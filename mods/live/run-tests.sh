@@ -28,8 +28,12 @@ node --test "$here/gen-locales.test.js"
 # the glyph tables, vocabulary and the all-mod design lints (L3, I5 (a), I20, L1b-L9 over every mods/* source): imports the real ui.ts, so the tables it lints are the ones the pane draws
 node --test "$here/ui-lint.test.js"
 node --test "$here/band-split.test.js"
+node --test "$here/band-keep-speed.test.js"
+node --test "$here/band-no-error-text.test.js"
 # the O4 shell planner (tiers, geometry, the forge-stats panel reader, the right-hand columns): pure, imports the real shell.ts
 node --test "$here/shell.test.js"
+# the P2 pet tab & panel/1 tuple reader (sprite, 79 vs 80 fallback, negative controls, usage/side poison isolation): pure, imports real panel.ts & pettab.ts
+node --test "$here/pettab.test.js"
 # the operator-console snapshot (the fleet.console/1 trust-boundary parser, the console.json mode reader, fictional fixtures): pure, imports the real console.ts
 node --test "$here/console.test.js"
 # the console tab strip (consoletabs.ts: five tabs, badges, the 120 / 80 / 20 column forms), the console.json mode finder, and the golden that pins the non-console strips byte for byte

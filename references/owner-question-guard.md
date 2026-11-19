@@ -114,6 +114,10 @@ the language reason first.
 
 ## Replay and regression checks
 
+Shared rules live in `hooks/lib/owner-question-rules.js` (the Stop hook and `scripts/reply-precheck.js` both load it).
+
+Run `node scripts/reply-precheck.js` on a draft (stdin or `--file`) before sending. Exit 0 prints `ok`. Exit 1 prints one line per problem. `--session <id>` runs card-binding checks; without it those checks are skipped with a stderr note.
+
 Run `node scripts/replay-stop-guard.js --dir <transcript-directory>` from the
 project whose local cards should be used. It evaluates every regular `.jsonl` file
 in basename order through the guard, ignoring runtime opt-out switches. Each line

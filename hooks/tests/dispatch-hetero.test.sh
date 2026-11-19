@@ -10,6 +10,7 @@
 #   (c) exit 0 + no commit       → no_op        (status no_op,      exit 1)
 #   (d) timeout/non-zero + none  → QUESTION_SUSPECTED (status question_suspected, exit 1)
 . "$(dirname "$0")/lib.sh"
+install_cli_sentinels
 # Ambient mission harness env must not poison hermetic unit tests.
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
   AUTOPILOT_PARENT_RUN_ID AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID \
@@ -22,7 +23,22 @@ for _git_cfg_i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
 done
 unset _git_cfg_i
 
-SCRIPT="$REPO_ROOT/scripts/dispatch-hetero.sh"
+REAL_SCRIPT="$REPO_ROOT/scripts/dispatch-hetero.sh"
+# A call with no --runner and no --model is the unpinned grok default (impl-defaults.test.sh covers it), but this
+# suite's fixtures drive the agy rail through --agy-bin stubs. SCRIPT pins --runner agy on such calls; a call that
+# names --model, --runner, a pace role or a contract goes to the real script untouched. Default-behaviour
+# assertions call "$REAL_SCRIPT" directly.
+SCRIPT="$TEST_TMP/dispatch-hetero-agy-rail"
+cat > "$SCRIPT" <<WRAP
+#!/usr/bin/env bash
+want=1
+for a in "\$@"; do
+  case "\$a" in --model|--model=*|--runner|--runner=*|--pace-role|--pace-role=*|--contract|--contract=*) want=0 ;; esac
+done
+if [ "\$want" -eq 1 ]; then exec "$REAL_SCRIPT" "\$@" --runner agy; fi
+exec "$REAL_SCRIPT" "\$@"
+WRAP
+chmod +x "$SCRIPT"
 
 # --- store isolation, FROM THE TOP (evidence-discipline §9) -------------------
 # dispatch-hetero.sh's seat_strike_capture writes seat strikes via
@@ -2142,20 +2158,20 @@ assert_contains "$OUT" '"model": "gemini-3.7-flash-high"' \
 assert_not_contains "$OUT" '"model": "gemini-flash-high"' \
   "the unresolved alias never reaches the vendor as a literal model name"
 
-# The built-in default is the literal agy implementer id, so a --model-less agy
-# dispatch sends it unchanged (a non-alias is not rewritten by the flash resolver).
+# --runner agy without --model defaults to the cheap hydrogen tier (never carbon, an expensive seat).
 OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/alias-default --prompt-file "$PROMPT" \
   --agy-bin "$STUB_OK" --runner agy 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "default-model dispatch exit code"
-assert_contains "$OUT" '"model": "gemini-4-carbon-low"' \
-  "the built-in default is gemini-4-carbon-low"
+assert_contains "$OUT" '"model": "gemini-4-hydrogen-low"' \
+  "the agy default is gemini-4-hydrogen-low"
+assert_not_contains "$OUT" 'carbon' "the agy default never names carbon"
 
-# --- the default is agy-only: any other runner must be told, not guessed at ---
-OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/nomodel-grok --prompt-file "$PROMPT" \
-  --runner grok 2>&1)"; EXIT=$?
+# --- runners without their own default (e.g. pi) must be told; codex/grok/agy/opencode default (impl-defaults.test.sh) ---
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/nomodel-pi --prompt-file "$PROMPT" \
+  --runner pi 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "non-agy runner without --model exit code"
 assert_contains "$OUT" '"status": "precondition_failed"' "non-agy default refusal is a precondition"
-assert_contains "$OUT" "--model is required for runner 'grok'" \
+assert_contains "$OUT" "--model is required for runner 'pi'" \
   "the refusal names the runner and says --model is required"
 
 # (The old agy argv-payload ceiling refusal is gone: agy takes the prompt on stdin. Large-prompt
@@ -2784,18 +2800,18 @@ OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$PACE_RUNS_DIR" \
 [ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (--pace-role codex): out=%s err=%s\n' "$OUT" "$(cat "$TEST_TMP/pace-codex.err" 2>/dev/null)" >&2
 assert_eq "0" "$EXIT" "hetero --pace-role implementer selects codex and exits 0"
 assert_contains "$OUT" '"runner": "codex"' "hetero --pace-role stdout reports chosen runner codex"
-assert_contains "$OUT" '"model": "gpt-6.1-sol"' "hetero --pace-role stdout reports chosen model gpt-6.1-sol"
-assert_contains "$(tr '\n' ' ' < "$HETERO_CODEX_ARGV")" "--model gpt-6.1-sol " "hetero --pace-role passes chosen model to codex"
+assert_contains "$OUT" '"model": "gpt-6.1-terra"' "hetero --pace-role stdout reports chosen model gpt-6.1-terra"
+assert_contains "$(tr '\n' ' ' < "$HETERO_CODEX_ARGV")" "--model gpt-6.1-terra " "hetero --pace-role passes chosen model to codex"
 PACE_MF_CHECK="$(node -e '
   const fs = require("fs");
   const mf = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
   const ec = mf.engine_choice;
   if (!ec || typeof ec !== "object") process.exit(2);
   const ok = mf.runner === "codex"
-    && mf.model === "gpt-6.1-sol"
+    && mf.model === "gpt-6.1-terra"
     && ec.engine === "codex"
     && ec.runner === "codex"
-    && ec.model === "gpt-6.1-sol"
+    && ec.model === "gpt-6.1-terra"
     && ec.pool === "codex A"
     && ec.slack_pts === -35
     && ec.over_pace === true
@@ -2837,7 +2853,7 @@ OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$PACE_RUNS_DIR" \
   AUTOPILOT_PACE_FILE="$REPO_ROOT/scripts/fixtures/pace-select/all-unknown.json" \
   AUTOPILOT_QUALIFIED_FILE="$TEST_TMP/missing-qualified.json" \
   DISPATCH_QUIET=1 \
-  "$SCRIPT" --no-verify-tip --pace-role implementer --agy-bin "$TEST_TMP/nonexistent-agy-bin" \
+  "$SCRIPT" --no-verify-tip --pace-role implementer --agy-bin "$TEST_TMP/nonexistent-agy-bin" --grok-bin "$TEST_TMP/nonexistent-grok-bin" \
   --run-id pace-unknown-fail --branch feat/pace-unknown-fail --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "hetero --pace-role with pace_unknown exits 2 (no silent default)"
 assert_contains "$OUT" '"status": "precondition_failed"' "hetero --pace-role pace_unknown emits precondition_failed"

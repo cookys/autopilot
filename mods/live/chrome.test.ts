@@ -162,7 +162,8 @@ test('M7: missing pending-card source shows ? (never 0) on 現況, 待決 and ba
         const nowAboveStrip = frameRows(nowPage, ctx).slice(0, -stripLen).map(rowText).join('\n')
         const decAboveStrip = frameRows(decidePage, ctx).slice(0, -stripLen).map(rowText).join('\n')
         expect(nowAboveStrip, msg + ' now has ?').toContain(wantPage)
-        expect(decAboveStrip, msg + ' decide has ?').toContain(wantPage)
+        expect(decAboveStrip, msg + ' decide is the band line').toContain(t('shell.on_band'))
+        expect(decAboveStrip, msg + ' decide does not repeat the pending count').not.toContain(wantPage)
         expect(nowAboveStrip, msg + ' now no 0 pending').not.toMatch(/待決\s*0|Pending\s*0|\b0\s*cards|\(0\)|沒有待決卡|No open decision|No pending cards/)
         expect(decAboveStrip, msg + ' decide no 0').not.toContain('0')
         expect(decAboveStrip, msg + ' decide no none_cards').not.toMatch(/沒有待決卡|No open decision|No pending cards/)
@@ -193,7 +194,8 @@ test('M7: missing pending-card source shows ? (never 0) on 現況, 待決 and ba
       expect(nowText).not.toContain(wantNoSourcePrefix)
     }
     const zeroDecText = frameRows(decidePage, { live: okLiveZero as never, console: okConZero, size: { cols: 120, rows: 30 }, t, nowMs: NOW }).map(rowText).join('\n')
-    expect(zeroDecText).toContain(t('page.decide.none_cards'))
+    expect(zeroDecText).toContain(t('shell.on_band'))
+    expect(zeroDecText).not.toContain(t('page.decide.none_cards'))
     expect(zeroDecText).not.toContain(wantNoSourcePrefix)
   }
 })

@@ -18,8 +18,10 @@ test('R4-1: 120x30 open pane keeps stale fleet class, age and quota cause above 
   con.sources = { tasks: { state: 'expired', at_ms: NOW - 12 * MIN }, quota_forecast: { state: 'no_source', at_ms: null } }
   const rows = bandRows(band(120, con))
   expect(rows.length).toBe(2)
-  expect(flat(rows[0])).toContain('艦隊過期 12 分')
-  expect(flat(rows[0])).toContain('額度無預測來源')
+  expect(flat(rows[0])).toContain('x')
+  expect(flat(rows[0])).not.toContain('艦隊過期')
+  expect(flat(rows[0])).not.toContain('額度無預測來源')
+  expect(flat(rows[0])).not.toContain('autopilot status runs --watch')
   expect(flat(rows[1])).toBe('  autopilot status runs --watch')
   for (const row of rows) expect(displayWidth(flat(row))).toBeLessThanOrEqual(116)
 })
@@ -70,8 +72,9 @@ test('R4-3: 80x16 with one body row shows the focused title and card count befor
     const ctx = { ...(ctxOf(80, 3, con) as any), live, decide: { ...NO_NAV, cursor } }
     const rows = frameRows(decidePage, ctx).map(rowText)
     expect(rows.length).toBe(3)
-    expect(rows[1]).toContain(cards[cursor].question)
-    expect(rows[1]).toContain('第 ' + (cursor + 1) + ' 張／共 3 張')
+    expect(rows[1]).toContain('待決在 band 上（d）')
+    expect(rows[1]).not.toContain(cards[cursor].question)
+    expect(rows[1]).not.toContain('第 ' + (cursor + 1) + ' 張／共 3 張')
     expect(rows[1]).not.toContain('h: 上張')
   }
 })

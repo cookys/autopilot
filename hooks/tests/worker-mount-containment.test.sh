@@ -62,6 +62,7 @@ ln -s "$(command -v head)" "$MINBIN/head"
 # `command -v true` is the shell builtin, so a symlink of that name loops. Use the binary.
 if [ -x /usr/bin/true ]; then ln -s /usr/bin/true "$MINBIN/true"; else ln -s /bin/true "$MINBIN/true"; fi
 ln -s "$(command -v env)" "$MINBIN/env"
+ln -s "$(command -v printenv)" "$MINBIN/printenv"
 REAL_BASH="$(command -v bash)"
 mkshim id 'case "$1" in -u) echo 4242 ;; -g) echo 4343 ;; -un) echo worker ;; *) echo 4242 ;; esac'
 # Clobber the way standard sudoers does: secure_path, set_logname, always_set_home, SUDO_USER.
@@ -247,8 +248,64 @@ eq "0" "$SP_QUIET_RC" "sudo preserve-env warning setpriv holds dispatcher identi
 SP_QUIET_ERR="$(env USER=worker PATH="$SUDO_PATH" HOME="${HOME-}" WORKER_MOUNT_PROC_STATUS="$STATUS0" SHIM_WARN_PRESERVE=1 \
   "$REAL_BASH" -c '. "$1"; worker_mount_isolation_detect; [ "$WORKER_MOUNT_MODE" = sudo_private_ns ] || exit 4; exec "${WORKER_MOUNT_PREFIX[@]}" "$2" -c "printf ok"' _ "$LIB" "$REAL_BASH" 2>&1 >/dev/null)"
 eq "" "$SP_QUIET_ERR" "sudo preserve-env warning setpriv emits empty worker stderr"
-eq "true" "$(node -e 'const fs=require("fs"),p=require("path"),r=process.argv[1];process.stdout.write(String(fs.readFileSync(p.join(r,"scripts/lib/worker-containment.sh")).equals(fs.readFileSync(p.join(r,"platforms/codex/plugin/scripts/lib/worker-containment.sh")))))' "$REPO_ROOT")" "codex plugin mirror of worker-containment.sh stays byte-identical"
+
+# sudo env_reset + SHIM_WARN_PRESERVE=1 (01M7P91RTVG7H1A01YCTHRVH2Z):
+# The shared identity probe does not look at AUTOPILOT_ENV_PROBE. env_reset still yields
+# sudo_private_ns (same decision as 73ded1257) for codex/grok/agy. The prefix itself does
+# not carry ANTHROPIC_BASE_URL; cc-shim restores that from a 0600 file (sandbox test).
+cat > "$SHIMS/sudo" <<'EOF'
+#!/bin/sh
+if [ "${SUDO_SHIM_FAIL_UNSHARE:-}" = 1 ]; then
+  for a in "$@"; do b="${a##*/}"; [ "$b" = unshare ] && exit 1; done
+fi
+saw_preserve=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -n) shift ;;
+    --preserve-env|--preserve-env=*|-E) saw_preserve=1; shift ;;
+    -u) shift 2 ;;
+    --) shift; break ;;
+    -*) shift ;;
+    *) break ;;
+  esac
+done
+if [ "$saw_preserve" -eq 1 ] && [ "${SHIM_WARN_PRESERVE:-0}" = 1 ]; then
+  printf '%s\n' "sudo: preserving the entire environment is not supported, '--preserve-env' is ignored" >&2
+fi
+[ $# -eq 0 ] && exit 0
+if [ "${SHIM_ENV_RESET:-0}" = 1 ] && { [ "$saw_preserve" -eq 0 ] || [ "${SHIM_WARN_PRESERVE:-0}" = 1 ]; }; then
+  exec /usr/bin/env -i \
+    PATH=/usr/sbin:/usr/bin:/sbin:/bin \
+    USER=root LOGNAME=root HOME=/root SUDO_USER=x \
+    SUDO_SHIM_FAIL_UNSHARE="${SUDO_SHIM_FAIL_UNSHARE:-}" \
+    SHIM_WARN_PRESERVE="${SHIM_WARN_PRESERVE:-}" \
+    SHIM_ENV_RESET="${SHIM_ENV_RESET:-}" \
+    "$@"
+fi
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export USER=root
+export LOGNAME=root
+export HOME=/root
+export SUDO_USER=x
+exec "$@"
+EOF
+chmod +x "$SHIMS/sudo"
+# (a) env_reset sudo shim: shared detection still accepts sudo_private_ns (codex/grok/agy).
+# The prefix does not forward ANTHROPIC_BASE_URL. AUTOPILOT_ENV_PROBE is not part of this function.
+eq "sudo_private_ns" "$(detect_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0" SHIM_WARN_PRESERVE=1 SHIM_ENV_RESET=1 | cut -d'|' -f1)" "(a) env_reset + preserve-env warning with setpriv stays sudo_private_ns"
+DROPPED_BASE_URL="$(env USER=worker PATH="$SUDO_PATH" HOME="${HOME-}" WORKER_MOUNT_PROC_STATUS="$STATUS0" SHIM_WARN_PRESERVE=1 SHIM_ENV_RESET=1 \
+  "$REAL_BASH" -c 'export ANTHROPIC_BASE_URL=x; . "$1"; worker_mount_isolation_detect; [ "$WORKER_MOUNT_MODE" = sudo_private_ns ] || exit 4; "${WORKER_MOUNT_PREFIX[@]}" printenv ANTHROPIC_BASE_URL || true' _ "$LIB")"
+eq "" "$DROPPED_BASE_URL" "(a) env_reset prefix does not carry ANTHROPIC_BASE_URL (cc-shim file pass-through is separate)"
+GREEN_BASE_URL="$(env USER=worker PATH="$SUDO_PATH" HOME="${HOME-}" WORKER_MOUNT_PROC_STATUS="$STATUS0" SHIM_WARN_PRESERVE=0 SHIM_ENV_RESET=1 \
+  "$REAL_BASH" -c 'export ANTHROPIC_BASE_URL=x; . "$1"; worker_mount_isolation_detect; [ "$WORKER_MOUNT_MODE" = sudo_private_ns ] || exit 4; "${WORKER_MOUNT_PREFIX[@]}" printenv ANTHROPIC_BASE_URL' _ "$LIB")"
+eq "x" "$GREEN_BASE_URL" "silent sudo with env_reset keeps --preserve-env and printenv ANTHROPIC_BASE_URL prints x"
 rmshim setpriv
+eq "sudo_private_ns" "$(detect_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0" SHIM_WARN_PRESERVE=1 SHIM_ENV_RESET=1 | cut -d'|' -f1)" "(a) env_reset + preserve-env warning without setpriv stays sudo_private_ns"
+FB_GREEN_BASE_URL="$(env USER=worker PATH="$SUDO_PATH" HOME="${HOME-}" WORKER_MOUNT_PROC_STATUS="$STATUS0" SHIM_WARN_PRESERVE=0 SHIM_ENV_RESET=1 \
+  "$REAL_BASH" -c 'export ANTHROPIC_BASE_URL=x; . "$1"; worker_mount_isolation_detect; [ "$WORKER_MOUNT_MODE" = sudo_private_ns ] || exit 4; "${WORKER_MOUNT_PREFIX[@]}" printenv ANTHROPIC_BASE_URL' _ "$LIB")"
+eq "x" "$FB_GREEN_BASE_URL" "silent sudo fallback with env_reset keeps --preserve-env/-E and printenv ANTHROPIC_BASE_URL prints x"
+
+eq "true" "$(node -e 'const fs=require("fs"),p=require("path"),r=process.argv[1];process.stdout.write(String(fs.readFileSync(p.join(r,"scripts/lib/worker-containment.sh")).equals(fs.readFileSync(p.join(r,"platforms/codex/plugin/scripts/lib/worker-containment.sh")))))' "$REPO_ROOT")" "codex plugin mirror of worker-containment.sh stays byte-identical"
 mv -f "$TEST_TMP/orig-sudo" "$SHIMS/sudo"
 SUDO_SHIM_FAIL_UNSHARE=1
 eq "refuse" "$(detect_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0" SUDO_SHIM_FAIL_UNSHARE=1 | cut -d'|' -f1)" "unshare probe fails -> refuse"

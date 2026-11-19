@@ -6,8 +6,8 @@
 import { T_EN } from './i18n'
 import type { T } from './i18n'
 import { BAND_INFO_LABEL, BAND_SEP, displayWidth, fittedBandWidth, hhmm, layoutBand, plainBandText, slotFleet } from './model'
-import { PICK_MARK, QUICK_SEP } from './shell'
-import type { LeftItem, ShellPlan } from './shell'
+import { PICK_MARK, QUICK_SEP, SHELL_MENUS } from './shell'
+import type { LeftItem, ShellMenuId, ShellPlan } from './shell'
 import type { DecideState, LiveSnapshot, PaneLine, PaneTab, Seg, SlotId } from './model'
 import { actionSeg, cardParas, dimProps, drawSeg, forgeBar, GLYPHS, moreSeg, PALETTE, wrapPlain } from './ui'
 import { fixedWindow, followsTail, thumbOf } from './scrollmath'
@@ -20,7 +20,7 @@ import type { ConsoleNav, ConsoleTab } from './consoletabs'
 import { COL_GAP } from './speedview'
 import type { SpeedColumn } from './speedview'
 import type { BandPageId, BarStrip, BarTabId } from './tabs'
-import { isBriefStale, lineCounts, staleBadge } from './pages/rows'
+import { isBriefStale, staleBadge } from './pages/rows'
 import { mostSevere } from './pages/frame'
 
 type El = (props: any) => any
@@ -29,6 +29,8 @@ type El = (props: any) => any
 export const BAND_ROWS = 1
 // M5: the cells row 1 of the console band keeps free at its right end for the `[-]` control (three cells and a gap)
 export const BAND_CLOSE_ROOM = 4
+// r4 D: the console sources whose failure the band shows; slots, metrics, answer_log and changes are no_source on purpose in fleet's snapshot
+const BAND_SOURCES = ['tasks', 'peers', 'cards', 'quota_now'] as const
 
 // The band is the final row next to the prompt; open content grows above it.
 export function stackBand(el: { Box: El }, band: unknown, below: unknown) {
@@ -36,7 +38,7 @@ export function stackBand(el: { Box: El }, band: unknown, below: unknown) {
   return <Box flexDirection="column" justifyContent="flex-end">{below}{band}</Box>
 }
 
-// bandlayout: rows drawn top to bottom, ending in quick controls and the menu row. The tree is never taller than the band: a host that gets more
+// bandlayout: rows drawn top to bottom, menu row first and the quick row last (ux-v7). The tree is never taller than the band: a host that gets more
 // than maxRows rows opens a window of its own and hides the last row (the quick row) behind a "n more" line, so there is no spare row here.
 export function stackRows(el: { Box: El }, rows: unknown[]) {
   const { Box } = el
@@ -63,9 +65,24 @@ export function scrollHint(el: { Box: El; Text: El; Button?: El }, t: T, above: 
 }
 
 // consecutive segs of one slot become one Button; a seg with no slot (a separator) stays a bare Text
-function drawSegs(el: { Text: El; Button?: El }, segs: Seg[], onSlot: (id: SlotId) => void) {
+const FLEET_COUNT = new Set(['fleetRun', 'fleetWait', 'fleetStuck'])
+
+// Stale fleet counts are not drawn. The cell becomes the short marker; a fleet cell with no counts stays as it is.
+function maskFleetCounts(segs: Seg[], t: T): Seg[] {
+  if (!segs.some(s => s.slot === 'fleet' && s.tag !== undefined && FLEET_COUNT.has(s.tag))) return segs
+  const marker: Seg = { text: t('band.fleet_unknown'), slot: 'fleet', tag: 'fleetWord' }
+  let placed = false
+  const out: Seg[] = []
+  for (const s of segs) {
+    if (s.slot !== 'fleet') { out.push(s); continue }
+    if (!placed) { out.push(marker); placed = true }
+  }
+  return out
+}
+
+function drawSegs(el: { Text: El; Button?: El }, segs: Seg[], onSlot: (id: SlotId) => void, dimAll = false) {
   const { Text, Button } = el
-  const text = (s: Seg, i: number) => <Text key={'s' + i} {...drawSeg(s)} wrap="truncate">{s.text}</Text>
+  const text = (s: Seg, i: number) => <Text key={'s' + i} {...drawSeg(s)} {...(dimAll ? dimProps() : {})} wrap="truncate">{s.text}</Text>
   const runs: { slot: SlotId | undefined; at: number; segs: Seg[] }[] = []
   segs.forEach((s, i) => {
     const last = runs[runs.length - 1]
@@ -93,7 +110,7 @@ function staleLiveReason(snap: LiveSnapshot, t: T): string {
 }
 
 // the band's own cells (the line and the ⓘ), and the width they take
-function bandCells(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, onInfo: () => void, t: T, onSlot: (id: SlotId) => void, preset: { segs: Seg[]; width: number } | null = null, infoLabel = BAND_INFO_LABEL, legacyTabs = false, sourceFailure: Seg | null = null, repairInline = true): { nodes: unknown[]; width: number } {
+function bandCells(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, onInfo: () => void, t: T, onSlot: (id: SlotId) => void, preset: { segs: Seg[]; width: number } | null = null, infoLabel = BAND_INFO_LABEL, legacyTabs = false, fleetUnknown = false): { nodes: unknown[]; width: number } {
   const { Text, Button } = el
   const extra = displayWidth(infoLabel) - displayWidth(BAND_INFO_LABEL)
   // only the ⓘ autoFocuses: Ctrl+x Tab lands on it, as before the slots were controls
@@ -102,23 +119,21 @@ function bandCells(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | 
     : <Button key="info" plain autoFocus onPress={onInfo}>{infoLabel}</Button>
   // a fitted line (the fleet segment is on it): draw those segs, do not run layoutBand again. The width is the shared fitted width (segs + ⓘ), never preset.width on its own.
   const segW = (segs: { text: string }[]) => segs.reduce((n, s) => n + displayWidth(s.text), 0)
-  if (sourceFailure !== null) {
-    const line = plainBandText(sourceFailure.text + (repairInline ? ' · autopilot status runs --watch' : ''), columns - extra) + BAND_SEP
-    return { nodes: [<Text key="w" {...drawSeg(sourceFailure)} wrap="truncate">{line}</Text>, icon], width: fittedBandWidth(displayWidth(line), null, false) + extra }
+  const dimCells = !legacyTabs && snap?.state === 'stale' && snap.band !== null
+  if (preset !== null) {
+    const segs = fleetUnknown ? maskFleetCounts(preset.segs, t) : preset.segs
+    return { nodes: [...drawSegs(el, segs, onSlot, dimCells), icon], width: fittedBandWidth(segW(segs), null, false) + extra }
   }
-  if (preset !== null) return { nodes: [...drawSegs(el, preset.segs, onSlot), icon], width: fittedBandWidth(segW(preset.segs), null, false) + extra }
   if (snap === null || snap.band === null) {
     let reason = snap === null ? t('band.waiting') : snap.text
-    // X4: replace the redundant publication clock with an age, keeping the
-    // complete cause and repair command in the summary's reclaimed cells.
-    if (!legacyTabs && snap?.state === 'stale') {
-      reason = GLYPHS.state.failed + ' ' + staleLiveReason(snap, t) + (repairInline ? ' · autopilot status runs --watch' : '')
-    }
+    // X4: a missing band still names the stale cause. The repair command stays off this row.
+    if (!legacyTabs && snap?.state === 'stale') reason = GLYPHS.state.failed + ' ' + staleLiveReason(snap, t)
     const line = plainBandText(reason, columns - extra) + BAND_SEP
     return { nodes: [<Text key="w" {...(!legacyTabs && snap?.state === 'stale' ? drawSeg(staleBadge(line)) : dimProps())} wrap="truncate">{line}</Text>, icon], width: fittedBandWidth(displayWidth(line), null, false) + extra }
   }
   const line = layoutBand(snap.band.slots, columns - extra)
-  return { nodes: [...drawSegs(el, line.segs, onSlot), icon], width: fittedBandWidth(segW(line.segs), null, false) + extra }
+  const segs = fleetUnknown ? maskFleetCounts(line.segs, t) : line.segs
+  return { nodes: [...drawSegs(el, segs, onSlot, dimCells), icon], width: fittedBandWidth(segW(segs), null, false) + extra }
 }
 
 export function Band(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, onInfo: () => void, t: T = T_EN, onSlot: (id: SlotId) => void = () => {}) {
@@ -141,7 +156,7 @@ export function bandQuotaSeg(pools: QuotaPool[] | null, nowMs: number, t: T, sou
   return { text: t('console.command.sum_quota') + ' ' + (w.role === 'broken' ? GLYPHS.state.failed + ' ' : '') + w.pool + ' ' + w.text, color }
 }
 
-export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, t: T, hd: BarHandlers, active: BarTabId | ConsoleTab | BandPageId | null, forge: readonly ForgeSegment[] | null, usage = true, moreTo: BarTabId | null = null, con: (ConsoleNav & { cols: number }) | null = null, preset: { segs: Seg[]; width: number } | null = null, quota: Seg | null = null, noTabs = false, legacyTabs = false): { node: unknown; stripRow: unknown; strip: BarStrip; tabsAt: number } {
+export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, t: T, hd: BarHandlers, active: BarTabId | ConsoleTab | BandPageId | null, forge: readonly ForgeSegment[] | null, usage = true, moreTo: BarTabId | null = null, con: (ConsoleNav & { cols: number }) | null = null, preset: { segs: Seg[]; width: number } | null = null, quota: Seg | null = null, noTabs = false, legacyTabs = false, forgeRow = false): { node: unknown; stripRow: unknown; strip: BarStrip; tabsAt: number } {
   const { Box, Text, Button } = el
   // R4-4: the host may reduce band columns beside an open pane; the terminal's
   // width is not this budget. A visible fleet group always keeps its name.
@@ -150,32 +165,30 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
     const label = slotFleet({ stuck: 0, running: 0, waiting: 0 }, t)!.segs.filter(s => s.tag === 'fleetWord').map(s => ({ ...s, slot: 'fleet' as const }))
     preset = { segs: [...preset.segs.slice(0, at), ...label, ...preset.segs.slice(at)], width: preset.width + label.reduce((n, s) => n + displayWidth(s.text), 0) }
   }
-  // W5: report each affected data class, with age, before the repair command.
-  let sourceFailure: Seg | null = null
+  // A missing or stale source is not an error sentence on row 1 (guideline §1.1 rule 4).
+  // 'band.no_console', 'band.fleet_stale' and 'band.quota_nopace' stay in the string table and are not drawn here.
+  // The same conditions still drop the quota segment and, with the pane open, keep the repair on row 2.
+  let sourceBad = false
+  let fleetUnknown = false
   if (!legacyTabs && con !== null) {
-    if (con.snap === null) sourceFailure = staleBadge(GLYPHS.state.failed + ' ' + t('band.no_console') + (snap?.state === 'stale' ? ' · ' + staleLiveReason(snap, t) : ''))
+    if (con.snap === null) sourceBad = true
     else {
       const nowMs = snap?.detail.now_ms ?? con.snap.generated_at_ms
       const brief = isBriefStale(con.snap, nowMs)
       const tasks = con.snap.sources.tasks
-      const old = tasks?.state === 'expired' || tasks?.state === 'stale' || brief.stale
-      const parts: string[] = []
-      if (old || snap?.state === 'stale') {
-        const at = tasks?.at_ms ?? con.snap.generated_at_ms
-        const min = Math.max(0, Math.floor((nowMs - at) / 60000))
-        const counts = lineCounts(con.snap, t)
-        const badges = [['failed', GLYPHS.state.failed], ['stalled', GLYPHS.state.stalled]].filter(([k]) => (counts[k] ?? 0) > 0).map(([k, g]) => g + counts[k]).join(' ')
-        parts.push(t('band.fleet_stale', { min }) + (badges === '' ? '' : '（' + badges + '）'))
-      }
+      fleetUnknown = tasks?.state === 'expired' || tasks?.state === 'stale' || brief.stale
+      if (fleetUnknown || snap?.state === 'stale') sourceBad = true
       const forecast = con.snap.sources.quota_forecast
-      if (forecast !== undefined && forecast.state !== 'ok') parts.push(t('band.quota_nopace'))
-      const other = mostSevere({ live: snap, console: con.snap, size: { cols: columns, rows: 2 }, t, nowMs })
-      if (parts.length === 0 && other !== null) parts.push(other.text.slice((GLYPHS.state.failed + ' ').length))
-      if (parts.length > 0) sourceFailure = staleBadge(GLYPHS.state.failed + ' ' + parts.join(' · '))
+      if (forecast !== undefined && forecast.state !== 'ok') sourceBad = true
+      if (!sourceBad) {
+        const other = mostSevere({ live: snap, console: con.snap, size: { cols: columns, rows: 2 }, t, nowMs }, BAND_SOURCES)
+        if (other !== null) sourceBad = true
+      }
     }
   }
-  // the forge label is read by forgeSegments (ui.ts): speed (and pet) sit on the left after the ⓘ, and the strip keeps a short forge tab that opens the full view
-  const fb = forge === null || sourceFailure !== null || (!legacyTabs && snap?.state === 'stale') ? null : forgeBar(forge)
+  // the forge label is read by forgeSegments (ui.ts): speed (and pet) sit on the left after the ⓘ, and the strip keeps a short forge tab that opens the full view.
+  // The rate is measured on this seat. A failed data source or a stale live snapshot does not clear it; the failure line is what narrows.
+  const fb = forge === null ? null : forgeBar(forge)
   const forgeW = fb === null ? 0 : fb.width
   const oldStrip = legacyTabs ? barStrip(snap, t, active as BarTabId | ConsoleTab | null, fb === null ? null : GLYPHS.structure.speed, usage, con) : null
   // `moreTo`: a tab has no room (用量, or forge with something timed), so a dim `›` ends the row: a Button (key 'more'), so Tab / Enter still reach the hidden tab
@@ -184,11 +197,11 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
   const strip = legacyTabs && con === null ? oldStrip as BarStrip : pageBarStrip(snap, t, Math.max(0, columns - moreW), active, null, con?.snap ?? null, !legacyTabs)
   // M5: in the console band the tab strip is row 2 (pageBarStrip), so row 1 gives the left text every idle cell up to the right-hand controls (BAND_CLOSE_ROOM keeps
   // the `[-]` cell): the stale reason and its whole fix command (`autopilot status runs --watch`) are never cut while blank cells are left. M6: the open Button says what it opens.
-  if (sourceFailure !== null || (!legacyTabs && snap?.state === 'stale')) quota = null
+  if (sourceBad || (!legacyTabs && snap?.state === 'stale')) quota = null
   const leftRoom = legacyTabs && con === null ? columns - (oldStrip as BarStrip).width - 1 - forgeW - moreW : columns - BAND_CLOSE_ROOM - forgeW - moreW - (quota === null ? 0 : displayWidth(quota.text) + 2)
-  // R4-1: the open pane owns navigation; its spare band row holds the repair whole.
-  const repairBelow = noTabs && !legacyTabs && (sourceFailure !== null || snap?.state === 'stale')
-  const left = bandCells(el, snap, Math.max(1, leftRoom), hd.onInfo, t, hd.onSlot, preset, con !== null && !noTabs ? t('band.open_pane') + ' ' : BAND_INFO_LABEL, legacyTabs, sourceFailure, !repairBelow)
+  // R4-1: the open pane owns navigation; its spare band row holds the repair whole. Row 1 never carries the command. `forgeRow`: that row under the band is forge-stats' summary (PM G33), so the repair is not drawn here.
+  const repairBelow = noTabs && !legacyTabs && !forgeRow && (sourceBad || snap?.state === 'stale')
+  const left = bandCells(el, snap, Math.max(1, leftRoom), hd.onInfo, t, hd.onSlot, preset, con !== null && !noTabs ? t('band.open_pane') + ' ' : BAND_INFO_LABEL, legacyTabs, fleetUnknown)
   // the same fitted width as layoutBandLine: segs + ⓘ + speed + ›. The gap is whatever is left before the strip, at least one cell. tabsAt stops before the ›.
   const segW = preset !== null ? preset.segs.reduce((n, s) => n + displayWidth(s.text), 0) : left.width - displayWidth(BAND_INFO_LABEL)
   void segW
@@ -306,10 +319,10 @@ export type ShellDraw = {
   plan: ShellPlan
   left: LeftItem[]
   onLeft: (id: string) => void
-  main: unknown[] // the main window's content rows, at most plan.bodyRows - 2; the divider and the progress row below them are drawn here
+  main: unknown[] // the main window's content rows, top-aligned, at most plan.bodyRows - 2; the divider and the progress row below them are drawn here
   progress: unknown // the progress row's content (one Box), inside the main window
   quick: unknown[]
-  bar: unknown // the menu row (BandBar), always last, directly below the quick controls
+  bar: unknown // the menu row, always first (ux-v7). The quick row is always last.
 }
 export function Shell(el: { Box: El; Text: El; Button?: El }, d: ShellDraw): unknown[] {
   const { Box, Text, Button } = el
@@ -320,9 +333,12 @@ export function Shell(el: { Box: El; Text: El; Button?: El }, d: ShellDraw): unk
     return <Text key={'v' + i} {...drawSeg(seg)}>{seg.text}</Text>
   }
   const blank = (k: string) => <Text key={k}>{' '}</Text>
-  const rows: unknown[] = [<Box key="top">{segsOf(plan.top, 't')}</Box>]
+  // r5 (operator 11-19): what the owner operates sits at the bottom, next to the prompt: top frame, body, bottom frame, then the menu row, and the quick row last
+  const rows: unknown[] = []
+  rows.push(<Box key="top">{segsOf(plan.top, 't')}</Box>)
   const body = plan.bodyRows
-  const content = body - 2
+  const content = plan.compact ? body : body - 2 // r4: a compact frame has no divider and no progress row
+  const S = GLYPHS.structure
   for (let r = 0; r < body; r++) {
     const item = d.left[r]
     const divider = r === content
@@ -331,24 +347,103 @@ export function Shell(el: { Box: El; Text: El; Button?: El }, d: ShellDraw): unk
       : Button === undefined
         ? <Box key="l">{segsOf(item.segs, 'l')}</Box>
         : <Button key={item.key} plain onPress={() => d.onLeft(item.id)}>{segsOf(item.segs, 'l')}</Button>
-    const mainAt = r - Math.max(0, content - d.main.length)
-    const mainCell = divider ? <Text key="div" {...drawSeg(plan.divider.rule)}>{plan.divider.rule.text}</Text> : r > content ? d.progress : d.main[mainAt] ?? blank('m')
-    const cells = [
-      vert(0, false),
-      <Box key="lc" width={plan.geo.left} flexShrink={0}>{leftCell}</Box>,
-      vert(1, divider),
-      <Box key="mc" width={plan.geo.main} flexShrink={0}>{mainCell}</Box>,
-    ]
-    plan.columns.forEach((c, i) => {
-      cells.push(vert(2 + i, divider && i === 0), <Box key={'c' + i} width={c.inner} flexShrink={0}>{segsOf(c.rows[r] ?? [], 'c' + i + '-')}</Box>)
-    })
-    cells.push(vert(2 + plan.columns.length, divider && plan.columns.length === 0))
+    const mainCell = divider ? <Text key="div" {...drawSeg(plan.divider.rule)}>{plan.divider.rule.text}</Text> : r > content ? d.progress : d.main[r] ?? blank('m')
+    const cells: unknown[] = []
+    if (plan.separate) {
+      const edge = (k: string, here: boolean, ch: string) => <Text key={k} color={here ? PALETTE.here : PALETTE.idle}>{ch}</Text>
+      cells.push(
+        edge('v0', false, S.bandSep),
+        <Box key="lc" width={plan.leftInner} flexShrink={0}>{leftCell}</Box>,
+        edge('v1', false, S.bandSep),
+        <Text key="gap">{' '}</Text>,
+        edge('v2', true, divider ? S.frameLeftT : S.bandSep),
+        <Box key="mc" width={plan.geo.main} flexShrink={0}>{mainCell}</Box>,
+        edge('v3', true, divider ? S.frameRightT : S.bandSep),
+      )
+    } else {
+      cells.push(
+        vert(0, false),
+        <Box key="lc" width={plan.geo.left} flexShrink={0}>{leftCell}</Box>,
+        vert(1, divider),
+        <Box key="mc" width={plan.geo.main} flexShrink={0}>{mainCell}</Box>,
+      )
+      plan.columns.forEach((c, i) => {
+        cells.push(vert(2 + i, divider && i === 0), <Box key={'c' + i} width={c.inner} flexShrink={0}>{segsOf(c.rows[r] ?? [], 'c' + i + '-')}</Box>)
+      })
+      cells.push(vert(2 + plan.columns.length, divider && plan.columns.length === 0))
+    }
     rows.push(<Box key={'row' + r}>{cells}</Box>)
   }
   rows.push(<Box key="bottom">{segsOf(plan.bottom, 'b')}</Box>)
+  rows.push(<Box key="menurow">{d.bar}</Box>)
   rows.push(<Box key="quick"><Text>{' '}</Text>{d.quick}</Box>)
-  rows.push(<Box key="menu">{d.bar}</Box>)
   return rows
+}
+// r5: a band too short for the frames (the card is taller than rows - 4): the card's rows only, then the menu row and the quick row. No left window, no frame, no divider or progress row.
+export function ShellBare(el: { Box: El; Text: El; Button?: El }, d: { main: unknown[]; bar: unknown; quick: unknown[] }): unknown[] {
+  const { Box, Text } = el
+  const rows: unknown[] = d.main.map((m, i) => <Box key={'bare' + i}>{m}</Box>)
+  rows.push(<Box key="menurow">{d.bar}</Box>)
+  rows.push(<Box key="quickrow"><Text>{' '}</Text>{d.quick}</Box>)
+  return rows
+}
+
+// The top menu row (ux-v7 §1). The host draws a letter hotkey as `k: ` in front of the label, so the label is the words
+// and the Box is as wide as that prefix plus the words. ▾ sits on the selected menu. ▲N stays on 待決. 待你動手 is the tail.
+// r5: `note` is a dim summary at the tail (the collapsed band's `待決 N 張 · d 展開`, the bare card's position); `speed` is the forge label (`│ ϟ 83 tok/s ▁▂▃`, tok/s is back on the band), dropped when it does not fit
+export type MenuRowSpec = { selected: ShellMenuId; pending: number; room: number; awaiting: number; columns: number; onSelect: (id: ShellMenuId) => void; note?: string; speed?: readonly Seg[] | null; onSpeed?: () => void }
+export function shellMenuRow(el: { Box: El; Text: El; Button?: El }, t: T, spec: MenuRowSpec): unknown {
+  const { Box, Text, Button } = el
+  const word = (id: ShellMenuId): string => {
+    const base = id === 'd' ? t('tab.decide') + ' ' + GLYPHS.state.need_you + spec.pending
+      : id === 'r' ? t('shell.room') + ' ' + spec.room
+      : id === 'u' ? t('shell.usage')
+      : id === 'p' ? t('tab.pet')
+      : t('shell.help')
+    return spec.selected === id ? base + ' ' + GLYPHS.structure.open : base
+  }
+  const items = SHELL_MENUS.map(id => {
+    const label = word(id)
+    const hotkey = id
+    const shown = hotkey + ': ' + label
+    const key = id === 'd' ? 'tab:decide' : 'menu:' + id
+    return { id, label, hotkey, shown, key, width: displayWidth(shown) }
+  })
+  const tail = spec.awaiting > 0 ? t('shell.awaiting', { n: spec.awaiting }) : ''
+  const noteW = spec.note === undefined || spec.note === '' ? 0 : 2 + displayWidth(spec.note)
+  let gaps = [1, 3, 5, 5, 5]
+  const hostWidth = (): number => displayWidth(gaps.map((g, i) => ' '.repeat(g)).join('')) + items.reduce((n, it) => n + it.width, 0) + (tail === '' ? 0 : 2 + displayWidth(tail)) + noteW
+  // gaps[0] is the leading space; the rest sit between items. Shrink from the right until the row fits.
+  while (hostWidth() > spec.columns) {
+    const at = gaps.map((g, i) => (i > 0 && g > 1 ? i : -1)).filter(i => i >= 0).pop()
+    if (at === undefined) { if (gaps[0] > 0) gaps[0] -= 1; else break }
+    else gaps[at] -= 1
+  }
+  const kids: unknown[] = []
+  items.forEach((it, i) => {
+    if (gaps[i] > 0) kids.push(<Text key={'g' + i}>{' '.repeat(gaps[i])}</Text>)
+    const btn = Button === undefined
+      ? <Text key="b">{it.shown}</Text>
+      : <Button key={it.key} hotkey={it.hotkey} plain onPress={() => spec.onSelect(it.id)}>{it.label}</Button>
+    kids.push(<Box key={it.id} width={it.width} flexShrink={0}>{btn}</Box>)
+  })
+  if (tail !== '') kids.push(<Text key="await" color={PALETTE.attention}>{'  ' + tail}</Text>)
+  if (noteW > 0) kids.push(<Text key="note" {...dimProps()} wrap="truncate">{'  ' + spec.note}</Text>)
+  const sp = spec.speed
+  if (sp !== undefined && sp !== null && sp.length > 0) {
+    const w = sp.reduce((n, g) => n + displayWidth(g.text), 0)
+    if (hostWidth() + 1 + w <= spec.columns) {
+      const texts = sp.map((g, i) => <Text key={'sp' + i} {...drawSeg(g)} wrap="truncate">{g.text}</Text>)
+      kids.push(<Text key="spgap">{' '}</Text>, Button === undefined || spec.onSpeed === undefined ? <Box key="speed">{texts}</Box> : <Button key="speed" plain onPress={spec.onSpeed}>{texts}</Button>)
+    }
+  }
+  return <Box key="shellmenu">{kids}</Box>
+}
+
+// one plain line in the main window (the pet placeholder, the help line, an empty 待決)
+export function shellNote(el: { Box: El; Text: El }, text: string): unknown[] {
+  const { Box, Text } = el
+  return [<Box key="note"><Text wrap="truncate">{' ' + text}</Text></Box>]
 }
 
 // ---- the card view (ux-v7, bandlayout): the main window of the 待決 tab shows ONE card, every word of it. The rows below are all of the card, wrapped and never cut; the caller (register.ts) shows
@@ -369,6 +464,8 @@ export type CardView = {
   grey: boolean // an answered card (sent, or closed elsewhere): the question and the options are dim theme text, the card stays in its place
   fix: { label: string; onPress: () => void } | null // the pane's 改答案 on a card sent from here
   fill: { label: string; onPress: () => void } | null // the button that puts the reply line in the prompt box (`$.prompt.fill`): an option card's 附註／其他回答, a typed card's 打字回答; null where the surface has no prompt box or the card is a dialog's
+  tight?: boolean // r5: a band with too few rows: no padding rows under the background, and 建議 and its reason on one row
+  compact?: boolean // r4: a window of 4 content rows or fewer: the title row, then the options, then the rest of the card (scrolled)
   width: number // the main window's inner width less the pad
   onPress: (k: number) => void
 }
@@ -394,7 +491,8 @@ export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t:
   const line = (k: string, text: string, dimmed = false, lead = '') => rows.push(<Box key={k}><Text>{' ' + lead}</Text><Text {...dim(dimmed)} wrap="truncate">{text}</Text></Box>)
   const fillBtn = v.fill === null ? null : BarButton(el, 'fill', v.fill.label, v.fill.onPress)
   const fixBtn = v.fix === null ? null : BarButton(el, 'fix', v.fix.label, v.fix.onPress)
-  wrapPlain(v.question, w, w).forEach((r, i) => line('q' + i, r, v.grey))
+  // r5: the question is paragraphs, not one wrapped run: a step list `(1) ... (2) ...` or `1. 2.` puts every step on its own row, its continuation hanging under its text
+  paraRows(v.question, w, w).forEach((p, i) => line('q' + i, ' '.repeat(p.indent) + p.row, v.grey))
   // the state line of a sent or closed card (and its 改答案 Button) sits right under the question, so a window that shows only the top of a tall card still shows it
   if (v.meta !== null) rows.push(<Box key="metar"><Text>{' '}</Text><Text key="meta" {...dimProps()} wrap="truncate">{v.meta}</Text>{fixBtn === null ? <Text key="nf">{''}</Text> : <Box key="fx"><Text>{'  '}</Text>{fixBtn}</Box>}</Box>)
   // a keyed block (背景, 建議, 不授權): the key at column 1, the value from column KEY; a continuation row hangs under the value
@@ -406,40 +504,94 @@ export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t:
       line(id + i, ' '.repeat(p.indent) + p.row, dimmed, head)
     })
   }
-  if (v.background !== null) block('bg', keys[0], v.background, true)
+  let bgLines = 0
+  if (v.background !== null) {
+    const before = rows.length
+    block('bg', keys[0], v.background, true)
+    bgLines = rows.length - before
+  }
+  // two background rows when the card is drawn whole, so a one-line question puts the first option on band row 5 at every tier
+  if (!v.split && v.compact !== true && v.tight !== true) while (bgLines < 2) { line('bgpad' + bgLines, ' ') ; bgLines++ }
+  const optFrom = rows.length
   v.options.forEach((o, k) => {
-    const hotkey = k < 6 ? String(k + 1) : undefined
-    const hasKey = !v.locked && Button !== undefined && hotkey !== undefined
-    // the name wraps by display width: the row has the pad and the pick mark in front (3 cells), the host's `k: ` in front of a Button, and the ★ behind the last piece (2 cells)
-    const room = Math.max(1, w - 3 - (hasKey ? 3 : 0) - 2)
-    const [head = '', ...more] = wrapPlain(o.label, room, room)
-    const label = v.locked
-      ? <Text key="b" {...dim(v.grey)} wrap="truncate">{head + ' '.repeat(Math.max(0, OPT_LABEL_COLS - displayWidth(head)))}</Text>
-      : !hasKey
-      ? <Text key="b" wrap="truncate">{(hotkey === undefined ? '' : hotkey + ': ') + head}</Text>
-      : <Button key={o.key} plain onPress={() => v.onPress(k)}>{head + ' '.repeat(Math.max(0, OPT_LABEL_COLS - displayWidth(head)))}</Button>
-    const star = o.recommended ? <Text key="rec">{' ' + GLYPHS.structure.recommend}</Text> : <Text key="rec">{''}</Text>
-    if (hasKey) keyed.push({ k, at: v.split ? null : rows.length })
-    optTo.push(
-      <Box key={'o' + k}>
-        <Text>{' '}</Text>{o.picked ? <Text key="pk" {...drawSeg(PICK_MARK)}>{PICK_MARK.text}</Text> : <Text key="pk">{' '}</Text>}<Text>{' '}</Text>
-        {label}
-        {more.length === 0 ? star : <Text key="rec">{''}</Text>}
-      </Box>,
-    )
-    // the rest of a long name hangs under the first piece; the ★ follows the last piece
-    more.forEach((r, i) => optTo.push(
-      <Box key={'on' + k + '_' + i}><Text>{' '}</Text><Text {...dim(v.grey)} wrap="truncate">{'    ' + r}</Text>{i === more.length - 1 ? star : <Text key="rec">{''}</Text>}</Box>,
-    ))
-    if (o.description !== '') wrapPlain(o.description, w - 4, w - 4).forEach((r, i) => line('od' + k + '_' + i, r, true, v.split && i === 0 ? String(k + 1).padEnd(4) : '    '))
+    if (v.split) {
+      const hotkey = k < 6 ? String(k + 1) : undefined
+      const hasKey = !v.locked && Button !== undefined && hotkey !== undefined
+      const room = Math.max(1, w - 3 - (hasKey ? 3 : 0) - 2)
+      const [head = '', ...more] = wrapPlain(o.label, room, room)
+      const label = v.locked
+        ? <Text key="b" {...dim(v.grey)} wrap="truncate">{head + ' '.repeat(Math.max(0, OPT_LABEL_COLS - displayWidth(head)))}</Text>
+        : !hasKey
+        ? <Text key="b" wrap="truncate">{(hotkey === undefined ? '' : hotkey + ': ') + head}</Text>
+        : <Button key={o.key} plain onPress={() => v.onPress(k)}>{head + ' '.repeat(Math.max(0, OPT_LABEL_COLS - displayWidth(head)))}</Button>
+      const star = o.recommended ? <Text key="rec">{' ' + GLYPHS.structure.recommend}</Text> : <Text key="rec">{''}</Text>
+      if (hasKey) keyed.push({ k, at: null })
+      optTo.push(
+        <Box key={'o' + k}>
+          <Text>{' '}</Text>{o.picked ? <Text key="pk" {...drawSeg(PICK_MARK)}>{PICK_MARK.text}</Text> : <Text key="pk">{' '}</Text>}<Text>{' '}</Text>
+          {label}
+          {more.length === 0 ? star : <Text key="rec">{''}</Text>}
+        </Box>,
+      )
+      more.forEach((r, i) => optTo.push(
+        <Box key={'on' + k + '_' + i}><Text>{' '}</Text><Text {...dim(v.grey)} wrap="truncate">{'    ' + r}</Text>{i === more.length - 1 ? star : <Text key="rec">{''}</Text>}</Box>,
+      ))
+      if (o.description !== '') wrapPlain(o.description, w - 4, w - 4).forEach((r, i) => line('od' + k + '_' + i, r, true, i === 0 ? String(k + 1).padEnd(4) : '    '))
+      return
+    }
+    // one line `   N: label ★  description`; a description that does not fit wraps under the description column. No digit hotkey.
+    const num = String(k + 1)
+    const star = o.recommended ? ' ' + GLYPHS.structure.recommend : ''
+    const prefix = (o.picked ? PICK_MARK.text : ' ') + '  ' + num + ': '
+    const prefixW = displayWidth(prefix)
+    const gap = '  '
+    const budget = Math.max(1, w - prefixW - displayWidth(star) - displayWidth(gap))
+    const labelParts = wrapPlain(o.label, budget, Math.max(1, w - prefixW))
+    if (labelParts.length === 0) labelParts.push('')
+    const oneLabel = labelParts.length === 1
+    const head = prefix + labelParts[0] + (oneLabel ? star : '')
+    const descAt = displayWidth(head + gap)
+    const descRoom = Math.max(1, w - (oneLabel ? descAt : prefixW))
+    const descParts = o.description === '' ? [] : wrapPlain(o.description, oneLabel ? Math.max(1, w - descAt) : descRoom, descRoom)
+    const restHead = '  ' + num + ': ' + labelParts[0] + (oneLabel ? star : '')
+    const restFirst = oneLabel && descParts.length > 0 ? restHead + gap + descParts[0] : restHead
+    const hasKey = !v.locked && Button !== undefined && k < 6
+    const drawn = hasKey
+      ? <Button key={o.key} plain onPress={() => v.onPress(k)}>{restFirst}</Button>
+      : <Text key="b" {...dim(v.grey)} wrap="truncate">{restFirst}</Text>
+    const mark = o.picked ? <Text key="pk" {...drawSeg(PICK_MARK)}>{PICK_MARK.text}</Text> : <Text key="pk">{' '}</Text>
+    if (hasKey) keyed.push({ k, at: rows.length })
+    rows.push(<Box key={'o' + k}>{mark}{drawn}</Box>)
+    // mark is one cell, then two spaces, then the digit: content column 3, band column 31 when the main border is column 27
+    labelParts.slice(1).forEach((piece, i) => {
+      const last = i === labelParts.length - 2
+      const text = ' '.repeat(prefixW) + piece + (last ? star : '')
+      rows.push(<Box key={'on' + k + '_' + i}><Text {...dim(v.grey)} wrap="truncate">{text}</Text></Box>)
+    })
+    const descFrom = oneLabel ? 1 : 0
+    // a wrapped label's description rows hang under the label column (prefixW), the width descRoom was wrapped to
+    const indent = oneLabel ? descAt : prefixW
+    descParts.slice(descFrom).forEach((piece, i) => {
+      rows.push(<Box key={'od' + k + '_' + i}><Text {...dimProps()} wrap="truncate">{' '.repeat(Math.min(indent, Math.max(0, w - 1))) + piece}</Text></Box>)
+    })
   })
+  const optTo2 = rows.length
   if (v.advice !== null) {
-    block('ad', keys[1], v.advice.label, false)
-    if (v.advice.why !== null) block('aw', null, v.advice.why, false)
+    if (v.tight === true && v.advice.why !== null) block('ad', keys[1], v.advice.label + ' — ' + v.advice.why, false)
+    else {
+      block('ad', keys[1], v.advice.label, false)
+      if (v.advice.why !== null) block('aw', null, v.advice.why, false)
+    }
   }
   if (v.notAuthorized !== null) block('na', keys[2], v.notAuthorized, false)
   if (fillBtn !== null) optTo.push(<Box key="fill"><Text>{' '}</Text>{fillBtn}</Box>)
   if (v.meta === null && v.note !== null) line('note', v.note, true)
+  if (v.compact === true && !v.split && optTo2 > optFrom) {
+    // the first row of the question stays on top, the options come next, and everything else (the rest of the question, the state line, the background, the advice) follows and scrolls
+    const re = [...rows.slice(0, 1), ...rows.slice(optFrom, optTo2), ...rows.slice(1, optFrom), ...rows.slice(optTo2)]
+    keyed.forEach(x => { if (x.at !== null && x.at >= optFrom && x.at < optTo2) x.at = x.at - optFrom + 1 })
+    return { rows: re, strip, keyed }
+  }
   return { rows, strip, keyed }
 }
 
@@ -469,12 +621,13 @@ export function cardSplit(el: { Box: El; Text: El; Button?: El }, t: T, o: { top
 
 // the quick row of the 待決 card view: `0: 送出 N 張 │ 7: 上一張 │ 8: 下一張 │ 9: 下一個選單   tip`. The slots have fixed widths (15, 12, 12, 16), so the four labels sit at the same
 // columns at every tier; only the tip's length changes.
-export type CardQuick = { sendN: number; undo?: { secs: number; onUndo: () => void }; tip: string; onSend: () => void; onPrev: () => void; onNext: () => void; onMenu: () => void }
+export type CardQuick = { sendN: number; undo?: { secs: number; onUndo: () => void }; tip: string; fill?: { label: string; onPress: () => void } | null; onSend: () => void; onPrev: () => void; onNext: () => void; onMenu: () => void }
 export function cardQuick(el: { Box: El; Text: El; Button?: El }, t: T, q: CardQuick): unknown[] {
   const { Box, Text, Button } = el
+  // the digits are label text, never a hotkey (a bare digit in an empty composer would press the Button). The Box width, not the text, places 0/7/8/9.
   const slot = (key: string, hotkey: string, label: string, width: number, press: () => void, sep: boolean) => (
     <Box key={'s-' + key} width={width} flexShrink={0}>
-      {Button === undefined ? <Text key="b">{hotkey + ': ' + label}</Text> : <Button key={key} plain onPress={press}>{label}</Button>}
+      {Button === undefined ? <Text key="b">{hotkey + ': ' + label}</Text> : <Button key={key} plain onPress={press}>{hotkey + ': ' + label}</Button>}
       {sep ? <Text key="sep" {...drawSeg(QUICK_SEP)}>{QUICK_SEP.text}</Text> : <Text key="sep">{''}</Text>}
     </Box>
   )
@@ -483,7 +636,7 @@ export function cardQuick(el: { Box: El; Text: El; Button?: El }, t: T, q: CardQ
     slot('prev', '7', t('shell.prev'), 12, q.onPrev, true),
     slot('next', '8', t('shell.next'), 12, q.onNext, true),
     slot('next-menu', '9', t('shell.next_menu'), 16, q.onMenu, false),
-    <Text key="tip" {...dimProps()} wrap="truncate">{q.tip}</Text>,
+    q.fill === undefined || q.fill === null ? <Text key="tip" {...dimProps()} wrap="truncate">{q.tip}</Text> : <Box key="qfill"><Text>{'  '}</Text>{BarButton(el, 'fill', q.fill.label, q.fill.onPress)}</Box>, // r5 bare card: the fill Button takes the tip's place
   ]
 }
 

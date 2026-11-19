@@ -1,8 +1,9 @@
 'use strict';
 
 /**
- * fleet-task.js — fleet task verbs: one progress line, or mark a task blocked on a target.
+ * fleet-task.js — fleet task verbs: show task JSON, emit one progress line, or mark a task blocked on a target.
  *
+ *   show(taskId, { timeoutMs })       ->  { ok: true, task, stdout } | { ok: false, status, timedOut, error }
  *   progress(taskId, text)            ->  { ok: true } | { ok: false, status, error }   (`task update <id> <text>`, used by stage-advance)
  *   blocked(taskId, blockedOn, note)  ->  { ok: true } | { ok: false, status, error }
  *   dispatchEnding(taskId, {role, runId, status, sha, log}, {timeoutMs})
@@ -29,13 +30,44 @@ function bin() {
 }
 
 function run(args, timeoutMs = 15000) {
-  const r = spawnSync(bin(), args, { encoding: 'utf8', timeout: timeoutMs });
-  if (r.error) return { ok: false, status: null, error: r.error.message };
+  const r = spawnSync(bin(), args, {
+    encoding: 'utf8',
+    timeout: timeoutMs,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  if (r.error) {
+    const timedOut = r.error.code === 'ETIMEDOUT';
+    return {
+      ok: false,
+      status: null,
+      timedOut,
+      error: timedOut ? `timed out after ${timeoutMs}ms` : r.error.message,
+    };
+  }
+  if (r.signal) {
+    return { ok: false, status: null, timedOut: false, error: `signal ${r.signal}` };
+  }
   if (r.status !== 0) {
     const detail = (r.stderr || '').trim().split('\n')[0];
-    return { ok: false, status: r.status, error: detail || `exit ${r.status}`, stdout: r.stdout };
+    return { ok: false, status: r.status, timedOut: false, error: detail || `exit ${r.status}`, stdout: r.stdout };
   }
   return { ok: true, stdout: r.stdout };
+}
+
+function show(taskId, opts = {}) {
+  const timeoutMs = Number.isFinite(opts.timeoutMs) && opts.timeoutMs > 0 ? opts.timeoutMs : 1500;
+  const r = run(['task', 'show', String(taskId), '--json'], timeoutMs);
+  if (!r.ok) return r;
+  let task;
+  try {
+    task = JSON.parse(r.stdout || '');
+  } catch (err) {
+    return { ok: false, status: 0, timedOut: false, error: `invalid JSON (${err.message})` };
+  }
+  if (!task || typeof task !== 'object' || Array.isArray(task)) {
+    return { ok: false, status: 0, timedOut: false, error: 'invalid task JSON object' };
+  }
+  return { ok: true, task, stdout: r.stdout };
 }
 
 function progress(taskId, text) {
@@ -71,4 +103,4 @@ function ownerAddress() {
   return ADDR_RE.test(first) ? first : null;
 }
 
-module.exports = { progress, dispatchEnding, blocked, ownerAddress, bin };
+module.exports = { show, progress, dispatchEnding, blocked, ownerAddress, bin };

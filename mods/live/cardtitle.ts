@@ -12,3 +12,19 @@ export const cardTitleOf = (d: { title?: string | null; question?: string | null
 // a name the band's 待決 list draws is wrapped and drawn whole (bandpolish), so it takes cardNameOf; the 待決 tab heading, the fleet others card and the console feed (commandtab.ts) use cardTitleOf's "…".
 export const cardNameOf = (d: { title?: string | null; question: string }): string =>
   typeof d.title === 'string' && d.title !== '' && !/[\u0000-\u001f\u007f\u2028\u2029]/.test(d.title) ? d.title : d.question
+
+const cleanTitle = (title: string | null | undefined): string | null =>
+  typeof title === 'string' && title !== '' && !/[\u0000-\u001f\u007f\u2028\u2029]/.test(title) ? title : null
+
+// The left list and the card header, when the card has no title: the first sentence of the question.
+// Cut at the first 。！？.!?;； or before a "(1)" / "1." list start. The main window still shows the whole question.
+export const cardSentenceOf = (d: { title?: string | null; question?: string | null }): string => {
+  const title = cleanTitle(d.title)
+  if (title !== null) return title
+  const q = (typeof d.question === 'string' ? d.question : '').replace(/[\r\n]+/g, ' ').trim()
+  const at = q.search(/[。！？.!?;；]|\(\d+\)|(?:^|\s)\d+\./)
+  if (at < 0) return q
+  const mark = q.slice(at).match(/^[。！？.!?;；]|\(\d+\)|(?:^|\s)\d+\./)
+  const cut = mark !== null && /^[。！？.!?;；]/.test(mark[0]) ? q.slice(0, at + mark[0].length).trim() : q.slice(0, at).trim()
+  return cut === '' ? q : cut
+}

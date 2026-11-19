@@ -54,7 +54,7 @@ test('gate2 item 1: actions sit directly above the strip, the body touches the a
   expect(out.length).toBe(24)
   const last = out.length - 1
   expect(out[last - 1]).toContain('沒有待決卡') // the action row is right above the strip
-  const content = out.indexOf(t('frame.pet_todo'))
+  const content = out.indexOf(t('page.pet.none'))
   expect(content, 'the body touches the first action').toBe(last - 2)
   const blanks = out.map((l, i) => (l.trim() === '' ? i : -1)).filter(i => i >= 0)
   expect(blanks.length).toBeGreaterThan(0)
@@ -225,9 +225,8 @@ test('gate2 item 9: the zh-TW decide nav hints split into [h] and [l] Buttons (s
   const live = { ...(LIVE0 as object), pending: [dec('d-aaaa0001'), dec('d-aaaa0002')] }
   for (const state of [NO_NAV, { ...NO_NAV, picks: { 'd-aaaa0001': 0 }, hold: { 'd-aaaa0001': NOW - 2000 } }, { ...NO_NAV, sent: { 'd-aaaa0001': NOW - 12000 } }]) {
     const rows = hostRows('decide', 70, 24, { decide: state }, live)
-    expect(rows.flatMap(r => r.buttons).filter(b => b.props.hotkey === 'h' || b.props.hotkey === 'l').map(b => b.props.hotkey)).toEqual(['h', 'l'])
-    const parts = t('page.decide.act_nav_c').split(/(?<=^|\s)(?=\[[a-z]\] \S)/).filter(x => x.trim() !== '')
-    expect(parts.length).toBe(2)
+    expect(rows.flatMap(r => r.buttons).filter(b => b.props.hotkey === 'h' || b.props.hotkey === 'l').map(b => b.props.hotkey)).toEqual([])
+    expect(rows.map(r => r.text).join('\n')).toContain('待決在 band 上（d）')
   }
 })
 

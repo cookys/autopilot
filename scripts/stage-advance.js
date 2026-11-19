@@ -1134,6 +1134,7 @@ function main() {
 
 if (require.main === module) process.exit(main());
 module.exports = {
+  COARSE_OF_NODE,
   run,
   parseUnit,
   unitViolation,

@@ -1,0 +1,49 @@
+{
+  "schema": "autopilot.fleet-flow-evidence/1",
+  "rules": [
+    {
+      "event": "leaving:plan",
+      "sizes": ["M", "L", "XL"],
+      "derivation_id": "plan_blob",
+      "codes": ["plan_receipt_required", "plan_blob_missing", "plan_not_first"]
+    },
+    {
+      "event": "leaving:plan-review",
+      "sizes_from_node": "plan-review",
+      "derivation_id": "plan_review_receipt",
+      "codes": ["plan_review_required", "plan_review_unrepaired"]
+    },
+    {
+      "event": "leaving:code-review",
+      "sizes": ["M", "L", "XL"],
+      "derivation_id": "code_review_receipt",
+      "codes": ["code_review_receipt_missing", "code_review_ambiguous"],
+      "urgent_low_timing": "after_finish",
+      "urgent_low_codes": ["urgent_review_missing"]
+    },
+    {
+      "event": "leaving:qc-gate",
+      "sizes": ["XS", "S", "M", "L", "XL"],
+      "derivation_id": "stage_order_only",
+      "codes": ["entry_stage_skipped", "diagnose_skipped"]
+    },
+    {
+      "event": "finish:merge_sha",
+      "sizes": ["XS", "S", "M", "L", "XL"],
+      "derivation_id": "merge_ancestry_and_tip",
+      "codes": ["merge_not_found", "merge_ambiguous", "merge_not_on_target", "merge_not_reviewed_tip"]
+    },
+    {
+      "event": "finish:qc_receipt",
+      "sizes": ["XS", "S", "M", "L", "XL"],
+      "derivation_id": "qc_outcome_record",
+      "codes": ["qc_outcome_refused", "qc_trailer_missing"]
+    },
+    {
+      "event": "finish:used",
+      "sizes": ["XS", "S", "M", "L", "XL"],
+      "derivation_id": "used_line_policy",
+      "codes": ["used_na_not_allowed", "used_evidence_unresolvable"]
+    }
+  ]
+}

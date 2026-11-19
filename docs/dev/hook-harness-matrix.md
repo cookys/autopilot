@@ -19,6 +19,7 @@ In `hooks/harness-support-evidence.json`, a `fired` row (a probe run saw the eve
 | `dirty-protected-paths` | Stop<br>未驗證 | SessionEnd, Stop<br>未驗證 | — | — |
 | `dispatch-model-guard` | PreToolUse<br>未驗證 | — | — | — |
 | `failure-escalation` | PostToolUse<br>未驗證 | — | — | — |
+| `fleet-dispatch-class` | PreToolUse<br>未驗證 | — | — | — |
 | `fleet-send-work-order-guard` | PreToolUse<br>未驗證 | — | — | — |
 | `fleet-stop` | Stop<br>未驗證 | — | — | — |
 | `foreman-guard` | PreToolUse<br>未驗證 | — | — | — |
@@ -47,5 +48,6 @@ In `hooks/harness-support-evidence.json`, a `fired` row (a probe run saw the eve
 | `suggest-compact` | PostToolUse<br>未驗證 | — | — | — |
 | `unmerged-ship-advisory` | Stop<br>未驗證 | — | — | — |
 | `version-drift-check` | SessionStart<br>未驗證 | — | — | — |
+| `work-order-adopt` | PostToolUse<br>未驗證 | — | — | — |
 
 `opt-in-multiplexer` hosts the opt-in PreToolUse / PostToolUse / Stop stems for Claude Code; their tiers are in `scripts/check-hook-inventory.js`. `post-tool-chain` hosts the PostToolUse stems named in its hooks.json command (one process instead of several).

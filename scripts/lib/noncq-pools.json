@@ -22,13 +22,13 @@
   "agy": {
     "key": "agy",
     "runner": "agy",
-    "model": "gemini-4-carbon-high",
+    "model": "gemini-4-hydrogen-low",
     "max_parallel": 2
   },
   "agy(alias 2)": {
     "key": "agy",
     "runner": "agy",
-    "model": "gemini-4-carbon-high",
+    "model": "gemini-4-hydrogen-low",
     "max_parallel": 2
   },
   "agyclaude": {

@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parse, isMPlus } = require('./work-order-plan.js');
+const { parse, parseSizeTag, isMPlus } = require('./work-order-plan.js');
 
 test('parse: handles empty, null, and non-string inputs', () => {
   assert.deepEqual(parse(''), { size: null, plan: null });
@@ -11,21 +11,47 @@ test('parse: handles empty, null, and non-string inputs', () => {
   assert.deepEqual(parse(123), { size: null, plan: null });
 });
 
-test('parse: extracts Size from plain, bullet, bold, and line-1 brief header', () => {
+test('parse: extracts Size from plain, bullet, bold, line-1 brief header, and line-1 SizeTag', () => {
   assert.equal(parse('Size: M').size, 'M');
   assert.equal(parse('- **Size**: L').size, 'L');
   assert.equal(parse('* **Size:** XL').size, 'XL');
   assert.equal(parse('  - Size: XS').size, 'XS');
   assert.equal(parse('Engine: gemini | Size: S | Lane: autopilot').size, 'S');
   assert.equal(parse('| Size: M |').size, 'M');
+  assert.equal(parse('[M] Implement work-order-adopt\nPlan: plan-first').size, 'M');
+  assert.equal(parse('[bug S] Fix parser edge case').size, 'S');
+  assert.equal(parse('[!L] Urgent incident fix').size, 'L');
   assert.equal(parse('Line 1\n| Size: M |').size, null);
 });
 
-test('parse: detects conflicting Size field lines and ignores prose', () => {
+test('parse: detects conflicting Size field lines and SizeTags and ignores prose', () => {
   assert.equal(parse('Size: S\n- **Size**: M').size, 'conflict');
   assert.equal(parse('Size: M | Size: L |').size, 'conflict');
+  assert.equal(parse('[S] Small title\nSize: M').size, 'conflict');
+  assert.equal(parse('[S] [M] Two tags').size, 'conflict');
   assert.equal(parse('Size: M\nSize: M').size, 'M');
+  assert.equal(parse('[M] Matching title\nSize: M').size, 'M');
   assert.equal(parse('The Size: M is in prose\nSize: S').size, 'S');
+});
+
+test('parseSizeTag: parses size, bug, urgent and ignores non-size brackets', () => {
+  assert.deepEqual(parseSizeTag(''), { size: null, bug: false, urgent: false });
+  assert.deepEqual(parseSizeTag('No bracket tag here'), { size: null, bug: false, urgent: false });
+  assert.deepEqual(parseSizeTag('[no-task: triage] Something'), { size: null, bug: false, urgent: false });
+  assert.deepEqual(parseSizeTag('[stage:build/implement] note'), { size: null, bug: false, urgent: false });
+  assert.deepEqual(parseSizeTag('[S] Quick cleanup'), { size: 'S', bug: false, urgent: false });
+  assert.deepEqual(parseSizeTag('[M] Adopt fleet task\nPlan: plan-first'), { size: 'M', bug: false, urgent: false });
+  assert.deepEqual(parseSizeTag('[bug S] Fix null deref'), { size: 'S', bug: true, urgent: false });
+  assert.deepEqual(parseSizeTag('[!L] Restore prod'), { size: 'L', bug: false, urgent: true });
+  assert.deepEqual(parseSizeTag('[L!] Restore prod'), { size: 'L', bug: false, urgent: true });
+  assert.deepEqual(parseSizeTag('[bug !M] Urgent bugfix'), { size: 'M', bug: true, urgent: true });
+  assert.deepEqual(parseSizeTag('[!bug M] Urgent bugfix'), { size: 'M', bug: true, urgent: true });
+  assert.deepEqual(parseSizeTag('[S] [L] Conflicting tags'), { size: 'conflict', bug: false, urgent: false });
+  assert.deepEqual(parseSizeTag('First line without tag\n[M] Second line tag ignored'), {
+    size: null,
+    bug: false,
+    urgent: false,
+  });
 });
 
 test('parse: extracts Plan markers and ignores prose plan-first', () => {

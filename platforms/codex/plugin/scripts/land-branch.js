@@ -8,7 +8,19 @@
 // Usage:
 //   node scripts/land-branch.js --branch <ref> --review-json <file> --fleet-task <id> --body-file <file>
 //     --review-generation <n> [--base-ref origin/develop] [--known-red <file>] [--suites affected|none]
-//     [--push] [--remote origin]
+//     [--push] [--remote origin] [--keep-branch] [--prune-remote]
+//
+// After the merge commit is pushed (status landed only), the landed branch is reaped:
+// worktrees checked out on it go through `repo-residue-sweep.js reap --repo <dir> --yes
+// --worktree <path>` (live, busy and dirty worktrees stay; this script does not re-check
+// them), then `git branch -d <branch>` (merged-only). `--prune-remote` also runs
+// `prune-merged-branch.js --repo <dir> --branch <name> --target develop --remote <remote>`.
+// Each reap step prints one `reap:` line on stderr (removed, skipped, or warning).
+// A failing reap step prints a warning and still exits 0. `--keep-branch` skips every
+// reap step. A branch named main, master, develop, or the merge target (the
+// --base-ref name after the remote prefix) is not reaped: one warning, exit unchanged.
+// A failed merge, a failed push, merged_not_pushed, and any earlier stop
+// remove nothing.
 //
 // --review-generation <n> is required. n is the generation of the review that passed
 // (1 when the first review was SHIP-AS-IS). A positive integer only: no sign, no
@@ -59,6 +71,7 @@ function usage(stream) {
   stream.write(
     'Usage: node scripts/land-branch.js --branch <ref> --review-json <file> --fleet-task <id> --body-file <file> --review-generation <n>\n' +
     '  [--base-ref origin/develop] [--known-red <file>] [--suites affected|none] [--push] [--remote origin]\n' +
+    '  [--keep-branch] [--prune-remote]\n' +
     'Stdout is one JSON line: {"status","sha","new_red","checks","log"}.\n' +
     'Exit 0 only for landed or merged_not_pushed.\n',
   );
@@ -71,6 +84,8 @@ function parseArgs(argv) {
     push: false,
     remote: 'origin',
     knownRed: null,
+    keepBranch: false,
+    pruneRemote: false,
   };
   const valued = {
     branch: 'branch',
@@ -87,6 +102,14 @@ function parseArgs(argv) {
     const flag = argv[i];
     if (flag === '--push') {
       opts.push = true;
+      continue;
+    }
+    if (flag === '--keep-branch') {
+      opts.keepBranch = true;
+      continue;
+    }
+    if (flag === '--prune-remote') {
+      opts.pruneRemote = true;
       continue;
     }
     if (!flag || !flag.startsWith('--')) throw new Error(`unknown argument: ${flag || '<missing>'}`);
@@ -184,6 +207,18 @@ function readKnown(file) {
 
 function branchLabel(ref) {
   return ref.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : ref;
+}
+
+function mergeTargetBranch(baseRef, remote) {
+  const label = branchLabel(baseRef);
+  const prefix = `${remote}/`;
+  if (label.startsWith(prefix)) return label.slice(prefix.length);
+  return label;
+}
+
+function reapProtected(branch, opts) {
+  if (branch === 'main' || branch === 'master' || branch === 'develop') return true;
+  return branch === mergeTargetBranch(opts.baseRef, opts.remote);
 }
 
 function commitMessage(branch, bodyText, model, fleetTask, reviewGeneration) {
@@ -296,6 +331,100 @@ function restoreHippo(git) {
   if (removed.status !== 0) return tail(removed.stderr || removed.stdout);
   if (fs.existsSync(HIPPO_CACHE)) fs.rmSync(HIPPO_CACHE, { force: true });
   return null;
+}
+
+function reapNote(line) {
+  process.stderr.write(`${line}\n`);
+}
+
+function worktreesOnBranch(porcelain, branch) {
+  const paths = [];
+  let current = null;
+  let on = false;
+  const flush = () => {
+    if (current && on) paths.push(current);
+    current = null;
+    on = false;
+  };
+  for (const line of `${porcelain}\n`.split('\n')) {
+    if (line.startsWith('worktree ')) {
+      flush();
+      current = line.slice('worktree '.length);
+    } else if (line === `branch refs/heads/${branch}`) on = true;
+    else if (line === '') flush();
+  }
+  flush();
+  return paths;
+}
+
+function reapAfterLand(opts, git, run) {
+  const branch = branchLabel(opts.branch);
+  if (opts.keepBranch) {
+    reapNote('reap: skipped: --keep-branch');
+    return;
+  }
+  if (reapProtected(branch, opts)) {
+    reapNote(`reap: warning: skipped: refusing to reap protected branch ${branch}`);
+    return;
+  }
+  const top = git(['rev-parse', '--show-toplevel']);
+  const repo = top.status === 0 ? top.stdout.trim() : '';
+  const listed = git(['worktree', 'list', '--porcelain']);
+  let paths = [];
+  if (listed.status !== 0) {
+    reapNote(`reap: warning: worktree list failed: ${tail(listed.stderr || listed.stdout) || `exit ${listed.status}`}`);
+  } else {
+    paths = worktreesOnBranch(listed.stdout, branch);
+  }
+  if (listed.status === 0 && paths.length === 0) {
+    reapNote(`reap: skipped worktree: none checked out on ${branch}`);
+  }
+  const sweep = path.join(__dirname, 'repo-residue-sweep.js');
+  for (const wt of paths) {
+    if (!repo) {
+      reapNote(`reap: warning: worktree ${wt} not removed: repo path unknown`);
+      continue;
+    }
+    const result = run(['node', sweep, 'reap', '--repo', repo, '--yes', '--worktree', wt]);
+    let report = null;
+    try { report = JSON.parse(result.stdout); } catch { report = null; }
+    const resolved = path.resolve(wt);
+    const removed = report && report.actions && (report.actions.worktrees_removed || []).some((row) => path.resolve(row.path) === resolved);
+    const kept = report && report.actions && (report.actions.worktrees_kept || []).find((row) => path.resolve(row.path) === resolved);
+    if (removed) {
+      reapNote(`reap: removed worktree ${wt}`);
+    } else if (kept) {
+      const why = kept.why || kept.class || 'kept';
+      if (kept.class === 'dirty' || result.status !== 0) {
+        reapNote(`reap: warning: preserved worktree ${wt}: ${why}`);
+      } else {
+        reapNote(`reap: skipped worktree ${wt}: ${why}`);
+      }
+    } else {
+      const why = tail(result.stderr || result.stdout) || `exit ${result.status}`;
+      reapNote(`reap: warning: worktree ${wt} not removed: ${why}`);
+    }
+  }
+  const deleted = git(['branch', '-d', branch]);
+  if (deleted.status === 0) reapNote(`reap: removed local branch ${branch}`);
+  else reapNote(`reap: warning: local branch ${branch} not removed: ${tail(deleted.stderr || deleted.stdout) || `exit ${deleted.status}`}`);
+  if (!opts.pruneRemote) return;
+  if (!repo) {
+    reapNote('reap: warning: remote branch not removed: repo path unknown');
+    return;
+  }
+  const pruner = path.join(__dirname, 'prune-merged-branch.js');
+  const result = run(['node', pruner, '--repo', repo, '--branch', branch, '--target', 'develop', '--remote', opts.remote]);
+  let report = null;
+  try { report = JSON.parse(result.stdout); } catch { report = null; }
+  if (result.status === 0 && report && report.action === 'deleted') {
+    reapNote(`reap: removed remote branch ${branch}`);
+  } else if (result.status === 0 && report && (report.action === 'absent' || report.action === 'skipped')) {
+    reapNote(`reap: skipped remote branch ${branch}: ${report.action}${report.reason ? ` ${report.reason}` : ''}`);
+  } else {
+    const why = (report && (report.reason || report.action)) || tail(result.stderr || result.stdout) || `exit ${result.status}`;
+    reapNote(`reap: warning: remote branch ${branch} not removed: ${why}`);
+  }
 }
 
 function headSha(git) {
@@ -432,6 +561,11 @@ function main() {
   const pushed = git(['push', opts.remote, 'HEAD:develop']);
   if (pushed.status !== 0) {
     finish({ status: 'push_failed', stderr_tail: tail(pushed.stderr || pushed.stdout), checks }, 1);
+  }
+  try {
+    reapAfterLand(opts, git, run);
+  } catch (error) {
+    reapNote(`reap: warning: ${error && error.message ? error.message : error}`);
   }
   finish({ status: 'landed', checks }, 0);
 }

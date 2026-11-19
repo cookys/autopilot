@@ -18,7 +18,8 @@
   "per-turn-gate",
   "pm-output-cap",
   "session-summary",
-  "test-runner"
+  "test-runner",
+  "work-order-adopt"
  ],
  "opt_in_sub_stems": {
   "pm-dispatch-plan-guard": "fleet-send-work-order-guard"

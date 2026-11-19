@@ -6,9 +6,11 @@ const assert = require('node:assert/strict')
 const path = require('node:path')
 
 let S
+let P
 let ui
 test.before(async () => {
   S = await import(path.join(__dirname, 'shell.ts'))
+  P = await import(path.join(__dirname, 'panel.ts'))
   ui = await import(path.join(__dirname, 'ui.ts'))
 })
 
@@ -28,7 +30,7 @@ const PANEL = (over = {}) => ({
 })
 const ROOM = Array.from({ length: 9 }, (_, i) => ({ seq: i + 1, from: i % 3 === 0 ? 'owner' : 'seat' + i, kind: 'say', text: 'message ' + (i + 1) + '\nsecond line' }))
 const FLEET = [{ lane: 'lane-a', needYou: 0, failed: 0, stuck: 0, running: 2, waiting: 0 }, { lane: 'lane-b', needYou: 1, failed: 0, stuck: 0, running: 0, waiting: 0 }, { lane: 'lane-c', needYou: 0, failed: 0, stuck: 0, running: 0, waiting: 0 }]
-const input = (columns, over = {}) => ({ columns, t, menuTitle: 'menu', mainTitle: 'main', room: { rows: ROOM, fresh: 0 }, panel: S.parsePanel(PANEL(), 1_010_000), fleet: FLEET, ...over })
+const input = (columns, over = {}) => ({ columns, t, menuTitle: 'menu', mainTitle: 'main', room: { rows: ROOM, fresh: 0 }, panel: P.readLegacyUsage(PANEL(), 1_010_000), fleet: FLEET, ...over })
 const planWidth = p => p.geo.left + p.geo.main + p.columns.reduce((a, c) => a + c.inner, 0) + p.columns.length + 3
 
 test('tier: the five levels sit on bodyColumns 235 / 195 / 155 / 115, one cell either side of each boundary', () => {
@@ -74,38 +76,38 @@ test('geometry: a band too narrow for a main window of 30 gets no shell, so the 
 })
 
 test('reader: nothing written, a non-object, another schema and an old panel without `side` are each a quiet "no summary" and never throw', () => {
-  assert.deepEqual(S.parsePanel(null, 0), { status: 'absent', ageMs: null, side: null, usage: null })
-  assert.deepEqual(S.parsePanel(undefined, 0), { status: 'absent', ageMs: null, side: null, usage: null })
-  for (const bad of ['text', 7, true, [], [PANEL()]]) assert.equal(S.parsePanel(bad, 0).status, 'bad', JSON.stringify(bad))
-  assert.equal(S.parsePanel({ schema: 'codeforge.panel/2', side: PANEL().side }, 0).status, 'old')
-  assert.equal(S.parsePanel({ side: PANEL().side }, 0).status, 'old')
-  assert.equal(S.parsePanel({ schema: 'codeforge.panel/2', side: PANEL().side }, 0).side, null)
+  assert.deepEqual(P.readLegacyUsage(null, 0), { status: 'absent', ageMs: null, side: null, usage: null })
+  assert.deepEqual(P.readLegacyUsage(undefined, 0), { status: 'absent', ageMs: null, side: null, usage: null })
+  for (const bad of ['text', 7, true, [], [PANEL()]]) assert.equal(P.readLegacyUsage(bad, 0).status, 'bad', JSON.stringify(bad))
+  assert.equal(P.readLegacyUsage({ schema: 'codeforge.panel/2', side: PANEL().side }, 0).status, 'old')
+  assert.equal(P.readLegacyUsage({ side: PANEL().side }, 0).status, 'old')
+  assert.equal(P.readLegacyUsage({ schema: 'codeforge.panel/2', side: PANEL().side }, 0).side, null)
   const old = PANEL(); delete old.side
-  assert.deepEqual(S.parsePanel(old, 1_005_000), { status: 'ok', ageMs: 5_000, side: null, usage: null })
+  assert.deepEqual(P.readLegacyUsage(old, 1_005_000), { status: 'ok', ageMs: 5_000, side: null, usage: null })
 })
 
 test('reader: the side parts are read one by one; a broken part is dropped, the others stay; unknown fields are ignored', () => {
   const p = PANEL(); p.side.usage = { tiers: 'nope' }; p.side.extra = { x: 1 }; p.unknown_top = 1
-  const r = S.parsePanel(p, 1_000_000)
+  const r = P.readLegacyUsage(p, 1_000_000)
   assert.equal(r.status, 'ok')
   assert.equal(r.side.usage, null)
   assert.ok(r.side.usageFull !== null && r.side.memory !== null)
   const q = PANEL(); q.side.memory = { tiers: { 30: [[{ text: 5 }]], 40: [line('ok')] } } // tier 30 breaks the line shape and is dropped, tier 40 stays
-  assert.deepEqual(Object.keys(S.parsePanel(q, 0).side.memory), ['40'])
+  assert.deepEqual(Object.keys(P.readLegacyUsage(q, 0).side.memory), ['40'])
   const none = PANEL(); none.side = { usage: 1, usage_full: null, memory: [] }
-  assert.equal(S.parsePanel(none, 0).side, null)
+  assert.equal(P.readLegacyUsage(none, 0).side, null)
 })
 
 test('reader: money is never drawn: any `$` in `side` drops the whole side (control: the same table without it is read)', () => {
   const clean = PANEL()
-  assert.notEqual(S.parsePanel(clean, 0).side, null)
+  assert.notEqual(P.readLegacyUsage(clean, 0).side, null)
   const dirty = PANEL(); dirty.side.usage_full.tiers[40][3] = line('model-a $12.50')
-  const rd = S.parsePanel(dirty, 1_030_000)
+  const rd = P.readLegacyUsage(dirty, 1_030_000)
   assert.equal(rd.side, null)
   assert.equal(rd.status, 'ok') // only the side is dropped: the read itself is still a good one
   assert.equal(rd.ageMs, 30_000)
   const dirtyTone = PANEL(); dirtyTone.side.memory.tiers[30][0] = [{ text: '記憶 ', tone: 'dim' }, { text: '$3' }]
-  const rt = S.parsePanel(dirtyTone, 1_030_000)
+  const rt = P.readLegacyUsage(dirtyTone, 1_030_000)
   assert.equal(rt.side, null)
   assert.equal(rt.status, 'ok')
   assert.equal(rt.ageMs, 30_000)
@@ -114,7 +116,7 @@ test('reader: money is never drawn: any `$` in `side` drops the whole side (cont
 test('reader: control characters in another process\'s text never reach the screen (ESC, OSC, BEL, newline in a panel line, a room from and text; one row stays one row)', () => {
   const bad = '\u001b[31mred\u001b]52;x\u0007\nnext\u0085\u007f'
   const p = PANEL(); p.side.usage.tiers[30][0] = [{ text: bad, tone: 'dim' }, { text: bad }]
-  const r = S.parsePanel(p, 0)
+  const r = P.readLegacyUsage(p, 0)
   assert.equal(r.status, 'ok')
   const segs = S.panelSegs(r.side.usage['30'][0], 80)
   const text = segText(segs)
@@ -130,10 +132,10 @@ test('reader: control characters in another process\'s text never reach the scre
 
 test('reader: unknown tone words are dropped to plain text; the age counts from updated_at_ms and is never negative', () => {
   const p = PANEL(); p.side.usage.tiers[30][0] = [{ text: 'x', tone: 'neon' }]
-  assert.deepEqual(S.parsePanel(p, 0).side.usage['30'][0], [{ text: 'x' }])
-  assert.equal(S.parsePanel(PANEL(), 999_000).ageMs, 0)
-  assert.equal(S.parsePanel(PANEL(), 1_090_000).ageMs, 90_000)
-  assert.equal(S.parsePanel(PANEL({ updated_at_ms: 'x' }), 5).ageMs, null)
+  assert.deepEqual(P.readLegacyUsage(p, 0).side.usage['30'][0], [{ text: 'x' }])
+  assert.equal(P.readLegacyUsage(PANEL(), 999_000).ageMs, 0)
+  assert.equal(P.readLegacyUsage(PANEL(), 1_090_000).ageMs, 90_000)
+  assert.equal(P.readLegacyUsage(PANEL({ updated_at_ms: 'x' }), 5).ageMs, null)
 })
 
 test('pickTier: the largest key not wider than the inner width; none fits means none', () => {
@@ -211,7 +213,7 @@ test('plan: each tier takes the panel table made for its width (30 at 120, 50 at
 
 test('plan: a missing or old `side` draws the roundtable alone, at every tier, with no empty column left behind', () => {
   const none = PANEL(); delete none.side
-  for (const panel of [S.parsePanel(none, 1_000_000), S.parsePanel(null, 0), S.parsePanel({ schema: 'x' }, 0), S.parsePanel('junk', 0)]) {
+  for (const panel of [P.readLegacyUsage(none, 1_000_000), P.readLegacyUsage(null, 0), P.readLegacyUsage({ schema: 'x' }, 0), P.readLegacyUsage('junk', 0)]) {
     for (const cols of [120, 160, 200, 240]) {
       const p = S.shellPlan(input(cols, { panel, fleet: [] }))
       assert.deepEqual(p.columns.map(c => c.id), cols <= 160 ? ['roomUsage'] : ['room'], 'tier of ' + cols)
@@ -222,16 +224,16 @@ test('plan: a missing or old `side` draws the roundtable alone, at every tier, w
     }
   }
   // the fleet column alone is still drawn at 240 when autopilot has lanes but codeforge wrote nothing
-  assert.deepEqual(S.shellPlan(input(240, { panel: S.parsePanel(null, 0) })).columns.map(c => c.id), ['room', 'fleet'])
+  assert.deepEqual(S.shellPlan(input(240, { panel: P.readLegacyUsage(null, 0) })).columns.map(c => c.id), ['room', 'fleet'])
 })
 
 test('plan: data older than 60 s puts "N minutes ago" on the first row of the first right column, no extra row; fresh data does not', () => {
-  const stale = S.shellPlan(input(160, { panel: S.parsePanel(PANEL(), 1_000_000 + 150_000) }))
+  const stale = S.shellPlan(input(160, { panel: P.readLegacyUsage(PANEL(), 1_000_000 + 150_000) }))
   assert.equal(segText(stale.columns[0].rows[0]).trimEnd(), 'shell.stale{"n":3}')
   assert.equal(stale.columns[0].rows.length, S.BODY_ROWS)
-  const fresh = S.shellPlan(input(160, { panel: S.parsePanel(PANEL(), 1_000_000 + 59_000) }))
+  const fresh = S.shellPlan(input(160, { panel: P.readLegacyUsage(PANEL(), 1_000_000 + 59_000) }))
   assert.ok(!segText(fresh.columns[0].rows[0]).includes('shell.stale'))
-  const edge = S.shellPlan(input(160, { panel: S.parsePanel(PANEL(), 1_000_000 + 60_000) }))
+  const edge = S.shellPlan(input(160, { panel: P.readLegacyUsage(PANEL(), 1_000_000 + 60_000) }))
   assert.ok(!segText(edge.columns[0].rows[0]).includes('shell.stale'), 'exactly 60 s is still fresh')
 })
 
@@ -439,30 +441,41 @@ test('left title: a card list is titled with the open tab\'s name, a tab list wi
   assert.ok(!top.includes('shell.menu'))
 })
 
-// ---- awaiting_operator_action count (bandawait): tier 80 only, in the main window's title, attention colour, nothing at 0 ----
-test('awaiting: tier 80 shows the count in the main title for N=1 and N>=2; N=0 and absent draw nothing', () => {
+// ---- awaiting_operator_action count (bandawait): the menu row owns it (band.tsx). No window title carries it, at any tier, including 0 and absent. ----
+test('awaiting: the count is not in a window title at tier 80 for N=1, N>=2, N=0 or absent', () => {
   const top = (cols, over) => S.shellPlan(input(cols, over)).top
-  const one = top(80, { awaiting: 1 })
-  assert.ok(segText(one).includes('main · shell.awaiting{"n":1}'), segText(one))
-  const many = top(80, { awaiting: 3 })
-  assert.ok(segText(many).includes('shell.awaiting{"n":3}'), segText(many))
-  for (const over of [{ awaiting: 0 }, {}]) assert.ok(!segText(top(80, over)).includes('shell.awaiting'), JSON.stringify(over))
+  for (const over of [{ awaiting: 1 }, { awaiting: 3 }, { awaiting: 0 }, {}]) assert.ok(!segText(top(80, over)).includes('shell.awaiting'), JSON.stringify(over))
+  assert.deepEqual(top(80, { awaiting: 1 }), top(80, {}))
 })
 
-test('awaiting: exactly 80 columns - plan exists, the title row keeps the frame width, the count is a PALETTE.attention text colour only', () => {
+test('awaiting: exactly 80 columns - plan exists, the title row keeps the frame width, and the title has no attention count', () => {
   const p = S.shellPlan(input(80, { awaiting: 2 }))
   assert.equal(p.geo.tier, 80)
   assert.equal(width(p.top), planWidth(p))
   assert.ok(width(p.top) <= 80)
-  const seg = p.top.find(s => s.text.includes('shell.awaiting'))
-  assert.equal(seg.color, ui.PALETTE.attention)
-  for (const k of ['backgroundColor', 'inverse', 'bold']) assert.equal(seg[k], undefined, k)
+  assert.equal(p.top.find(s => s.text.includes('shell.awaiting')), undefined)
+  assert.equal(p.separate, false)
+  assert.equal(p.leftInner, 26)
 })
 
 test('awaiting: the other tiers are untouched, whatever the count', () => {
   for (const cols of [115, 120, 160, 200, 240]) {
     assert.deepEqual(S.shellPlan(input(cols, { awaiting: 5 })).top, S.shellPlan(input(cols)).top, 'tier at ' + cols)
   }
+})
+
+test('card view frames are separate: left inner is 24, a one-cell gap, main border would start at column 27', () => {
+  const p = S.shellPlan(input(75, { noRight: true }))
+  assert.equal(p.separate, true)
+  assert.equal(p.leftInner, 24)
+  assert.equal(p.geo.left, 26)
+  assert.equal(width(p.top), 75)
+  assert.ok(!segText(p.top).includes('┬'))
+  const text = segText(p.top)
+  assert.equal(text[0], '╭')
+  assert.equal(text[25], '╮')
+  assert.equal(text[26], ' ')
+  assert.equal(text[27], '╭')
 })
 
 // ---- bandawait: the model.json half of the data -> screen chain (the drawn half is live.test.ts "bandawait e2e") ----
@@ -484,27 +497,27 @@ test('awaiting: buildJobModel splits four cards - open is the only 待決, close
 // ---- usagetab: the band's 用量 tab (top-level `usage` tiers of codeforge.panel/1) ----
 const USAGE_ROW = n => [line('row ' + n)]
 const USAGE = (over = {}, rows = 3) => PANEL({ usage: tiersOf([40, 60], k => Array.from({ length: rows }, (_, i) => line('t' + k + ' row ' + (i + 1)))), ...over })
-const usageText = (panel, cols = 60, now = 1_010_000, n = 6) => S.usageRows(S.parsePanel(panel, now), cols, n, t).map(segText)
+const usageText = (panel, cols = 60, now = 1_010_000, n = 6) => S.usageRows(P.readLegacyUsage(panel, now), cols, n, t).map(segText)
 
 test('usage reader: the top-level `usage` tiers are read next to `side`; a broken tier is dropped, control characters are cleaned, `side` is untouched', () => {
   const p = USAGE({ usage: { tiers: { 40: [line('a'), 'broken'], 60: [[{ text: 'x\u001b[31my', tone: 'success' }], line('b')] } } })
-  const r = S.parsePanel(p, 0)
+  const r = P.readLegacyUsage(p, 0)
   assert.deepEqual(Object.keys(r.usage), ['60'], 'the 40 tier has a line that is not a list of parts: dropped whole')
   assert.equal(r.usage['60'][0][0].text, 'x[31my')
   assert.notEqual(r.side, null)
-  assert.equal(S.parsePanel(PANEL(), 0).usage, null, 'empty tiers: no usage')
+  assert.equal(P.readLegacyUsage(PANEL(), 0).usage, null, 'empty tiers: no usage')
 })
 
 test('usage reader: a line whose text carries `$` is not kept, the others are (the usage tab draws no money)', () => {
   const p = USAGE({ usage: { tiers: { 40: [line('5h 41%'), line('today ', { text: '$1.20' }), line('7d 12%'), [{ text: '$' }]] } } })
-  const rows = S.parsePanel(p, 0).usage['40'].map(segText)
+  const rows = P.readLegacyUsage(p, 0).usage['40'].map(segText)
   assert.deepEqual(rows, ['5h 41%', '7d 12%'])
   assert.deepEqual(usageText(p, 40), ['5h 41%', '7d 12%'])
   assert.ok(!usageText(p, 40).join('').includes('$'))
 })
 
 test('usage tier: the largest key not wider than the window; under 40 the smallest (40) clipped; pickTier alone gives nothing at 39', () => {
-  const tiers = S.parsePanel(USAGE(), 0).usage
+  const tiers = P.readLegacyUsage(USAGE(), 0).usage
   const key = inner => S.pickUsageTier(tiers, inner)[0].map(p => p.text).join('').slice(0, 3)
   assert.equal(S.pickTier(tiers, 39), null)
   assert.equal(key(39), 't40')
@@ -512,7 +525,7 @@ test('usage tier: the largest key not wider than the window; under 40 the smalle
   assert.equal(key(59), 't40')
   assert.equal(key(60), 't60')
   assert.equal(key(75), 't60')
-  const only60 = S.parsePanel(USAGE({ usage: tiersOf([60]) }), 0).usage
+  const only60 = P.readLegacyUsage(USAGE({ usage: tiersOf([60]) }), 0).usage
   assert.equal(S.pickUsageTier(only60, 45)[0][0].text, 'row 60', 'no 40 table: the smallest there is')
   assert.equal(S.pickUsageTier(null, 50), null)
 })
@@ -521,17 +534,17 @@ test('usage rows: the picked table, each row cut to cols-1', () => {
   assert.deepEqual(usageText(USAGE(), 60), ['t60 row 1', 't60 row 2', 't60 row 3'])
   assert.deepEqual(usageText(USAGE(), 45), ['t40 row 1', 't40 row 2', 't40 row 3'])
   const long = USAGE({ usage: tiersOf([40], () => [line('x'.repeat(80))]) })
-  const segs = S.usageRows(S.parsePanel(long, 0), 40, 6, t)[0]
+  const segs = S.usageRows(P.readLegacyUsage(long, 0), 40, 6, t)[0]
   assert.equal(width(segs), 39)
   assert.ok(segText(segs).endsWith('…'))
 })
 
 test('usage rows: nothing written, an unknown schema or format, and no layout are one dim line each (no throw)', () => {
-  const none = S.usageRows(S.parsePanel(null, 0), 60, 6, t)
+  const none = S.usageRows(P.readLegacyUsage(null, 0), 60, 6, t)
   assert.deepEqual(none.map(segText), ['shell.usage_none'])
   assert.equal(none[0][0].dim, true)
   assert.deepEqual(usageText({ ...USAGE(), schema: 'codeforge.panel/2' }), ['shell.usage_format'])
-  assert.deepEqual(S.usageRows(S.parsePanel('junk', 0), 60, 6, t).map(segText), ['shell.usage_format'])
+  assert.deepEqual(S.usageRows(P.readLegacyUsage('junk', 0), 60, 6, t).map(segText), ['shell.usage_format'])
   assert.deepEqual(usageText(PANEL()), ['shell.usage_nolayout'], 'ok panel with empty usage tiers')
   assert.deepEqual(usageText(USAGE({ usage: { tiers: { 40: [line('$9')] } } }), 60), ['shell.usage_nolayout'], 'every line was money')
 })
@@ -540,34 +553,34 @@ test('usage rows: exactly as many lines as rows fit draws them all; one more dra
   const fit = usageText(USAGE({}, 6))
   assert.equal(fit.length, 6)
   assert.ok(!fit.join('|').includes('usage_more'), 'no hint when the rows just fit')
-  const seven = S.usageRows(S.parsePanel(USAGE({}, 7), 1_010_000), 60, 6, t)
+  const seven = S.usageRows(P.readLegacyUsage(USAGE({}, 7), 1_010_000), 60, 6, t)
   assert.equal(seven.length, 6)
   assert.deepEqual(seven.slice(0, 5).map(segText), [1, 2, 3, 4, 5].map(i => 't60 row ' + i))
   assert.equal(segText(seven[5]), 'shell.usage_more{"n":2}')
   assert.equal(seven[5][0].dim, true)
-  const ten = S.usageRows(S.parsePanel(USAGE({}, 10), 1_010_000), 60, 6, t)
+  const ten = S.usageRows(P.readLegacyUsage(USAGE({}, 10), 1_010_000), 60, 6, t)
   assert.equal(segText(ten[5]), 'shell.usage_more{"n":5}')
 })
 
 test('usage rows: stale data puts its age in front of the first row, with no row of its own; fresh data and the 60 s edge do not', () => {
   const p = USAGE()
-  const stale = S.usageRows(S.parsePanel(p, 1_000_000 + 150_000), 60, 6, t)
+  const stale = S.usageRows(P.readLegacyUsage(p, 1_000_000 + 150_000), 60, 6, t)
   assert.equal(stale.length, 3, 'no extra row')
   assert.equal(segText(stale[0]), 'shell.stale{"n":3} t60 row 1')
   assert.equal(stale[0][0].dim, true)
   assert.equal(segText(stale[1]), 't60 row 2')
-  const hinted = S.usageRows(S.parsePanel(USAGE({}, 7), 1_000_000 + 150_000), 60, 6, t)
+  const hinted = S.usageRows(P.readLegacyUsage(USAGE({}, 7), 1_000_000 + 150_000), 60, 6, t)
   assert.equal(hinted.length, 6, 'stale plus a cut table still fills the window and no more')
   assert.ok(width(hinted[0]) <= 59)
   assert.deepEqual(usageText(p, 60, 1_000_000 + 59_000), ['t60 row 1', 't60 row 2', 't60 row 3'])
   assert.deepEqual(usageText(p, 60, 1_000_000 + 60_000), ['t60 row 1', 't60 row 2', 't60 row 3'], 'exactly STALE_MS is still fresh')
   assert.equal(usageText(p, 60, 1_000_000 + 60_001)[0].startsWith('shell.stale'), true)
-  assert.equal(width(S.usageRows(S.parsePanel(p, 1_000_000 + 150_000), 20, 6, t)[0]), 19, 'the age and the row are cut together')
+  assert.equal(width(S.usageRows(P.readLegacyUsage(p, 1_000_000 + 150_000), 20, 6, t)[0]), 19, 'the age and the row are cut together')
 })
 
 test('usage colours: subtle / inactive / success are PALETTE roles, dim is dim, bold and mono are plain text, an unknown tone and a stray bg or inverse field are ignored', () => {
   const p = USAGE({ usage: { tiers: { 40: [[{ text: 'a', tone: 'subtle', bg: 'red', inverse: true }], [{ text: 'b', tone: 'inactive' }], [{ text: 'c', tone: 'success' }], [{ text: 'd', tone: 'dim' }], [{ text: 'e', tone: 'bold' }], [{ text: 'f', tone: 'mono' }], [{ text: 'g', tone: 'neon' }]] } } })
-  const rows = S.usageRows(S.parsePanel(p, 0), 60, 9, t)
+  const rows = S.usageRows(P.readLegacyUsage(p, 0), 60, 9, t)
   const seg = i => rows[i][0]
   assert.equal(seg(0).color, ui.PALETTE.structure)
   assert.equal(seg(1).color, ui.PALETTE.idle)
@@ -590,9 +603,17 @@ test('plan: at 240 with no lanes, a memory row alone keeps the third column (id 
 test('plan: control: at 240 with no lanes and an empty memory tier the third column is dropped and its width goes to the usage column', () => {
   const full = S.shellPlan(input(240, { fleet: [] }))
   const panel = PANEL(); panel.side.memory = { tiers: { 40: [] } }
-  const p = S.shellPlan(input(240, { fleet: [], panel: S.parsePanel(panel, 1_010_000) }))
+  const p = S.shellPlan(input(240, { fleet: [], panel: P.readLegacyUsage(panel, 1_010_000) }))
   assert.deepEqual(p.columns.map(c => c.id), ['room', 'usage'])
   const inner = (pl, id) => pl.columns.find(c => c.id === id).inner
   assert.equal(inner(p, 'usage'), inner(full, 'usage') + inner(full, 'fleet') + 1)
   assert.equal(width(p.top), planWidth(p))
+})
+
+test('panel separation: parsePanel/PANEL_SCHEMA moved to panel.ts; shell.ts carries no codeforge.panel literal', () => {
+  assert.equal(S.parsePanel, undefined)
+  assert.equal(S.PANEL_SCHEMA, undefined)
+  const fs = require('node:fs')
+  assert.equal(fs.readFileSync(path.join(__dirname, 'shell.ts'), 'utf8').includes('codeforge.panel'), false)
+  assert.equal(P.PANEL_SCHEMA, 'codeforge.panel/1')
 })

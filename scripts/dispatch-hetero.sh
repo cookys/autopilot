@@ -20,18 +20,18 @@
 #
 # USAGE:
 #   scripts/dispatch-hetero.sh --branch <name> --prompt-file <file>
-#       [--model gemini-4-carbon-low]        # default agy implementer id. A gemini-flash[-tier]
-#                                             # alias still resolves against the live `agy models`
-#                                             # inventory. Names: `agy models` / `grok models`.
-#                                             # Required for any non-agy runner. The next roster
-#                                             # rung when this id is the implementer and
-#                                             # implementer_ladder is empty is gemini-4-argon-low
-#                                             # (resolve-review-loop.sh; this script does not retry).
+#       [--model <id>]                        # no built-in model. Unpinned (no --runner/--model) goes to
+#                                             # grok-4.7 at effort low; --runner codex -> gpt-6.1-terra low,
+#                                             # --runner agy -> gemini-4-hydrogen-low low (never carbon),
+#                                             # --runner opencode -> opencode-go/beam-free (no variant),
+#                                             # cursor/kimi use broker defaults; other runners REQUIRE --model.
+#                                             # A gemini-flash[-tier] alias still resolves against the live
+#                                             # `agy models` inventory. Explicit --model/--effort always win.
 #       [--runner auto|codex|agy|grok|cc-shim|pi|cursor|opencode|kimi|claude-native|qoderclicn] # default auto: *gpt*/*codex*→codex,
-#                                              #   *grok*/*composer*→grok, else agy (*qwen*/*qwq* refused; use cc-shim + --endpoint).
+#                                              #   *grok*/*composer*→grok, no --model→grok, else agy (*qwen*/*qwq* refused; use cc-shim + --endpoint).
 #                                              #   qoderclicn (EXPLICIT only, never auto): Qoder CLI CN.
 #                                              #   Explicit wins (don't rely on name luck).
-#                                              #   grok models: grok-4.5 (ex-grok-build), grok-composer-2.5-fast
+#                                              #   grok: default grok-4.7 (effort low); also grok-4.5 (ex-grok-build), grok-composer-2.5-fast
 #                                              #   cc-shim (EXPLICIT only): Claude Code CLI
 #                                              #   driving an Anthropic-compatible endpoint —
 #                                              #   needs ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN
@@ -51,11 +51,14 @@
 #                                              #   Default composer-2.5; composer models only.
 #                                              #   Pace may select it; the model-name guard remains.
 #       [--pace-role <role>]                   # override the default implementer quota-selection role.
-#                                              #   No named runner/model: pace-select chooses by quota,
-#                                              #   records engine_choice + pace_choice; pace_unknown
-#                                              #   retains the existing default. Named seats win and
-#                                              #   warn when their fresh usage reaches the ceiling.
-#       [--effort xhigh]                       # codex reasoning effort (low|medium|high|xhigh|max)
+#                                              #   No named runner/model: pace-select chooses by quota
+#                                              #   among four cheap seats only (grok-4.7/low,
+#                                              #   gpt-6.1-terra/low, gemini-4-hydrogen-low/low,
+#                                              #   opencode-go/beam-free/default). Records engine_choice
+#                                              #   + pace_choice; pace_unknown retains the existing default.
+#                                              #   Named seats win and warn at the ceiling. An explicit
+#                                              #   --model/--effort always wins.
+#       [--effort xhigh]                       # reasoning effort (low|medium|high|xhigh|max; unpinned codex/grok/agy→low, opencode→none)
 #       [--endpoint <name>]                    # cc-shim only (also --endpoint=<name>; last one
 #                                              #   wins; @none clears; empty is refused): resolve
 #                                              #   creds via resolve-endpoint.sh
@@ -347,11 +350,10 @@ if [ "${AUTOPILOT_TEST_ALLOW_HETERO_SEAMS:-}" != "1" ]; then
   unset HETERO_TEST_SYSTEMCTL_KILL_FAIL HETERO_TEST_NO_SETSID HETERO_TEST_NO_JOBCONTROL
 fi
 
-# Default is the agy implementer id gemini-4-carbon-low (literal; the flash alias cannot
-# resolve to carbon). agy_resolve_model_alias() echoes a non-alias unchanged and still
-# resolves a gemini-flash[-tier] alias against the live inventory. The id is agy-only, so
-# a non-agy runner without --model is refused (Cursor has its own broker default).
-MODEL="gemini-4-carbon-low"
+# qualified default below (grok-4.7, codex gpt-6.1-terra, agy gemini-4-hydrogen-low, opencode beam-free, cursor/kimi
+# broker). Every other runner without a default dies "--model is required". Never default to an expensive seat.
+# every other runner without a default die "--model is required". Never default to an expensive seat.
+MODEL=""
 MODEL_IS_DEFAULT=1
 BASE="develop"
 TIMEOUT="9m"
@@ -508,6 +510,7 @@ cnative_account_state() {
 }
 PI_BIN="pi"
 GROK_PROMPT_FILE=""   # grok-only combined prompt temp; init early so the INT/TERM trap can reap it
+EFFORT_SENT=""        # final effort actually sent (or "default" when none is); set once before the worker, read by emit/manifest and detach declare -p
 QODER_PROMPT_FILE=""  # qoder combined prompt temp; init early so the INT/TERM trap and detach declare -p can reap it
 CCSHIM_PROMPT_FILE="" # cc-shim combined prompt temp; same trap-reap rationale
 BROKER_TIMEOUT_S=""
@@ -724,6 +727,7 @@ cleanup() {
   [ -n "${AGY_STDERR:-}" ] && rm -f "$AGY_STDERR"
   [ -n "${AGY_PARSED:-}" ] && rm -f "$AGY_PARSED"
   [ -n "${CCSHIM_ENVELOPE:-}" ] && rm -f "$CCSHIM_ENVELOPE"
+  declare -F _reap_ccshim_env_dir >/dev/null 2>&1 && _reap_ccshim_env_dir
   reap_cnative_config_dir || true
   reap_sandbox_config_dir || true
   [ -n "${GATE_ARMED_SESSION:-}" ] && node "$SELF_DIR/per-turn-gate-arm.js" disarm --session "$GATE_ARMED_SESSION" >/dev/null 2>&1
@@ -1239,6 +1243,8 @@ NODE
   fi
   local probe_fields=""
   [ -n "${PROBE_JSON:-}" ] && probe_fields=", \"probe\": $PROBE_JSON"
+  local effort_fields=""
+  [ -z "${EFFORT_SENT:-}" ] || effort_fields=", \"effort\": \"$(_flat_json_escape "$EFFORT_SENT")\""
   local role_kit_fields=""
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_fields=", \"role_kit\": $ROLE_KIT_JSON"
   local sandbox_fields=""
@@ -1274,7 +1280,7 @@ NODE
     "$run_id_json" "$usage_json" "$num_turns_json" "$wall_json" "$duplex_json" \
     "$provider_session_json" "$provider_reused_json" "$worktree_reused_json" "$retention_lease_json" \
     "$strict_fields" "$campaign_fields" "$strict_boundary_fields" "$boundary_reject_fields" "$identity_fields" \
-    "$provider_error_fields" "$timeout_fields" ", \"error_category\": $error_category_json" "$role_kit_fields" "$probe_fields" "$sandbox_fields$fell_back_fields" "$tip_verify_fields")"
+    "$provider_error_fields" "$timeout_fields" ", \"error_category\": $error_category_json" "$effort_fields$role_kit_fields" "$probe_fields" "$sandbox_fields$fell_back_fields" "$tip_verify_fields")"
   printf '%s\n' "$_emit_json"
   # dispatch_usage/1 ledger row (never affects the result or the exit code; see lib/dispatch-usage.js).
   printf '%s' "$_emit_json" | node "$SELF_DIR/lib/dispatch-usage.js" append --from-result - --role "${AUTOPILOT_DISPATCH_ROLE:-implementer}" \
@@ -2601,6 +2607,8 @@ write_manifest() {
   if [ -n "${CAPABILITY_WRITE_SUPPRESSED:-}" ]; then
     capability_suppressed_fields=", \"capability_write_suppressed\": \"$(_flat_json_escape "$CAPABILITY_WRITE_SUPPRESSED")\""
   fi
+  local effort_manifest_fields=""
+  [ -z "${EFFORT_SENT:-}" ] || effort_manifest_fields=", \"effort\": \"$(_flat_json_escape "$EFFORT_SENT")\""
   local role_kit_manifest_fields=""
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_manifest_fields=", \"role_kit\": $ROLE_KIT_JSON"
   [ "${SANDBOX:-off}" = "bwrap" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"sandbox\": $(sandbox_json)"
@@ -2668,7 +2676,7 @@ write_manifest() {
       "$log_format" "$duplex_json" "$pid_json" "$scope_json" "${MANIFEST_CONTAINMENT:-plain}" \
       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${DISPATCH_STARTED_EPOCH:-null}" "$(_flat_json_escape "${PROMPT_FILE:-}")" "${DISPATCH_LANE_JSON:-null}" "${SCAFFOLD_TIER_EFFECTIVE:-off}" \
       "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$tip_verify_json" "$tip_verify_source_json" "$parent_json" "$root_json" "$depth_json" \
-      "$mf_timeout_secs" "$(_flat_json_escape "$mf_timeout_source")" "$mf_timeout_enforced" "$strict_manifest_fields" "$strike_suppressed_fields" "$capability_suppressed_fields" "$role_kit_manifest_fields" "$campaign_scope_fields" "$REPO_IDENTITY_FIELDS$(declare -F dispatch_attr_fields >/dev/null 2>&1 && dispatch_attr_fields "${PROMPT_FILE:-}" "$runner" "${ENDPOINT:-}" "${MANIFEST_FINAL_STATUS:+${OUTCOME_COMMIT:-}}")" \
+      "$mf_timeout_secs" "$(_flat_json_escape "$mf_timeout_source")" "$mf_timeout_enforced" "$strict_manifest_fields" "$strike_suppressed_fields" "$capability_suppressed_fields" "$effort_manifest_fields$role_kit_manifest_fields" "$campaign_scope_fields" "$REPO_IDENTITY_FIELDS$(declare -F dispatch_attr_fields >/dev/null 2>&1 && dispatch_attr_fields "${PROMPT_FILE:-}" "$runner" "${ENDPOINT:-}" "${MANIFEST_FINAL_STATUS:+${OUTCOME_COMMIT:-}}")" \
       "$(declare -F manifest_session_id_json >/dev/null 2>&1 && manifest_session_id_json || printf null)" \
       "$(declare -F manifest_child_session_json >/dev/null 2>&1 && manifest_child_session_json || printf null)" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
@@ -2975,6 +2983,10 @@ set_runner_flags() {
         IS_CODEX=1
       elif [[ "$model_lc" == *grok* || "$model_lc" == *composer* ]]; then
         IS_GROK=1
+      elif [ "$MODEL_IS_DEFAULT" -eq 1 ]; then
+        # No --runner and no --model: never an expensive seat. Qualified cheap implementer
+        # default is grok-4.7 at effort low (set below); agy is not an unpinned default.
+        IS_GROK=1
       fi
       ;;
     *) die_precondition "--runner must be one of auto|codex|agy|grok|cc-shim|pi|cursor|opencode|kimi|claude-native|qoderclicn (got: $RUNNER)" ;;
@@ -3129,6 +3141,14 @@ if [ -n "$_ps_parsed" ]; then
   { IFS= read -r RUNNER; IFS= read -r MODEL; IFS= read -r _ps_ep; IFS= read -r ENGINE_CHOICE_JSON; IFS= read -r PACE_CHOICE_JSON; } <<< "$_ps_parsed"
   [ -n "${ENDPOINT:-}" ] || ENDPOINT="$_ps_ep"
   MODEL_IS_DEFAULT=0
+  if [ "$MODEL_SUPPLIED" -eq 0 ] && printf '%s' "$MODEL" | grep -qiE 'carbon|argon|astra|fable|opus'; then
+    die_precondition "unpinned dispatch never uses an expensive model ($MODEL); pass --model to choose one"
+  fi
+  if [ "$EFFORT_EXPLICIT" -eq 0 ] && [ -n "${ENGINE_CHOICE_JSON:-}" ]; then
+    _ps_effort="$(node -e 'let o; try { o=JSON.parse(process.argv[1]); } catch { process.exit(0); } if (o && typeof o.effort === "string" && o.effort) process.stdout.write(o.effort);' "$ENGINE_CHOICE_JSON" 2>/dev/null || true)"
+    [ -n "${_ps_effort:-}" ] && EFFORT="$_ps_effort"
+    unset _ps_effort
+  fi
 fi
 # Saved before skill-pack / scaffold prepend text, which would hide image magic bytes.
 VISION_PROMPT_FILE="$PROMPT_FILE"
@@ -3242,11 +3262,42 @@ if [ "$MISSION_NOOP_SHORT_CIRCUIT" -eq 1 ]; then
     "Mission no-op marker requires the exact matching sealed zero_diff_receipt"
 fi
 set_runner_flags
-# codex effort cap (Fleet task 01M7PQN6WXP5H9Q7QXPQM97V22, temporary until feat/codex-effort-high lands): the literal
-# EFFORT="xhigh" is a script default, not a seat decision. An unpinned codex call sends high; an explicit
-# --effort always wins. Other runners are unchanged.
+# codex effort: an unpinned codex call sends low (scorecard event 38). The literal EFFORT="xhigh"
+# is a script default, not a seat decision. An explicit --effort always wins.
 if [ "${IS_CODEX:-0}" -eq 1 ] && [ "$EFFORT_EXPLICIT" -eq 0 ]; then
-  EFFORT="high"
+  EFFORT="low"
+fi
+# codex implementer default (2026-11-19 implementer exam, scorecard event 38, 24/24 at low on
+# impl-live-rail-v1): an unpinned codex call is gpt-6.1-terra at low; explicit --model/--effort win.
+if [ "${IS_CODEX:-0}" -eq 1 ] && [ "$MODEL_IS_DEFAULT" -eq 1 ]; then
+  MODEL="gpt-6.1-terra"
+  MODEL_IS_DEFAULT=0
+fi
+# opencode implementer default (qualified seat official:implementer:opencode-go/beam-free:opencode:339):
+# beam-free has no effort tier, so an unpinned call sends no variant ("default"), never the xhigh script default.
+if [ "${IS_OPENCODE:-0}" -eq 1 ]; then
+  [ "$EFFORT_EXPLICIT" -eq 1 ] || EFFORT="default"
+  if [ "$MODEL_IS_DEFAULT" -eq 1 ]; then
+    MODEL="opencode-go/beam-free"
+    MODEL_IS_DEFAULT=0
+  fi
+fi
+# agy implementer default (2026-11-19 implementer exam, scorecard event 37, 24/24 at low): a --runner agy call
+# without --model is gemini-4-hydrogen-low at low. The old carbon default is gone (expensive seat); agy is never
+# the unpinned (no --runner) default, that order is grok-4.7 low first. Explicit --model/--effort win.
+if [ "${RUNNER_RESOLVED:-0}" -eq 1 ] \
+  && [ "${IS_CODEX:-0}${IS_GROK:-0}${IS_CCSHIM:-0}${IS_PI:-0}${IS_CURSOR:-0}${IS_OPENCODE:-0}${IS_KIMI:-0}${IS_QODER:-0}${IS_CNATIVE:-0}" = "000000000" ]; then
+  if [ "$MODEL_IS_DEFAULT" -eq 1 ]; then
+    MODEL="gemini-4-hydrogen-low"
+    MODEL_IS_DEFAULT=0
+    [ "$EFFORT_EXPLICIT" -eq 1 ] || EFFORT="low"
+  fi
+fi
+# grok implementer default effort (qualified seat official:implementer:grok-4.7:grok:194,
+# Fleet task 01M7S0RPFQJ217HXV3X11WXDVP): an unpinned grok call sends low; an explicit
+# --effort always wins. Other runners are unchanged.
+if [ "${IS_GROK:-0}" -eq 1 ] && [ "$EFFORT_EXPLICIT" -eq 0 ]; then
+  EFFORT="low"
 fi
 # The local-implementer gate runs at the end of set_runner_flags, after the runner
 # (including auto + a listed endpoint) is resolved, still before resolve-endpoint.
@@ -3301,6 +3352,14 @@ if [ "${IS_CNATIVE:-0}" -eq 1 ] && [ "$MODEL_IS_DEFAULT" -eq 0 ]; then
     || die_precondition "claude-native refused: $_CNATIVE_MODEL_ERR"
 fi
 
+# grok implementer default model (qualified seat official:implementer:grok-4.7:grok:194,
+# Fleet task 01M7S0RPFQJ217HXV3X11WXDVP): an unpinned grok call defaults to grok-4.7;
+# an explicit --model always wins.
+if [ "${IS_GROK:-0}" -eq 1 ] && [ "$MODEL_IS_DEFAULT" -eq 1 ]; then
+  MODEL="grok-4.7"
+  MODEL_IS_DEFAULT=0
+fi
+
 if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
    && [ "$IS_PI" -eq 0 ] && [ "$IS_CURSOR" -eq 0 ] && [ "$IS_OPENCODE" -eq 0 ] && [ "$IS_KIMI" -eq 0 ] && [ "$IS_QODER" -eq 0 ] && [ "$IS_CNATIVE" -eq 0 ]; then
   # `|| die` in the PARENT: agy_resolve_model_alias deliberately never dies inside `$( )`,
@@ -3311,7 +3370,7 @@ elif [ "$MODEL_IS_DEFAULT" -eq 1 ]; then
   # The built-in default is an agy alias and means nothing to any other vendor. Refusing
   # here is the loud half of the fix: silently forwarding it produced a vendor-side error
   # whose text named a model the caller never chose.
-  die_precondition "--model is required for runner '$RUNNER' — the built-in default ('$MODEL') is an agy model id"
+  die_precondition "--model is required for runner '$RUNNER'"
 fi
 
 if [ "${#SKILLS[@]}" -gt 0 ]; then
@@ -3414,6 +3473,9 @@ elif [ "$IS_CCSHIM" -eq 1 ]; then
   # real-Anthropic key can't take precedence over the shim token — so accepting API_KEY
   # here would pass the precondition then leave the run with no usable auth (gpt-5.5 review).
   [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ] || die_precondition "cc-shim requires ANTHROPIC_AUTH_TOKEN in env (the shim's bearer token; ANTHROPIC_API_KEY is intentionally NOT used — it is unset before launching claude so it cannot override the shim token)"
+  # Endpoint vars are not probed here. sudo env_reset drops them for every runner; only
+  # cc-shim needs them, and run_agent writes a 0600 file that the post-drop command reads.
+  # The post-condition (AUTOPILOT_ENV_PROBE) refuses if they still do not arrive.
 elif [ "$IS_PI" -eq 1 ]; then
   command -v node >/dev/null 2>&1 || die_precondition "node not found (pi runner requires Node for the RPC supervisor)"
   command -v "$PI_BIN" >/dev/null 2>&1 || die_precondition "pi binary not found: $PI_BIN"
@@ -4726,6 +4788,64 @@ worker_mount_isolation_detect
 HAVE_SETSID=0; command -v setsid >/dev/null 2>&1 && grep -q -- --wait < <(setsid --help 2>&1) && HAVE_SETSID=1
 # reap_container is defined by worker-containment.sh (name kept for declare -f).
 
+# Defined before abort_dispatch. The refuse path below calls abort_dispatch, which calls
+# cleanup_managed_codex_home. A definition later in the file is not visible yet, and the
+# early refuse then dies with "command not found" (seen on a real host at this call).
+# Sibling on that path: prepare_managed_codex_home is not called from the trap; it is kept
+# beside its cleanup. Other EXIT/ERR callees (cleanup, reap_container, reap_cnative_config_dir,
+# reap_sandbox_config_dir, _cont_terminal_on_exit, _wt_check_live_or_log_skip) are defined
+# or sourced above this point.
+prepare_managed_codex_home() {
+  local controller_home="${CODEX_HOME:-$HOME/.codex}"
+  # bwrap makes / read-only except the worktree and this scratch dir. The managed home has to be created inside it.
+  if [ "${SANDBOX:-off}" = "bwrap" ] && [ -z "${SANDBOX_TMP:-}" ]; then
+    sandbox_setup || die_precondition "cannot allocate the bwrap scratch dir for the managed Codex home"
+  fi
+  if [ "${SANDBOX:-off}" = "bwrap" ]; then
+    MANAGED_CODEX_HOME="$(mktemp -d "${SANDBOX_TMP}/autopilot-managed-codex-home-XXXXXX")" \
+      || die_precondition "cannot allocate isolated managed Codex home"
+  else
+    MANAGED_CODEX_HOME="$(mktemp -d -t autopilot-managed-codex-home-XXXXXX)" \
+      || die_precondition "cannot allocate isolated managed Codex home"
+  fi
+  chmod 700 "$MANAGED_CODEX_HOME" \
+    || die_precondition "cannot protect isolated managed Codex home"
+  # Codex documents that --ignore-user-config still reads authentication from
+  # CODEX_HOME. Copy only that credential file: plugin/config/session state is
+  # deliberately excluded so the controller's PreToolUse hook cannot intercept
+  # the managed implementer.
+  if [ -r "$controller_home/auth.json" ]; then
+    cp "$controller_home/auth.json" "$MANAGED_CODEX_HOME/auth.json" \
+      || die_precondition "cannot stage managed Codex authentication"
+    chmod 600 "$MANAGED_CODEX_HOME/auth.json" \
+      || die_precondition "cannot protect managed Codex authentication"
+  fi
+}
+
+cleanup_managed_codex_home() {
+  [ -n "${MANAGED_CODEX_HOME:-}" ] || return 0
+  case "$MANAGED_CODEX_HOME" in
+    "${TMPDIR:-/tmp}"/autopilot-managed-codex-home-*|"${SANDBOX_TMP:-/nonexistent}"/autopilot-managed-codex-home-*)
+      rm -rf -- "$MANAGED_CODEX_HOME"
+      ;;
+    *)
+      echo "WARNING: refusing to remove unexpected managed Codex home: $MANAGED_CODEX_HOME" >&2
+      ;;
+  esac
+  MANAGED_CODEX_HOME=""
+}
+
+# Only the mktemp dir this run created. Called from EXIT cleanup and abort_dispatch.
+_reap_ccshim_env_dir() {
+  [ -n "${CCSHIM_ENV_DIR:-}" ] || return 0
+  case "$CCSHIM_ENV_DIR" in
+    "${TMPDIR:-/tmp}"/dispatch-hetero-ccshim-env-*|"${SANDBOX_TMP:-/nonexistent}"/dispatch-hetero-ccshim-env-*)
+      rm -rf -- "$CCSHIM_ENV_DIR"
+      ;;
+  esac
+  CCSHIM_ENV_DIR=""
+}
+
 # Managed aborts must preserve exact branch evidence before any removal. The
 # legacy minimal remover + branch deletion remains only for unmanaged one-shots.
 abort_dispatch() {
@@ -4734,6 +4854,7 @@ abort_dispatch() {
   [ -n "$SCAFFOLD_PROMPT_FILE" ] && rm -f "$SCAFFOLD_PROMPT_FILE"
   [ -n "$GROK_PROMPT_FILE" ] && rm -f "$GROK_PROMPT_FILE"
   [ -n "$CCSHIM_PROMPT_FILE" ] && rm -f "$CCSHIM_PROMPT_FILE"
+  _reap_ccshim_env_dir
   [ -n "$OPENCODE_PROMPT_FILE" ] && rm -f "$OPENCODE_PROMPT_FILE"
   [ -n "$KIMI_PROMPT_FILE" ] && rm -f "$KIMI_PROMPT_FILE"
   [ -n "$QODER_PROMPT_FILE" ] && rm -f "$QODER_PROMPT_FILE"
@@ -4791,46 +4912,6 @@ fi
 # Build the worker command line, then run it inside the strongest available
 # container. The command cd's into the worktree itself (we cannot rely on a
 # subshell cwd surviving the container boundary).
-prepare_managed_codex_home() {
-  local controller_home="${CODEX_HOME:-$HOME/.codex}"
-  # bwrap makes / read-only except the worktree and this scratch dir. The managed home has to be created inside it.
-  if [ "${SANDBOX:-off}" = "bwrap" ] && [ -z "${SANDBOX_TMP:-}" ]; then
-    sandbox_setup || die_precondition "cannot allocate the bwrap scratch dir for the managed Codex home"
-  fi
-  if [ "${SANDBOX:-off}" = "bwrap" ]; then
-    MANAGED_CODEX_HOME="$(mktemp -d "${SANDBOX_TMP}/autopilot-managed-codex-home-XXXXXX")" \
-      || die_precondition "cannot allocate isolated managed Codex home"
-  else
-    MANAGED_CODEX_HOME="$(mktemp -d -t autopilot-managed-codex-home-XXXXXX)" \
-      || die_precondition "cannot allocate isolated managed Codex home"
-  fi
-  chmod 700 "$MANAGED_CODEX_HOME" \
-    || die_precondition "cannot protect isolated managed Codex home"
-  # Codex documents that --ignore-user-config still reads authentication from
-  # CODEX_HOME. Copy only that credential file: plugin/config/session state is
-  # deliberately excluded so the controller's PreToolUse hook cannot intercept
-  # the managed implementer.
-  if [ -r "$controller_home/auth.json" ]; then
-    cp "$controller_home/auth.json" "$MANAGED_CODEX_HOME/auth.json" \
-      || die_precondition "cannot stage managed Codex authentication"
-    chmod 600 "$MANAGED_CODEX_HOME/auth.json" \
-      || die_precondition "cannot protect managed Codex authentication"
-  fi
-}
-
-cleanup_managed_codex_home() {
-  [ -n "${MANAGED_CODEX_HOME:-}" ] || return 0
-  case "$MANAGED_CODEX_HOME" in
-    "${TMPDIR:-/tmp}"/autopilot-managed-codex-home-*|"${SANDBOX_TMP:-/nonexistent}"/autopilot-managed-codex-home-*)
-      rm -rf -- "$MANAGED_CODEX_HOME"
-      ;;
-    *)
-      echo "WARNING: refusing to remove unexpected managed Codex home: $MANAGED_CODEX_HOME" >&2
-      ;;
-  esac
-  MANAGED_CODEX_HOME=""
-}
-
 WATCHDOG_PID=""
 WATCHDOG_TOKEN_FILE=""
 WATCHDOG_DISARMED=0
@@ -5308,6 +5389,7 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
 # the SAME engine invocation with ZERO behavioral difference.
 run_agent() {
 if [ "$IS_CODEX" -eq 1 ]; then
+  EFFORT_SENT="$EFFORT"
   prepare_managed_codex_home
   run_worker bash -c 'cd "$1" && exec env -u CODEX_THREAD_ID CODEX_HOME="$6" \
       "$5" exec --ignore-user-config --model "$2" \
@@ -5316,6 +5398,7 @@ if [ "$IS_CODEX" -eq 1 ]; then
       -c "model_reasoning_effort=\"$3\"" < "$4"' _ "$WT" "$MODEL" "$EFFORT" "$PROMPT_FILE" "$CODEX_BIN" "$MANAGED_CODEX_HOME"
   cleanup_managed_codex_home
 elif [ "$IS_CCSHIM" -eq 1 ] || [ "$IS_CNATIVE" -eq 1 ]; then
+  EFFORT_SENT="${CLAUDE_EFFORT_ARG:-default}"
   # claude-native shares this arm (same claude -p invocation, edit-only directive, envelope parse); it
   # differs only in auth: a seeded CLAUDE_CONFIG_DIR (ONLY .credentials.json) and no shim endpoint.
   # cc-shim: the Claude Code CLI (`claude -p`) driving an arbitrary Anthropic-compatible
@@ -5428,10 +5511,40 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
     # use the Task tools, so the cc-shim hand is never given them. (claude-native branches: unchanged.)
     # "$8" (always passed, possibly empty) is the validated X-Fleet-Task line: with a gate settings
     # file $7 holds it, so the settings slot is pinned with "${GATE_ARGV[0]-}" like the claude-native arm.
-    run_worker bash -c 'cd "$1" && exec env -u ANTHROPIC_API_KEY -u ANTHROPIC_CUSTOM_HEADERS ${8:+ANTHROPIC_CUSTOM_HEADERS="$8"} claude -p ${4:+--session-id "$4"} --model "$2" \
+    # "$9" is the 0600 endpoint env file (mode set below). The token is not an argument.
+    # sudo --preserve-env / -E is not used for these two variables: sudo env_reset drops them,
+    # and the command after the privilege drop reads the file, deletes it, then execs claude.
+    _ccshim_env_parent="${TMPDIR:-/tmp}"
+    if [ "${SANDBOX:-off}" = "bwrap" ] && [ -n "${SANDBOX_TMP:-}" ]; then
+      _ccshim_env_parent="$SANDBOX_TMP"
+    fi
+    CCSHIM_ENV_DIR="$(umask 077; mktemp -d "$_ccshim_env_parent/dispatch-hetero-ccshim-env-XXXXXX")" \
+      || die_precondition "cc-shim 拒絕啟動：無法建立端點環境檔目錄"
+    CCSHIM_ENV_FILE="$CCSHIM_ENV_DIR/endpoint.env"
+    ( umask 077
+      printf 'ANTHROPIC_BASE_URL=%q\nANTHROPIC_AUTH_TOKEN=%q\n' \
+        "$ANTHROPIC_BASE_URL" "$ANTHROPIC_AUTH_TOKEN" > "$CCSHIM_ENV_FILE"
+    ) || die_precondition "cc-shim 拒絕啟動：無法寫入端點環境檔"
+    chmod 600 "$CCSHIM_ENV_FILE" || die_precondition "cc-shim 拒絕啟動：無法保護端點環境檔"
+    run_worker bash -c 'cd "$1" || exit 1
+        _ccshim_env_file="$9"
+        # ccshim-env-load
+        if [ -f "$_ccshim_env_file" ]; then
+          _ccshim_mode="$(stat -c %a "$_ccshim_env_file" 2>/dev/null || true)"
+          [ "$_ccshim_mode" = "600" ] || { printf "%s\n" "cc-shim 拒絕啟動：端點環境檔權限不是 0600" >&2; rm -f -- "$_ccshim_env_file"; exit 2; }
+          set -a
+          . "$_ccshim_env_file"
+          set +a
+          rm -f -- "$_ccshim_env_file"
+          rmdir "${_ccshim_env_file%/*}" 2>/dev/null || true
+        fi
+        _ccshim_env_probe="${ANTHROPIC_BASE_URL:+1}"
+        [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ] && [ "$_ccshim_env_probe" = "1" ] || { printf "%s\n" "cc-shim 拒絕啟動：mount 隔離前綴不會保留環境變數，端點環境變數（ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN）將被清空" >&2; exit 2; }
+        # ccshim-env-load-end
+        exec env -u ANTHROPIC_API_KEY -u ANTHROPIC_CUSTOM_HEADERS ${8:+ANTHROPIC_CUSTOM_HEADERS="$8"} claude -p ${4:+--session-id "$4"} --model "$2" \
         --strict-mcp-config --dangerously-skip-permissions --disallowedTools TaskCreate,TaskUpdate,TaskGet,TaskList \
         ${5:+--effort "$5"} ${7:+--settings "$7"} --output-format json < "$3" >"$6"' \
-        _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE" "${GATE_ARGV[0]-}" "$FLEET_TASK_HEADER"
+        _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE" "${GATE_ARGV[0]-}" "$FLEET_TASK_HEADER" "$CCSHIM_ENV_FILE"
   fi
   # The worker is done (success, failure or timeout): the gate file and the settings file go now.
   if [ -n "${GATE_ARMED_SESSION:-}" ]; then
@@ -5523,6 +5636,7 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
   printf '%s' "${GROK_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$GROK_PROMPT_FILE"
   # effort enum is per-MODEL (grok-4.5 rejects xhigh; 4.6+ accept) ⇒ clamp against THIS model's live enum.
   GROK_EFFORT="$(grok_effort_clamp "$EFFORT" "$MODEL" "$GROK_BIN")"
+  EFFORT_SENT="$GROK_EFFORT"
   grok_effort_note "$EFFORT" "dispatch-hetero" "$MODEL" "$GROK_BIN" "$GROK_EFFORT"
   if [ -n "$RESUME_SESSION_ID" ]; then
     PROVIDER_SESSION_ID="$RESUME_SESSION_ID"
@@ -5538,6 +5652,7 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
   fi
   rm -f "$GROK_PROMPT_FILE"
 elif [ "$IS_QODER" -eq 1 ]; then
+  EFFORT_SENT="$EFFORT"
   # Qoder CLI CN (qoderclicn 1.1.89). EDIT-ONLY + wrapper-commit, same rail as grok.
   # Prompt on stdin. --config-dir only when --qoder-config-dir was given.
   # Do not call runner_bin_fallback: an omitted --qoder-bin stays the bare name qoderclicn.
@@ -5584,6 +5699,7 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
 "
   OPENCODE_PROMPT_FILE="$(mktemp -t dispatch-hetero-opencode-prompt-XXXXXX)"
   printf '%s' "${OPENCODE_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$OPENCODE_PROMPT_FILE"
+  EFFORT_SENT="$EFFORT"
   # argv/env come from lib/opencode-containment.js (`plan --profile implement`): v1 =
   # `run --dir <wt> --pure -m M --variant V --format json`; v2 (opencode 2.x removed those flags) =
   # `run --standalone -m M#V --format json` with the worktree as cwd. Max→xhigh in both.
@@ -5614,12 +5730,14 @@ elif [ "$IS_KIMI" -eq 1 ] && [ "$BIN_FLAG_KIMI" -eq 1 ]; then
   #   (above) so the run here sends the EXACT bytes that were size-checked.
   KIMI_PROMPT_FILE="$(mktemp -t dispatch-hetero-kimi-prompt-XXXXXX)"
   printf '%s' "${KIMI_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$KIMI_PROMPT_FILE"
+  EFFORT_SENT="${KIMI_EFFORT_SEND:-default}"
   run_worker bash -c 'cd "$1" && exec "$2" -m "$4" -p "$(cat "$3")" --output-format text' \
       _ "$WT" "$KIMI_BIN" "$KIMI_PROMPT_FILE" "$MODEL"
   rm -f "$KIMI_PROMPT_FILE"
   # Part 3: kimi has no usage command; its result is the quota signal (429 -> exhausted + reset, clean -> available).
   node "$SELF_DIR/lib/kimi-quota-observe.js" observe --rc "${AGENT_EXIT:-0}" --log-file "$LOG" >/dev/null 2>&1 || true
 elif [ "$IS_CURSOR" -eq 1 ] || [ "$IS_KIMI" -eq 1 ]; then
+  if [ "$IS_KIMI" -eq 1 ]; then EFFORT_SENT="${KIMI_EFFORT_SEND:-default}"; else EFFORT_SENT="default"; fi
   # Both seats use the same clone, protocol, diff-import and quota-observer rail.
   BROKER_RUNNER=cursor
   local broker_group_wrapper="${AUTOPILOT_CURSOR_GROUP_WRAPPER:-sg}" broker_group_cmd
@@ -5640,6 +5758,7 @@ elif [ "$IS_CURSOR" -eq 1 ] || [ "$IS_KIMI" -eq 1 ]; then
     fi
   fi
 elif [ "$IS_PI" -eq 1 ]; then
+  EFFORT_SENT="default"
   # Directive channel (Phase 2): forward the R0 ledger coords to the supervisor so a
   # depth-0 `directive-send` actually DELIVERS mid-run on the production pi path (the
   # supervisor polls + steers + acks; it gates cleanly on absence). Gated on ALL three
@@ -5687,6 +5806,7 @@ else
     AGY_STDERR="$(mktemp -t dispatch-hetero-agy-stderr-XXXXXX)"
   fi
   AGY_EFFORT="$(agy_effort_for_model "$MODEL" "$EFFORT")"
+  EFFORT_SENT="$AGY_EFFORT"
   AGY_CLAMPED="$(agy_effort_clamp "$EFFORT")"
   if [ "$AGY_EFFORT" != "$AGY_CLAMPED" ]; then
     printf 'agy effort %s (clamped %s) folded to %s: model id encodes the tier\n' \
@@ -7007,7 +7127,7 @@ dispatch_detached_run() {
   declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN CURSOR_BIN OPENCODE_BIN OPENCODE_VER KIMI_BIN QODER_BIN QODER_CONFIG_DIR KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER ENDPOINT PACE_ROLE ENGINE_CHOICE_JSON PACE_CHOICE_JSON EFFORT CLAUDE_EFFORT_ARG \
       SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_CURSOR IS_OPENCODE IS_KIMI IS_QODER IS_CNATIVE CNATIVE_CONFIG_DIR RUNNER_RESOLVED CURSOR_FAST PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT GITCONFIG_SNAPSHOT_FILE GITCONFIG_DRIFT_KEYS EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
       BROKER_TIMEOUT_S BROKER_RESULT BROKER_VERDICT BROKER_REASON BROKER_RUNNER BIN_FLAG_KIMI \
-      WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID WORKER_FALLBACK_PGID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE OPENCODE_PROMPT_FILE KIMI_PROMPT_FILE QODER_PROMPT_FILE KIMI_EDIT_ONLY \
+      WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID WORKER_FALLBACK_PGID GROK_PROMPT_FILE EFFORT_SENT CCSHIM_PROMPT_FILE OPENCODE_PROMPT_FILE KIMI_PROMPT_FILE QODER_PROMPT_FILE KIMI_EDIT_ONLY \
       AGY_ENVELOPE AGY_STDERR AGY_PARSED AGY_USAGE_JSON CCSHIM_ENVELOPE \
       PROVIDER_ERROR_RUNNER PROVIDER_ERROR_STATUS PROVIDER_ERROR_FIELD \
       PACKED_PROMPT_TEMP LEDGER RUN_ID STAGE RESULTS_DIR RESULT_FILE EXIT_FILE HEARTBEAT_SECS \

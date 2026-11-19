@@ -18,13 +18,13 @@ Shared Cursor/Kimi broker transport and clone rail use the cursor-named helpers;
 `lib/endpoint-probe.js` `lib/endpoint-probe.sh` `lib/worker-containment.sh` `lib/idle-watch.sh` `lib/plan-review-panel.js` `lib/plan-review-context.js` `lib/review-fanout.js` `lib/repo-identity.sh` `lib/dispatch-branch-ledger.sh` `lib/gitconfig-containment.sh` `lib/seed-claude-config.js` `lib/codeforge-collect.sh` `lib/fleet-task-header.js` `lib/fleet-task-ref.js` `lib/fleet-task-ref.test.js` `lib/event-attribution.js` `lib/dispatch-lane.sh` `dispatch-panel.js`
 
 **Routing & config resolution** — `lib/dispatch-usage.js` `lib/account-alias.js` `resolve-dispatch.sh` `resolve-dispatch-topology.js` `topology-prune.js` `lib/topology-runners.js` `lib/retired-runners.json` `resolve-doa.sh` `resolve-endpoint.sh` `resolve-knowledge-routing.sh` `resolve-project-paths.sh` `resolve-qc-gate.sh` `resolve-review-loop.sh` `resolve-worktree-teardown.sh` `resolve-execution-profile.js` `resolve-scaffold-tier.js` `lib/scaffold-envelope.sh` `lib/resolve-config.sh` `lib/config-audit.js` `lib/autocompact-window.js` `lib/runtime-paths.js` `load-endpoints-env.sh` `lib/load-endpoints-env.js` `claude-account.js` `quota-reporter.js` `quota-provider-sync.js` `quota-mirror-tick.js` `lane-reopen.js`
-`lib/local-sandbox-endpoints.json` `lib/local-sandbox-endpoint.sh` `lib/local-sandbox-parent.js` `pace-select.js` `pace-select.test.js` `lib/pace-reading.js` `lib/pace-roles.json`
+`lib/local-sandbox-endpoints.json` `lib/local-sandbox-endpoint.sh` `lib/local-sandbox-parent.js` `pace-select.js` `pace-select.test.js` `lib/pace-reading.js` `lib/pace-roles.json` `lib/broker-run-pace.js`
 
 **Worktree & branch lifecycle** — `reap-dispatch-branches.sh` `reap-dispatch-worktrees.sh` `reap-build-artifacts.js` `lib/build-artifacts.js` `lib/disk-guard.js` `accept-dev-channel-prompt.sh` `reap-scratch-checkouts.js` `scratch-closeout.sh` `repo-residue-sweep.js` `prune-plugin-cache.js` `resolve-repo-placement.js` `pin-evidence-anchors.js` `lifecycle-residue-receipt.js` `write-task-status-input.js` `record-integration.js` `check-inputs-landed.js` `check-containment.js` `land-branch.js` `lib/worktree-reap.sh` `lib/worktree-intent.sh` `lib/prune-tmp-residue.sh` `lib/worktree-activity.js` `lib/tmp-residue.js` `lib/tmp-residue-registry.json` `register-external-run.js`
 `prune-merged-branch.js` `count-merged-remote-branches.js` `lib/worktree-removal-log.js`
 
 **Mission, campaign & session state** — `check-blueprint-conformance.js` `decision-ledger.js` `open-decision.js` `decision-claim.js` `fleet-card-mirror.js` `lib/card-notice.js` `probe-unknown.js` `build-rehydration-bundle.js` `check-stall-fuse.js` `next-pick.js`
-**Mission, campaign & session state (cont.)** — `request-decision.js` `lib/team.js` `lib/menu-card-content.js` `lib/team.test.js` `open-decision-role-gate.test.js` `open-decision-attach-step.test.js` `request-decision.test.js` `pm-ask.js` `pm-switchboard.js` `pm-inbox-done.js` `fleet-replay.js` `fleet-replay.test.js` `lib/pm-inbox-adapter.js` `lib/pm-result-rules.js` `lib/work-order-plan.js`
+**Mission, campaign & session state (cont.)** — `request-decision.js` `lib/team.js` `lib/menu-card-content.js` `lib/team.test.js` `open-decision-role-gate.test.js` `open-decision-attach-step.test.js` `request-decision.test.js` `pm-ask.js` `pm-switchboard.js` `pm-inbox-done.js` `fleet-replay.js` `fleet-replay.test.js` `lib/pm-inbox-adapter.js` `lib/pm-result-rules.js` `lib/work-order-plan.js` `work-order-adopt.js` `work-order-adopt.test.js`
 `mission-routing-admission.js` `mission-execution-graph-check.js` `scaffold-mission.js` `mission-terminal-reconcile.js` `mission-convergence-check.js` `next-touch-validation.js` `validate-next-touch-reservation.js` `validate-next-touch-terminal.js` `session-mode.js` `session-ctx-report.js` `noncq.js` `noncq.test.js` `lib/noncq-pools.json` `stage-advance.js` `lib/fleet-task.js` `run-approval.js` `compaction-rehydrate.js` `checkpoint-coverage.js` `run-ledger.sh` `watch-foreman.js` `agent-liveness-check.js` `stuck-hand-check.js` `stuck-hand-check.test.js` `implementation-campaign-check.js` `check-plan-authority-ownership.js` `check-repair-scope.js` `stage-graph.js` `lib/stage-write.js` `lib/urgent-review-follow-up.js` `task-card.js`
 
 **Engine capability & qualification** — `engine-scorecard.js` `engine-capability-state.js` `engine-qualify.sh` `engine-qualify.js` `qualification-case-broker.js` `qualification-review-provider.js` `lib/qualification-panel-schema.json` `lib/qualification-mode-schemas.json` `lib/agy-containment.js` `probe-engine-capability.sh` `probe-local-engine.js` `probe-harness-capabilities.sh` `probe-todo-tools-pin.js` `probe-codex-enforcement.js` `probe-codex-postcompact-production.js`
@@ -32,6 +32,8 @@ Shared Cursor/Kimi broker transport and clone rail use the cursor-named helpers;
 **Engine capability & qualification (cont.)** — `lib/vision-guard.js` `lib/engine-vision.json` `runner-pin-check.js` `runner-smoke.js` `lib/runner-pins.js`
 
 **Execution profiles** — `build-profile-payload.js` `profile-session.js` `check-profile-isolation.js` `measure-profile-context.js`
+
+**Root-scan guard** — `lib/root-scan-guard.js` `root-scan-shim.js`
 
 **Diff scanning & anti-gaming** — `completeness-scan.sh` `error-path-scan.sh` `secret-scan-diff.js` `safe-inspect.js` `check-redispatch-prompt.sh` `check-dispatch-suppression.sh` `check-backlog-entries.js` `check-backlog-single-writer.js` `lib/backlog-rules.js` `lib/record-files.js` `migrate-backlog-entries.js` `diff-file-list.sh` `diff-scope-report.sh` `diff-since-last-round.sh` `probe-diff-domain.sh` `classify-diff-risk.sh` `check-disjointness.sh` `check-hands-commit.js` `check-test-integrity.sh` `replay-test-integrity.js` `scan-fixture-literals.js` `check-blind-evidence.sh` `lib/test-integrity-l1.py` `check-test-outcome.js` `leak-guard.js` `redact-personal.js` `lib/personal-data-patterns.js` `lib/personal-data-redact.js` `lib/leak-guard-hosts.example.json`
 
@@ -41,7 +43,7 @@ Shared Cursor/Kimi broker transport and clone rail use the cursor-named helpers;
 `lib/exclude-allowlist.js` `lib/seat-id-guard.js` `lib/raw-log-path.js` `review-ledger-archive.js` `lib/review-ledger-copy.js` `lib/review-ledger-tar.js`
 
 **Verification & review synthesis (cont.)** — `review-jury.js` `render-fleet-inventory.js` `rule-effect-check.js`
-`replay-stop-guard.js` `check-unmerged-ship.js` `lesson-lint.js` `lesson-lint.test.js` `check-tip-verify-default.sh` `lib/tip-verify-repo-default.js` `lib/tip-verify-grace.json`
+`replay-stop-guard.js` `reply-precheck.js` `check-unmerged-ship.js` `lesson-lint.js` `lesson-lint.test.js` `check-tip-verify-default.sh` `lib/tip-verify-repo-default.js` `lib/tip-verify-grace.json`
 
 **Task tree & risk** — `tree.js` `risk-counter.js` `hook-harness-matrix.js` `lib/chain-command.js`
 
@@ -49,7 +51,7 @@ Shared Cursor/Kimi broker transport and clone rail use the cursor-named helpers;
 
 **Sync, drift & release gates (cont.)** — `check-fixed-times.js` `check-test-exec-bits.js`
 
-**Sync, drift & release gates (cont.)** — `check-quota-adapters.js` `check-events-contract.js` `check-claude-spawn-sites.js` `lib/claude-spawn-sites.json`
+**Sync, drift & release gates (cont.)** — `check-quota-adapters.js` `check-events-contract.js` `check-claude-spawn-sites.js` `lib/claude-spawn-sites.json` `export-fleet-flow.js` `export-fleet-flow.test.js`
 
 **Setup & install** — `dev-setup.sh` `dev-update.sh` `accounts-onboard.sh` `profile-health.js` `profile-link.js` `lane-switch.js` `profile-switch-advice.js` `login-checklist.js` `install-hooks.sh` `install-antigravity.sh` `install-opencode.sh` `install-token-discipline.js` `install-quota-mirror.js` `install-fleet-card-mirror.js` `setup-symlinks.sh` `setup-symlinks.ps1` `install-antigravity.ps1` `agy-shell-guard.zsh` `project-detect.js` `scaffold-config.js` `statusline-live-tee.js` `lib/opencode-discovery-probe.js` `lib/test-git-env.js` `lib/test-git-env.sh` `lib/test-gitconfig` `lib/runner-fallback-bin.sh`
 

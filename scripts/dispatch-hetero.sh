@@ -51,10 +51,13 @@
 #                                              #   Default composer-2.5; composer models only.
 #                                              #   Pace may select it; the model-name guard remains.
 #       [--pace-role <role>]                   # override the default implementer quota-selection role.
-#                                              #   No named runner/model: pace-select chooses by quota,
-#                                              #   records engine_choice + pace_choice; pace_unknown
-#                                              #   retains the existing default. Named seats win and
-#                                              #   warn when their fresh usage reaches the ceiling.
+#                                              #   No named runner/model: pace-select chooses by quota
+#                                              #   among four cheap seats only (grok-4.7/low,
+#                                              #   gpt-6.1-terra/low, gemini-4-hydrogen-low/low,
+#                                              #   opencode-go/beam-free/default). Records engine_choice
+#                                              #   + pace_choice; pace_unknown retains the existing default.
+#                                              #   Named seats win and warn at the ceiling. An explicit
+#                                              #   --model/--effort always wins.
 #       [--effort xhigh]                       # reasoning effort (low|medium|high|xhigh|max; unpinned codex/grok/agy→low, opencode→none)
 #       [--endpoint <name>]                    # cc-shim only (also --endpoint=<name>; last one
 #                                              #   wins; @none clears; empty is refused): resolve
@@ -3137,6 +3140,14 @@ if [ -n "$_ps_parsed" ]; then
   { IFS= read -r RUNNER; IFS= read -r MODEL; IFS= read -r _ps_ep; IFS= read -r ENGINE_CHOICE_JSON; IFS= read -r PACE_CHOICE_JSON; } <<< "$_ps_parsed"
   [ -n "${ENDPOINT:-}" ] || ENDPOINT="$_ps_ep"
   MODEL_IS_DEFAULT=0
+  if [ "$MODEL_SUPPLIED" -eq 0 ] && printf '%s' "$MODEL" | grep -qiE 'carbon|argon|astra|fable|opus'; then
+    die_precondition "unpinned dispatch never uses an expensive model ($MODEL); pass --model to choose one"
+  fi
+  if [ "$EFFORT_EXPLICIT" -eq 0 ] && [ -n "${ENGINE_CHOICE_JSON:-}" ]; then
+    _ps_effort="$(node -e 'let o; try { o=JSON.parse(process.argv[1]); } catch { process.exit(0); } if (o && typeof o.effort === "string" && o.effort) process.stdout.write(o.effort);' "$ENGINE_CHOICE_JSON" 2>/dev/null || true)"
+    [ -n "${_ps_effort:-}" ] && EFFORT="$_ps_effort"
+    unset _ps_effort
+  fi
 fi
 # Saved before skill-pack / scaffold prepend text, which would hide image magic bytes.
 VISION_PROMPT_FILE="$PROMPT_FILE"
@@ -3250,9 +3261,8 @@ if [ "$MISSION_NOOP_SHORT_CIRCUIT" -eq 1 ]; then
     "Mission no-op marker requires the exact matching sealed zero_diff_receipt"
 fi
 set_runner_flags
-# codex effort cap (Fleet task 01M7PQN6WXP5H9Q7QXPQM97V22, temporary until feat/codex-effort-high lands): the literal
-# EFFORT="xhigh" is a script default, not a seat decision. An unpinned codex call sends high; an explicit
-# --effort always wins. Other runners are unchanged.
+# codex effort: an unpinned codex call sends low (scorecard event 38). The literal EFFORT="xhigh"
+# is a script default, not a seat decision. An explicit --effort always wins.
 if [ "${IS_CODEX:-0}" -eq 1 ] && [ "$EFFORT_EXPLICIT" -eq 0 ]; then
   EFFORT="low"
 fi
@@ -3348,12 +3358,6 @@ if [ "${IS_GROK:-0}" -eq 1 ] && [ "$MODEL_IS_DEFAULT" -eq 1 ]; then
   MODEL="grok-4.7"
   MODEL_IS_DEFAULT=0
 fi
-
-# Effort actually sent, recorded in every result and manifest. claude-based runners and kimi forward an effort
-# only when explicitly set; everything else sends EFFORT (low/high/... or "default" = none).
-EFFORT_SENT="$EFFORT"
-if [ "$IS_CCSHIM" -eq 1 ] || [ "$IS_CNATIVE" -eq 1 ]; then EFFORT_SENT="${CLAUDE_EFFORT_ARG:-default}"; fi
-if [ "$IS_KIMI" -eq 1 ]; then EFFORT_SENT="${KIMI_EFFORT_SEND:-default}"; fi
 
 if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
    && [ "$IS_PI" -eq 0 ] && [ "$IS_CURSOR" -eq 0 ] && [ "$IS_OPENCODE" -eq 0 ] && [ "$IS_KIMI" -eq 0 ] && [ "$IS_QODER" -eq 0 ] && [ "$IS_CNATIVE" -eq 0 ]; then
@@ -5362,6 +5366,7 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
 # the SAME engine invocation with ZERO behavioral difference.
 run_agent() {
 if [ "$IS_CODEX" -eq 1 ]; then
+  EFFORT_SENT="$EFFORT"
   prepare_managed_codex_home
   run_worker bash -c 'cd "$1" && exec env -u CODEX_THREAD_ID CODEX_HOME="$6" \
       "$5" exec --ignore-user-config --model "$2" \
@@ -5370,6 +5375,7 @@ if [ "$IS_CODEX" -eq 1 ]; then
       -c "model_reasoning_effort=\"$3\"" < "$4"' _ "$WT" "$MODEL" "$EFFORT" "$PROMPT_FILE" "$CODEX_BIN" "$MANAGED_CODEX_HOME"
   cleanup_managed_codex_home
 elif [ "$IS_CCSHIM" -eq 1 ] || [ "$IS_CNATIVE" -eq 1 ]; then
+  EFFORT_SENT="${CLAUDE_EFFORT_ARG:-default}"
   # claude-native shares this arm (same claude -p invocation, edit-only directive, envelope parse); it
   # differs only in auth: a seeded CLAUDE_CONFIG_DIR (ONLY .credentials.json) and no shim endpoint.
   # cc-shim: the Claude Code CLI (`claude -p`) driving an arbitrary Anthropic-compatible
@@ -5577,6 +5583,7 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
   printf '%s' "${GROK_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$GROK_PROMPT_FILE"
   # effort enum is per-MODEL (grok-4.5 rejects xhigh; 4.6+ accept) ⇒ clamp against THIS model's live enum.
   GROK_EFFORT="$(grok_effort_clamp "$EFFORT" "$MODEL" "$GROK_BIN")"
+  EFFORT_SENT="$GROK_EFFORT"
   grok_effort_note "$EFFORT" "dispatch-hetero" "$MODEL" "$GROK_BIN" "$GROK_EFFORT"
   if [ -n "$RESUME_SESSION_ID" ]; then
     PROVIDER_SESSION_ID="$RESUME_SESSION_ID"
@@ -5592,6 +5599,7 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
   fi
   rm -f "$GROK_PROMPT_FILE"
 elif [ "$IS_QODER" -eq 1 ]; then
+  EFFORT_SENT="$EFFORT"
   # Qoder CLI CN (qoderclicn 1.1.89). EDIT-ONLY + wrapper-commit, same rail as grok.
   # Prompt on stdin. --config-dir only when --qoder-config-dir was given.
   # Do not call runner_bin_fallback: an omitted --qoder-bin stays the bare name qoderclicn.
@@ -5638,6 +5646,7 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
 "
   OPENCODE_PROMPT_FILE="$(mktemp -t dispatch-hetero-opencode-prompt-XXXXXX)"
   printf '%s' "${OPENCODE_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$OPENCODE_PROMPT_FILE"
+  EFFORT_SENT="$EFFORT"
   # argv/env come from lib/opencode-containment.js (`plan --profile implement`): v1 =
   # `run --dir <wt> --pure -m M --variant V --format json`; v2 (opencode 2.x removed those flags) =
   # `run --standalone -m M#V --format json` with the worktree as cwd. Max→xhigh in both.
@@ -5668,12 +5677,14 @@ elif [ "$IS_KIMI" -eq 1 ] && [ "$BIN_FLAG_KIMI" -eq 1 ]; then
   #   (above) so the run here sends the EXACT bytes that were size-checked.
   KIMI_PROMPT_FILE="$(mktemp -t dispatch-hetero-kimi-prompt-XXXXXX)"
   printf '%s' "${KIMI_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$KIMI_PROMPT_FILE"
+  EFFORT_SENT="${KIMI_EFFORT_SEND:-default}"
   run_worker bash -c 'cd "$1" && exec "$2" -m "$4" -p "$(cat "$3")" --output-format text' \
       _ "$WT" "$KIMI_BIN" "$KIMI_PROMPT_FILE" "$MODEL"
   rm -f "$KIMI_PROMPT_FILE"
   # Part 3: kimi has no usage command; its result is the quota signal (429 -> exhausted + reset, clean -> available).
   node "$SELF_DIR/lib/kimi-quota-observe.js" observe --rc "${AGENT_EXIT:-0}" --log-file "$LOG" >/dev/null 2>&1 || true
 elif [ "$IS_CURSOR" -eq 1 ] || [ "$IS_KIMI" -eq 1 ]; then
+  if [ "$IS_KIMI" -eq 1 ]; then EFFORT_SENT="${KIMI_EFFORT_SEND:-default}"; else EFFORT_SENT="default"; fi
   # Both seats use the same clone, protocol, diff-import and quota-observer rail.
   BROKER_RUNNER=cursor
   local broker_group_wrapper="${AUTOPILOT_CURSOR_GROUP_WRAPPER:-sg}" broker_group_cmd
@@ -5694,6 +5705,7 @@ elif [ "$IS_CURSOR" -eq 1 ] || [ "$IS_KIMI" -eq 1 ]; then
     fi
   fi
 elif [ "$IS_PI" -eq 1 ]; then
+  EFFORT_SENT="default"
   # Directive channel (Phase 2): forward the R0 ledger coords to the supervisor so a
   # depth-0 `directive-send` actually DELIVERS mid-run on the production pi path (the
   # supervisor polls + steers + acks; it gates cleanly on absence). Gated on ALL three
@@ -5741,6 +5753,7 @@ else
     AGY_STDERR="$(mktemp -t dispatch-hetero-agy-stderr-XXXXXX)"
   fi
   AGY_EFFORT="$(agy_effort_for_model "$MODEL" "$EFFORT")"
+  EFFORT_SENT="$AGY_EFFORT"
   AGY_CLAMPED="$(agy_effort_clamp "$EFFORT")"
   if [ "$AGY_EFFORT" != "$AGY_CLAMPED" ]; then
     printf 'agy effort %s (clamped %s) folded to %s: model id encodes the tier\n' \

@@ -2800,18 +2800,18 @@ OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$PACE_RUNS_DIR" \
 [ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (--pace-role codex): out=%s err=%s\n' "$OUT" "$(cat "$TEST_TMP/pace-codex.err" 2>/dev/null)" >&2
 assert_eq "0" "$EXIT" "hetero --pace-role implementer selects codex and exits 0"
 assert_contains "$OUT" '"runner": "codex"' "hetero --pace-role stdout reports chosen runner codex"
-assert_contains "$OUT" '"model": "gpt-6.1-sol"' "hetero --pace-role stdout reports chosen model gpt-6.1-sol"
-assert_contains "$(tr '\n' ' ' < "$HETERO_CODEX_ARGV")" "--model gpt-6.1-sol " "hetero --pace-role passes chosen model to codex"
+assert_contains "$OUT" '"model": "gpt-6.1-terra"' "hetero --pace-role stdout reports chosen model gpt-6.1-terra"
+assert_contains "$(tr '\n' ' ' < "$HETERO_CODEX_ARGV")" "--model gpt-6.1-terra " "hetero --pace-role passes chosen model to codex"
 PACE_MF_CHECK="$(node -e '
   const fs = require("fs");
   const mf = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
   const ec = mf.engine_choice;
   if (!ec || typeof ec !== "object") process.exit(2);
   const ok = mf.runner === "codex"
-    && mf.model === "gpt-6.1-sol"
+    && mf.model === "gpt-6.1-terra"
     && ec.engine === "codex"
     && ec.runner === "codex"
-    && ec.model === "gpt-6.1-sol"
+    && ec.model === "gpt-6.1-terra"
     && ec.pool === "codex A"
     && ec.slack_pts === -35
     && ec.over_pace === true

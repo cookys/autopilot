@@ -162,7 +162,7 @@ assert_recorded "agy default" gemini-4-hydrogen-low low
 run_case agy-carbon --runner agy --model gemini-4-carbon-low --agy-bin "$STUB_AGY"
 assert_eq "0" "$EXIT" "agy explicit carbon: exits 0 ($OUT)"
 assert_eq "1" "$(grep -c -x -e gemini-4-carbon-low "$AGY_SPAWN")" "agy explicit --model gemini-4-carbon-low passes through"
-assert_recorded "agy explicit carbon" gemini-4-carbon-low xhigh
+assert_recorded "agy explicit carbon" gemini-4-carbon-low low
 
 # Case 5: explicit grok model + effort pass through unchanged.
 : > "$GROK_ARGV"
@@ -171,6 +171,126 @@ assert_eq "0" "$EXIT" "grok explicit: exits 0 ($OUT)"
 assert_eq "grok-4.6" "$(argv_flag_val "$GROK_ARGV" --model)" "grok explicit: --model passes through"
 assert_eq "high" "$(argv_flag_val "$GROK_ARGV" --reasoning-effort)" "grok explicit: --effort passes through"
 assert_recorded "grok explicit" grok-4.6 high
+
+# Pace file: quota may pick a seat, but only a cheap one, at that seat's effort.
+pace_row() { # pool used_pct hours
+  printf '{"pool":"%s","class":"other","used_pct":%s,"expected_pct":60,"stale":false,"hours_to_reset":%s,"reset_at":"2026-11-20T00:00:00.000Z","seen_at":"2026-11-19T00:00:00Z","status":"ok"}' "$1" "$2" "$3"
+}
+write_pace() { # file, then pool:used:hours triples
+  local file="$1"; shift
+  local rows="" spec pool used hours
+  for spec in "$@"; do
+    pool="${spec%%:*}"; spec="${spec#*:}"; used="${spec%%:*}"; hours="${spec#*:}"
+    [ -n "$rows" ] && rows="$rows,"
+    rows="$rows$(pace_row "$pool" "$used" "$hours")"
+  done
+  printf '{"schema":"capacity.pace/1","generated_at":"2026-11-19T00:00:00Z","rows":[%s]}\n' "$rows" > "$file"
+}
+assert_no_expensive() { # label file
+  [ -s "$2" ] || return 0
+  assert_eq "0" "$(grep -ciE 'carbon|argon|astra|fable|opus' "$2")" "$1: argv never names carbon|argon|astra|fable|opus"
+}
+
+PACE_AGY="$TEST_TMP/pace-agy-wide.json"
+write_pace "$PACE_AGY" "agy:1:1" "codex A:50:40" "grok-cli:50:40" "agyclaude:50:40"
+: > "$AGY_SPAWN"; : > "$GROK_ARGV"; : > "$CODEX_ARGV"
+AUTOPILOT_PACE_FILE="$PACE_AGY" run_case pace-agy --agy-bin "$STUB_AGY" --grok-bin "$STUB_GROK" --codex-bin "$STUB_CODEX"
+assert_eq "0" "$EXIT" "pace agy widest: exits 0 ($OUT)"
+assert_eq "1" "$(grep -c -x -e gemini-4-hydrogen-low "$AGY_SPAWN")" "pace agy widest: model gemini-4-hydrogen-low"
+assert_eq "low" "$(awk 'prev=="--effort"{print; exit}{prev=$0}' "$AGY_SPAWN")" "pace agy widest: effort low"
+assert_recorded "pace agy widest" gemini-4-hydrogen-low low
+assert_no_expensive "pace agy widest" "$AGY_SPAWN"
+
+PACE_CODEX="$TEST_TMP/pace-codex-wide.json"
+write_pace "$PACE_CODEX" "agy:80:48" "codex A:1:1" "grok-cli:80:48" "agyclaude:80:48"
+: > "$CODEX_ARGV"; : > "$AGY_SPAWN"
+AUTOPILOT_PACE_FILE="$PACE_CODEX" run_case pace-codex --agy-bin "$STUB_AGY" --grok-bin "$STUB_GROK" --codex-bin "$STUB_CODEX"
+assert_eq "0" "$EXIT" "pace codex widest: exits 0 ($OUT)"
+assert_eq "gpt-6.1-terra" "$(argv_flag_val "$CODEX_ARGV" --model)" "pace codex widest: model gpt-6.1-terra"
+assert_contains "$(cat "$CODEX_ARGV")" 'model_reasoning_effort="low"' "pace codex widest: effort low"
+assert_recorded "pace codex widest" gpt-6.1-terra low
+assert_no_expensive "pace codex widest" "$CODEX_ARGV"
+
+PACE_CLAUDE="$TEST_TMP/pace-agyclaude-wide.json"
+write_pace "$PACE_CLAUDE" "agy:40:24" "codex A:70:48" "grok-cli:80:24" "agyclaude:1:1"
+: > "$AGY_SPAWN"; : > "$GROK_ARGV"; : > "$CODEX_ARGV"
+AUTOPILOT_PACE_FILE="$PACE_CLAUDE" run_case pace-agyclaude --agy-bin "$STUB_AGY" --grok-bin "$STUB_GROK" --codex-bin "$STUB_CODEX"
+assert_eq "0" "$EXIT" "pace agyclaude widest: exits 0 ($OUT)"
+_exp_n="$(grep -ciE 'opus|carbon|argon|astra|fable' "$OUT" || true)"; _exp_n="${_exp_n:-0}"
+assert_eq "$_exp_n" "0" "pace agyclaude widest: result never names opus or another expensive model"
+model_got="$(json_last_get "$OUT" model)"
+case "$model_got" in
+  grok-4.7|gpt-6.1-terra|gemini-4-hydrogen-low|opencode-go/beam-free) ;;
+  *) assert_eq "cheap-seat" "$model_got" "pace agyclaude widest: picks a cheap seat" ;;
+esac
+assert_no_expensive "pace agyclaude widest agy" "$AGY_SPAWN"
+assert_no_expensive "pace agyclaude widest grok" "$GROK_ARGV"
+assert_no_expensive "pace agyclaude widest codex" "$CODEX_ARGV"
+
+for role in author reviewer; do
+  : > "$AGY_SPAWN"; : > "$GROK_ARGV"; : > "$CODEX_ARGV"
+  AUTOPILOT_PACE_FILE="$PACE_AGY" run_case "pace-$role" --pace-role "$role" --agy-bin "$STUB_AGY" --grok-bin "$STUB_GROK" --codex-bin "$STUB_CODEX"
+  assert_eq "0" "$EXIT" "pace-role $role unpinned: exits 0 ($OUT)"
+  assert_eq "0" "$(printf '%s' "$OUT" | grep -ciE 'carbon|argon|astra|fable|opus' || true)" "pace-role $role unpinned: result never names an expensive model"
+  assert_no_expensive "pace-role $role" "$AGY_SPAWN"
+  assert_no_expensive "pace-role $role grok" "$GROK_ARGV"
+  assert_no_expensive "pace-role $role codex" "$CODEX_ARGV"
+done
+
+# Guard: a pace-roles copy that still names carbon dies before any CLI spawn.
+ROLES_CARBON="$TEST_TMP/pace-roles-carbon.json"
+node -e '
+  const fs = require("fs");
+  const r = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  if (!r.unpinned_seats) r.unpinned_seats = { agy: { model: "gemini-4-hydrogen-low", effort: "low" } };
+  r.unpinned_seats.agy.model = "gemini-4-carbon-high";
+  if (r.role_models && r.role_models.implementer) r.role_models.implementer.agy = "gemini-4-carbon-high";
+  if (r.pools) {}
+  fs.writeFileSync(process.argv[2], JSON.stringify(r));
+' "$REPO_ROOT/scripts/lib/pace-roles.json" "$ROLES_CARBON"
+node -e '
+  const fs = require("fs");
+  const p = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  for (const row of p.rows) if (row.pool === "agy" || row.pool === "agy(alias 2)") {}
+  const pools = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
+  pools.agy.model = "gemini-4-carbon-high";
+  if (pools["agy(alias 2)"]) pools["agy(alias 2)"].model = "gemini-4-carbon-high";
+  fs.writeFileSync(process.argv[4], JSON.stringify(pools));
+' "$PACE_AGY" "$ROLES_CARBON" "$REPO_ROOT/scripts/lib/noncq-pools.json" "$TEST_TMP/noncq-carbon.json"
+: > "$AGY_SPAWN"; : > "$GROK_ARGV"; : > "$CODEX_ARGV"
+AUTOPILOT_PACE_FILE="$PACE_AGY" AUTOPILOT_PACE_ROLES="$ROLES_CARBON" AUTOPILOT_NONCQ_POOLS="$TEST_TMP/noncq-carbon.json" \
+  run_case pace-guard --agy-bin "$STUB_AGY" --grok-bin "$STUB_GROK" --codex-bin "$STUB_CODEX"
+assert_eq "2" "$EXIT" "pace carbon guard: precondition exit ($OUT)"
+assert_contains "$OUT" "unpinned dispatch never uses an expensive model" "pace carbon guard: names the rule"
+assert_contains "$OUT" "gemini-4-carbon-high" "pace carbon guard: names the model"
+assert_contains "$OUT" "pass --model to choose one" "pace carbon guard: tells the caller to pass --model"
+assert_eq "0" "$(wc -c < "$AGY_SPAWN" | tr -d " ")" "pace carbon guard: agy not spawned"
+assert_eq "0" "$(wc -c < "$GROK_ARGV" | tr -d " ")" "pace carbon guard: grok not spawned"
+assert_eq "0" "$(wc -c < "$CODEX_ARGV" | tr -d " ")" "pace carbon guard: codex not spawned"
+
+# EFFORT_SENT is the value the CLI actually received.
+: > "$AGY_SPAWN"
+run_case agy-effort-sent --runner agy --model gemini-4-carbon-low --effort high --agy-bin "$STUB_AGY"
+assert_eq "0" "$EXIT" "agy effort sent: exits 0 ($OUT)"
+agy_eff="$(awk 'prev=="--effort"{print; exit}{prev=$0}' "$AGY_SPAWN")"
+assert_eq "low" "$agy_eff" "agy effort sent: stub received low (model suffix wins over --effort high)"
+assert_eq "$agy_eff" "$(json_last_get "$OUT" effort)" "agy effort sent: recorded effort equals the stub"
+
+STUB_PI="$TEST_TMP/pi"
+cat > "$STUB_PI" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+chmod +x "$STUB_PI"
+printf '{}\n' > "$TEST_TMP/pi-models.json"
+PI_MODELS_JSON="$TEST_TMP/pi-models.json" run_case pi-effort --runner pi --model pi-fixture --pi-bin "$STUB_PI" --timeout 15s
+assert_eq "default" "$(json_last_get "$OUT" effort)" "pi effort sent: recorded effort is default ($(json_last_get "$OUT" status) exit $EXIT)"
+
+: > "$GROK_ARGV"
+run_case grok-max --runner grok --model grok-4.7 --effort max --grok-bin "$STUB_GROK"
+assert_eq "0" "$EXIT" "grok max: exits 0 ($OUT)"
+grok_eff="$(argv_flag_val "$GROK_ARGV" --reasoning-effort)"
+assert_eq "$grok_eff" "$(json_last_get "$OUT" effort)" "grok max: recorded effort equals the clamp the stub received ($grok_eff)"
 
 # Negative controls: disabling a default must turn its case red (refusal instead of the cheap default).
 PRE="$TEST_TMP/pre-codex"

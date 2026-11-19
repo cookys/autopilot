@@ -64,7 +64,7 @@ NODE_PICKER
   printf '%s|%s|%s\n' "$_FG_RUNNER" "$_FG_ENGINE" "$_FG_PACE_CHOICE_JSON"
 ) > "$TEST_TMP/pick.out" 2> "$TEST_TMP/pick.err"
 assert_eq "$?" 0 'reviewer default retreat selects by pace'
-assert_contains "$(cat "$TEST_TMP/pick.out")" 'codex|gpt-6.1-sol|' 'reviewer retreat uses a different family and excludes failed seat'
+assert_contains "$(cat "$TEST_TMP/pick.out")" 'codex|gpt-6.1-terra|' 'reviewer retreat uses a different family and excludes failed seat'
 
 # Hetero uses a fixture repo; the real rail commits the sentinel edit and verifies it.
 repo="$TEST_TMP/repo"
@@ -156,7 +156,7 @@ PACE_TEST_TMP="$TEST_TMP" bash -c '
 retry_rc=$?
 [ "$retry_rc" -eq 0 ] || cat "$TEST_TMP/retry.err" >&2
 assert_eq "$retry_rc" 0 'automatic reviewer reaches the retry child'
-result="$(node -e 'const a=require(process.argv[1]); console.log(a[a.indexOf("--runner")+1] === "codex" && a[a.indexOf("--model")+1] === "gpt-6.1-sol" ? "ok" : JSON.stringify(a));' "$TEST_TMP/retry-args.json")"
+result="$(node -e 'const a=require(process.argv[1]); console.log(a[a.indexOf("--runner")+1] === "codex" && a[a.indexOf("--model")+1] === "gpt-6.1-terra" ? "ok" : JSON.stringify(a));' "$TEST_TMP/retry-args.json")"
 assert_eq "$result" ok 'retry pins the chosen runner and model when original flags were absent'
 AUTOPILOT_AGY_REVIEW_RETREATED=1 AUTOPILOT_AGY_RETREAT_LOG_ROW="$(cat "$TEST_TMP/retry-log.json")" \
   bash "$REPO_ROOT/scripts/dispatch-review.sh" --runner codex --model gpt-6.1-sol --diff-file "$TEST_TMP/diff" \
@@ -175,7 +175,7 @@ assert_eq "$result" codex 'retry child retains pace_choice in its manifest'
   printf '%s|%s\n' "$_FG_RUNNER" "$_FG_ENGINE"
 ) > "$TEST_TMP/pick-empty.out" 2> "$TEST_TMP/pick-empty.err"
 assert_eq "$?" 0 'reviewer retreat tolerates empty IMPLEMENTER_FAMILY'
-assert_contains "$(cat "$TEST_TMP/pick-empty.out")" 'codex|gpt-6.1-sol' 'reviewer retreat with empty IMPLEMENTER_FAMILY picks codex'
+assert_contains "$(cat "$TEST_TMP/pick-empty.out")" 'codex|gpt-6.1-terra' 'reviewer retreat with empty IMPLEMENTER_FAMILY picks codex'
 
 node - "$REPO_ROOT/scripts/dispatch-review.sh" "$TEST_TMP/review-pace.sh" <<'NODE_REV_PACE'
 const fs=require('node:fs'); const s=fs.readFileSync(process.argv[2],'utf8');
@@ -190,7 +190,7 @@ NODE_REV_PACE
   printf '%s|%s|%s\n' "$RUNNER" "$MODEL" "$ENDPOINT"
 ) > "$TEST_TMP/rev-empty.out" 2> "$TEST_TMP/rev-empty.err"
 assert_eq "$?" 0 'review default selection tolerates empty IMPLEMENTER_FAMILY'
-assert_eq "$(cat "$TEST_TMP/rev-empty.out")" 'codex|gpt-6.1-sol|' 'review default selection chooses codex when IMPLEMENTER_FAMILY is empty'
+assert_eq "$(cat "$TEST_TMP/rev-empty.out")" 'codex|gpt-6.1-terra|' 'review default selection chooses codex when IMPLEMENTER_FAMILY is empty'
 
 # --runner auto is unpinned and uses pace selection.
 (cd "$repo" && bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --branch feat/pace-auto --runner auto --prompt-file "$TEST_TMP/brief" --codex-bin "$TEST_TMP/bin/codex-impl" --run-id pace-hetero-auto) > "$TEST_TMP/hetero-auto.out" 2> "$TEST_TMP/hetero-auto.err"

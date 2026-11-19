@@ -59,12 +59,22 @@ test('P5: fyi=true does not hide a work order (no [no-task needed)', () => {
   assert.equal(out.hookSpecificOutput.permissionDecision, 'deny');
   assert.match(out.hookSpecificOutput.permissionDecisionReason, /task_id/);
   assert.match(out.hookSpecificOutput.permissionDecisionReason, /waiting_on/);
+  assert.match(out.hookSpecificOutput.permissionDecisionReason, /內文最上面/);
+  assert.match(out.hookSpecificOutput.permissionDecisionReason, /task_id: <26 碼任務 id>\ntag: progress\|result\|question\|ruling\|fyi\nwaiting_on: /);
+  assert.doesNotMatch(out.hookSpecificOutput.permissionDecisionReason, /欄位/);
+});
+
+test('P5: task_id header line at top of body counts as task context', () => {
+  const body = 'task_id: 01M7RSNEWJ85N4906CNC4Z3QFX\ntag: progress\n' + WORK;
+  assert.equal(call('mcp__fleet__reply', body, { message_id: 'm1' }), null);
 });
 
 test('P5: reply carrying a work order without task context is denied', () => {
   const out = call('mcp__fleet__reply', WORK, { message_id: 'm1' });
   assert.equal(out.hookSpecificOutput.permissionDecision, 'deny');
   assert.match(out.hookSpecificOutput.permissionDecisionReason, /reply/);
+  assert.match(out.hookSpecificOutput.permissionDecisionReason, /task_id: <26 碼任務 id>/);
+  assert.doesNotMatch(out.hookSpecificOutput.permissionDecisionReason, /欄位/);
 });
 
 test('P5: reply that answers a task (task_id field or 26-char id in text) is allowed', () => {

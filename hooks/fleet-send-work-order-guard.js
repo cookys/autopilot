@@ -4,7 +4,7 @@
  * mcp__fleet__dispatch for PM plan-first guard).
  *
  * mcp__fleet__reply (same rule, default-on): a reply that is a work order is denied unless it carries task context
- * (a task_id field or a 26-char task id in the text). fyi=true does not exempt a send/reply that asks for work
+ * (a `task_id: <26-char id>` header line at the top of the body, or a 26-char task id in the text). fyi=true does not exempt a send/reply that asks for work
  * (imperative phrases); only the bare mention 回報 stays allowed under fyi.
  *
  * mcp__fleet__send (default-on):
@@ -35,11 +35,13 @@ const WORK_ORDER_PHRASES = Object.freeze([
   '現在就跑', '去跑', '開跑', '請做', '請跑', '請修', '要你', 'run it now', 'please run', 'please implement',
 ]);
 
-const DENY_REASON = '這則 send 是在派工（要對方現在做事或回交件）。新工作請用 dispatch；既有任務的訊息請用 reply，並在 send 填 task_id / tag / waiting_on 欄位綁定任務，不要寫在內文裡；純資訊才用 send 並設 fyi=true（fyi 不能夾帶要對方做事的指令）。';
-const REPLY_DENY_REASON = '這則 reply 是在派工（要對方現在做事或回交件）。新工作請用 dispatch；若是回答既有任務，請帶任務脈絡（task_id 欄位，或內文寫明 26 碼任務 id）；純資訊才設 fyi=true。';
+const HEADER_EXAMPLE = '訊息內文最上面逐行寫：\ntask_id: <26 碼任務 id>\ntag: progress|result|question|ruling|fyi\nwaiting_on: <對方地址>';
+const DENY_REASON = '這則 send 是在派工（要對方現在做事或回交件）。新工作請用 dispatch；既有任務的訊息請用 reply，並用標頭行綁定任務。' + HEADER_EXAMPLE + '\n純資訊才用 send 並設 fyi=true（fyi 不能夾帶要對方做事的指令）。';
+const REPLY_DENY_REASON = '這則 reply 是在派工（要對方現在做事或回交件）。新工作請用 dispatch；若是回答既有任務，請帶任務脈絡。' + HEADER_EXAMPLE + '\n純資訊才設 fyi=true。';
 // 'fyi' means "needs no answer, no action": an ask hiding under it is still a work order. Only the bare
 // noun 回報 (a mention, e.g. "晚點補完整回報") stays allowed under fyi.
 const FYI_BENIGN_PHRASES = Object.freeze(['回報']);
+const HEADER_TASK_ID_RE = /^task_id:\s*[0-9A-HJKMNP-TV-Z]{26}\s*$/m;
 const ULID_IN_TEXT_RE = /\b[0-9A-HJKMNP-TV-Z]{26}\b/;
 const DISPATCH_OPT_IN = 'pm-dispatch-plan-guard';
 const DISPATCH_SIZE_DENY_REASON = '每張派工都要帶 Size（XS|S|M|L|XL），請補上';
@@ -68,6 +70,7 @@ function isFyiWorkOrder(content) {
 
 function hasTaskContext(toolInput) {
   if (typeof toolInput.task_id === 'string' && toolInput.task_id.trim()) return true;
+  if (typeof toolInput.content === 'string' && HEADER_TASK_ID_RE.test(toolInput.content.split('\n').slice(0, 5).join('\n'))) return true;
   return typeof toolInput.content === 'string' && ULID_IN_TEXT_RE.test(toolInput.content);
 }
 

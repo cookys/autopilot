@@ -135,6 +135,9 @@ function usage(code) {
     '  --date <YYYY-MM-DD>    Override local date stamp for receipt filename.',
     '  --timeout <dur>        Per-runner dispatch timeout (default: 3m).',
     '  --fleet-bin <bin>      Override `fleet` executable name/path.',
+    '  --install-timer        Render systemd user service and timer units into unit-dir.',
+    '  --fleet-address <addr> Fleet address for --install-timer (else AUTOPILOT_FLEET_ADDRESS).',
+    '  --unit-dir <dir>       Override systemd user unit dir (else XDG_CONFIG_HOME/systemd/user).',
     '  -h, --help             Print this help message.',
     '',
     'Exit: 0 all pass | 1 any runner failed | 2 usage or configuration error.',
@@ -154,6 +157,9 @@ function parseArgs(argv) {
     date: null,
     timeout: '3m',
     fleetBin: 'fleet',
+    installTimer: false,
+    fleetAddress: null,
+    unitDir: null,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -190,6 +196,16 @@ function parseArgs(argv) {
     } else if (arg === '--fleet-bin') {
       if (i + 1 >= argv.length || !argv[i + 1]) usage(2);
       opts.fleetBin = argv[i + 1].trim();
+      i += 1;
+    } else if (arg === '--install-timer') {
+      opts.installTimer = true;
+    } else if (arg === '--fleet-address') {
+      if (i + 1 >= argv.length || !argv[i + 1]) usage(2);
+      opts.fleetAddress = argv[i + 1].trim();
+      i += 1;
+    } else if (arg === '--unit-dir') {
+      if (i + 1 >= argv.length || !argv[i + 1]) usage(2);
+      opts.unitDir = path.resolve(argv[i + 1]);
       i += 1;
     } else if (arg === '-h' || arg === '--help') {
       usage(0);
@@ -303,9 +319,16 @@ function formatSpawnError(err) {
   return code || message || undefined;
 }
 
+function stripKnownNoiseLines(raw) {
+  return String(raw || '')
+    .split(/\r?\n/)
+    .filter((line) => !line.trimStart().startsWith('codeforge-collect:'))
+    .join('\n');
+}
+
 function extractRunFailureDetails(run) {
   const details = {
-    stderr_tail: redactTail(run && run.stderr, STDERR_TAIL_CHARS),
+    stderr_tail: redactTail(stripKnownNoiseLines(run && run.stderr), STDERR_TAIL_CHARS),
     stdout_tail: redactTail(run && run.stdout, STDOUT_TAIL_CHARS),
   };
   if (run && run.error) {
@@ -591,7 +614,11 @@ function notifyFailures(fleetBin, fleetAddr, failedRows) {
     const stderrPreview = typeof row.stderr_tail === 'string'
       ? row.stderr_tail.slice(0, NOTIFY_STDERR_CHARS).replace(/[\r\n]+/g, ' ').trim()
       : '';
-    return stderrPreview ? `${line} stderr=${stderrPreview}` : line;
+    if (stderrPreview) return `${line} stderr=${stderrPreview}`;
+    const stdoutPreview = typeof row.stdout_tail === 'string'
+      ? row.stdout_tail.slice(0, NOTIFY_STDERR_CHARS).replace(/[\r\n]+/g, ' ').trim()
+      : '';
+    return stdoutPreview ? `${line} stdout=${stdoutPreview}` : line;
   });
   const body = lines.join('\n');
   const env = { ...process.env };
@@ -612,8 +639,72 @@ function notifyFailures(fleetBin, fleetAddr, failedRows) {
   return true;
 }
 
+function resolveUnitDir(explicitDir, env = process.env) {
+  if (explicitDir) return path.resolve(explicitDir);
+  const xdg = env.XDG_CONFIG_HOME;
+  if (typeof xdg === 'string' && xdg.trim() !== '' && path.isAbsolute(xdg)) {
+    return path.join(xdg, 'systemd', 'user');
+  }
+  return path.join(os.homedir(), '.config', 'systemd', 'user');
+}
+
+function renderSystemdUnits(repoRoot, fleetAddress) {
+  const systemdDir = path.join(__dirname, 'systemd');
+  const serviceTpl = fs.readFileSync(path.join(systemdDir, 'runner-smoke.service'), 'utf8');
+  const timerTpl = fs.readFileSync(path.join(systemdDir, 'runner-smoke.timer'), 'utf8');
+  const replaceAll = (text) => text
+    .replace(/@REPO_PATH@/g, repoRoot)
+    .replace(/@FLEET_ADDRESS@/g, fleetAddress);
+  const service = replaceAll(serviceTpl);
+  const timer = replaceAll(timerTpl);
+  const unresolved = new Set();
+  for (const text of [service, timer]) {
+    const matches = text.match(/@[A-Z0-9_]+@/g);
+    if (matches) {
+      for (const m of matches) unresolved.add(m);
+    }
+  }
+  if (unresolved.size > 0) {
+    throw new Error(`unrendered placeholder(s) in unit template: ${[...unresolved].join(', ')}`);
+  }
+  return { service, timer };
+}
+
+function installTimer(opts) {
+  const fleetAddress = (opts.fleetAddress || process.env.AUTOPILOT_FLEET_ADDRESS || '').trim();
+  if (!fleetAddress) {
+    process.stderr.write('runner-smoke: --install-timer requires @FLEET_ADDRESS@ (--fleet-address <addr> or AUTOPILOT_FLEET_ADDRESS)\n');
+    process.exit(2);
+  }
+  const repoRoot = path.resolve(__dirname, '..');
+  let rendered;
+  try {
+    rendered = renderSystemdUnits(repoRoot, fleetAddress);
+  } catch (err) {
+    process.stderr.write(`runner-smoke: ${err.message}\n`);
+    process.exit(2);
+  }
+  const unitDir = resolveUnitDir(opts.unitDir, process.env);
+  const servicePath = path.join(unitDir, 'runner-smoke.service');
+  const timerPath = path.join(unitDir, 'runner-smoke.timer');
+  if (opts.dryRun) {
+    process.stdout.write(`# ${servicePath}\n${rendered.service}\n# ${timerPath}\n${rendered.timer}\n`);
+  } else {
+    fs.mkdirSync(unitDir, { recursive: true });
+    fs.writeFileSync(servicePath, rendered.service, { mode: 0o644 });
+    fs.writeFileSync(timerPath, rendered.timer, { mode: 0o644 });
+    process.stdout.write(`Installed ${servicePath}\nInstalled ${timerPath}\n`);
+  }
+  process.stdout.write('Next:\n  systemctl --user daemon-reload\n  systemctl --user enable --now runner-smoke.timer\n');
+  process.exit(0);
+}
+
 function main() {
   const opts = parseArgs(process.argv.slice(2));
+  if (opts.installTimer) {
+    installTimer(opts);
+    return;
+  }
   const vettedPath = resolveVettedPath(opts.vettedPath, process.env);
   let table;
   let items;

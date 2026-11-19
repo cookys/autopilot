@@ -969,6 +969,16 @@ function fetchAndResolveWorkOrder(taskId, repoRoot) {
       stderr: `session-mode: fleet task ${taskId}: conflicting Size lines in work order; stored wo_state: unresolved\n`,
     };
   }
+  if (!parsed.size) {
+    return {
+      ok: true,
+      wo_size: null,
+      wo_plan: parsed.plan,
+      wo_state: 'unresolved',
+      plan_receipt: null,
+      stderr: `session-mode: fleet task ${taskId}: no Size in work order; stored wo_state: unresolved\n`,
+    };
+  }
   if (parsed.plan && typeof parsed.plan === 'object') {
     const receipt = derivePlanReceiptFromGit(repoRoot, parsed.plan.sha, parsed.plan.path);
     if (!receipt) {
@@ -998,6 +1008,70 @@ function fetchAndResolveWorkOrder(taskId, repoRoot) {
     plan_receipt: null,
     stderr: null,
   };
+}
+
+function resolvePrefetchedWorkOrder(taskId, rawWoSize, rawWoPlan, repoRoot) {
+  if (!SIZES.includes(rawWoSize)) {
+    return {
+      ok: true,
+      wo_size: null,
+      wo_plan: null,
+      wo_state: 'unresolved',
+      plan_receipt: null,
+      stderr: `session-mode: fleet task ${taskId}: invalid or missing --wo-size; stored wo_state: unresolved\n`,
+    };
+  }
+  let parsedPlan = null;
+  if (rawWoPlan !== undefined && rawWoPlan !== null && rawWoPlan !== '') {
+    parsedPlan = typeof rawWoPlan === 'string' ? workOrderPlan.parse(`Plan: ${rawWoPlan}`).plan : null;
+    if (!parsedPlan) {
+      return {
+        ok: true,
+        wo_size: rawWoSize,
+        wo_plan: null,
+        wo_state: 'unresolved',
+        plan_receipt: null,
+        stderr: `session-mode: fleet task ${taskId}: invalid --wo-plan "${rawWoPlan}"; stored wo_state: unresolved\n`,
+      };
+    }
+  }
+  if (parsedPlan && typeof parsedPlan === 'object') {
+    const receipt = derivePlanReceiptFromGit(repoRoot, parsedPlan.sha, parsedPlan.path);
+    if (!receipt) {
+      return {
+        ok: true,
+        wo_size: rawWoSize,
+        wo_plan: parsedPlan,
+        wo_state: 'unresolved',
+        plan_receipt: null,
+        stderr: `session-mode: fleet task ${taskId}: Plan ${parsedPlan.path}@${parsedPlan.sha} did not resolve in git; stored wo_state: unresolved\n`,
+      };
+    }
+    return {
+      ok: true,
+      wo_size: rawWoSize,
+      wo_plan: parsedPlan,
+      wo_state: 'resolved',
+      plan_receipt: receipt,
+      stderr: null,
+    };
+  }
+  return {
+    ok: true,
+    wo_size: rawWoSize,
+    wo_plan: parsedPlan,
+    wo_state: 'resolved',
+    plan_receipt: null,
+    stderr: null,
+  };
+}
+
+function resolveWorkOrderForSet(args, taskId, repoRoot) {
+  if (!taskId) return null;
+  if (Object.prototype.hasOwnProperty.call(args, 'wo-size')) {
+    return resolvePrefetchedWorkOrder(taskId, args['wo-size'], args['wo-plan'], repoRoot);
+  }
+  return fetchAndResolveWorkOrder(taskId, repoRoot);
 }
 
 function applyWorkOrderToMarker(marker, taskId, fetchRes, prior, repoRoot) {
@@ -1213,7 +1287,7 @@ function cmdSetInit(args) {
     return 2;
   }
   const repoRoot = path.resolve(args['repo-root'] || gitToplevel());
-  const fetchRes = effectiveTaskId ? fetchAndResolveWorkOrder(effectiveTaskId, repoRoot) : null;
+  const fetchRes = resolveWorkOrderForSet(args, effectiveTaskId, repoRoot);
   const timeoutMs = Number(process.env.AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS) > 0
     ? Number(process.env.AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS) : PHASE_LOCK_TIMEOUT_MS;
   const file = target.file;
@@ -1367,7 +1441,7 @@ function cmdSet(args) {
     process.stderr.write('session-mode: --refresh requires --fleet-task <id> or an existing fleet_task_id on the marker\n');
     return 2;
   }
-  const fetchRes = effectiveTaskId ? fetchAndResolveWorkOrder(effectiveTaskId, repoRoot) : null;
+  const fetchRes = resolveWorkOrderForSet(args, effectiveTaskId, repoRoot);
   if (effectiveTaskId && fetchRes && fetchRes.ok && fetchRes.wo_state === 'resolved') {
     const floorErr = sizeFloorError(initParsed.init.size, effectiveTaskId, fetchRes.wo_size);
     if (floorErr) { process.stderr.write(`session-mode: ${floorErr}\n`); return 2; }

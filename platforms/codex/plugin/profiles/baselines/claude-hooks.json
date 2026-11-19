@@ -291,7 +291,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/work-order-adopt-hook.js",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/work-order-adopt.js",
             "timeout": 5,
             "onFailure": "continue"
           }

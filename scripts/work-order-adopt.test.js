@@ -7,8 +7,11 @@
  * isolated AUTOPILOT_SESSION_MODE_DIR + scratch git repos via scripts/lib/test-git-env.js.
  *
  * Negative controls:
- *   - Title without SizeTag MUST return exit 2, write `wo_state: "unresolved"`, emit
- *     exactly one stderr line, and NEVER advance `stage` or emit `[stage:...]` progress.
+ *   - `session-mode.js set --fleet-task <id>` with a title containing no Size stores
+ *     `wo_state: "unresolved"` and `wo_size: null` (never `resolved`).
+ *   - Title without SizeTag on `work-order-adopt.js` MUST return exit 2, write
+ *     `wo_state: "unresolved"` (with no stale stage/size), emit one stderr line, and NEVER
+ *     advance `stage` or emit `[stage:...]` progress.
  *   - Inherited `AUTOPILOT_PARENT_SESSION_ID` without `--session-id` MUST refuse with exit 3
  *     before touching any marker file.
  */
@@ -23,6 +26,7 @@ const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
 
 const ADOPT_SCRIPT = path.resolve(__dirname, 'work-order-adopt.js');
+const SESSION_MODE_SCRIPT = path.resolve(__dirname, 'session-mode.js');
 const STAGE_ADVANCE_SCRIPT = path.resolve(__dirname, 'stage-advance.js');
 
 function makeSandbox() {
@@ -41,6 +45,8 @@ function makeSandbox() {
   fs.writeFileSync(tasksFile, '{}\n');
 
   execFileSync('git', ['-C', repo, 'init', '-b', 'develop'], { stdio: 'ignore' });
+  execFileSync('git', ['-C', repo, 'config', 'user.name', 't'], { stdio: 'ignore' });
+  execFileSync('git', ['-C', repo, 'config', 'user.email', 't@example.invalid'], { stdio: 'ignore' });
   fs.writeFileSync(path.join(repo, 'README.md'), 'seed\n');
   execFileSync('git', ['-C', repo, 'add', 'README.md'], { stdio: 'ignore' });
   execFileSync('git', ['-C', repo, 'commit', '-m', 'seed'], { stdio: 'ignore' });
@@ -87,6 +93,10 @@ process.exit(0);
     fs.writeFileSync(tasksFile, `${JSON.stringify(map, null, 2)}\n`);
   }
 
+  function clearFleetLog() {
+    fs.rmSync(fleetLog, { force: true });
+  }
+
   function buildEnv(extra = {}) {
     const env = { ...process.env };
     delete env.AUTOPILOT_TOKEN_SEAT;
@@ -109,6 +119,15 @@ process.exit(0);
 
   function runAdopt(argv, envExtra = {}) {
     return spawnSync(process.execPath, [ADOPT_SCRIPT, ...argv], {
+      cwd: repo,
+      env: buildEnv(envExtra),
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  }
+
+  function runSessionMode(argv, envExtra = {}) {
+    return spawnSync(process.execPath, [SESSION_MODE_SCRIPT, ...argv], {
       cwd: repo,
       env: buildEnv(envExtra),
       encoding: 'utf8',
@@ -141,15 +160,17 @@ process.exit(0);
     repo,
     markerDir,
     setTasks,
+    clearFleetLog,
     buildEnv,
     runAdopt,
+    runSessionMode,
     readMarker,
     readFleetCalls,
     cleanup,
   };
 }
 
-test('fixture [M] task writes wo_size=M, fleet_task_id, entry stage=plan, wo_state=resolved (plus [bug S] and [!L])', () => {
+test('fixture [M] task writes wo_size=M, fleet_task_id, entry stage=plan, wo_state=resolved in ONE fleet task show call (plus [bug S] and [!L])', () => {
   const sbx = makeSandbox();
   try {
     sbx.setTasks({
@@ -167,8 +188,11 @@ test('fixture [M] task writes wo_size=M, fleet_task_id, entry stage=plan, wo_sta
       },
     });
 
+    sbx.clearFleetLog();
     const rM = sbx.runAdopt(['--task', '01M7TASKM00000000000000001', '--session-id', 'sid-m']);
     assert.equal(rM.status, 0, `stderr: ${rM.stderr}`);
+    const showCallsM = sbx.readFleetCalls().filter((c) => c[0] === 'task' && c[1] === 'show');
+    assert.equal(showCallsM.length, 1, 'adopt must invoke `fleet task show` strictly once (no second fetch in session-mode)');
     const mMarker = sbx.readMarker('sid-m');
     assert.ok(mMarker);
     assert.equal(mMarker.fleet_task_id, '01M7TASKM00000000000000001');
@@ -247,6 +271,150 @@ test('second task with a different id goes through --new-task and clears prior t
     assert.equal(after.wo_state, 'resolved');
     assert.equal(after.stage, 'implement');
     assert.ok(Number.isInteger(after.task_seq) && after.task_seq >= 2, `expected task_seq >= 2, got ${after.task_seq}`);
+  } finally {
+    sbx.cleanup();
+  }
+});
+
+test('local-task marker (size=M, stage=implement, no fleet_task_id) then [S] fleet task passes --new-task -> size S, stage implement; unresolved clears stale stage/size', () => {
+  const sbx = makeSandbox();
+  try {
+    sbx.setTasks({
+      '01M7FROMLOCAL0000000000001': {
+        id: '01M7FROMLOCAL0000000000001',
+        title: '[S] Small fleet follow-up after local task',
+      },
+      '01M7FROMLOCALUNRES00000002': {
+        id: '01M7FROMLOCALUNRES00000002',
+        title: 'Unresolved fleet task without bracket size',
+      },
+    });
+
+    // 1) Local task: size=M, stage=implement, no fleet_task_id -> adopt [S] fleet task
+    const initLocal = sbx.runSessionMode(['set', '--size', 'M', '--session-id', 'sid-local']);
+    assert.equal(initLocal.status, 0, `session-mode init stderr: ${initLocal.stderr}`);
+    const advPlan = spawnSync(
+      process.execPath,
+      [STAGE_ADVANCE_SCRIPT, '--session-id', 'sid-local', '--to', 'plan'],
+      { cwd: sbx.repo, env: sbx.buildEnv(), encoding: 'utf8' },
+    );
+    assert.equal(advPlan.status, 0, `stage-advance plan stderr: ${advPlan.stderr}`);
+    const advImpl = spawnSync(
+      process.execPath,
+      [STAGE_ADVANCE_SCRIPT, '--session-id', 'sid-local', '--to', 'implement', '--unit', 'phase:1/1:local'],
+      { cwd: sbx.repo, env: sbx.buildEnv(), encoding: 'utf8' },
+    );
+    assert.equal(advImpl.status, 0, `stage-advance implement stderr: ${advImpl.stderr}`);
+
+    const localBefore = sbx.readMarker('sid-local');
+    assert.equal(localBefore.size, 'M');
+    assert.equal(localBefore.stage, 'implement');
+    assert.equal(localBefore.fleet_task_id, undefined);
+
+    const rAdoptS = sbx.runAdopt(['--task', '01M7FROMLOCAL0000000000001', '--session-id', 'sid-local']);
+    assert.equal(rAdoptS.status, 0, `adopt [S] stderr: ${rAdoptS.stderr}`);
+    const afterS = sbx.readMarker('sid-local');
+    assert.equal(afterS.fleet_task_id, '01M7FROMLOCAL0000000000001');
+    assert.equal(afterS.wo_task, '01M7FROMLOCAL0000000000001');
+    assert.equal(afterS.size, 'S');
+    assert.equal(afterS.wo_size, 'S');
+    assert.equal(afterS.wo_state, 'resolved');
+    assert.equal(afterS.stage, 'implement');
+    assert.equal(afterS.unit, undefined, 'prior local unit must be cleared by --new-task');
+    assert.ok(Number.isInteger(afterS.task_seq) && afterS.task_seq >= 2);
+
+    // 2) Same rule for writeUnresolvedMarker: local task (size=M, stage=implement, no fleet_task_id) -> unresolved fleet task leaves NO stale stage or size
+    assert.equal(sbx.runSessionMode(['set', '--size', 'M', '--session-id', 'sid-local-unres']).status, 0);
+    assert.equal(
+      spawnSync(process.execPath, [STAGE_ADVANCE_SCRIPT, '--session-id', 'sid-local-unres', '--to', 'plan'], {
+        cwd: sbx.repo,
+        env: sbx.buildEnv(),
+        encoding: 'utf8',
+      }).status,
+      0,
+    );
+    assert.equal(
+      spawnSync(process.execPath, [STAGE_ADVANCE_SCRIPT, '--session-id', 'sid-local-unres', '--to', 'implement'], {
+        cwd: sbx.repo,
+        env: sbx.buildEnv(),
+        encoding: 'utf8',
+      }).status,
+      0,
+    );
+
+    const rUnres = sbx.runAdopt(['--task', '01M7FROMLOCALUNRES00000002', '--session-id', 'sid-local-unres']);
+    assert.equal(rUnres.status, 2);
+    const afterUnres = sbx.readMarker('sid-local-unres');
+    assert.equal(afterUnres.wo_state, 'unresolved');
+    assert.equal(afterUnres.wo_size, null);
+    assert.equal(afterUnres.stage, undefined, 'no stale stage left in unresolved marker');
+    assert.equal(afterUnres.size, undefined, 'no stale size left in unresolved marker');
+    assert.ok(Number.isInteger(afterUnres.task_seq) && afterUnres.task_seq >= 2);
+  } finally {
+    sbx.cleanup();
+  }
+});
+
+test('title SizeTag governs size conflict; body is read only for Plan: (title [M] + body Size: S -> resolved M)', () => {
+  const sbx = makeSandbox();
+  try {
+    sbx.setTasks({
+      '01M7BODYSIZE00000000000001': {
+        id: '01M7BODYSIZE00000000000001',
+        title: '[M] Refactor work-order parser',
+        body: 'Size: S\nPlan: plan-first',
+      },
+      '01M7TITLECONFLICT000000002': {
+        id: '01M7TITLECONFLICT000000002',
+        title: '[S] [M] Conflicting title tags',
+        body: 'Plan: plan-first',
+      },
+    });
+
+    const rOk = sbx.runAdopt(['--task', '01M7BODYSIZE00000000000001', '--session-id', 'sid-body-size']);
+    assert.equal(rOk.status, 0, `stderr: ${rOk.stderr}`);
+    const mOk = sbx.readMarker('sid-body-size');
+    assert.equal(mOk.wo_state, 'resolved');
+    assert.equal(mOk.wo_size, 'M');
+    assert.equal(mOk.size, 'M');
+    assert.equal(mOk.wo_plan, 'plan-first');
+    assert.equal(mOk.stage, 'plan');
+
+    const rConflict = sbx.runAdopt(['--task', '01M7TITLECONFLICT000000002', '--session-id', 'sid-title-conflict']);
+    assert.equal(rConflict.status, 2);
+    const mConflict = sbx.readMarker('sid-title-conflict');
+    assert.equal(mConflict.wo_state, 'unresolved');
+    assert.equal(mConflict.wo_size, null);
+    assert.equal(mConflict.stage, undefined);
+  } finally {
+    sbx.cleanup();
+  }
+});
+
+test('negative control: session-mode.js set --fleet-task with a title lacking any size stores wo_state=unresolved (never resolved with wo_size=null)', () => {
+  const sbx = makeSandbox();
+  try {
+    sbx.setTasks({
+      '01M7SMNOSIZE00000000000001': {
+        id: '01M7SMNOSIZE00000000000001',
+        title: 'Investigate intermittent timeout in worker pool\nPlan: plan-first',
+      },
+    });
+
+    const res = sbx.runSessionMode([
+      'set',
+      '--fleet-task',
+      '01M7SMNOSIZE00000000000001',
+      '--session-id',
+      'sid-sm-nosize',
+    ]);
+    assert.equal(res.status, 0, `stderr: ${res.stderr}`);
+    const marker = sbx.readMarker('sid-sm-nosize');
+    assert.ok(marker);
+    assert.equal(marker.fleet_task_id, '01M7SMNOSIZE00000000000001');
+    assert.equal(marker.wo_task, '01M7SMNOSIZE00000000000001');
+    assert.equal(marker.wo_size, null);
+    assert.equal(marker.wo_state, 'unresolved');
   } finally {
     sbx.cleanup();
   }

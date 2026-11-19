@@ -2,12 +2,12 @@
 'use strict';
 
 /**
- * work-order-adopt-hook.js — Opt-in PostToolUse hook (stem `work-order-adopt`).
+ * work-order-adopt.js — Opt-in PostToolUse hook (stem `work-order-adopt`).
  *
  * Fires on `mcp__fleet__task_progress` and on `Bash` commands invoking
- * `fleet task progress <id>`. When `<id>` differs from the live session marker's
- * `fleet_task_id`, runs `scripts/work-order-adopt.js --task <id> --session-id <sid>`
- * to bind the fleet work order and enter its stage walk automatically.
+ * `fleet task progress <id>`. Runs `scripts/work-order-adopt.js --task <id> --session-id <sid>`
+ * when `<id>` differs from the live session marker's `fleet_task_id`, OR when
+ * `fleet_task_id === <id>` has no `stage` yet (e.g. a killed earlier run).
  *
  * Contract:
  *   - Default-off; self-gated via hooks/_shared/opt-in.js (`isEnabled('work-order-adopt')`).
@@ -103,7 +103,12 @@ function handle(payload, opts = {}) {
   }
 
   const current = sessionMode.readSessionRecord(target.id);
-  if (current && current.fleet_task_id === taskId) {
+  if (
+    current &&
+    current.fleet_task_id === taskId &&
+    typeof current.stage === 'string' &&
+    current.stage.length > 0
+  ) {
     return { adopted: false, reason: 'same_task_id' };
   }
 

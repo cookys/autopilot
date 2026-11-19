@@ -68,16 +68,10 @@ function readJson(rel) {
 
 // basename of a hook command → script stem (no extension), e.g.
 // "node ${CLAUDE_PLUGIN_ROOT}/hooks/mcp-health.js pre" → "mcp-health"
-const HOOK_FILE_STEM_MAP = Object.freeze({
-  'work-order-adopt-hook': 'work-order-adopt',
-});
-function canonicalStem(raw) {
-  return Object.prototype.hasOwnProperty.call(HOOK_FILE_STEM_MAP, raw) ? HOOK_FILE_STEM_MAP[raw] : raw;
-}
 const HOOK_CMD_RE = new RegExp(`${HOOKS_DIR_REL.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&')}/([A-Za-z0-9_-]+)\\.(js|sh)`);
 function stemFromCommand(cmd) {
   const m = cmd.match(HOOK_CMD_RE);
-  return m ? canonicalStem(m[1]) : null;
+  return m ? m[1] : null;
 }
 
 // D6: the per-event opt-in multiplexer owns these stems. When the multiplexer is
@@ -198,7 +192,7 @@ function deriveInventory() {
   for (const f of fs.readdirSync(HOOKS_DIR)) {
     if (!/\.(js|sh)$/.test(f)) continue;
     if (NON_HOOK.some((re) => re.test(f))) continue;
-    all.add(canonicalStem(f.replace(/\.(js|sh)$/, '')));
+    all.add(f.replace(/\.(js|sh)$/, ''));
   }
   const disabled = new Set([...all].filter((s) => !wired.has(s)));
 

@@ -1,12 +1,13 @@
 'use strict';
 
 /**
- * work-order-adopt-hook.test.js — PostToolUse hook suite for hooks/work-order-adopt-hook.js.
+ * work-order-adopt.test.js — PostToolUse hook suite for hooks/work-order-adopt.js.
  *
  * Covers:
  *   - opt-in off -> no adopt call, marker untouched, stdout empty, exit 0 (negative control);
- *   - mcp__fleet__task_progress with same id as marker.fleet_task_id -> no adopt call;
- *   - mcp__fleet__task_progress with new id -> exactly one adopt call, marker updated, stdout empty, exit 0;
+ *   - mcp__fleet__task_progress with new id -> one adopt call (single `fleet task show`), marker updated, stdout empty, exit 0;
+ *   - mcp__fleet__task_progress with same id and non-empty `stage` -> no adopt call;
+ *   - mcp__fleet__task_progress with same id when marker has NO `stage` (killed earlier run) -> retries adopt;
  *   - Bash `fleet task progress <id>` with new id -> one adopt call, marker updated, stdout empty, exit 0;
  *   - unresolved task (exit 2 inside work-order-adopt.js) -> hook still exits 0 with empty stdout.
  */
@@ -20,7 +21,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
 
-const HOOK_SCRIPT = path.resolve(__dirname, 'work-order-adopt-hook.js');
+const HOOK_SCRIPT = path.resolve(__dirname, 'work-order-adopt.js');
 
 function makeHookSandbox() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wo-adopt-hook-test-'));
@@ -38,6 +39,8 @@ function makeHookSandbox() {
   fs.writeFileSync(tasksFile, '{}\n');
 
   execFileSync('git', ['-C', repo, 'init', '-b', 'develop'], { stdio: 'ignore' });
+  execFileSync('git', ['-C', repo, 'config', 'user.name', 't'], { stdio: 'ignore' });
+  execFileSync('git', ['-C', repo, 'config', 'user.email', 't@example.invalid'], { stdio: 'ignore' });
   fs.writeFileSync(path.join(repo, 'README.md'), 'seed\n');
   execFileSync('git', ['-C', repo, 'add', 'README.md'], { stdio: 'ignore' });
   execFileSync('git', ['-C', repo, 'commit', '-m', 'seed'], { stdio: 'ignore' });
@@ -158,7 +161,7 @@ test('negative control: opt-in off does nothing and spawns zero fleet calls', ()
   }
 });
 
-test('mcp__fleet__task_progress: new id triggers one adopt call; same id triggers zero adopt calls', () => {
+test('mcp__fleet__task_progress: new id runs fleet task show once; same id with stage skips; same id without stage retries', () => {
   const sbx = makeHookSandbox();
   try {
     sbx.setTasks({
@@ -166,9 +169,13 @@ test('mcp__fleet__task_progress: new id triggers one adopt call; same id trigger
         id: '01M7HOOK000000000000000001',
         title: '[M] Implement stage adopt\nPlan: plan-first',
       },
+      '01M7KILLED0000000000000002': {
+        id: '01M7KILLED0000000000000002',
+        title: '[S] Recover killed adopt run',
+      },
     });
 
-    // First progress on new id -> adopts once
+    // First progress on new id -> adopts once, calling `fleet task show` strictly once
     const r1 = sbx.runHook(
       {
         hook_event_name: 'PostToolUse',
@@ -187,9 +194,9 @@ test('mcp__fleet__task_progress: new id triggers one adopt call; same id trigger
     assert.equal(m1.wo_size, 'M');
     assert.equal(m1.stage, 'plan');
     const showCalls1 = sbx.readFleetCalls().filter((c) => c[0] === 'task' && c[1] === 'show');
-    assert.ok(showCalls1.length >= 1, 'adopt must have queried fleet task show');
+    assert.equal(showCalls1.length, 1, 'adopt must query fleet task show strictly once');
 
-    // Second progress with the SAME task id -> NO adopt call at all
+    // Second progress with the SAME task id AND non-empty stage -> NO adopt call at all
     sbx.clearFleetLog();
     const r2 = sbx.runHook(
       {
@@ -203,7 +210,46 @@ test('mcp__fleet__task_progress: new id triggers one adopt call; same id trigger
     );
     assert.equal(r2.status, 0);
     assert.equal(r2.stdout, '');
-    assert.equal(sbx.readFleetCalls().length, 0, 'same task_id must not invoke work-order-adopt');
+    assert.equal(sbx.readFleetCalls().length, 0, 'same task_id with stage set must not invoke work-order-adopt');
+
+    // Killed earlier run: marker already has fleet_task_id === id, but NO stage -> MUST retry adoption
+    const now = Date.now();
+    fs.writeFileSync(
+      path.join(sbx.markerDir, 'sid-killed.json'),
+      `${JSON.stringify(
+        {
+          session_id: 'sid-killed',
+          level: null,
+          repo_root: sbx.repo,
+          started_at: new Date(now - 5000).toISOString(),
+          expires_at: new Date(now + 3600 * 1000).toISOString(),
+          fleet_task_id: '01M7KILLED0000000000000002',
+          wo_task: '01M7KILLED0000000000000002',
+          wo_size: 'S',
+          size: 'S',
+          wo_state: 'resolved',
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    sbx.clearFleetLog();
+    const rRetry = sbx.runHook(
+      {
+        hook_event_name: 'PostToolUse',
+        session_id: 'sid-killed',
+        cwd: sbx.repo,
+        tool_name: 'mcp__fleet__task_progress',
+        tool_input: { task_id: '01M7KILLED0000000000000002', note: 'resuming after killed adopt' },
+      },
+      { AUTOPILOT_HOOK_WORK_ORDER_ADOPT: '1' },
+    );
+    assert.equal(rRetry.status, 0);
+    assert.equal(rRetry.stdout, '');
+    const mRetried = sbx.readMarker('sid-killed');
+    assert.equal(mRetried.stage, 'implement', 'killed earlier run without stage must retry and set entry stage');
+    const retryShowCalls = sbx.readFleetCalls().filter((c) => c[0] === 'task' && c[1] === 'show');
+    assert.equal(retryShowCalls.length, 1, 'retry must invoke fleet task show once');
   } finally {
     sbx.cleanup();
   }

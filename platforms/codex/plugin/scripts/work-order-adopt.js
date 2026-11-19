@@ -8,23 +8,26 @@
  *   node scripts/work-order-adopt.js --task <id> [--session-id <id>] [--repo-root <dir>]
  *
  * Behavior (fleet-stage-graph-binding P3):
- *   1. Reads `fleet task show <id> --json` via scripts/lib/fleet-task.js (`FLEET_BIN` overridable,
- *      1.5 s timeout). Parses size / bug / urgent from the title SizeTag (`[S]`, `[bug S]`, `[!L]`)
- *      and `Plan:` from the work order via scripts/lib/work-order-plan.js.
- *   2. If the live marker has a different `fleet_task_id`, invokes:
- *        `session-mode.js set --new-task --fleet-task <id> --size <S> [--bug] [--urgent]`
- *      otherwise:
- *        `session-mode.js set --fleet-task <id> --size <S> [--bug] [--urgent]`
+ *   1. Reads `fleet task show <id> --json` once via scripts/lib/fleet-task.js (`FLEET_BIN`
+ *      overridable, 1.5 s timeout). Parses size / bug / urgent from the title SizeTag ONLY
+ *      (`[S]`, `[bug S]`, `[!L]`) and reads body lines ONLY for `Plan:` via
+ *      scripts/lib/work-order-plan.js.
+ *   2. If the live marker has any non-empty task-scoped field (`sessionMode.NEW_TASK_CLEARED`) and
+ *      its `wo_task` (else `fleet_task_id`) differs from `<id>`, invokes:
+ *        `session-mode.js set --new-task --fleet-task <id> --size <S> --wo-size <S> [--wo-plan <P>] [--bug] [--urgent]`
+ *      otherwise omits `--new-task`. Passing `--wo-size` (and `--wo-plan`) avoids a second
+ *      `fleet task show` spawn inside `session-mode.js`.
  *   3. Queries `stage-graph.js` for `<entry>` of `{ size, bug, urgent }` and invokes:
  *        `stage-advance.js --to <entry>`
- *   4. Unresolved (no SizeTag in title, or conflicting sizes): writes `wo_state: "unresolved"` to
- *      the session marker, prints one stderr line, exits 2, and does NOT call `stage-advance.js`.
+ *   4. Unresolved (no SizeTag in title, conflicting SizeTags in title, or unresolvable `Plan:`):
+ *      writes `wo_state: "unresolved"` to the session marker (clearing any stale task-scoped stage
+ *      or size fields), prints one stderr line, exits 2, and does NOT call `stage-advance.js`.
  *   5. Fleet CLI unreachable, non-zero exit, invalid JSON, or timeout (1.5 s): prints one stderr
  *      warning line, exits 0, and leaves the marker unchanged.
  *
  * Exit codes:
  *   0 — adopted into entry stage, OR degraded cleanly when fleet CLI is unavailable/timed out
- *   2 — unresolved work order (missing/conflicting SizeTag) or invalid CLI arguments
+ *   2 — unresolved work order (missing/conflicting title SizeTag or unresolvable Plan) or bad CLI args
  *   3 — marker write refused (e.g. inherited parent session id) or stage-advance refusal
  *   1 — unexpected internal error
  *
@@ -96,6 +99,37 @@ function resolveRepoRoot(explicitRepoRoot) {
   }
 }
 
+function hasNonEmptyTaskField(marker) {
+  if (!marker || typeof marker !== 'object') return false;
+  for (const k of sessionMode.NEW_TASK_CLEARED) {
+    const v = marker[k];
+    if (typeof v === 'string' && v.length > 0) return true;
+    if (v === true) return true;
+    if (Array.isArray(v) && v.length > 0) return true;
+    if (v !== null && typeof v === 'object' && !Array.isArray(v)) return true;
+  }
+  return false;
+}
+
+function shouldStartNewTask(current, taskId) {
+  if (!hasNonEmptyTaskField(current)) return false;
+  const currentTask =
+    typeof current.wo_task === 'string' && current.wo_task.length > 0
+      ? current.wo_task
+      : typeof current.fleet_task_id === 'string' && current.fleet_task_id.length > 0
+        ? current.fleet_task_id
+        : null;
+  return currentTask !== taskId;
+}
+
+function extractBodyPlan(task) {
+  const titleRest = typeof task.title === 'string' ? task.title.split(/\r?\n/).slice(1).join('\n') : '';
+  const bodySource = [titleRest, task.body, task.description]
+    .filter((v) => typeof v === 'string' && v.length > 0)
+    .join('\n');
+  return bodySource ? workOrderPlan.parse(bodySource).plan : null;
+}
+
 function writeUnresolvedMarker({ target, taskId, parsedPlan, repoRoot }) {
   const dir = sessionMode.markerDir();
   const file = path.join(dir, `${target.id}.json`);
@@ -115,21 +149,15 @@ function writeUnresolvedMarker({ target, taskId, parsedPlan, repoRoot }) {
       let next;
       if (current) {
         next = { ...current };
-        const hadDifferentTask =
-          typeof current.fleet_task_id === 'string' &&
-          current.fleet_task_id.length > 0 &&
-          current.fleet_task_id !== taskId;
-        if (hadDifferentTask) {
+        if (shouldStartNewTask(current, taskId)) {
           const seqPrev =
             Number.isInteger(current.task_seq) && current.task_seq >= 1
               ? current.task_seq
-              : current.size !== undefined || current.stage !== undefined
-                ? 1
-                : 0;
-          for (const k of sessionMode.NEW_TASK_CLEARED) delete next[k];
+              : 1;
           next.task_seq = seqPrev + 1;
           next.task_started_at = nowIso;
         }
+        for (const k of sessionMode.NEW_TASK_CLEARED) delete next[k];
       } else {
         let repoIdentity = null;
         try {
@@ -204,35 +232,24 @@ function adoptWorkOrder(argv = process.argv.slice(2)) {
   }
 
   const repoRoot = resolveRepoRoot(opts.repoRoot);
-  const fullText = [shown.task.title, shown.task.body, shown.task.description]
-    .filter((v) => typeof v === 'string' && v.length > 0)
-    .join('\n');
   const tag = workOrderPlan.parseSizeTag(shown.task.title);
-  const parsedWo = workOrderPlan.parse(fullText);
+  const parsedPlan = extractBodyPlan(shown.task);
 
-  if (!tag.size || tag.size === 'conflict' || parsedWo.size === 'conflict') {
-    const parsedPlan = tag.size === 'conflict' || parsedWo.size === 'conflict' ? null : parsedWo.plan;
+  if (!tag.size || tag.size === 'conflict') {
+    const storedPlan = tag.size === 'conflict' ? null : parsedPlan;
     try {
-      writeUnresolvedMarker({ target, taskId, parsedPlan, repoRoot });
+      writeUnresolvedMarker({ target, taskId, parsedPlan: storedPlan, repoRoot });
     } catch (err) {
       process.stderr.write(`work-order-adopt: failed to write unresolved marker for ${taskId}: ${err.message}\n`);
       return 1;
     }
-    const why =
-      tag.size === 'conflict' || parsedWo.size === 'conflict'
-        ? 'conflicting Size markers in work order'
-        : 'no SizeTag in title';
+    const why = tag.size === 'conflict' ? 'conflicting SizeTag in title' : 'no SizeTag in title';
     process.stderr.write(`work-order-adopt: fleet task ${taskId}: ${why}; stored wo_state: unresolved\n`);
     return 2;
   }
 
   const current = sessionMode.readSessionRecord(target.id);
-  const hasDifferentTask = Boolean(
-    current &&
-      typeof current.fleet_task_id === 'string' &&
-      current.fleet_task_id.length > 0 &&
-      current.fleet_task_id !== taskId,
-  );
+  const needsNewTask = shouldStartNewTask(current, taskId);
 
   const childEnv = { ...process.env };
   if (explicitId && !(process.env.AUTOPILOT_PARENT_SESSION_ID || '').trim()) {
@@ -240,8 +257,12 @@ function adoptWorkOrder(argv = process.argv.slice(2)) {
   }
 
   const setArgs = [SESSION_MODE_SCRIPT, 'set'];
-  if (hasDifferentTask) setArgs.push('--new-task');
-  setArgs.push('--fleet-task', taskId, '--size', tag.size);
+  if (needsNewTask) setArgs.push('--new-task');
+  setArgs.push('--fleet-task', taskId, '--size', tag.size, '--wo-size', tag.size);
+  if (parsedPlan) {
+    const woPlanArg = typeof parsedPlan === 'string' ? parsedPlan : `${parsedPlan.path}@${parsedPlan.sha}`;
+    setArgs.push('--wo-plan', woPlanArg);
+  }
   if (tag.bug) setArgs.push('--bug');
   if (tag.urgent) setArgs.push('--urgent');
   if (explicitId) setArgs.push('--session-id', explicitId);
@@ -257,6 +278,13 @@ function adoptWorkOrder(argv = process.argv.slice(2)) {
     const detail = firstLine(setRes.stderr, `session-mode set exited ${setRes.status}`);
     process.stderr.write(`${detail}\n`);
     return setRes.status || 1;
+  }
+
+  const afterSet = sessionMode.readSessionRecord(target.id);
+  if (afterSet && afterSet.wo_state === 'unresolved') {
+    const detail = firstLine(setRes.stderr, `work-order-adopt: fleet task ${taskId}: stored wo_state: unresolved`);
+    process.stderr.write(`${detail}\n`);
+    return 2;
   }
 
   let entry;
@@ -305,5 +333,7 @@ module.exports = {
   adoptWorkOrder,
   parseArgs,
   validateTaskId,
+  shouldStartNewTask,
+  hasNonEmptyTaskField,
   FLEET_TIMEOUT_MS,
 };

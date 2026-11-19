@@ -546,7 +546,8 @@ export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t:
       rows.push(<Box key={'on' + k + '_' + i}><Text {...dim(v.grey)} wrap="truncate">{text}</Text></Box>)
     })
     const descFrom = oneLabel ? 1 : 0
-    const indent = oneLabel ? descAt : displayWidth(prefix + labelParts[labelParts.length - 1] + star + gap)
+    // a wrapped label's description rows hang under the label column (prefixW), the width descRoom was wrapped to
+    const indent = oneLabel ? descAt : prefixW
     descParts.slice(descFrom).forEach((piece, i) => {
       rows.push(<Box key={'od' + k + '_' + i}><Text {...dimProps()} wrap="truncate">{' '.repeat(Math.min(indent, Math.max(0, w - 1))) + piece}</Text></Box>)
     })

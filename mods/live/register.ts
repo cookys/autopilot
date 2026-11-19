@@ -1239,7 +1239,7 @@ const undoDeps = ($: EngineInterface): UndoDeps => ({
   pool: st => actionable(snapshot === null ? [] : snapshot.pending.filter(d => !isStepCard(d)), decideBatch.order.length > 0 ? decideBatch : bandBatch, st), // a reopened card the session already closed is kept in whichever batch is open
   claim: claimCard ?? claimWith($),
   onClaimFailed: (id, reason) => {
-    void $.clock.now().then(ts => appendSendLog($.fs, liveBaseSeen, { ts, event: 'claim_failed', ids: [id], reason })).catch(() => undefined)
+    void $.clock.now().then(ts => appendSendLog((p) => $.fs.read(p), (p, t) => $.fs.write(p, t), liveBaseSeen, { ts, event: 'claim_failed', ids: [id], reason })).catch(() => undefined)
   },
 })
 async function stopHoldTimerIfIdle($: EngineInterface): Promise<void> {
@@ -1274,7 +1274,7 @@ async function sendDecide($: EngineInterface, only: ReadonlySet<string>): Promis
       const oneLine = reason.replace(/[\r\n]+/g, ' ').trim()
       const truncated = oneLine.length > 120 ? oneLine.slice(0, 119) + '…' : oneLine
       $.ui.toast(t('decide.send_failed', { reason: truncated || '-' }))
-      void $.clock.now().then(ts => appendSendLog($.fs, liveBaseSeen, { ts, event: 'post_refused', ids: failedIds, reason })).catch(() => undefined)
+      void $.clock.now().then(ts => appendSendLog((p) => $.fs.read(p), (p, t) => $.fs.write(p, t), liveBaseSeen, { ts, event: 'post_refused', ids: failedIds, reason })).catch(() => undefined)
     },
   }, only)
   const typed = submitSuccessor(snapshot === null ? [] : snapshot.pending.filter(d => !isStepCard(d)), ids)

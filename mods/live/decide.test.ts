@@ -849,7 +849,12 @@ test('sendNow: post rejection calls onSendFailed with reason and rolls back sent
 test('cardMain: step card renders step_done button and step_hint without decide.in_chat; pressing it calls done', () => {
   const zh = makeT('zh-TW')
   type Node = { type: string; props: Record<string, unknown>; children: unknown[] }
-  const h = (type: string) => (props: Record<string, unknown> | null, ...children: unknown[]): Node => ({ type, props: props ?? {}, children })
+  // react-jsx calls the component with one props object; children live on props.children, not as extra arguments
+  const listed = (c: unknown): unknown[] => c == null || c === false ? [] : Array.isArray(c) ? c.flat(8) : [c]
+  const h = (type: string) => (props: Record<string, unknown> | null): Node => {
+    const p = props ?? {}
+    return { type, props: p, children: listed(p.children) }
+  }
   const el = { Box: h('Box') as never, Text: h('Text') as never, Button: h('Button') as never }
   const collectText = (n: unknown): string => {
     if (typeof n === 'string' || typeof n === 'number') return String(n)
@@ -929,7 +934,7 @@ test('sendNow + appendSendLog: rejected prompt.submit writes one post_refused JS
       return {}
     },
     onSendFailed: (reason, ids) => {
-      void appendSendLog(fakeFs, '/tmp/live-test', { ts: 1700000000000, event: 'post_refused', ids, reason })
+      void appendSendLog(fakeFs.read, fakeFs.write, '/tmp/live-test', { ts: 1700000000000, event: 'post_refused', ids, reason })
     },
   }, new Set(['d-send-1']))
 

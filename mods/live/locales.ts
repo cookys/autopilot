@@ -883,7 +883,10 @@ export const EN: Record<string, string> = {
   "page.now.quota_stale_plain": "data stale (age unknown)",
   "page.now.quota_waste": "Quota waste",
   "page.quota.col_proj_s": "Proj",
-  "page.quota.red_summary": "Quota red {n} ({names})"
+  "page.quota.red_summary": "Quota red {n} ({names})",
+  "decide.send_failed": "Send failed: {reason} (cards kept, press 0 again)",
+  "decide.step_hint": "Press [Done] when you have done it",
+  "decide.step_done": "Done"
 }
 
 export const ZH_TW: Record<string, string> = {
@@ -1767,5 +1770,8 @@ export const ZH_TW: Record<string, string> = {
   "page.now.quota_stale_plain": "資料過期（年紀不明）",
   "page.now.quota_waste": "額度浪費",
   "page.quota.col_proj_s": "預",
-  "page.quota.red_summary": "額度紅 {n}（{names}）"
+  "page.quota.red_summary": "額度紅 {n}（{names}）",
+  "decide.send_failed": "送出失敗：{reason}（卡片還在，可再按一次 0）",
+  "decide.step_hint": "做完後按〔做完了〕",
+  "decide.step_done": "做完了"
 }

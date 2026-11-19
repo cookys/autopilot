@@ -2,6 +2,7 @@
 'use strict';
 
 // hetero-review-loop.js — multi-seat review loop driver: collect / finalize / opt-out (see --help).
+// Stage event: `[stage:review/genN] <verdict>` when a generation is finalized (scripts/lib/stage-event.js).
 // Packet mode (--packets <file> --packet <id>) carries a range too big for one review packet by
 // splitting it BY PATH into per-packet phases that a set check proves cover the range exactly once
 // (check-phase-review-receipt.js --packets); it never excludes a path. Without those flags every
@@ -2231,6 +2232,18 @@ async function handleFinalize(flags) {
     } : {}),
   };
   console.log(JSON.stringify(summary, null, 2));
+  try {
+    const receiptSha = crypto.createHash('sha256').update(JSON.stringify(receipt)).digest('hex');
+    require('./lib/stage-event').emitStage({
+      taskId: typeof flags['fleet-task'] === 'string' ? flags['fleet-task'] : '',
+      stage: `review/gen${generation}`,
+      sha: receiptSha,
+      detail: verdict,
+      repoRoot,
+    });
+  } catch (error) {
+    console.error(`stage-event: ${error.message}`);
+  }
   process.exit(0);
 }
 

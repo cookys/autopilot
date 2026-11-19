@@ -1,0 +1,20 @@
+# Sync worker retry implementation plan
+
+## Scope
+
+- **In scope** — Apply T-17’s `RetryConfig` in `src/sync/worker.js`, add deterministic coverage in `tests/worker.test.js`, and wire configuration through the worker’s normal entry point. Changes to `src/sync/client.js` are limited to passing retry metadata required by a verified, existing idempotency contract. Caller changes are limited to forwarding configuration or existing retry metadata where needed.
+- **Out of scope** — Changes to the T-17 schema, new server-side idempotency, and unrelated client or caller refactoring.
+
+## Implementation
+
+1. **Confirm the T-17 handoff.** T-17 is absent from the supplied task board. Obtain the schema’s import path, validation API, defaults, attempt-count semantics, and backoff rules from the owning team. Verify that the delivered schema is available on the target branch. Treat that delivery as a prerequisite for implementation.
+
+2. **Resolve configuration wiring.** Trace the `syncOnce` callers and record the file paths for the normal worker entry point and any existing configuration path. If no configuration path exists, add an optional third `retryConfig` argument to `syncOnce(client, batch)` and use it as the configuration entry point. Preserve the two-argument call and apply T-17 defaults when configuration is omitted. Validate supplied configuration through T-17 before the first push.
+
+3. **Resolve failure classification and replay safety.** Verify and record the sync service’s retryable statuses and transport failures, and cite the contract or implementation that establishes whether a batch can be replayed safely. Check for an existing idempotency mechanism. If one is required and available, reuse the same idempotency key for every attempt of a logical push. The supplied client returns the `fetch` result directly, so classify HTTP responses explicitly as well as handling rejected pushes. Until the service rules are verified, treat unclassified outcomes as terminal. If replay safety cannot be established, retry only failures verified to occur before the batch could be applied. Treat ambiguous POST outcomes as terminal. If these safeguards leave no verified retryable failure, report the missing service contract as a blocker to delivery.
+
+4. **Write the tests and demonstrate the negative controls.** Retain the existing single-push test. Use deterministic timing to cover T-17 defaults and explicit configuration, recovery from a replay-safe rejected push and a retryable HTTP response, immediate termination on permanent or ambiguous failures, the configured delay sequence, and exhaustion at the exact attempt limit. Assert that the same batch is reused, a successful result is returned unchanged, and the terminal failure remains visible to callers. Where applicable, verify that retries reuse the idempotency key. For every new or changed check, capture a failure at the intended assertion against the unpatched worker or a targeted temporary defect. For example, bypass the delay, allow an extra attempt, or retry an ambiguous failure. Restore each temporary defect before final verification.
+
+5. **Implement the retry loop.** Push immediately, then apply the configured backoff before each eligible retry. Reuse the same batch and enforce T-17’s attempt limit. Return the successful push result unchanged. Propagate the last rejection on exhaustion or a terminal rejection. For terminal HTTP failures, use the established caller contract. If callers consume the raw `Response`, return the last failed response so they can inspect its status.
+
+6. **Verify the completed change.** Run `node --test tests/worker.test.js` with the delivered T-17 schema and confirm that every check exercised by a negative control now passes. Verify through the normal worker entry point that the configured policy is applied and stops at its attempt limit. Run `node --test` from the repository root as the concrete test-discovery command for the supplied `node:test` layout. Check the target branch’s manifest, scripts, and CI configuration for an additional full-suite command. If one is defined, record its exact invocation and run it as well.

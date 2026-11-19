@@ -1,0 +1,219 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "onoff-T3-r2",
+  "logical_plan_id": "pr-onoff-T3-r2-2944183",
+  "session_id": "onoff-T3-r2-2944183",
+  "session_key": "9a3b061a702ab10196c32a59011fc0e926f1ded486e66123ddd0bf794fec5924",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "dbaad91937ce9933f47e964aa6ad0adc3bd84b5180d2d6561800d66c6c65c914",
+  "manifest_sha256": "ff34db880203e0ac1f7c93aabd5774330ece84646673293383b4ae9ece8b5c02",
+  "context_sha256": "583816514f16d7701bf90712df1f6cc2d949e087a212cb7f9b8136fa464b0e7a",
+  "plan_sha256": "18bfc576613c00f2dda376d57b2a988b257073618bfa255f71d792b9cb687e95",
+  "plan_path": "plan.md",
+  "plan_git_blob_sha": "a6f9d4cf0af7978fd665031b1e193ad533dc212e",
+  "repo_head_sha": "8b6d903937bb1c48bec586031b030c393787d148",
+  "plan_dirty_vs_head": false,
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "reviewer",
+      "target_id": "reviewer",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high",
+          "operation": "plan-review",
+          "request_digest": "15f4e935d79d263fc3050edc2337c1f810627d1bb3d27293fabed986eb330334"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "0980e8416719c4fbcdaeb6411b4d1fcff54319182760ff302329004907bf7f78",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "<tmp>/dispatch-author-log-ctXI0v",
+          "digest": "0980e8416719c4fbcdaeb6411b4d1fcff54319182760ff302329004907bf7f78"
+        },
+        "receipt_digest": "b29f12e948284d54fa0689f6975958174c8cbfacfec25c2e30595030fbc88037"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "reviewer",
+      "target_id": "reviewer",
+      "family": "google",
+      "runner": "agy",
+      "model": "gemini-4-hydrogen-high",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "tests/run.sh, package.json, verification step 4",
+      "claim": "The plan does not specify any negative-control run showing each new or changed check failing on a deliberately broken input before passing.",
+      "evidence": "Step 2 modifies the existing success case and adds email validation cases in tests/run.sh, and Step 3 adds syntax checks using node --check and bash -n, while Step 4 only runs npm test and npm run lint and confirms both exit successfully without first demonstrating failure on broken input or syntax.",
+      "evidence_reference": "PLAN_UNDER_REVIEW steps 2, 3, and 4",
+      "repair": "Add an explicit negative-control step for each new or changed check so that deliberately broken inputs (and broken syntax for any syntax check) are observed failing before the passing verification run.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b24b9bdbc0e18385c0dfe2542aececb89db847131bcd475918dd35e9df8d38ac"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "PLAN_UNDER_REVIEW, package.json",
+      "claim": "The plan does not state what is in and out of scope, and Step 3 adds test and lint scripts to package.json despite the repository defining only check and no linter configuration.",
+      "evidence": "The four-step plan contains no in-scope or out-of-scope boundary statement, and Step 3 acknowledges that the repository currently defines only check and includes no linter configuration before proposing new test and lint scripts in package.json.",
+      "evidence_reference": "PLAN_UNDER_REVIEW steps 1-4; SOURCE_CONTEXT package.json",
+      "repair": "State explicitly what is in and out of scope for the task, and remove the unrequested package.json test and lint script additions unless explicitly within the stated scope.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c91d47ce66e36c5bfad1cf4bf8cd78cc5d91988e215d7d0ff2595e72898c45fb"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "package.json, verification step 4",
+      "claim": "The verification commands named in Step 4 (npm test and npm run lint) do not exist in this repository as written.",
+      "evidence": "In SOURCE_CONTEXT package.json, scripts defines only check ('node scripts/check.js') and defines neither test nor lint, yet Step 4 specifies running npm test and npm run lint instead of npm run check.",
+      "evidence_reference": "SOURCE_CONTEXT package.json; PLAN_UNDER_REVIEW steps 3 and 4",
+      "repair": "Update Step 4 to run the repository's existing verification command npm run check (or node scripts/check.js) rather than nonexistent npm test and npm run lint commands.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "078cb93bb936566cf7e6de858d18c08a72bdb926392ad7f33f8eab739d55f0ad"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "tests/run.sh",
+      "claim": "Step 2 proposes editing tests/run.sh, but tests/run.sh is not present in the supplied repository context to confirm its existence.",
+      "evidence": "SOURCE_CONTEXT includes only package.json, scripts/check.js, and src/validate.js; although scripts/check.js invokes 'bash tests/run.sh', tests/run.sh itself is absent from SOURCE_CONTEXT and Step 2 does not state it will be created.",
+      "evidence_reference": "SOURCE_CONTEXT scripts/check.js; PLAN_UNDER_REVIEW steps 2 and 3",
+      "repair": "Confirm tests/run.sh exists in the repository tree before editing it, or state in the plan that it will be created if missing.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "241977b2214e170cf79affc72f565fdc2df43924772ec5218c019d9956212f34"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "tests/run.sh",
+      "claim": "Step 2 relies on assumed existing test cases in tests/run.sh that are not verifiable from the supplied repository context and are not named as an unresolved blocker.",
+      "evidence": "Step 2 refers to updating 'the existing success case' and keeping 'a case that checks the existing name error when both fields are missing' in tests/run.sh, but tests/run.sh is not supplied in SOURCE_CONTEXT.",
+      "evidence_reference": "PLAN_UNDER_REVIEW step 2; SOURCE_CONTEXT",
+      "repair": "Inspect tests/run.sh to confirm its existing test cases and format, or name the missing file context as an unresolved prerequisite with stated handling.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "898c573d965a3790a2f26db1a4cd264c6ab415ee19562b88102ce944caee2a41"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "241977b2214e170cf79affc72f565fdc2df43924772ec5218c019d9956212f34",
+      "rubric_id": "R1",
+      "affected_surface": "tests/run.sh",
+      "claim": "Step 2 proposes editing tests/run.sh, but tests/run.sh is not present in the supplied repository context to confirm its existence.",
+      "evidence_reference": "SOURCE_CONTEXT scripts/check.js; PLAN_UNDER_REVIEW steps 2 and 3",
+      "disposition": null
+    },
+    {
+      "fingerprint": "898c573d965a3790a2f26db1a4cd264c6ab415ee19562b88102ce944caee2a41",
+      "rubric_id": "R2",
+      "affected_surface": "tests/run.sh",
+      "claim": "Step 2 relies on assumed existing test cases in tests/run.sh that are not verifiable from the supplied repository context and are not named as an unresolved blocker.",
+      "evidence_reference": "PLAN_UNDER_REVIEW step 2; SOURCE_CONTEXT",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-11-19T02:55:31.433Z"
+}

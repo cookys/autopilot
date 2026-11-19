@@ -1,0 +1,243 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "onoff-T5-r1",
+  "logical_plan_id": "pr-onoff-T5-r1-3355467",
+  "session_id": "onoff-T5-r1-3355467",
+  "session_key": "a1c316222fcbc5774a573db4ed3a438b3519c7586b69e894386197ac1195b196",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "dbaad91937ce9933f47e964aa6ad0adc3bd84b5180d2d6561800d66c6c65c914",
+  "manifest_sha256": "56659be04a15bafd214f70a7054bec949d1389ce011e3c69e753882b5432a7ff",
+  "context_sha256": "53c92d54eb5e691b2ea9870f9fddbba21cd032eb5466f76bef17100faa4ffad1",
+  "plan_sha256": "786d60de871d1c2d52db99a7d7b3e302a63826f8c908d429cdbf3d21c3b4013d",
+  "plan_path": "plan.md",
+  "plan_git_blob_sha": "d527222485724bac3876677f0577fc18a14d281b",
+  "repo_head_sha": "493fe9b199a0fed08339be16cfccf8ca4c19e300",
+  "plan_dirty_vs_head": false,
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "reviewer",
+      "target_id": "reviewer",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high",
+          "operation": "plan-review",
+          "request_digest": "829a48355ef274c56e93a6be0b02ef4e2d77069defd4141bfa9c554894389604"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "0e3f5f2eecef229030f64db287df3154a286c4c74a53fb1fdf5968193dea4aac",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "<tmp>/dispatch-author-log-Q6UDgr",
+          "digest": "0e3f5f2eecef229030f64db287df3154a286c4c74a53fb1fdf5968193dea4aac"
+        },
+        "receipt_digest": "62868aede0e61cac4adc16312552dc2435abc406cfe322bf96d48c575d1d6dfc"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "reviewer",
+      "target_id": "reviewer",
+      "family": "google",
+      "runner": "agy",
+      "model": "gemini-4-hydrogen-high",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "db/schema.sql, db/migrate/legacy_nick.sql, and unnamed forward migration",
+      "claim": "The plan schedules edits to db/schema.sql, deletion of db/migrate/legacy_nick.sql, and creation of an unnamed forward migration, but neither db/schema.sql nor db/migrate/legacy_nick.sql exists in the supplied repository context and the plan does not say db/schema.sql will be created.",
+      "evidence": "Step 1 instructs verifying deletion of db/migrate/legacy_nick.sql and Step 3 directs updating db/schema.sql, removing db/migrate/legacy_nick.sql, and adding an unnamed forward migration, while the supplied SOURCE_CONTEXT contains only src/users.js.",
+      "evidence_reference": "PLAN_UNDER_REVIEW steps 1 and 3; SOURCE_CONTEXT path src/users.js",
+      "repair": "Inspect the actual repository tree, replace unverified paths with verified existing files or explicitly state paths to be created, and drop references to db/schema.sql and db/migrate/legacy_nick.sql if they do not exist.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "2e86bdb476cc990e8abae92a1ad451fe64ae88aff79f3625e718a34558986fc4"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Database engine, migration runner, schema/bootstrap files, rehearsal environment, and caller inventory",
+      "claim": "The plan assumes multiple repository and infrastructure dependencies that do not exist in the supplied repository context and are not recorded as unresolved blockers with stated handling.",
+      "evidence": "SOURCE_CONTEXT provides only src/users.js exporting label = (u) => u.nick || 'user-' + u.id, with no database schema, migration tooling, checksum-tracking runner, normal bootstrap path, backup tooling, background writers, or two-million-row rehearsal copy as assumed in Steps 1, 3, 4, and 5.",
+      "evidence_reference": "PLAN_UNDER_REVIEW steps 1, 3, 4, and 5; SOURCE_CONTEXT path src/users.js",
+      "repair": "Verify which database, migration runner, bootstrap path, and writer services actually exist; record every missing dependency as an explicit unresolved blocker with handling before scheduling implementation or deployment.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "253ece082b9d2311883c10b289ee460376b9e9e3c208abc43524212454e62aff"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Backfill count reconciliation, schema/data verification, and src/users.js label verification",
+      "claim": "None of the new or changed checks in the plan include a negative control demonstrating the check failing on a deliberately broken input before showing it passing.",
+      "evidence": "Steps 2, 4, 5, and 6 describe positive verification of count reconciliation, preserved names, label rendering, final schema, user count, and writes, without first running any check against deliberately broken data, broken backfill logic, or broken label code to confirm failure detection.",
+      "evidence_reference": "PLAN_UNDER_REVIEW steps 2, 4, 5, and 6; SOURCE_CONTEXT path src/users.js",
+      "repair": "Define a negative control for each new or changed check, such as confirming the label test fails when display_name is absent or ignored and confirming migration validation fails on mismatched backfill counts, and run it before verifying the passing fix.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "9b567a92e6dbdd54968f1b5481a26b3e1f63c0b7bd651e250d3a2affbe192153"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Overall plan scope boundaries",
+      "claim": "The plan does not state what is in scope and what is out of scope.",
+      "evidence": "Steps 1 through 6 list discovery, backfill rules, code and schema edits, migration deletion, rehearsal, cutover, and recovery actions without any explicit statement defining in-scope work and out-of-scope exclusions.",
+      "evidence_reference": "PLAN_UNDER_REVIEW steps 1 through 6",
+      "repair": "Add an explicit scope statement defining what changes are in scope, such as migrating users.nick to users.display_name and updating src/users.js and verified callers, and what is out of scope.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "74ff426f9409dbd08ec36ac5e7a00919414e39a7812245fcaad77960fdf45f46"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Step 3 forward migration vs. Step 5 count reconciliation and Step 6 rollback",
+      "claim": "Dropping nick in the same forward migration and release as backfilling display_name creates an ordering conflict with pre-drop count reconciliation and leaves no non-destructive rollback if a defect surfaces after traffic reopens.",
+      "evidence": "Step 3 combines creating display_name, backfilling, and dropping nick into one forward migration, whereas Step 5 requires reconciling backfill counts before dropping nick and Step 6 relies on transactional rollback or pre-reopen backup restore before reopening traffic.",
+      "evidence_reference": "PLAN_UNDER_REVIEW steps 3, 5, and 6",
+      "repair": "Split the schema change into separate expand/backfill/verify and contract (drop nick) steps or migrations, and clarify rollback behavior if DDL commits implicitly or an issue appears after traffic reopens.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "2ab8314e80378faf0866c4b0ed55e695951be5b6a737d911604d3a60a94fd841"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "Verification commands across Steps 1, 4, 5, and 6",
+      "claim": "The plan names no concrete verification commands and describes verification only in prose, while the supplied repository context contains no test scripts or runnable commands.",
+      "evidence": "Steps 1, 4, 5, and 6 state goals such as verifying fresh installs, label rendering, final schema, and successful writes without naming any command, and SOURCE_CONTEXT contains only src/users.js.",
+      "evidence_reference": "PLAN_UNDER_REVIEW steps 1, 4, 5, and 6; SOURCE_CONTEXT path src/users.js",
+      "repair": "Specify the exact verification commands that exist in the target repository, or note their creation in scope, once the full repository tree is inspected.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "8ceb12c5c39882cc1c66627a7c8a986b0c43db5cc28dce9385f4dbd469a17893"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "2ab8314e80378faf0866c4b0ed55e695951be5b6a737d911604d3a60a94fd841",
+      "rubric_id": "R5",
+      "affected_surface": "Step 3 forward migration vs. Step 5 count reconciliation and Step 6 rollback",
+      "claim": "Dropping nick in the same forward migration and release as backfilling display_name creates an ordering conflict with pre-drop count reconciliation and leaves no non-destructive rollback if a defect surfaces after traffic reopens.",
+      "evidence_reference": "PLAN_UNDER_REVIEW steps 3, 5, and 6",
+      "disposition": null
+    },
+    {
+      "fingerprint": "8ceb12c5c39882cc1c66627a7c8a986b0c43db5cc28dce9385f4dbd469a17893",
+      "rubric_id": "R6",
+      "affected_surface": "Verification commands across Steps 1, 4, 5, and 6",
+      "claim": "The plan names no concrete verification commands and describes verification only in prose, while the supplied repository context contains no test scripts or runnable commands.",
+      "evidence_reference": "PLAN_UNDER_REVIEW steps 1, 4, 5, and 6; SOURCE_CONTEXT path src/users.js",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-11-19T02:57:39.096Z"
+}

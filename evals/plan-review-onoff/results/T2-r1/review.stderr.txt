@@ -1,0 +1,2 @@
+dispatch-plan-review: seat reviewer had no fallbacks; added auto-fb-reviewer-1 (family xai) from the topology
+stage-advance: 5 the marker has no size (run `session-mode.js set --size <S>`)

@@ -1,0 +1,235 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "onoff-T5-r2",
+  "logical_plan_id": "pr-onoff-T5-r2-3355468",
+  "session_id": "onoff-T5-r2-3355468",
+  "session_key": "e2e033bdbacc5545d634de33933e30db2ac4d6cb92a2e90abc2b1517f736e7af",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "dbaad91937ce9933f47e964aa6ad0adc3bd84b5180d2d6561800d66c6c65c914",
+  "manifest_sha256": "e6fe02fd53e2f583cb9c7f5390c8c215bbc8af2712112d366754b5391c53fc72",
+  "context_sha256": "53c92d54eb5e691b2ea9870f9fddbba21cd032eb5466f76bef17100faa4ffad1",
+  "plan_sha256": "31136b70b60eda45026edab5176d5ddfe3626abba49b1972cae8bef0f656c9fa",
+  "plan_path": "plan.md",
+  "plan_git_blob_sha": "811d89621616efa278971bad45c648fe6719359e",
+  "repo_head_sha": "8cc25f4b69b0a42068296b308ac91723989e8d61",
+  "plan_dirty_vs_head": false,
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "reviewer",
+      "target_id": "reviewer",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high",
+          "operation": "plan-review",
+          "request_digest": "adc91ce82550c7efd2955ca55239fed328fea04335139624f70c3747ab781251"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "124d9894189ebaa41b0c3ec637f089130661153f30911b17cf21ce0a42e33ef7",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "<tmp>/dispatch-author-log-kOKJ1A",
+          "digest": "124d9894189ebaa41b0c3ec637f089130661153f30911b17cf21ce0a42e33ef7"
+        },
+        "receipt_digest": "7eb3d53b0d4a2a4a218fefa42cdea9bad6e46f4e745939fe76e468541c99d6e4"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "reviewer",
+      "target_id": "reviewer",
+      "family": "google",
+      "runner": "agy",
+      "model": "gemini-4-hydrogen-high",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "db/schema.sql, db/migrate/legacy_nick.sql, 001_init.sql, and Step 2 new migration path",
+      "claim": "Steps 2 and 5 edit db/schema.sql, delete db/migrate/legacy_nick.sql, keep 001_init.sql intact, and add an unnamed migration file, but only src/users.js is verified to exist in the supplied repository context.",
+      "evidence": "SOURCE_CONTEXT supplies only src/users.js containing 'exports.label = (u) => u.nick || ...'. Checking db/schema.sql, db/migrate/legacy_nick.sql, 001_init.sql, db/migrate/001_init.sql, and package.json in the workspace returned 'file does not exist', and Step 2 does not name the path of the new migration file to be created.",
+      "evidence_reference": "PLAN_UNDER_REVIEW Steps 2 and 5; SOURCE_CONTEXT src/users.js",
+      "repair": "Verify and supply the actual repository paths for db/schema.sql, db/migrate/legacy_nick.sql, and 001_init.sql, confirm db/schema.sql is hand-edited rather than generated, and specify the exact file path of the new migration to create.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6e1e2924f2a81f76a1c1f92e57be88129b3a2eeea64c9cc0245aac8b464c6222"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Database engine, migration runner, accounts table, readers/writers of users.nick, and deployment/snapshot tooling",
+      "claim": "The plan relies on an unspecified database engine, migration runner, accounts import, other users.nick readers/writers, traffic-pausing, snapshot, and smoke-test tooling that do not exist in SOURCE_CONTEXT and are not named as unresolved blockers with stated handling.",
+      "evidence": "SOURCE_CONTEXT contains only src/users.js. Step 1 leaves the database engine and version, presence of users.display_name, applied migration files, queries/jobs/views/triggers using users.nick, and dependency on db/migrate/legacy_nick.sql and accounts unknown; Step 2 assumes conditional column-add DDL without stating fallback handling if the engine or runner lacks it.",
+      "evidence_reference": "PLAN_UNDER_REVIEW Steps 1, 2, 3, 4, and 5; SOURCE_CONTEXT src/users.js",
+      "repair": "Supply the repository migration runner, schema, job, and test files in context or explicitly list the unknown engine/version, runner capabilities, users.nick readers/writers, and accounts import dependency as unresolved blockers with gating and fallback handling before Step 2.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ca09c01957db570c3f212fca259c99deef812b144f94f00aae65e6bf858d2087"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Backfill checks, user-<id> fallback check, smoke tests, and migration-runner checks",
+      "claim": "None of the new or changed checks in Steps 3, 4, or 5 is shown failing on a deliberately broken input before being shown passing.",
+      "evidence": "Step 3 verifies fresh install, upgrade, backfill completeness, and the user-<id> fallback; Step 4 checks backfill results and runs smoke tests for reading, creating, and updating users; Step 5 verifies migration-runner acceptance of removing legacy_nick.sql. No step includes a negative-control failure check.",
+      "evidence_reference": "PLAN_UNDER_REVIEW Steps 3, 4, and 5",
+      "repair": "Add an explicit negative-control step for each new or changed check demonstrating failure on deliberately broken input (such as unbackfilled nick rows, overwritten nonempty display_name, broken fallback in src/users.js, or invalid migration state) before demonstrating the pass.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "7f470cce682fa0158c009197d2046529affca888fb703a8fab12ef999341c0c4"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Plan scope boundaries (Steps 1-5)",
+      "claim": "The plan does not state what is in scope and out of scope, and Step 5 conditionally alters the supported migration path after cutover.",
+      "evidence": "PLAN_UNDER_REVIEW begins at Step 1 without stating what is in or out of scope for accounts imports, additional readers/writers, API contracts, or multi-release deprecation, and Step 5 adds post-cutover migration changes if a supported upgrade still relies on the accounts import.",
+      "evidence_reference": "PLAN_UNDER_REVIEW Steps 1-5",
+      "repair": "Add explicit in-scope and out-of-scope boundaries, and decide before implementation whether preserving the accounts import and deleting db/migrate/legacy_nick.sql are in scope for this change.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "4b402e2ef140d6fee5d397a3bb8c3955d1d39967de9739f698994a1193efb49b"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Step 4 cutover/column-drop rollback and Step 5 deletion ordering",
+      "claim": "Destructive steps lack safe ordering and non-destructive post-resume rollback: nick is dropped in the same deploy as the code change, uncommitted-migration rollback is assumed around DDL, and accounts-import preservation is checked after cutover.",
+      "evidence": "Step 4 runs backfill, checks results, drops nick, deploys the app, and resumes traffic in one deploy, relying on rolling back an uncommitted migration or restoring a pre-cutover snapshot (which loses post-resume writes if an uncovered nick reader fails later). Step 5 defers preserving a needed accounts import until after Step 4 cutover.",
+      "evidence_reference": "PLAN_UNDER_REVIEW Steps 2, 4, and 5",
+      "repair": "Separate the additive/backfill migration from dropping nick (or use expand-and-contract across deploys so rollback does not discard post-cutover writes), account for engine DDL auto-commit semantics, and preserve any required accounts import prior to cutover and Step 5 deletion.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "9939a8b2a2da1a2a35d905669c0ef314981262069b43dd7f20779d61c004130b"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Verification commands across Steps 1, 3, 4, and 5",
+      "claim": "The plan describes verification only in prose and names no concrete repository commands, while SOURCE_CONTEXT contains no test or migration scripts.",
+      "evidence": "Steps 1, 3, 4, and 5 refer generically to verifying schema/migration paths, testing fresh installs and upgrades, running smoke tests, and checking the migration runner without naming command strings; SOURCE_CONTEXT supplies only src/users.js.",
+      "evidence_reference": "PLAN_UNDER_REVIEW Steps 1, 3, 4, and 5; SOURCE_CONTEXT src/users.js",
+      "repair": "Replace prose verification descriptions with exact runnable commands verified to exist in the repository for migrations, schema checks, and user label or smoke tests.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d37ec5e811bcd7c3d142d2542560a9c0d2c9b841d485692861abebd31d453aaf"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "d37ec5e811bcd7c3d142d2542560a9c0d2c9b841d485692861abebd31d453aaf",
+      "rubric_id": "R6",
+      "affected_surface": "Verification commands across Steps 1, 3, 4, and 5",
+      "claim": "The plan describes verification only in prose and names no concrete repository commands, while SOURCE_CONTEXT contains no test or migration scripts.",
+      "evidence_reference": "PLAN_UNDER_REVIEW Steps 1, 3, 4, and 5; SOURCE_CONTEXT src/users.js",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-11-19T02:57:45.078Z"
+}

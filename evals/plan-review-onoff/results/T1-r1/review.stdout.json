@@ -1,0 +1,147 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "onoff-T1-r1",
+  "logical_plan_id": "pr-onoff-T1-r1-2524419",
+  "session_id": "onoff-T1-r1-2524419",
+  "session_key": "551a87f38a4de3de3d2f38eb5cff684e1b99714623c0c2b51fcb02fc1eeeebf1",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "nonblocking_conditional",
+  "rubric_sha256": "dbaad91937ce9933f47e964aa6ad0adc3bd84b5180d2d6561800d66c6c65c914",
+  "manifest_sha256": "611147c7fe4905ea1deb74b416d41835b9584163cfd7794e5415c839f2d1ef8a",
+  "context_sha256": "57dafbfb522d4d3bac0650d14e8db7a02fb52b9e8a9bfd1bbb9bd2a66e5df52a",
+  "plan_sha256": "fd73ca801d434a31d4c4fe38de8f9639f47fef61322d1bedb68a8af4dffa1042",
+  "plan_path": "plan.md",
+  "plan_git_blob_sha": "9870c99531fb5c88caffa7b2f897ada092b02bea",
+  "repo_head_sha": "cccd0d1de343fedba231dc63a4628c83feed300c",
+  "plan_dirty_vs_head": false,
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "reviewer",
+      "target_id": "reviewer",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high",
+          "operation": "plan-review",
+          "request_digest": "cb08cb57603b3614f56f31470f362136e22bfc965eb4393690611971c2f72f20"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "71349ce9e81665deded5d4f4949887473488048a0b0db86d0475425457d21fba",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "<tmp>/dispatch-author-log-gejgOY",
+          "digest": "71349ce9e81665deded5d4f4949887473488048a0b0db86d0475425457d21fba"
+        },
+        "receipt_digest": "c9eb3a21ca968316f904065e4b053add8b18bdca7fb1dea8cc0ebd9fef282d2c"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "reviewer",
+      "target_id": "reviewer",
+      "family": "google",
+      "runner": "agy",
+      "model": "gemini-4-hydrogen-high",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Plan step 4 (parser and CLI test verification)",
+      "claim": "Step 4 only schedules running 'npm test' after writing the tests and does not include a negative-control check showing each new or changed test failing on a deliberately broken or pre-change input before passing.",
+      "evidence": "Plan step 4 states to extend the parser tests, add CLI tests invoking src/index.js, cover existing default and quiet text output, and then run 'npm test', without any step that runs the new or changed checks against a deliberately broken or unmodified implementation to observe failure before observing them pass.",
+      "evidence_reference": "PLAN_UNDER_REVIEW step 4; package.json scripts.test; tests/args.test.js",
+      "repair": "Before implementing the --json changes or against a deliberately broken input, run the new and extended parser and CLI tests to confirm they fail as expected, then implement the changes and run 'npm test' to show them passing.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "8d964f4d08c403bc614c64088cf32d6a7cf565602d23980dce37020c62b9b1a5"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Plan steps 1-4 (scope boundary)",
+      "claim": "The plan specifies behaviors to preserve but does not explicitly state what is in scope and out of scope.",
+      "evidence": "Plan steps 1-4 state to keep src/index.js, preserve --quiet and --no-color defaults and path filtering, and keep existing default and quiet text formats, but omit an explicit in-scope and out-of-scope boundary (for example, whether color output handling in src/cli/run.js or unknown-flag validation in src/cli/args.js is out of scope).",
+      "evidence_reference": "PLAN_UNDER_REVIEW steps 1-4; src/cli/args.js; src/cli/run.js",
+      "repair": "Add an explicit scope note stating that only adding --json parsing in src/cli/args.js, JSON stdout formatting in src/cli/run.js, and corresponding tests is in scope, and that unrelated behavior such as color rendering or unknown-flag handling is out of scope.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1753411e42265780393bd868f328a4c21282ebba29947c442bec06ced394619d"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "8d964f4d08c403bc614c64088cf32d6a7cf565602d23980dce37020c62b9b1a5",
+      "rubric_id": "R3",
+      "affected_surface": "Plan step 4 (parser and CLI test verification)",
+      "claim": "Step 4 only schedules running 'npm test' after writing the tests and does not include a negative-control check showing each new or changed test failing on a deliberately broken or pre-change input before passing.",
+      "evidence_reference": "PLAN_UNDER_REVIEW step 4; package.json scripts.test; tests/args.test.js",
+      "disposition": null
+    },
+    {
+      "fingerprint": "1753411e42265780393bd868f328a4c21282ebba29947c442bec06ced394619d",
+      "rubric_id": "R4",
+      "affected_surface": "Plan steps 1-4 (scope boundary)",
+      "claim": "The plan specifies behaviors to preserve but does not explicitly state what is in scope and out of scope.",
+      "evidence_reference": "PLAN_UNDER_REVIEW steps 1-4; src/cli/args.js; src/cli/run.js",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-11-19T02:53:36.184Z"
+}

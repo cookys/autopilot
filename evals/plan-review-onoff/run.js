@@ -50,7 +50,7 @@ fs.writeFileSync(path.join(repo, 'manifest.json'), JSON.stringify(man, null, 2))
 for (const a of [['init', '-q'], ['add', '-A'], ['-c', 'user.name=eval', '-c', 'user.email=eval@example.invalid', 'commit', '-q', '-m', 'fixture']]) sh('git', a, { cwd: repo });
 
 const ctxFlags = [];
-for (const f of fs.readdirSync(repo, { recursive: true })) { if (!f.startsWith('.git') && !['plan.md', 'rubric.md', 'manifest.json'].includes(f) && /\.(js|json|sql|md)$/.test(f)) ctxFlags.push('--context-file', f); }
+for (const f of fs.readdirSync(repo, { recursive: true })) { if (!f.startsWith('.git') && !['plan.md', 'rubric.md', 'manifest.json'].includes(f) && /\.(js|json|md)$/.test(f)) ctxFlags.push('--context-file', f); }
 const rv = sh('node', [path.join(SCRIPTS, 'dispatch-plan-review.js'), '--repo-root', repo, '--plan-file', 'plan.md', '--rubric-file', 'rubric.md',
   '--manifest-file', path.join(repo, 'manifest.json'), '--ticket', `onoff-${task}-r${rep}`, '--session-id', `onoff-${task}-r${rep}-${process.pid}`,
   '--generation', '1', '--allow-unregistered', ...ctxFlags, '--timeout', '15m', '--state-dir', path.join(cell, 'state')], { timeout: 1800000 });

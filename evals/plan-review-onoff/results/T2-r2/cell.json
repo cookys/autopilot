@@ -1,0 +1,33 @@
+{
+  "task": "T2",
+  "rep": 2,
+  "review_exit": 0,
+  "OFF": {
+    "defects": {
+      "D2": false,
+      "D3": false,
+      "D1": false
+    },
+    "defect_score": 0,
+    "quality": {
+      "Q1": true,
+      "Q2": true,
+      "Q3": true
+    },
+    "quality_score": 3
+  },
+  "ON": {
+    "defects": {
+      "D2": true,
+      "D3": true,
+      "D1": false
+    },
+    "defect_score": 2,
+    "quality": {
+      "Q1": true,
+      "Q2": true,
+      "Q3": true
+    },
+    "quality_score": 3
+  }
+}

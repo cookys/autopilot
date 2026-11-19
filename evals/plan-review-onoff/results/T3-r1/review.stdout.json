@@ -1,0 +1,227 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "onoff-T3-r1",
+  "logical_plan_id": "pr-onoff-T3-r1-2524421",
+  "session_id": "onoff-T3-r1-2524421",
+  "session_key": "c2876d89c312cc2c5f994932e81f84fe5f42fd71cd020192770d819c6a709b0d",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "dbaad91937ce9933f47e964aa6ad0adc3bd84b5180d2d6561800d66c6c65c914",
+  "manifest_sha256": "e680d01876c47adde163e584da8d44087ce828a458b49bf2339bde3cf6dc2a24",
+  "context_sha256": "583816514f16d7701bf90712df1f6cc2d949e087a212cb7f9b8136fa464b0e7a",
+  "plan_sha256": "7b0ee54ce3a54e92f6941c74cf26299909d40b215be17567e3f86f8c44382a3a",
+  "plan_path": "plan.md",
+  "plan_git_blob_sha": "b907b42d6dd0db2db429fa2f0cd23ec2fbf07100",
+  "repo_head_sha": "cdf7ece30014c3a9c29160e2d784d8a7595122a6",
+  "plan_dirty_vs_head": false,
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "reviewer",
+      "target_id": "reviewer",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high",
+          "operation": "plan-review",
+          "request_digest": "6211388fa5376a7a75168bc51cec5e4c37f9b16760666825b160aa5c0dd52d19"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "36cf412ee69b023afedf0bbd1897c76e07fe8fd7e102d61891ca656ab9f9bf9f",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "<tmp>/dispatch-author-log-nmLMDm",
+          "digest": "36cf412ee69b023afedf0bbd1897c76e07fe8fd7e102d61891ca656ab9f9bf9f"
+        },
+        "receipt_digest": "752ebe7ffd5e27a564052b8958412b180607953ed9ffeaa5c2280345d8e18f13"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "reviewer",
+      "target_id": "reviewer",
+      "family": "google",
+      "runner": "agy",
+      "model": "gemini-4-hydrogen-high",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "tests/run.sh and ESLint configuration file",
+      "claim": "Step 2 edits tests/run.sh without its file presence or existing contents verified in SOURCE_CONTEXT, and Step 3 requires a minimal ESLint configuration for CommonJS without naming the file path to be created.",
+      "evidence": "SOURCE_CONTEXT includes only package.json, scripts/check.js, and src/validate.js; tests/run.sh is only referenced by scripts/check.js via execSync('bash tests/run.sh', { stdio: 'inherit' }), and Step 3 does not specify whether an ESLint config file such as eslint.config.cjs or .eslintrc.json will be created.",
+      "evidence_reference": "PLAN_UNDER_REVIEW Step 2 and Step 3; SOURCE_CONTEXT scripts/check.js",
+      "repair": "Confirm tests/run.sh exists in the repository before editing it, and explicitly name the ESLint configuration file path to be created in Step 3 (for example, eslint.config.cjs or .eslintrc.json).",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "616da3761fa38efe09b5c91271eed1b3e915e27bf6fc6f692ad8582afddc5827"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "package.json devDependencies and ESLint tooling",
+      "claim": "Step 3 configures lint to run ESLint as a development dependency and Step 4 runs npm run lint, but eslint does not exist in the repository and no installation step or unresolved-blocker handling is stated.",
+      "evidence": "package.json in SOURCE_CONTEXT contains only { 'name': 'svc', 'scripts': { 'check': 'node scripts/check.js' } } with no devDependencies and no eslint package; the plan does not include an npm install command or state how missing package installation or offline registry access is handled.",
+      "evidence_reference": "PLAN_UNDER_REVIEW Step 3 and Step 4; SOURCE_CONTEXT package.json",
+      "repair": "Add an explicit dependency installation step (such as npm install --save-dev eslint) and pin the ESLint config format to match the installed version, or declare ESLint availability and registry access as an unresolved blocker with stated fallback handling.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "22b7fce57cb9d62cb9e649ad02ccdfe14e33915cd0f5d901b823733128994ae1"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "tests/run.sh email assertions and package.json lint script",
+      "claim": "The plan adds new email validation assertions in tests/run.sh and a new ESLint check in package.json without showing either check failing on a deliberately broken input before showing it passing.",
+      "evidence": "Steps 1 through 3 modify src/validate.js, tests/run.sh, and package.json, and Step 4 only states to run npm test and npm run lint and fix failures until they pass, omitting any negative-control step.",
+      "evidence_reference": "PLAN_UNDER_REVIEW Steps 1-4",
+      "repair": "Add explicit negative-control steps: run the updated tests/run.sh against the unchanged src/validate.js (or broken email inputs) to confirm the new assertions fail before implementing Step 1, and run npm run lint on a temporary lint violation to confirm ESLint rejects invalid code before passing.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "240b86d530674a74d7bea946fcda47ec18ff8428ed0e93f3caf83818097dae58"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Plan scope definition across Steps 1-4",
+      "claim": "The plan does not state what is in scope and what is out of scope.",
+      "evidence": "PLAN_UNDER_REVIEW consists solely of four implementation and verification steps (updating validateUser, updating tests/run.sh, adding test/lint scripts with ESLint, and running verification commands) with no scope boundary statement.",
+      "evidence_reference": "PLAN_UNDER_REVIEW Steps 1-4",
+      "repair": "Add an explicit Scope section listing what is in scope (email validation in src/validate.js, tests in tests/run.sh, and test/lint script setup) and what is out of scope (such as unrelated modules, full RFC 5322 email parsing, or runtime dependencies).",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "a6d8a255765d93f6ce56c17070b9729ba335aa9e0fd89533f61647da427311cb"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Step 4 verification commands (npm test and npm run lint)",
+      "claim": "Step 4 names npm test and npm run lint as verification commands, neither of which currently exists in package.json as written.",
+      "evidence": "SOURCE_CONTEXT package.json defines only the 'check' script ('node scripts/check.js'); 'test' and 'lint' are only proposed in Step 3, and 'lint' cannot execute without installing eslint first.",
+      "evidence_reference": "PLAN_UNDER_REVIEW Step 3 and Step 4; SOURCE_CONTEXT package.json",
+      "repair": "Gate Step 4 on completing Step 3 and installing eslint so 'test' and 'lint' exist in package.json, or also list the existing 'npm run check' command for baseline verification.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "7fb4af589bf2706f73c24af5385b5c0daa66cc7d309d2922675008f868bf5fed"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "616da3761fa38efe09b5c91271eed1b3e915e27bf6fc6f692ad8582afddc5827",
+      "rubric_id": "R1",
+      "affected_surface": "tests/run.sh and ESLint configuration file",
+      "claim": "Step 2 edits tests/run.sh without its file presence or existing contents verified in SOURCE_CONTEXT, and Step 3 requires a minimal ESLint configuration for CommonJS without naming the file path to be created.",
+      "evidence_reference": "PLAN_UNDER_REVIEW Step 2 and Step 3; SOURCE_CONTEXT scripts/check.js",
+      "disposition": null
+    },
+    {
+      "fingerprint": "a6d8a255765d93f6ce56c17070b9729ba335aa9e0fd89533f61647da427311cb",
+      "rubric_id": "R4",
+      "affected_surface": "Plan scope definition across Steps 1-4",
+      "claim": "The plan does not state what is in scope and what is out of scope.",
+      "evidence_reference": "PLAN_UNDER_REVIEW Steps 1-4",
+      "disposition": null
+    },
+    {
+      "fingerprint": "7fb4af589bf2706f73c24af5385b5c0daa66cc7d309d2922675008f868bf5fed",
+      "rubric_id": "R6",
+      "affected_surface": "Step 4 verification commands (npm test and npm run lint)",
+      "claim": "Step 4 names npm test and npm run lint as verification commands, neither of which currently exists in package.json as written.",
+      "evidence_reference": "PLAN_UNDER_REVIEW Step 3 and Step 4; SOURCE_CONTEXT package.json",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-11-19T02:53:38.618Z"
+}

@@ -1,0 +1,147 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "onoff-T1-r2",
+  "logical_plan_id": "pr-onoff-T1-r2-2944181",
+  "session_id": "onoff-T1-r2-2944181",
+  "session_key": "cbb48f3ba65edc66d6b134b70d5b0de9f2942055883e9a975269affd8376f289",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "nonblocking_conditional",
+  "rubric_sha256": "dbaad91937ce9933f47e964aa6ad0adc3bd84b5180d2d6561800d66c6c65c914",
+  "manifest_sha256": "578cdb9068298c3d9ee40e741fbf045da95298af87e3a63edfa8e7b6ce90fe8d",
+  "context_sha256": "57dafbfb522d4d3bac0650d14e8db7a02fb52b9e8a9bfd1bbb9bd2a66e5df52a",
+  "plan_sha256": "cd6d59cc011b1343a93ad7c261274b17329226efff5da486a8dcff6987a3426c",
+  "plan_path": "plan.md",
+  "plan_git_blob_sha": "9e2e53bc3494567f775f9a6d0cf53b5d6e0de278",
+  "repo_head_sha": "19409bf5667ac1b329ddfc12fb8cbf6c6024abe7",
+  "plan_dirty_vs_head": false,
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "reviewer",
+      "target_id": "reviewer",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high",
+          "operation": "plan-review",
+          "request_digest": "26acfcbedad8b14f211b28f75a6a53d17028aa73dd6408b500e20924ff9b9b3f"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "a7e82d3522529ce1c563ca4eca090c3345a283ca0e064942a6faa168c6230b35",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "<tmp>/dispatch-author-log-4K9QCm",
+          "digest": "a7e82d3522529ce1c563ca4eca090c3345a283ca0e064942a6faa168c6230b35"
+        },
+        "receipt_digest": "6a6ce88a992f5ee6cd681eef3254b680b8abd45a6dbf3fade5568cc82c35b618"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "reviewer",
+      "target_id": "reviewer",
+      "family": "google",
+      "runner": "agy",
+      "model": "gemini-4-hydrogen-high",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Plan steps 4-5 (tests/args.test.js, CLI tests through src/index.js, and npm test)",
+      "claim": "The plan does not include a negative-control check showing each new or changed test failing on a deliberately broken input before passing.",
+      "evidence": "Step 4 adds tests to tests/args.test.js and CLI tests through src/index.js, and Step 5 runs npm test only once after Steps 1-3 are implemented, with no prior failure check.",
+      "evidence_reference": "PLAN_UNDER_REVIEW steps 4-5; SOURCE_CONTEXT package.json and tests/args.test.js",
+      "repair": "Run the new tests before implementing Steps 1-3 or against a deliberately broken input first to confirm failure before running npm test after implementation.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c07ae2c88ffecd003ccd17a396dc99cd7b3455cd7247e79cd0af6cfaba806ea2"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Plan steps 1-4 (scope boundary)",
+      "claim": "The plan states which existing behaviors are preserved but does not explicitly state what is out of scope.",
+      "evidence": "Steps 2 and 3 note keeping existing --quiet, --no-color, positional paths, unrecognized -- option handling, and non-JSON output, while omitting an explicit out-of-scope statement (such as leaving src/index.js and unused opts.color in src/cli/run.js unchanged).",
+      "evidence_reference": "PLAN_UNDER_REVIEW steps 1-4; SOURCE_CONTEXT src/cli/run.js and src/index.js",
+      "repair": "Add a brief sentence stating what is out of scope, such as changes to src/index.js, implementing --no-color output styling in src/cli/run.js, or rejecting unknown -- flags.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "48eeb5e2a9fb6f6e4840f1eff120b42313b00c067aa6b6608791dbdeeb182f48"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "c07ae2c88ffecd003ccd17a396dc99cd7b3455cd7247e79cd0af6cfaba806ea2",
+      "rubric_id": "R3",
+      "affected_surface": "Plan steps 4-5 (tests/args.test.js, CLI tests through src/index.js, and npm test)",
+      "claim": "The plan does not include a negative-control check showing each new or changed test failing on a deliberately broken input before passing.",
+      "evidence_reference": "PLAN_UNDER_REVIEW steps 4-5; SOURCE_CONTEXT package.json and tests/args.test.js",
+      "disposition": null
+    },
+    {
+      "fingerprint": "48eeb5e2a9fb6f6e4840f1eff120b42313b00c067aa6b6608791dbdeeb182f48",
+      "rubric_id": "R4",
+      "affected_surface": "Plan steps 1-4 (scope boundary)",
+      "claim": "The plan states which existing behaviors are preserved but does not explicitly state what is out of scope.",
+      "evidence_reference": "PLAN_UNDER_REVIEW steps 1-4; SOURCE_CONTEXT src/cli/run.js and src/index.js",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-11-19T02:55:20.516Z"
+}

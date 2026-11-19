@@ -1,0 +1,187 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "onoff-T2-r1",
+  "logical_plan_id": "pr-onoff-T2-r1-2524420",
+  "session_id": "onoff-T2-r1-2524420",
+  "session_key": "76c9181b33d73c4b74f91ebbe6c1962d6ea259edaf34ef6d13582f0f52a1be8c",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "dbaad91937ce9933f47e964aa6ad0adc3bd84b5180d2d6561800d66c6c65c914",
+  "manifest_sha256": "a868fc36e8f614a64f9f309d668476165d6e2a34b553e0d13261521234d9e63d",
+  "context_sha256": "c9eb81c394da67b035ced7833f44faea4198e0b31b918837d1037ee0d958a452",
+  "plan_sha256": "a6e381814623da5ffbb20d135cf39ad8792a1e37a0bc7d5361a310e077780141",
+  "plan_path": "plan.md",
+  "plan_git_blob_sha": "117613c9ed51d411087720282f9a5ba14eadf2a7",
+  "repo_head_sha": "d98c977a98baa9a852ac54cc145f4ce1d69aea29",
+  "plan_dirty_vs_head": false,
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "reviewer",
+      "target_id": "reviewer",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high",
+          "operation": "plan-review",
+          "request_digest": "3799a60f9cd76ea989bcd0bfcf09a84c3f392d603e58a4c909c80675528397c2"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "2328c9568868ab92658d5a53f668df41c73c9e278f0ac1e8f613676a2ea9a483",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "<tmp>/dispatch-author-log-YsgFpf",
+          "digest": "2328c9568868ab92658d5a53f668df41c73c9e278f0ac1e8f613676a2ea9a483"
+        },
+        "receipt_digest": "e30ae73d8a3855147fc8ce6dd79903e93de85e8a83d2f4a92b9093954228a9b5"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "reviewer",
+      "target_id": "reviewer",
+      "family": "google",
+      "runner": "agy",
+      "model": "gemini-4-hydrogen-high",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Plan Step 2; src/sync/worker.js; src/sync/client.js; tests/worker.test.js",
+      "claim": "Step 2 relies on an existing configuration path and syncOnce call sites that are absent from the supplied repository files and are not named as an unresolved blocker with a stated handling.",
+      "evidence": "Plan Step 2 directs tracing syncOnce call sites and passing RetryConfig through the existing configuration path. In the supplied context, src/sync/worker.js only exports syncOnce(client, batch), src/sync/client.js only exports makeClient(url), docs/tasks.md lists only T-12, T-15, and T-18, and tests/worker.test.js is the only caller of syncOnce; no configuration path exists in the supplied files, and Step 2 does not flag its absence as a blocker.",
+      "evidence_reference": "Plan Step 2; src/sync/worker.js; src/sync/client.js; tests/worker.test.js; docs/tasks.md",
+      "repair": "Verify whether configuration and additional syncOnce callers exist outside the supplied files; if none exist, name the missing configuration path as an unresolved prerequisite in Step 2 and specify how RetryConfig will be supplied (such as an optional parameter on syncOnce or a new config loader).",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ebecd1d1397ab37d200cbdb975738ee4cf6a6195910b9cdfe53af8256bcb53d1"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Plan Step 5; tests/worker.test.js",
+      "claim": "Plan Step 5 defines new and changed retry checks in tests/worker.test.js without showing each check failing on a deliberately broken input before showing it passing.",
+      "evidence": "Step 5 plans tests for backoff schedule via a controlled clock or delay stub, first-attempt success, recovery after a retryable failure, attempt exhaustion, immediate termination on a non-retryable failure, HTTP error responses, and the T-17 schema and defaults, then runs 'node --test tests/worker.test.js' with no negative-control failure run prior to passing.",
+      "evidence_reference": "Plan Step 5; tests/worker.test.js",
+      "repair": "Update Step 5 to run each new or changed test in tests/worker.test.js against the un-retried worker or deliberately broken behavior (such as skipped backoff, retrying non-retryable errors, ignoring HTTP error responses, or unbounded attempts) and confirm each check fails before running them against the implemented retry logic to pass.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "124c14636f855ca274467fd8ef25ee0d8da17695792773d2ed57924b68206215"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Plan Steps 1-5",
+      "claim": "The plan does not state what is in scope and what is out of scope.",
+      "evidence": "The plan contains only a title and Steps 1 through 5 covering T-17 confirmation, configuration wiring, retry eligibility, edits to src/sync/worker.js, and tests in tests/worker.test.js, with no section or sentence defining what is in scope versus out of scope (such as whether src/sync/client.js, T-17 implementation, endpoint deduplication, T-12 batching, or T-18 metrics are excluded).",
+      "evidence_reference": "Plan title and Steps 1-5",
+      "repair": "Add an explicit scope statement listing what is in scope (bounded retry logic in src/sync/worker.js, RetryConfig wiring, and tests in tests/worker.test.js) and what is out of scope (implementing T-17, modifying src/sync/client.js or receiving endpoint deduplication, and altering T-12 or T-18).",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b1c417ca42a29a3f8ffef1aeb2d4129904caf1064fb9512430d194cf4fa11c4a"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Plan Step 5",
+      "claim": "Step 5 references running the repository's full test suite without naming a concrete command verified to exist in the supplied repository context.",
+      "evidence": "Step 5 instructs to run 'node --test tests/worker.test.js' and the repository's full test suite. While tests/worker.test.js exists and uses node:test, no package.json, test script, or full-suite command is present in the supplied repository files.",
+      "evidence_reference": "Plan Step 5; tests/worker.test.js; supplied source context",
+      "repair": "Inspect the full repository for a package.json or test runner script and name the exact full-suite command in Step 5, or limit the named command to 'node --test tests/worker.test.js' if no other test suite exists.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1206baa222b37f71a891e93e78ffeae96d70edc0aabd90431ce71545e437f445"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "1206baa222b37f71a891e93e78ffeae96d70edc0aabd90431ce71545e437f445",
+      "rubric_id": "R6",
+      "affected_surface": "Plan Step 5",
+      "claim": "Step 5 references running the repository's full test suite without naming a concrete command verified to exist in the supplied repository context.",
+      "evidence_reference": "Plan Step 5; tests/worker.test.js; supplied source context",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-11-19T02:53:54.648Z"
+}

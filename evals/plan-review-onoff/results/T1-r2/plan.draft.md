@@ -1,0 +1,5 @@
+1. Add a `json` boolean to `parseArgs` in `src/cli/args.js`, defaulting to `false` and set by `--json`. The supplied files place argument parsing and output in `src/cli/args.js` and `src/cli/run.js`, with `src/index.js` wiring them together.
+2. Keep the existing `--quiet`, `--no-color`, and positional path behavior. Group the flag checks together and preserve the current handling of unrecognized `--` options.
+3. In `src/cli/run.js`, when `opts.json` is true, write `JSON.stringify(opts.paths)` followed by a newline to stdout and return. This produces one array of path strings in input order, including `[]` for no paths. When combined with `--quiet`, JSON mode takes precedence. Preserve the existing output when `--json` is absent.
+4. Extend `tests/args.test.js` to cover the flag’s default and its use alongside existing flags and paths. Add CLI tests through `src/index.js` that verify the entire stdout is a single JSON array, including for empty input and paths that require JSON escaping. Cover `--json --quiet` and the existing default and quiet text output.
+5. Run `npm test`.

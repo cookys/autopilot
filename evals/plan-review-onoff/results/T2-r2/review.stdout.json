@@ -1,0 +1,195 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "onoff-T2-r2",
+  "logical_plan_id": "pr-onoff-T2-r2-2944182",
+  "session_id": "onoff-T2-r2-2944182",
+  "session_key": "993bfa1f5d63973cb13e39cad28b100b79e6ec655167b22607bba2bc3643c225",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "dbaad91937ce9933f47e964aa6ad0adc3bd84b5180d2d6561800d66c6c65c914",
+  "manifest_sha256": "bbad0d5e188c2cf9a1891553e7640b746caca3e2aad726ff08bb0367d19942e6",
+  "context_sha256": "c9eb81c394da67b035ced7833f44faea4198e0b31b918837d1037ee0d958a452",
+  "plan_sha256": "49c566f4aac7d6c087b002158cf4e0471eda26ce4b57ed494fd0f944519f54c1",
+  "plan_path": "plan.md",
+  "plan_git_blob_sha": "0f5481aa148097ea45409201a7b3824ab0cebab9",
+  "repo_head_sha": "dc7abc63692e2b81d136c7306e8f3a832fb1ce7c",
+  "plan_dirty_vs_head": false,
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "reviewer",
+      "target_id": "reviewer",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high",
+          "operation": "plan-review",
+          "request_digest": "483bf3de18ec8882c2405a44e75b2679f648e4104f57aa17dcb2c0e27c3b885a"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "7d41ed06d1b1f5c88d068f84279984f6a0225a80e6a5f2ea8295207f494e9aa6",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "<tmp>/dispatch-author-log-feebGG",
+          "digest": "7d41ed06d1b1f5c88d068f84279984f6a0225a80e6a5f2ea8295207f494e9aa6"
+        },
+        "receipt_digest": "735a012fca5fdead008c30d5425ecede3baa3b6088dd1dd90c8d72c79d964e82"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "reviewer",
+      "target_id": "reviewer",
+      "family": "google",
+      "runner": "agy",
+      "model": "gemini-4-hydrogen-high",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Step 2, Step 3, src/sync/worker.js, src/sync/client.js",
+      "claim": "The plan relies on an existing worker configuration path, sync service failure classification rules, and an optional idempotency mechanism that are absent from the supplied repository context without naming them as unresolved blockers with stated fallback handling.",
+      "evidence": "Step 2 instructs passing validated RetryConfig through the existing worker configuration path, and Step 3 relies on the sync service's rules for transient and permanent failures and an existing idempotency mechanism if provided. In the supplied files, src/sync/worker.js only exports syncOnce(client, batch) with no configuration path, and src/sync/client.js only executes fetch(url, { method: 'POST', body: JSON.stringify(b) }) with no idempotency mechanism or failure rules.",
+      "evidence_reference": "PLAN_UNDER_REVIEW Steps 2-3; src/sync/worker.js line 1; src/sync/client.js line 1",
+      "repair": "Verify and cite the actual configuration path, callers, failure status rules, and idempotency mechanism in the repository, or list their absence as unresolved blockers with explicit fallback handling such as adding an optional parameter to syncOnce and failing closed without retrying ambiguous POST failures when no idempotency mechanism exists.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "392eca51e877b926f7f4f2bd46a435cfc52277bf13eee5b5fb2dcf8f8604bb90"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Step 5, Step 6, tests/worker.test.js",
+      "claim": "The plan does not require showing each new or changed check failing on a deliberately broken input before it is shown passing.",
+      "evidence": "Step 5 extends tests/worker.test.js with retry, backoff, and attempt-limit tests, and Step 6 runs node --test tests/worker.test.js after Step 4 implementation, with no step demonstrating the new checks failing against the unpatched syncOnce or deliberately broken inputs first.",
+      "evidence_reference": "PLAN_UNDER_REVIEW Steps 4-6; tests/worker.test.js lines 1-3",
+      "repair": "Add an explicit negative-control step showing each new check in tests/worker.test.js failing on the unpatched implementation or a deliberately broken configuration or response before passing with the fix.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "e1013ad0ff9e0ded7560fe1686c0f1b69a196567a26becf04daf6b8f433e8952"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Plan Steps 1-6, src/sync/client.js, src/sync/worker.js",
+      "claim": "The plan does not explicitly state what is in scope and what is out of scope.",
+      "evidence": "None of Steps 1-6 declare in-scope or out-of-scope boundaries, leaving unclear whether modifying src/sync/client.js or external syncOnce callers is in scope or excluded.",
+      "evidence_reference": "PLAN_UNDER_REVIEW Steps 1-6",
+      "repair": "Add an explicit scope statement specifying that retry orchestration in src/sync/worker.js and tests in tests/worker.test.js are in scope, and explicitly stating whether src/sync/client.js, caller changes, or server-side idempotency are out of scope.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "e023f5617afb59ac776e1adc44d3f3f263e8e28d5c5c6fda3c86051c76e414ae"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Step 6",
+      "claim": "Step 6 references running the repository's full test suite without naming a concrete command verified to exist in the repository.",
+      "evidence": "Step 6 names 'node --test tests/worker.test.js' (which targets the existing tests/worker.test.js that requires node:test) alongside 'the repository's full test suite' without specifying an exact command, and no package.json or test-suite script is present in the supplied repository files.",
+      "evidence_reference": "PLAN_UNDER_REVIEW Step 6; SOURCE_CONTEXT file list",
+      "repair": "Name the exact full test suite command verified in the repository's manifest or scripts rather than referring generically to the repository's full test suite.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "reviewer",
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "a23a2e172a487faa03c5f1b2f0848bf3f0147deb446cd00380353457901e3379"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "e023f5617afb59ac776e1adc44d3f3f263e8e28d5c5c6fda3c86051c76e414ae",
+      "rubric_id": "R4",
+      "affected_surface": "Plan Steps 1-6, src/sync/client.js, src/sync/worker.js",
+      "claim": "The plan does not explicitly state what is in scope and what is out of scope.",
+      "evidence_reference": "PLAN_UNDER_REVIEW Steps 1-6",
+      "disposition": null
+    },
+    {
+      "fingerprint": "a23a2e172a487faa03c5f1b2f0848bf3f0147deb446cd00380353457901e3379",
+      "rubric_id": "R6",
+      "affected_surface": "Step 6",
+      "claim": "Step 6 references running the repository's full test suite without naming a concrete command verified to exist in the repository.",
+      "evidence_reference": "PLAN_UNDER_REVIEW Step 6; SOURCE_CONTEXT file list",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-11-19T02:55:25.589Z"
+}

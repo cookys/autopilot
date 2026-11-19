@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "onoff-T4-r2",
+  "logical_plan_id": "pr-onoff-T4-r2-2944184",
+  "session_id": "onoff-T4-r2-2944184",
+  "session_key": "8f75378ccc9e4f30c51d833cc91a7e72e6c1b9e2084c439d0f7abfe15ce6d5cd",
+  "generation": 1,
+  "verdict": "READY",
+  "semantic_verdict": "READY",
+  "terminal": true,
+  "policy_reason": "no_accepted_blockers",
+  "rubric_sha256": "dbaad91937ce9933f47e964aa6ad0adc3bd84b5180d2d6561800d66c6c65c914",
+  "manifest_sha256": "f2076a33a8b7dec794c797c5eb5c4c3aaa4fb1d5c7a17bb618112608a45c28fd",
+  "context_sha256": "f77515fc356a5229aaa69f55e3be1ef6ec385ed3adee55a1a8f9210df37895c4",
+  "plan_sha256": "ec30e78d77cc41e85dfde0887b712c604fcfead17e3d521985304c5e99abba7b",
+  "plan_path": "plan.md",
+  "plan_git_blob_sha": "8d5cce7363554a354134fe284939bc82b5468b67",
+  "repo_head_sha": "b4cc77b8a8cea99a272e4a7b688e6e6d6f0e316f",
+  "plan_dirty_vs_head": false,
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "reviewer",
+      "target_id": "reviewer",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "agy",
+          "model": "gemini-4-hydrogen-high",
+          "operation": "plan-review",
+          "request_digest": "42f7d0b617c21174aa64417afd9b95da8009266d9ec199ac8c6f324a92a8ab67"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "0d5bde1d8135e7b8460e19ba0502f526d51e508ff6c82c8fd58f58e64f154dda",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "<tmp>/dispatch-author-log-m2gxuX",
+          "digest": "0d5bde1d8135e7b8460e19ba0502f526d51e508ff6c82c8fd58f58e64f154dda"
+        },
+        "receipt_digest": "83744d10ba53ed95f7c7c3ecd339d7a57a91210cea8645794c564c866093decd"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "reviewer",
+      "target_id": "reviewer",
+      "family": "google",
+      "runner": "agy",
+      "model": "gemini-4-hydrogen-high",
+      "verdict": "READY"
+    }
+  ],
+  "findings": [],
+  "backlog_candidates": [],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-11-19T02:55:24.144Z"
+}

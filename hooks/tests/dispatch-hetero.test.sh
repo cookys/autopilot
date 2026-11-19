@@ -2150,12 +2150,12 @@ assert_eq "0" "$EXIT" "default-model dispatch exit code"
 assert_contains "$OUT" '"model": "gemini-4-carbon-low"' \
   "the built-in default is gemini-4-carbon-low"
 
-# --- the default is agy-only: any other runner must be told, not guessed at ---
-OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/nomodel-grok --prompt-file "$PROMPT" \
-  --runner grok 2>&1)"; EXIT=$?
+# --- the built-in default is agy-only: runners without their own default (e.g. codex) must be told ---
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/nomodel-codex --prompt-file "$PROMPT" \
+  --runner codex 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "non-agy runner without --model exit code"
 assert_contains "$OUT" '"status": "precondition_failed"' "non-agy default refusal is a precondition"
-assert_contains "$OUT" "--model is required for runner 'grok'" \
+assert_contains "$OUT" "--model is required for runner 'codex'" \
   "the refusal names the runner and says --model is required"
 
 # (The old agy argv-payload ceiling refusal is gone: agy takes the prompt on stdin. Large-prompt

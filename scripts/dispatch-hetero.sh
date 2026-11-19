@@ -23,7 +23,8 @@
 #       [--model gemini-4-carbon-low]        # default agy implementer id. A gemini-flash[-tier]
 #                                             # alias still resolves against the live `agy models`
 #                                             # inventory. Names: `agy models` / `grok models`.
-#                                             # Required for any non-agy runner. The next roster
+#                                             # grok defaults to grok-4.7 (cursor/kimi use broker
+#                                             # defaults); required for other non-agy runners. The next roster
 #                                             # rung when this id is the implementer and
 #                                             # implementer_ladder is empty is gemini-4-argon-low
 #                                             # (resolve-review-loop.sh; this script does not retry).
@@ -31,7 +32,7 @@
 #                                              #   *grok*/*composer*→grok, else agy (*qwen*/*qwq* refused; use cc-shim + --endpoint).
 #                                              #   qoderclicn (EXPLICIT only, never auto): Qoder CLI CN.
 #                                              #   Explicit wins (don't rely on name luck).
-#                                              #   grok models: grok-4.5 (ex-grok-build), grok-composer-2.5-fast
+#                                              #   grok: default grok-4.7 (effort low); also grok-4.5 (ex-grok-build), grok-composer-2.5-fast
 #                                              #   cc-shim (EXPLICIT only): Claude Code CLI
 #                                              #   driving an Anthropic-compatible endpoint —
 #                                              #   needs ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN
@@ -55,7 +56,7 @@
 #                                              #   records engine_choice + pace_choice; pace_unknown
 #                                              #   retains the existing default. Named seats win and
 #                                              #   warn when their fresh usage reaches the ceiling.
-#       [--effort xhigh]                       # codex reasoning effort (low|medium|high|xhigh|max)
+#       [--effort xhigh]                       # reasoning effort (low|medium|high|xhigh|max; unpinned codex→high, grok→low)
 #       [--endpoint <name>]                    # cc-shim only (also --endpoint=<name>; last one
 #                                              #   wins; @none clears; empty is refused): resolve
 #                                              #   creds via resolve-endpoint.sh
@@ -350,7 +351,7 @@ fi
 # Default is the agy implementer id gemini-4-carbon-low (literal; the flash alias cannot
 # resolve to carbon). agy_resolve_model_alias() echoes a non-alias unchanged and still
 # resolves a gemini-flash[-tier] alias against the live inventory. The id is agy-only, so
-# a non-agy runner without --model is refused (Cursor has its own broker default).
+# a non-agy runner without its own default (grok→grok-4.7, cursor/kimi brokers) is refused.
 MODEL="gemini-4-carbon-low"
 MODEL_IS_DEFAULT=1
 BASE="develop"
@@ -508,6 +509,7 @@ cnative_account_state() {
 }
 PI_BIN="pi"
 GROK_PROMPT_FILE=""   # grok-only combined prompt temp; init early so the INT/TERM trap can reap it
+GROK_EFFORT=""        # grok-only clamped reasoning effort; init early so emit/manifest and detach declare -p see it
 QODER_PROMPT_FILE=""  # qoder combined prompt temp; init early so the INT/TERM trap and detach declare -p can reap it
 CCSHIM_PROMPT_FILE="" # cc-shim combined prompt temp; same trap-reap rationale
 BROKER_TIMEOUT_S=""
@@ -1239,6 +1241,8 @@ NODE
   fi
   local probe_fields=""
   [ -n "${PROBE_JSON:-}" ] && probe_fields=", \"probe\": $PROBE_JSON"
+  local effort_fields=""
+  [ "${IS_GROK:-0}" -eq 1 ] && effort_fields=", \"effort\": \"$(_flat_json_escape "${GROK_EFFORT:-$EFFORT}")\""
   local role_kit_fields=""
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_fields=", \"role_kit\": $ROLE_KIT_JSON"
   local sandbox_fields=""
@@ -1274,7 +1278,7 @@ NODE
     "$run_id_json" "$usage_json" "$num_turns_json" "$wall_json" "$duplex_json" \
     "$provider_session_json" "$provider_reused_json" "$worktree_reused_json" "$retention_lease_json" \
     "$strict_fields" "$campaign_fields" "$strict_boundary_fields" "$boundary_reject_fields" "$identity_fields" \
-    "$provider_error_fields" "$timeout_fields" ", \"error_category\": $error_category_json" "$role_kit_fields" "$probe_fields" "$sandbox_fields$fell_back_fields" "$tip_verify_fields")"
+    "$provider_error_fields" "$timeout_fields" ", \"error_category\": $error_category_json" "$effort_fields$role_kit_fields" "$probe_fields" "$sandbox_fields$fell_back_fields" "$tip_verify_fields")"
   printf '%s\n' "$_emit_json"
   # dispatch_usage/1 ledger row (never affects the result or the exit code; see lib/dispatch-usage.js).
   printf '%s' "$_emit_json" | node "$SELF_DIR/lib/dispatch-usage.js" append --from-result - --role "${AUTOPILOT_DISPATCH_ROLE:-implementer}" \
@@ -2601,6 +2605,8 @@ write_manifest() {
   if [ -n "${CAPABILITY_WRITE_SUPPRESSED:-}" ]; then
     capability_suppressed_fields=", \"capability_write_suppressed\": \"$(_flat_json_escape "$CAPABILITY_WRITE_SUPPRESSED")\""
   fi
+  local effort_manifest_fields=""
+  [ "${IS_GROK:-0}" -eq 1 ] && effort_manifest_fields=", \"effort\": \"$(_flat_json_escape "${GROK_EFFORT:-$EFFORT}")\""
   local role_kit_manifest_fields=""
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_manifest_fields=", \"role_kit\": $ROLE_KIT_JSON"
   [ "${SANDBOX:-off}" = "bwrap" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"sandbox\": $(sandbox_json)"
@@ -2668,7 +2674,7 @@ write_manifest() {
       "$log_format" "$duplex_json" "$pid_json" "$scope_json" "${MANIFEST_CONTAINMENT:-plain}" \
       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${DISPATCH_STARTED_EPOCH:-null}" "$(_flat_json_escape "${PROMPT_FILE:-}")" "${DISPATCH_LANE_JSON:-null}" "${SCAFFOLD_TIER_EFFECTIVE:-off}" \
       "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$tip_verify_json" "$tip_verify_source_json" "$parent_json" "$root_json" "$depth_json" \
-      "$mf_timeout_secs" "$(_flat_json_escape "$mf_timeout_source")" "$mf_timeout_enforced" "$strict_manifest_fields" "$strike_suppressed_fields" "$capability_suppressed_fields" "$role_kit_manifest_fields" "$campaign_scope_fields" "$REPO_IDENTITY_FIELDS$(declare -F dispatch_attr_fields >/dev/null 2>&1 && dispatch_attr_fields "${PROMPT_FILE:-}" "$runner" "${ENDPOINT:-}" "${MANIFEST_FINAL_STATUS:+${OUTCOME_COMMIT:-}}")" \
+      "$mf_timeout_secs" "$(_flat_json_escape "$mf_timeout_source")" "$mf_timeout_enforced" "$strict_manifest_fields" "$strike_suppressed_fields" "$capability_suppressed_fields" "$effort_manifest_fields$role_kit_manifest_fields" "$campaign_scope_fields" "$REPO_IDENTITY_FIELDS$(declare -F dispatch_attr_fields >/dev/null 2>&1 && dispatch_attr_fields "${PROMPT_FILE:-}" "$runner" "${ENDPOINT:-}" "${MANIFEST_FINAL_STATUS:+${OUTCOME_COMMIT:-}}")" \
       "$(declare -F manifest_session_id_json >/dev/null 2>&1 && manifest_session_id_json || printf null)" \
       "$(declare -F manifest_child_session_json >/dev/null 2>&1 && manifest_child_session_json || printf null)" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
@@ -3248,6 +3254,12 @@ set_runner_flags
 if [ "${IS_CODEX:-0}" -eq 1 ] && [ "$EFFORT_EXPLICIT" -eq 0 ]; then
   EFFORT="high"
 fi
+# grok implementer default effort (qualified seat official:implementer:grok-4.7:grok:194,
+# Fleet task 01M7S0RPFQJ217HXV3X11WXDVP): an unpinned grok call sends low; an explicit
+# --effort always wins. Other runners are unchanged.
+if [ "${IS_GROK:-0}" -eq 1 ] && [ "$EFFORT_EXPLICIT" -eq 0 ]; then
+  EFFORT="low"
+fi
 # The local-implementer gate runs at the end of set_runner_flags, after the runner
 # (including auto + a listed endpoint) is resolved, still before resolve-endpoint.
 # agy is the else-case rail (no IS_* flag). Refuse an unusable --timeout HERE, in the parent: the agy
@@ -3299,6 +3311,14 @@ fi
 if [ "${IS_CNATIVE:-0}" -eq 1 ] && [ "$MODEL_IS_DEFAULT" -eq 0 ]; then
   _CNATIVE_MODEL_ERR="$(node "$SELF_DIR/lib/seat-model-id.js" check "$MODEL" 2>&1)" \
     || die_precondition "claude-native refused: $_CNATIVE_MODEL_ERR"
+fi
+
+# grok implementer default model (qualified seat official:implementer:grok-4.7:grok:194,
+# Fleet task 01M7S0RPFQJ217HXV3X11WXDVP): an unpinned grok call defaults to grok-4.7;
+# an explicit --model always wins.
+if [ "${IS_GROK:-0}" -eq 1 ] && [ "$MODEL_IS_DEFAULT" -eq 1 ]; then
+  MODEL="grok-4.7"
+  MODEL_IS_DEFAULT=0
 fi
 
 if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
@@ -7007,7 +7027,7 @@ dispatch_detached_run() {
   declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN CURSOR_BIN OPENCODE_BIN OPENCODE_VER KIMI_BIN QODER_BIN QODER_CONFIG_DIR KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER ENDPOINT PACE_ROLE ENGINE_CHOICE_JSON PACE_CHOICE_JSON EFFORT CLAUDE_EFFORT_ARG \
       SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_CURSOR IS_OPENCODE IS_KIMI IS_QODER IS_CNATIVE CNATIVE_CONFIG_DIR RUNNER_RESOLVED CURSOR_FAST PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT GITCONFIG_SNAPSHOT_FILE GITCONFIG_DRIFT_KEYS EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
       BROKER_TIMEOUT_S BROKER_RESULT BROKER_VERDICT BROKER_REASON BROKER_RUNNER BIN_FLAG_KIMI \
-      WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID WORKER_FALLBACK_PGID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE OPENCODE_PROMPT_FILE KIMI_PROMPT_FILE QODER_PROMPT_FILE KIMI_EDIT_ONLY \
+      WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID WORKER_FALLBACK_PGID GROK_PROMPT_FILE GROK_EFFORT CCSHIM_PROMPT_FILE OPENCODE_PROMPT_FILE KIMI_PROMPT_FILE QODER_PROMPT_FILE KIMI_EDIT_ONLY \
       AGY_ENVELOPE AGY_STDERR AGY_PARSED AGY_USAGE_JSON CCSHIM_ENVELOPE \
       PROVIDER_ERROR_RUNNER PROVIDER_ERROR_STATUS PROVIDER_ERROR_FIELD \
       PACKED_PROMPT_TEMP LEDGER RUN_ID STAGE RESULTS_DIR RESULT_FILE EXIT_FILE HEARTBEAT_SECS \

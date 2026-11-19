@@ -9,7 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { spawnSync } = require('child_process');
+const { spawn } = require('child_process');
 const { classify } = require('./lib/root-scan-guard.js');
 
 function auditLine(tool, args, reason) {
@@ -26,9 +26,11 @@ function auditLine(tool, args, reason) {
 function writeAudit(line) {
   const dest = process.env.AUTOPILOT_ROOT_SCAN_AUDIT;
   if (!dest) return;
-  const fd = fs.openSync(dest, fs.constants.O_APPEND | fs.constants.O_CREAT | fs.constants.O_WRONLY, 0o600);
+  // O_WRONLY is required to append. O_NOFOLLOW refuses a symlink audit path.
+  const flags = fs.constants.O_APPEND | fs.constants.O_CREAT | fs.constants.O_NOFOLLOW | fs.constants.O_WRONLY;
+  const fd = fs.openSync(dest, flags, 0o600);
   try {
-    if (fs.fstatSync(fd).size === 0) fs.fchmodSync(fd, 0o600);
+    try { fs.fchmodSync(fd, 0o600); } catch (e) { /* still write the line */ }
     fs.writeSync(fd, line);
   } finally {
     fs.closeSync(fd);
@@ -67,16 +69,35 @@ function findReal(tool, skipDir) {
   return null;
 }
 
-function exitFromChild(result) {
-  if (result.error) {
-    process.stderr.write(`root-scan-guard: exec failed: ${result.error.message}\n`);
-    process.exit(127);
-  }
-  if (result.signal) {
-    const n = os.constants.signals[result.signal] || 1;
-    process.exit(128 + n);
-  }
-  process.exit(result.status === null ? 1 : result.status);
+function execReal(real, args) {
+  // spawnSync cannot forward SIGTERM/SIGINT/SIGHUP to the child while it blocks
+  // this process, so the child is spawned and those signals are relayed.
+  const child = spawn(real, args, { stdio: 'inherit' });
+  let settled = false;
+  const finish = (code) => {
+    if (settled) return;
+    settled = true;
+    process.exit(code);
+  };
+  const forward = (sig) => {
+    if (!child.pid) return;
+    try { child.kill(sig); } catch (e) { /* child already gone */ }
+  };
+  process.on('SIGTERM', () => forward('SIGTERM'));
+  process.on('SIGINT', () => forward('SIGINT'));
+  process.on('SIGHUP', () => forward('SIGHUP'));
+  child.on('error', (err) => {
+    process.stderr.write(`root-scan-guard: exec failed: ${err.message}\n`);
+    finish(err.code === 'ENOENT' ? 127 : 126);
+  });
+  child.on('exit', (code, signal) => {
+    if (signal) {
+      const n = os.constants.signals[signal] || 1;
+      finish(128 + n);
+      return;
+    }
+    finish(code === null ? 1 : code);
+  });
 }
 
 function main() {
@@ -100,7 +121,7 @@ function main() {
     process.stderr.write(`root-scan-guard: no real binary: ${tool}\n`);
     process.exit(127);
   }
-  exitFromChild(spawnSync(real, args, { stdio: 'inherit' }));
+  execReal(real, args);
 }
 
 main();

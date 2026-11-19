@@ -152,6 +152,41 @@ reset_audit; run_at "$WORK" grep -e / -r x .; assert_allowed "grep -e pattern" g
 reset_audit; run_at "$WORK" rg -g / x .; assert_allowed "rg -g" rg
 reset_audit; run_at "$WORK" rg x; assert_allowed "rg cwd tmp" rg
 
+echo "round 2 refused"
+reset_audit; run_at "$WORK" grep -r --color x /; assert_refused "grep -r --color x /"
+reset_audit; run_at "$WORK" grep --rec x /; assert_refused "grep --rec x /"
+reset_audit; run_at "$WORK" grep --dir recurse x /; assert_refused "grep --dir recurse x /"
+reset_audit; run_at "$WORK" grep --recursi x /; assert_refused "grep --recursi x /"
+reset_audit; run_at "$WORK" grep -r --regex PAT /; assert_refused "grep -r --regex PAT /"
+reset_audit; run_at "$WORK" rg --files /; assert_refused "rg --files /"
+reset_audit; run_at "$WORK" rg --files -g '*.md' /; assert_refused "rg --files -g glob /"
+reset_audit; run_at "$WORK" find -- /; assert_refused "find -- /"
+reset_audit; run_at "$WORK" rg --ignore-file / x /; assert_refused "rg --ignore-file / x /"
+reset_audit; run_at "$WORK" rg --color never x /; assert_refused "rg --color never x /"
+
+echo "round 2 allowed"
+reset_audit; run_at "$WORK" grep -r --color=auto x src; assert_allowed "grep --color=auto" grep
+reset_audit; run_at "$WORK" rg --color never x .; assert_allowed "rg --color never" rg
+reset_audit; run_at "$WORK" rg --files src; assert_allowed "rg --files src" rg
+reset_audit; run_at "$WORK" find -- . -name x; assert_allowed "find -- ." find
+reset_audit; run_at "$WORK" grep -e / -r x .; assert_allowed "grep -e / still" grep
+reset_audit; run_at "$WORK" rg -g / x .; assert_allowed "rg -g / still" rg
+reset_audit; run_at "$WORK" grep x /etc/hosts; assert_allowed "grep hosts still" grep
+
+echo "audit preexisting 0644"
+reset_audit
+printf 'old-line\n' > "$AUDIT"
+chmod 644 "$AUDIT"
+run_at "$WORK" find / -name hippo
+assert_refused "preexisting audit refusal"
+mode=$(stat -c %a "$AUDIT")
+assert_eq "$mode" "600" "audit fchmod preexisting 0600"
+if grep -qx 'old-line' "$AUDIT" && [ "$(grep -c . "$AUDIT")" -eq 2 ]; then
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+else
+  fail "audit not appended: $(cat "$AUDIT" 2>/dev/null)"
+fi
+
 echo "status passthrough"
 reset_audit
 STUB_EXIT=3
@@ -192,6 +227,12 @@ need(classify({ tool: "egrep", args: ["-r", "x", "/"], cwd }).refuse === true, "
 need(classify({ tool: "fgrep", args: ["-Rli", "x", "/"], cwd }).refuse === true, "fgrep -Rli");
 const ok = classify({ tool: "find", args: ["/home", "-name", "x"], cwd });
 need(ok.refuse === false && ok.root_path === null, "allow home");
+const ig = classify({ tool: "rg", args: ["--ignore-file", "/", "x", "."], cwd });
+need(ig.refuse === true && ig.reason === "root-token", "rg ignore-file root-token " + JSON.stringify(ig));
+need(classify({ tool: "grep", args: ["-e", "/", "-r", "x", "."], cwd }).refuse === false, "grep -e / allowed");
+need(classify({ tool: "rg", args: ["-g", "/", "x", "."], cwd }).refuse === false, "rg -g / allowed");
+need(classify({ tool: "find", args: ["--", "/"], cwd }).refuse === true, "find -- /");
+need(classify({ tool: "rg", args: ["--files", "-g", "*.md", "/"], cwd }).refuse === true, "rg --files glob");
 ' "$GUARD_JS" "$WORK"
 assert_exit_code $? 0 "classify units"
 

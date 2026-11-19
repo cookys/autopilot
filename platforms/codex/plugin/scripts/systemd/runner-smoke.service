@@ -8,6 +8,7 @@ Description=Daily autopilot engine CLI smoke gate
 
 [Service]
 Type=oneshot
+Environment=PATH=%h/.local/bin:%h/.grok/bin:/usr/local/bin:/usr/bin:/bin
 UnsetEnvironment=AUTOPILOT_TOKEN_SEAT AUTOPILOT_SESSION_ID
 StandardInput=null
 ExecStart=/usr/bin/env node @REPO_PATH@/scripts/runner-smoke.js --notify @FLEET_ADDRESS@

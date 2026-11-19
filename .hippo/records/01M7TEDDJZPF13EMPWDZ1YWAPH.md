@@ -1,0 +1,13 @@
+---
+id: 01M7TEDDJZPF13EMPWDZ1YWAPH
+kind: issue
+created: 2026-11-19T17:42:03.103Z
+---
+- **Since**: 2026-11-20
+- **Report**: 01M7S33V
+- **Reply**: none
+- **Problem**: engine-qualify 沒有將 AUTOPILOT_TASK_* 環境變數傳遞給被考的 runner。
+- **Impact**: 受測 runner 在 engine-qualify 時拿不到 AUTOPILOT_TASK_* 上下文，導致測試失真或失敗。
+- **Trigger**: 下次修改 engine-qualify 傳遞 AUTOPILOT_TASK_* 的派發邏輯時處理
+- **Source**: PEER-REPORTED PM 2026-11-20
+- **Pointer**: none

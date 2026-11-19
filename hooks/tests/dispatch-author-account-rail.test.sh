@@ -144,6 +144,8 @@ assert_eq "0" "$URC" "unconfigured: legacy path, one spawn, no alias/token ($UPR
 assert_not_contains "$LOUT" "precondition_failed" "unconfigured: legacy path ran"
 
 # 5. unrecognised env-check output: invalid, nothing spawned (stub claude-account.js in a copy of scripts/).
+# script copies below live in $TEST_TMP; the outbound scan resolves ../../hooks/_shared from lib/, so mirror it beside them
+mkdir -p "$TEST_TMP/hooks" && cp -r "$REPO_ROOT/hooks/_shared" "$TEST_TMP/hooks/_shared"
 STUBD="$TEST_TMP/stub-scripts"; cp -r "$REPO_ROOT/scripts" "$STUBD"
 cat > "$STUBD/claude-account.js" <<'STUBEOF'
 const fs = require('fs'); const a = process.argv[2];

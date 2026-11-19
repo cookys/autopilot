@@ -52,6 +52,19 @@
       "kind": "env",
       "audience": "internal",
       "doc": "references/hetero-dispatch.md",
+      "name": "AUTOPILOT_OUTBOUND_SCAN_ALLOW",
+      "class": "path_seam",
+      "default": "<repo>/.autopilot/outbound-scan-allow",
+      "readers": [
+        "scripts/lib/outbound-secret-scan.js"
+      ],
+      "relates": [],
+      "note": "Allowlist file for the outbound secret scan (sha256 of token, category, reason per line); overrides the repo default path."
+    },
+    {
+      "kind": "env",
+      "audience": "internal",
+      "doc": "references/hetero-dispatch.md",
       "name": "AUTOPILOT_KIMI_BROKER_SOCK",
       "class": "path_seam",
       "default": "/srv/kimi-broker/sock",

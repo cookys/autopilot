@@ -89,6 +89,8 @@ mv "$FX_ACC/registry.json.away" "$FX_ACC/registry.json"
 
 # --- unrecognised env-check output (rc 0 but not unconfigured|mode_off|ok): invalid, spawn 0.
 # A stub claude-account.js stands in for the real one in a copy of scripts/: env-check prints $G37_STUB_OUT.
+# script copies below live in $TEST_TMP; the outbound scan resolves ../../hooks/_shared from lib/, so mirror it beside them
+mkdir -p "$TEST_TMP/hooks" && cp -r "$REPO_ROOT/hooks/_shared" "$TEST_TMP/hooks/_shared"
 STUBD="$TEST_TMP/stub-scripts"; cp -r "$SD" "$STUBD"
 cat > "$STUBD/claude-account.js" <<'STUBEOF'
 const fs = require('fs'); const a = process.argv[2];

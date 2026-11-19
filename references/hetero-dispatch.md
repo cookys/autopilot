@@ -185,6 +185,15 @@ scripts/dispatch-review.sh --diff-file change.diff --spec-file brief.md
   prints `pace: grok is at 93% of its 7-day window (resets ...); named by caller, dispatching anyway — codex has 87% left`
   and continues. Named seats do not claim an automatic `pace_choice`.
 
+## Outbound secret scan (alfred audit 01M7QZ9T)
+
+`dispatch-review.sh` and `dispatch-author.sh` run [`scripts/lib/outbound-secret-scan.js`](../scripts/lib/outbound-secret-scan.js) over the payload actually sent (review: the assembled prompt file holding diff, spec, pack and checklists; author: the final prompt file, wrap included) right before any runner spawns, for every runner. The cn-model gate stays where it was, ahead of it.
+
+- Hit or unreadable input: nothing is spawned. Author returns `runner_failed` (exit 3); review has no `runner_failed` status, so it returns its `precondition_failed` (exit 2). The reason is `outbound_secret: <categories>`, categories only, never matched text.
+- Categories: `pem_key`, `bearer_token`, `token_prefix` (the shared `hooks/_shared/secret-patterns.js` list), `long_base64` / `long_hex` (run of 512 or more), `number_run` (64 or more consecutive comma-separated numbers), `b64_key32` (43 base64 chars, optional `=`). A 43-char candidate must contain one of `0-9+/`; letters-only is an identifier. Non-UTF-8 or NUL input is refused (exit 2).
+- Allowlist for known-public vectors: `.autopilot/outbound-scan-allow` in the repo root, one line `<sha256 of the exact matched token> <category> <reason>` (`#` comments allowed). The sha is of the token, not the file, so the rest of the file stays scanned. Override path: `AUTOPILOT_OUTBOUND_SCAN_ALLOW`. Get the sha with `printf '%s' "$TOKEN" | sha256sum`.
+- Test: [`hooks/tests/outbound-secret-scan.test.sh`](../hooks/tests/outbound-secret-scan.test.sh) (fake tokens built at runtime; stub runners touch a sentinel).
+
 ## Context-window gate
 
 [`scripts/check-context-window.js`](../scripts/check-context-window.js) (+ the sourceable wrapper [`scripts/lib/context-window.sh`](../scripts/lib/context-window.sh)) answers one question before anything is spent: **does the input we are about to feed this engine fit its context window?**

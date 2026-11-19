@@ -1380,6 +1380,13 @@ fi
 # Runner stderr capture (BL-0136): grok / cc-shim / claude-native write here
 # instead of /dev/null; read only on failure, bounded + redacted, never salvaged as output.
 RUNNER_ERR_FILE="$(mktemp -t dispatch-author-runner-err-XXXXXX)"
+# Outbound scan (alfred audit 01M7QZ9T): the final prompt file is scanned right before any runner spawns.
+# Output is categories only, never matched text; a hit is runner_failed and nothing is sent.
+_os_cats="$(node "$_AUTHOR_SELF_DIR/lib/outbound-secret-scan.js" --categories "$PROMPT_FILE" 2>/dev/null)"; _os_rc=$?
+if [ "$_os_rc" -ne 0 ]; then
+  emit_result "runner_failed" "$RAW_LOG" "outbound_secret: ${_os_cats:-unreadable}" 3 ", \"transport_status\": \"outbound_secret\""
+fi
+unset _os_cats _os_rc
 declare -F child_session_apply_env >/dev/null 2>&1 && child_session_apply_env "$_AUTHOR_SELF_DIR" 2>/dev/null || true   # 3b rule 3 for the in-process runner branches
 
 # dispatch_usage/1 start row (status running; the finished row from emit_result replaces it for the reader). A

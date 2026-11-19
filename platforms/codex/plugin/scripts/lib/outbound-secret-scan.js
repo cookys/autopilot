@@ -1,0 +1,146 @@
+#!/usr/bin/env node
+/**
+ * outbound-secret-scan.js — scan a payload BEFORE it is sent to an external engine
+ * (dispatch-review.sh / dispatch-author.sh call it right before the runner spawn).
+ *
+ *   node outbound-secret-scan.js [--categories] [--allow FILE] FILE...
+ *   Exit 0 clean, 1 hit, 2 unreadable (missing file, NUL byte, or not valid UTF-8).
+ *   Output: `<file>:<line>: <category>` per hit — NEVER the matched text. With
+ *   --categories: one line, the sorted unique categories joined by commas.
+ *
+ * Categories: pem_key, bearer_token, token_prefix, long_base64, long_hex,
+ *   number_run, b64_key32.
+ * Token-prefix patterns (ghp_/sk-/xox...) are the shared hooks/_shared/secret-patterns.js
+ * list; this file adds only the shapes that list does not cover (ported from alfred's
+ * tools/outbound_scan.py rules).
+ *
+ * False-positive rule: a 43-char base64 key candidate must contain one of [0-9+/];
+ * letters-only is an identifier (Kotlin test names, camelCase). Its boundary also
+ * treats . _ - as token characters, so a path segment or identifier is not a key.
+ *
+ * Allowlist (known-public vectors): `.autopilot/outbound-scan-allow`, one line
+ * `<sha256 of the exact matched token> <category> <reason>`; `#` comments allowed.
+ * The sha is of the matched token only, so the rest of the file stays scanned.
+ * Lookup: --allow FILE, else $AUTOPILOT_OUTBOUND_SCAN_ALLOW, else
+ * <git toplevel or cwd>/.autopilot/outbound-scan-allow.
+ */
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const { spawnSync } = require('child_process');
+const secrets = require('../../hooks/_shared/secret-patterns');
+
+const LONG_RUN = 512;
+const NUMBER_RUN = 64;
+
+const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
+
+function loadAllow(file) {
+  const set = new Set();
+  if (!file) return set;
+  let text;
+  try { text = fs.readFileSync(file, 'utf8'); } catch { return set; }
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    const [sha, category] = line.split(/\s+/);
+    if (/^[0-9a-f]{64}$/.test(sha || '') && category) set.add(`${sha} ${category}`);
+  }
+  return set;
+}
+
+function defaultAllowPath() {
+  if (process.env.AUTOPILOT_OUTBOUND_SCAN_ALLOW) return process.env.AUTOPILOT_OUTBOUND_SCAN_ALLOW;
+  const top = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' });
+  const root = top.status === 0 ? top.stdout.trim() : process.cwd();
+  return path.join(root, '.autopilot', 'outbound-scan-allow');
+}
+
+const RE_PEM = /-----BEGIN [A-Z0-9 ]*(?:PRIVATE KEY|KEY BLOCK)-----/;
+const RE_BEARER = /\bBearer[ \t]+[A-Za-z0-9._~+/=-]{20,}/i;
+const RE_LONG = new RegExp(`[A-Za-z0-9+/]{${LONG_RUN},}={0,2}`);
+// 43 base64 chars, optional '=' pad; neighbours may not continue the token.
+const RE_KEY32 = /(?<![A-Za-z0-9+/=._-])([A-Za-z0-9+/]{43})(?:=)?(?![A-Za-z0-9+/=._-])/g;
+const RE_NUM = /^-?\d+(?:\.\d+)?$/;
+
+/** Scan decoded text. Returns [{line, category, token}] (token is for allowlisting only). */
+function scanText(text, allow = new Set()) {
+  const hits = [];
+  const add = (line, category, token) => {
+    if (allow.has(`${sha256(token)} ${category}`)) return;
+    hits.push({ line, category, token });
+  };
+  const lines = text.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const n = i + 1;
+    let m;
+    if ((m = RE_PEM.exec(line))) add(n, 'pem_key', m[0]);
+    if ((m = RE_BEARER.exec(line))) add(n, 'bearer_token', m[0]);
+    for (const { pattern } of secrets.patterns) {
+      if ((m = pattern.exec(line))) add(n, 'token_prefix', m[0]);
+    }
+    if ((m = RE_LONG.exec(line))) {
+      add(n, /^[0-9a-fA-F]+$/.test(m[0]) ? 'long_hex' : 'long_base64', m[0]);
+    }
+    if (line.length >= NUMBER_RUN * 2 - 1) {
+      let run = 0;
+      let start = 0;
+      let off = 0;
+      for (const part of line.split(',')) {
+        const t = part.replace(/^[\s[\](){}]+|[\s[\](){}]+$/g, '');
+        if (RE_NUM.test(t)) {
+          if (run === 0) start = off;
+          run++;
+          if (run === NUMBER_RUN) { add(n, 'number_run', line.slice(start, off + part.length)); break; }
+        } else run = 0;
+        off += part.length + 1;
+      }
+    }
+    RE_KEY32.lastIndex = 0;
+    while ((m = RE_KEY32.exec(line))) {
+      if (/[0-9+/]/.test(m[1])) add(n, 'b64_key32', m[0]);
+    }
+  }
+  return hits;
+}
+
+/** Decode a buffer or refuse: NUL or invalid UTF-8 returns null. */
+function decodeStrict(buf) {
+  if (buf.includes(0)) return null;
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch { return null; }
+}
+
+function main(argv) {
+  let allowFile;
+  let categoriesOnly = false;
+  const files = [];
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--allow') allowFile = argv[++i];
+    else if (argv[i] === '--categories') categoriesOnly = true;
+    else if (argv[i] === '-h' || argv[i] === '--help') {
+      process.stdout.write('Usage: outbound-secret-scan.js [--categories] [--allow FILE] FILE...\n');
+      return 0;
+    } else files.push(argv[i]);
+  }
+  if (files.length === 0) { process.stderr.write('outbound-secret-scan: no files\n'); return 2; }
+  const allow = loadAllow(allowFile || defaultAllowPath());
+  const out = [];
+  const cats = new Set();
+  let unreadable = false;
+  for (const f of files) {
+    let buf;
+    try { buf = fs.readFileSync(f); } catch { out.push(`${f}: unreadable`); cats.add('unreadable'); unreadable = true; continue; }
+    const text = decodeStrict(buf);
+    if (text === null) { out.push(`${f}: unreadable (NUL or not UTF-8)`); cats.add('unreadable'); unreadable = true; continue; }
+    for (const h of scanText(text, allow)) { out.push(`${f}:${h.line}: ${h.category}`); cats.add(h.category); }
+  }
+  if (categoriesOnly) { if (cats.size) process.stdout.write([...cats].sort().join(',') + '\n'); }
+  else if (out.length) process.stdout.write(out.join('\n') + '\n');
+  return unreadable ? 2 : cats.size ? 1 : 0;
+}
+
+if (require.main === module) process.exitCode = main(process.argv.slice(2));
+module.exports = { scanText, decodeStrict, loadAllow, sha256 };

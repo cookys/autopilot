@@ -1263,7 +1263,15 @@ async function holdTick($: EngineInterface): Promise<void> {
 }
 // The one prompt.submit of the mod (ui-lint allowlist): the window of `only` ended, so its answers go out (decideundo.ts sendNow). The prompt starts a turn once the session is idle: it is not awaited.
 async function sendDecide($: EngineInterface, only: ReadonlySet<string>): Promise<void> {
-  const ids = await sendNow({ ...undoDeps($), post: text => $.prompt.submit({ text }) }, only)
+  const ids = await sendNow({
+    ...undoDeps($),
+    post: text => $.prompt.submit({ text }),
+    onSendFailed: reason => {
+      const oneLine = reason.replace(/[\r\n]+/g, ' ').trim()
+      const truncated = oneLine.length > 120 ? oneLine.slice(0, 119) + '…' : oneLine
+      $.ui.toast(t('decide.send_failed', { reason: truncated || '-' }))
+    },
+  }, only)
   const typed = submitSuccessor(snapshot === null ? [] : snapshot.pending.filter(d => !isStepCard(d)), ids)
   if (typed !== null) await decideAnswered($, typed) // a typed-only card is answered by sending it: the focus goes to its successor even though the send button is gone
 }
@@ -1886,14 +1894,22 @@ export function registerLive(on: Parameters<Register>[0]): void {
             label: t(optN === 0 ? 'shell.fill_type' : 'shell.fill_note'),
             onPress: () => { void $.prompt.fill({ text: fillText, mode: 'replace' }).then(out => { if (!out.isFilled) $.ui.toast(t('shell.fill_refused', { why: out.refusal ?? '-' })) }) },
           }
-          const note = cur === undefined || curLocked || fill !== null ? null : optN === 0 ? t(cur.id === null || !decideDialog(cur) ? 'decide.in_chat' : 'decide.in_dialog') : null
+          const isStep = cur !== undefined && isStepCard(cur)
+          const note = cur === undefined || curLocked || fill !== null ? null
+            : isStep ? t('decide.step_hint')
+            : optN === 0 ? t(cur.id === null || !decideDialog(cur) ? 'decide.in_chat' : 'decide.in_dialog') : null
+          const stepId = isStep && cur.id !== null ? cur.id : null
+          const done = stepId === null || curLocked ? null : {
+            label: t('decide.step_done'),
+            onPress: () => { void dismissCard($, stepId).then(redraw) },
+          }
           // the pane's state words (tabs.ts decideCards): held, sent, and for a card closed elsewhere the batch's `answered elsewhere` line; a correcting card (fixing) is open again and says nothing here
           const heldNow = cur !== undefined && decideHeld(cur, st)
           const meta = cur === undefined ? (bandBatch.ans[curKey] ?? null) : heldNow ? t('decide.held') : sentOf(cur) ? t('decide.sent') : null
           const fixable = cur !== undefined && cur.id !== null && !heldNow && sentOf(cur) && !decideDialog(cur)
           const fixId = cur?.id ?? null
           const view = (split: boolean, tight = false, width = mainCols - 1, noFill = false) => cardMain(el, {
-            key: curKey, question: cur === undefined ? bandBatch.q[curKey] : cur.question, background: cur === undefined ? null : cur.background, note, fill: noFill ? null : fill, meta, tight, locked: curLocked, grey: cur === undefined || sentOf(cur), split,
+            key: curKey, question: cur === undefined ? bandBatch.q[curKey] : cur.question, background: cur === undefined ? null : cur.background, note, fill: noFill ? null : fill, done, meta, tight, locked: curLocked, grey: cur === undefined || sentOf(cur), split,
             fix: fixable && fixId !== null ? { label: t('decide.fix'), onPress: () => { void decidePress($, 'fix:' + fixId).then(redraw) } } : null,
             advice: cur === undefined || (cur.recommendation === null && cur.why === null) ? null : { label: cur.recommendation ?? '', why: cur.why },
             notAuthorized: cur === undefined ? null : cur.not_authorized,

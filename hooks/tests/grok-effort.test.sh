@@ -152,17 +152,17 @@ assert_file_exists "$MF_B" "case (b): run manifest written"
 assert_eq "grok-4.6" "$(file_json_get "$MF_B" model)" "case (b): manifest model is grok-4.6"
 assert_eq "high" "$(file_json_get "$MF_B" effort)" "case (b): manifest effort is high"
 
-# Case (c): another non-agy runner without its own default (codex) without --model still exits 2
-# with the "--model is required" precondition, and non-grok result JSON stays unchanged (no effort key).
+# Case (c): another non-agy runner without its own default (pi) without --model still exits 2
+# with the "--model is required" precondition, and its precondition result JSON carries no effort key (nothing was sent).
 OUT_C="$(cd "$SBX" && "$HETERO" --no-verify-tip \
-  --branch feat/non-agy-nomodel-c --prompt-file "$PROMPT" --runner codex \
+  --branch feat/non-agy-nomodel-c --prompt-file "$PROMPT" --runner pi \
   --timeout 30s </dev/null 2>&1)"; EXIT_C=$?
 assert_eq "2" "$EXIT_C" "case (c): non-agy runner without --model exits 2 ($OUT_C)"
 assert_eq "precondition_failed" "$(json_last_get "$OUT_C" status)" \
   "case (c): non-agy runner without --model status is precondition_failed"
-assert_contains "$OUT_C" "--model is required for runner 'codex'" \
+assert_contains "$OUT_C" "--model is required for runner 'pi'" \
   "case (c): precondition names the runner and states --model is required"
 assert_eq "<absent>" "$(json_last_get "$OUT_C" effort)" \
-  "case (c): non-grok runner result JSON omits grok-only effort key"
+  "case (c): refused dispatch result JSON omits effort (none sent)"
 
 finalize_test

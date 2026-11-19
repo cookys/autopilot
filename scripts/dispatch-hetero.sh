@@ -20,16 +20,15 @@
 #
 # USAGE:
 #   scripts/dispatch-hetero.sh --branch <name> --prompt-file <file>
-#       [--model gemini-4-carbon-low]        # default agy implementer id. A gemini-flash[-tier]
-#                                             # alias still resolves against the live `agy models`
-#                                             # inventory. Names: `agy models` / `grok models`.
-#                                             # grok defaults to grok-4.7 (cursor/kimi use broker
-#                                             # defaults); required for other non-agy runners. The next roster
-#                                             # rung when this id is the implementer and
-#                                             # implementer_ladder is empty is gemini-4-argon-low
-#                                             # (resolve-review-loop.sh; this script does not retry).
+#       [--model <id>]                        # no built-in model. Unpinned (no --runner/--model) goes to
+#                                             # grok-4.7 at effort low; --runner codex -> gpt-6.1-terra low,
+#                                             # --runner agy -> gemini-4-hydrogen-low low (never carbon),
+#                                             # --runner opencode -> opencode-go/beam-free (no variant),
+#                                             # cursor/kimi use broker defaults; other runners REQUIRE --model.
+#                                             # A gemini-flash[-tier] alias still resolves against the live
+#                                             # `agy models` inventory. Explicit --model/--effort always win.
 #       [--runner auto|codex|agy|grok|cc-shim|pi|cursor|opencode|kimi|claude-native|qoderclicn] # default auto: *gpt*/*codex*→codex,
-#                                              #   *grok*/*composer*→grok, else agy (*qwen*/*qwq* refused; use cc-shim + --endpoint).
+#                                              #   *grok*/*composer*→grok, no --model→grok, else agy (*qwen*/*qwq* refused; use cc-shim + --endpoint).
 #                                              #   qoderclicn (EXPLICIT only, never auto): Qoder CLI CN.
 #                                              #   Explicit wins (don't rely on name luck).
 #                                              #   grok: default grok-4.7 (effort low); also grok-4.5 (ex-grok-build), grok-composer-2.5-fast
@@ -56,7 +55,7 @@
 #                                              #   records engine_choice + pace_choice; pace_unknown
 #                                              #   retains the existing default. Named seats win and
 #                                              #   warn when their fresh usage reaches the ceiling.
-#       [--effort xhigh]                       # reasoning effort (low|medium|high|xhigh|max; unpinned codex→high, grok→low)
+#       [--effort xhigh]                       # reasoning effort (low|medium|high|xhigh|max; unpinned codex/grok/agy→low, opencode→none)
 #       [--endpoint <name>]                    # cc-shim only (also --endpoint=<name>; last one
 #                                              #   wins; @none clears; empty is refused): resolve
 #                                              #   creds via resolve-endpoint.sh
@@ -348,11 +347,10 @@ if [ "${AUTOPILOT_TEST_ALLOW_HETERO_SEAMS:-}" != "1" ]; then
   unset HETERO_TEST_SYSTEMCTL_KILL_FAIL HETERO_TEST_NO_SETSID HETERO_TEST_NO_JOBCONTROL
 fi
 
-# Default is the agy implementer id gemini-4-carbon-low (literal; the flash alias cannot
-# resolve to carbon). agy_resolve_model_alias() echoes a non-alias unchanged and still
-# resolves a gemini-flash[-tier] alias against the live inventory. The id is agy-only, so
-# a non-agy runner without its own default (grok→grok-4.7, cursor/kimi brokers) is refused.
-MODEL="gemini-4-carbon-low"
+# qualified default below (grok-4.7, codex gpt-6.1-terra, agy gemini-4-hydrogen-low, opencode beam-free, cursor/kimi
+# broker). Every other runner without a default dies "--model is required". Never default to an expensive seat.
+# every other runner without a default die "--model is required". Never default to an expensive seat.
+MODEL=""
 MODEL_IS_DEFAULT=1
 BASE="develop"
 TIMEOUT="9m"
@@ -509,7 +507,7 @@ cnative_account_state() {
 }
 PI_BIN="pi"
 GROK_PROMPT_FILE=""   # grok-only combined prompt temp; init early so the INT/TERM trap can reap it
-GROK_EFFORT=""        # grok-only clamped reasoning effort; init early so emit/manifest and detach declare -p see it
+EFFORT_SENT=""        # final effort actually sent (or "default" when none is); set once before the worker, read by emit/manifest and detach declare -p
 QODER_PROMPT_FILE=""  # qoder combined prompt temp; init early so the INT/TERM trap and detach declare -p can reap it
 CCSHIM_PROMPT_FILE="" # cc-shim combined prompt temp; same trap-reap rationale
 BROKER_TIMEOUT_S=""
@@ -1242,7 +1240,7 @@ NODE
   local probe_fields=""
   [ -n "${PROBE_JSON:-}" ] && probe_fields=", \"probe\": $PROBE_JSON"
   local effort_fields=""
-  [ "${IS_GROK:-0}" -eq 1 ] && effort_fields=", \"effort\": \"$(_flat_json_escape "${GROK_EFFORT:-$EFFORT}")\""
+  [ -z "${EFFORT_SENT:-}" ] || effort_fields=", \"effort\": \"$(_flat_json_escape "$EFFORT_SENT")\""
   local role_kit_fields=""
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_fields=", \"role_kit\": $ROLE_KIT_JSON"
   local sandbox_fields=""
@@ -2606,7 +2604,7 @@ write_manifest() {
     capability_suppressed_fields=", \"capability_write_suppressed\": \"$(_flat_json_escape "$CAPABILITY_WRITE_SUPPRESSED")\""
   fi
   local effort_manifest_fields=""
-  [ "${IS_GROK:-0}" -eq 1 ] && effort_manifest_fields=", \"effort\": \"$(_flat_json_escape "${GROK_EFFORT:-$EFFORT}")\""
+  [ -z "${EFFORT_SENT:-}" ] || effort_manifest_fields=", \"effort\": \"$(_flat_json_escape "$EFFORT_SENT")\""
   local role_kit_manifest_fields=""
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_manifest_fields=", \"role_kit\": $ROLE_KIT_JSON"
   [ "${SANDBOX:-off}" = "bwrap" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"sandbox\": $(sandbox_json)"
@@ -2981,6 +2979,10 @@ set_runner_flags() {
         IS_CODEX=1
       elif [[ "$model_lc" == *grok* || "$model_lc" == *composer* ]]; then
         IS_GROK=1
+      elif [ "$MODEL_IS_DEFAULT" -eq 1 ]; then
+        # No --runner and no --model: never an expensive seat. Qualified cheap implementer
+        # default is grok-4.7 at effort low (set below); agy is not an unpinned default.
+        IS_GROK=1
       fi
       ;;
     *) die_precondition "--runner must be one of auto|codex|agy|grok|cc-shim|pi|cursor|opencode|kimi|claude-native|qoderclicn (got: $RUNNER)" ;;
@@ -3252,7 +3254,33 @@ set_runner_flags
 # EFFORT="xhigh" is a script default, not a seat decision. An unpinned codex call sends high; an explicit
 # --effort always wins. Other runners are unchanged.
 if [ "${IS_CODEX:-0}" -eq 1 ] && [ "$EFFORT_EXPLICIT" -eq 0 ]; then
-  EFFORT="high"
+  EFFORT="low"
+fi
+# codex implementer default (2026-11-19 implementer exam, scorecard event 38, 24/24 at low on
+# impl-live-rail-v1): an unpinned codex call is gpt-6.1-terra at low; explicit --model/--effort win.
+if [ "${IS_CODEX:-0}" -eq 1 ] && [ "$MODEL_IS_DEFAULT" -eq 1 ]; then
+  MODEL="gpt-6.1-terra"
+  MODEL_IS_DEFAULT=0
+fi
+# opencode implementer default (qualified seat official:implementer:opencode-go/beam-free:opencode:339):
+# beam-free has no effort tier, so an unpinned call sends no variant ("default"), never the xhigh script default.
+if [ "${IS_OPENCODE:-0}" -eq 1 ]; then
+  [ "$EFFORT_EXPLICIT" -eq 1 ] || EFFORT="default"
+  if [ "$MODEL_IS_DEFAULT" -eq 1 ]; then
+    MODEL="opencode-go/beam-free"
+    MODEL_IS_DEFAULT=0
+  fi
+fi
+# agy implementer default (2026-11-19 implementer exam, scorecard event 37, 24/24 at low): a --runner agy call
+# without --model is gemini-4-hydrogen-low at low. The old carbon default is gone (expensive seat); agy is never
+# the unpinned (no --runner) default, that order is grok-4.7 low first. Explicit --model/--effort win.
+if [ "${RUNNER_RESOLVED:-0}" -eq 1 ] \
+  && [ "${IS_CODEX:-0}${IS_GROK:-0}${IS_CCSHIM:-0}${IS_PI:-0}${IS_CURSOR:-0}${IS_OPENCODE:-0}${IS_KIMI:-0}${IS_QODER:-0}${IS_CNATIVE:-0}" = "000000000" ]; then
+  if [ "$MODEL_IS_DEFAULT" -eq 1 ]; then
+    MODEL="gemini-4-hydrogen-low"
+    MODEL_IS_DEFAULT=0
+    [ "$EFFORT_EXPLICIT" -eq 1 ] || EFFORT="low"
+  fi
 fi
 # grok implementer default effort (qualified seat official:implementer:grok-4.7:grok:194,
 # Fleet task 01M7S0RPFQJ217HXV3X11WXDVP): an unpinned grok call sends low; an explicit
@@ -3321,6 +3349,12 @@ if [ "${IS_GROK:-0}" -eq 1 ] && [ "$MODEL_IS_DEFAULT" -eq 1 ]; then
   MODEL_IS_DEFAULT=0
 fi
 
+# Effort actually sent, recorded in every result and manifest. claude-based runners and kimi forward an effort
+# only when explicitly set; everything else sends EFFORT (low/high/... or "default" = none).
+EFFORT_SENT="$EFFORT"
+if [ "$IS_CCSHIM" -eq 1 ] || [ "$IS_CNATIVE" -eq 1 ]; then EFFORT_SENT="${CLAUDE_EFFORT_ARG:-default}"; fi
+if [ "$IS_KIMI" -eq 1 ]; then EFFORT_SENT="${KIMI_EFFORT_SEND:-default}"; fi
+
 if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
    && [ "$IS_PI" -eq 0 ] && [ "$IS_CURSOR" -eq 0 ] && [ "$IS_OPENCODE" -eq 0 ] && [ "$IS_KIMI" -eq 0 ] && [ "$IS_QODER" -eq 0 ] && [ "$IS_CNATIVE" -eq 0 ]; then
   # `|| die` in the PARENT: agy_resolve_model_alias deliberately never dies inside `$( )`,
@@ -3331,7 +3365,7 @@ elif [ "$MODEL_IS_DEFAULT" -eq 1 ]; then
   # The built-in default is an agy alias and means nothing to any other vendor. Refusing
   # here is the loud half of the fix: silently forwarding it produced a vendor-side error
   # whose text named a model the caller never chose.
-  die_precondition "--model is required for runner '$RUNNER' — the built-in default ('$MODEL') is an agy model id"
+  die_precondition "--model is required for runner '$RUNNER'"
 fi
 
 if [ "${#SKILLS[@]}" -gt 0 ]; then
@@ -7027,7 +7061,7 @@ dispatch_detached_run() {
   declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN CURSOR_BIN OPENCODE_BIN OPENCODE_VER KIMI_BIN QODER_BIN QODER_CONFIG_DIR KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER ENDPOINT PACE_ROLE ENGINE_CHOICE_JSON PACE_CHOICE_JSON EFFORT CLAUDE_EFFORT_ARG \
       SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_CURSOR IS_OPENCODE IS_KIMI IS_QODER IS_CNATIVE CNATIVE_CONFIG_DIR RUNNER_RESOLVED CURSOR_FAST PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT GITCONFIG_SNAPSHOT_FILE GITCONFIG_DRIFT_KEYS EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
       BROKER_TIMEOUT_S BROKER_RESULT BROKER_VERDICT BROKER_REASON BROKER_RUNNER BIN_FLAG_KIMI \
-      WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID WORKER_FALLBACK_PGID GROK_PROMPT_FILE GROK_EFFORT CCSHIM_PROMPT_FILE OPENCODE_PROMPT_FILE KIMI_PROMPT_FILE QODER_PROMPT_FILE KIMI_EDIT_ONLY \
+      WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID WORKER_FALLBACK_PGID GROK_PROMPT_FILE EFFORT_SENT CCSHIM_PROMPT_FILE OPENCODE_PROMPT_FILE KIMI_PROMPT_FILE QODER_PROMPT_FILE KIMI_EDIT_ONLY \
       AGY_ENVELOPE AGY_STDERR AGY_PARSED AGY_USAGE_JSON CCSHIM_ENVELOPE \
       PROVIDER_ERROR_RUNNER PROVIDER_ERROR_STATUS PROVIDER_ERROR_FIELD \
       PACKED_PROMPT_TEMP LEDGER RUN_ID STAGE RESULTS_DIR RESULT_FILE EXIT_FILE HEARTBEAT_SECS \

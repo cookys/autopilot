@@ -23,8 +23,9 @@
 //   [core-dir]    the scope touches a directory the config marks `core`
 //   [core-unset]  effective core_dirs (shipped list union the repo file) is empty, so every scope path
 //                 counts as core. Allowed only when every path matches the shipped core_unset_allow list,
-//                 or is named in New-Files: and does not exist under cwd yet. A repo file cannot change
+//                 or is named in New-Files: and does not exist under the repo root yet. A repo file cannot change
 //                 that list. An empty core list must not fail open onto source edits (01M7S88YZPPZKVARP0F2SYMRGS).
+//                 Paths are normalised; `..`, absolute and glob paths never pass.
 //   [novel]       role is plan, design, brainstorm, architecture, plan_review or research, or the task is
 //                 marked novel (env AUTOPILOT_TASK_NOVEL=1, or `Novel: yes` header)
 //   [unknown-size|unknown-role|unknown-scope]  FAIL CLOSED: size, role or scope is missing
@@ -49,7 +50,7 @@
 //   role   AUTOPILOT_TASK_ROLE  / `Role: <role>`          (a rail may pass its own implied role; a review or novel rail role is a floor that env/header cannot lower)
 //   scope  AUTOPILOT_TASK_SCOPE / `Scope: a, b`  (comma/newline separated paths), plus the `diff --git` paths of any diff file
 //   new    `New-Files: a, b` (same comma/newline split as Scope). Counts only when effective core_dirs is
-//          empty: a named path that does not exist under cwd is allowed even if it misses core_unset_allow.
+//          empty: a named path that does not exist under the repo root is allowed even if it misses core_unset_allow.
 //   novel  AUTOPILOT_TASK_NOVEL=1 / `Novel: yes`
 //   class  AUTOPILOT_TASK_CLASS / `Task-Class: <value>`   (local served family only; compared case-insensitively)
 // Config: scripts/lib/cn-model-gate-defaults.json (starter lists) extended by <repo>/.claude/cn-model-gate.json
@@ -170,16 +171,47 @@ function shippedCoreUnsetAllow() {
   return Array.isArray(raw) ? raw.map(String) : [];
 }
 
-function normRel(p) {
-  return String(p).replace(/^\.\//, '').replace(/^\/+/, '');
+// core-unset only. Case-sensitive and anchored at the repo root. A leading `**/` still matches
+// any depth (the shipped fixtures / testdata / __fixtures__ entries). Other globs, including
+// `docs/**` and `doc/**`, match only from the first segment. Not matchesAny.
+function coreUnsetGlobRegex(g) {
+  let re = '';
+  let i = 0;
+  if (g.startsWith('**/')) { re += '(?:.*/)?'; i = 3; }
+  for (; i < g.length; i++) {
+    const c = g[i];
+    if (c === '*') {
+      if (g[i + 1] === '*') { re += '.*'; i++; if (g[i + 1] === '/') i++; }
+      else re += '[^/]*';
+    } else if (c === '?') re += '[^/]';
+    else re += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  }
+  return new RegExp(`^${re}$`);
+}
+
+function coreUnsetAllowMatch(norm, globs) {
+  return globs.some((g) => coreUnsetGlobRegex(g).test(norm));
+}
+
+// Strip one leading `./`, then path.posix.normalize. Absolute, `..`, and glob characters never pass.
+function coreUnsetNorm(raw) {
+  let s = String(raw);
+  const absolute = path.posix.isAbsolute(s);
+  if (s.startsWith('./')) s = s.slice(2);
+  const normalised = path.posix.normalize(s);
+  const bad = absolute || /[*?[{]/.test(s) || s.split('/').includes('..') || normalised.split('/').includes('..');
+  return { normalised, bad };
+}
+
+function absentUnderRepoRoot(root, normalised) {
+  const abs = path.resolve(root, normalised);
+  const rel = path.relative(root, abs);
+  if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) return false;
+  return !fs.existsSync(abs);
 }
 
 function splitPathList(raw) {
   return String(raw || '').split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
-}
-
-function pathExistsUnder(cwd, p) {
-  return fs.existsSync(path.resolve(cwd, normRel(p)));
 }
 
 function instantMs(v) {
@@ -295,8 +327,17 @@ function check(opts = {}) {
   if (BIG_SIZES.includes(f.size)) return block('core-size');
   if (cfg.core_dirs.length === 0) {
     const allow = shippedCoreUnsetAllow();
-    const news = new Set(f.newFiles.map(normRel));
-    const unset = f.scope.some((p) => !matchesAny(p, allow) && !(news.has(normRel(p)) && !pathExistsUnder(cwd, p)));
+    const news = new Set();
+    for (const n of f.newFiles) {
+      const c = coreUnsetNorm(n);
+      if (!c.bad) news.add(c.normalised);
+    }
+    const unset = f.scope.some((p) => {
+      const c = coreUnsetNorm(p);
+      if (c.bad) return true;
+      if (coreUnsetAllowMatch(c.normalised, allow)) return false;
+      return !(news.has(c.normalised) && absentUnderRepoRoot(root, c.normalised));
+    });
     if (unset) return block('core-unset');
   } else if (f.scope.some((p) => matchesAny(p, cfg.core_dirs))) return block('core-dir');
   if (f.novel || cfg.novel_roles.includes(f.role) || cfg.novel_roles.includes(f.railRole)) return block('novel');

@@ -145,6 +145,39 @@ test('core-unset: empty core_dirs treats every path as core except the shipped a
   assert.equal(gate.check({ ...K, env: {}, files: [sens], cwd: bare }).cls, 'sensitive');
 });
 
+test('core-unset paths: normalise, anchor the allow list, existence under the repo root', () => {
+  const bare = gitRepo('core-unset-paths');
+  const denied = (name, text) => {
+    const f = briefFile(name, text);
+    assert.equal(gate.check({ ...K, env: {}, files: [f], cwd: bare }).cls, 'core-unset', name);
+  };
+  denied('deny-dotdot.md', 'Size: S\nRole: implementer\nScope: docs/../src/x.rs\n');
+  denied('deny-src-docs.md', 'Size: S\nRole: implementer\nScope: src/docs/x.rs\n');
+  denied('deny-outside.md', 'Size: S\nRole: implementer\nScope: ../outside.rs\nNew-Files: ../outside.rs\n');
+  denied('deny-glob.md', 'Size: S\nRole: implementer\nScope: src/*.rs\nNew-Files: src/*.rs\n');
+  denied('deny-abs.md', 'Size: S\nRole: implementer\nScope: /src/x.rs\n');
+  denied('deny-dotdot-norm.md', 'Size: S\nRole: implementer\nScope: docs/./../src/x.rs\n');
+
+  const sub = path.join(bare, 'src');
+  fs.mkdirSync(sub, { recursive: true });
+  fs.writeFileSync(path.join(sub, 'x.rs'), 'fn x() {}\n');
+  const cwdFile = briefFile('deny-cwd.md', 'Size: S\nRole: implementer\nScope: src/x.rs\nNew-Files: src/x.rs\n');
+  assert.equal(gate.check({ ...K, env: {}, files: [cwdFile], cwd: sub }).cls, 'core-unset', 'existence is under the repo root');
+  const cli = run('node', [path.join(S, 'lib', 'cn-model-dispatch-gate.js'), 'check', '--runner', 'kimi', '--model', 'kimi-code', '--cwd', sub, '--prompt-file', cwdFile]);
+  assert.notEqual(cli.status, 0);
+  assert.match(cli.stderr, /cn_model_dispatch_barred moonshot core-unset/);
+
+  const allow = (name, text) => {
+    const f = briefFile(name, text);
+    assert.equal(gate.check({ ...K, env: {}, files: [f], cwd: bare }).allowed, true, name);
+  };
+  allow('allow-docs-plan.md', 'Size: S\nRole: implementer\nScope: docs/plans/x.md\n');
+  allow('allow-dot-docs.md', 'Size: S\nRole: implementer\nScope: ./docs/a.md\n');
+  allow('allow-fixtures.md', 'Size: S\nRole: implementer\nScope: tests/fixtures/seat_burn/a.json\n');
+  allow('allow-src-fixtures.md', 'Size: S\nRole: implementer\nScope: src/fixtures/a.json\n');
+  allow('allow-absent-new.md', 'Size: S\nRole: implementer\nScope: tests/test_new.py\nNew-Files: tests/test_new.py\n');
+});
+
 test('class 4 novel: plan/design/brainstorm/architecture/research roles, or a novel marker', () => {
   for (const r of ['plan', 'design', 'brainstorm', 'architecture', 'research']) {
     assert.equal(cls(K, { ...OK, AUTOPILOT_TASK_ROLE: r }).cls, 'novel', r);

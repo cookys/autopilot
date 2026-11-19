@@ -37,13 +37,16 @@
  *     {summary: {effective, stale, unknown, total}}
  *   --json: single JSON document
  *     {schema: "autopilot.rule-effect/1", seats: [...], summary: {effective, stale, unknown, total}}
- *   --seats adds rule_repo (absolute), rule_commit (full sha), time_source
- *     ("transcript" | "missing") on each emitted seat. Foreign-host rows are omitted.
+ *   --seats adds rule_repo (absolute), rule_commit (full sha), rule_ref
+ *     (the ref searched; default origin/develop), time_source
+ *     ("transcript" | "missing") on each emitted seat, and rule_ref on the
+ *     --json document. Foreign-host rows are omitted. When no row is on this
+ *     host, --json includes "no_local_seats": true.
  *
  * Exit codes:
  *   0 = every seat is effective
  *   1 = any seat is stale
- *   2 = no seat is stale, some seat is unknown
+ *   2 = no seat is stale and some seat is unknown, or --seats has no row on this host
  *   3 = CLI usage or unreadable/invalid inventory
  *
  * Node >= 20.10, built-ins only.
@@ -643,7 +646,7 @@ function loadSeatsTsv(seatsPath) {
     let line = lines[i];
     if (line.endsWith('\r')) line = line.slice(0, -1);
     if (line.trim() === '' || line.startsWith('#')) continue;
-    const cols = line.split('\t');
+    const cols = line.split('\t').map((col) => col.trim());
     if (!headerSeen && cols[0] === 'seat') {
       headerSeen = true;
       continue;
@@ -653,7 +656,7 @@ function loadSeatsTsv(seatsPath) {
       throw new UsageError(`seats ${seatsPath}: line ${lineNo}: expected 3 tab-separated columns, got ${cols.length}`);
     }
     const [seat, host, sid] = cols;
-    if (seat.trim() === '' || host.trim() === '' || sid.trim() === '') {
+    if (seat === '' || host === '' || sid === '') {
       throw new UsageError(`seats ${seatsPath}: line ${lineNo}: seat, host and sid must be non-empty`);
     }
     rows.push({ seat, host, sid });
@@ -713,11 +716,12 @@ function msToIso(ms) {
   return ms === null ? null : new Date(ms).toISOString();
 }
 
-function withSeatMeta(row, ruleRepo, ruleCommit, timeSource) {
+function withSeatMeta(row, ruleRepo, ruleCommit, ruleRef, timeSource) {
   return {
     ...row,
     rule_repo: ruleRepo,
     rule_commit: ruleCommit,
+    rule_ref: ruleRef,
     time_source: timeSource,
   };
 }
@@ -731,6 +735,15 @@ function checkSeats(opts, localHostname) {
   const ruleCommit = resolveRuleCommit(ruleRepo, ruleRef);
   const rows = loadSeatsTsv(opts.seats);
   const localRows = rows.filter((row) => isLocalHost(row.host, localHostname));
+  if (localRows.length === 0) {
+    return {
+      seats: [],
+      summary: { effective: 0, stale: 0, unknown: 0, total: 0 },
+      exitCode: 2,
+      no_local_seats: true,
+      rule_ref: ruleRef,
+    };
+  }
 
   const slots = localRows.map((row) => {
     const transcriptPath = findSeatTranscript(projectsDir, row.sid);
@@ -771,11 +784,11 @@ function checkSeats(opts, localHostname) {
         null,
         null,
       );
-      return withSeatMeta(unknown, ruleRepo, ruleCommit, 'missing');
+      return withSeatMeta(unknown, ruleRepo, ruleCommit, ruleRef, 'missing');
     }
     const res = checked[cursor];
     cursor += 1;
-    return withSeatMeta(res, ruleRepo, ruleCommit, 'transcript');
+    return withSeatMeta(res, ruleRepo, ruleCommit, ruleRef, 'transcript');
   });
 
   const summary = { effective: 0, stale: 0, unknown: 0, total: seats.length };
@@ -783,7 +796,7 @@ function checkSeats(opts, localHostname) {
   let exitCode = 0;
   if (summary.stale > 0) exitCode = 1;
   else if (summary.unknown > 0) exitCode = 2;
-  return { seats, summary, exitCode };
+  return { seats, summary, exitCode, rule_ref: ruleRef };
 }
 
 function resolvePresentSince(realRepo, resolvedSha, commitTimeSec) {
@@ -1089,13 +1102,21 @@ function main(argv = process.argv.slice(2), io = {}) {
       ? checkSeats(opts, localHostname)
       : checkInventory(loadInventory(opts.inventory), opts, localHostname);
     const { seats, summary, exitCode } = evaluated;
+    if (evaluated.no_local_seats) {
+      stderr.write(`rule-effect-check: no seat in ${opts.seats} is on host ${localHostname}\n`);
+    }
     if (opts.json) {
-      stdout.write(`${JSON.stringify({ schema: OUTPUT_SCHEMA, seats, summary }, null, 2)}\n`);
+      const doc = { schema: OUTPUT_SCHEMA, seats, summary };
+      if (evaluated.rule_ref) doc.rule_ref = evaluated.rule_ref;
+      if (evaluated.no_local_seats) doc.no_local_seats = true;
+      stdout.write(`${JSON.stringify(doc, null, 2)}\n`);
     } else {
       for (const row of seats) {
         stdout.write(`${JSON.stringify(row)}\n`);
       }
-      stdout.write(`${JSON.stringify({ summary })}\n`);
+      const summaryDoc = { summary };
+      if (evaluated.no_local_seats) summaryDoc.no_local_seats = true;
+      stdout.write(`${JSON.stringify(summaryDoc)}\n`);
     }
     return exitCode;
   } catch (err) {

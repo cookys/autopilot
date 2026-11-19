@@ -701,4 +701,81 @@ assert_contains "$ERR" "line 4" "seats: bad column count names the line number"
 run_check --seats "$SEATS_OK" --inventory "$INV_EFF" --host "$LOCAL_HOST"
 assert_exit_code "$RC" 3 "seats: --seats with --inventory -> exit 3"
 
+# a) only other-host rows is not a green empty report
+SEATS_FOREIGN="$TEST_TMP/seats-foreign-only.tsv"
+printf 'foreign-seat\t%s\tsid-foreign\n' "$OTHER_HOST" > "$SEATS_FOREIGN"
+run_check --seats "$SEATS_FOREIGN" --rule-repo "$SEATS_REPO" --projects-dir "$SEATS_PROJECTS" --host "$LOCAL_HOST" --json
+assert_exit_code "$RC" 2 "seats: only other-host rows -> exit 2"
+assert_contains "$ERR" "rule-effect-check: no seat in $SEATS_FOREIGN is on host $LOCAL_HOST" \
+  "seats: zero local rows names the tsv and host on stderr"
+FOREIGN_JSON="$(printf '%s' "$OUT" | node -e '
+const d = JSON.parse(require("fs").readFileSync(0, "utf8"));
+process.stdout.write([d.no_local_seats === true, d.summary.total, d.seats.length].join("|"));
+')"
+assert_eq "$FOREIGN_JSON" "true|0|0" "seats: only other-host rows sets no_local_seats and total 0"
+
+# b) session start before the rule commit, compact_boundary after it -> effective
+#    (kills "compact detection returns null": start alone would be stale)
+SEATS_COMPACT_BEFORE="$TEST_TMP/seats-compact-before.tsv"
+cat > "$SEATS_PROJECTS/proj-a/sid-compact-before.jsonl" <<EOF
+{"type":"user","timestamp":"2023-01-01T00:00:00.000Z","message":"early"}
+{"type":"system","subtype":"compact_boundary","timestamp":"$SEATS_AFTER_ISO"}
+EOF
+printf 'local-compact-before\t%s\tsid-compact-before\n' "$LOCAL_HOST" > "$SEATS_COMPACT_BEFORE"
+run_check --seats "$SEATS_COMPACT_BEFORE" --rule-repo "$SEATS_REPO" --rule-ref origin/develop \
+  --projects-dir "$SEATS_PROJECTS" --host "$LOCAL_HOST" --json
+assert_exit_code "$RC" 0 "seats: start before rule commit but compact after -> exit 0"
+COMPACT_BEFORE_V="$(printf '%s' "$OUT" | node -e '
+const s = JSON.parse(require("fs").readFileSync(0, "utf8")).seats[0];
+process.stdout.write(s.verdict + "|" + s.time_source);
+')"
+assert_eq "$COMPACT_BEFORE_V" "effective|transcript" \
+  "seats: compact_boundary after the rule commit makes an early session effective"
+
+# c) start before the rule commit, later non-compact timestamps after it -> stale
+#    (kills "latest timestamp instead of earliest")
+SEATS_EARLY="$TEST_TMP/seats-earliest.tsv"
+cat > "$SEATS_PROJECTS/proj-a/sid-earliest.jsonl" <<EOF
+{"type":"user","timestamp":"2023-01-01T00:00:00.000Z","message":"early"}
+{"type":"assistant","timestamp":"$SEATS_AFTER_ISO","message":"later"}
+EOF
+printf 'local-earliest\t%s\tsid-earliest\n' "$LOCAL_HOST" > "$SEATS_EARLY"
+run_check --seats "$SEATS_EARLY" --rule-repo "$SEATS_REPO" --projects-dir "$SEATS_PROJECTS" --host "$LOCAL_HOST" --json
+assert_exit_code "$RC" 1 "seats: later non-compact lines do not refresh an early session -> exit 1"
+EARLY_V="$(printf '%s' "$OUT" | node -e '
+const s = JSON.parse(require("fs").readFileSync(0, "utf8")).seats[0];
+process.stdout.write(s.verdict + "|" + s.time_source);
+')"
+assert_eq "$EARLY_V" "stale|transcript" "seats: earliest timestamp, not the latest line, decides stale"
+
+# d) omitted --rule-ref uses origin/develop, not HEAD, when their CLAUDE.md history differs
+git -C "$SEATS_REPO" checkout -q -b seats-local-head
+printf '# seats rule local head\n' > "$SEATS_REPO/CLAUDE.md"
+git -C "$SEATS_REPO" add CLAUDE.md
+GIT_AUTHOR_DATE="@1700005000" GIT_COMMITTER_DATE="@1700005000" \
+  git -C "$SEATS_REPO" commit -q -m "docs: local head claude rule"
+SHA_SEATS_HEAD_CLAUDE="$(git -C "$SEATS_REPO" rev-parse HEAD)"
+assert_neq "$SHA_SEATS_HEAD_CLAUDE" "$SHA_SEATS_CLAUDE" "fixture: HEAD CLAUDE.md commit differs from origin/develop"
+run_check --seats "$SEATS_OK" --rule-repo "$SEATS_REPO" --projects-dir "$SEATS_PROJECTS" --host "$LOCAL_HOST" --json
+assert_exit_code "$RC" 0 "seats: omitted --rule-ref still checks origin/develop -> exit 0"
+RULE_REF_V="$(printf '%s' "$OUT" | node -e '
+const d = JSON.parse(require("fs").readFileSync(0, "utf8"));
+const s = d.seats[0];
+process.stdout.write([d.rule_ref, s.rule_ref, s.rule_commit].join("|"));
+')"
+assert_eq "$RULE_REF_V" "origin/develop|origin/develop|${SHA_SEATS_CLAUDE}" \
+  "seats: omitted --rule-ref records origin/develop and that ref's CLAUDE.md commit, not HEAD"
+
+# e) trailing space on sid still finds the transcript
+SEATS_PAD="$TEST_TMP/seats-pad.tsv"
+printf 'local-eff\t%s\tsid-eff \n' "$LOCAL_HOST" > "$SEATS_PAD"
+run_check --seats "$SEATS_PAD" --rule-repo "$SEATS_REPO" --rule-ref origin/develop \
+  --projects-dir "$SEATS_PROJECTS" --host "$LOCAL_HOST" --json
+assert_exit_code "$RC" 0 "seats: sid trailing space still finds the transcript -> exit 0"
+PAD_V="$(printf '%s' "$OUT" | node -e '
+const s = JSON.parse(require("fs").readFileSync(0, "utf8")).seats[0];
+process.stdout.write(s.verdict + "|" + s.reason);
+')"
+assert_eq "$PAD_V" "effective|null" "seats: trimmed sid is effective, not transcript_missing"
+
 finalize_test

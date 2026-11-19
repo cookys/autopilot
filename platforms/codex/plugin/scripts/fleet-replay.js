@@ -288,6 +288,33 @@ function extractTaskIdFromBody(body) {
   return m && m[1] ? m[1].trim() : '';
 }
 
+function firstString(obj, keys) {
+  for (const k of keys) {
+    if (typeof obj[k] === 'string' && obj[k].trim() !== '') return obj[k].trim();
+  }
+  return '';
+}
+
+// Real fleet CLI inbox lines carry id / received_ms and may carry object-valued
+// disposition / reply_to; fold them into the legacy message_id / seen_at / string shape.
+function normalizeInboxMessage(msg) {
+  if (!msg || typeof msg !== 'object') return msg;
+  const out = { ...msg };
+  if (out.message_id == null && out.id != null) out.message_id = out.id;
+  if (typeof msg.received_ms === 'number' && Number.isFinite(msg.received_ms)) {
+    out.seen_at = msg.received_ms;
+  }
+  const d = msg.disposition;
+  if (d && typeof d === 'object') {
+    out.disposition = firstString(d, ['state', 'disposition', 'result', 'status', 'kind', 'value', 'name']);
+  }
+  const r = msg.reply_to;
+  if (r && typeof r === 'object') {
+    out.reply_to = firstString(r, ['id', 'message_id', 'ref']);
+  }
+  return out;
+}
+
 function mapMessageToSwitchboardItem(msg, isOperator = false) {
   const body = extractBody(msg);
   const from = msg && typeof msg.from === 'string' ? msg.from : '';
@@ -441,7 +468,36 @@ function writeJsonl(filePath, rows) {
   fs.writeFileSync(filePath, body ? `${body}\n` : '', 'utf8');
 }
 
+function buildResidueBreakdown(residueRecords) {
+  const groups = new Map();
+  const byKind = {};
+  for (const r of residueRecords) {
+    const kind = r.kind || '(empty)';
+    const from = r.from || '(empty)';
+    const key = `${kind}\u0000${from}`;
+    groups.set(key, (groups.get(key) || 0) + 1);
+    byKind[kind] = (byKind[kind] || 0) + 1;
+  }
+  const sorted = [...groups.entries()]
+    .map(([key, count]) => {
+      const [kind, from] = key.split('\u0000');
+      return { kind, from, count };
+    })
+    .sort((a, b) => b.count - a.count
+      || (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0)
+      || (a.from < b.from ? -1 : a.from > b.from ? 1 : 0));
+  const top = sorted.slice(0, 10);
+  const topSum = top.reduce((n, g) => n + g.count, 0);
+  return {
+    total: residueRecords.length,
+    top_groups: top,
+    other_count: residueRecords.length - topSum,
+    by_kind: byKind,
+  };
+}
+
 function replaySwitchboard(messages, opts = {}) {
+  messages = messages.map(normalizeInboxMessage);
   const operatorPatterns = Array.isArray(opts.operators) ? opts.operators.filter(Boolean) : [];
   const operatorMatchers = buildMatchers(operatorPatterns);
   const member = opts.member || 'pm--claude';
@@ -579,6 +635,7 @@ function replaySwitchboard(messages, opts = {}) {
     by_from_top20: byFromTop20,
     by_rule: byRule,
     wakes_per_hour: wakesPerHour,
+    residue_breakdown: buildResidueBreakdown(residueRecords),
     verdict,
     verdict_line: `verdict=${verdict} residue_ratio_all=${pctStr} (<=10% keep_rules, >15% add_sonnet_fallback, else borderline)`,
     human_check_note: 'Swallowed real decision requests cannot be detected by rules alone; human or engine review of no-action-sample.jsonl and residue-sample.jsonl is required.',
@@ -646,6 +703,7 @@ function renderGuardReviewMarkdown(denySample, allowSample) {
 }
 
 function replayGuard(messages, opts = {}) {
+  messages = messages.map(normalizeInboxMessage);
   const decideFn = typeof opts.decideFn === 'function' ? opts.decideFn : loadGuardDecide();
   const pmMatchers = buildMatchers(opts.pms || []);
   const member = opts.member || 'pm--claude';
@@ -762,6 +820,13 @@ function formatHumanSwitchboard(report) {
     lines.push(`| ${row.from} | ${row.total} | ${row.auto_accept} | ${row.needs_decision} | ${row.no_action} | ${row.residue} |`);
   }
 
+  const rb = report.residue_breakdown;
+  if (rb) {
+    lines.push('', `殘餘分組（kind, from）前 10 名，共 ${rb.total} 筆（其餘 ${rb.other_count}）：`, '| kind | from | count |', '|---|---|---:|');
+    for (const g of rb.top_groups) lines.push(`| ${g.kind} | ${g.from} | ${g.count} |`);
+    lines.push('', `殘餘依 kind：${Object.entries(rb.by_kind).map(([k, n]) => `${k}=${n}`).join(' ') || '(none)'}`);
+  }
+
   lines.push(
     '',
     `切換判定：${report.verdict_line}`,
@@ -853,6 +918,7 @@ module.exports = {
   compileAddressMatcher,
   isPmSender,
   mapMessageToSwitchboardItem,
+  normalizeInboxMessage,
   classOfDecision,
   computeWakesPerHour,
   deterministicSample,

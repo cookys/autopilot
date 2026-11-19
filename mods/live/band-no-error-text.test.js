@@ -170,7 +170,7 @@ const MIN = 60_000
 const step = (i) => ({ at: i, model: 'm', isSubagent: false, ttftMs: 100, decodeMs: 2000, outTokens: 200, tps: 80 })
 const flat = (n) => typeof n === 'string' ? n : Array.isArray(n) ? n.map(flat).join('') : n?.props ? flat(n.props.children) : ''
 
-async function rowOf(cols, { snap = 'full', tasks = 'ok', forecast = 'ok', quotaText = null } = {}) {
+async function rowOf(cols, { snap = 'full', tasks = 'ok', forecast = 'ok', quotaText = null, noTabs = false, forgeRow = false, rowAt = 0 } = {}) {
   const { parseConsole } = await import('./console.ts')
   const { BandBar } = await import('./band.tsx')
   const { speedLabelParts } = await import('./speedview.ts')
@@ -196,9 +196,9 @@ async function rowOf(cols, { snap = 'full', tasks = 'ok', forecast = 'ok', quota
   }
   const forge = speedLabelParts([step(1), step(2), step(3)])
   const quota = quotaText === null ? null : { text: quotaText }
-  const node = BandBar(EL, live, cols, t, { onInfo() {}, onSlot() {}, onTab() {} }, null, forge, true, null, { snap: parsed, tab: 'command', cols }, { segs, width: 40 }, quota, false).node
+  const node = BandBar(EL, live, cols, t, { onInfo() {}, onSlot() {}, onTab() {} }, null, forge, true, null, { snap: parsed, tab: 'command', cols }, { segs, width: 40 }, quota, noTabs, false, forgeRow).node
   const rows = node.props.children.flat().filter(Boolean)
-  return flat(rows[0])
+  return flat(rows[rowAt])
 }
 
 test('(a) missing console snapshot keeps the normal cells and the speed label', async () => {
@@ -224,4 +224,14 @@ test('(c) a quota forecast that is not ok omits the quota segment and the error 
   assert.equal(row.includes('額度無預測來源'), false)
   assert.equal(row.includes('某池'), false)
   assert.equal(row.includes('10%'), false)
+})
+
+// PM G33: with the pane open the band's second row holds the repair command whole, unless that row under the band belongs to forge-stats' summary (forgeRow): then the command is
+// not drawn on the band (it stays in the pane and the info page). Row 1 never carries it either way.
+test('(d) the repair line: drawn on row 2 when the pane is open and a source is bad, absent when forge-stats holds the row', async () => {
+  const repair = 'autopilot status runs --watch'
+  assert.equal((await rowOf(120, { snap: 'null', noTabs: true, rowAt: 1 })).includes(repair), true)
+  assert.equal((await rowOf(120, { snap: 'null', noTabs: true, forgeRow: true, rowAt: 1 })).includes(repair), false)
+  assert.equal((await rowOf(120, { snap: 'null', noTabs: true, forgeRow: true, rowAt: 0 })).includes(repair), false)
+  assert.match(await rowOf(120, { snap: 'null', noTabs: true, forgeRow: true, rowAt: 0 }), /tok\/s/)
 })

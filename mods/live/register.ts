@@ -63,7 +63,7 @@ import { consoleFleetCounts } from './pages/rows'
 import { KEEP_STEPS, petTag, serverToolMs, STEPS_SHAPE, stepRate, validSteps } from './speed'
 import type { Step } from './speed'
 import { COL_GAP, SPEED_ROWS, speedLabelParts, speedView } from './speedview'
-import { FLEET_SUMMARY_V, fleetSummary, fleetView, makeFleetFeed, othersView } from './fleet'
+import { FLEET_SUMMARY_V, fleetSummary, fleetView, makeFleetFeed, othersView, utf8Bytes } from './fleet'
 import type { FleetSummary, FleetTask, FleetView } from './fleet'
 import type { BandPageId, BarTabId, ScrollView } from './tabs'
 import { MAIN_CONTENT_ROWS, SHELL_ROWS, type ShellPlan, cardRows, freshCount, leftItems, leftTitle, newestSeq, parsePanel, parseRoom, progressSegs, shellPlan, usageRows } from './shell'
@@ -130,6 +130,33 @@ function kickFleet($: EngineInterface, nowMs: number): void {
     void $.ui.invalidate('ui.render')
   }, () => {}).catch(() => {})
 }
+// codeforge's forge-stats band is drawn in this session: its heartbeat `<live_base>/codeforge/mod-alive/<sid>.json` (schema codeforge.mod-alive/1, written every 2 s) is this
+// session's, at most FORGE_ALIVE_MS old and says layout `band`. `summaryRow`: it also says `summary_row: true`, the forge-stats that draws the one-line summary on the row
+// under the band (PM G33, TUI guideline 1.1 rule 3). An older one answers a one-row ask with its own speed label, so it is never handed that row (BL-0359).
+// The file is stat'ed before it is read: only a regular file, not itself a symbolic link, at most FORGE_ALIVE_MAX_BYTES; then the text is held to the same bound in UTF-8
+// bytes. A link, a directory, a FIFO or device, a big file or any error is no heartbeat, and the tick goes on. `$.fs` has no lstat and no bounded read, so a file swapped
+// between the stat and the read is held only by the size check after. Read by the tick only, never by a render.
+const FORGE_ALIVE_MS = 10_000
+const FORGE_ALIVE_MAX_BYTES = 4096
+async function forgeBand($: EngineInterface, nowMs: number): Promise<boolean> {
+  try {
+    if (liveBaseSeen === null) return false
+    const sid = await $.session.id()
+    const path = liveBaseSeen + '/codeforge/mod-alive/' + sanitizeSid(sid) + '.json'
+    const st = await $.fs.stat(path)
+    if (st.kind !== 'file' || st.isLink || !(st.size <= FORGE_ALIVE_MAX_BYTES)) return false
+    const text = await $.fs.read(path)
+    if (typeof text !== 'string' || text.length > FORGE_ALIVE_MAX_BYTES || utf8Bytes(text) > FORGE_ALIVE_MAX_BYTES) return false
+    const parsed = parseJson(text)
+    if (!parsed.ok || !isObject(parsed.value)) return false
+    const v = parsed.value
+    const age = typeof v.written_at_ms === 'number' ? nowMs - v.written_at_ms : NaN
+    return v.schema === 'codeforge.mod-alive/1' && v.session_id === sid && v.layout === 'band' && age >= 0 && age < FORGE_ALIVE_MS && v.summary_row === true
+  } catch (_e) {
+    return false
+  }
+}
+let forgeSummaryRow = false // set by the tick from the heartbeat; the band's draw reads it, never the file
 async function fleetFor($: EngineInterface): Promise<FleetView | null> {
   if (paneTab !== 'fleet') return null
   const nowMs = await $.clock.now()
@@ -160,6 +187,7 @@ async function fleetTick($: EngineInterface): Promise<void> {
   // NOT gated by the console mode: the framed pages (現況 · 待決 · 艦隊 · 額度 · 花費 ...) are drawn in every session and read the seat quota row and the console snapshot,
   // so the polls run whether the pane is open or not and whatever .claude/console.json says (pane-poll.test.ts holds this)
   void seatQuota.refresh(argv => $.process.run([...argv], { timeoutMs: SEATS_TIMEOUT_MS }), nowMs).then(ran => { if (ran) void $.ui.invalidate('ui.render') }, () => undefined) // the 現況 page's seat quota row: 60 s cache inside the feed, never awaited by a render
+  forgeSummaryRow = await forgeBand($, nowMs)
   kickFleet($, nowMs) // the band's own fleet segment reads the summary this publishes; the feed's TTL spaces the runs
   await shellTick($, nowMs).catch(() => undefined)
 }
@@ -1688,7 +1716,15 @@ export function registerLive(on: Parameters<Register>[0]): void {
     // the band is two rows: row 2 is the tab row while the pane is closed. With the pane open the pane's own strip is the only tab row on screen (folds A4).
     let paneOpen = false
     if (!legacyTabs || consoleOn) { try { paneOpen = (await $.ui.panes()).some(p => p.id === PANE_ID) } catch (_e) { /* the engine could not list panes: treat the pane as closed */ } }
-    const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge, usageOn, moreTo, con, bandPreset, consoleOn && consoleSnap !== null ? bandQuotaSeg(normalizedPools(consoleSnap), bandNow, t, qSrc) : null, paneOpen, legacyTabs)
+    // No tab open, a row to spare under the band's own two and a forge-stats that draws the summary row (its heartbeat says so): that row goes to the mod below (PM G33, TUI guideline
+    // 1.1 rule 3). Too short a host or too narrow a one drops it first; the band's own rows are never squeezed. A mod that passes it on (the engine's own element comes back)
+    // leaves the band at its own two rows, never a blank one. While it holds the row the repair line is not drawn on the band (it stays in the pane and the ⓘ page).
+    let forgeRow: unknown | null = null
+    if (active === null && forgeSummaryRow && rows >= 3 && columns >= FORGE_BELOW_MIN_COLS) {
+      const answer = await lower(1, columns)
+      if (answer !== undefined && answer !== null && (answer as { type?: string }).type !== 'engine') forgeRow = answer
+    }
+    const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge, usageOn, moreTo, con, bandPreset, consoleOn && consoleSnap !== null ? bandQuotaSeg(normalizedPools(consoleSnap), bandNow, t, qSrc) : null, paneOpen, legacyTabs, forgeRow !== null)
     // The O4 shell: a band tab is open, the host gave 12 rows and the width holds a main window. Anything less keeps the tab-row layout below.
     if (active !== 'decide' || rows < SHELL_ROWS) bandBatch = NO_BATCH // the batch lives while the card view is drawn
     if (active !== null && active !== 'forge' && rows >= SHELL_ROWS && snapshot !== null) {
@@ -1846,7 +1882,8 @@ export function registerLive(on: Parameters<Register>[0]): void {
       content = barContent(el, snapshot, active, columns, t, { onSlot: slot })
     }
     if (active !== 'forge' && rows < 3 + content.length) return bar.node // the two bar rows, the rule and the rows do not fit: the two bar rows alone stay
-    // The fleet counts are on the band's own line (slotFleet). Nothing is handed to the mod below for a second row.
+    // The fleet counts are on the band's own line (slotFleet). The mod below gets the row under the band only through forgeRow (above).
+    if (forgeRow !== null) return stackBand(el, bar.node, [forgeRow])
     if ((content.length === 0 && (active === null || active === 'forge')) || rows < 3) return bar.node // an open tab with no row of its own still draws its rule: the ━ shows which tab is open
     return stackBand(el, bar.node, [BarRule(el, bar.strip, columns, bar.tabsAt, active), ...content])
   })

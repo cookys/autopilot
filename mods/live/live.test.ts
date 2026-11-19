@@ -3434,23 +3434,15 @@ test('fleetcards: a stale mirror, a broken mirror and a missing mirror each say 
 // mod below when that mod's heartbeat says it draws the summary row. The reader is an inline plugin loaded beneath the one under test: it reads the atom with `$.state.get`
 // on the ui.render chain and draws one line, or passes when there is nothing to read.
 const g33Alive = (over: Record<string, unknown> = {}) => j({ schema: 'codeforge.mod-alive/1', session_id: SID_A, written_at_ms: NOW_FRESH - 1000, layout: 'band', summary_row: true, ...over })
-// The reader runs in its own environment (an inline plugin's register sees no test variable): it reports each ask through `$.fs.write('/g33-reader/<maxRows>/<v>')`,
-// which the world records in w.writes.
-const G33_READER = {
-  name: 'forge-reader',
-  tier: 'append' as const,
-  register: ((on: any) => {
-    on('ui.render', { component: 'AbovePrompt' }, async ($: any, e: any, next: any) => {
-      const read = await $.state.get({ plugin: 'autopilot', key: 'fleet' })
-      const value = read.value
-      await $.fs.write('/g33-reader/' + e.props.maxRows + '/' + (value === undefined ? 'none' : value.v), '')
-      if (value === undefined || value.v !== 1) return next(e)
-      const { Text } = $.ui.resolve(e)
-      const t = value.totals
-      const top = value.topStuck
-      return Text({ children: 'FLEET ▲' + t.needYou + ' ✗' + t.failed + ' ⊘' + t.stuck + ' ●' + t.running + ' ⋯' + t.waiting + ' top ' + (top === null ? '-' : top.title + ' (' + top.rule + ')') })
-    })
-  }) as any,
+// The mod below (codeforge's forge-stats) is the world's `lower` hook (what answers the band's next(e)): each ask is recorded as `/g33-reader/<maxRows>/<bodyColumns>` in
+// w.writes, and a one-row ask is answered with a line; any other ask is the engine's own drawing.
+const g33Mod = (w: World) => {
+  w.lower = ($: any, e: any) => {
+    w.writes.push('/g33-reader/' + e.props.maxRows + '/' + e.props.bodyColumns)
+    if (e.props.maxRows !== 1) return { type: 'engine' as const, ref: 0 }
+    const { Text } = $.ui.resolve(e)
+    return Text({ children: 'FORGE-ROW' })
+  }
 }
 // a heartbeat file and its stat (a regular file of its UTF-8 size, unless the test says otherwise)
 const g33Put = (w: World, text: string, stat: Record<string, unknown> = {}) => {
@@ -3470,90 +3462,141 @@ const g33Ran = (on: On) => {
   on('process.run', ($$: any, e: any) => { ran.push((e.argv as string[]).join(' ')); return { value: { exitCode: 0, stdout: g23Tasks(NOW_FRESH), stderr: '' } } })
   return ran
 }
-test('G33a: the tick publishes `autopilot.fleet` and the band draws those counts on its own line; the reader beneath is never asked for a second row (terminal)', { plugins: [G33_READER] }, async ($, on) => {
+// PM G33 (TUI guideline 1.1 rule 3): an alive forge-stats whose heartbeat says `summary_row: true` is handed ONE row under the band's own two; anything else is never asked.
+// The reader beneath records each ask as `<maxRows>/<v>/<bodyColumns>` (v = `none` until the first fleet run has published the atom).
+const g33Tasks = (ran: string[]) => ran.filter(a => a === 'fleet tasks --tree --json')
+const g33Lines = (texts: string[]) => texts.filter(t => t === 'FORGE-ROW').length
+const g33One = (w: World) => g33Asks(w).filter(a => a.startsWith('1/'))
+const REPAIR = 'autopilot status runs --watch'
+test('G33a: an alive forge-stats (summary_row) is asked for exactly one row on the idle band and its row sits under the band; the counts stay on the band line (terminal)', async ($, on) => {
   const ran = g33Ran(on)
   const w = worldEn(on, base())
-  g33Put(w, g33Alive()) // a heartbeat is not what starts the fetch anymore
+  g33Mod(w)
+  g33Put(w, g33Alive())
   await start($, 'terminal')
-  await w.clock.advance(5_000) // one tick: the feed runs although no Fleet tab is open
-  g33Put(w, g33Alive({ written_at_ms: NOW_FRESH + 9_000 }))
+  await w.clock.advance(5_000) // one tick: the heartbeat is read and the feed runs although no Fleet tab is open
+  g33Put(w, g33Alive({ written_at_ms: NOW_FRESH + 9_000 })) // forge-stats rewrites it every 2 s
   await w.clock.advance(5_000) // inside the TTL: no second run
-  expect(ran).toEqual(['fleet tasks --tree --json'])
+  expect(g33Tasks(ran)).toEqual(['fleet tasks --tree --json'])
   const texts = await g33Band($, BAND_PROPS.maxRows, 240)
-  // the fixture: one running row, one waiting row, two stalled
   expect(texts.join('')).toContain('⊘ 2  ● 1  ⋯ 1')
-  expect(texts.some(t => t.startsWith('FLEET'))).toBe(false)
-  expect(g33Asks(w).filter(a => a.startsWith('1/'))).toEqual([])
+  expect(texts.join('')).not.toContain(REPAIR)
+  expect(g33One(w)).toEqual(['1/240'])
   const asked = g33Asks(w).length
+  const plain = await g33Band($, 2, 240) // no room for a row under the band's two: the row is dropped first, not asked
+  expect(g33Asks(w).length).toBe(asked)
+  expect(g33Lines(texts)).toBe(g33Lines(plain) + 1)
   await g33Band($, 1, 240)
-  expect(g33Asks(w).length).toBe(asked) // one row granted or six: the reader is not asked either way
+  expect(g33Asks(w).length).toBe(asked)
 })
-test('G33a: the feed runs with no summary_row heartbeat, and before any run the band has no fleet counts; the reader is never asked (terminal)', { plugins: [G33_READER] }, async ($, on) => {
+test('G33a: with no summary_row (an older forge-stats) the feed runs, the band has no fleet counts before a run, and the reader is never asked for a row (terminal)', async ($, on) => {
   const ran = g33Ran(on)
   const w = worldEn(on, base())
+  g33Mod(w)
   g33Put(w, g33Alive({ summary_row: undefined }))
   await start($, 'terminal')
   expect((await g33Band($, BAND_PROPS.maxRows, 240)).join('')).not.toContain('⋯')
-  expect(g33Asks(w).filter(a => a.startsWith('1/'))).toEqual([])
+  expect(g33One(w)).toEqual([])
   await w.clock.advance(5_000)
-  expect(ran).toEqual(['fleet tasks --tree --json'])
+  expect(g33Tasks(ran)).toEqual(['fleet tasks --tree --json'])
   const texts = await g33Band($, BAND_PROPS.maxRows, 240)
   expect(texts.join('')).toContain('⋯ 1')
-  expect(texts.some(t => t.startsWith('FLEET'))).toBe(false)
-  expect(g33Asks(w).filter(a => a.startsWith('1/'))).toEqual([])
+  expect(g33One(w)).toEqual([])
+  g33Put(w, g33Alive({ summary_row: false }))
+  await w.clock.advance(5_000)
+  await g33Band($, BAND_PROPS.maxRows, 240)
+  expect(g33One(w)).toEqual([])
 })
-test('G33a: a stale, foreign, unreadable or oversized heartbeat does not stop the fetch, and the band stays one row (terminal)', { plugins: [G33_READER] }, async ($, on) => {
+test('G33a: a stale, foreign, absent, unreadable or oversized heartbeat is not alive: the fetch goes on and the reader is never asked for a row (terminal)', async ($, on) => {
   const ran = g33Ran(on)
   const w = worldEn(on, base())
+  g33Mod(w)
   await start($, 'terminal')
+  await w.clock.advance(5_000) // no heartbeat file at all
+  await g33Band($, BAND_PROPS.maxRows, 240)
+  expect(g33One(w)).toEqual([])
   for (const bad of [g33Alive({ written_at_ms: NOW_FRESH - 60_000 }), g33Alive({ session_id: 'sid-other' }), g33Alive({ layout: 'pane' }), g33Alive({ schema: 'codeforge.mod-alive/2' }), '{not json', g33Alive({ pad: 'x'.repeat(5000) })]) {
     g33Put(w, bad)
     await w.clock.advance(5_000)
+    await g33Band($, BAND_PROPS.maxRows, 240)
   }
-  expect(ran).toEqual(['fleet tasks --tree --json']) // the first tick fetches; the later ones are inside the TTL. The file is not the gate.
+  expect(g33Tasks(ran).length).toBeGreaterThan(0) // the feed ran with no good heartbeat: the file is not the gate for it
   const texts = await g33Band($, BAND_PROPS.maxRows, 240)
   expect(texts.join('')).toContain('⊘ 2  ● 1  ⋯ 1')
-  expect(texts.some(t => t.startsWith('FLEET'))).toBe(false)
-  expect(g33Asks(w).filter(a => a.startsWith('1/'))).toEqual([])
+  expect(g33One(w)).toEqual([])
 })
-// C1 U7: in the operator-console mode (.claude/console.json in the session's repo) the band never calls the mod below for its second row: `next(e)` is not called (the reader beneath, which records
-// every ask, hears nothing), and the band's tab row is the console's (指揮 團隊 額度 主機 本席). Without the file the call is the one G33a pins (the negative control).
+test('G33a: a heartbeat that was alive and is not rewritten for more than 10 s takes the row back (terminal)', async ($, on) => {
+  g33Ran(on)
+  const w = worldEn(on, base())
+  g33Mod(w)
+  g33Put(w, g33Alive({ written_at_ms: NOW_FRESH + 4_000 }))
+  await start($, 'terminal')
+  await w.clock.advance(5_000) // written 1 s ago
+  await w.clock.advance(5_000) // let the feed's run settle (the first band draw after it asks)
+  g33Put(w, g33Alive({ written_at_ms: NOW_FRESH + 9_000 }))
+  await w.clock.advance(5_000)
+  const alive = g33Lines(await g33Band($, BAND_PROPS.maxRows, 240))
+  const asked = g33One(w).length
+  expect(asked).toBeGreaterThan(0)
+  expect(alive).toBe(1)
+  await w.clock.advance(5_000) // 6 s since the last write: still alive
+  await w.clock.advance(5_000) // 11 s: stale
+  const texts = await g33Band($, BAND_PROPS.maxRows, 240)
+  expect(g33Lines(texts)).toBe(alive - 1)
+  expect(g33One(w).length).toBe(asked)
+})
+test('G33a: narrow and short hosts drop the forge row first: 80 columns is asked, under FORGE_BELOW_MIN_COLS (26) is not, and the band line is drawn either way (terminal)', async ($, on) => {
+  g33Ran(on)
+  const w = worldEn(on, base())
+  g33Mod(w)
+  g33Put(w, g33Alive())
+  await start($, 'terminal')
+  await w.clock.advance(5_000)
+  g33Put(w, g33Alive({ written_at_ms: NOW_FRESH + 9_000 }))
+  await w.clock.advance(5_000)
+  const t80 = await g33Band($, 6, 80) // 80x24: a band of 6 rows at most
+  expect(g33One(w)).toEqual(['1/80'])
+  const t60 = await g33Band($, 6, 60)
+  expect(g33One(w)).toEqual(['1/80', '1/60'])
+  const t25 = await g33Band($, 6, 25)
+  expect(g33One(w)).toEqual(['1/80', '1/60']) // 25 < 26: not asked
+  expect(g33Lines(t80)).toBe(g33Lines(t25) + 1)
+  expect(g33Lines(t60)).toBe(g33Lines(t25) + 1)
+  expect(t25.length).toBeGreaterThan(0) // the band's own rows are drawn
+})
+// C1 U7 (rewritten to the G33 contract): the operator-console mode no longer withholds the row. An alive forge-stats with summary_row IS asked for one row on the idle band, and the
+// band's tab row is still the console's (現況 待決 艦隊 額度 ...). Without the heartbeat nothing is asked in either mode (the control).
 const CONSOLE_PROGRAM = j({ schema: 'autopilot.console/1', mode: 'program' })
 const consoleFiles = (): Tree => ({ ...base(), [CWD + '/.git/HEAD']: 'ref: refs/heads/x\n', [CWD + '/.claude/console.json']: CONSOLE_PROGRAM })
-test('C1 U7: console mode: an alive forge-stats with summary_row is never asked for the second row (next(e) 0 calls) and the band row carries the console tab names (terminal)', { plugins: [G33_READER] }, async ($, on) => {
+test('C1 U7: console mode: an alive forge-stats with summary_row is asked for one row on the idle band and the band row carries the console tab names (terminal)', async ($, on) => {
   g33Ran(on)
   const w = world(on, consoleFiles())
+  g33Mod(w)
   g33Put(w, g33Alive())
   await start($, 'terminal')
   await w.clock.advance(5_000) // the tick reads the mode and the heartbeat (alive, summary_row true)
   g33Put(w, g33Alive({ written_at_ms: NOW_FRESH + 9_000 }))
   await w.clock.advance(5_000)
   const texts = await g33Band($)
-  const asks = g33Asks(w).filter(a => a.startsWith('1/'))
-  console.log('console mode next(e) asks for the second row: ' + asks.length + ' | band row: ' + texts.join(' ').replace(/\s+/g, ' ').slice(0, 80))
-  expect(asks).toEqual([])
-  expect(texts.some(t => t.startsWith('FLEET'))).toBe(false)
+  const asks = g33One(w)
+  console.log('console mode asks for the row under the band: ' + asks.length + ' | band row: ' + texts.join(' ').replace(/\s+/g, ' ').slice(0, 80))
+  expect(asks).toEqual(['1/120'])
+  expect(g33Lines(texts)).toBe(g33Lines(await g33Band($, 2)) + 1)
   const row = texts.join(' ')
   for (const name of ['現況', '待決', '艦隊', '額度', '派工', '審查', '花費', '殘留']) expect(row.includes(name)).toBe(true)
   for (const old of ['指揮', '團隊', '主機', '本席']) expect(row.includes(old)).toBe(false)
   const flat = texts.join('')
   expect(flat.includes('⊘ 2')).toBe(false) // the console band does not grow a fleet segment on row 1
-  expect(flat.includes('⋯')).toBe(false)
 })
-test('C1 U7 control: without the console config the same fetch draws the counts on the band line and still never asks for a second row (terminal)', { plugins: [G33_READER] }, async ($, on) => {
+test('C1 U7 control: console mode with no heartbeat is never asked for a row (terminal)', async ($, on) => {
   g33Ran(on)
-  const w = world(on, base())
-  g33Put(w, g33Alive())
+  const w = world(on, consoleFiles())
+  g33Mod(w)
   await start($, 'terminal')
   await w.clock.advance(5_000)
-  g33Put(w, g33Alive({ written_at_ms: NOW_FRESH + 9_000 }))
   await w.clock.advance(5_000)
-  const texts = await g33Band($, BAND_PROPS.maxRows, 240)
-  const asks = g33Asks(w).filter(a => a.startsWith('1/'))
-  console.log('non-console mode next(e) asks for the second row: ' + asks.length)
-  expect(asks).toEqual([])
-  expect(texts.some(t => t.startsWith('FLEET'))).toBe(false)
-  expect(texts.join('')).toContain('⊘ 2  ● 1  ⋯ 1')
+  const texts = await g33Band($)
+  expect(g33One(w)).toEqual([])
 })
 // C1 fix: a band tab that is open (barTab) when the console mode turns on must not stay: the strip is highlighted with the console tab, so the body under it has to be the console's too.
 test('C1 fix: a 待決 band tab left open when console.json appears is closed; the band body is the one a fresh console-mode band draws (terminal)', async ($, on) => {
@@ -3762,9 +3805,10 @@ test('C1 U8 KR2 + KR5: the console mode refresh (ticks and a redraw of every pag
   expect(ran.filter(a => RUNNER_ARGV.test(a))).toEqual([])
   expect(unexpectedWrites(w.writes)).toEqual([])
 })
-test('G33a review g1: the heartbeat file is not the gate: a link, a non-file, an oversized body or a stat error still lets the tick fetch once, and no second row is handed over (terminal)', { plugins: [G33_READER] }, async ($, on) => {
+test('G33a review g1: the heartbeat file is not the gate: a link, a non-file, an oversized body or a stat error still lets the tick fetch once, and no second row is handed over (terminal)', async ($, on) => {
   const ran = g33Ran(on)
   const w = worldEn(on, base())
+  g33Mod(w)
   await start($, 'terminal')
   const path = LIVE + '/codeforge/mod-alive/' + SID_A + '.json'
   const at = (ms: number) => g33Alive({ written_at_ms: NOW_FRESH + ms })

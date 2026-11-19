@@ -154,7 +154,7 @@ export function bandQuotaSeg(pools: QuotaPool[] | null, nowMs: number, t: T, sou
   return { text: t('console.command.sum_quota') + ' ' + (w.role === 'broken' ? GLYPHS.state.failed + ' ' : '') + w.pool + ' ' + w.text, color }
 }
 
-export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, t: T, hd: BarHandlers, active: BarTabId | ConsoleTab | BandPageId | null, forge: readonly ForgeSegment[] | null, usage = true, moreTo: BarTabId | null = null, con: (ConsoleNav & { cols: number }) | null = null, preset: { segs: Seg[]; width: number } | null = null, quota: Seg | null = null, noTabs = false, legacyTabs = false): { node: unknown; stripRow: unknown; strip: BarStrip; tabsAt: number } {
+export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, t: T, hd: BarHandlers, active: BarTabId | ConsoleTab | BandPageId | null, forge: readonly ForgeSegment[] | null, usage = true, moreTo: BarTabId | null = null, con: (ConsoleNav & { cols: number }) | null = null, preset: { segs: Seg[]; width: number } | null = null, quota: Seg | null = null, noTabs = false, legacyTabs = false, forgeRow = false): { node: unknown; stripRow: unknown; strip: BarStrip; tabsAt: number } {
   const { Box, Text, Button } = el
   // R4-4: the host may reduce band columns beside an open pane; the terminal's
   // width is not this budget. A visible fleet group always keeps its name.
@@ -197,8 +197,8 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
   // the `[-]` cell): the stale reason and its whole fix command (`autopilot status runs --watch`) are never cut while blank cells are left. M6: the open Button says what it opens.
   if (sourceBad || (!legacyTabs && snap?.state === 'stale')) quota = null
   const leftRoom = legacyTabs && con === null ? columns - (oldStrip as BarStrip).width - 1 - forgeW - moreW : columns - BAND_CLOSE_ROOM - forgeW - moreW - (quota === null ? 0 : displayWidth(quota.text) + 2)
-  // R4-1: the open pane owns navigation; its spare band row holds the repair whole. Row 1 never carries the command.
-  const repairBelow = noTabs && !legacyTabs && (sourceBad || snap?.state === 'stale')
+  // R4-1: the open pane owns navigation; its spare band row holds the repair whole. Row 1 never carries the command. `forgeRow`: that row under the band is forge-stats' summary (PM G33), so the repair is not drawn here.
+  const repairBelow = noTabs && !legacyTabs && !forgeRow && (sourceBad || snap?.state === 'stale')
   const left = bandCells(el, snap, Math.max(1, leftRoom), hd.onInfo, t, hd.onSlot, preset, con !== null && !noTabs ? t('band.open_pane') + ' ' : BAND_INFO_LABEL, legacyTabs, fleetUnknown)
   // the same fitted width as layoutBandLine: segs + ⓘ + speed + ›. The gap is whatever is left before the strip, at least one cell. tabsAt stops before the ›.
   const segW = preset !== null ? preset.segs.reduce((n, s) => n + displayWidth(s.text), 0) : left.width - displayWidth(BAND_INFO_LABEL)

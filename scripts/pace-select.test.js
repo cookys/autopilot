@@ -2996,3 +2996,42 @@ test('behind-pace (2c): behind signal is a yes/no preference only with no propor
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('WARN_ahead demotion: two eligible candidates -> non-ahead picked and ahead candidate annotated', () => {
+  const res = selectEngine({
+    pace: priorityPace([
+      paceRow('agy', 10, 50, { status: 'WARN_ahead', hours_to_reset: 1 }),
+      paceRow('grok', 40, 50, { status: 'ok', hours_to_reset: 2 }),
+    ]),
+    role: 'implementer',
+    checkEndpoint: allEndpointsReady,
+  });
+  assert.equal(res.engine, 'grok');
+  const agyCand = res.candidates.find((c) => c.engine === 'agy');
+  assert.equal(agyCand.basis, 'pace');
+  assert.equal(agyCand.demoted, 'ahead');
+});
+
+test('WARN_ahead demotion: only eligible candidate is WARN_ahead -> still picked', () => {
+  const res = selectEngine({
+    pace: priorityPace([
+      paceRow('agy', 10, 50, { status: 'WARN_ahead', hours_to_reset: 1 }),
+    ]),
+    role: 'implementer',
+    checkEndpoint: allEndpointsReady,
+  });
+  assert.equal(res.engine, 'agy');
+  const agyCand = res.candidates.find((c) => c.engine === 'agy');
+  assert.equal(agyCand.basis, 'pace');
+  assert.equal(agyCand.demoted, 'ahead');
+});
+
+test('WARN_ahead demotion: missing pace file -> unchanged pace_unknown pick', () => {
+  const res = spawnSync('node', [CLI, '--role', 'implementer', '--pace', MISSING_PACE, '--json'], {
+    encoding: 'utf8',
+  });
+  assert.equal(res.status, 3);
+  const parsed = JSON.parse(res.stdout);
+  assert.equal(parsed.engine, null);
+  assert.equal(parsed.reason, 'pace_unknown');
+});

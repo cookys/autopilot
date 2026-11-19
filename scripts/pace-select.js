@@ -65,6 +65,10 @@
  * per day, not quota percent, and is retired automatically when a fresh reading
  * exists. Missing/unreadable audit -> `basis: "none"` and old fallback rules.
  *
+ * Ahead-of-pace demotion: a candidate with a fresh `WARN_ahead` row is demoted
+ * (`basis: "pace"`, `demoted: "ahead"`) and picked only if no non-ahead eligible
+ * candidate exists. Missing or stale pace data causes no demotion.
+ *
  * USAGE:
  *   node scripts/pace-select.js --role <reviewer|implementer|author>
  *     [--pace <pace.v1.json>] [--qualified <qualified.v1.json>]
@@ -92,6 +96,7 @@ const {
   PACE_SCHEMA,
   SEEN_AT_FRESH_MS,
   finiteNum,
+  isAheadPaceStatus,
   isFreshRowForKey,
   isSeenAtFresh,
 } = require('./lib/pace-reading.js');
@@ -714,13 +719,14 @@ function selectEngine({
       continue;
     }
     const low = isLowStatus(row.status);
+    const ahead = reading.status === 'fresh' && isAheadPaceStatus(row.status);
 
     const prev = bestByKey.get(key);
     if (
       !prev
       || compareReadings(reading, prev.reading) < 0
     ) {
-      bestByKey.set(key, { key, entry, reading, low });
+      bestByKey.set(key, { key, entry, reading, low, ahead });
     }
   }
 
@@ -854,6 +860,7 @@ function selectEngine({
         pool: hit.reading.pool,
         slack_pts: hit.reading.slack,
         ...(hit.reading.status === 'stale_recent' ? { status: 'stale_recent' } : {}),
+        ...(hit.ahead ? { basis: 'pace', demoted: 'ahead' } : {}),
         ...behindFields,
       });
       known.push(hit);
@@ -886,6 +893,9 @@ function selectEngine({
   const priorityRank = key => { const i = priorityList.indexOf(key); return i < 0 ? Infinity : i; };
   const statusRank = r => ['schedule_only', 'observed_available'].includes(r.status) ? 2 : Number(r.status === 'stale_recent');
   known.sort((a, b) => {
+    const aAhead = a.ahead === true ? 1 : 0;
+    const bAhead = b.ahead === true ? 1 : 0;
+    if (aAhead !== bAhead) return aAhead - bAhead;
     const aPref = a.preferBehind === true ? 0 : 1;
     const bPref = b.preferBehind === true ? 0 : 1;
     if (aPref !== bPref) return aPref - bPref;

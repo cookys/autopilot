@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0472 -->
+<!-- next-id: BL-0473 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1973,4 +1973,20 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: peer
 - **Effort**: XS
 - **Source**: PM 01M7RP1YE7JDT0N66AM1KY01NK
+- **Pointer**: none
+
+### pii-read-guard 誤擋 16 個舊評測紀錄檔
+- **Id**: BL-0472
+- **Status**: open
+- **Since**: 2026-11-19
+- **Origin**: peer
+- **Reporter**: cookys/aimax395/pm--claude
+- **Report**: 01M7RQPXFZYHEWAER07C3YRFHE
+- **Reply**: none
+- **Problem**: 5e4302c88 的 pii-read-guard 在 repo 內擋下 16 個追蹤檔（docs/plans 下舊評測的 raw log 與 transcript jsonl，命中多為 3 個以上真格式 email 或像手機號碼的數字），代理讀不到這些證據檔，只能改走 safe-inspect。
+- **Impact**: 讀舊評測證據時多一步；全隊推之前要量各線常讀檔（git log、CSV fixture、帶作者 email 的檔）的誤擋率
+- **Trigger**: 全隊推 pii-read-guard 之前
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: PM 01M7RQPX
 - **Pointer**: none

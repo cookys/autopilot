@@ -3,6 +3,7 @@
 # A worker that claims green on a failing command must not be reported done.
 . "$(dirname "$0")/lib.sh"
 
+install_cli_sentinels
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
   AUTOPILOT_PARENT_RUN_ID AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID \
   AUTOPILOT_DISPATCH_DEPTH 2>/dev/null || true
@@ -157,7 +158,7 @@ run_case() {
   local br="$1"; shift
   local prompt="${CASE_PROMPT:-$PROMPT_PLAIN}"
   EXIT=0
-  OUT="$(cd "$SBX" && "$SCRIPT" --branch "$br" --prompt-file "$prompt" --agy-bin "$STUB" "$@" 2>&1)" || EXIT=$?
+  OUT="$(cd "$SBX" && "$SCRIPT" --branch "$br" --prompt-file "$prompt" --agy-bin "$STUB" --runner agy "$@" 2>&1)" || EXIT=$?
   J="$(last_json "$OUT")"
 }
 

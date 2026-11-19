@@ -60,7 +60,7 @@ test('pace-select never returns an exhausted kimi (negative control: available b
   const server = net.createServer(conn => { connections++; conn.destroy(); });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(socket, resolve); });
   let clock = Date.now();
-  const pace = { schema: 'capacity.pace/1', rows: [{ pool: 'kimi', used_pct: 5, expected_pct: 60, stale: false, hours_to_reset: 12 }] };
+  const pace = { schema: 'capacity.pace/1', rows: [{ pool: 'kimi', used_pct: 5, expected_pct: 60, stale: false, seen_at: new Date(clock).toISOString(), hours_to_reset: 12 }] };
   const env = { ...process.env, AUTOPILOT_LIVE_DIR: live, AUTOPILOT_KIMI_BROKER_SOCK: socket,
     AUTOPILOT_TASK_SIZE: 'S', AUTOPILOT_TASK_SCOPE: 'docs/example.md' };
   const roles = loadRoles();

@@ -8,7 +8,7 @@ unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
 export HOME="$TEST_TMP/home" AUTOPILOT_LIVE_DIR="$TEST_TMP/live"
 export ENGINE_CAPABILITY_DIR="$TEST_TMP/capability" AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session"
 export AUTOPILOT_PACE_FILE="$TEST_TMP/pace.json" AUTOPILOT_QUALIFIED_FILE="$TEST_TMP/missing-qualified.json"
-export AUTOPILOT_KIMI_BROKER_WORK_ROOT="$TEST_TMP/shared" AUTOPILOT_KIMI_BROKER_SOCK="$TEST_SHORT_TMP/broker.sock"
+export AUTOPILOT_KIMI_BROKER_WORK_ROOT="$TEST_TMP/shared" AUTOPILOT_KIMI_BROKER_SOCK="$TEST_SHORT_TMP/broker.sock" AUTOPILOT_KIMI_BROKER_AUDIT="$TEST_TMP/missing-audit.tsv"
 export AUTOPILOT_KIMI_GROUP_WRAPPER="$TEST_TMP/group-wrapper" DISPATCH_DETACH=0
 export AUTOPILOT_TMP_LOG_RETENTION_DAYS=0 AUTOPILOT_TASK_SIZE=S AUTOPILOT_TASK_SCOPE=docs/example.md
 mkdir -p "$HOME" "$AUTOPILOT_KIMI_BROKER_WORK_ROOT" "$AUTOPILOT_SESSION_MODE_DIR" "$TEST_TMP/bin" "$TEST_TMP/repo/.claude"
@@ -161,7 +161,7 @@ const jury=admission('scripts/review-jury.js',['runnerFound']);
 const fake=path.join(process.env.HOME,'.kimi-code/bin/kimi');
 fs.mkdirSync(path.dirname(fake),{recursive:true});fs.writeFileSync(fake,'#!/bin/sh\necho invoked >> "'+path.join(root,'local-kimi-invocations')+'"\nexit 99\n',{mode:0o755});
 const now=new Date(),data={schema:'capacity.pace/1',generated_at:now.toISOString(),rows:[{
- pool:'kimi',class:'other',status:'ok',stale:false,used_pct:20,expected_pct:40,hours_to_reset:12,reset_at:new Date(+now+43200000).toISOString()
+ pool:'kimi',class:'other',status:'ok',stale:false,seen_at:now.toISOString(),used_pct:20,expected_pct:40,hours_to_reset:12,reset_at:new Date(+now+43200000).toISOString()
 }]};
 fs.writeFileSync(process.env.AUTOPILOT_PACE_FILE,JSON.stringify(data));
 const select=()=>pace.selectEngine({pace:data,role:'implementer',checkEndpoint:()=>true,env:process.env});

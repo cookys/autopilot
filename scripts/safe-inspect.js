@@ -7,6 +7,9 @@ const fs = require('node:fs');
 const { createHash } = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 
+// Keys and structure stay visible, so personal data (ID, mobile, email, card) inside a key is masked too.
+const { maskPii } = require('../hooks/_shared/secret-patterns.js');
+const maskKey = (key) => maskPii(key).text;
 function mask(value) {
   const text = String(value);
   return `***len=${text.length} sha8=${createHash('sha256').update(text).digest('hex').slice(0, 8)}`;
@@ -23,7 +26,7 @@ function maskObject(value, envList = false) {
   }
   if (value !== null && typeof value === 'object') {
     // fromEntries also preserves keys such as __proto__ as ordinary own properties.
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, maskObject(item, key === 'Env')]));
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [maskKey(key), maskObject(item, key === 'Env')]));
   }
   return mask(value);
 }
@@ -74,7 +77,7 @@ function maskFile(text) {
       const value = m[4].trim();
       const block = YAML_BLOCK.exec(value);
       if (block) yamlBlockIndent = indent.length;
-      return `${m[1]}${m[2]}${m[3]}${value === '' ? '' : block ? block[1] : mask(literal(value))}`;
+      return `${m[1]}${maskKey(m[2])}${m[3]}${value === '' ? '' : block ? block[1] : mask(literal(value))}`;
     }
     m = /^(\s*-\s+)(.*)$/.exec(line);
     if (m) {

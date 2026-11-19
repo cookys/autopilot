@@ -65,10 +65,10 @@ for (const cols of [120, 160]) for (const mode of [false, true]) test(`X4: ${col
   const band = await mountBand($, cols, 30)
   const tree = await band.drawn() as Node
   const summary = text(tree.children?.[0])
-  expect(summary).toContain('✗')
-  expect(summary).toContain('艦隊過期') // W5: identify the stale data class.
-  expect(summary).toContain('12 分') // W5: compact age leaves room for cause and repair.
-  expect(summary).toContain('autopilot status runs --watch')
+  expect(summary).not.toContain('艦隊過期') // row 1 keeps the cells; the stale class is not an error sentence
+  expect(summary).not.toContain('沒有 console')
+  expect(summary).not.toContain('autopilot status runs --watch')
+  if (!mode) expect(summary).toContain('艦隊 ?') // non-console mode draws the fleet cell from the expired tasks source
   expect(displayWidth(summary)).toBeLessThanOrEqual(cols - 4)
   expect(tree.children?.filter(n => n?.type === 'Box').length).toBe(2)
   await band.unmount()
@@ -86,7 +86,8 @@ for (const [cols, rows] of [[120, 30], [160, 40]]) for (const open of [false, tr
     expect(summary).toContain('✗')
     expect(summary).toContain('12 分')
     expect(summary).toContain('watcher 沒有在發佈')
-    expect(open ? text(tree) : summary).toContain('autopilot status runs --watch') // R4-1: open-pane repairs occupy band row 2.
+    if (open) expect(text(tree)).toContain('autopilot status runs --watch') // R4-1: open-pane repairs occupy band row 2
+    else expect(summary).not.toContain('autopilot status runs --watch')
     expect(displayWidth(summary)).toBeLessThanOrEqual(cols - 4)
     expect(walk(tree.children?.[0]).some(n => n.props?.color === PALETTE.broken)).toBe(true)
     expect(tree.children?.filter(n => n?.type === 'Box').length).toBe(2)
@@ -177,7 +178,7 @@ for (const cols of [80, 120, 160]) test(`Z3: page 0 is labelled 鍛 in both shar
 test('X1: each closed-band page button opens its matching framed page and leaves the band at two rows', async ($, on) => {
   const h = host(on)
   await $.session.start({ surface: 'terminal', cwd: REPO })
-  for (const p of PAGES.filter(p => p.id !== 'help')) {
+  for (const p of PAGES.filter(p => p.id !== 'help' && p.id !== 'decide')) { // 待決 is the O4 card shell on the band (live.test.ts 'O4 regression'), not a pane page
     const band = await mountBand($, 120, 30)
     await band.press({ key: p.id === 'forge' ? 'forge' : 'tab:' + p.id })
     expect(h.isOpen(), p.id + ' opens pane').toBe(true)

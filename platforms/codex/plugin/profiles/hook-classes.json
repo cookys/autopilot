@@ -21,6 +21,7 @@
     { "stem": "design-quality", "class": "guidance", "profiles": ["guided"] },
     { "stem": "dispatch-model-guard", "class": "invariant_effect" },
     { "stem": "failure-escalation", "class": "invariant_effect" },
+    { "stem": "fleet-dispatch-class", "class": "invariant_effect" },
     { "stem": "fleet-send-work-order-guard", "class": "invariant_effect" },
     { "stem": "fleet-stop", "class": "invariant_effect" },
     { "stem": "foreman-guard", "class": "invariant_effect" },
@@ -39,6 +40,7 @@
     { "stem": "runs-watch-autostart", "class": "host_only" },
     { "stem": "scheduled-wakeup-guard", "class": "invariant_effect" },
     { "stem": "secret-output-redact", "class": "invariant_effect" },
+    { "stem": "pii-read-guard", "class": "invariant_effect" },
     { "stem": "session-handoff", "class": "invariant_effect" },
     { "stem": "session-start", "class": "host_only" },
     { "stem": "session-summary", "class": "invariant_effect" },
@@ -49,6 +51,7 @@
     { "stem": "suggest-compact", "class": "guidance", "profiles": ["guided"] },
     { "stem": "test-runner", "class": "invariant_effect" },
     { "stem": "unmerged-ship-advisory", "class": "invariant_effect" },
-    { "stem": "version-drift-check", "class": "host_only" }
+    { "stem": "version-drift-check", "class": "host_only" },
+    { "stem": "work-order-adopt", "class": "invariant_effect" }
   ]
 }

@@ -21,6 +21,18 @@
 //                 of the same family, and any other barred family on that endpoint, stay barred.
 //   [core-size]   size is above XS/S (M, L, XL)
 //   [core-dir]    the scope touches a directory the config marks `core`
+//   [core-unset]  effective core_dirs (shipped list union the repo file) is empty, so every scope path
+//                 counts as core. Allowed only when every path matches the shipped core_unset_allow list,
+//                 or is named in New-Files: and does not exist under the repo root yet. A repo file cannot change
+//                 that list. A path allowed only by **/fixtures/**, **/testdata/** or **/__fixtures__/** also needs a basename extension in the shipped core_unset_fixture_exts list (lower-cased); docs/**, doc/** and an absent New-Files path do not, and a repo file cannot change that list. An empty core list must not fail open onto source edits (01M7S88YZPPZKVARP0F2SYMRGS).
+//                 Paths are normalised; `..`, absolute and glob paths never pass.
+//                 A diff path that contains whitespace, or git's quoted `"b/..."` form, never passes.
+//                 A symlink in any existing component of the normalised path never passes.
+//                 Every Scope header and every New-Files header is read and the paths are unioned.
+//                 Diff text is split on CRLF or LF.
+//                 Rename, copy and binary lines are read, and an unparsable or mismatched `diff --git` line never passes.
+//                 Every header field on a line is read.
+//                 Only ENOENT counts as absent.
 //   [novel]       role is plan, design, brainstorm, architecture, plan_review or research, or the task is
 //                 marked novel (env AUTOPILOT_TASK_NOVEL=1, or `Novel: yes` header)
 //   [unknown-size|unknown-role|unknown-scope]  FAIL CLOSED: size, role or scope is missing
@@ -43,13 +55,16 @@
 // Task facts (env wins over header; header = first 8 lines of the brief/spec, `Key: v` alone or as a `| Key: v` field):
 //   size   AUTOPILOT_TASK_SIZE  / `Size: XS|S|M|L|XL`
 //   role   AUTOPILOT_TASK_ROLE  / `Role: <role>`          (a rail may pass its own implied role; a review or novel rail role is a floor that env/header cannot lower)
-//   scope  AUTOPILOT_TASK_SCOPE / `Scope: a, b`  (comma/newline separated paths), plus the `diff --git` paths of any diff file
+//   scope  AUTOPILOT_TASK_SCOPE / every `Scope: a, b` header (comma/newline separated paths, unioned), plus diff paths
+//   new    every `New-Files: a, b` header (same split, unioned). Counts only when effective core_dirs is
+//          empty: a named path that does not exist under the repo root is allowed even if it misses core_unset_allow.
 //   novel  AUTOPILOT_TASK_NOVEL=1 / `Novel: yes`
 //   class  AUTOPILOT_TASK_CLASS / `Task-Class: <value>`   (local served family only; compared case-insensitively)
 // Config: scripts/lib/cn-model-gate-defaults.json (starter lists) extended by <repo>/.claude/cn-model-gate.json
 //   (union of every list; a repo can add entries and cannot remove a starter). Fields: sensitive_paths,
 //   sensitive_repos, core_dirs, novel_roles, review_roles, local_task_classes, local_deny_repos.
-//   review_local_exceptions is read only from the shipped defaults (not unioned). Clock: check(..., { now })
+//   review_local_exceptions, core_unset_allow and core_unset_fixture_exts are read only from the shipped defaults (not unioned).
+//   Clock: check(..., { now })
 //   with an ISO string. An explicit now that does not parse fails closed and is not replaced by the real
 //   clock. When now is omitted, Date.now() is used (no env override).
 // Family inference is stage-write.js familyOfEngine (qoder included). Transcript deny list is
@@ -84,22 +99,58 @@ function headerLines(file) {
 }
 
 function headerValue(files, key) {
-  const re = new RegExp(`(^|\\|)[ \\t]*${key}:[ \\t]*([^|]*)`, 'i');
+  const found = headerValues(files, key);
+  return found.length ? found[0] : '';
+}
+
+// Every matching field on every header line in the first 8 lines of every file. Unioning callers can only add paths.
+function headerValues(files, key) {
+  const re = new RegExp(`(?:^|\\|)[ \\t]*${key}:[ \\t]*([^|]*)`, 'gi');
+  const out = [];
   for (const f of files.filter(Boolean)) {
     for (const l of headerLines(f)) {
-      const m = re.exec(l);
-      if (m) return m[2].trim();
+      for (const m of l.matchAll(re)) out.push(m[1].trim());
     }
   }
-  return '';
+  return out;
+}
+
+// `+++`/`---` path runs to end of line; a tab and anything after it is git's timestamp, not the path.
+// A quoted `"b/..."` form (C-style escapes) is kept quoted so core-unset refuses it instead of decoding.
+// A clean `diff --git a/X b/Y` records both paths. Anything else on that line (quoted form included) is a
+// whitespace sentinel so core-unset refuses it instead of ignoring the line.
+const UNPARSED_DIFF = 'unparsed diff';
+
+function diffPathBody(rest) {
+  const tab = rest.indexOf('\t');
+  if (tab !== -1) rest = rest.slice(0, tab);
+  if (rest === '/dev/null') return '';
+  if (rest.startsWith('"')) return rest;
+  if (rest.startsWith('a/') || rest.startsWith('b/')) rest = rest.slice(2);
+  return rest;
 }
 
 function diffPaths(file) {
   let text;
   try { text = fs.readFileSync(file, 'utf8'); } catch { return []; }
   const out = new Set();
-  for (const m of text.matchAll(/^diff --git a\/(\S+) b\/(\S+)/gm)) { out.add(m[1]); out.add(m[2]); }
-  for (const m of text.matchAll(/^(?:\+\+\+|---) [ab]\/(\S+)/gm)) out.add(m[1]);
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.replace(/\r$/, '');
+    if (line.startsWith('diff --git ')) {
+      const halves = /^a\/(\S+) b\/(\S+)$/.exec(line.slice('diff --git '.length));
+      if (!halves) out.add(UNPARSED_DIFF);
+      else { out.add(halves[1]); out.add(halves[2]); }
+      continue;
+    }
+    const moved = /^(?:rename|copy) (?:from|to) (.*)$/.exec(line);
+    if (moved) { if (moved[1]) out.add(moved[1]); continue; }
+    const binary = /^Binary files a\/(\S+) and b\/(\S+) differ$/.exec(line);
+    if (binary) { out.add(binary[1]); out.add(binary[2]); continue; }
+    const hunk = /^(?:\+\+\+|---) (.*)$/.exec(line);
+    if (!hunk) continue;
+    const body = diffPathBody(hunk[1]);
+    if (body) out.add(body);
+  }
   return [...out];
 }
 
@@ -154,6 +205,106 @@ function loadConfig(root) {
 function shippedReviewExceptions() {
   const raw = loadList(DEFAULTS_PATH).review_local_exceptions;
   return Array.isArray(raw) ? raw : [];
+}
+
+// Shipped defaults only. A repo file is not consulted: an empty core_dirs must not be widened
+// by a repo adding source globs to the allow list (01M7S88YZPPZKVARP0F2SYMRGS).
+function shippedCoreUnsetAllow() {
+  const raw = loadList(DEFAULTS_PATH).core_unset_allow;
+  return Array.isArray(raw) ? raw.map(String) : [];
+}
+
+// Shipped defaults only, same rule as core_unset_allow (01M7S88YZPPZKVARP0F2SYMRGS).
+const CORE_UNSET_FIXTURE_GLOBS = new Set(['**/fixtures/**', '**/testdata/**', '**/__fixtures__/**']);
+
+function shippedCoreUnsetFixtureExts() {
+  const raw = loadList(DEFAULTS_PATH).core_unset_fixture_exts;
+  return new Set(Array.isArray(raw) ? raw.map((e) => String(e).toLowerCase()) : []);
+}
+
+// Extension is the text after the last dot of the basename, lower-cased. No dot, or a
+// leading dot with nothing after it, is no extension.
+function coreUnsetFixtureExt(norm) {
+  const base = norm.split('/').pop();
+  const dot = base.lastIndexOf('.');
+  if (dot <= 0) return '';
+  return base.slice(dot + 1).toLowerCase();
+}
+
+// True when the path is not on the shipped allow list, or is on it only through a fixture
+// directory and the extension is not a shipped data extension. docs/** and doc/** skip the
+// extension rule. The caller still applies the absent New-Files exception.
+function coreUnsetAllowBlocks(norm, allow, exts) {
+  let viaFixture = false;
+  let viaOther = false;
+  for (const g of allow) {
+    if (!coreUnsetGlobRegex(g).test(norm)) continue;
+    if (CORE_UNSET_FIXTURE_GLOBS.has(g)) viaFixture = true;
+    else viaOther = true;
+  }
+  if (viaOther) return false;
+  if (!viaFixture) return true;
+  return !exts.has(coreUnsetFixtureExt(norm));
+}
+
+// core-unset only. Case-sensitive and anchored at the repo root. A leading `**/` still matches
+// any depth (the shipped fixtures / testdata / __fixtures__ entries). Other globs, including
+// `docs/**` and `doc/**`, match only from the first segment. Not matchesAny.
+function coreUnsetGlobRegex(g) {
+  let re = '';
+  let i = 0;
+  if (g.startsWith('**/')) { re += '(?:.*/)?'; i = 3; }
+  for (; i < g.length; i++) {
+    const c = g[i];
+    if (c === '*') {
+      if (g[i + 1] === '*') { re += '.*'; i++; if (g[i + 1] === '/') i++; }
+      else re += '[^/]*';
+    } else if (c === '?') re += '[^/]';
+    else re += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  }
+  return new RegExp(`^${re}$`);
+}
+
+// Strip one leading `./`, then path.posix.normalize. Absolute, `..`, and glob characters never pass.
+function coreUnsetNorm(raw) {
+  let s = String(raw);
+  const absolute = path.posix.isAbsolute(s);
+  if (s.startsWith('./')) s = s.slice(2);
+  const normalised = path.posix.normalize(s);
+  const bad = absolute || /[*?[{]/.test(s) || s.split('/').includes('..') || normalised.split('/').includes('..');
+  return { normalised, bad };
+}
+
+function absentUnderRepoRoot(root, normalised) {
+  const abs = path.resolve(root, normalised);
+  const rel = path.relative(root, abs);
+  if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) return false;
+  try {
+    fs.lstatSync(abs);
+    return false;
+  } catch (e) {
+    return e.code === 'ENOENT';
+  }
+}
+
+// core-unset only. lstat each existing prefix; do not follow a symlink into the target.
+function coreUnsetHasSymlink(root, normalised) {
+  const absRoot = path.resolve(root);
+  let cur = absRoot;
+  for (const part of normalised.split('/')) {
+    if (!part || part === '.') continue;
+    cur = path.join(cur, part);
+    const rel = path.relative(absRoot, cur);
+    if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) return true;
+    let st;
+    try { st = fs.lstatSync(cur); } catch (e) { return e.code !== 'ENOENT'; }
+    if (st.isSymbolicLink()) return true;
+  }
+  return false;
+}
+
+function splitPathList(raw) {
+  return String(raw || '').split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
 }
 
 function instantMs(v) {
@@ -239,11 +390,13 @@ function taskFacts({ files = [], diffFiles = [], role = '', env = process.env })
   const headerRole = String(headerValue(files, 'Role') || '').trim().toLowerCase();
   const railRole = String(role || '').trim().toLowerCase();
   const roleV = envRole || headerRole || railRole;
-  const scopeRaw = String(env.AUTOPILOT_TASK_SCOPE || headerValue(files, 'Scope') || '');
-  const scope = [...new Set([...scopeRaw.split(/[,\n]/).map((s) => s.trim()).filter(Boolean), ...diffFiles.filter(Boolean).flatMap(diffPaths)])];
+  const envScope = String(env.AUTOPILOT_TASK_SCOPE || '');
+  const scopeParts = envScope ? splitPathList(envScope) : headerValues(files, 'Scope').flatMap(splitPathList);
+  const scope = [...new Set([...scopeParts, ...diffFiles.filter(Boolean).flatMap(diffPaths)])];
+  const newFiles = [...new Set(headerValues(files, 'New-Files').flatMap(splitPathList))];
   const novel = String(env.AUTOPILOT_TASK_NOVEL || '') === '1' || /^yes$/i.test(headerValue(files, 'Novel'));
   const taskClass = String(env.AUTOPILOT_TASK_CLASS || headerValue(files, 'Task-Class') || '').trim().toLowerCase();
-  return { size, role: roleV, railRole, headerRole, scope, novel, transcript: isMarked(files, env), taskClass };
+  return { size, role: roleV, railRole, headerRole, scope, newFiles, novel, transcript: isMarked(files, env), taskClass };
 }
 
 // -> { allowed, family, cls?, line? }
@@ -266,7 +419,24 @@ function check(opts = {}) {
     if (!exempt) return block('review-role');
   }
   if (BIG_SIZES.includes(f.size)) return block('core-size');
-  if (f.scope.some((p) => matchesAny(p, cfg.core_dirs))) return block('core-dir');
+  if (cfg.core_dirs.length === 0) {
+    const allow = shippedCoreUnsetAllow();
+    const fixtureExts = shippedCoreUnsetFixtureExts();
+    const news = new Set();
+    for (const n of f.newFiles) {
+      const c = coreUnsetNorm(n);
+      if (!c.bad) news.add(c.normalised);
+    }
+    const unset = f.scope.some((p) => {
+      if (/[\s"]/.test(String(p))) return true;
+      const c = coreUnsetNorm(p);
+      if (c.bad || /[\s"]/.test(c.normalised)) return true;
+      if (coreUnsetHasSymlink(root, c.normalised)) return true;
+      if (!coreUnsetAllowBlocks(c.normalised, allow, fixtureExts)) return false;
+      return !(news.has(c.normalised) && absentUnderRepoRoot(root, c.normalised));
+    });
+    if (unset) return block('core-unset');
+  } else if (f.scope.some((p) => matchesAny(p, cfg.core_dirs))) return block('core-dir');
   if (f.novel || cfg.novel_roles.includes(f.role) || cfg.novel_roles.includes(f.railRole)) return block('novel');
   if (!SMALL_SIZES.includes(f.size)) return block('unknown-size');
   if (!f.role) return block('unknown-role');

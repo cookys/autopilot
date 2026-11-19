@@ -2,7 +2,7 @@
 # test-grok-effort.sh — grok effort clamping (lib/grok-effort.sh) + wiring in the 3 dispatch rails.
 #
 # Unit assertions run everywhere. The live end-to-end probe (which is the ONLY thing that
-# proves the clamp is actually necessary AND sufficient) runs only when the grok CLI is
+# proves the clamp is actually necessary AND sufficient) runs only when AUTOPILOT_GROK_LIVE_PROBE=1 and the grok CLI is
 # present and logged in; otherwise it is SKIPPED loudly, never silently passed.
 set -euo pipefail
 
@@ -106,7 +106,8 @@ fi
 # ---- 4. live probe: read EACH MODEL's live enum and fail if the clamp would emit a rejected level
 # The previous probe only asked the CLI's DEFAULT model, so it stayed green while an explicit
 # `--model grok-4.5` dispatch failed rc=1 on xhigh. Probe the models we actually dispatch.
-if command -v grok >/dev/null 2>&1; then
+# Opt-in (AUTOPILOT_GROK_LIVE_PROBE=1): the probe runs the real grok CLI, which a default suite run must never do.
+if [ "${AUTOPILOT_GROK_LIVE_PROBE:-0}" = 1 ] && command -v grok >/dev/null 2>&1; then
   for model in "" ${AUTOPILOT_GROK_PROBE_MODELS:-grok-4.5 grok-4.7}; do
     label="${model:-<default>}"
     raw_enum="$(timeout 40 grok ${model:+--model "$model"} --effort __autopilot_probe__ -p hi </dev/null 2>&1 | head -3 || true)"
@@ -132,7 +133,7 @@ if command -v grok >/dev/null 2>&1; then
     printf 'test-grok-effort: live probe OK for %s (enum: %s)\n' "$label" "$live_enum"
   done
 else
-  printf 'test-grok-effort: live probe SKIPPED (grok CLI not installed)\n' >&2
+  printf 'test-grok-effort: live probe SKIPPED (opt-in: AUTOPILOT_GROK_LIVE_PROBE=1 with the grok CLI installed)\n' >&2
 fi
 
 printf '%s\n' 'test-grok-effort: PASS'

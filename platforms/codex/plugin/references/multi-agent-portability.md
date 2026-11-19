@@ -379,7 +379,22 @@ tool schemas + goal docs, 2026-06-02 — see the harness-integration direction m
 
 ---
 
-## 8. Related docs
+<a id="fleet-work-order-lanes"></a>
+## 8. Fleet work-order lanes
+
+Enforcement for fleet work orders sits at fleet's `task_result` re-derivation rather than a Claude hook, so non-Claude harness lanes (`codex`, `agy`, `grok`) run plain CLI with no hook parity claimed. For a work-order lane with a write seat, pass an explicit fresh session id `wo-<task id>` (`resolveMarkerWriteTarget` in `scripts/session-mode.js` refuses inherited ids with exit 3 when a rail exported `AUTOPILOT_PARENT_SESSION_ID`, and a cwd-keyed marker collides between concurrent sessions):
+
+1. `node scripts/work-order-adopt.js --task <id> --session-id wo-<id>`; then `node scripts/stage-advance.js --session-id wo-<id> --to <node>` per node.
+2. Plan review (L/XL): `node scripts/dispatch-plan-review.js --repo-root <r> --plan-file <plan> --rubric-file <rubric> --ticket <id> --session-id wo-<id> --generation <n> --manifest-file <m>`; tar `gN.json`, `gN-disp.json`, plan and rubric; `fleet upload <tar> --summary "plan-review <id>"` returns the sha256.
+3. Code review (M+): `node scripts/hetero-review-loop.js collect ...` then `finalize ...`; tar the resulting `review-<phase>/` dir; `fleet upload` it.
+4. Merge per `finish-flow` "Merge" (the `QC-Verdict` trailer in the last paragraph); tar `qc-runs/<head>.json` from the git common dir; `fleet upload` it.
+5. `node scripts/fleet-flow-verify.js ... --receipts <local dir>` (preflight; fix what it refuses), then `task_result` with the `Receipt:` lines and the `Used:` line.
+
+`dispatch-author.sh` is a read-only rail (no repo mutation path), so no work-order sequence applies to it; read-only seats and `noncq.js` items do not call `task_result`. Honest limit: a harness that never writes the session marker loses lane-side early refusal, while fleet still refuses at `task_result`.
+
+---
+
+## 9. Related docs
 
 - [`AGENTS.md`](../AGENTS.md) — agents.md-spec readme for any agent
 - [`CLAUDE.md`](../CLAUDE.md) — Claude Code-specific conventions

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Shared rules: hooks/lib/owner-question-rules.js.
 # Test for owner-question-guard.js — Stop hook that checks every reply and repeated Stop.
 # Transcript and live-card fixtures live in TEST_TMP only.
 . "$(dirname "$0")/lib.sh"
@@ -97,21 +98,16 @@ printf '{"owner_question_guard":false}' > "$HOOK_HOME/.autopilot/config.json"
 run_hook owner-question-guard.js "$(payload zh)"
 assert_eq "" "$__RUN_STDOUT" "config false: silent"
 
-# RED at 792347b09: block reason was the relative command "node scripts/open-decision.js open --category goal ..."; stdout lacked the absolute script path, "--question", "--option", "close --id", and "[待決回覆]" (assert_not_contains of "node scripts/open-decision.js" failed on that relative text).
-# Copy-pasteable instruction: absolute open-decision.js path, real flags, close form, panel reply head.
+# Block reason is one example line, not the full open-decision.js usage (exit codes, close form, panel head).
 rm -f "$HOOK_HOME/.autopilot/config.json"
-OPEN_ABS="$(node -e 'process.stdout.write(require("path").join(process.argv[1], "scripts", "open-decision.js"))' "$REPO_ROOT")"
 mk absq '可以強制刪嗎？你說可以我再刪。'
-expect_block absq "absolute open instruction"
-assert_contains "$__RUN_STDOUT" "$OPEN_ABS" "reason has absolute open-decision.js"
-assert_contains "$__RUN_STDOUT" "open" "reason names open"
-assert_contains "$__RUN_STDOUT" "--question" "reason names --question"
-assert_contains "$__RUN_STDOUT" "--option" "reason names --option"
-assert_contains "$__RUN_STDOUT" "--category <money|identity|presence|goal|public-release|unbackable-loss|authority>" "reason names the required --category"
-assert_contains "$__RUN_STDOUT" "沒帶或不在其中 exit 7" "reason says --category is required (exit 7)"
-assert_contains "$__RUN_STDOUT" "close --id" "reason names close --id"
-assert_contains "$__RUN_STDOUT" "[待決回覆]" "reason names panel reply head"
-assert_not_contains "$__RUN_STDOUT" "node scripts/open-decision.js" "reason is not the relative-only command"
+expect_block absq "short open example"
+OPEN_JS="$(cd "$REPO_ROOT" && pwd)/scripts/open-decision.js"
+assert_contains "$__RUN_STDOUT" "node $OPEN_JS open --category <c>" "reason has the absolute open-decision path"
+assert_contains "$__RUN_STDOUT" "--not-authorized <b>" "reason example keeps --not-authorized"
+assert_contains "$__RUN_STDOUT" "只送一則短更正" "reason asks for a short correction"
+assert_not_contains "$__RUN_STDOUT" "沒帶或不在其中 exit 7" "reason omits the usage essay"
+assert_not_contains "$__RUN_STDOUT" "[待決回覆]" "reason omits the panel-reply essay"
 mk nowait '已完成清理，沒有要你決定的事。'
 expect_pass nowait "reply without a wait phrase emits nothing"
 

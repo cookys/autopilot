@@ -1,0 +1,264 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/fleet-flow.schema.json",
+  "title": "fleet-flow",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "autopilot_version",
+    "bump_limits",
+    "coarse_of_node",
+    "evidence",
+    "export_sha256",
+    "graph_schema",
+    "loop_backs",
+    "schema",
+    "sizes",
+    "source_sha256"
+  ],
+  "properties": {
+    "schema": { "const": "autopilot.fleet-flow/1" },
+    "graph_schema": { "const": "autopilot.stage-graph/1" },
+    "autopilot_version": { "type": "string", "minLength": 1 },
+    "source_sha256": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence", "exporter", "stage_advance", "stage_graph"],
+      "properties": {
+        "stage_graph": { "$ref": "#/$defs/sha256" },
+        "evidence": { "$ref": "#/$defs/sha256" },
+        "stage_advance": { "$ref": "#/$defs/sha256" },
+        "exporter": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "export_sha256": { "$ref": "#/$defs/sha256" },
+    "sizes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["L", "M", "S", "XL", "XS"],
+      "properties": {
+        "XS": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/walk_variant" } },
+        "S": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/walk_variant" } },
+        "M": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/walk_variant" } },
+        "L": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/walk_variant" } },
+        "XL": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/walk_variant" } }
+      }
+    },
+    "loop_backs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from", "to"],
+        "properties": {
+          "from": { "$ref": "#/$defs/node_id" },
+          "to": { "$ref": "#/$defs/node_id" },
+          "except_urgency": {
+            "type": "array",
+            "items": { "enum": ["urgent-low"] }
+          }
+        }
+      }
+    },
+    "bump_limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["L", "M", "S", "XL", "XS"],
+      "properties": {
+        "XS": { "$ref": "#/$defs/limit" },
+        "S": { "$ref": "#/$defs/limit" },
+        "M": { "$ref": "#/$defs/limit" },
+        "L": { "$ref": "#/$defs/limit" },
+        "XL": { "$ref": "#/$defs/limit" }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/evidence_row" }
+    },
+    "coarse_of_node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code-review",
+        "diagnose",
+        "explore",
+        "finish",
+        "implement",
+        "intent",
+        "plan",
+        "plan-review",
+        "proposal",
+        "qc-gate",
+        "research",
+        "verify"
+      ],
+      "properties": {
+        "explore": { "$ref": "#/$defs/coarse_stage" },
+        "intent": { "$ref": "#/$defs/coarse_stage" },
+        "diagnose": { "$ref": "#/$defs/coarse_stage" },
+        "research": { "$ref": "#/$defs/coarse_stage" },
+        "proposal": { "$ref": "#/$defs/coarse_stage" },
+        "plan": { "$ref": "#/$defs/coarse_stage" },
+        "plan-review": { "$ref": "#/$defs/coarse_stage" },
+        "implement": { "$ref": "#/$defs/coarse_stage" },
+        "verify": { "$ref": "#/$defs/coarse_stage" },
+        "code-review": { "$ref": "#/$defs/coarse_stage" },
+        "qc-gate": { "$ref": "#/$defs/coarse_stage" },
+        "finish": { "$ref": "#/$defs/coarse_stage" }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "node_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z-]*$"
+    },
+    "coarse_stage": {
+      "enum": ["explore", "plan", "build", "review", "merged", "shipped", "used"]
+    },
+    "walk_variant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bug",
+        "entry",
+        "explore",
+        "nodes",
+        "research",
+        "terminal",
+        "unit_kind",
+        "urgent",
+        "urgent_low",
+        "walk"
+      ],
+      "properties": {
+        "bug": { "type": "boolean" },
+        "urgent": { "type": "boolean" },
+        "explore": { "type": "boolean" },
+        "research": { "type": "boolean" },
+        "urgent_low": { "type": "boolean" },
+        "nodes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/node_id" }
+        },
+        "walk": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/node_id" }
+        },
+        "entry": { "$ref": "#/$defs/node_id" },
+        "terminal": { "$ref": "#/$defs/node_id" },
+        "unit_kind": { "enum": ["phase", "deliverable", null] }
+      }
+    },
+    "limit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["files", "lines"],
+      "properties": {
+        "files": { "type": ["integer", "null"], "minimum": 0 },
+        "lines": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "evidence_row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["codes", "derivation_id", "event", "sizes"],
+      "properties": {
+        "event": { "type": "string", "minLength": 1 },
+        "sizes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["XS", "S", "M", "L", "XL"] }
+        },
+        "derivation_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "codes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          }
+        },
+        "urgent_low_timing": {
+          "enum": ["after_finish"]
+        },
+        "urgent_low_codes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          }
+        }
+      }
+    },
+    "evidence_input_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["codes", "derivation_id", "event"],
+      "oneOf": [
+        { "required": ["sizes"] },
+        { "required": ["sizes_from_node"] }
+      ],
+      "properties": {
+        "event": { "type": "string", "minLength": 1 },
+        "sizes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["XS", "S", "M", "L", "XL"] }
+        },
+        "sizes_from_node": { "$ref": "#/$defs/node_id" },
+        "derivation_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "codes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          }
+        },
+        "urgent_low_timing": {
+          "enum": ["after_finish"]
+        },
+        "urgent_low_codes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          }
+        }
+      }
+    },
+    "evidence_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rules", "schema"],
+      "properties": {
+        "schema": { "const": "autopilot.fleet-flow-evidence/1" },
+        "rules": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/evidence_input_rule" }
+        }
+      }
+    }
+  }
+}

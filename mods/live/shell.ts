@@ -19,9 +19,15 @@ export function bandTier(bodyColumns: number): Tier {
 export const SHELL_ROWS = 12 // menu row, top frame, BODY_ROWS body rows, bottom frame, quick row (ux-v7: the progress row moved inside the main window)
 export const BODY_ROWS = 8 // the main window's last two rows are the divider ├─┤ and the progress row; the six above are its content
 export const MAIN_CONTENT_ROWS = BODY_ROWS - 2
-export const LEFT_COLS = 26
+export const LEFT_COLS = 26 // the left FRAME spans columns 0–25; the drawn inner text is two cells narrower so a gap can sit at column 26
 export const MAIN_MAX = 76
 export const MAIN_MIN = 30
+export const SHELL_MENUS = ['d', 'r', 'u', 'p', 'h'] as const
+export type ShellMenuId = typeof SHELL_MENUS[number]
+export function nextShellMenu(id: ShellMenuId): ShellMenuId {
+  const at = SHELL_MENUS.indexOf(id)
+  return SHELL_MENUS[(at + 1) % SHELL_MENUS.length]
+}
 export type ColId = 'roomUsage' | 'room' | 'usage' | 'fleet'
 export type RightCol = { id: ColId; inner: number }
 const RIGHT: Record<Tier, readonly RightCol[]> = {
@@ -232,32 +238,34 @@ export type ShellInput = {
   footMain?: string // right-aligned in the bottom frame of the main window (the one-line hint)
   noRight?: boolean // the card view: no right-hand columns, the main window is as wide as the band allows (shellGeometry)
   bodyRows?: number // the frame's body rows when the content grows up past BODY_ROWS (the card view); right-hand columns are only drawn at BODY_ROWS
-  awaiting?: number // answered cards still waiting for the operator's own step (status awaiting_operator_action); drawn in the main window's title at tier 80 only, and only when above 0
+  awaiting?: number // the count is drawn on the top menu row (band.tsx), not in a window title
 }
 export type ShellColumn = { id: ColId; inner: number; rows: Seg[][] } // BODY_ROWS rows, each padded to exactly `inner` cells
-export type ShellPlan = { geo: Geometry; bodyRows: number; top: Seg[]; bottom: Seg[]; verts: Seg[]; columns: ShellColumn[]; divider: { left: Seg; right: Seg; rule: Seg } }
+export type ShellPlan = { geo: Geometry; bodyRows: number; top: Seg[]; bottom: Seg[]; verts: Seg[]; columns: ShellColumn[]; divider: { left: Seg; right: Seg; rule: Seg }; separate: boolean; leftInner: number }
 
 const border = (role: 'here' | 'idle'): Partial<Seg> => ({ color: PALETTE[role] })
-function frameRow(kind: 'top' | 'bottom', widths: readonly number[], titles: readonly Seg[][]): Seg[] {
+function frameRow(kind: 'top' | 'bottom', widths: readonly number[], titles: readonly Seg[][], separate = false): Seg[] {
   const f = GLYPHS.structure
   const [l, r, mid] = kind === 'top' ? [f.frameTL, f.frameTR, f.frameDown] : [f.frameBL, f.frameBR, f.frameUp]
   const MAIN = 1
   const out: Seg[] = []
   widths.forEach((w, i) => {
-    out.push({ text: i === 0 ? l : mid, ...border(i === MAIN || i - 1 === MAIN ? 'here' : 'idle') })
+    const edge = border(i === MAIN ? 'here' : 'idle')
+    if (separate) {
+      if (i > 0) out.push({ text: ' ' })
+      out.push({ text: l, ...edge })
+    } else out.push({ text: i === 0 ? l : mid, ...border(i === MAIN || i - 1 === MAIN ? 'here' : 'idle') })
     const style = border(i === MAIN ? 'here' : 'idle')
+    const title = clipSegs(titles[i] ?? [], Math.max(0, w - 4))
     if (kind === 'bottom') {
       // a foot title sits at the right end: `───── 3/8 ─`
-      const title = clipSegs(titles[i] ?? [], Math.max(0, w - 4))
-      if (title.length === 0) { out.push({ text: f.rule.repeat(w), ...style }); return }
-      out.push({ text: f.rule.repeat(Math.max(0, w - 3 - segWidth(title))) + ' ', ...style }, ...title, { text: ' ' + f.rule, ...style })
-      return
-    }
-    const title = clipSegs(titles[i] ?? [], Math.max(0, w - 4))
-    if (title.length === 0) { out.push({ text: f.rule.repeat(w), ...style }); return }
-    out.push({ text: f.rule + ' ', ...style }, ...title, { text: ' ' + f.rule.repeat(Math.max(0, w - 3 - segWidth(title))), ...style })
+      if (title.length === 0) out.push({ text: f.rule.repeat(w), ...style })
+      else out.push({ text: f.rule.repeat(Math.max(0, w - 3 - segWidth(title))) + ' ', ...style }, ...title, { text: ' ' + f.rule, ...style })
+    } else if (title.length === 0) out.push({ text: f.rule.repeat(w), ...style })
+    else out.push({ text: f.rule + ' ', ...style }, ...title, { text: ' ' + f.rule.repeat(Math.max(0, w - 3 - segWidth(title))), ...style })
+    if (separate) out.push({ text: r, ...edge })
   })
-  out.push({ text: r, ...border(widths.length - 1 === MAIN ? 'here' : 'idle') })
+  if (!separate) out.push({ text: r, ...border(widths.length - 1 === MAIN ? 'here' : 'idle') })
   return out
 }
 
@@ -300,9 +308,10 @@ export function shellPlan(inp: ShellInput): ShellPlan | null {
     else if (!foot) spec = [spec[0], { id: 'usage', inner: spec[1].inner + spec[2].inner + 1 }]
   }
 
-  // tier 80 has no right-hand column to carry it, so the count rides in the main window's title; 0 draws nothing (the same as the roundtable's fresh mark)
-  const awaitingTitle: Seg[] = geo.tier === 80 && (inp.awaiting ?? 0) > 0 ? [{ text: ' · ' }, { text: t('shell.awaiting', { n: inp.awaiting as number }), color: PALETTE.attention }] : []
-  const titles: Seg[][] = [[{ text: inp.menuTitle }], [{ text: inp.mainTitle }, ...awaitingTitle]]
+  // 「待你動手 N」is the top menu row's (band.tsx), at every tier. A window title never carries it.
+  const separate = inp.noRight === true
+  const leftInner = separate ? geo.left - 2 : geo.left
+  const titles: Seg[][] = [[{ text: inp.menuTitle }], [{ text: inp.mainTitle }]]
   const columns: ShellColumn[] = []
   spec.forEach((c, idx) => {
     const lead1 = idx === 0 ? lead : null
@@ -328,14 +337,14 @@ export function shellPlan(inp: ShellInput): ShellPlan | null {
     }
   })
 
-  const widths = [geo.left, geo.main, ...columns.map(c => c.inner)]
+  const widths = [leftInner, geo.main, ...columns.map(c => c.inner)]
   const v = GLYPHS.structure.bandSep
   const verts = widths.concat([0]).map((_w, i) => ({ text: v, ...border(i === 1 || i === 2 ? 'here' : 'idle') }) as Seg)
   const f = GLYPHS.structure
   const divider = { left: { text: f.frameLeftT, ...border('here') } as Seg, right: { text: f.frameRightT, ...border('here') } as Seg, rule: { text: f.rule.repeat(geo.main), color: PALETTE.structure } as Seg }
   const foot = (text: string | undefined): Seg[] => (text === undefined || text === '' ? [] : [{ text }])
   const bottomTitles: Seg[][] = [foot(inp.footLeft), foot(inp.footMain)]
-  return { geo, bodyRows, top: frameRow('top', widths, titles), bottom: frameRow('bottom', widths, bottomTitles), verts, columns, divider }
+  return { geo, bodyRows, top: frameRow('top', widths, titles, separate), bottom: frameRow('bottom', widths, bottomTitles, separate), verts, columns, divider, separate, leftInner }
 }
 
 // the marks band.tsx draws (it sets no colour of its own): a picked option's ◆ and the `│` between the quick row's slots

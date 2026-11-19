@@ -439,30 +439,41 @@ test('left title: a card list is titled with the open tab\'s name, a tab list wi
   assert.ok(!top.includes('shell.menu'))
 })
 
-// ---- awaiting_operator_action count (bandawait): tier 80 only, in the main window's title, attention colour, nothing at 0 ----
-test('awaiting: tier 80 shows the count in the main title for N=1 and N>=2; N=0 and absent draw nothing', () => {
+// ---- awaiting_operator_action count (bandawait): the menu row owns it (band.tsx). No window title carries it, at any tier, including 0 and absent. ----
+test('awaiting: the count is not in a window title at tier 80 for N=1, N>=2, N=0 or absent', () => {
   const top = (cols, over) => S.shellPlan(input(cols, over)).top
-  const one = top(80, { awaiting: 1 })
-  assert.ok(segText(one).includes('main · shell.awaiting{"n":1}'), segText(one))
-  const many = top(80, { awaiting: 3 })
-  assert.ok(segText(many).includes('shell.awaiting{"n":3}'), segText(many))
-  for (const over of [{ awaiting: 0 }, {}]) assert.ok(!segText(top(80, over)).includes('shell.awaiting'), JSON.stringify(over))
+  for (const over of [{ awaiting: 1 }, { awaiting: 3 }, { awaiting: 0 }, {}]) assert.ok(!segText(top(80, over)).includes('shell.awaiting'), JSON.stringify(over))
+  assert.deepEqual(top(80, { awaiting: 1 }), top(80, {}))
 })
 
-test('awaiting: exactly 80 columns - plan exists, the title row keeps the frame width, the count is a PALETTE.attention text colour only', () => {
+test('awaiting: exactly 80 columns - plan exists, the title row keeps the frame width, and the title has no attention count', () => {
   const p = S.shellPlan(input(80, { awaiting: 2 }))
   assert.equal(p.geo.tier, 80)
   assert.equal(width(p.top), planWidth(p))
   assert.ok(width(p.top) <= 80)
-  const seg = p.top.find(s => s.text.includes('shell.awaiting'))
-  assert.equal(seg.color, ui.PALETTE.attention)
-  for (const k of ['backgroundColor', 'inverse', 'bold']) assert.equal(seg[k], undefined, k)
+  assert.equal(p.top.find(s => s.text.includes('shell.awaiting')), undefined)
+  assert.equal(p.separate, false)
+  assert.equal(p.leftInner, 26)
 })
 
 test('awaiting: the other tiers are untouched, whatever the count', () => {
   for (const cols of [115, 120, 160, 200, 240]) {
     assert.deepEqual(S.shellPlan(input(cols, { awaiting: 5 })).top, S.shellPlan(input(cols)).top, 'tier at ' + cols)
   }
+})
+
+test('card view frames are separate: left inner is 24, a one-cell gap, main border would start at column 27', () => {
+  const p = S.shellPlan(input(75, { noRight: true }))
+  assert.equal(p.separate, true)
+  assert.equal(p.leftInner, 24)
+  assert.equal(p.geo.left, 26)
+  assert.equal(width(p.top), 75)
+  assert.ok(!segText(p.top).includes('┬'))
+  const text = segText(p.top)
+  assert.equal(text[0], '╭')
+  assert.equal(text[25], '╮')
+  assert.equal(text[26], ' ')
+  assert.equal(text[27], '╭')
 })
 
 // ---- bandawait: the model.json half of the data -> screen chain (the drawn half is live.test.ts "bandawait e2e") ----

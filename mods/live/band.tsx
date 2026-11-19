@@ -6,8 +6,8 @@
 import { T_EN } from './i18n'
 import type { T } from './i18n'
 import { BAND_INFO_LABEL, BAND_SEP, displayWidth, fittedBandWidth, hhmm, layoutBand, plainBandText, slotFleet } from './model'
-import { PICK_MARK, QUICK_SEP } from './shell'
-import type { LeftItem, ShellPlan } from './shell'
+import { PICK_MARK, QUICK_SEP, SHELL_MENUS } from './shell'
+import type { LeftItem, ShellMenuId, ShellPlan } from './shell'
 import type { DecideState, LiveSnapshot, PaneLine, PaneTab, Seg, SlotId } from './model'
 import { actionSeg, cardParas, dimProps, drawSeg, forgeBar, GLYPHS, moreSeg, PALETTE, wrapPlain } from './ui'
 import { fixedWindow, followsTail, thumbOf } from './scrollmath'
@@ -36,7 +36,7 @@ export function stackBand(el: { Box: El }, band: unknown, below: unknown) {
   return <Box flexDirection="column" justifyContent="flex-end">{below}{band}</Box>
 }
 
-// bandlayout: rows drawn top to bottom, ending in quick controls and the menu row. The tree is never taller than the band: a host that gets more
+// bandlayout: rows drawn top to bottom, menu row first and the quick row last (ux-v7). The tree is never taller than the band: a host that gets more
 // than maxRows rows opens a window of its own and hides the last row (the quick row) behind a "n more" line, so there is no spare row here.
 export function stackRows(el: { Box: El }, rows: unknown[]) {
   const { Box } = el
@@ -306,10 +306,10 @@ export type ShellDraw = {
   plan: ShellPlan
   left: LeftItem[]
   onLeft: (id: string) => void
-  main: unknown[] // the main window's content rows, at most plan.bodyRows - 2; the divider and the progress row below them are drawn here
+  main: unknown[] // the main window's content rows, top-aligned, at most plan.bodyRows - 2; the divider and the progress row below them are drawn here
   progress: unknown // the progress row's content (one Box), inside the main window
   quick: unknown[]
-  bar: unknown // the menu row (BandBar), always last, directly below the quick controls
+  bar: unknown // the menu row, always first (ux-v7). The quick row is always last.
 }
 export function Shell(el: { Box: El; Text: El; Button?: El }, d: ShellDraw): unknown[] {
   const { Box, Text, Button } = el
@@ -320,9 +320,11 @@ export function Shell(el: { Box: El; Text: El; Button?: El }, d: ShellDraw): unk
     return <Text key={'v' + i} {...drawSeg(seg)}>{seg.text}</Text>
   }
   const blank = (k: string) => <Text key={k}>{' '}</Text>
-  const rows: unknown[] = [<Box key="top">{segsOf(plan.top, 't')}</Box>]
+  const rows: unknown[] = [<Box key="menu">{d.bar}</Box>]
+  rows.push(<Box key="top">{segsOf(plan.top, 't')}</Box>)
   const body = plan.bodyRows
   const content = body - 2
+  const S = GLYPHS.structure
   for (let r = 0; r < body; r++) {
     const item = d.left[r]
     const divider = r === content
@@ -331,24 +333,83 @@ export function Shell(el: { Box: El; Text: El; Button?: El }, d: ShellDraw): unk
       : Button === undefined
         ? <Box key="l">{segsOf(item.segs, 'l')}</Box>
         : <Button key={item.key} plain onPress={() => d.onLeft(item.id)}>{segsOf(item.segs, 'l')}</Button>
-    const mainAt = r - Math.max(0, content - d.main.length)
-    const mainCell = divider ? <Text key="div" {...drawSeg(plan.divider.rule)}>{plan.divider.rule.text}</Text> : r > content ? d.progress : d.main[mainAt] ?? blank('m')
-    const cells = [
-      vert(0, false),
-      <Box key="lc" width={plan.geo.left} flexShrink={0}>{leftCell}</Box>,
-      vert(1, divider),
-      <Box key="mc" width={plan.geo.main} flexShrink={0}>{mainCell}</Box>,
-    ]
-    plan.columns.forEach((c, i) => {
-      cells.push(vert(2 + i, divider && i === 0), <Box key={'c' + i} width={c.inner} flexShrink={0}>{segsOf(c.rows[r] ?? [], 'c' + i + '-')}</Box>)
-    })
-    cells.push(vert(2 + plan.columns.length, divider && plan.columns.length === 0))
+    const mainCell = divider ? <Text key="div" {...drawSeg(plan.divider.rule)}>{plan.divider.rule.text}</Text> : r > content ? d.progress : d.main[r] ?? blank('m')
+    const cells: unknown[] = []
+    if (plan.separate) {
+      const edge = (k: string, here: boolean, ch: string) => <Text key={k} color={here ? PALETTE.here : PALETTE.idle}>{ch}</Text>
+      cells.push(
+        edge('v0', false, S.bandSep),
+        <Box key="lc" width={plan.leftInner} flexShrink={0}>{leftCell}</Box>,
+        edge('v1', false, S.bandSep),
+        <Text key="gap">{' '}</Text>,
+        edge('v2', true, divider ? S.frameLeftT : S.bandSep),
+        <Box key="mc" width={plan.geo.main} flexShrink={0}>{mainCell}</Box>,
+        edge('v3', true, divider ? S.frameRightT : S.bandSep),
+      )
+    } else {
+      cells.push(
+        vert(0, false),
+        <Box key="lc" width={plan.geo.left} flexShrink={0}>{leftCell}</Box>,
+        vert(1, divider),
+        <Box key="mc" width={plan.geo.main} flexShrink={0}>{mainCell}</Box>,
+      )
+      plan.columns.forEach((c, i) => {
+        cells.push(vert(2 + i, divider && i === 0), <Box key={'c' + i} width={c.inner} flexShrink={0}>{segsOf(c.rows[r] ?? [], 'c' + i + '-')}</Box>)
+      })
+      cells.push(vert(2 + plan.columns.length, divider && plan.columns.length === 0))
+    }
     rows.push(<Box key={'row' + r}>{cells}</Box>)
   }
   rows.push(<Box key="bottom">{segsOf(plan.bottom, 'b')}</Box>)
   rows.push(<Box key="quick"><Text>{' '}</Text>{d.quick}</Box>)
-  rows.push(<Box key="menu">{d.bar}</Box>)
   return rows
+}
+
+// The top menu row (ux-v7 §1). The host draws a letter hotkey as `k: ` in front of the label, so the label is the words
+// and the Box is as wide as that prefix plus the words. ▾ sits on the selected menu. ▲N stays on 待決. 待你動手 is the tail.
+export type MenuRowSpec = { selected: ShellMenuId; pending: number; room: number; awaiting: number; columns: number; onSelect: (id: ShellMenuId) => void }
+export function shellMenuRow(el: { Box: El; Text: El; Button?: El }, t: T, spec: MenuRowSpec): unknown {
+  const { Box, Text, Button } = el
+  const word = (id: ShellMenuId): string => {
+    const base = id === 'd' ? t('tab.decide') + ' ' + GLYPHS.state.need_you + spec.pending
+      : id === 'r' ? t('shell.room') + ' ' + spec.room
+      : id === 'u' ? t('shell.usage')
+      : id === 'p' ? t('tab.pet')
+      : t('shell.help')
+    return spec.selected === id ? base + ' ' + GLYPHS.structure.open : base
+  }
+  const items = SHELL_MENUS.map(id => {
+    const label = word(id)
+    const hotkey = id
+    const shown = hotkey + ': ' + label
+    const key = id === 'd' ? 'tab:decide' : 'menu:' + id
+    return { id, label, hotkey, shown, key, width: displayWidth(shown) }
+  })
+  const tail = spec.awaiting > 0 ? t('shell.awaiting', { n: spec.awaiting }) : ''
+  let gaps = [1, 3, 5, 5, 5]
+  const hostWidth = (): number => displayWidth(gaps.map((g, i) => ' '.repeat(g)).join('')) + items.reduce((n, it) => n + it.width, 0) + (tail === '' ? 0 : 2 + displayWidth(tail))
+  // gaps[0] is the leading space; the rest sit between items. Shrink from the right until the row fits.
+  while (hostWidth() > spec.columns) {
+    const at = gaps.map((g, i) => (i > 0 && g > 1 ? i : -1)).filter(i => i >= 0).pop()
+    if (at === undefined) { if (gaps[0] > 0) gaps[0] -= 1; else break }
+    else gaps[at] -= 1
+  }
+  const kids: unknown[] = []
+  items.forEach((it, i) => {
+    if (gaps[i] > 0) kids.push(<Text key={'g' + i}>{' '.repeat(gaps[i])}</Text>)
+    const btn = Button === undefined
+      ? <Text key="b">{it.shown}</Text>
+      : <Button key={it.key} hotkey={it.hotkey} plain onPress={() => spec.onSelect(it.id)}>{it.label}</Button>
+    kids.push(<Box key={it.id} width={it.width} flexShrink={0}>{btn}</Box>)
+  })
+  if (tail !== '') kids.push(<Text key="await" color={PALETTE.attention}>{'  ' + tail}</Text>)
+  return <Box key="shellmenu">{kids}</Box>
+}
+
+// one plain line in the main window (the pet placeholder, the help line, an empty 待決)
+export function shellNote(el: { Box: El; Text: El }, text: string): unknown[] {
+  const { Box, Text } = el
+  return [<Box key="note"><Text wrap="truncate">{' ' + text}</Text></Box>]
 }
 
 // ---- the card view (ux-v7, bandlayout): the main window of the 待決 tab shows ONE card, every word of it. The rows below are all of the card, wrapped and never cut; the caller (register.ts) shows
@@ -406,32 +467,74 @@ export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t:
       line(id + i, ' '.repeat(p.indent) + p.row, dimmed, head)
     })
   }
-  if (v.background !== null) block('bg', keys[0], v.background, true)
+  let bgLines = 0
+  if (v.background !== null) {
+    const before = rows.length
+    block('bg', keys[0], v.background, true)
+    bgLines = rows.length - before
+  }
+  // two background rows when the card is drawn whole, so a one-line question puts the first option on band row 5 at every tier
+  if (!v.split) while (bgLines < 2) { line('bgpad' + bgLines, ' ') ; bgLines++ }
   v.options.forEach((o, k) => {
-    const hotkey = k < 6 ? String(k + 1) : undefined
-    const hasKey = !v.locked && Button !== undefined && hotkey !== undefined
-    // the name wraps by display width: the row has the pad and the pick mark in front (3 cells), the host's `k: ` in front of a Button, and the ★ behind the last piece (2 cells)
-    const room = Math.max(1, w - 3 - (hasKey ? 3 : 0) - 2)
-    const [head = '', ...more] = wrapPlain(o.label, room, room)
-    const label = v.locked
-      ? <Text key="b" {...dim(v.grey)} wrap="truncate">{head + ' '.repeat(Math.max(0, OPT_LABEL_COLS - displayWidth(head)))}</Text>
-      : !hasKey
-      ? <Text key="b" wrap="truncate">{(hotkey === undefined ? '' : hotkey + ': ') + head}</Text>
-      : <Button key={o.key} plain onPress={() => v.onPress(k)}>{head + ' '.repeat(Math.max(0, OPT_LABEL_COLS - displayWidth(head)))}</Button>
-    const star = o.recommended ? <Text key="rec">{' ' + GLYPHS.structure.recommend}</Text> : <Text key="rec">{''}</Text>
-    if (hasKey) keyed.push({ k, at: v.split ? null : rows.length })
-    optTo.push(
-      <Box key={'o' + k}>
-        <Text>{' '}</Text>{o.picked ? <Text key="pk" {...drawSeg(PICK_MARK)}>{PICK_MARK.text}</Text> : <Text key="pk">{' '}</Text>}<Text>{' '}</Text>
-        {label}
-        {more.length === 0 ? star : <Text key="rec">{''}</Text>}
-      </Box>,
-    )
-    // the rest of a long name hangs under the first piece; the ★ follows the last piece
-    more.forEach((r, i) => optTo.push(
-      <Box key={'on' + k + '_' + i}><Text>{' '}</Text><Text {...dim(v.grey)} wrap="truncate">{'    ' + r}</Text>{i === more.length - 1 ? star : <Text key="rec">{''}</Text>}</Box>,
-    ))
-    if (o.description !== '') wrapPlain(o.description, w - 4, w - 4).forEach((r, i) => line('od' + k + '_' + i, r, true, v.split && i === 0 ? String(k + 1).padEnd(4) : '    '))
+    if (v.split) {
+      const hotkey = k < 6 ? String(k + 1) : undefined
+      const hasKey = !v.locked && Button !== undefined && hotkey !== undefined
+      const room = Math.max(1, w - 3 - (hasKey ? 3 : 0) - 2)
+      const [head = '', ...more] = wrapPlain(o.label, room, room)
+      const label = v.locked
+        ? <Text key="b" {...dim(v.grey)} wrap="truncate">{head + ' '.repeat(Math.max(0, OPT_LABEL_COLS - displayWidth(head)))}</Text>
+        : !hasKey
+        ? <Text key="b" wrap="truncate">{(hotkey === undefined ? '' : hotkey + ': ') + head}</Text>
+        : <Button key={o.key} plain onPress={() => v.onPress(k)}>{head + ' '.repeat(Math.max(0, OPT_LABEL_COLS - displayWidth(head)))}</Button>
+      const star = o.recommended ? <Text key="rec">{' ' + GLYPHS.structure.recommend}</Text> : <Text key="rec">{''}</Text>
+      if (hasKey) keyed.push({ k, at: null })
+      optTo.push(
+        <Box key={'o' + k}>
+          <Text>{' '}</Text>{o.picked ? <Text key="pk" {...drawSeg(PICK_MARK)}>{PICK_MARK.text}</Text> : <Text key="pk">{' '}</Text>}<Text>{' '}</Text>
+          {label}
+          {more.length === 0 ? star : <Text key="rec">{''}</Text>}
+        </Box>,
+      )
+      more.forEach((r, i) => optTo.push(
+        <Box key={'on' + k + '_' + i}><Text>{' '}</Text><Text {...dim(v.grey)} wrap="truncate">{'    ' + r}</Text>{i === more.length - 1 ? star : <Text key="rec">{''}</Text>}</Box>,
+      ))
+      if (o.description !== '') wrapPlain(o.description, w - 4, w - 4).forEach((r, i) => line('od' + k + '_' + i, r, true, i === 0 ? String(k + 1).padEnd(4) : '    '))
+      return
+    }
+    // one line `   N: label ★  description`; a description that does not fit wraps under the description column. No digit hotkey.
+    const num = String(k + 1)
+    const star = o.recommended ? ' ' + GLYPHS.structure.recommend : ''
+    const prefix = (o.picked ? PICK_MARK.text : ' ') + '  ' + num + ': '
+    const prefixW = displayWidth(prefix)
+    const gap = '  '
+    const budget = Math.max(1, w - prefixW - displayWidth(star) - displayWidth(gap))
+    const labelParts = wrapPlain(o.label, budget, Math.max(1, w - prefixW))
+    if (labelParts.length === 0) labelParts.push('')
+    const oneLabel = labelParts.length === 1
+    const head = prefix + labelParts[0] + (oneLabel ? star : '')
+    const descAt = displayWidth(head + gap)
+    const descRoom = Math.max(1, w - (oneLabel ? descAt : prefixW))
+    const descParts = o.description === '' ? [] : wrapPlain(o.description, oneLabel ? Math.max(1, w - descAt) : descRoom, descRoom)
+    const restHead = '  ' + num + ': ' + labelParts[0] + (oneLabel ? star : '')
+    const restFirst = oneLabel && descParts.length > 0 ? restHead + gap + descParts[0] : restHead
+    const hasKey = !v.locked && Button !== undefined && k < 6
+    const drawn = hasKey
+      ? <Button key={o.key} plain onPress={() => v.onPress(k)}>{restFirst}</Button>
+      : <Text key="b" {...dim(v.grey)} wrap="truncate">{restFirst}</Text>
+    const mark = o.picked ? <Text key="pk" {...drawSeg(PICK_MARK)}>{PICK_MARK.text}</Text> : <Text key="pk">{' '}</Text>
+    if (hasKey) keyed.push({ k, at: rows.length })
+    rows.push(<Box key={'o' + k}>{mark}{drawn}</Box>)
+    // mark is one cell, then two spaces, then the digit: content column 3, band column 31 when the main border is column 27
+    labelParts.slice(1).forEach((piece, i) => {
+      const last = i === labelParts.length - 2
+      const text = ' '.repeat(prefixW) + piece + (last ? star : '')
+      rows.push(<Box key={'on' + k + '_' + i}><Text {...dim(v.grey)} wrap="truncate">{text}</Text></Box>)
+    })
+    const descFrom = oneLabel ? 1 : 0
+    const indent = oneLabel ? descAt : displayWidth(prefix + labelParts[labelParts.length - 1] + star + gap)
+    descParts.slice(descFrom).forEach((piece, i) => {
+      rows.push(<Box key={'od' + k + '_' + i}><Text {...dimProps()} wrap="truncate">{' '.repeat(Math.min(indent, Math.max(0, w - 1))) + piece}</Text></Box>)
+    })
   })
   if (v.advice !== null) {
     block('ad', keys[1], v.advice.label, false)
@@ -472,9 +575,10 @@ export function cardSplit(el: { Box: El; Text: El; Button?: El }, t: T, o: { top
 export type CardQuick = { sendN: number; undo?: { secs: number; onUndo: () => void }; tip: string; onSend: () => void; onPrev: () => void; onNext: () => void; onMenu: () => void }
 export function cardQuick(el: { Box: El; Text: El; Button?: El }, t: T, q: CardQuick): unknown[] {
   const { Box, Text, Button } = el
+  // the digits are label text, never a hotkey (a bare digit in an empty composer would press the Button). The Box width, not the text, places 0/7/8/9.
   const slot = (key: string, hotkey: string, label: string, width: number, press: () => void, sep: boolean) => (
     <Box key={'s-' + key} width={width} flexShrink={0}>
-      {Button === undefined ? <Text key="b">{hotkey + ': ' + label}</Text> : <Button key={key} plain onPress={press}>{label}</Button>}
+      {Button === undefined ? <Text key="b">{hotkey + ': ' + label}</Text> : <Button key={key} plain onPress={press}>{hotkey + ': ' + label}</Button>}
       {sep ? <Text key="sep" {...drawSeg(QUICK_SEP)}>{QUICK_SEP.text}</Text> : <Text key="sep">{''}</Text>}
     </Box>
   )

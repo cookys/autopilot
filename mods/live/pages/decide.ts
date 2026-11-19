@@ -286,6 +286,8 @@ const brokenRows = (text: string, cols: number): Row[] => wrapPlain(text, cols, 
 const noSource = (ctx: PageCtx, id: string): Row => brokenRow(GLYPHS.state.failed + ' ' + ctx.t(id))
 
 function render(ctx0: PageCtx): { body: Row[]; actions: Row[] } {
+  // The pane's 待決 page is retired: the O4 band shell is the only pending-decision panel. The tab and its key stay.
+  return { body: [[seg(ctx0.t('shell.on_band'))]], actions: [] }
   const ctx = ctx0 as DecideCtx
   const { t } = ctx
   const nav = ctx.decide ?? NO_NAV

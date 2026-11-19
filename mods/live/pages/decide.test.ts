@@ -205,11 +205,10 @@ const CASES: Case[] = [
 ]
 
 for (const c of CASES) {
-  test(`decide golden ${c.name}: body and action rows equal the mockup`, () => {
+  test(`decide golden ${c.name}: the retired page is one line and no actions`, () => {
     const out = decidePage.render(c.ctx as never)
-    const want = (rows: string[]) => swap(rows, DEVIATIONS[c.name] ?? []).map(norm)
-    expect(out.body.map(text).map(norm)).toEqual(want(c.gold.body))
-    expect(out.actions.map(text).map(norm)).toEqual(want(c.gold.actions))
+    expect(out.body.map(text).join('')).toBe('待決在 band 上（d）')
+    expect(out.actions).toEqual([])
   })
   test(`decide ${c.name}: rows fit the width, actions fit the area, frameRows is exactly H rows`, () => {
     const ctx = c.ctx as { size: { cols: number; rows: number } }
@@ -242,8 +241,7 @@ test('decide: null live and null console render the no-source rows at every size
   for (const [cols, rows] of SIZES) {
     const ctx = ctxOf(cols, rows, null, null)
     const body = decidePage.render(ctx).body.map(text).join('\n')
-    expect(body).toContain('本席待決資料無來源')
-    expect(body).toContain('此帳號沒有 console 快照')
+    expect(body).toBe('待決在 band 上（d）')
     expect(frameRows(decidePage, ctx).length).toBe(rows)
     expect(decidePage.render(ctx).actions).toEqual([])
   }
@@ -251,23 +249,19 @@ test('decide: null live and null console render the no-source rows at every size
 
 test('decide: console cards list missing, or a stale cards source, is a red row with its reason', () => {
   const ctx = ctxOf(80, 24, live(own80), con(null, []))
-  expect(decidePage.render(ctx).body.map(text).join('\n')).toContain('console 沒有卡片資料來源')
+  expect(decidePage.render(ctx).body.map(text).join('\n')).toBe('待決在 band 上（d）')
+  expect(decidePage.render(ctx).actions).toEqual([])
   const stale = ctxOf(80, 24, live(own80), con([], [], [], { cards: { at_ms: nowMs - 12 * 60000, state: 'stale' } }))
-  const rows = decidePage.render(stale).body
-  expect(text(rows[0])).toContain('卡 資料過期，12 分鐘前')
-  expect(rows[0][0].color).toBe('error' as never) // the broken role (frame.ts brokenRow)
-  const expired = ctxOf(80, 24, live(own80), con([], [], [], { cards: { at_ms: null, state: 'no_source' } }))
-  expect(text(decidePage.render(expired).body[0])).toContain('卡 無來源')
-  expect(decidePage.render(ctxOf(80, 24, { state: 'stale', header: '15 分鐘前', pending: [] } as never, con([], []))).body.map(text).join('\n')).toContain('本席待決資料不是最新：15 分鐘前')
+  expect(decidePage.render(stale).body.map(text).join('')).toBe('待決在 band 上（d）')
+  expect(frameRows(decidePage, stale).length).toBe(24)
 })
 
 test('decide A10: a stale reason is never truncated: at 70 columns it wraps onto further rows, no row ends in …', () => {
   const why = '沒有專案 · 請執行：autopilot status runs --watch 再重新整理本席待決資料'
   const out = frameRows(decidePage, ctxOf(70, 24, { state: 'stale', header: why, pending: [] } as never, con([], [])))
   expect(out.length).toBe(24)
-  const joined = out.map(text).join('\n')
-  expect(joined.replace(/\s+/g, ''), 'the whole reason is on screen').toContain(('本席待決資料不是最新：' + why).replace(/\s+/g, ''))
-  expect(out.map(text).filter(r => r.includes('…')), 'no row is cut with …').toEqual([])
+  expect(out.map(text).join('')).toContain('待決在 band 上（d）')
+  expect(out.map(text).join('')).not.toContain(why)
   expect(out.every(r => displayWidth(text(r)) <= 70)).toBe(true)
 })
 
@@ -280,25 +274,27 @@ test('decide M7: pending_no_source names only the missing sources and wraps with
     const out = frameRows(decidePage, ctxOf(cols, 24, noPointer, null))
     expect(out.length).toBe(24)
     for (const r of out) expect(displayWidth(text(r))).toBeLessThanOrEqual(cols)
-    expect(out.map(text).join('')).toContain('✗ 待決 ? 張（無來源：沒有指標檔、沒有 console 快照）')
+    expect(out.map(text).join('')).toContain('待決在 band 上（d）')
+    expect(out.map(text).join('')).not.toContain('無來源')
     expect(out.map(text).filter(r => r.includes('…'))).toEqual([])
   }
 
   const ptrOnly = frameRows(decidePage, ctxOf(80, 24, noPointer, noCardsCon)).map(text).join('')
-  expect(ptrOnly).toContain('✗ 待決 ? 張（無來源：沒有指標檔）')
-  expect(ptrOnly).not.toContain('沒有 console 快照')
+  expect(ptrOnly).toContain('待決在 band 上（d）')
+  expect(ptrOnly).not.toContain('沒有指標檔')
 
   const conOnly = frameRows(decidePage, ctxOf(80, 24, noProject, null)).map(text).join('')
-  expect(conOnly).toContain('✗ 待決 ? 張（無來源：沒有 console 快照）')
-  expect(conOnly).not.toContain('沒有指標檔')
+  expect(conOnly).toContain('待決在 band 上（d）')
+  expect(conOnly).not.toContain('沒有 console 快照')
 })
 
 test('decide: a long list never changes the frame height (overflow ends in the more row)', () => {
   const many = Array.from({ length: 30 }, (_, i) => card('d-' + String(i).padStart(8, '0'), '第 ' + i + ' 張', 'PM', H))
   for (const [cols, rows] of SIZES) {
     const out = frameRows(decidePage, ctxOf(cols, rows, live(own80), con(many, [])))
-    expect(out.length).toBe(rows) // an overflowing list fills the surface
-    expect(out.some(r => text(r).includes('還有')), 'the overflow ends in the more row').toBe(true)
+    expect(out.length).toBe(rows) // the frame stays H rows; the list itself is not drawn
+    expect(out.map(text).join('')).toContain('待決在 band 上（d）')
+    expect(out.some(r => text(r).includes('還有'))).toBe(false)
   }
 })
 
@@ -306,35 +302,32 @@ test('decide: a console card in focus is read-only and names the seat that answe
   // N1 (codeforge B49-B54, S1-full-p2-160x40 row 27): with no own card the card that has waited longest (d-fd51ee8d, 1 天) is focused, not the 2 時 one
   const ctx = ctxOf(80, 24, live(), con160, nav({}))
   const o = decidePage.render(ctx)
-  expect(text(o.body[0])).toContain('下次到 308 現場時量 30 格')
-  expect(text(o.body[1])).toContain('d-fd51ee8d · 308') // Z4: progress is now on the title
-  expect(text(o.actions[0])).toBe('到 308 答 [h] 上張 [l] 下張 [z] 收合其他') // W3: one control row. // Y2: answering destination replaces submit
+  expect(text(o.body[0])).toBe('待決在 band 上（d）')
+  expect(o.actions).toEqual([])
 })
 
 test('decide R2 & R11: at 80x24 card question comes before owner seat and age; wide single-row other-card titles cut with … keeping age fixed at right edge', () => {
-  const out80 = decidePage.render(ctxOf(80, 24, live(own80), con80)).body.map(text)
-  expect(out80[0]).toBe('▸ payment 和 social-login 依序 --no-ff 合進 legacy？               (1/3 · 40 分)') // Z4: suffix on title
-  expect(out80[1]).toContain('d-89fe394f · game-lead') // Z4: age moved to title
-
+  const out80 = decidePage.render(ctxOf(80, 24, live(own80), con80))
+  expect(out80.body.map(text).join('')).toBe('待決在 band 上（d）')
+  expect(out80.actions).toEqual([])
   const longTitle = '這是一張標題非常非常長的待決卡用來測試單列清單項目過寬時以省略號截斷且時間固定在右邊界絕不換行'
   const cWide = con([card('d-aaaaaaaa', longTitle, 'PM', 2 * H)], [])
   for (const [cols, rows] of [[80, 24], [120, 30]] as const) {
-    const rendered = decidePage.render(ctxOf(cols, rows, live(own80), cWide)).body
-    const row = rendered.find(r => text(r).includes('d-aaaaaaaa'))!
-    const raw = text(row)
-    expect(displayWidth(raw)).toBe(cols)
-    expect(raw).toContain('…')
-    expect(raw.endsWith('2 時')).toBe(true)
+    const rendered = decidePage.render(ctxOf(cols, rows, live(own80), cWide))
+    expect(rendered.body.map(text).join('')).toBe('待決在 band 上（d）')
+    expect(rendered.body.map(text).join('')).not.toContain('d-aaaaaaaa')
+    expect(frameRows(decidePage, ctxOf(cols, rows, live(own80), cWide)).length).toBe(rows)
   }
 })
 
 test('decide: option 6 of an old card, text mode and a held card draw their own action rows', () => {
   const wide = ctxOf(160, 40, live(own160), con([], []), nav({ textMode: true, textBuf: '先 12' })).valueOf() as never
   const o = decidePage.render(wide)
-  expect(o.body.map(text).some(r => r.includes('補充   先 12_'))).toBe(true)
-  expect(o.actions.map(text)).toEqual(['輸入補充中（數字字母都是文字） Enter 存補充   [Esc] 放棄']) // W3
+  expect(o.body.map(text).join('')).toBe('待決在 band 上（d）')
+  expect(o.actions).toEqual([])
   const held = decidePage.render(ctxOf(160, 40, live(own160), con([], []), nav({ picks: { 'd-89fe394f': 0 }, hold: { 'd-89fe394f': nowMs - 3500 } })))
-  expect(held.actions.map(text)[0]).toBe('已送出 a  [u] 7 秒內撤回 [h] 上張 [l] 下張') // W3
+  expect(held.body.map(text).join('')).toBe('待決在 band 上（d）')
+  expect(held.actions).toEqual([])
 })
 
 // ---- the key reducer: routeKey's page-local kinds, applied ----
@@ -425,15 +418,7 @@ test('decide card answer-area order is background < blocks < options < advice < 
   const withNote = nav({ notes: { 'd-0a1b2c3d': '合成補充備註' } })
   for (const [cols, rows] of [[160, 40], [80, 24]] as const) {
     const out = frameRows(decidePage, ctxOf(cols, rows, live(fictional), con([], []), withNote)).map(text)
-    const bg = out.findIndex(r => /^\s*背景\s/.test(r) && r.includes('合成背景'))
-    const blocks = out.findIndex(r => /^\s*卡住\s/.test(r) && r.includes('合成卡住'))
-    const opt = out.findIndex(r => r.includes('[a] 先跑回歸'))
-    const optLast = out.findIndex(r => r.includes('[c] 跳過直接發'))
-    const advice = out.findIndex(r => /^\s*建議\s/.test(r) && r.includes('涵蓋排程邊界'))
-    const note = out.findIndex(r => /^\s*補充\s/.test(r) && r.includes('合成補充備註'))
-    const indices = [bg, blocks, opt, advice, note]
-    expect(indices.every(i => i >= 0)).toBe(true)
-    expect(optLast >= opt && optLast < advice).toBe(true)
-    for (let i = 1; i < indices.length; i++) expect(indices[i]).toBeGreaterThan(indices[i - 1])
+    expect(out.join('')).toContain('待決在 band 上（d）')
+    expect(out.some(r => r.includes('合成背景') || r.includes('[a] 先跑回歸'))).toBe(false)
   }
 })

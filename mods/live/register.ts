@@ -44,7 +44,7 @@ import { atom, read, update } from 'claude-code'
 import type { AdvisoryTracker } from './advisories'
 import { DISMISS_PRESS, forgeFit, GLYPHS, LOOK_PRESS, SHOW_PRESS, showTarget, stateOf } from './ui'
 import type { ForgeSegment } from './ui'
-import { cardNameOf } from './cardtitle'
+import { cardSentenceOf } from './cardtitle'
 import { NO_BATCH, actionable, answerPlan, answerOf, batchSync, cardKey, draftOf, focusRepair, inputsFor, noteKey, optKey, submitSuccessor } from './decidebatch'
 import type { DecideBatch } from './decidebatch'
 import { applyPick, holdSend, reopen, sendNow, tickHold, undoHold } from './decideundo'
@@ -56,7 +56,7 @@ import type { ConsoleSnapshot } from './console'
 import { consoleSlotTab, nextConsoleTab } from './consoletabs'
 import type { ConsoleNav, ConsoleTab } from './consoletabs'
 
-import { BandBar, bandQuotaSeg, BarRule, Shell, barContent, barParts, cardMain, cardQuick, decideContent, progressRow, cardSplit, speedContent, stackBand, stackRows, usageDraw } from './band'
+import { BandBar, bandQuotaSeg, BarRule, Shell, barContent, barParts, cardMain, cardQuick, decideContent, progressRow, cardSplit, shellMenuRow, shellNote, speedContent, stackBand, stackRows, usageDraw } from './band'
 import type { SpeedPlacement } from './band'
 import { normalizedPools } from './pages/quota-pick'
 import { consoleFleetCounts } from './pages/rows'
@@ -66,7 +66,7 @@ import { COL_GAP, SPEED_ROWS, speedLabelParts, speedView } from './speedview'
 import { FLEET_SUMMARY_V, fleetSummary, fleetView, makeFleetFeed, othersView } from './fleet'
 import type { FleetSummary, FleetTask, FleetView } from './fleet'
 import type { BandPageId, BarTabId, ScrollView } from './tabs'
-import { MAIN_CONTENT_ROWS, SHELL_ROWS, type ShellPlan, cardRows, freshCount, leftItems, leftTitle, newestSeq, parsePanel, parseRoom, progressSegs, shellPlan, usageRows } from './shell'
+import { MAIN_CONTENT_ROWS, SHELL_MENUS, SHELL_ROWS, type ShellMenuId, type ShellPlan, cardRows, freshCount, leftItems, leftTitle, newestSeq, nextShellMenu, parsePanel, parseRoom, progressSegs, roomLines, shellGeometry, shellPlan, usageRows } from './shell'
 import type { Card } from './shell'
 import type { LeftItem } from './shell'
 import type { FleetLaneSum, PanelRead, RoomRow } from './shell'
@@ -284,6 +284,8 @@ const consolePaneOf = async ($: EngineInterface, e: Parameters<EngineInterface['
   })
 }
 let barTab: BarTabId | null = null // the tab of the band row that is open (its content is drawn under the rule); null = none; a memory state, reset at session start
+let shellMenu: ShellMenuId = 'd' // the O4 shell's menu (d 待決 by default). It is not barTab: d/r/u/p/h and 9 only change this.
+let shellOn = false // the last AbovePrompt draw was the shell (ui.scroll follows the card window only then)
 const expanded = new Set<string>() // the recent-prompt groups the person opened (by group id)
 const folded = new Set<string>() // the Now sections the person folded (SECTION ids); kept across /clear, a view preference and not tied to the transcript
 const recentTracker = makeRecentTracker()
@@ -1476,6 +1478,8 @@ export async function startLive($: EngineInterface): Promise<void> {
   consoleReadMs = -Infinity
   consoleFeed = makeConsoleFeed(undefined, undefined, consoleIngestFrom)
   barTab = null
+  shellMenu = 'd'
+  shellOn = false
   folded.clear() // a new Claude Code session opens every section
   pressSeq += 1 // presses still in flight become stale: they assign nothing and leave the chain alone
   decided = null
@@ -1543,6 +1547,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    shellOn = false
     if (e.props.hasSurvey) return next(e)
     const legacyTabs = (e.props as { legacyTabs?: boolean }).legacyTabs === true
     // the ⓘ opens the panel on the Now tab; pressed again while the panel is open it shows the next tab (7 tabs, the ? legend last, then Now again) (the pane never gets the keyboard
@@ -1689,22 +1694,42 @@ export function registerLive(on: Parameters<Register>[0]): void {
     let paneOpen = false
     if (!legacyTabs || consoleOn) { try { paneOpen = (await $.ui.panes()).some(p => p.id === PANE_ID) } catch (_e) { /* the engine could not list panes: treat the pane as closed */ } }
     const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge, usageOn, moreTo, con, bandPreset, consoleOn && consoleSnap !== null ? bandQuotaSeg(normalizedPools(consoleSnap), bandNow, t, qSrc) : null, paneOpen, legacyTabs)
-    // The O4 shell: a band tab is open, the host gave 12 rows and the width holds a main window. Anything less keeps the tab-row layout below.
-    if (active !== 'decide' || rows < SHELL_ROWS) bandBatch = NO_BATCH // the batch lives while the card view is drawn
-    if (active !== null && active !== 'forge' && rows >= SHELL_ROWS && snapshot !== null) {
+    // The O4 shell is the band's normal state whenever the host gave 12 rows and the width holds a main window.
+    // It does not wait for a band tab, and it does not care whether the pane is open. legacyTabs keeps the old bar only under 12 rows (the E1 suites).
+    const shellFits = rows >= SHELL_ROWS && shellGeometry(columns) !== null && snapshot !== null
+    if (!legacyTabs && rows < SHELL_ROWS) {
+      const n = snapshot === null ? 0 : new Set(snapshot.pending.filter(d => !isStepCard(d)).map(cardKey)).size
+      return stackRows(el, shellNote(el, t('shell.short_height', { n, m: rows })))
+    }
+    if (shellMenu !== 'd' || !shellFits) bandBatch = NO_BATCH // the batch lives while the 待決 card view is drawn
+    if (shellFits && snapshot !== null) {
       const nowMs = await $.clock.now()
       const panelRaw = await ($.state.get as (ref: { plugin: string; key: string }) => Promise<{ value: unknown }>)({ plugin: 'forge-stats', key: 'panel' }).then(g => g.value, () => null)
       const fleet = await read($, FLEET)
       const lanes: FleetLaneSum[] = fleet.lanes.map(l => ({ lane: l.lane, needYou: l.needYou, failed: l.failed, stuck: l.stuck, running: l.running, waiting: l.waiting }))
       const panel: PanelRead = parsePanel(panelRaw, nowMs)
-      const strip = barStrip(snapshot, t, active, null) // the shell's menu lists every tab, the 用量 one too
-      // ux-v7: the 待決 tab is a card view. One card in the main window (decideCursor), the card list on the left, the progress row and the four quick slots under it.
-      const st = active === 'decide' ? await read($, DECIDE) : null
-      const pending = active === 'decide' ? snapshot.pending.filter(d => !isStepCard(d)) : []
+      const grouped = new Map<string, LiveDecision[]>()
+      for (const d of snapshot.pending) {
+        const k = cardKey(d)
+        const g = grouped.get(k)
+        if (g === undefined) grouped.set(k, [d])
+        else g.push(d)
+      }
+      const nonStep: LiveDecision[] = []
+      const stepOnly: LiveDecision[] = []
+      const marked = new Set<string>()
+      for (const [k, copies] of grouped) {
+        const step = copies.find(c => isStepCard(c))
+        const plain = copies.find(c => !isStepCard(c))
+        if (plain !== undefined) { nonStep.push(plain); if (step !== undefined) marked.add(k) }
+        else if (step !== undefined) stepOnly.push(step)
+      }
+      const st = await read($, DECIDE)
+      const pending = shellMenu === 'd' ? nonStep : []
       // The pane's batch (decidebatch.ts batchSync, the same pure function and the same DecideState): the card list keeps its order and its numbers, a card the session or the CLI closed stays greyed in place
       // (`answered elsewhere`), and a sent card is greyed. The batch is the band's own variable (the pane's closes with the pane's tab), synced at every draw of the 待決 tab and closed on any other.
       bandBatch = st === null ? NO_BATCH : batchSync(bandBatch, pending, st, t('decide.elsewhere'))
-      const entries = st === null ? [] : bandBatch.order.map(k => {
+      const entries: { key: string; d: LiveDecision | null }[] = st === null ? [] : bandBatch.order.map(k => {
         const listed = pending.find(d => cardKey(d) === k)
         const reopened = listed === undefined ? bandBatch.card[k] : undefined // a sent card the session already closed, reopened here to correct: still actionable
         const d = listed ?? (reopened !== undefined && reopened.id !== null && st.fixing?.[reopened.id] !== undefined ? reopened : null)
@@ -1713,35 +1738,58 @@ export function registerLive(on: Parameters<Register>[0]): void {
       const live = entries.flatMap(e => (e.d === null ? [] : [e.d]))
       const sentOf = (d: LiveDecision): boolean => d.id !== null && st !== null && st.sent[d.id] !== undefined && !decideFixing(d, st)
       const cards: Card[] = st === null ? [] : entries.map(({ key, d }) => d === null
-        ? { id: key, name: cardNameOf({ title: bandBatch.card[key]?.title ?? null, question: bandBatch.q[key] }), answer: bandBatch.ans[key] ?? null, sent: false, grey: true, gone: true }
-        : { id: key, name: cardNameOf(d), answer: draftOf(d, st), sent: sentOf(d), grey: sentOf(d) })
+        ? { id: key, name: cardSentenceOf({ title: bandBatch.card[key]?.title ?? null, question: bandBatch.q[key] }), answer: bandBatch.ans[key] ?? null, sent: false, grey: true, gone: true }
+        : { id: key, name: cardSentenceOf(d), answer: draftOf(d, st), sent: sentOf(d), grey: sentOf(d) })
+      if (shellMenu === 'd' && st !== null) {
+        const have = new Set(cards.map(c => c.id))
+        for (const d of stepOnly) {
+          const key = cardKey(d)
+          if (have.has(key)) continue
+          have.add(key)
+          entries.push({ key, d })
+          cards.push({ id: key, name: t('shell.step_mark') + ' ' + cardSentenceOf(d), answer: null, sent: false, grey: false })
+        }
+        const mark = t('shell.step_mark') + ' '
+        for (const c of cards) if (marked.has(c.id) && !c.name.startsWith(mark)) c.name = mark + c.name
+      }
       decideCursor = cards.length === 0 ? 0 : Math.max(0, Math.min(cards.length - 1, decideCursor))
       const cur = entries[decideCursor]?.d ?? undefined
       const curKey = entries[decideCursor]?.key
       const curLocked = cur !== undefined && st !== null && (sentOf(cur) || decideHeld(cur, st)) // sent, or in its undo window: no option, no fill (decideundo.ts applyPick would refuse the pick anyway)
       const optN = cur === undefined || cur.id === null || decideDialog(cur) ? 0 : cur.options.length
       // bandlayout: the card view has no right-hand columns (the roundtable and the usage have their own tabs) and its frame grows upward; every other tab keeps the 12-row frame
-      const cardMode = active === 'decide' && cards.length > 0 && st !== null && curKey !== undefined
+      const cardMode = shellMenu === 'd' && cards.length > 0 && st !== null && curKey !== undefined
+      const menuWord = shellMenu === 'r' ? t('shell.room') : shellMenu === 'u' ? t('shell.usage') : shellMenu === 'p' ? t('tab.pet') : shellMenu === 'h' ? t('shell.help') : t('tab.decide')
       const planInp = {
-        columns, t, menuTitle: leftTitle(cards.length > 0 ? 'cards' : 'tabs', (strip.tabs.find(b => b.id === active)?.label.text ?? '').trim(), t),
-        mainTitle: cards.length > 0 ? t('shell.main_title', { n: decideCursor + 1, total: cards.length }) : (strip.tabs.find(b => b.id === active)?.label.text ?? '').trim(),
-        room: { rows: shellRoom.rows, fresh: freshCount(shellRoom.rows, shellBaseline ?? null) }, panel, fleet: lanes, awaiting: (snapshot.awaiting ?? []).length,
-        ...(cards.length > 0 ? { footLeft: decideCursor + 1 + '/' + cards.length, footMain: optN > 0 && !curLocked ? t('shell.hint_pick', { n: Math.min(optN, 6) }) : '' } : {}), // the card view re-plans with the hint of the options it actually draws
+        columns, t, menuTitle: leftTitle(cardMode ? 'cards' : 'tabs', t('tab.decide'), t),
+        mainTitle: cardMode ? t('shell.main_title', { n: decideCursor + 1, total: cards.length }) : menuWord,
+        room: { rows: shellRoom.rows, fresh: freshCount(shellRoom.rows, shellBaseline ?? null) }, panel, fleet: lanes,
+        ...(cardMode ? { footLeft: decideCursor + 1 + '/' + cards.length, footMain: optN > 0 && !curLocked ? t('shell.hint_pick', { n: Math.min(optN, 6) }) : '' } : {}), // the card view re-plans with the hint of the options it actually draws
         ...(cardMode ? { noRight: true } : {}),
       }
       const plan0 = shellPlan(planInp)
       if (plan0 !== null) {
         let plan: ShellPlan = plan0
         shellDrawnMs = nowMs
+        shellOn = true
         const mainCols = plan.geo.main - 1
-        const tabIds = strip.tabs.map(b => b.id).filter(id => id !== 'forge')
         const redraw = () => { void $.ui.invalidate('ui.render') }
+        const menuItems = SHELL_MENUS.map(id => ({ id, label: id === 'd' ? t('tab.decide') : id === 'r' ? t('shell.room') : id === 'u' ? t('shell.usage') : id === 'p' ? t('tab.pet') : t('shell.help') }))
+        const holdIds = Object.keys(st?.hold ?? {})
+        const quickOf = (sendN: number, holds: number[]) => cardQuick(el, t, {
+          sendN, ...(holds.length === 0 ? {} : { undo: { secs: Math.max(0, Math.ceil((Math.max(...holds) - nowMs) / 1000)), onUndo: () => { void Promise.all(holdIds.map(i => undoDecide($, i))).then(redraw) } } }), tip: t(plan.geo.tier === 80 ? 'shell.tip_short' : 'shell.tip_full'),
+          onSend: () => { void decidePress($, 'submit').then(redraw) },
+          onPrev: () => { if (cards.length > 0) { decideCursor = Math.max(0, decideCursor - 1); redraw() } },
+          onNext: () => { if (cards.length > 0) { decideCursor = Math.min(cards.length - 1, decideCursor + 1); redraw() } },
+          onMenu: () => { shellMenu = nextShellMenu(shellMenu); redraw() },
+        })
+        const pickMenu = (id: string) => { shellMenu = id as ShellMenuId; redraw() }
         let main: unknown[]
         let left: LeftItem[]
         let onLeft: (id: string) => void
         let progress: unknown
         let quick: unknown[]
-        if (active === 'decide' && cards.length > 0 && st !== null && curKey !== undefined) {
+        if (cardMode && st !== null && curKey !== undefined) {
           const pickPress = (k: number) => {
             if (cur === undefined || cur.id === null || curLocked) return
             const id = cur.id
@@ -1791,34 +1839,28 @@ export function registerLive(on: Parameters<Register>[0]): void {
           else { fixedWindow(whole.rows.length, room, model); main = whole.rows }
           const hint = curLocked || seen.length === 0 ? '' : seen.every((k, i) => k === i) && (seen.length > 1 || optN === 1) ? t('shell.hint_pick', { n: seen.length }) : t('shell.hint_pick_some')
           if (hint !== (optN > 0 && !curLocked ? t('shell.hint_pick', { n: Math.min(optN, 6) }) : '')) { const again = shellPlan({ ...planInp, footMain: hint, bodyRows: plan.bodyRows }); if (again !== null) plan = again }
-          left = cardRows(cards, decideCursor, plan.geo.left, plan.bodyRows)
+          left = cardRows(cards, decideCursor, plan.separate ? plan.leftInner : plan.geo.left, plan.bodyRows)
           onLeft = (id: string) => { const i = cards.findIndex(c => c.id === id); if (i >= 0) { decideCursor = i; redraw() } }
           const lastCard = cards.find(c => c.id === decideLastId)
           const prog = progressSegs({ cards: cards.filter(c => c.gone !== true), last: lastCard === undefined || lastCard.answer === null || lastCard.sent ? null : { name: lastCard.name, answer: lastCard.answer }, wide: plan.geo.tier >= 160, width: mainCols - 1, t })
           progress = progressRow(el, prog)
           const sendN = live.filter(d => decideOpen(d, st) && !decideHeld(d, st) && decideLine(d, st) !== null).length
-          const holds = Object.values(st.hold ?? {})
-          quick = cardQuick(el, t, {
-            sendN, ...(holds.length === 0 ? {} : { undo: { secs: Math.max(0, Math.ceil((Math.max(...holds) - nowMs) / 1000)), onUndo: () => { void Promise.all(Object.keys(st.hold ?? {}).map(i => undoDecide($, i))).then(redraw) } } }), tip: t(plan.geo.tier === 80 ? 'shell.tip_short' : 'shell.tip_full'),
-            onSend: () => { void decidePress($, 'submit').then(redraw) },
-            onPrev: () => { decideCursor = Math.max(0, decideCursor - 1); redraw() },
-            onNext: () => { decideCursor = Math.min(cards.length - 1, decideCursor + 1); redraw() },
-            onMenu: () => { const at = tabIds.indexOf(active); const to = tabIds[(at + 1) % tabIds.length]; if (to !== undefined && to !== active) onTab(to as BarTabId) },
-          })
+          quick = quickOf(sendN, Object.values(st.hold ?? {}))
         } else {
-          const parts = active === 'usage'
-            ? usageDraw(el, usageRows(panel, mainCols, MAIN_CONTENT_ROWS, t))
-            : active === 'decide'
-            ? decideContent(el, snapshot, await read($, DECIDE), mainCols, t, (id: string) => { void decidePress($, id).then(() => $.ui.invalidate('ui.render')) }, MAIN_CONTENT_ROWS)
-            : barParts(el, snapshot, active, mainCols, t, { onSlot: slot }).rows
-          const unit = snapshot.band === null ? [] : snapshot.band.slots.filter(sl => sl.id === 'unit')
-          main = parts.slice(0, MAIN_CONTENT_ROWS)
-          left = leftItems(strip.tabs.map(b => ({ id: b.id, label: b.label.text.trim() })), active, plan.geo.left)
-          onLeft = (id: string) => { if (id !== active) onTab(id as BarTabId) }
-          progress = progressRow(el, unit.length === 0 ? [] : layoutBand(unit, mainCols - 1).segs.slice(0, -1), slot)
-          quick = [] // the shell's quick row stays (the card keys use it); outside a card it is blank, so the frame keeps its height
+          const lines = shellMenu === 'u' ? usageRows(panel, mainCols, MAIN_CONTENT_ROWS, t) : shellMenu === 'r' ? roomLines(shellRoom.rows, mainCols, MAIN_CONTENT_ROWS) : null
+          main = lines === null
+            ? shellNote(el, t(shellMenu === 'p' ? 'shell.pet_soon' : shellMenu === 'h' ? 'shell.help_body' : 'decide.none'))
+            : usageDraw(el, lines.length === 0 ? [[{ text: t('shell.room_none'), dim: true }]] : lines)
+          left = leftItems(menuItems, shellMenu, plan.geo.left)
+          onLeft = pickMenu
+          progress = progressRow(el, [])
+          quick = quickOf(0, [])
         }
-        return stackRows(el, Shell(el, { plan, left, onLeft, main, progress, quick, bar: bar.stripRow }))
+        const menu = shellMenuRow(el, t, {
+          selected: shellMenu, pending: nonStep.length, room: shellRoom.rows.length, awaiting: (snapshot.awaiting ?? []).length, columns,
+          onSelect: (id) => { shellMenu = id; redraw() },
+        })
+        return stackRows(el, Shell(el, { plan, left, onLeft, main, progress, quick, bar: menu }))
       }
     }
     let content: unknown[] = []
@@ -1853,7 +1895,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
 
   // bandlayout: the band's card view scrolls its own window (the wheel and the scroll keys, when the engine sends them to the band), one offset per tab (bandScroll), kept when the tab is left
   on('ui.scroll', { component: 'AbovePrompt' }, ($, e, next) => {
-    const model = barTab === null ? undefined : bandScroll[barTab]
+    const model = shellOn && shellMenu === 'd' ? bandModel('decide') : barTab === null ? undefined : bandScroll[barTab]
     return model === undefined ? next(e) : scrollHook(model, e, next, () => { void $.ui.invalidate('ui.render') })
   })
 

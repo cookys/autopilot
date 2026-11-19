@@ -3689,7 +3689,7 @@ test('gate3 item 4: console mode, pane CLOSED: band row 2 has the new page names
   for (const b of bandBtns) expect(b.props?.hotkey, 'no hotkey on band Button ' + String(b.props?.key)).toBeUndefined()
   const cases: [string, string, string][] = [
     ['tab:now', '現況', '── 全艦隊'],
-    ['tab:decide', '待決', '記憶線：測試綠了，合併到 develop 嗎？'],
+    ['tab:decide', '待決', '待決在 band 上（d）'],
     ['tab:fleet', '艦隊', '復原線'],
     ['tab:quota', '額度', '── 額度池'],
     ['tab:dispatch', '派工', '── 執行中 2'],
@@ -7829,14 +7829,14 @@ for (const surface of SURFACES) {
     Object.assign(files, extra)
     return world(on, files, nowMs)
   }
-  const mountShell = ($: any, columns: number, maxRows = 12) => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-shell', props: { ...BAND_PROPS, maxRows, bodyColumns: columns }, viewport: { columns: columns + 5, rows: 50, isFullscreen: true } })
-  const drawShell = async ($: any, columns: number, press: string[] = [], maxRows = 12) => {
+  const mountShell = ($: any, columns: number, maxRows = 12, extra: Record<string, unknown> = {}) => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-shell', props: { ...BAND_PROPS, maxRows, bodyColumns: columns, ...extra }, viewport: { columns: columns + 5, rows: 50, isFullscreen: true } })
+  const drawShell = async ($: any, columns: number, press: string[] = [], maxRows = 12, extra: Record<string, unknown> = {}) => {
     for (const key of press) {
-      const ui = await mountShell($, columns, maxRows)
+      const ui = await mountShell($, columns, maxRows, extra)
       await ui.press({ key })
       await ui.unmount()
     }
-    const ui = await mountShell($, columns, maxRows)
+    const ui = await mountShell($, columns, maxRows, extra)
     const tree = (await ui.drawn()) as Node
     const found = (await ui.findAll({ type: 'Button' })) as Node[]
     const buttons = found.map(b => b.props?.key as string)
@@ -7847,8 +7847,7 @@ for (const surface of SURFACES) {
     const spare = full.length > 1 && full[full.length - 1].trim() === '' // the blank row after the quick row that lets the engine raise ui.scroll (register.ts stackRows)
     const raw = full
     const core = spare ? full.slice(0, -1) : full
-    // bandlayout: the shell stands as `top frame, body rows, bottom frame, menu row, quick row` (the menu row and the quick row are the bottom two rows). `rows` keeps the older order (menu row first)
-    // so a test that counts rows from the top reads what it always read; `raw` is the drawn order.
+    // ux-v7: the shell is drawn menu row, top frame, body, bottom frame, quick row. `rows` is that order. The remap below only runs if a draw still starts with the frame.
     // S0 (plan r2 §3.1): outside the shell the bar is two rows (the flatten above); inside it the menu row is the tab strip row alone, so the shell stays SHELL_ROWS high. `all` is every drawn row,
     // which is what the host's maxRows counts.
     const shell = core.length >= 4 && core[0].startsWith('\u256d')
@@ -7883,7 +7882,7 @@ for (const surface of SURFACES) {
     shellWorld(on, { '/fake/forge-panel.json': j(SHELL_PANEL) })
     await start($, surface)
     const last: [number, number | null][] = [[300, 44], [235, 44], [234, 45], [195, 45], [194, 50], [155, 50], [154, 32], [115, 32], [114, null], [80, null]]
-    await drawShell($, 240, ['tab:now'])
+    await drawShell($, 240, ['menu:r'])
     for (const [cols, inner] of last) {
       const d = await drawShell($, cols)
       const top = d.rows[1]
@@ -8160,7 +8159,7 @@ for (const surface of SURFACES) {
   test('O4 shell: no forge-stats panel at all: the right side is the roundtable alone (160) or the roundtable and the fleet column (240); no usage window, no empty window (' + surface + ')', async ($, on) => {
     shellWorld(on)
     await start($, surface)
-    await drawShell($, 240, ['tab:now'])
+    await drawShell($, 240, ['menu:r'])
     const a = await drawShell($, 160)
     expect(a.rows[1]).toContain('圓桌')
     expect(a.rows[1]).not.toContain('用量')
@@ -8175,7 +8174,7 @@ for (const surface of SURFACES) {
   test('O4 shell: an old or broken panel (another schema, no side) is a quiet no-summary; the band still draws (' + surface + ')', async ($, on) => {
     shellWorld(on, { '/fake/forge-panel.json': j({ ...SHELL_PANEL, side: undefined }) })
     await start($, surface)
-    await drawShell($, 240, ['tab:now'])
+    await drawShell($, 240, ['menu:r'])
     const d = await drawShell($, 240)
     expect(d.rows.length).toBe(12)
     expect(d.rows[1]).not.toContain('用量')
@@ -8185,7 +8184,7 @@ for (const surface of SURFACES) {
     const w = shellWorld(on, { '/fake/forge-panel.json': j(SHELL_PANEL) })
     await start($, surface)
     void w
-    await drawShell($, 240, ['tab:now'])
+    await drawShell($, 240, ['menu:r'])
     const t160 = await drawShell($, 160)
     expect(t160.rows[1]).toContain('圓桌 · 用量')
     expect(t160.rows.slice(2, 10).some(r => r.includes('5h ▰▰▱▱ 41% 重置 2h10m'))).toBe(true) // the 50 table
@@ -8206,7 +8205,7 @@ for (const surface of SURFACES) {
   test('O4 shell: panel data older than a minute is marked on the first row of the first right column, with no extra row (' + surface + ')', { plugins: [FORGE_STATS_WRITER] }, async ($, on) => {
     shellWorld(on, { '/fake/forge-panel.json': j({ ...SHELL_PANEL, updated_at_ms: NOW_FRESH - 200_000 }) })
     await start($, surface)
-    await drawShell($, 240, ['tab:now'])
+    await drawShell($, 240, ['menu:r'])
     const d = await drawShell($, 160)
     expect(d.rows.length).toBe(12)
     expect(d.rows[2]).toContain('資料 3 分鐘前')
@@ -8570,9 +8569,18 @@ for (const surface of SURFACES) {
   const LAY_DESC = '甲案的說明也很長，'.repeat(6) + '到此為止。'
   const LAYCARD = { id: 'd-lay00001', question: '背景很長的卡要怎麼辦', background: LONG_BG, options: [{ label: '甲案', description: LAY_DESC }, { label: '乙案', description: '乙案說明' }], recommendation: '甲案', why: LAY_WHY, not_authorized: LAY_NOT }
   const layWorld = (on: any, cards: object[] = [LAYCARD]) => shellWorld(on, { [W_MODEL]: j(model({ needs_decision: true, decisions: cards })) })
-  const bodyOf = (raw: string[]): string[] => raw.slice(1, raw.length - 3) // the frame's body rows: between the top frame and the bottom frame (the menu row and the quick row follow)
-  // the main window's text of a body row: `│` card list `│` main window `│` (the test kit's text carries no Box widths, so the windows are told apart by their edges, not by columns)
-  const mainCells = (raw: string[], _cols: number): string[] => bodyOf(raw).map(r => (r.split('│')[2] ?? '').trimEnd())
+  // menu row is first and the quick row last (ux-v7). The body is whatever sits between the top ╭ frame and the bottom ╰ frame.
+  const bodyOf = (raw: string[]): string[] => {
+    const top = raw.findIndex(r => r.includes('╭'))
+    const bot = raw.findIndex(r => r.includes('╰'))
+    return top >= 0 && bot > top ? raw.slice(top + 1, bot) : raw.slice(1, Math.max(1, raw.length - 3))
+  }
+  // separate card frames are `│ left │ │ main │`, so the main text is the third cell; a joined frame's main text is the second
+  const mainCells = (raw: string[], _cols: number): string[] => bodyOf(raw).map(r => {
+    const parts = r.split('│')
+    const at = (parts[2] ?? '').trim() === '' && parts.length > 3 ? 3 : 2
+    return (parts[at] ?? '').trimEnd()
+  })
   const squash = (rows: string[]): string => rows.join('').replace(/\s+/g, '')
   test('bandlayout: a long Chinese background, the advice, its reason, the 不授權 line and every option description are drawn whole and wrapped, with no … anywhere, at 80, 100 and 160 columns (' + surface + ')', async ($, on) => {
     layWorld(on)

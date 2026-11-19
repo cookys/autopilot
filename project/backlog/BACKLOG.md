@@ -132,7 +132,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 ### band「待你動手 N」改放最上面的選單列
 - **Id**: BL-0422
-- **Status**: open
+- **Status**: done
 - **Since**: 2026-11-07
 - **Origin**: peer
 - **Reporter**: codeforge

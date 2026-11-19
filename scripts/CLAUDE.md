@@ -49,7 +49,7 @@ Shared Cursor/Kimi broker transport and clone rail use the cursor-named helpers;
 
 **Sync, drift & release gates (cont.)** — `check-fixed-times.js` `check-test-exec-bits.js`
 
-**Sync, drift & release gates (cont.)** — `check-quota-adapters.js` `check-events-contract.js` `check-claude-spawn-sites.js` `lib/claude-spawn-sites.json`
+**Sync, drift & release gates (cont.)** — `check-quota-adapters.js` `check-events-contract.js` `check-claude-spawn-sites.js` `lib/claude-spawn-sites.json` `export-fleet-flow.js` `export-fleet-flow.test.js`
 
 **Setup & install** — `dev-setup.sh` `dev-update.sh` `accounts-onboard.sh` `profile-health.js` `profile-link.js` `lane-switch.js` `profile-switch-advice.js` `login-checklist.js` `install-hooks.sh` `install-antigravity.sh` `install-opencode.sh` `install-token-discipline.js` `install-quota-mirror.js` `install-fleet-card-mirror.js` `setup-symlinks.sh` `setup-symlinks.ps1` `install-antigravity.ps1` `agy-shell-guard.zsh` `project-detect.js` `scaffold-config.js` `statusline-live-tee.js` `lib/opencode-discovery-probe.js` `lib/test-git-env.js` `lib/test-git-env.sh` `lib/test-gitconfig` `lib/runner-fallback-bin.sh`
 

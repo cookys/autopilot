@@ -41,6 +41,24 @@
       ]
     },
     {
+      "id": "export-fleet-flow",
+      "title": "references/fleet-flow-graph.json (autopilot.fleet-flow/1) vs references/stage-graph.json, COARSE_OF_NODE and plugin version",
+      "generator": "node scripts/export-fleet-flow.js",
+      "check": "node scripts/export-fleet-flow.js --check",
+      "fix": "node scripts/export-fleet-flow.js && bash scripts/sync-codex-plugin-skills.sh && git add references/fleet-flow-graph.json platforms/codex/plugin",
+      "tier": "both",
+      "trigger": [
+        "references/stage-graph.json",
+        "references/fleet-flow-graph.json",
+        "schemas/fleet-flow.schema.json",
+        "scripts/export-fleet-flow.js",
+        "scripts/stage-graph.js",
+        "scripts/stage-advance.js",
+        ".claude-plugin/plugin.json",
+        "*plugin.json"
+      ]
+    },
+    {
       "id": "sync-codex-plugin-skills",
       "title": "committed Codex plugin payload under platforms/codex/plugin/",
       "generator": "bash scripts/sync-codex-plugin-skills.sh",

@@ -10,7 +10,7 @@ import { WRAP_HANG, brokenRow, wrapRow } from './rows'
 import type { Row } from './rows'
 import type { QuotaSeat } from '../console'
 import type { Seg } from '../model'
-import { GLYPHS, PALETTE, displayWidth } from '../ui'
+import { GLYPHS, PALETTE, displayWidth, idTail } from '../ui'
 import type { QuotaPool, Verdict } from './quota-pick'
 import { ROLE_WARNING, isUnknownPool, normalizedPools, poolKey, poolLabel, rankPools } from './quota-pick'
 
@@ -74,7 +74,7 @@ function clipPlain(text: string, w: number): string {
 
 function fitCellR(text: string, w: number): string {
   if (w <= 0) return ''
-  const fitted = displayWidth(text) < w ? text : clipPlain(text, Math.max(1, w - 1))
+  const fitted = idTail(text, w)
   return padR(fitted, w)
 }
 

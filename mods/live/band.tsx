@@ -174,8 +174,9 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
       if (parts.length > 0) sourceFailure = staleBadge(GLYPHS.state.failed + ' ' + parts.join(' · '))
     }
   }
-  // the forge label is read by forgeSegments (ui.ts): speed (and pet) sit on the left after the ⓘ, and the strip keeps a short forge tab that opens the full view
-  const fb = forge === null || sourceFailure !== null || (!legacyTabs && snap?.state === 'stale') ? null : forgeBar(forge)
+  // the forge label is read by forgeSegments (ui.ts): speed (and pet) sit on the left after the ⓘ, and the strip keeps a short forge tab that opens the full view.
+  // The rate is measured on this seat. A failed data source or a stale live snapshot does not clear it; the failure line is what narrows.
+  const fb = forge === null ? null : forgeBar(forge)
   const forgeW = fb === null ? 0 : fb.width
   const oldStrip = legacyTabs ? barStrip(snap, t, active as BarTabId | ConsoleTab | null, fb === null ? null : GLYPHS.structure.speed, usage, con) : null
   // `moreTo`: a tab has no room (用量, or forge with something timed), so a dim `›` ends the row: a Button (key 'more'), so Tab / Enter still reach the hidden tab

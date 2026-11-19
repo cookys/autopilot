@@ -62,6 +62,12 @@ function isWorkOrder(content) {
   return WORK_ORDER_PHRASES.some((phrase) => hay.includes(phrase.toLowerCase()));
 }
 
+// reply: deny only an imperative addressed to the receiver, or a brief header block; first-person and bare nouns pass.
+const REPLY_IMPERATIVE_RE = /請(?:你)?(?:做|跑|修|實作)|麻煩你|please (?:run|implement|fix)\b|^\s*(?:Engine|Role):/im;
+function isReplyWorkOrder(content) {
+  return typeof content === 'string' && REPLY_IMPERATIVE_RE.test(content);
+}
+
 function isFyiWorkOrder(content) {
   if (typeof content !== 'string' || !content) return false;
   const hay = content.toLowerCase();
@@ -108,7 +114,7 @@ function decide(input, env = envBag()) {
   const toolInput = input.tool_input && typeof input.tool_input === 'object' ? input.tool_input : {};
   if (input.tool_name === 'mcp__fleet__reply') {
     // A reply that answers a task carries task context and is fine; an uncontexted work order is not.
-    const asks = toolInput.fyi === true ? isFyiWorkOrder(toolInput.content) : isWorkOrder(toolInput.content);
+    const asks = isReplyWorkOrder(toolInput.content);
     if (!asks || hasTaskContext(toolInput)) return null;
     return preToolDeny(REPLY_DENY_REASON);
   }

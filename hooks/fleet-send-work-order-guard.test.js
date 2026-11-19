@@ -65,12 +65,12 @@ test('P5: fyi=true does not hide a work order (no [no-task needed)', () => {
 });
 
 test('P5: task_id header line at top of body counts as task context', () => {
-  const body = 'task_id: 01M7RSNEWJ85N4906CNC4Z3QFX\ntag: progress\n' + WORK;
+  const body = 'task_id: 01M7RSNEWJ85N4906CNC4Z3QFX\ntag: progress\n' + '請跑 nsys 這一輪。';
   assert.equal(call('mcp__fleet__reply', body, { message_id: 'm1' }), null);
 });
 
 test('P5: reply carrying a work order without task context is denied', () => {
-  const out = call('mcp__fleet__reply', WORK, { message_id: 'm1' });
+  const out = call('mcp__fleet__reply', '請跑 nsys 這一輪，跑完交件。', { message_id: 'm1' });
   assert.equal(out.hookSpecificOutput.permissionDecision, 'deny');
   assert.match(out.hookSpecificOutput.permissionDecisionReason, /reply/);
   assert.match(out.hookSpecificOutput.permissionDecisionReason, /task_id: <26 碼任務 id>/);
@@ -78,8 +78,22 @@ test('P5: reply carrying a work order without task context is denied', () => {
 });
 
 test('P5: reply that answers a task (task_id field or 26-char id in text) is allowed', () => {
-  assert.equal(call('mcp__fleet__reply', WORK, { message_id: 'm1', task_id: '01M7RSNEWJ85N4906CNC4Z3QFX' }), null);
-  assert.equal(call('mcp__fleet__reply', `${WORK} 母單 01M7RSNEWJ85N4906CNC4Z3QFX`, { message_id: 'm1' }), null);
+  assert.equal(call('mcp__fleet__reply', '請跑 nsys 這一輪。', { message_id: 'm1', task_id: '01M7RSNEWJ85N4906CNC4Z3QFX' }), null);
+  assert.equal(call('mcp__fleet__reply', `請跑 nsys 這一輪。母單 01M7RSNEWJ85N4906CNC4Z3QFX`, { message_id: 'm1' }), null);
+});
+
+test('P5: first-person and bare-noun replies are allowed (also fyi)', () => {
+  for (const c of ['好的，我現在就跑，跑完回報', 'OK 已修，你可以開跑了', '要你確認的事我寫在 PR', '我去跑 一次，之後給你']) {
+    assert.equal(call('mcp__fleet__reply', c, { message_id: 'm1' }), null, c);
+    assert.equal(call('mcp__fleet__reply', c, { message_id: 'm1', fyi: true }), null, c);
+  }
+});
+
+test('P5: imperative replies are denied', () => {
+  for (const c of ['麻煩你修一下 foo.js 然後回我', 'please implement the parser and push']) {
+    const out = call('mcp__fleet__reply', c, { message_id: 'm1' });
+    assert.equal(out.hookSpecificOutput.permissionDecision, 'deny', c);
+  }
 });
 
 test('P5: plain fact reply and fyi reply with only the noun 回報 are allowed', () => {

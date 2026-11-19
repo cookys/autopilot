@@ -97,8 +97,29 @@ function spriteLinesOf(raw: unknown): PanelLine[] | null {
     if (raw.rows !== undefined) return spriteLinesOf(raw.rows)
     if (Array.isArray(raw.pixels)) return rasterRowsFromPixels(raw.pixels)
     if (Array.isArray(raw.grid)) return rasterRowsFromPixels(raw.grid)
+    if (Array.isArray(raw.frames)) return spriteFrameLines(raw)
   }
   return null
+}
+
+// forge-stats SpriteData: frames[0] only; a cell equal to `transparent` is off, any other char is lit.
+// Palette colour is not used. Any shape mismatch (width/height, row length, row count) gives null.
+function spriteFrameLines(raw: Record<string, unknown>): PanelLine[] | null {
+  const { width, height, transparent, frames } = raw
+  if (!Number.isInteger(width) || !Number.isInteger(height) || typeof transparent !== 'string') return null
+  const w = width as number
+  const h = height as number
+  if (w < 1 || h < 1 || !Array.isArray(frames) || frames.length === 0) return null
+  const frame = frames[0]
+  if (!Array.isArray(frame) || frame.length !== h) return null
+  const grid: boolean[][] = []
+  for (const row of frame) {
+    if (typeof row !== 'string') return null
+    const cells = Array.from(row)
+    if (cells.length !== w) return null
+    grid.push(cells.map(c => c !== transparent))
+  }
+  return rasterRowsFromPixels(grid)
 }
 
 function matchPetIcon(raw: unknown): PetIconEntry | null {

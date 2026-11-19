@@ -114,3 +114,23 @@ test('pettab half-block sprite: converts pixel matrix to half-block raster lines
   assert.equal(lines[2], 'atk [31m5')
   assert.equal(r.body[2][0].color, ui.PALETTE.structure)
 })
+
+const spriteData = (frames, over = {}) => ({
+  width: 4, height: 4, transparent: '.', palette: { '#': 0xffffff, x: 0xff0000 }, frames, frame_ms: 100, ...over,
+})
+
+test('readPet SpriteData: frames[0] becomes half-block rows (transparent char off, any other char lit)', () => {
+  const t = makeT('en')
+  const payload = validPanel({ sprite: spriteData([['#..#', '#..#', '.xx.', '.xx.']]) })
+  assert.deepEqual(P.readPet(payload).pet.sprite, [[{ text: '█  █' }], [{ text: ' ██' }]])
+  const body = PT.renderPet(payload, 80, t).body.map(row => row.map(s => s.text).join(''))
+  assert.equal(body[1], '█  █')
+  assert.equal(body[2], ' ██')
+})
+
+test('readPet SpriteData: a short row, a row count other than height, or empty/missing frames gives no sprite lines', () => {
+  assert.equal(P.readPet(validPanel({ sprite: spriteData([['#..#', '#..', '.xx.', '.xx.']]) })).pet.sprite, null)
+  assert.equal(P.readPet(validPanel({ sprite: spriteData([['#..#', '#..#', '.xx.']]) })).pet.sprite, null)
+  assert.equal(P.readPet(validPanel({ sprite: spriteData([]) })).pet.sprite, null)
+  assert.equal(P.readPet(validPanel({ sprite: { width: 4, height: 4, transparent: '.', palette: {} } })).pet.sprite, null)
+})

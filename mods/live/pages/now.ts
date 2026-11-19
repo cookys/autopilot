@@ -561,7 +561,7 @@ function quotaShortSummary(ctx: PageCtx, con: ConsoleSnapshot, wide: boolean): {
   const ranked = pools === null ? [] : rankPools(pools, nowMs, t)
   const stalePools = ranked.filter(v => v.kind === 'stale' || v.kind === 'stale_seat')
   const staleAges = stalePools.map(v => v.staleMin).filter((min): min is number => min !== null)
-  const staleNote = stalePools.length === 0 ? '' : ' · ' + (staleAges.length === 0 ? t('page.quota.sv_stale_seat_plain') : t('page.now.quota_stale', { min: Math.max(...staleAges) }))
+  const staleNote = stalePools.length === 0 ? '' : ' · ' + (staleAges.length === 0 ? t('page.now.quota_stale_plain') : t('page.now.quota_stale', { min: Math.max(...staleAges) }))
   const redLabels = ranked.filter(v => v.role === 'broken').map(v => poolLabel(v.pool))
   for (const i of con.items) {
     if (!isSeatBlocked(i) || i.to_console === false) continue
@@ -807,7 +807,7 @@ function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
     if (rec.length > 0) body.push(blank(), ruleRow(t('page.now.recent'), wide), ...rec)
   }
   if (body.reduce((n, r) => n + wrapRow(r, size.cols, WRAP_HANG).length, 0) > firstRoom) {
-    // Keep a hidden spend error visible without displacing pools.
+    // Keep a hidden spend error visible without removing section headings.
     const spendError = body.findIndex(r => r.some((s, i) => s.text.trim() === t('page.now.l_spend') && r[i + 1]?.text.startsWith(GLYPHS.state.failed)))
     const kept: Row[] = []
     let i = 0
@@ -817,8 +817,17 @@ function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
       kept.push(...wrapped)
     }
     if (spendError >= i) {
-      const heading = kept.findIndex(r => r.some(s => s.text.startsWith(GLYPHS.structure.rule)))
-      if (heading >= 0) kept[heading] = truncateSegs(body[spendError], size.cols)
+      const spend = wrapRow(truncateSegs(body[spendError], size.cols), size.cols, WRAP_HANG)
+      while (i > 0) {
+        const last = body[i - 1]
+        if (last.some(s => s.text.startsWith(GLYPHS.structure.rule))) break
+        i--
+        kept.splice(kept.length - wrapRow(last, size.cols, WRAP_HANG).length)
+        if (kept.length + spend.length <= firstRoom - 1) {
+          kept.push(...spend)
+          break
+        }
+      }
     }
     const hidden = body.slice(i).filter(r => categories.has(r)) // W4: count bus items/pools, never seat chrome or wrapped rows.
     const groups = new Map<string, Row[]>()

@@ -607,14 +607,27 @@ test('now: unknown stale ages, fleet totals and hidden seat spend errors remain 
     quota: { pools: pools as never, seats: [] },
   })
   const short = (c: ConsoleSnapshot) => nowPage.render({ ...(ctxOf(80, 24, c) as object), shortBody: true } as never).body.map(text).join('\n')
-  expect(short(snap)).toContain('席資料過期')
+  expect(short(snap)).toContain('資料過期（年紀不明）')
   expect(short(snap)).not.toContain('資料過期 0 分')
   const knownAges = con({ ...snap, quota: { pools: pools.map((p, i) => ({ ...p, stale_age_min: i === 0 ? null : i * 7 })) as never, seats: [] } })
   expect(short(knownAges)).toContain('資料過期 14 分')
   expect(nowPage.render(ctxOf(80, 3, snap)).body.map(text).join('\n')).toContain('艦隊 59')
 
-  const overflowing = con({ ...snap, lines: [], items: Array.from({ length: 30 }, (_, i) => ({ ...con().items[0], id: 'e' + i })) })
-  const body = nowPage.render(ctxOf(120, 30, overflowing)).body.map(text)
-  expect(body.some(r => r.startsWith('另有 '))).toBe(true)
-  expect(body.join('\n')).toContain('花費   ✗ seats --quota 沒有本席這一列')
+  for (const count of [30, 14, 17]) {
+    const overflowing = con({ ...snap, lines: [], items: Array.from({ length: count }, (_, i) => ({ ...con().items[0], id: 'e' + i })) })
+    const body = nowPage.render(ctxOf(120, 30, overflowing)).body.map(text)
+    const full = nowPage.render(ctxOf(120, 200, overflowing)).body.map(text)
+    const category = (r: string) => r.includes('capacity--claude') || /^  . 額度 /.test(r)
+    expect(body.some(r => r.startsWith('另有 '))).toBe(true)
+    expect(body.find(r => r.startsWith('另有 '))).toContain('另有 ' + (full.filter(category).length - body.filter(category).length) + ' 項')
+    expect(body.some(r => r.startsWith('── 全艦隊 '))).toBe(true)
+    if (count !== 30) expect(body.some(r => r.startsWith('── 本席 '))).toBe(true)
+    expect(body.length).toBeLessThanOrEqual(26)
+    if (count === 17) {
+      // The last kept row is the seat heading; it must not be displaced.
+      expect(body.join('\n')).not.toContain('花費')
+    } else {
+      expect(body.join('\n')).toContain('花費   ✗ seats --quota 沒有本席這一列')
+    }
+  }
 })

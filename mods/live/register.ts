@@ -138,11 +138,10 @@ function kickFleet($: EngineInterface, nowMs: number): void {
 // between the stat and the read is held only by the size check after. Read by the tick only, never by a render.
 const FORGE_ALIVE_MS = 10_000
 const FORGE_ALIVE_MAX_BYTES = 4096
-async function forgeBand($: EngineInterface, nowMs: number): Promise<boolean> {
+export async function forgeAliveAt($: EngineInterface, liveBase: string, nowMs: number): Promise<boolean> {
   try {
-    if (liveBaseSeen === null) return false
     const sid = await $.session.id()
-    const path = liveBaseSeen + '/codeforge/mod-alive/' + sanitizeSid(sid) + '.json'
+    const path = liveBase + '/codeforge/mod-alive/' + sanitizeSid(sid) + '.json'
     const st = await $.fs.stat(path)
     if (st.kind !== 'file' || st.isLink || !(st.size <= FORGE_ALIVE_MAX_BYTES)) return false
     const text = await $.fs.read(path)
@@ -155,6 +154,9 @@ async function forgeBand($: EngineInterface, nowMs: number): Promise<boolean> {
   } catch (_e) {
     return false
   }
+}
+async function forgeBand($: EngineInterface, nowMs: number): Promise<boolean> {
+  return liveBaseSeen === null ? false : forgeAliveAt($, liveBaseSeen, nowMs)
 }
 let forgeSummaryRow = false // set by the tick from the heartbeat; the band's draw reads it, never the file
 async function fleetFor($: EngineInterface): Promise<FleetView | null> {
@@ -1300,6 +1302,11 @@ async function pruneDecide($: EngineInterface, listed: ReadonlySet<string>, ok: 
 const FORGE_LABEL_MAX = 30
 const FORGE_FULL_ROWS = 12
 const FORGE_BELOW_MIN_COLS = 26 // the narrowest the mod below is asked for its view (forge-stats draws a one-row summary under this)
+// The one-row ask the band makes of the mod below (PM G33): only with no tab open, an alive forge-stats that draws the summary row, a row to spare under the band's own two, and
+// a host at least FORGE_BELOW_MIN_COLS wide. null = not asked.
+export function forgeRowAsk(active: unknown, summaryRow: boolean, rows: number, columns: number): { maxRows: 1; bodyColumns: number } | null {
+  return active === null && summaryRow && rows >= 3 && columns >= FORGE_BELOW_MIN_COLS ? { maxRows: 1, bodyColumns: columns } : null
+}
 // BL-0359 closed. The speed view sits `beside` the mod below, as shipped. The label's pet is always read (codeforge's pet.json); a null pet draws nothing.
 const SPEED_PLACEMENT: SpeedPlacement = 'beside'
 
@@ -1720,8 +1727,9 @@ export function registerLive(on: Parameters<Register>[0]): void {
     // 1.1 rule 3). Too short a host or too narrow a one drops it first; the band's own rows are never squeezed. A mod that passes it on (the engine's own element comes back)
     // leaves the band at its own two rows, never a blank one. While it holds the row the repair line is not drawn on the band (it stays in the pane and the ⓘ page).
     let forgeRow: unknown | null = null
-    if (active === null && forgeSummaryRow && rows >= 3 && columns >= FORGE_BELOW_MIN_COLS) {
-      const answer = await lower(1, columns)
+    const forgeAsk = forgeRowAsk(active, forgeSummaryRow, rows, columns)
+    if (forgeAsk !== null) {
+      const answer = await lower(forgeAsk.maxRows, forgeAsk.bodyColumns)
       if (answer !== undefined && answer !== null && (answer as { type?: string }).type !== 'engine') forgeRow = answer
     }
     const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge, usageOn, moreTo, con, bandPreset, consoleOn && consoleSnap !== null ? bandQuotaSeg(normalizedPools(consoleSnap), bandNow, t, qSrc) : null, paneOpen, legacyTabs, forgeRow !== null)

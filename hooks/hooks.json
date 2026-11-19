@@ -170,6 +170,17 @@
         ]
       },
       {
+        "matcher": "Read|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pii-read-guard.js",
+            "timeout": 10,
+            "onFailure": "continue"
+          }
+        ]
+      },
+      {
         "matcher": "ScheduleWakeup",
         "hooks": [
           {

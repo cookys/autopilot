@@ -3561,8 +3561,8 @@ test('C1 fix: a 待決 band tab left open when console.json appears is closed; t
   const files = richWorld()
   const w = world(on, files)
   await start($, 'terminal')
-  const bandTexts = async () => {
-    const ui = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', requestId: 'rq-c1fix', props: { ...BAND_PROPS, maxRows: 20 }, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+  const bandTexts = async (rowsHost = 20) => {
+    const ui = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', requestId: 'rq-c1fix', props: { ...BAND_PROPS, maxRows: rowsHost }, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     const out = walkTexts((await ui.drawn()) as Node).map(textOf)
     await ui.unmount()
     return out
@@ -3574,7 +3574,7 @@ test('C1 fix: a 待決 band tab left open when console.json appears is closed; t
   files[CWD + '/.git/HEAD'] = 'ref: refs/heads/x\n'
   files[CWD + '/.claude/console.json'] = CONSOLE_PROGRAM
   await w.clock.advance(11_000) // the tick reads the mode: it turns on
-  const after = await bandTexts()
+  const after = await bandTexts(6) // 6 rows: below the shell's 12, so the console band's default 待決 shell is not what is compared
   expect(after.length, 'the 待決 body (many rows) is gone').toBeLessThan(before.length)
   expect(after.join(' ').includes('艦隊') && !after.join(' ').includes('指揮'), 'the pane is closed: the console band draws the new page names 1-8').toBe(true)
 })
@@ -3671,7 +3671,7 @@ test('pane UX fix: console mode, pane CLOSED: the band draws its tab row (row 2)
   expect(r.text.includes('疑似卡住'), 'the band drew: ' + r.text.slice(0, 80)).toBe(true)
   expect(r.tabs.length, 'the closed pane leaves the tab row on the band: ' + r.text.slice(0, 160)).toBeGreaterThanOrEqual(3)
 })
-test('gate3 item 4: console mode, pane CLOSED: band row 2 has the new page names 1-8 without digit hotkeys and no old tab name, and pressing any name opens the pane on that page (terminal)', async ($, on) => {
+test('gate3 item 4: console mode, pane CLOSED: band row 2 has the new page names 1-8 without digit hotkeys and no old tab name, and pressing any name but 待決 opens the pane on that page (terminal)', async ($, on) => {
   const w = await framedWorld($, on)
   w.panes = []
   const bandUi = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', requestId: 'rq-gate3-band', props: { ...BAND_PROPS, maxRows: 6 }, viewport: { columns: 160, rows: 40, isFullscreen: true } })
@@ -3689,7 +3689,7 @@ test('gate3 item 4: console mode, pane CLOSED: band row 2 has the new page names
   for (const b of bandBtns) expect(b.props?.hotkey, 'no hotkey on band Button ' + String(b.props?.key)).toBeUndefined()
   const cases: [string, string, string][] = [
     ['tab:now', '現況', '── 全艦隊'],
-    ['tab:decide', '待決', '記憶線：測試綠了，合併到 develop 嗎？'],
+    // tab:decide is the O4 card shell on the band, not a pane page (O4 regression tests below)
     ['tab:fleet', '艦隊', '復原線'],
     ['tab:quota', '額度', '── 額度池'],
     ['tab:dispatch', '派工', '── 執行中 2'],
@@ -3712,6 +3712,39 @@ test('gate3 item 4: console mode, pane CLOSED: band row 2 has the new page names
     expect(rows.slice(1, -1).join('\n'), key + ' body').toContain(bodyMarker)
   }
 })
+// PM seat (console on, legacyTabs absent, pane open, 18 rows): pressing the 待決 band tab sets the band tab, so the O4 shell is drawn (12 rows or more), not the two-row strip
+const pmBandRows = async ($: any, w: any, o: { panesOpen: boolean; columns: number; maxRows: number; press: string[] }) => {
+  for (const key of o.press) {
+    w.panes = [] // the tab row is on the band only while the pane is closed (A4): the press happens then, the pane may open afterwards
+    const p = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', requestId: 'rq-pm-press', props: { ...BAND_PROPS, legacyTabs: false, maxRows: o.maxRows, bodyColumns: o.columns }, viewport: { columns: o.columns + 5, rows: 50, isFullscreen: true } })
+    await p.press({ key })
+    await p.unmount()
+  }
+  w.panes = o.panesOpen ? ['autopilot-live'] : []
+  const ui = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', requestId: 'rq-pm-draw', props: { ...BAND_PROPS, legacyTabs: false, maxRows: o.maxRows, bodyColumns: o.columns }, viewport: { columns: o.columns + 5, rows: 50, isFullscreen: true } })
+  const tree = (await ui.drawn()) as Node
+  await ui.unmount()
+  const flat = ((tree.children || []) as Node[]).flatMap(function rows(c: Node): Node[] { const kids = (c.children || []) as Node[]; return c.type === 'Box' && c.props?.flexDirection === 'column' ? kids : c.type === 'Box' && kids.length === 1 && kids[0].type === 'Box' && kids[0].props?.flexDirection === 'column' ? rows(kids[0]) : [c] }).map(n => walkTexts(n).map(textOf).join(''))
+  const core = flat.length > 1 && flat[flat.length - 1].trim() === '' ? flat.slice(0, -1) : flat
+  return core
+}
+for (const columns of [155, 75]) {
+  for (const panesOpen of [true, false]) {
+    test('O4 regression: PM seat (console on, legacyTabs false, pane ' + (panesOpen ? 'open' : 'closed') + ', 18 rows, ' + columns + ' columns): pressing 待決 draws the 12-row shell, not the two-row strip (terminal)', async ($, on) => {
+      const w = await framedWorld($, on)
+      const rows = await pmBandRows($, w, { panesOpen, columns, maxRows: 18, press: ['tab:decide'] })
+      expect(rows.length, 'rows after pressing 待決: ' + rows.map(r => r.slice(0, 40)).join(' | ')).toBeGreaterThanOrEqual(12)
+      expect(rows.some(r => r.startsWith('\u256d')), 'the shell frame top is drawn').toBe(true)
+      expect(w.opens.length, 'the press sets the band tab; it does not open the pane').toBe(0)
+    })
+  }
+  test('O4 regression: PM seat, no key pressed (console on, legacyTabs false, pane open, 18 rows, ' + columns + ' columns): the console mode opens on the 待決 shell, 12 rows or more (terminal)', async ($, on) => {
+    const w = await framedWorld($, on)
+    const rows = await pmBandRows($, w, { panesOpen: true, columns, maxRows: 18, press: [] })
+    expect(rows.length, 'rows: ' + rows.map(r => r.slice(0, 40)).join(' | ')).toBeGreaterThanOrEqual(12)
+    expect(rows.some(r => r.startsWith('\u256d')), 'the shell frame top is drawn').toBe(true)
+  })
+}
 // pageview-focus-unbounded: the fold clamps the focus to the rows that are still shown, so the next unfold does not put the ▸ back on a row that was folded away
 test('pane review fix: folding the 艦隊 page clamps the focus to the last shown row (terminal)', async ($, on) => {
   await framedWorld($, on, snap => { snap.lines = [...snap.lines, ...Array.from({ length: 24 }, (_, i) => i + 7).map(n => ({ ...snap.lines[3], line_id: 'zz' + n, label: 'ZZ線' + n, issues: [] }))]; return snap })
@@ -7059,7 +7092,7 @@ for (const surface of SURFACES) {
     await w.clock.advance(5_000) // the tick reads .claude/console.json; consoleOn is false until then
     TURN_PLAN = FIVE_SLOW; TURN_AT = 0
     await runPlan($, FIVE_SLOW.map(() => undefined))
-    const ui = await mount($, { bodyColumns: 240 })
+    const ui = await mount($, { bodyColumns: 240, maxRows: 6 })
     const tree = (await ui.drawn()) as Node
     const buttons = (await ui.findAll({ type: 'Button' })) as Node[]
     const speed = buttons.find(b => b.props?.key === 'speed')

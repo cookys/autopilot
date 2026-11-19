@@ -34,6 +34,9 @@ const CODEX_HOOKS_JSON = LAYOUT.path('codex_hooks_json');
 const HOOK_HARNESS_EVIDENCE = LAYOUT.path('hook_harness_evidence');
 const HOOK_HARNESS_MATRIX_DOC = LAYOUT.path('hook_harness_matrix_doc');
 
+const HOOK_FILE_STEM_MAP = Object.freeze({
+  'work-order-adopt-hook': 'work-order-adopt',
+});
 const HOOK_CMD_RE = new RegExp(`${HOOKS_DIR.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/([A-Za-z0-9_-]+)\\.(js|sh)`, 'u');
 const STALE_DAYS = 60;
 const HARNESSES = [['claude', 'Claude Code'], ['codex', 'Codex'], ['opencode', 'OpenCode'], ['agy', 'agy']];
@@ -76,8 +79,9 @@ function registered(block) {
         }
         const mm = HOOK_CMD_RE.exec(h.command || '');
         if (!mm) continue;
-        if (!out.has(mm[1])) out.set(mm[1], new Set());
-        out.get(mm[1]).add(event);
+        const stem = Object.prototype.hasOwnProperty.call(HOOK_FILE_STEM_MAP, mm[1]) ? HOOK_FILE_STEM_MAP[mm[1]] : mm[1];
+        if (!out.has(stem)) out.set(stem, new Set());
+        out.get(stem).add(event);
       }
     }
   }

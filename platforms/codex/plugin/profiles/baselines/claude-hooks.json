@@ -285,6 +285,17 @@
             "onFailure": "continue"
           }
         ]
+      },
+      {
+        "matcher": "Bash|mcp__fleet__task_progress",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/work-order-adopt-hook.js",
+            "timeout": 5,
+            "onFailure": "continue"
+          }
+        ]
       }
     ],
     "PostToolUseFailure": [

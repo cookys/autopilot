@@ -318,6 +318,9 @@ function loadHookClasses(repoRoot = DEFAULT_REPO_ROOT) {
       'cost-tracker', 'session-summary', 'check-console', 'batch-format', 'askpm-log',
     ],
   };
+  const HOOK_FILE_STEM_MAP = {
+    'work-order-adopt-hook': 'work-order-adopt',
+  };
   const wired = [];
   for (const [eventName, groups] of Object.entries(hookManifest.hooks || {})) {
     for (const group of groups) {
@@ -339,7 +342,7 @@ function loadHookClasses(repoRoot = DEFAULT_REPO_ROOT) {
           }
           continue;
         }
-        wired.push(match[1]);
+        wired.push(Object.prototype.hasOwnProperty.call(HOOK_FILE_STEM_MAP, match[1]) ? HOOK_FILE_STEM_MAP[match[1]] : match[1]);
       }
     }
   }

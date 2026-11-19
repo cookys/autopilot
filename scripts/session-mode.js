@@ -814,7 +814,7 @@ function cmdEnsureChild() {
 }
 
 function cmdSetPlain(args) {
-  const target = writeTarget();
+  const target = writeTarget({ explicitId: typeof args['session-id'] === 'string' ? args['session-id'] : undefined });
   if (target.refused) { process.stderr.write(refusalLine('set', target)); return 3; }
   // A plain `set` is a record, not an exit from orchestrator mode: it never replaces this session's unexpired
   // l3-l6 marker (that would drop an l5/l6 session's mode without its close evidence). `clear` is the exit.
@@ -1192,7 +1192,7 @@ function applyInitFields(marker, init, repoRoot, prior) {
 // (plain marker, level null) / merge-if-present (level and every other field preserved), under the marker
 // lock + atomic rename. --size is upward-only against an existing marker's size.
 function cmdSetInit(args) {
-  const target = writeTarget();
+  const target = writeTarget({ explicitId: typeof args['session-id'] === 'string' ? args['session-id'] : undefined });
   if (target.refused) { process.stderr.write(refusalLine('set', target)); return 3; }
   const parsed = parseInit(args);
   if (parsed.error) { process.stderr.write(`session-mode: ${parsed.error}\n`); return 2; }
@@ -1340,7 +1340,7 @@ function cmdSet(args) {
   if (args['new-task'] === true) return cmdSetInit(args); // --level, if any, is checked there against the live marker
   if ((!hasLevel || args.level === 'none') && hasInitFlags(args)) return cmdSetInit(args);
   if (!hasLevel || args.level === 'none') return cmdSetPlain(args);
-  const target = writeTarget();
+  const target = writeTarget({ explicitId: typeof args['session-id'] === 'string' ? args['session-id'] : undefined });
   if (target.refused) { process.stderr.write(refusalLine('set', target)); return 3; }
   const level = args.level;
   const initParsed = parseInit(args);
@@ -1833,6 +1833,7 @@ module.exports = {
   verifyMissionRoutingProjection,
   LEVELS,
   SIZES,
+  NEW_TASK_CLEARED,
   markerDir,
   writeMarkerFile,
   defaultBaseRef,

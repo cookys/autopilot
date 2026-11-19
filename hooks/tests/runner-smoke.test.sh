@@ -264,6 +264,7 @@ fi
 if [ -n "${FAKE_OPENCODE_STDERR:-}" ]; then
   printf '%s\n' "$FAKE_OPENCODE_STDERR" >&2
 fi
+if [ -n "${FAKE_OPENCODE_STDOUT:-}" ]; then printf '%s\n' "$FAKE_OPENCODE_STDOUT"; fi
 if [ -n "${FAKE_OPENCODE_EXIT:-}" ]; then
   exit "$FAKE_OPENCODE_EXIT"
 fi
@@ -873,5 +874,49 @@ process.stdout.write("ok");
 ' "$MUT_NO_STDERR_RECEIPTS/2026-11-26.json")"
 assert_eq "$MUT_NO_STDERR_CHECK" "ok" "negative control: dropping stderr_tail omits stderr_tail from receipt row (first test goes red)"
 assert_not_contains "$(cat "$FLEET_LOG")" "stderr=boom" "negative control: dropping stderr_tail omits stderr=boom from FAIL notify line"
+
+# --- 8. --install-timer, systemd PATH, and noise-filtered failure details ---
+INSTALL_DRY_OUT="$(node "$SMOKE_JS" --install-timer --fleet-address test/canary/ops --dry-run < /dev/null 2>&1)"; INSTALL_DRY_RC=$?
+assert_eq "$INSTALL_DRY_RC" "0" "--install-timer --dry-run exits 0"
+assert_contains "$INSTALL_DRY_OUT" "$REPO_ROOT/scripts/runner-smoke.js" "--install-timer --dry-run substitutes @REPO_PATH@"
+assert_contains "$INSTALL_DRY_OUT" "test/canary/ops" "--install-timer --dry-run substitutes @FLEET_ADDRESS@"
+assert_contains "$INSTALL_DRY_OUT" "Environment=PATH=%h/.local/bin:%h/.grok/bin:/usr/local/bin:/usr/bin:/bin" "rendered service includes ~/.local/bin PATH"
+assert_contains "$INSTALL_DRY_OUT" "systemctl --user enable --now runner-smoke.timer" "--install-timer prints systemctl --user instructions"
+if printf '%s' "$INSTALL_DRY_OUT" | grep -qE '@[A-Z0-9_]+@'; then
+  assert_eq "found" "none" "--install-timer --dry-run leaves no @...@ placeholders"
+else
+  assert_eq "none" "none" "--install-timer --dry-run leaves no @...@ placeholders"
+fi
+
+INSTALL_NO_ADDR_OUT="$(AUTOPILOT_FLEET_ADDRESS="" node "$SMOKE_JS" --install-timer --dry-run < /dev/null 2>&1)"; INSTALL_NO_ADDR_RC=$?
+assert_eq "$INSTALL_NO_ADDR_RC" "2" "--install-timer without fleet address exits 2"
+assert_contains "$INSTALL_NO_ADDR_OUT" "@FLEET_ADDRESS@" "--install-timer without fleet address names @FLEET_ADDRESS@"
+
+UNIT_DIR="$TEST_TMP/systemd-user-units"
+INSTALL_WRITE_OUT="$(node "$SMOKE_JS" --install-timer --fleet-address test/canary/ops --unit-dir "$UNIT_DIR" < /dev/null 2>&1)"; INSTALL_WRITE_RC=$?
+assert_eq "$INSTALL_WRITE_RC" "0" "--install-timer write mode exits 0"
+assert_file_exists "$UNIT_DIR/runner-smoke.service" "--install-timer writes runner-smoke.service"
+assert_file_exists "$UNIT_DIR/runner-smoke.timer" "--install-timer writes runner-smoke.timer"
+SVC_SUM_1="$(cksum < "$UNIT_DIR/runner-smoke.service")"
+TMR_SUM_1="$(cksum < "$UNIT_DIR/runner-smoke.timer")"
+INSTALL_WRITE_2_OUT="$(node "$SMOKE_JS" --install-timer --fleet-address test/canary/ops --unit-dir "$UNIT_DIR" < /dev/null 2>&1)"; INSTALL_WRITE_2_RC=$?
+assert_eq "$INSTALL_WRITE_2_RC" "0" "--install-timer second run exits 0 (idempotent)"
+assert_eq "$(cksum < "$UNIT_DIR/runner-smoke.service")" "$SVC_SUM_1" "--install-timer second run keeps runner-smoke.service identical"
+assert_eq "$(cksum < "$UNIT_DIR/runner-smoke.timer")" "$TMR_SUM_1" "--install-timer second run keeps runner-smoke.timer identical"
+
+NOISE_RECEIPTS="$TEST_TMP/noise-receipts"
+rm -f "$FLEET_LOG"
+NOISE_OUT="$(AUTOPILOT_RUNNER_VETTED_FILE="$TEST_TMP/noise-vetted.json" PATH="$FAKE_OC_BIN:$PATH" FAKE_OPENCODE_STDERR="codeforge-collect: codeforge not on PATH" FAKE_OPENCODE_STDOUT="weekly limit reached" FAKE_OPENCODE_EXIT=1 node "$SMOKE_JS" --pins "$FIXTURE_OC_PINS" --only opencode --notify test/canary/ops --receipt-dir "$NOISE_RECEIPTS" --date 2026-11-27 < /dev/null 2>&1)"; NOISE_RC=$?
+assert_eq "$NOISE_RC" "1" "stub runner with noise stderr and quota stdout exits 1"
+NOISE_CHECK="$(node -e '
+const fs = require("fs");
+const doc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const row = doc.runners.find((r) => r.runner === "opencode");
+if (!row) process.exit(1);
+if ((row.stderr_tail || "").includes("codeforge-collect:")) process.exit(2);
+if (!(row.stdout_tail || "").includes("weekly limit reached")) process.exit(3);
+process.stdout.write("ok");
+' "$NOISE_RECEIPTS/2026-11-27.json")"
+assert_eq "$NOISE_CHECK" "ok" "receipt skips codeforge-collect noise on stderr and keeps weekly limit reached on stdout"
 
 finalize_test

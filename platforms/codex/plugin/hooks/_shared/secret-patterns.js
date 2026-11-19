@@ -121,11 +121,23 @@ function luhnValid(digits) {
   }
   return sum % 10 === 0;
 }
+// Placeholder email domains (Co-Authored-By trailers, test identities): neither masked nor counted toward blocking.
+const PLACEHOLDER_DOMAIN = /^(?:noreply\..+|users\.noreply\.github\.com|(?:.+\.)?example\.(?:com|org|net)|.+\.invalid|invalid|localhost)$/;
+function placeholderEmail(email) {
+  const at = email.lastIndexOf('@');
+  const local = email.slice(0, at).toLowerCase();
+  const domain = email.slice(at + 1).toLowerCase();
+  return PLACEHOLDER_DOMAIN.test(domain) || (local === 'noreply' && domain === 'anthropic.com');
+}
 const piiPatterns = [
   // [12] citizen, [89] new-format resident certificate; the checksum cuts random-token false positives.
   { name: 'tw_national_id', pattern: /(?<![A-Za-z0-9])[A-Z][1289]\d{8}(?![A-Za-z0-9])/g, valid: twIdValid },
   { name: 'tw_mobile', pattern: /(?<![A-Za-z0-9+])(?:\+886[- ]?9|09)\d{2}[- ]?\d{3}[- ]?\d{3}(?![A-Za-z0-9])/g },
-  { name: 'email', pattern: /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}(?![A-Za-z0-9-]|:\S)/g },
+  {
+    name: 'email',
+    pattern: /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}(?![A-Za-z0-9-]|:\S)/g,
+    valid: (m) => !placeholderEmail(m),
+  },
   // 13-19 digits, plain or 4-4-4-n / 4-6-5 groups; leading 2-6 (card networks) keeps epoch ms (1xxxxxxxxxxxx) out.
   {
     name: 'card_number',

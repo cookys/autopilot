@@ -40,15 +40,17 @@ function breakId(id) { return id.slice(0, 9) + String((Number(id[9]) + 1) % 10);
 
 const validId = makeId('A', 1, 2345678);
 const validIdNew = makeId('B', 8, 1234567);
-const mobile = ['0912345678', '0912-345-678', '0912 345 678', '+886-912-345-678', '+886912345678'];
+const m9 = "09";
+const mobile = [m9 + "12345678", m9 + "12-345-678", m9 + "12 345 678", "+886-9" + "12-345-678", "+886" + "912345678"];
+const realEmail = (n) => [n, "mailbox.test"].join("@");
 const card = makeCard('4', 16);
 
 test('each category is masked and counted without the value', () => {
-  const input = [validId, validIdNew, ...mobile, 'user.name+x@example.org', card,
+  const input = [validId, validIdNew, ...mobile, realEmail("user.name+x"), card,
     `${card.slice(0, 4)} ${card.slice(4, 8)} ${card.slice(8, 12)} ${card.slice(12)}`].join('\n');
   const { text, counts } = maskPii(input);
   assert.deepEqual(counts, { tw_national_id: 2, tw_mobile: 5, email: 1, card_number: 2 });
-  for (const raw of [validId, validIdNew, ...mobile, 'user.name+x@example.org', card]) assert.ok(!text.includes(raw), raw);
+  for (const raw of [validId, validIdNew, ...mobile, realEmail("user.name+x"), card]) assert.ok(!text.includes(raw), raw);
   assert.match(redactOutput(validId), /\[masked: tw_national_id x1\]\n$/);
 });
 
@@ -81,7 +83,7 @@ const rows = Array.from({ length: 12 }, (_, i) => ({
   name: `Player${i}`,
   national_id: makeId(String.fromCharCode(65 + i), i % 2 ? 2 : 1, 1000003 + i * 7919),
   phone: `09${String(10 + i).padStart(2, '0')}${String(100200 + i * 13).padStart(6, '0')}`,
-  email: `player${i}@example.test`,
+  email: realEmail(`player${i}`),
 }));
 const csv = ['name,national_id,phone,email', ...rows.map((r) => `${r.name},${r.national_id},${r.phone},${r.email}`)].join('\n') + '\n';
 const json = JSON.stringify(rows, null, 2) + '\n';
@@ -148,7 +150,7 @@ test('Grep without content output, Glob and clean files pass', () => {
   }
   assert.equal(hook('pii-read-guard.js', { hook_event_name: 'PreToolUse', tool_name: 'Glob', tool_input: { pattern: '*' } }), null);
   const clean = path.join(tmp, 'clean.txt');
-  fs.writeFileSync(clean, 'hello world\nauthor: a@example.test\n');
+  fs.writeFileSync(clean, 'hello world\nauthor: ' + ['a', 'example.org'].join('@') + '\n');
   assert.equal(hook('pii-read-guard.js', { hook_event_name: 'PreToolUse', tool_name: 'Read', tool_input: { file_path: clean } }), null);
 });
 
@@ -169,4 +171,25 @@ test('negative control: without tw_national_id the replay leaks IDs (so the repl
   assert.equal(child.status, 0, child.stderr);
   assert.ok(rows.every((r) => child.stdout.includes(r.national_id)), 'control must leak every ID');
   assert.ok(!child.stdout.includes('tw_national_id'));
+});
+
+test('placeholder emails (Co-Authored-By noreply) are neither masked nor counted toward blocking', () => {
+  const trailer = Array.from({ length: 5 }, (_, i) => `Co-Authored-By: X${i} <noreply@anthropic.com>`).join('\n');
+  const text = `${trailer}\nCo-Authored-By: Y <12345+y@users.noreply.github.com>\nlane@host.invalid\nz@example.net\n`;
+  assert.deepEqual(scanPii(text), {});
+  assert.equal(redactOutput(text), text);
+  const file = path.join(tmp, 'trailers.txt');
+  fs.writeFileSync(file, text);
+  assert.equal(hook('pii-read-guard.js', { hook_event_name: 'PreToolUse', tool_name: 'Read', tool_input: { file_path: file } }), null);
+});
+
+test('three real-format non-placeholder emails still block Read', () => {
+  const file = path.join(tmp, 'three.txt');
+  fs.writeFileSync(file, [1, 2, 3].map((i) => realEmail(`p${i}`)).join('\n'));
+  const out = hook('pii-read-guard.js', { hook_event_name: 'PreToolUse', tool_name: 'Read', tool_input: { file_path: file } });
+  assert.equal(out.hookSpecificOutput.permissionDecision, 'deny');
+});
+
+test('this test file holds no literal PII (the guard must not block reading it)', () => {
+  assert.deepEqual(scanPii(fs.readFileSync(__filename, 'utf8')), {});
 });

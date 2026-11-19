@@ -18,6 +18,7 @@
 const PACE_SCHEMA = 'capacity.pace/1';
 const ALERT_BEHIND_STATUS = 'ALERT_behind';
 const BEHIND_EARLY_STATUS = 'behind_early';
+const WARN_AHEAD_STATUS = 'WARN_ahead';
 const BEHIND_PACE_STATUSES = Object.freeze([ALERT_BEHIND_STATUS, BEHIND_EARLY_STATUS]);
 const SEEN_AT_FRESH_MS = 24 * 3600 * 1000;
 
@@ -29,6 +30,11 @@ function finiteNum(v) {
 /** True only when status is ALERT_behind or behind_early. */
 function isBehindPaceStatus(status) {
   return status === ALERT_BEHIND_STATUS || status === BEHIND_EARLY_STATUS;
+}
+
+/** True only when status is WARN_ahead. */
+function isAheadPaceStatus(status) {
+  return status === WARN_AHEAD_STATUS;
 }
 
 /** True only when row is a plain object with a non-empty pool name and stale === false. */
@@ -116,10 +122,12 @@ module.exports = {
   PACE_SCHEMA,
   ALERT_BEHIND_STATUS,
   BEHIND_EARLY_STATUS,
+  WARN_AHEAD_STATUS,
   BEHIND_PACE_STATUSES,
   SEEN_AT_FRESH_MS,
   finiteNum,
   isBehindPaceStatus,
+  isAheadPaceStatus,
   isFreshRow,
   isSeenAtFresh,
   isFreshRowForKey,

@@ -347,7 +347,7 @@ test('(a) reset-weighted quota outranks linear pace; claude rows are never candi
     qualified_source: 'pace-roles.json',
     pace_generated_at: '2026-11-13T02:00:00Z',
     candidates: [
-      { engine: 'agy', pool: 'agy', slack_pts: -25 },
+      { engine: 'agy', pool: 'agy', slack_pts: -25, basis: 'pace', demoted: 'ahead' },
       { engine: 'glm', pool: 'glm', slack_pts: -3 },
       { engine: 'codex', reason: 'unknown' },
       { engine: 'grok', pool: 'grok-cli', slack_pts: 14 },
@@ -728,7 +728,7 @@ test('(g) scarce codex row 35 pts ahead is a known reading with slack -35, not u
     candidates: [
       { engine: 'agy', reason: 'unknown' },
       { engine: 'glm', reason: 'unknown' },
-      { engine: 'codex', pool: 'codex A', slack_pts: -35 },
+      { engine: 'codex', pool: 'codex A', slack_pts: -35, basis: 'pace', demoted: 'ahead' },
       { engine: 'grok', reason: 'unknown' },
       { engine: 'opencode', reason: 'unknown' },
     ],
@@ -806,13 +806,16 @@ test('(h) endpoint readiness: glm has best slack (+30) but endpoint_not_ready ->
     role: 'author',
     checkEndpoint: (ep) => ep !== 'glm',
   });
-  assert.equal(glmDown.engine, 'agy');
-  assert.equal(glmDown.slack_pts, -15);
+  // BL-0468: agy is WARN_ahead, demoted below grok (used_pct 51 → slack -11).
+  assert.equal(glmDown.engine, 'grok');
+  assert.equal(glmDown.pool, 'grok-cli');
+  assert.equal(glmDown.slack_pts, -11);
   assert.equal(glmDown.selected_by, 'quota_score');
   assert.equal(glmDown.over_pace, true);
 
   // When glm endpoint is not ready (injected, no shell spawn), glm is listed as
   // { engine: "glm", reason: "endpoint_not_ready" } and grok (+14) is chosen instead.
+  // BL-0468: agy is WARN_ahead, demoted below the on-pace grok
   const checkedUnready = [];
   const whenNotReady = selectEngine({
     pace,
@@ -828,10 +831,12 @@ test('(h) endpoint readiness: glm has best slack (+30) but endpoint_not_ready ->
   assert.equal(whenNotReady.engine, 'grok');
   assert.equal(whenNotReady.runner, 'grok');
   assert.equal(whenNotReady.model, 'grok-4.7');
+  assert.equal(whenNotReady.pool, 'grok-cli');
   assert.equal(whenNotReady.slack_pts, 14);
+  assert.equal(whenNotReady.selected_by, 'quota_score');
   assert.equal(whenNotReady.over_pace, false);
   assert.deepEqual(whenNotReady.candidates, [
-    { engine: 'agy', pool: 'agy', slack_pts: -15 },
+    { engine: 'agy', pool: 'agy', slack_pts: -15, basis: 'pace', demoted: 'ahead' },
     { engine: 'glm', reason: 'endpoint_not_ready' },
     { engine: 'codex', reason: 'unknown' },
     { engine: 'grok', pool: 'grok-cli', slack_pts: 14 },
@@ -889,7 +894,7 @@ test('(i) qualified.v1.json eligibility: fail-only excluded, provisional allowed
     assert.equal(flagOut.qualified_source, qPath);
     assert.equal(flagOut.candidates.some((c) => c.engine === 'grok'), false);
     assert.deepEqual(flagOut.candidates, [
-      { engine: 'agy', pool: 'agy', slack_pts: -25 },
+      { engine: 'agy', pool: 'agy', slack_pts: -25, basis: 'pace', demoted: 'ahead' },
       { engine: 'glm', pool: 'glm', slack_pts: -3 },
     ]);
 
@@ -1003,7 +1008,7 @@ test('(i) qualified.v1.json eligibility: fail-only excluded, provisional allowed
     const authorOut = JSON.parse(authorPick.stdout);
     assert.equal(authorOut.engine, 'agy');
     assert.equal(authorOut.qualified_source, exportedPath);
-    assert.deepEqual(authorOut.candidates, [{ engine: 'agy', pool: 'agy', slack_pts: -25 }]);
+    assert.deepEqual(authorOut.candidates, [{ engine: 'agy', pool: 'agy', slack_pts: -25, basis: 'pace', demoted: 'ahead' }]);
 
     // 5. Negative control: invalid schema or invented result in an existing qualified file fails closed (exit 2).
     const badPath = path.join(tmpDir, 'bad-qualified.json');
@@ -2995,4 +3000,43 @@ test('behind-pace (2c): behind signal is a yes/no preference only with no propor
     fs.rmSync(sockDir, { recursive: true, force: true });
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('WARN_ahead demotion: two eligible candidates -> non-ahead picked and ahead candidate annotated', () => {
+  const res = selectEngine({
+    pace: priorityPace([
+      paceRow('agy', 10, 50, { status: 'WARN_ahead', hours_to_reset: 1 }),
+      paceRow('grok-cli', 40, 50, { status: 'ok', hours_to_reset: 2 }),
+    ]),
+    role: 'implementer',
+    checkEndpoint: allEndpointsReady,
+  });
+  assert.equal(res.engine, 'grok');
+  const agyCand = res.candidates.find((c) => c.engine === 'agy');
+  assert.equal(agyCand.basis, 'pace');
+  assert.equal(agyCand.demoted, 'ahead');
+});
+
+test('WARN_ahead demotion: only eligible candidate is WARN_ahead -> still picked', () => {
+  const res = selectEngine({
+    pace: priorityPace([
+      paceRow('agy', 10, 50, { status: 'WARN_ahead', hours_to_reset: 1 }),
+    ]),
+    role: 'implementer',
+    checkEndpoint: allEndpointsReady,
+  });
+  assert.equal(res.engine, 'agy');
+  const agyCand = res.candidates.find((c) => c.engine === 'agy');
+  assert.equal(agyCand.basis, 'pace');
+  assert.equal(agyCand.demoted, 'ahead');
+});
+
+test('WARN_ahead demotion: missing pace file -> unchanged pace_unknown pick', () => {
+  const res = spawnSync('node', [CLI, '--role', 'implementer', '--pace', MISSING_PACE, '--json'], {
+    encoding: 'utf8',
+  });
+  assert.equal(res.status, 3);
+  const parsed = JSON.parse(res.stdout);
+  assert.equal(parsed.engine, null);
+  assert.equal(parsed.reason, 'pace_unknown');
 });

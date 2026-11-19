@@ -625,6 +625,42 @@ test('(e) --exclude removes keys from consideration', () => {
   assert.equal(JSON.parse(noneLeft.stdout).reason, 'pace_unknown');
 });
 
+test('(e2) --exclude <key> removes the key from the priority walk: same input twice, control lists it, excluded run does not', () => {
+  const file = fixturePath('ahead-vs-behind.json');
+  const key = 'glm';
+
+  // Control: the same input without --exclude must list the key in the candidates.
+  const control = cli(['--role', 'author', '--pace', file, '--json']);
+  assert.equal(control.status, 0, control.stderr);
+  const controlOut = JSON.parse(control.stdout);
+  const controlOrder = controlOut.candidates.map((c) => c.engine);
+  assert.ok(
+    controlOrder.includes(key),
+    `control (no --exclude) must list ${key}: ${JSON.stringify(controlOrder)}`,
+  );
+  assert.equal(controlOut.engine, 'glm'); // the key even wins the walk
+
+  // Excluded: the same input plus --exclude <key>; the key is gone from the candidates and their order.
+  const excluded = cli(['--role', 'author', '--pace', file, '--exclude', key, '--json']);
+  assert.equal(excluded.status, 0, excluded.stderr);
+  const excludedOut = JSON.parse(excluded.stdout);
+  const excludedOrder = excludedOut.candidates.map((c) => c.engine);
+  assert.equal(
+    excludedOrder.includes(key),
+    false,
+    `--exclude ${key}: the key must not appear in the candidates or their order: ${JSON.stringify(excludedOrder)}`,
+  );
+  assert.notEqual(excludedOut.engine, key);
+  // Exclusion is a pure removal: the surviving candidates keep the control order and content.
+  assert.deepEqual(
+    excludedOut.candidates,
+    controlOut.candidates.filter((c) => c.engine !== key),
+  );
+  // The walk continues past the excluded key: grok (+14) now wins over agy (-25).
+  assert.equal(excludedOut.engine, 'grok');
+  assert.equal(excludedOut.slack_pts, 14);
+});
+
 test('(f) alias rows of one key: the larger fresh slack is used', () => {
   const r = cli(['--role', 'implementer', '--pace', fixturePath('aliases.json'), '--json']);
   assert.equal(r.status, 0, r.stderr);

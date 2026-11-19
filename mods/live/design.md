@@ -18,7 +18,7 @@ The left column is 26 wide at every tier. The main window starts at the same col
 
 A right column with nothing to show is not drawn and its width goes to the roundtable, so there is no hole. At 200 with no full usage table the roundtable takes both. At 240 the same rule applies to the usage column (no `usage_full`) and the fleet column (no lanes and no memory).
 
-## 2. The rows (ux-v7: the menu row is the first band row, the quick row is the last)
+## 2. The rows (r5: the menu row is the second-to-last band row, the quick row is the last; both sit next to the prompt)
 
 From the top: **menu row**, top frame, body rows, bottom frame (with a foot title right-aligned in the left window, the card position `3/8`, and in the main window the one-line hint), **quick row**. The menu row is band row 0 and the quick row is always the last band row; only the body between the frames grows.
 
@@ -70,7 +70,17 @@ The shell is drawn whenever `maxRows >= 12` and the width holds a main window of
 
 ## 10. Coordinates
 
-Relative to the band's first row, at body widths 75, 115, 155, 195 and 235 (ux-v7 section 2): menu row = band row 0; the question's first character at (band row 2, col 29); the first option's digit at (band row 5, col 31); quick-row `0` / `7` / `8` / `9` at columns 1 / 16 / 28 / 40 on the last band row; the left frame occupies columns 0–25; the main frame's border starts at column 27. No row is wider than `bodyColumns`. The card view draws two frames with one gap cell between them (left inner 24, not the joined 26), so the main window's inner width at body 75 is 46.
+Relative to the band's first row (r5: the top frame is row 0, the menu row is second to last, the quick row last; older text below that says menu row = band row 0 now reads: question at band row 1, first option at row 4), at body widths 75, 115, 155, 195 and 235 (ux-v7 section 2): menu row = band row 0 (pre-r5); the question's first character at (band row 2, col 29); the first option's digit at (band row 5, col 31); quick-row `0` / `7` / `8` / `9` at columns 1 / 16 / 28 / 40 on the last band row; the left frame occupies columns 0–25; the main frame's border starts at column 27. No row is wider than `bodyColumns`. The card view draws two frames with one gap cell between them (left inner 24, not the joined 26), so the main window's inner width at body 75 is 46.
+
+## 11. r5: menu at the bottom, collapse, fit ladder, tok/s
+
+- **Rule (operator, rejection of r4 on 11-19):** the menu row (d 待決 / r / u / p / h) and the quick row (0/7/8/9) sit at the very bottom of the band, next to the prompt. Order: top frame, body, bottom frame, menu row, quick row. Why it matters: a top menu moved when the band changed height (real 2.1.328 pane: row 27 became row 30 after one answer), so the next click missed; at the bottom its distance from the prompt never changes (test `r5 D2`).
+- **Collapse:** `d` on the 待決 menu collapses the band to ONE row (the menu row plus `待決 N 張 · 按 d 展開`); `d` again expands; r/u/p/h expand and select. Default is expanded; reset at session start. `band-geometry.log` lines carry `expanded` and the real row count (`shellRows`).
+- **Height:** the host gives `maxRows` and the band uses all of it (49x209: 19). Cards that do not fit shed in this order: padding and the 建議 reason row (tight), divider and progress row (compact), frames and left window (bare), then split and scroll. Priority options > 建議 > 不授權 > 背景.
+- **Asking the host for rows is not possible (2.1.328, strings in the o4dbg2 dump, `cc328-strings.txt`):** `maxRows = min(rows, bandHeight + room)`, `room = Rt - height(wt) - height(So)`, `Rt = (vt||Pt) ? rows-2 : floor(rows/2)` (offset about 49518743). `vt` is true only for the `history-search` overlay; `Pt` for elicitation, elicitation-url, background-task-details, model-picker and prompt-help (offsets about 38689596-38689745). A mod-registered above-prompt band sets neither, and no band API requests an overlay or more rows.
+- **Options and steps are one row each:** `N: label ★  description` (hanging wrap); a question with (1)(2)(3) or 1. 2. 3. puts each step on its own row (`paraRows`).
+- **tok/s** is drawn on the menu row (shell mode never drew the BandBar that carried it); a Button keyed `speed`.
+- **Digits** are not hotkeys (a bare digit in an empty composer would press the Button): 1-5 and 0/7/8/9 are clickable; letters d/r/u/p/h work after `ctrl+x tab`.
 
 ## Sources
 

@@ -1968,7 +1968,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
         }
         const menu = shellMenuRow(el, t, {
           selected: shellMenu, pending: nonStep.length, room: shellRoom.rows.length, awaiting: (snapshot?.awaiting ?? []).length, columns,
-          onSelect: selectMenu, speed: forge === null ? null : forgeBar(forge).segs,
+          onSelect: selectMenu, speed: forge === null ? null : forgeBar(forge).segs, onSpeed: redraw,
           ...(bandCollapsed ? { note: t('shell.collapsed', { n: nonStep.length, key: 'd' }) } : bare ? { note: barePos } : {}),
         })
         if (bandCollapsed) {

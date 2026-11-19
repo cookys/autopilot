@@ -8853,7 +8853,7 @@ for (const surface of SURFACES) {
         else expect(d.all.length, 'tree rows (the bare layout shrinks to its card) ' + at).toBeLessThanOrEqual(maxRows)
         expect(d.all[d.all.length - 2], 'menu row second to last ' + at).toContain('待決')
         expect(d.all[d.all.length - 2].includes('╭'), 'menu row is not a frame ' + at).toBe(false)
-        expect(d.all[0].startsWith('╭'), 'top frame first ' + at).toBe(true)
+        if (maxRows >= 8) expect(d.all[0].startsWith('╭'), 'top frame first ' + at).toBe(true)
         expect(d.all[d.all.length - 1], 'quick row last ' + at).toContain('0:')
         for (const r of d.all) expect(displayWidth(r), 'row width ' + at).toBeLessThanOrEqual(columns)
         expect(d.buttons.filter(k => k.startsWith('tab:') && k !== 'tab:decide'), 'no old tab bar ' + at).toEqual([])
@@ -8936,6 +8936,16 @@ for (const surface of SURFACES) {
     expect(back.all.join('\n'), 'and switches back').toContain('P5')
     const m = await drawShell($, 160, ['next-menu'], 19)
     expect(m.all.join('\n'), '9 leaves the card view').not.toContain('P5')
+  })
+  test('r5 D2 (bug 6 root cause): the menu row keeps its place from the bottom while the card changes height, so a click lands (' + surface + ')', async ($, on) => {
+    // real 2.1.328 pane: the old top menu moved (row 27 -> 30) when the band changed height after an answer, so the next click missed. At the bottom the row is second to last in every state.
+    r5World(on, [PMCARD, STEPCARD])
+    await start($, surface)
+    for (const press of [[], ['opt:d-r5pmcard:0'], ['next'], ['prev'], ['d-toggle']]) {
+      const d = await drawShell($, 209, press.filter(k => k !== 'd-toggle'), 19)
+      expect(d.all[d.all.length - 2], 'menu row second to last after ' + press.join(',')).toContain('待決')
+      expect(d.all[d.all.length - 1], 'quick row last after ' + press.join(',')).toContain('送出')
+    }
   })
   test('O4 r4 A: under 6 rows the band is ONE hint line with the real row count (' + surface + ')', async ($, on) => {
     await r4World($, on, false)

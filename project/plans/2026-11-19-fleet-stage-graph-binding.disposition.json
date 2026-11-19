@@ -92,6 +92,104 @@
       "fingerprint": "933f0fb5a1bcab190b891e5cfc4dc9f80b3ad0bfa96aa982cd088941f58d0cd6",
       "disposition": "accepted_blocker",
       "rationale": "Verified: the first-draft P5 mixed fleet and capacity deliverables and section 3 lacked the plan-phases schema; phases split into P6a, P6b, P7 with single owners, schemas/plan-phases.schema.json added to P4."
+    },
+    {
+      "fingerprint": "70c7d8797aa0aaca1a9a028cbaa64b487607db64d65c0f6d6042b2bc2d9a20c4",
+      "rubric_id": "R5",
+      "generation": 2,
+      "disposition": "accepted_blocker",
+      "rationale": "Verified (export regenerates in memory; checksums prove nothing): section 4(d) now regenerates from four inputs incl. evidence rules and COARSE_OF_NODE and byte-compares; negative control deletes one rule with recomputed checksum; section 3 adds fleet-flow-evidence.json."
+    },
+    {
+      "fingerprint": "c02aee7905e5e918657bf6f455cf22669bbd31b17f02e25e5d95b0321aef4c7f",
+      "rubric_id": "R3",
+      "generation": 2,
+      "disposition": "accepted_blocker",
+      "rationale": "Verified (qc-gate row said no merge exists): section 4(b) rows 3 and 5 split pre-merge derivation (intended target + candidate tip, git merge-base) from finish reconcile; P2 acceptance adds a pre-merge fixture with no merge commit."
+    },
+    {
+      "fingerprint": "4877a990af3f1c60cd7167d6671f999d81d434861e953014ba5f49599644e863",
+      "rubric_id": "R3",
+      "generation": 2,
+      "disposition": "accepted_blocker",
+      "rationale": "Verified (finish rows ignored urgent-low deferral, finish-flow Post-finish code-review row): section 4(b) row 7 defines the urgent-low finish sequence, deferred row 3 and the post-finish check; P2 tests the full sequence."
+    },
+    {
+      "fingerprint": "c533a35b801c72652657b28bc9c9fa3574b1032f661fa145851ffb37daed9dd3",
+      "rubric_id": "R3",
+      "generation": 2,
+      "disposition": "accepted_blocker",
+      "rationale": "Verified (git log fallback returned no sha and no task binding): section 4(b) row 5 discovers the merge by exact Fleet-Task trailer on the target with refusal on zero or several; negative control is an unrelated latest commit with a valid trailer."
+    },
+    {
+      "fingerprint": "060a9416beac7ec95c73fbf39301b500f7cdbc3436355795e69b39a6d9c30747",
+      "rubric_id": "R3",
+      "generation": 2,
+      "disposition": "accepted_blocker",
+      "rationale": "Verified (pre-push has_evidence checks only that a trailer or .qc artifact exists, scripts/lib/qc-evidence.sh): section 4(b) row 6 derives QC from check-test-outcome.js and .qc artifacts bound to the merge, trailer is a summary, XS/S covered; negative control trailer with record deleted."
+    },
+    {
+      "fingerprint": "9e52001561d8c8e79b8eeafe5c3f393a41709ffbdaddc927513b01febb2493df",
+      "rubric_id": "R2",
+      "generation": 2,
+      "disposition": "accepted_blocker",
+      "rationale": "Verified (session-mode.js has no --session-id, :993-1000 stores resolved with null size, check-hook-inventory.js:71-75 and :184-185 derive stem from filename): sections 3 and 4(a) add the session-mode.js edits, --new-task on any task-scoped state and rename the hook to hooks/work-order-adopt.js."
+    },
+    {
+      "fingerprint": "635a33cea8f67f038daea3520a16827ac05d488c6151dc8e40b6dfa560961afc",
+      "rubric_id": "R3",
+      "generation": 2,
+      "disposition": "accepted_blocker",
+      "rationale": "Verified (timing, phase-base, plan-first discovery, qc-gate row, Used, per finish-flow item 7 and stage-advance.js:94): section 4(b) states re-derivation runs at task_result and accept, phase-base by merge-base with covering reconcile, plan-first path rule excluding explore-synthesis and INDEX, row 4 stage-order only with a warn code, Used as a task_result line with a resolvable token."
+    },
+    {
+      "fingerprint": "2f84c4cb249e01e9fb634e7e5eae3e9ce548dd1639f8c2cf2111365f0cdbcfb9",
+      "rubric_id": "R3",
+      "generation": 2,
+      "disposition": "accepted_blocker",
+      "rationale": "Verified (Mode B reads four files and never reads verdict, check-phase-review-receipt.js:298-455; Mode A has packets, chain, post-head modes; trailer reviewer id is not a ledger seat id): section 4(b) rows 2, 3, 6, 7 bundle all four plan files, select Mode by bundle shape, drop the reviewer-in-ledger check and handle urgent-low."
+    },
+    {
+      "fingerprint": "72c61c1a97ef8f600995f8e92cd3e5a0d42da757c1d68b74b91e21b1740f6883",
+      "rubric_id": "R5",
+      "generation": 2,
+      "disposition": "accepted_blocker",
+      "rationale": "Verified (same hole as the first R5 candidate, a recomputed checksum plus unchanged inputs passes): section 4(d) replaces checksum checks with whole-content regeneration over all four generator inputs and a clean-pin check; negative controls (1) deleted rule, (2) older export after COARSE_OF_NODE change, (3) stale stage-graph."
+    },
+    {
+      "fingerprint": "ae6352898d5dd2e3f96acbb3a17703385917773acce21808757ba3214cc68b50",
+      "rubric_id": "R6",
+      "generation": 2,
+      "disposition": "accepted_blocker",
+      "rationale": "Verified (no kind enum, CLI or plan-first representation in the plan): section 4(e) adds the Receipt kind enum and bundle format, the fleet-flow-verify CLI flags and autopilot.fleet-flow-verdict/1 output, and Task.plan_blob for plan-first."
+    },
+    {
+      "fingerprint": "e6c974694db01c74228add520453d3701838d18099817019db1836e0eef48c8e",
+      "rubric_id": "R7",
+      "generation": 2,
+      "disposition": "accepted_blocker",
+      "rationale": "Verified (R7 asked for receipts and dispatch-author.sh header says read-only): section 4(f) gives the exact seven-step CLI sequence for codex/agy/grok lanes and drops the dispatch-author attachment; the sequence lives in references/multi-agent-portability.md (section 3, P3)."
+    },
+    {
+      "fingerprint": "769fef6b89e8ef5d974f935649743e21038d68de1b17f2c011a914a1d6dbb59a",
+      "rubric_id": "R8",
+      "generation": 2,
+      "disposition": "accepted_blocker",
+      "rationale": "Verified (work-order-plan.js:15-17 parses only Size: lines; hooks/fleet-send-work-order-guard.js:64-76 enforces both Size and Plan): section 4(g) orders P2 promoted on the PM host, P6a live with both refusals observed, then P8 with pm-console stub controls (:262-274) preserved."
+    },
+    {
+      "fingerprint": "21885fa35bb8b55f8006404be622c8ccce1e28bfff45b8c10f6de119903f5445",
+      "rubric_id": "R9",
+      "generation": 2,
+      "disposition": "accepted_blocker",
+      "rationale": "Verified (T1-T4 had field names only, T3 would fire on card waits, conditional P5 and legacy tables undefined): section 4(i) table cites fleet constants and exempts member, d-card and waiting_on_operator waits from T3; section 4(h) adds conditional phases and legacy-table fallback; no new numbers per PM 01M7RTGA."
+    },
+    {
+      "fingerprint": "1b639bf45bf9434da8eed07ffc35751a976cf444d4d1dac36a409678b0952586",
+      "rubric_id": "R11",
+      "generation": 2,
+      "disposition": "accepted_blocker",
+      "rationale": "Verified (P7 had no consumer, P4 used_by differed, mirror and registry files omitted, sync-manifest ritual sync-codex-plugin-skills): P6b now depends on P7 and consumes its rows (4(j), phases), P4 used_by is identical in block and table, section 3 lists the Codex mirror and the P3 registries."
     }
   ]
 }

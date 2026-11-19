@@ -201,6 +201,43 @@ test('core-unset fixtures: data extensions only; docs and absent New-Files stay 
   allow('allow-new-rs.md', 'Size: S\nRole: implementer\nScope: src/fixtures/new.rs\nNew-Files: src/fixtures/new.rs\n');
 });
 
+test('core-unset round 4: whitespace and quoted diff paths, symlink components, every Scope and New-Files header', () => {
+  const bare = gitRepo('core-unset-r4');
+  const denied = (name, text, extra = {}) => {
+    const f = briefFile(name, text);
+    assert.equal(gate.check({ ...K, env: {}, files: [f], cwd: bare, ...extra }).cls, 'core-unset', name);
+  };
+  const allow = (name, text, extra = {}) => {
+    const f = briefFile(name, text);
+    assert.equal(gate.check({ ...K, env: {}, files: [f], cwd: bare, ...extra }).allowed, true, name);
+  };
+
+  const wsDiff = briefFile('ws-path.diff', 'diff --git a/src/fixtures/a.json z.rs b/src/fixtures/a.json z.rs\n+++ b/src/fixtures/a.json z.rs\n');
+  denied('deny-ws-brief.md', 'Size: S\nRole: implementer\n', { diffFiles: [wsDiff] });
+  const quotedDiff = briefFile('quoted-path.diff', '+++ "b/src/fixtures/a\\tb.json"\n');
+  denied('deny-quoted-brief.md', 'Size: S\nRole: implementer\n', { diffFiles: [quotedDiff] });
+
+  fs.mkdirSync(path.join(bare, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(bare, 'src', 'exist.rs'), 'fn e() {}\n');
+  fs.writeFileSync(path.join(bare, 'src', 'exist.json'), '{}\n');
+  fs.mkdirSync(path.join(bare, 'docs'), { recursive: true });
+  fs.symlinkSync('../src', path.join(bare, 'docs', 'lnk'));
+  denied('deny-docs-lnk.md', 'Size: S\nRole: implementer\nScope: docs/lnk/exist.rs\n');
+  fs.mkdirSync(path.join(bare, 'tests'), { recursive: true });
+  fs.symlinkSync('../src', path.join(bare, 'tests', 'fixtures'));
+  denied('deny-tests-fixtures-lnk.md', 'Size: S\nRole: implementer\nScope: tests/fixtures/exist.json\n');
+  denied('deny-new-under-lnk.md', 'Size: S\nRole: implementer\nScope: docs/lnk/zz.rs\nNew-Files: docs/lnk/zz.rs\n');
+  fs.symlinkSync('missing-target.rs', path.join(bare, 'src', 'dangling.rs'));
+  denied('deny-dangling.md', 'Size: S\nRole: implementer\nScope: src/dangling.rs\nNew-Files: src/dangling.rs\n');
+  denied('deny-two-scope.md', 'Size: S\nRole: implementer\nScope: docs/a.md\nScope: src/a.rs\n');
+
+  const okDiff = briefFile('ok-paths.diff', 'diff --git a/docs/plans/x.md b/docs/plans/x.md\n+++ b/docs/plans/x.md\t2020-01-01 00:00:00 +0000\ndiff --git a/tests/fixtures/a.json b/tests/fixtures/a.json\n--- a/tests/fixtures/a.json\n+++ b/tests/fixtures/a.json\n');
+  const okRepo = gitRepo('core-unset-r4-ok');
+  const okBrief = briefFile('allow-normal-diff.md', 'Size: S\nRole: implementer\n');
+  assert.equal(gate.check({ ...K, env: {}, files: [okBrief], diffFiles: [okDiff], cwd: okRepo }).allowed, true, 'normal diff docs and fixtures');
+  allow('allow-two-docs-scope.md', 'Size: S\nRole: implementer\nScope: docs/a.md\nScope: docs/plans/x.md\n');
+});
+
 test('class 4 novel: plan/design/brainstorm/architecture/research roles, or a novel marker', () => {
   for (const r of ['plan', 'design', 'brainstorm', 'architecture', 'research']) {
     assert.equal(cls(K, { ...OK, AUTOPILOT_TASK_ROLE: r }).cls, 'novel', r);

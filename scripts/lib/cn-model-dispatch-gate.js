@@ -26,6 +26,9 @@
 //                 or is named in New-Files: and does not exist under the repo root yet. A repo file cannot change
 //                 that list. A path allowed only by **/fixtures/**, **/testdata/** or **/__fixtures__/** also needs a basename extension in the shipped core_unset_fixture_exts list (lower-cased); docs/**, doc/** and an absent New-Files path do not, and a repo file cannot change that list. An empty core list must not fail open onto source edits (01M7S88YZPPZKVARP0F2SYMRGS).
 //                 Paths are normalised; `..`, absolute and glob paths never pass.
+//                 A diff path that contains whitespace, or git's quoted `"b/..."` form, never passes.
+//                 A symlink in any existing component of the normalised path never passes.
+//                 Every Scope header and every New-Files header is read and the paths are unioned.
 //   [novel]       role is plan, design, brainstorm, architecture, plan_review or research, or the task is
 //                 marked novel (env AUTOPILOT_TASK_NOVEL=1, or `Novel: yes` header)
 //   [unknown-size|unknown-role|unknown-scope]  FAIL CLOSED: size, role or scope is missing
@@ -48,8 +51,8 @@
 // Task facts (env wins over header; header = first 8 lines of the brief/spec, `Key: v` alone or as a `| Key: v` field):
 //   size   AUTOPILOT_TASK_SIZE  / `Size: XS|S|M|L|XL`
 //   role   AUTOPILOT_TASK_ROLE  / `Role: <role>`          (a rail may pass its own implied role; a review or novel rail role is a floor that env/header cannot lower)
-//   scope  AUTOPILOT_TASK_SCOPE / `Scope: a, b`  (comma/newline separated paths), plus the `diff --git` paths of any diff file
-//   new    `New-Files: a, b` (same comma/newline split as Scope). Counts only when effective core_dirs is
+//   scope  AUTOPILOT_TASK_SCOPE / every `Scope: a, b` header (comma/newline separated paths, unioned), plus diff paths
+//   new    every `New-Files: a, b` header (same split, unioned). Counts only when effective core_dirs is
 //          empty: a named path that does not exist under the repo root is allowed even if it misses core_unset_allow.
 //   novel  AUTOPILOT_TASK_NOVEL=1 / `Novel: yes`
 //   class  AUTOPILOT_TASK_CLASS / `Task-Class: <value>`   (local served family only; compared case-insensitively)
@@ -92,22 +95,47 @@ function headerLines(file) {
 }
 
 function headerValue(files, key) {
+  const found = headerValues(files, key);
+  return found.length ? found[0] : '';
+}
+
+// Every matching header line in the first 8 lines of every file. Unioning callers can only add paths.
+function headerValues(files, key) {
   const re = new RegExp(`(^|\\|)[ \\t]*${key}:[ \\t]*([^|]*)`, 'i');
+  const out = [];
   for (const f of files.filter(Boolean)) {
     for (const l of headerLines(f)) {
       const m = re.exec(l);
-      if (m) return m[2].trim();
+      if (m) out.push(m[2].trim());
     }
   }
-  return '';
+  return out;
+}
+
+// `+++`/`---` path runs to end of line; a tab and anything after it is git's timestamp, not the path.
+// A quoted `"b/..."` form (C-style escapes) is kept quoted so core-unset refuses it instead of decoding.
+// `diff --git` counts only when a/X and b/X are the same X; a rename or a quoted line is ignored.
+function diffPathBody(rest) {
+  const tab = rest.indexOf('\t');
+  if (tab !== -1) rest = rest.slice(0, tab);
+  if (rest === '/dev/null') return '';
+  if (rest.startsWith('"')) return rest;
+  if (rest.startsWith('a/') || rest.startsWith('b/')) rest = rest.slice(2);
+  return rest;
 }
 
 function diffPaths(file) {
   let text;
   try { text = fs.readFileSync(file, 'utf8'); } catch { return []; }
   const out = new Set();
-  for (const m of text.matchAll(/^diff --git a\/(\S+) b\/(\S+)/gm)) { out.add(m[1]); out.add(m[2]); }
-  for (const m of text.matchAll(/^(?:\+\+\+|---) [ab]\/(\S+)/gm)) out.add(m[1]);
+  for (const line of text.split('\n')) {
+    const same = /^diff --git a\/(.+) b\/\1$/.exec(line);
+    if (same) { out.add(same[1]); continue; }
+    const hunk = /^(?:\+\+\+|---) (.*)$/.exec(line);
+    if (!hunk) continue;
+    const body = diffPathBody(hunk[1]);
+    if (body) out.add(body);
+  }
   return [...out];
 }
 
@@ -236,7 +264,28 @@ function absentUnderRepoRoot(root, normalised) {
   const abs = path.resolve(root, normalised);
   const rel = path.relative(root, abs);
   if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) return false;
-  return !fs.existsSync(abs);
+  try {
+    fs.lstatSync(abs);
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+// core-unset only. lstat each existing prefix; do not follow a symlink into the target.
+function coreUnsetHasSymlink(root, normalised) {
+  const absRoot = path.resolve(root);
+  let cur = absRoot;
+  for (const part of normalised.split('/')) {
+    if (!part || part === '.') continue;
+    cur = path.join(cur, part);
+    const rel = path.relative(absRoot, cur);
+    if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) return true;
+    let st;
+    try { st = fs.lstatSync(cur); } catch { return false; }
+    if (st.isSymbolicLink()) return true;
+  }
+  return false;
 }
 
 function splitPathList(raw) {
@@ -326,9 +375,10 @@ function taskFacts({ files = [], diffFiles = [], role = '', env = process.env })
   const headerRole = String(headerValue(files, 'Role') || '').trim().toLowerCase();
   const railRole = String(role || '').trim().toLowerCase();
   const roleV = envRole || headerRole || railRole;
-  const scopeRaw = String(env.AUTOPILOT_TASK_SCOPE || headerValue(files, 'Scope') || '');
-  const scope = [...new Set([...splitPathList(scopeRaw), ...diffFiles.filter(Boolean).flatMap(diffPaths)])];
-  const newFiles = [...new Set(splitPathList(headerValue(files, 'New-Files')))];
+  const envScope = String(env.AUTOPILOT_TASK_SCOPE || '');
+  const scopeParts = envScope ? splitPathList(envScope) : headerValues(files, 'Scope').flatMap(splitPathList);
+  const scope = [...new Set([...scopeParts, ...diffFiles.filter(Boolean).flatMap(diffPaths)])];
+  const newFiles = [...new Set(headerValues(files, 'New-Files').flatMap(splitPathList))];
   const novel = String(env.AUTOPILOT_TASK_NOVEL || '') === '1' || /^yes$/i.test(headerValue(files, 'Novel'));
   const taskClass = String(env.AUTOPILOT_TASK_CLASS || headerValue(files, 'Task-Class') || '').trim().toLowerCase();
   return { size, role: roleV, railRole, headerRole, scope, newFiles, novel, transcript: isMarked(files, env), taskClass };
@@ -363,8 +413,10 @@ function check(opts = {}) {
       if (!c.bad) news.add(c.normalised);
     }
     const unset = f.scope.some((p) => {
+      if (/[\s"]/.test(String(p))) return true;
       const c = coreUnsetNorm(p);
-      if (c.bad) return true;
+      if (c.bad || /[\s"]/.test(c.normalised)) return true;
+      if (coreUnsetHasSymlink(root, c.normalised)) return true;
       if (!coreUnsetAllowBlocks(c.normalised, allow, fixtureExts)) return false;
       return !(news.has(c.normalised) && absentUnderRepoRoot(root, c.normalised));
     });

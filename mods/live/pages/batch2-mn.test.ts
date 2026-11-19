@@ -74,12 +74,13 @@ const decideCon = (cards: unknown[]) => ({ generated_at_ms: NOW, sources: { card
 const decideLive = { state: 'ok', header: '', pending: [] } as never
 const CARDS = [card('d-c0000005', '丙線：測試綠了，可以合嗎', 'PM', 5 * H), card('d-c0000024', '測試機第二槽插電', '308', 24 * H), card('d-c0000002', '戊線要不要重跑', 'PM', 2 * H)]
 
-test('M3 (S1-full-p2-160x40 row 29 / 33): the read-only card the `z 收合` header sits over has a z Button in its key row', () => {
-  const wide = decidePage.render(ctx(160, 40, decideCon(CARDS), decideLive)).actions.map(text)
-  expect(wide[wide.length - 1]).toContain('[h] 上張 [l] 下張') // W3: compact single action row.
-  expect(wide[wide.length - 1]).toContain('[z] 收合其他') // V3: both cards share compact fold controls.
-  const narrow = decidePage.render(ctx(80, 24, decideCon(CARDS), decideLive)).actions.map(text)
-  expect(narrow[narrow.length - 1]).toContain('[z] 收合其他')
+test('M3 (S1-full-p2-160x40 row 29 / 33): the retired decide page is one line, with no z/h/l card controls', () => {
+  for (const [cols, rows] of [[160, 40], [80, 24]] as const) {
+    const rendered = decidePage.render(ctx(cols, rows, decideCon(CARDS), decideLive))
+    expect(rendered.body).toEqual([])
+    expect(rendered.actions.map(text).join('')).toBe('待決在 band 上（d）')
+    expect(rendered.actions.map(text).join('')).not.toMatch(/\[z\]|\[h\]|\[l\]/)
+  }
 })
 
 test('M4 (S1-full-p3-160x40 row 29): an expanded line with no issue record is 正常, never 閒置; its focus says the detail is missing', () => {
@@ -135,13 +136,13 @@ test('M6 (nojump-f23 row 34): the closed band row 2 counts quota pools, does not
   expect(strip.tabs.some(x => x.id === 'forge' && x.label.text.includes('鍛'))).toBe(true)
 })
 
-test('N1 (S1-full-p2-160x40 row 27): 待決 focuses the card that has waited longest (the one 現況 names as 最舊) by default', () => {
-  const o = decidePage.render(ctx(160, 40, decideCon(CARDS), decideLive))
-  expect(text(o.body[0])).toContain('測試機第二槽插電')
-  expect(text(o.body[0])).toContain('1/3')
-  const narrow = decidePage.render(ctx(80, 24, decideCon(CARDS), decideLive)).body.map(text)
-  expect(narrow[0]).toContain('測試機第二槽插電')
-  expect(narrow[0]).toContain('1/3') // Z4: progress stays beside the title
+test('N1 (S1-full-p2-160x40 row 27): the retired decide page does not focus a card; the line says the band has it', () => {
+  for (const [cols, rows] of [[160, 40], [80, 24]] as const) {
+    const o = decidePage.render(ctx(cols, rows, decideCon(CARDS), decideLive))
+    expect(o.body).toEqual([])
+    expect(o.actions.map(text).join('')).toBe('待決在 band 上（d）')
+    expect(o.actions.map(text).join('')).not.toContain('測試機第二槽插電')
+  }
 })
 
 test('N2 (S1-full-p1-160x40 row 19): 現況 draws no ▸ focus mark and orders the line rows like 艦隊 (longest first), with the duration', () => {

@@ -133,12 +133,9 @@ for (const [cols, rows] of [[160, 40], [80, 24]]) {
     bottomAligned(short.tree, shortRows, cols, short.win)
     assert.equal(shortRows[0].trim(), '', 'short-content case leaves blank rows above on every tab')
     if (tab === 'decide') {
-      const opt = out.findIndex(r => r.includes('Last option'))
-      const advice = out.findIndex(r => r.includes('Fixture reason'))
-      const send = out.findIndex(r => r.includes('送出'))
-      assert.ok(opt >= 0 && advice > opt && send > advice, 'options precede advice, and submit follows the answer area')
-      assert.ok(send - advice <= 2, 'L3 directly below answer area, at most one rule: ' + JSON.stringify(out.slice(advice, send + 1)))
-      assert.ok(out.slice(send + 1).every(r => /現況|[─━]/.test(r)), 'only navigation may follow submit')
+      const joined = out.join('\n')
+      assert.ok(joined.includes('待決在 band 上（d）'), 'the retired decide page is the one band line')
+      assert.ok(!joined.includes('Last option') && !joined.includes('Fixture reason'), 'the pane no longer draws the decision card')
     }
   })
   for (const tab of ['command', 'team', 'quota', 'hosts', 'self']) test(`console ${tab} ${cols}x${rows}: footer last, short content leaves blanks above`, () => {
@@ -161,26 +158,17 @@ for (const [cols, rows] of [[160, 40], [80, 24]]) {
     footer(tree, out)
     assert.equal(out[0].trim(), '')
   })
-  test(`scroll ${cols}x${rows}: bottom default, up reveals older rows, End returns to hot rows`, () => {
+  test(`scroll ${cols}x${rows}: the retired decide page is one line, so thirty cards do not scroll`, () => {
     const live = snap()
     live.pending = Array.from({ length: 30 }, (_, i) => ({ ...HELD, id: 'd-' + i, question: 'Older fixture ' + i }))
     const win = S.newScroll()
-    let drawn = pane('decide', cols, rows, { live, win })
-    assert.ok(win.max > 0)
-    assert.equal(win.offset, win.max, 'overflow opens at bottom')
-    assert.ok(screen(drawn.tree, cols, rows).some(r => r.includes('Older fixture 29')))
-    const contentRows = render(drawn.tree, cols).length
-    assert.equal(contentRows, rows + 1, 'real rendered tree needs the spare row to trigger host ui.scroll')
-    const ev = { by: -rows, bodyRows: rows, contentRows, offset: 0 }
-    S.scrollHook(win, ev, () => assert.fail('framed keys must stay in the mod'), () => {})
-    const off = win.offset
-    drawn = pane('decide', cols, rows, { live, win })
-    assert.equal(win.offset, off, 'redraw preserves the scrolled-up view')
-    assert.ok(!screen(drawn.tree, cols, rows).some(r => r.includes('Older fixture 29')))
-    S.scrollHook(win, { ...ev, by: rows + 1, offset: 1 }, () => assert.fail('End belongs to the frame'), () => {})
-    drawn = pane('decide', cols, rows, { live, win })
-    assert.equal(win.offset, win.max)
-    footer(drawn.tree, screen(drawn.tree, cols, rows))
+    const drawn = pane('decide', cols, rows, { live, win })
+    const out = screen(drawn.tree, cols, rows)
+    assert.equal(win.max, 0, 'the one line does not overflow')
+    assert.equal(win.offset, 0)
+    assert.ok(out.some(r => r.includes('待決在 band 上（d）')))
+    assert.ok(!out.some(r => r.includes('Older fixture')))
+    footer(drawn.tree, out)
   })
   test(`band speed ${cols}x${rows}: real speed content grows above band`, () => {
     const bar = B.BandBar(el, snap(), cols, t, { onInfo() {}, onSlot() {}, onTab() {} }, 'forge', null)
@@ -194,15 +182,16 @@ for (const [cols, rows] of [[160, 40], [80, 24]]) {
   })
 }
 
-test('shell: short main content is padded above, quick controls precede final menu', () => {
+test('shell: the menu row is first and the quick row is last', () => {
   const plan = shellPlan({ columns: 160, t, menuTitle: 'fixture menu', mainTitle: 'fixture main', room: { rows: [], fresh: 0 }, panel: parsePanel(null, 0), fleet: [] })
   const bar = el.Text({ children: ['fixture band'] })
   const main = [el.Text({ children: ['fixture card options'] })]
   const tree = B.stackRows(el, B.Shell(el, { plan, left: [], onLeft() {}, main, progress: el.Text({ children: ['fixture progress'] }), quick: [el.Text({ children: ['fixture submit'] })], bar }))
   const out = render(tree, 160)
-  assert.equal(out[lastInk(out)].trim(), 'fixture band')
+  assert.equal(out[0].trim(), 'fixture band', 'ux-v7: the menu row is band row 0')
+  assert.equal(out[lastInk(out)].trim(), 'fixture submit', 'the quick row is the last band row')
   const opt = out.findIndex(r => r.includes('fixture card options'))
-  assert.equal(opt, plan.bodyRows - 2, 'main row sits just above its divider/progress, blanks above it')
+  assert.equal(opt, 2, 'a short main sits on the first body row, under the menu and the top frame')
 })
 
 test('shell overflow: default opens at bottom, scrolling up survives redraw', () => {
@@ -297,6 +286,10 @@ test('R14 mounted: every page keeps content adjacent to actions at 80x24 inline 
       const label = page.id + ' ' + columns + 'x' + rows
       expect(rendered.length, label + ' fixed height').toBe(rows)
       expect(rendered[action].trim(), label + ' action exists').not.toBe('')
+      if (page.id === 'decide') {
+        expect(rendered.join('\n'), label + ' retired').toMatch(/待決在 band 上（d）|Pending is on the band \(d\)/)
+        continue
+      }
       expect(rendered[action - 1].trim(), label + ' content touches action').not.toBe('')
       // K1: help now starts at its header in the shared frame; its long body fills the room.
       if (page.id === 'help') expect(rendered[0].trim(), label + ' header first').toMatch(/^(Help|說明)$/)

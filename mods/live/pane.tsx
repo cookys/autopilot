@@ -11,7 +11,7 @@ import type { DecideState, LiveSnapshot, PaneLine, PaneTab, Seg } from './model'
 import { dispatchLines, fleetTabLines, headerLines, hygieneTabLines, legendLines, nowLines, reviewTabLines, spendTabLines, stripOf, treeRowCount, withOverflowHint } from './tabs'
 import type { FleetView } from './fleet'
 import type { ScrollView } from './tabs'
-import { dimProps, drawSeg } from './ui'
+import { dimProps, drawSeg, onBandLine } from './ui'
 import type { Strip } from './ui'
 import { consoleStrip } from './consoletabs'
 import { commandView } from './commandtab'
@@ -330,7 +330,7 @@ export function Pane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El 
   }
   // the global header (design plan §2.2): drawn here, once, on every tab; no tab builder emits it (I9)
   // The frame keeps its upward overflow hint apart from these shared facts.
-  const body: PaneLine[] = tab === 'legend' ? legendLines(ctx) : tab === 'now' ? nowLines(snap, ctx) : tab === 'decide' ? [{ kind: 'item', fact: 'decide.cards', text: t('shell.on_band') }] : tab === 'review' ? reviewTabLines(snap, ctx) : tab === 'spend' ? spendTabLines(snap, ctx) : tab === 'hygiene' ? hygieneTabLines(snap, ctx) : tab === 'fleet' ? fleetTabLines(snap, ctx) : dispatchLines(snap, ctx)
+  const body: PaneLine[] = tab === 'legend' ? legendLines(ctx) : tab === 'now' ? nowLines(snap, ctx) : tab === 'decide' ? [onBandLine(t('shell.on_band'))] : tab === 'review' ? reviewTabLines(snap, ctx) : tab === 'spend' ? spendTabLines(snap, ctx) : tab === 'hygiene' ? hygieneTabLines(snap, ctx) : tab === 'fleet' ? fleetTabLines(snap, ctx) : dispatchLines(snap, ctx)
   const link = tab === 'dispatch' && snap.link !== null
   const stripH = stripOf(snap, ctx, tab, false)
   const plainHead = headerLines(snap, ctx)

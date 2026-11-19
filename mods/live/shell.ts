@@ -410,6 +410,7 @@ export type LeftItem = { id: string; key: string; segs: Seg[] }
 export function leftItems(items: readonly MenuItem[], active: string | null, inner: number): LeftItem[] {
   return items.map(it => {
     const here = it.id === active
-    return { id: it.id, key: 'menu:' + it.id, segs: padSegs(clipSegs([{ text: (here ? GLYPHS.chart.here : ' ') + ' ', ...(here ? { color: PALETTE.here } : {}) }, { text: it.label }], inner - 1), inner) }
+    // `left:` not `menu:`: the top row already keys r/u/p/h as `menu:`, and the host refuses two Buttons with one key
+    return { id: it.id, key: 'left:' + it.id, segs: padSegs(clipSegs([{ text: (here ? GLYPHS.chart.here : ' ') + ' ', ...(here ? { color: PALETTE.here } : {}) }, { text: it.label }], inner - 1), inner) }
   })
 }

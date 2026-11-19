@@ -572,8 +572,8 @@ export function mergeJobModels(primary: JobModel | null, campaigns: JobModel[]):
   return {
     ...base,
     needs_decision: asking !== undefined,
-    // every root's page now carries the project's cards (src/status/decision-input.js): one card shows once
-    decisions: all.flatMap(m => m.decisions).filter((d, i, a) => d.id === null || a.findIndex(x => x.id === d.id) === i).sort((a, b) => (Date.parse(a.opened_at ?? '') || 0) - (Date.parse(b.opened_at ?? '') || 0)),
+    // One id shows once per kind. A step/look copy of the same id is kept beside the decision so the shell can mark that one list row 要你做.
+    decisions: all.flatMap(m => m.decisions).filter((d, i, a) => d.id === null || a.findIndex(x => x.id === d.id && isStepCard(x) === isStepCard(d)) === i).sort((a, b) => (Date.parse(a.opened_at ?? '') || 0) - (Date.parse(b.opened_at ?? '') || 0)),
     awaiting_operator: all.flatMap(m => m.awaiting_operator ?? []).filter((d, i, a) => d.id === null || a.findIndex(x => x.id === d.id) === i),
     pending_dispatch: all.flatMap(m => m.pending_dispatch ?? []).filter((d, i, a) => d.id === null || a.findIndex(x => x.id === d.id) === i),
     conclusion: asking !== undefined ? asking.conclusion : base.conclusion,

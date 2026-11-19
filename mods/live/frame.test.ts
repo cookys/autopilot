@@ -33,6 +33,10 @@ test('registry: eleven pages in key order 1-8, 9 pet, 0 forge, i help; shells ar
   for (const p of PAGES) {
     const r = p.render(ctxOf(SIZES[0]))
     if (p.id === 'pet') expect(r.body.map(x => x.map(g => g.text).join(''))).toEqual(['寵物分頁還沒上線'])
+    else if (p.id === 'decide') {
+      expect(r.body).toEqual([])
+      expect(r.actions.map(x => x.map(g => g.text).join('')).join('')).toBe(t('shell.on_band'))
+    }
     else if (!p.framed) expect(r).toEqual({ body: [], actions: [] }) // a page that is not framed is still a shell
     else expect(r.body.length).toBeGreaterThan(0) // a framed page draws something; its goldens are in pages/<id>.test.ts
   }
@@ -348,10 +352,15 @@ test('gate G11: every key in a page key table has a Button with that hotkey and 
   const hotkeys = (tree: Node[]) => new Map(tree.filter(n => n.kind === 'Button' && typeof n.props.hotkey === 'string' && flat(n).trim() !== '').map(n => [n.props.hotkey as string, flat(n)]))
   const missing: string[] = []
   const need = (id: string, have: Map<string, string>, keys: string[]) => { for (const k of keys) if (!have.has(k)) missing.push(id + ':' + k) }
-  const picked = hotkeys(drawn('decide', { decide: { ...NO_NAV, picks: { 'd-aaaa0001': 0 } } }))
-  const held = hotkeys(drawn('decide', { decide: { ...NO_NAV, picks: { 'd-aaaa0001': 1 }, hold: { 'd-aaaa0001': NOW - 2000 } } }))
-  need('decide', picked, ['a', 'b', 'c', 'd', 'e', 's', 'n', 'f', 'z', 'h', 'l', 'i'])
-  need('decide', held, ['u'])
+  const pickedTree = drawn('decide', { decide: { ...NO_NAV, picks: { 'd-aaaa0001': 0 } } })
+  const heldTree = drawn('decide', { decide: { ...NO_NAV, picks: { 'd-aaaa0001': 1 }, hold: { 'd-aaaa0001': NOW - 2000 } } })
+  const cardKeys = ['a', 'b', 'c', 'd', 'e', 's', 'n', 'f', 'z', 'h', 'l', 'u']
+  for (const [id, tree] of [['decide-picked', pickedTree], ['decide-held', heldTree]] as const) {
+    const have = hotkeys(tree)
+    const drawnText = tree.map(flat).join('\n')
+    if (!drawnText.includes(t('shell.on_band'))) missing.push(id + ':on_band')
+    for (const k of cardKeys) if (have.has(k)) missing.push(id + ':retired-' + k)
+  }
   need('fleet', hotkeys(drawn('fleet', {})), pageHotkeys('fleet'))
   need('quota', hotkeys(drawn('spend', { console: consoleOf(POOLS.map(p => ({ ...p, switch_suggestion: 'personal -> team' }))) })), pageHotkeys('quota').filter(k => k !== 'z')) // z folds nothing on the quota page
   need('now', hotkeys(drawn('now', {})), ['i'])

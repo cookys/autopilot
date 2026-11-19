@@ -645,6 +645,10 @@ const tabName = (tab: PaneTab, u: Ctx): string => u.t('tab.' + tab) + ' ' + GLYP
 
 // an empty state: `—` at column 0, dim reason at 2. At most one per section (I10).
 export const empty = (reason: string, fact: FactId): PaneLine => lineOf('empty', [dim(GLYPHS.structure.empty, { role: 'glyph' }), dim(' ' + reason, { role: 'prose' })], { fact })
+// The retired 待決 pane: one line, the words only. The decisions live on the band.
+export function onBandLine(text: string): PaneLine {
+  return lineOf('item', [sg(text, { role: 'prose' })], { fact: 'decide.cards' })
+}
 // `  ▸ 還有 27 筆已完成` (open: `  ▾ 收起`), a toggle at column 2
 // `bare`: the whole group sits behind the toggle (`▸ 16 項已結束`), so there is no `還有` (it is not "more of a list")
 export function more(u: Ctx, n: number, noun: string, id: string, open = false, bare = false): PaneLine {

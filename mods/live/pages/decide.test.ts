@@ -205,10 +205,10 @@ const CASES: Case[] = [
 ]
 
 for (const c of CASES) {
-  test(`decide golden ${c.name}: the retired page is one line and no actions`, () => {
+  test(`decide golden ${c.name}: the retired page is one action line`, () => {
     const out = decidePage.render(c.ctx as never)
-    expect(out.body.map(text).join('')).toBe('待決在 band 上（d）')
-    expect(out.actions).toEqual([])
+    expect(out.body).toEqual([])
+    expect(out.actions.map(text).join('')).toBe('待決在 band 上（d）')
   })
   test(`decide ${c.name}: rows fit the width, actions fit the area, frameRows is exactly H rows`, () => {
     const ctx = c.ctx as { size: { cols: number; rows: number } }
@@ -240,19 +240,22 @@ const SIZES = [[160, 40], [120, 30], [80, 24]] as const
 test('decide: null live and null console render the no-source rows at every size, never throw', () => {
   for (const [cols, rows] of SIZES) {
     const ctx = ctxOf(cols, rows, null, null)
-    const body = decidePage.render(ctx).body.map(text).join('\n')
-    expect(body).toBe('待決在 band 上（d）')
+    const rendered = decidePage.render(ctx)
+    expect(rendered.body).toEqual([])
+    expect(rendered.actions.map(text).join('')).toBe('待決在 band 上（d）')
     expect(frameRows(decidePage, ctx).length).toBe(rows)
-    expect(decidePage.render(ctx).actions).toEqual([])
   }
 })
 
 test('decide: console cards list missing, or a stale cards source, is a red row with its reason', () => {
   const ctx = ctxOf(80, 24, live(own80), con(null, []))
-  expect(decidePage.render(ctx).body.map(text).join('\n')).toBe('待決在 band 上（d）')
-  expect(decidePage.render(ctx).actions).toEqual([])
+  const missing = decidePage.render(ctx)
+  expect(missing.body).toEqual([])
+  expect(missing.actions.map(text).join('')).toBe('待決在 band 上（d）')
   const stale = ctxOf(80, 24, live(own80), con([], [], [], { cards: { at_ms: nowMs - 12 * 60000, state: 'stale' } }))
-  expect(decidePage.render(stale).body.map(text).join('')).toBe('待決在 band 上（d）')
+  const staleOut = decidePage.render(stale)
+  expect(staleOut.body).toEqual([])
+  expect(staleOut.actions.map(text).join('')).toBe('待決在 band 上（d）')
   expect(frameRows(decidePage, stale).length).toBe(24)
 })
 
@@ -302,20 +305,21 @@ test('decide: a console card in focus is read-only and names the seat that answe
   // N1 (codeforge B49-B54, S1-full-p2-160x40 row 27): with no own card the card that has waited longest (d-fd51ee8d, 1 天) is focused, not the 2 時 one
   const ctx = ctxOf(80, 24, live(), con160, nav({}))
   const o = decidePage.render(ctx)
-  expect(text(o.body[0])).toBe('待決在 band 上（d）')
-  expect(o.actions).toEqual([])
+  expect(o.body).toEqual([])
+  expect(text(o.actions[0])).toBe('待決在 band 上（d）')
 })
 
 test('decide R2 & R11: at 80x24 card question comes before owner seat and age; wide single-row other-card titles cut with … keeping age fixed at right edge', () => {
   const out80 = decidePage.render(ctxOf(80, 24, live(own80), con80))
-  expect(out80.body.map(text).join('')).toBe('待決在 band 上（d）')
-  expect(out80.actions).toEqual([])
+  expect(out80.body).toEqual([])
+  expect(out80.actions.map(text).join('')).toBe('待決在 band 上（d）')
   const longTitle = '這是一張標題非常非常長的待決卡用來測試單列清單項目過寬時以省略號截斷且時間固定在右邊界絕不換行'
   const cWide = con([card('d-aaaaaaaa', longTitle, 'PM', 2 * H)], [])
   for (const [cols, rows] of [[80, 24], [120, 30]] as const) {
     const rendered = decidePage.render(ctxOf(cols, rows, live(own80), cWide))
-    expect(rendered.body.map(text).join('')).toBe('待決在 band 上（d）')
-    expect(rendered.body.map(text).join('')).not.toContain('d-aaaaaaaa')
+    expect(rendered.body).toEqual([])
+    expect(rendered.actions.map(text).join('')).toBe('待決在 band 上（d）')
+    expect(rendered.actions.map(text).join('')).not.toContain('d-aaaaaaaa')
     expect(frameRows(decidePage, ctxOf(cols, rows, live(own80), cWide)).length).toBe(rows)
   }
 })
@@ -323,11 +327,11 @@ test('decide R2 & R11: at 80x24 card question comes before owner seat and age; w
 test('decide: option 6 of an old card, text mode and a held card draw their own action rows', () => {
   const wide = ctxOf(160, 40, live(own160), con([], []), nav({ textMode: true, textBuf: '先 12' })).valueOf() as never
   const o = decidePage.render(wide)
-  expect(o.body.map(text).join('')).toBe('待決在 band 上（d）')
-  expect(o.actions).toEqual([])
+  expect(o.body).toEqual([])
+  expect(o.actions.map(text).join('')).toBe('待決在 band 上（d）')
   const held = decidePage.render(ctxOf(160, 40, live(own160), con([], []), nav({ picks: { 'd-89fe394f': 0 }, hold: { 'd-89fe394f': nowMs - 3500 } })))
-  expect(held.body.map(text).join('')).toBe('待決在 band 上（d）')
-  expect(held.actions).toEqual([])
+  expect(held.body).toEqual([])
+  expect(held.actions.map(text).join('')).toBe('待決在 band 上（d）')
 })
 
 // ---- the key reducer: routeKey's page-local kinds, applied ----

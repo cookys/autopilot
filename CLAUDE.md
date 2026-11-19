@@ -21,7 +21,7 @@ For Claude Code sessions working **on** the autopilot plugin itself. Other agent
 
 ## What this repo is
 
-Standalone lifecycle orchestration plugin: 31 skills, 3 methodology agents, 50 hooks (32 default-on,
+Standalone lifecycle orchestration plugin: 31 skills, 3 methodology agents, 51 hooks (33 default-on,
 18 opt-in). Optional integrations and coexistence rules: [`docs/guide/coexistence.md`](docs/guide/coexistence.md).
 
 ## Scripts (prefer over LLM judgment)

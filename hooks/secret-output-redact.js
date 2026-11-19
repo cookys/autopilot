@@ -2,6 +2,8 @@
 'use strict';
 
 // PostToolUse Bash: return a response-shaped object; Claude ignores string replacements.
+// Also masks personal data (tw_national_id, tw_mobile, email, card_number) via redactOutput and appends
+// `[masked: <category> xN]`. Read/Grep cannot be rewritten here; pii-read-guard.js blocks them pre-run.
 const fs = require('node:fs');
 const { configPath } = require('../scripts/lib/config-path.js');
 const { redactOutput } = require('./_shared/secret-patterns.js');
@@ -41,4 +43,4 @@ if (require.main === module) {
   } catch { /* Invalid hook input: no output, never echo the unredacted payload. */ }
 }
 
-module.exports = { handle };
+module.exports = { handle, secretMode };

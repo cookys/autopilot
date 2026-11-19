@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * outbound-secret-scan.js — scan a payload BEFORE it is sent to an external engine
- * (dispatch-review.sh / dispatch-author.sh call it right before the runner spawn).
+ * (dispatch-review.sh / dispatch-author.sh / dispatch-hetero.sh call it right before the runner spawn).
  *
  *   node outbound-secret-scan.js [--categories] [--allow FILE] FILE...
  *   Exit 0 clean, 1 hit, 2 unreadable (missing file, NUL byte, or not valid UTF-8).
@@ -65,6 +65,12 @@ const RE_LONG = new RegExp(`[A-Za-z0-9+/]{${LONG_RUN},}={0,2}`);
 const RE_KEY32 = /(?<![A-Za-z0-9+/=._-])([A-Za-z0-9+/]{43})(?:=)?(?![A-Za-z0-9+/=._-])/g;
 const RE_NUM = /^-?\d+(?:\.\d+)?$/;
 
+/** Every match on one line. A fresh global regex so lastIndex cannot hide a later token. */
+function eachMatch(re, line) {
+  const flags = re.flags.includes('g') ? re.flags : `${re.flags}g`;
+  return line.matchAll(new RegExp(re.source, flags));
+}
+
 /** Scan decoded text. Returns [{line, category, token}] (token is for allowlisting only). */
 function scanText(text, allow = new Set()) {
   const hits = [];
@@ -76,13 +82,12 @@ function scanText(text, allow = new Set()) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const n = i + 1;
-    let m;
-    if ((m = RE_PEM.exec(line))) add(n, 'pem_key', m[0]);
-    if ((m = RE_BEARER.exec(line))) add(n, 'bearer_token', m[0]);
+    for (const m of eachMatch(RE_PEM, line)) add(n, 'pem_key', m[0]);
+    for (const m of eachMatch(RE_BEARER, line)) add(n, 'bearer_token', m[0]);
     for (const { pattern } of secrets.patterns) {
-      if ((m = pattern.exec(line))) add(n, 'token_prefix', m[0]);
+      for (const m of eachMatch(pattern, line)) add(n, 'token_prefix', m[0]);
     }
-    if ((m = RE_LONG.exec(line))) {
+    for (const m of eachMatch(RE_LONG, line)) {
       add(n, /^[0-9a-fA-F]+$/.test(m[0]) ? 'long_hex' : 'long_base64', m[0]);
     }
     if (line.length >= NUMBER_RUN * 2 - 1) {
@@ -100,6 +105,7 @@ function scanText(text, allow = new Set()) {
       }
     }
     RE_KEY32.lastIndex = 0;
+    let m;
     while ((m = RE_KEY32.exec(line))) {
       if (/[0-9+/]/.test(m[1])) add(n, 'b64_key32', m[0]);
     }

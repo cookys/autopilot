@@ -4139,6 +4139,15 @@ fi
 _vg_msg="$(node "$SELF_DIR/lib/vision-guard.js" "${_vg_args[@]}" 2>&1 >/dev/null)" \
   || die_precondition "${_vg_msg:-vision-guard refused an image for engine ${_vg_runner}/${MODEL} file ${VISION_PROMPT_FILE}}"
 
+# Outbound scan: the final prompt (hands brief after skill-pack / campaign / scaffold)
+# is scanned once, after the vision and cn-model gates and before any runner spawn.
+# Categories only — never the matched text. A hit is a no-spawn precondition failure.
+_os_cats="$(node "$SELF_DIR/lib/outbound-secret-scan.js" --categories "$PROMPT_FILE" 2>/dev/null)"; _os_rc=$?
+if [ "$_os_rc" -ne 0 ]; then
+  die_precondition "outbound_secret: ${_os_cats:-unreadable}"
+fi
+unset _os_cats _os_rc
+
 # --- context-window gate ---
 # Placed AFTER skill-pack concatenation (the pack inflates PROMPT_FILE, and the engine
 # pays for the packed size, not the original) and BEFORE the worktree exists, so an

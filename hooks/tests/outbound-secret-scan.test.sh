@@ -87,6 +87,17 @@ printf '%s long_hex wrong category\n' "$TOKSHA" > "$TEST_TMP/allow-wrong"
 AUTOPILOT_OUTBOUND_SCAN_ALLOW="$TEST_TMP/allow-wrong" node "$SCAN" "$TEST_TMP/p-nonceC.txt" >/dev/null 2>&1
 assert_eq "1" "$?" "allowlist entry for another category does not exempt"
 
+# Allowlisted token A and a different token B on the SAME line: B is still a hit.
+GHP_B="gh""p_$(rep b 36)"
+GHP_SHA="$(printf '%s' "$GHP" | sha256sum | cut -d' ' -f1)"
+printf '%s token_prefix public test vector\n' "$GHP_SHA" > "$TEST_TMP/allow-ab"
+printf 'pair %s %s\n' "$GHP" "$GHP_B" > "$TEST_TMP/p-ab.txt"
+AB_OUT="$(AUTOPILOT_OUTBOUND_SCAN_ALLOW="$TEST_TMP/allow-ab" node "$SCAN" "$TEST_TMP/p-ab.txt" 2>&1)"; AB_RC=$?
+assert_eq "1" "$AB_RC" "same line: allowlisted A does not hide B"
+assert_contains "$AB_OUT" ":1: token_prefix" "same line: B is token_prefix"
+assert_not_contains "$AB_OUT" "$GHP" "same line: token A not printed"
+assert_not_contains "$AB_OUT" "$GHP_B" "same line: token B not printed"
+
 # --- dispatch-review.sh: fake ghp_ token in the diff -> refused, stub never invoked ---
 REVIEW_STUB="$TEST_TMP/review-stub.sh"
 cat > "$REVIEW_STUB" <<'EOF'
@@ -113,5 +124,33 @@ assert_file_absent "$SENTINEL" "author: stub runner never invoked"
 assert_contains "$AU_OUT" "\"status\": \"runner_failed\"" "author: status runner_failed"
 assert_contains "$AU_OUT" "outbound_secret: token_prefix" "author: reason names the category"
 assert_not_contains "$AU_OUT" "$GHP" "author: token text not in output"
+
+# --- dispatch-hetero.sh: brief with a fake token is a no-spawn failure; stub never runs ---
+# PATH is only the stub dir plus the dirs of node/git/bash, so no real engine CLI is reachable.
+HETERO="$REPO_ROOT/scripts/dispatch-hetero.sh"
+HSTUB_DIR="$TEST_TMP/hetero-path"
+mkdir -p "$HSTUB_DIR"
+cat > "$HSTUB_DIR/grok" <<'EOF'
+#!/usr/bin/env bash
+touch "$SENTINEL"
+exit 0
+EOF
+chmod +x "$HSTUB_DIR/grok"
+_keep_path="$(dirname "$(command -v node)"):$(dirname "$(command -v git)"):$(dirname "$(command -v bash)"):/usr/bin:/bin"
+HREPO="$TEST_TMP/hetero-repo"
+mkdir -p "$HREPO"
+git -C "$HREPO" init -q -b develop
+git -C "$HREPO" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
+printf 'Write a config. Use this token: %s\n' "$GHP" > "$TEST_TMP/hetero-leak.txt"
+rm -f "$SENTINEL"
+HT_OUT="$(cd "$HREPO" && env -u AUTOPILOT_GROK_EFFORT_PROBE \
+  DISPATCH_QUIET=1 PATH="$HSTUB_DIR:$_keep_path" \
+  bash "$HETERO" --no-verify-tip --runner grok --model grok-test \
+  --grok-bin "$HSTUB_DIR/grok" --prompt-file "$TEST_TMP/hetero-leak.txt" \
+  --branch hands/outbound-scan --context-window off 2>&1)"; HT_RC=$?
+assert_eq "2" "$HT_RC" "hetero: leaked token is precondition_failed (exit 2), no spawn"
+assert_file_absent "$SENTINEL" "hetero: stub runner never invoked"
+assert_contains "$HT_OUT" "outbound_secret: token_prefix" "hetero: reason names the category"
+assert_not_contains "$HT_OUT" "$GHP" "hetero: token text not in output"
 
 finalize_test

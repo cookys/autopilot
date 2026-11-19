@@ -14,11 +14,11 @@
   "implementer": [
     "agy",
     "glm",
-    "agyclaude",
     "codex",
     "grok",
     "kimi",
-    "cursor"
+    "cursor",
+    "opencode"
   ],
   "author": [
     "agy",
@@ -33,7 +33,7 @@
       "agy",
       "grok",
       "glm",
-      "agyclaude"
+      "opencode"
     ],
     "reviewer": [
       "agy",
@@ -85,8 +85,29 @@
   },
   "role_models": {
     "implementer": {
-      "agy": "gemini-4-hydrogen-high"
+      "agy": "gemini-4-hydrogen-low",
+      "codex": "gpt-6.1-terra",
+      "grok": "grok-4.7",
+      "opencode": "opencode-go/beam-free"
+    },
+    "reviewer": {
+      "agy": "gemini-4-hydrogen-low",
+      "codex": "gpt-6.1-terra",
+      "grok": "grok-4.7",
+      "opencode": "opencode-go/beam-free"
+    },
+    "author": {
+      "agy": "gemini-4-hydrogen-low",
+      "codex": "gpt-6.1-terra",
+      "grok": "grok-4.7",
+      "opencode": "opencode-go/beam-free"
     }
+  },
+  "unpinned_seats": {
+    "agy": { "runner": "agy", "model": "gemini-4-hydrogen-low", "effort": "low" },
+    "codex": { "runner": "codex", "model": "gpt-6.1-terra", "effort": "low" },
+    "grok": { "runner": "grok", "model": "grok-4.7", "effort": "low" },
+    "opencode": { "runner": "opencode", "model": "opencode-go/beam-free", "effort": "default" }
   },
   "pools": {
     "cursor": {
@@ -98,12 +119,19 @@
     "codex A": {
       "key": "codex",
       "runner": "codex",
-      "model": "gpt-6.1-sol"
+      "model": "gpt-6.1-terra",
+      "effort": "low"
     },
     "codex B": {
       "key": "codex",
       "runner": "codex",
-      "model": "gpt-6.1-sol"
+      "model": "gpt-6.1-terra",
+      "effort": "low"
+    },
+    "opencode": {
+      "key": "opencode",
+      "runner": "opencode",
+      "model": "opencode-go/beam-free"
     },
     "deepseek": {
       "key": "deepseek",

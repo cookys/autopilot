@@ -9,6 +9,7 @@
 #   (e) mode off, no new flag -> admitted, and the manifest stays without campaign_scope
 # suite-timeout-secs: 180
 . "$(dirname "$0")/lib.sh"
+install_cli_sentinels
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
   AUTOPILOT_PARENT_RUN_ID AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID \
   AUTOPILOT_DISPATCH_DEPTH 2>/dev/null || true
@@ -86,7 +87,7 @@ status_line() {
 
 run_dispatch() {
   rm -f "$RAN"
-  (cd "$SBX" && "$SCRIPT" --no-verify-tip --prompt-file "$PROMPT" --agy-bin "$STUB" "$@")
+  (cd "$SBX" && "$SCRIPT" --no-verify-tip --prompt-file "$PROMPT" --agy-bin "$STUB" --runner agy "$@")
 }
 
 # Usage documents the flag beside the campaign contract flags.

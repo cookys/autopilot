@@ -961,6 +961,22 @@ pick_node_npm_dir() {
   return 1
 }
 
+# Sentinel for real runner CLIs: grok, codex, agy, opencode, kimi found on PATH are replaced by stubs that exit 97 and
+# append their name to $CLI_SENTINEL_MARKER. A suite calls install_cli_sentinels once after sourcing this lib; the
+# intended stubs are always passed by explicit path (--agy-bin ...), which PATH does not affect. finalize_test then fails
+# the suite if the marker exists, so a fixture that forgot to pin its runner goes red instead of spending money.
+install_cli_sentinels() {
+  local d="$TEST_TMP/cli-sentinel-bin" n
+  mkdir -p "$d"
+  CLI_SENTINEL_MARKER="$TEST_TMP/real-cli-marker"
+  export CLI_SENTINEL_MARKER
+  for n in grok codex agy opencode kimi; do
+    printf '#!/bin/sh\nprintf "%%s\\n" "%s" >> "%s"\nexit 97\n' "$n" "$CLI_SENTINEL_MARKER" > "$d/$n"
+    chmod +x "$d/$n"
+  done
+  export PATH="$d:$PATH"
+}
+
 # Call once at end of each *.test.sh file.
 # Terminates the suite — it EXITS, it does not return. Anything appended after
 # the finalize_test call never runs, and the suite still reports PASS, so a new
@@ -969,6 +985,9 @@ pick_node_npm_dir() {
 finalize_test() {
   if [ -s "${TEST_TMP:-/nonexistent}/.mutation-miss" ]; then
     fail "mutation anchor missed (recorded by sed_mutate/sed_mutant): $(head -c 300 "$TEST_TMP/.mutation-miss" | tr '\n' ' ')"
+  fi
+  if [ -n "${CLI_SENTINEL_MARKER:-}" ] && [ -e "$CLI_SENTINEL_MARKER" ]; then
+    fail "a real runner CLI was invoked (sentinel marker): $(tr '\n' ' ' < "$CLI_SENTINEL_MARKER")"
   fi
   if [ "${#__TEST_FAIL_MSGS[@]}" -eq 0 ]; then
     echo "PASS [$TEST_NAME] $__TEST_PASS_COUNT assertions"

@@ -33,8 +33,10 @@
  *   - priority.<role> is only a tie-breaker, never a preference before quota.
  *   - WARN_*_low readings remain visible in low_keys; quota score sets rank.
  *   - The emitted `model` comes from pace-roles.json `role_models.<role>.<key>`
- *     when present (implementer + agy -> gemini-4-hydrogen-high; reviewer and
- *     author keep the pool's model), else the pool entry's model.
+ *     when present (agy -> gemini-4-hydrogen-low; codex -> gpt-6.1-terra), else
+ *     the pool entry's model. An unpinned `--dispatch` (no named runner/model/
+ *     endpoint) may only emit `unpinned_seats` (grok-4.7/low, gpt-6.1-terra/low,
+ *     gemini-4-hydrogen-low/low, opencode-go/beam-free/default) and sets `effort`.
  *   - `reviewer_exclude` lists the chosen key's family keys that a reviewer
  *     must not share. agy and agyclaude are different families (google vs
  *     anthropic), so choosing agy emits ["agy"] and never excludes agyclaude;
@@ -519,6 +521,7 @@ function selectEngine({
   now,
   env,
   cwd,
+  dispatchCheap = false,
 } = {}) {
   const resolvedEnv = env && typeof env === 'object' ? env : process.env;
   const resolvedPools = pools === undefined ? loadPools() : pools;
@@ -608,6 +611,15 @@ function selectEngine({
     allowedKeys = resolvedRoles[role].filter(
       (k) => typeof k === 'string' && k.length > 0 && !excluded.has(k),
     );
+  }
+  const cheapSeats = (
+    dispatchCheap
+    && resolvedRoles.unpinned_seats
+    && typeof resolvedRoles.unpinned_seats === 'object'
+    && !Array.isArray(resolvedRoles.unpinned_seats)
+  ) ? resolvedRoles.unpinned_seats : null;
+  if (cheapSeats) {
+    allowedKeys = Object.keys(cheapSeats).filter((k) => !excluded.has(k) && cheapSeats[k] && typeof cheapSeats[k] === 'object');
   }
   const allowedSet = new Set(allowedKeys);
 
@@ -895,8 +907,8 @@ function selectEngine({
     : (known[1]?.reading.status === 'stale_recent' && chosen.reading.status === 'fresh' ? 'fresh_before_stale_recent' : 'quota_score');
   const chosenBehindFields = behindSignals.get(chosen.key)?.fields || {};
 
-  // role_models overrides the emitted model per role (implementer + agy ->
-  // gemini-4-hydrogen-high); the pool entry's model stays the default.
+  // role_models overrides the emitted model per role. An unpinned dispatch
+  // uses unpinned_seats (cheap qualified seats only) for model and effort.
   const roleModelMap = (
     resolvedRoles.role_models
     && typeof resolvedRoles.role_models === 'object'
@@ -907,14 +919,21 @@ function selectEngine({
   )
     ? resolvedRoles.role_models[role]
     : {};
-  const modelOut = typeof roleModelMap[chosen.key] === 'string' && roleModelMap[chosen.key].trim() !== ''
-    ? roleModelMap[chosen.key].trim()
-    : (chosen.entry.model ?? null);
+  const cheapSeat = cheapSeats && cheapSeats[chosen.key];
+  const modelOut = cheapSeat && typeof cheapSeat.model === 'string' && cheapSeat.model.trim() !== ''
+    ? cheapSeat.model.trim()
+    : (typeof roleModelMap[chosen.key] === 'string' && roleModelMap[chosen.key].trim() !== ''
+      ? roleModelMap[chosen.key].trim()
+      : (chosen.entry.model ?? null));
+  const effortOut = cheapSeat && typeof cheapSeat.effort === 'string' && cheapSeat.effort.trim() !== ''
+    ? cheapSeat.effort.trim()
+    : null;
 
   const out = {
     engine: chosen.key,
     runner: chosen.entry.runner ?? null,
     model: modelOut,
+    ...(effortOut ? { effort: effortOut } : {}),
     pool: chosen.reading.pool,
     slack_pts: chosen.reading.slack,
     used_pct: chosen.reading.used_pct,
@@ -1164,6 +1183,7 @@ function main(argv = process.argv.slice(2), env = process.env) {
     }
   }
   const checkEndpoint = (ep, entry) => defaultCheckEndpoint(ep, env, entry);
+  const dispatchCheap = Boolean(flags.dispatch && !flags.namedRunner && !flags.namedModel && !flags.namedEndpoint);
   const paceRead = readPaceFile(flags.pace, env);
   if (!paceRead.ok) {
     if (paceRead.status === 'missing') {
@@ -1181,6 +1201,7 @@ function main(argv = process.argv.slice(2), env = process.env) {
         scope: flags.scope,
         now: nowDate,
         env,
+        dispatchCheap,
       });
       return emitSelection(unknownResult, flags, null, pools, roles, nowDate);
     }
@@ -1209,6 +1230,7 @@ function main(argv = process.argv.slice(2), env = process.env) {
       scope: flags.scope,
       now: nowDate,
       env,
+      dispatchCheap,
     });
   } catch (err) {
     if (flags.dispatch) return emitSelection({ engine: null, reason: 'pace_unknown' }, flags, pace, pools, roles, nowDate);

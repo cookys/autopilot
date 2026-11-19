@@ -270,24 +270,34 @@ test('pace-roles.json: matches scorecard qualification allowlists, codex pools, 
   assert.match(roles._why, /yes\/no preference/);
 
   assert.deepEqual(roles.reviewer, ['agy', 'glm', 'codex', 'grok', 'agyclaude', 'deepseek']);
-  assert.deepEqual(roles.implementer, ['agy', 'glm', 'agyclaude', 'codex', 'grok', 'kimi', 'cursor']);
+  assert.deepEqual(roles.implementer, ['agy', 'glm', 'codex', 'grok', 'kimi', 'cursor', 'opencode']);
   assert.deepEqual(roles.author, ['agy', 'glm', 'codex', 'grok', 'agyclaude', 'kimi']);
   assert.deepEqual(roles.priority, {
-    implementer: ['agy', 'grok', 'glm', 'agyclaude'],
+    implementer: ['agy', 'grok', 'glm', 'opencode'],
     reviewer: ['agy', 'grok', 'codex', 'glm', 'agyclaude'],
     author: ['agy', 'grok', 'codex', 'glm', 'agyclaude'],
   });
-  assert.deepEqual(roles.role_models, { implementer: { agy: 'gemini-4-hydrogen-high' } });
+  for (const role of ['implementer', 'reviewer', 'author']) {
+    assert.equal(roles.role_models[role].agy, 'gemini-4-hydrogen-low');
+    assert.equal(roles.role_models[role].codex, 'gpt-6.1-terra');
+    assert.equal(roles.role_models[role].grok, 'grok-4.7');
+    assert.equal(roles.role_models[role].opencode, 'opencode-go/beam-free');
+  }
+  assert.equal(roles.unpinned_seats.agy.model, 'gemini-4-hydrogen-low');
+  assert.equal(roles.unpinned_seats.codex.model, 'gpt-6.1-terra');
+  assert.equal(roles.implementer.includes('agyclaude'), false);
 
-  for (const r of ['reviewer', 'implementer', 'author']) {
+  for (const r of ['reviewer', 'author']) {
     assert.equal(roles[r].includes('agyclaude'), true);
     assert.equal(roles[r].includes('minimax'), false);
   }
+  assert.equal(roles.implementer.includes('minimax'), false);
 
   assert.deepEqual(roles.pools, {
     cursor: { key: 'cursor', runner: 'cursor', model: 'composer-2.5', max_parallel: 1 },
-    'codex A': { key: 'codex', runner: 'codex', model: 'gpt-6.1-sol' },
-    'codex B': { key: 'codex', runner: 'codex', model: 'gpt-6.1-sol' },
+    'codex A': { key: 'codex', runner: 'codex', model: 'gpt-6.1-terra', effort: 'low' },
+    'codex B': { key: 'codex', runner: 'codex', model: 'gpt-6.1-terra', effort: 'low' },
+    opencode: { key: 'opencode', runner: 'opencode', model: 'opencode-go/beam-free' },
     deepseek: roles.pools.deepseek, // the cn_gate seat: pinned field by field in the (deepseek 1) test
   });
 
@@ -339,9 +349,9 @@ test('(a) reset-weighted quota outranks linear pace; claude rows are never candi
     candidates: [
       { engine: 'agy', pool: 'agy', slack_pts: -25 },
       { engine: 'glm', pool: 'glm', slack_pts: -3 },
-      { engine: 'agyclaude', reason: 'unknown' },
       { engine: 'codex', reason: 'unknown' },
       { engine: 'grok', pool: 'grok-cli', slack_pts: 14 },
+      { engine: 'opencode', reason: 'unknown' },
     ],
   });
 
@@ -367,7 +377,7 @@ test('(a) reset-weighted quota outranks linear pace; claude rows are never candi
     { engine: 'codex', reason: 'unknown' },
   );
 
-  // A fresh agyclaude reading wins with 90 points left and only 7.2 hours to reset.
+  // agyclaude is not an implementer pace seat: a fresh opus reading cannot win.
   const agyClaudeFresh = structuredClone(pace);
   agyClaudeFresh.rows.find((row) => row.pool === 'agyclaude(alias 2)').stale = false;
   const agyClaudeLater = selectEngine({
@@ -377,26 +387,8 @@ test('(a) reset-weighted quota outranks linear pace; claude rows are never candi
     role: 'implementer',
     checkEndpoint: allEndpointsReady,
   });
-  assert.equal(agyClaudeLater.engine, 'agyclaude');
-  assert.equal(agyClaudeLater.selected_by, 'quota_score');
-  assert.equal(agyClaudeLater.slack_pts, 70);
-
-  // Increasing grok usage does not change the winner.
-  const grokBehind = structuredClone(agyClaudeFresh);
-  grokBehind.rows.find((row) => row.pool === 'grok-cli').used_pct = 50;
-  const agyClaudeWin = selectEngine({
-    pace: grokBehind,
-    pools,
-    roles,
-    role: 'implementer',
-    checkEndpoint: allEndpointsReady,
-  });
-  assert.equal(agyClaudeWin.engine, 'agyclaude');
-  assert.equal(agyClaudeWin.runner, 'agy');
-  assert.equal(agyClaudeWin.model, 'claude-opus-5-5-medium');
-  assert.equal(agyClaudeWin.pool, 'agyclaude(alias 2)');
-  assert.equal(agyClaudeWin.selected_by, 'quota_score');
-  assert.equal(agyClaudeWin.slack_pts, 70);
+  assert.equal(agyClaudeLater.engine, 'glm');
+  assert.equal(agyClaudeLater.candidates.some((c) => c.engine === 'agyclaude'), false);
 });
 
 test('observer stores are isolated by default; explicit env opts into cursor and kimi observations', async () => {
@@ -676,7 +668,7 @@ test('(f) alias rows of one key: the larger fresh slack is used', () => {
   assert.deepEqual(out, {
     engine: 'agy',
     runner: 'agy',
-    model: 'gemini-4-hydrogen-high',
+    model: 'gemini-4-hydrogen-low',
     pool: 'agy(alias 2)',
     slack_pts: 28,
     used_pct: 12,
@@ -692,9 +684,9 @@ test('(f) alias rows of one key: the larger fresh slack is used', () => {
     candidates: [
       { engine: 'agy', pool: 'agy(alias 2)', slack_pts: 28 },
       { engine: 'glm', reason: 'unknown' },
-      { engine: 'agyclaude', reason: 'unknown' },
       { engine: 'codex', reason: 'unknown' },
       { engine: 'grok', pool: 'grok-cli(alias 2)', slack_pts: 11 },
+      { engine: 'opencode', reason: 'unknown' },
     ],
   });
 });
@@ -707,8 +699,8 @@ test('(g) scarce codex row 35 pts ahead is a known reading with slack -35, not u
   // noncq-pools.json has no codex pool; mergePools supplies codex A / codex B from pace-roles.json.
   assert.equal(Object.prototype.hasOwnProperty.call(pools, 'codex A'), false);
   const merged = mergePools(pools, roles);
-  assert.deepEqual(merged['codex A'], { key: 'codex', runner: 'codex', model: 'gpt-6.1-sol' });
-  assert.deepEqual(merged['codex B'], { key: 'codex', runner: 'codex', model: 'gpt-6.1-sol' });
+  assert.deepEqual(merged['codex A'], { key: 'codex', runner: 'codex', model: 'gpt-6.1-terra', effort: 'low' });
+  assert.deepEqual(merged['codex B'], { key: 'codex', runner: 'codex', model: 'gpt-6.1-terra', effort: 'low' });
 
   const res = selectEngine({
     pace,
@@ -720,7 +712,7 @@ test('(g) scarce codex row 35 pts ahead is a known reading with slack -35, not u
   assert.deepEqual(res, {
     engine: 'codex',
     runner: 'codex',
-    model: 'gpt-6.1-sol',
+    model: 'gpt-6.1-terra',
     pool: 'codex A',
     slack_pts: -35,
     used_pct: 75,
@@ -736,9 +728,9 @@ test('(g) scarce codex row 35 pts ahead is a known reading with slack -35, not u
     candidates: [
       { engine: 'agy', reason: 'unknown' },
       { engine: 'glm', reason: 'unknown' },
-      { engine: 'agyclaude', reason: 'unknown' },
       { engine: 'codex', pool: 'codex A', slack_pts: -35 },
       { engine: 'grok', reason: 'unknown' },
+      { engine: 'opencode', reason: 'unknown' },
     ],
   });
 
@@ -881,7 +873,7 @@ test('(i) qualified.v1.json eligibility: fail-only excluded, provisional allowed
       rows: [
         { engine: 'grok-4.7', runner: 'grok', role: 'author', result: 'fail', date: '2026-11-12', event_id: 1 },
         { engine: 'glm-5.3', runner: 'cc-shim', role: 'author', result: 'provisional', date: '2026-11-11', event_id: 2 },
-        { engine: 'gemini-4-carbon-high', runner: 'agy', role: 'author', result: 'pass', date: '2026-11-10', event_id: 3 },
+        { engine: 'gemini-4-hydrogen-low', runner: 'agy', role: 'author', result: 'pass', date: '2026-11-10', event_id: 3 },
       ],
     };
     fs.writeFileSync(qPath, `${JSON.stringify(qualifiedDoc, null, 2)}\n`, 'utf8');
@@ -996,7 +988,7 @@ test('(i) qualified.v1.json eligibility: fail-only excluded, provisional allowed
     const rPass = spawnSync(process.execPath, [SCORECARD_CLI, 'record'], {
       encoding: 'utf8',
       env: scEnv,
-      input: `${makeRow('gemini-4-carbon-high', 'agy', 'google', 'qualified', '2026-11-13')}\n`,
+      input: `${makeRow('gemini-4-hydrogen-low', 'agy', 'google', 'qualified', '2026-11-13')}\n`,
     });
     assert.equal(rPass.status, 0, rPass.stderr);
     const expRes = spawnSync(process.execPath, [SCORECARD_CLI, 'export-qualified', '--out', exportedPath], {
@@ -1037,10 +1029,10 @@ test('quota tie-breaks: score, slack, then configured priority; role model and f
   assert.equal(run().engine, 'codex'); // equal score, codex has larger slack
   pace.rows[0].expected_pct = 60;
   assert.equal(run().engine, 'agy'); // exact tie uses priority
-  assert.equal(run().model, 'gemini-4-hydrogen-high');
+  assert.equal(run().model, 'gemini-4-hydrogen-low');
   assert.deepEqual(run().reviewer_exclude, ['agy']);
-  assert.equal(run('reviewer').model, 'gemini-4-carbon-high');
-  assert.equal(run('author').model, 'gemini-4-carbon-high');
+  assert.equal(run('reviewer').model, 'gemini-4-hydrogen-low');
+  assert.equal(run('author').model, 'gemini-4-hydrogen-low');
   pace.rows[1].used_pct = 13;
   assert.equal(run('reviewer').engine, 'codex'); // priority never beats quota
   pace.rows[1].stale = true;
@@ -1145,8 +1137,8 @@ test('(seat-fallback c) unknown implementer family never assumes openai and keep
 
 test('(seat-fallback d) implementer default policy retreats along priority.implementer without codex', () => withEnv({ AUTOPILOT_PACE_FILE: MISSING_PACE }, () => {
   const chainAll = implementerFallbackChain({});
-  assert.deepEqual(chainAll.map((r) => r.key), ['agy', 'grok', 'glm', 'agyclaude']);
-  assert.equal(chainAll[0].model, 'gemini-4-hydrogen-high');
+  assert.deepEqual(chainAll.map((r) => r.key), ['agy', 'grok', 'glm', 'opencode']);
+  assert.equal(chainAll[0].model, 'gemini-4-hydrogen-low');
   assert.equal(chainAll[1].key, 'grok');
   assert.equal(chainAll[1].runner, 'grok');
   assert.equal(chainAll[1].model, 'grok-4.7');
@@ -1154,7 +1146,7 @@ test('(seat-fallback d) implementer default policy retreats along priority.imple
 
   const afterAgy = selectImplementerFallback({
     failedRunner: 'agy',
-    failedModel: 'gemini-4-hydrogen-high',
+    failedModel: 'gemini-4-hydrogen-low',
   });
   assert.equal(afterAgy.key, 'grok');
   assert.equal(afterAgy.runner, 'grok');
@@ -1225,7 +1217,7 @@ test('(seat-fallback d) implementer default policy retreats along priority.imple
     assert.equal(outQwen.engine_unavailable.policy, 'cloud-fallback');
     assert.equal(outQwen.engine_unavailable.cloud_fallback_exhausted, true);
     assert.equal(flagOf(callsQwen[1], '--runner'), 'agy');
-    assert.equal(flagOf(callsQwen[1], '--model'), 'gemini-4-hydrogen-high');
+    assert.equal(flagOf(callsQwen[1], '--model'), 'gemini-4-hydrogen-low');
     assert.notEqual(flagOf(callsQwen[1], '--runner'), 'codex');
 
     // Case 2: agy seat unavailable with unset policy -> retreats to grok (grok-4.7).
@@ -1244,7 +1236,7 @@ test('(seat-fallback d) implementer default policy retreats along priority.imple
           result: {
             status: 'engine_unavailable',
             runner: 'agy',
-            model: 'gemini-4-hydrogen-high',
+            model: 'gemini-4-hydrogen-low',
             commit: null,
             base,
             branch: 'feat/agy-down',
@@ -1265,7 +1257,7 @@ test('(seat-fallback d) implementer default policy retreats along priority.imple
       runId: 'run-fb-d2',
       implementationRound: 1,
       roster: {
-        implementer_engine: 'gemini-4-hydrogen-high',
+        implementer_engine: 'gemini-4-hydrogen-low',
         implementer_effort: 'high',
         implementer_runner: 'agy',
       },
@@ -1404,7 +1396,7 @@ test('(low 3a) quota score ranks codex then agyclaude; low_keys is diagnostic', 
   assert.equal(resWithCodex.engine, 'codex');
   assert.equal(resWithCodex.selected_by, 'quota_score');
   assert.equal(resWithCodex.over_pace, false);
-  assert.deepEqual(resWithCodex.low_keys, ['agyclaude']);
+  assert.deepEqual(resWithCodex.low_keys, []);
   assert.equal(resWithCodex.demoted_last_resort, undefined);
 
   // Without codex/grok, no non-low key is >= 0 slack -> agyclaude wins as last resort.
@@ -1429,9 +1421,9 @@ test('(low 3a) quota score ranks codex then agyclaude; low_keys is diagnostic', 
     role: 'implementer',
     checkEndpoint: allEndpointsReady,
   });
-  assert.equal(resLastResort.engine, 'agyclaude');
+  assert.equal(resLastResort.engine, 'agy');
   assert.equal(resLastResort.demoted_last_resort, undefined);
-  assert.deepEqual(resLastResort.low_keys, ['agyclaude']);
+  assert.deepEqual(resLastResort.low_keys, []);
 
   // The CLI uses quota score and preserves low_keys diagnostics.
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pace-low-3a-'));
@@ -1446,15 +1438,15 @@ test('(low 3a) quota score ranks codex then agyclaude; low_keys is diagnostic', 
     const out1 = JSON.parse(r1.stdout);
     assert.equal(out1.engine, 'codex');
     assert.equal(out1.selected_by, 'quota_score');
-    assert.deepEqual(out1.low_keys, ['agyclaude']);
+    assert.deepEqual(out1.low_keys, []);
     assert.equal(out1.demoted_last_resort, undefined);
 
     const r2 = cli(['--role', 'implementer', '--pace', f2, '--json']);
     assert.equal(r2.status, 0, r2.stderr);
     const out2 = JSON.parse(r2.stdout);
-    assert.equal(out2.engine, 'agyclaude');
+    assert.equal(out2.engine, 'agy');
     assert.equal(out2.demoted_last_resort, undefined);
-    assert.deepEqual(out2.low_keys, ['agyclaude']);
+    assert.deepEqual(out2.low_keys, []);
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
@@ -1541,7 +1533,7 @@ test('(seat-fallback f / 3c) pace demotion moves low rungs behind non-low rungs 
 
     // 3. Implementer walk with agy low moves agy behind grok, glm and agyclaude.
     const implPlan = implementerFallbackPlan({ pacePath: agyLowPace });
-    assert.deepEqual(implPlan.chain.map((r) => r.key), ['grok', 'glm', 'agyclaude', 'agy']);
+    assert.deepEqual(implPlan.chain.map((r) => r.key), ['grok', 'glm', 'opencode', 'agy']);
     assert.deepEqual(implPlan.demoted, ['agy']);
 
     // 4. CLI supports --pace and AUTOPILOT_PACE_FILE.
@@ -1555,7 +1547,7 @@ test('(seat-fallback f / 3c) pace demotion moves low rungs behind non-low rungs 
       SEAT_FALLBACK_CLI, 'implementer', '--all',
     ], { encoding: 'utf8', env: { ...process.env, AUTOPILOT_PACE_FILE: agyLowPace } });
     assert.equal(cliEnv.status, 0, cliEnv.stderr);
-    assert.deepEqual(JSON.parse(cliEnv.stdout).map((r) => r.key), ['grok', 'glm', 'agyclaude', 'agy']);
+    assert.deepEqual(JSON.parse(cliEnv.stdout).map((r) => r.key), ['grok', 'glm', 'opencode', 'agy']);
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
@@ -1578,7 +1570,7 @@ test('(seat-fallback g / 3d) missing or unreadable pace file leaves fallback ord
       assert.deepEqual(revGoogle.demoted, []);
 
       const imp = implementerFallbackPlan({ pacePath });
-      assert.deepEqual(imp.chain.map((r) => r.key), ['agy', 'grok', 'glm', 'agyclaude']);
+      assert.deepEqual(imp.chain.map((r) => r.key), ['agy', 'grok', 'glm', 'opencode']);
       assert.deepEqual(imp.demoted, []);
     }
   } finally {
@@ -1993,8 +1985,8 @@ test('quota gates: CN review gate, qualification and disabled keys precede ranki
   assert.equal(revSmall.candidates.find(c => c.engine === 'deepseek').reason, 'cn_model_dispatch_barred');
   assert.equal(run({ roles: { ...loadRoles(), _disabled: ['codex'] } }).engine, 'agy');
   const qualified = { schema: QUALIFIED_SCHEMA, rows: [
-    { runner: 'codex', engine: 'gpt-6.1-sol', role: 'reviewer', result: 'fail' },
-    { runner: 'agy', engine: 'gemini-4-carbon-high', role: 'reviewer', result: 'pass' },
+    { runner: 'codex', engine: 'gpt-6.1-terra', role: 'reviewer', result: 'fail' },
+    { runner: 'agy', engine: 'gemini-4-hydrogen-low', role: 'reviewer', result: 'pass' },
   ] };
   assert.equal(run({ qualified }).engine, 'agy');
 });

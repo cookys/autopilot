@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Real rails with sentinel PATH: quota selection, caller pins and manifest evidence.
 . "$(dirname "$0")/lib.sh"
+install_cli_sentinels
 # Drop any inherited task/token-seat env so brief headers and rail role control the CN gate.
 unset AUTOPILOT_TASK_SIZE AUTOPILOT_TASK_ROLE AUTOPILOT_TASK_SCOPE AUTOPILOT_TASK_NOVEL AUTOPILOT_TASK_READS_TRANSCRIPT AUTOPILOT_TASK_CLASS AUTOPILOT_TOKEN_SEAT AUTOPILOT_ENDPOINT_GLM_TRANSPORT
 export AUTOPILOT_ENDPOINTS_ENV=/nonexistent
@@ -63,7 +64,7 @@ NODE_PICKER
   printf '%s|%s|%s\n' "$_FG_RUNNER" "$_FG_ENGINE" "$_FG_PACE_CHOICE_JSON"
 ) > "$TEST_TMP/pick.out" 2> "$TEST_TMP/pick.err"
 assert_eq "$?" 0 'reviewer default retreat selects by pace'
-assert_contains "$(cat "$TEST_TMP/pick.out")" 'codex|gpt-6.1-sol|' 'reviewer retreat uses a different family and excludes failed seat'
+assert_contains "$(cat "$TEST_TMP/pick.out")" 'codex|gpt-6.1-terra|' 'reviewer retreat uses a different family and excludes failed seat'
 
 # Hetero uses a fixture repo; the real rail commits the sentinel edit and verifies it.
 repo="$TEST_TMP/repo"
@@ -93,20 +94,23 @@ assert_contains "$(cat "$TEST_TMP/hetero.err")" 'pace: chose codex' 'hetero is d
 result="$(node -e 'const m=require(process.argv[1]); console.log(m.pace_choice?.engine)' "$AUTOPILOT_DISPATCH_RUNS_DIR/pace-hetero.manifest.json" 2>/dev/null)"
 assert_eq "$result" codex 'hetero manifest records pace_choice'
 
-# Missing telemetry leaves the historical agy default intact and returns success.
-cat > "$TEST_TMP/agy-default" <<'SENTINEL'
+# Missing telemetry leaves the unpinned cheap default (grok-4.7, low) intact and returns success.
+cat > "$TEST_TMP/grok-default" <<'SENTINEL'
 #!/usr/bin/env bash
-printf 'legacy agy\n' > quota-sentinel.txt
-git add quota-sentinel.txt
-git -c user.name=test -c user.email=test@example.com commit -qm 'test: legacy default'
-printf '{"conversation_id":"fixture","response":"done","status":"SUCCESS"}\n'
+case " $* " in
+  *" __autopilot_probe__ "*)
+    echo "Error: --effort/--reasoning-effort: unknown effort level '__autopilot_probe__'; use one of: xhigh, high, medium, low" >&2
+    exit 2 ;;
+esac
+if [ "${1:-}" = "--version" ]; then echo "grok-cli 0.2.111 (test stub)"; exit 0; fi
+printf 'default grok\n' > quota-sentinel.txt
 SENTINEL
-chmod +x "$TEST_TMP/agy-default"
-make_agy_stub_versioned "$TEST_TMP/agy-default"
-(cd "$repo" && AUTOPILOT_PACE_FILE="$TEST_TMP/missing-pace.json" bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --branch feat/no-pace --prompt-file "$TEST_TMP/brief" --agy-bin "$TEST_TMP/agy-default") > "$TEST_TMP/missing.out" 2> "$TEST_TMP/missing.err"
-assert_eq "$?" 0 'missing pace dispatch exits 0 with historical default'
+chmod +x "$TEST_TMP/grok-default"
+(cd "$repo" && AUTOPILOT_PACE_FILE="$TEST_TMP/missing-pace.json" bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --branch feat/no-pace --prompt-file "$TEST_TMP/brief" --grok-bin "$TEST_TMP/grok-default") > "$TEST_TMP/missing.out" 2> "$TEST_TMP/missing.err"
+assert_eq "$?" 0 'missing pace dispatch exits 0 with the cheap default'
 assert_contains "$(cat "$TEST_TMP/missing.err")" 'pace_unknown' 'missing telemetry fallback is visible'
-assert_contains "$(cat "$TEST_TMP/missing.out")" '"runner": "agy"' 'missing telemetry preserves agy default'
+assert_contains "$(cat "$TEST_TMP/missing.out")" '"runner": "grok"' 'missing telemetry lands on the grok default'
+assert_contains "$(cat "$TEST_TMP/missing.out")" '"model": "grok-4.7"' 'missing telemetry default model is grok-4.7'
 # The author rail itself supplies its role when the brief only names size/scope.
 printf 'Size: S\nScope: docs/example.md\nWrite a public documentation note.\n' > "$TEST_TMP/small-brief"
 export CLAUDE_CONFIG_DIR="$TEST_TMP/claude-fixture"
@@ -152,7 +156,7 @@ PACE_TEST_TMP="$TEST_TMP" bash -c '
 retry_rc=$?
 [ "$retry_rc" -eq 0 ] || cat "$TEST_TMP/retry.err" >&2
 assert_eq "$retry_rc" 0 'automatic reviewer reaches the retry child'
-result="$(node -e 'const a=require(process.argv[1]); console.log(a[a.indexOf("--runner")+1] === "codex" && a[a.indexOf("--model")+1] === "gpt-6.1-sol" ? "ok" : JSON.stringify(a));' "$TEST_TMP/retry-args.json")"
+result="$(node -e 'const a=require(process.argv[1]); console.log(a[a.indexOf("--runner")+1] === "codex" && a[a.indexOf("--model")+1] === "gpt-6.1-terra" ? "ok" : JSON.stringify(a));' "$TEST_TMP/retry-args.json")"
 assert_eq "$result" ok 'retry pins the chosen runner and model when original flags were absent'
 AUTOPILOT_AGY_REVIEW_RETREATED=1 AUTOPILOT_AGY_RETREAT_LOG_ROW="$(cat "$TEST_TMP/retry-log.json")" \
   bash "$REPO_ROOT/scripts/dispatch-review.sh" --runner codex --model gpt-6.1-sol --diff-file "$TEST_TMP/diff" \
@@ -171,7 +175,7 @@ assert_eq "$result" codex 'retry child retains pace_choice in its manifest'
   printf '%s|%s\n' "$_FG_RUNNER" "$_FG_ENGINE"
 ) > "$TEST_TMP/pick-empty.out" 2> "$TEST_TMP/pick-empty.err"
 assert_eq "$?" 0 'reviewer retreat tolerates empty IMPLEMENTER_FAMILY'
-assert_contains "$(cat "$TEST_TMP/pick-empty.out")" 'codex|gpt-6.1-sol' 'reviewer retreat with empty IMPLEMENTER_FAMILY picks codex'
+assert_contains "$(cat "$TEST_TMP/pick-empty.out")" 'codex|gpt-6.1-terra' 'reviewer retreat with empty IMPLEMENTER_FAMILY picks codex'
 
 node - "$REPO_ROOT/scripts/dispatch-review.sh" "$TEST_TMP/review-pace.sh" <<'NODE_REV_PACE'
 const fs=require('node:fs'); const s=fs.readFileSync(process.argv[2],'utf8');
@@ -186,7 +190,7 @@ NODE_REV_PACE
   printf '%s|%s|%s\n' "$RUNNER" "$MODEL" "$ENDPOINT"
 ) > "$TEST_TMP/rev-empty.out" 2> "$TEST_TMP/rev-empty.err"
 assert_eq "$?" 0 'review default selection tolerates empty IMPLEMENTER_FAMILY'
-assert_eq "$(cat "$TEST_TMP/rev-empty.out")" 'codex|gpt-6.1-sol|' 'review default selection chooses codex when IMPLEMENTER_FAMILY is empty'
+assert_eq "$(cat "$TEST_TMP/rev-empty.out")" 'codex|gpt-6.1-terra|' 'review default selection chooses codex when IMPLEMENTER_FAMILY is empty'
 
 # --runner auto is unpinned and uses pace selection.
 (cd "$repo" && bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --branch feat/pace-auto --runner auto --prompt-file "$TEST_TMP/brief" --codex-bin "$TEST_TMP/bin/codex-impl" --run-id pace-hetero-auto) > "$TEST_TMP/hetero-auto.out" 2> "$TEST_TMP/hetero-auto.err"

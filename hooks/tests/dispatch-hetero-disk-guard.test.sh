@@ -3,6 +3,7 @@
 # created") before any worktree, branch or record; a healthy disk dispatches as before.
 . "$(dirname "$0")/lib.sh"
 
+install_cli_sentinels
 SCRIPT="$REPO_ROOT/scripts/dispatch-hetero.sh"
 SBX="$TEST_TMP/repo"
 mkdir -p "$SBX"
@@ -71,7 +72,7 @@ status_line() {
 
 run_dispatch() {
   rm -f "$RAN"
-  (cd "$SBX" && "$SCRIPT" --no-verify-tip --prompt-file "$PROMPT" --agy-bin "$STUB" "$@")
+  (cd "$SBX" && "$SCRIPT" --no-verify-tip --prompt-file "$PROMPT" --agy-bin "$STUB" --runner agy "$@")
 }
 
 set_mode shadow

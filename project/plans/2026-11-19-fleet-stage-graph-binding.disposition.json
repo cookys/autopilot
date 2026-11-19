@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "fleet-stage-graph-binding-2026-11-19",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "c439329a05644a7c6f22fdcc36a2f3e475d531a8fc495ae376ebc15b3e6921a5",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: plan section (b) rows 6-7 and the QC row check only text; (b) now has per-row git or uploaded-receipt derivation, and non-derivable stages are marked telemetry with warn-level order checks."
+    },
+    {
+      "fingerprint": "0a76fcc3ef7ae7ce148f4fa3e33818a22be9d4712e2fa353db87f788224c89ac",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: skills/finish-flow/SKILL.md Merge row merges only after qc passes, so a merge-dependent qc-gate row is circular; (b) now keys rows to leaving-code-review and finish/accept."
+    },
+    {
+      "fingerprint": "d5971eb2c44c6323623677c12a80c2f769115042360a87322e2f5b3e945e790a",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Verified: scripts/check-phase-review-receipt.js:113 makes --phase-base mandatory; fixed in the (b) code-review row (derived by merge-base), P2 acceptance has a mismatch negative control."
+    },
+    {
+      "fingerprint": "3b3eadc987d78892692f479beccf7b0291d1e094706630dd71e6b65cc30da29c",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: an internal checksum alone cannot catch a stale or re-checksummed export; (d) adds source_sha256 against the pinned stage-graph.json, version compare and negative controls, degrade-and-warn per fleet review."
+    },
+    {
+      "fingerprint": "c5401266d1c2d457d209b03673ec8107e05904709bbcaa9703d651ce2dc7a43b",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Verified: scripts/stage-graph.js:110-117 moves code-review only when it is in the walk; (c) splits the urgent-low row into M/L/XL and XS/S."
+    },
+    {
+      "fingerprint": "582457a60927fe35a343e4610bbee180f3d17c4e27c55d8223d5bd5bb4aefe67",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted: (i) labels each alarm new or existing and observed or assumption; KR2 replay now maps to T0 and P4 owner-task check."
+    },
+    {
+      "fingerprint": "d4f004feb140df2274443c0e6ce59c173715da28e4636bd546e3f011a3dee26a",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted: (j) uses 有 where capability exists and assigns every row an owner from the allowed set; check-backlog-entries.js:26-39 --ready cited."
+    },
+    {
+      "fingerprint": "8c6aaa7c8dfa09c8b0549233bedc454ed4f1dcd2bdf20ea106ac685e8e9b069e",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: session-mode.js:26-39,1141,1200 --new-task semantics; the MCP task_accept tool is the requester side; (a) now specifies --new-task, unresolved handling without stage-advance, a named hook file and a probe for the trigger."
+    },
+    {
+      "fingerprint": "d34af1123625630e2423175b1e5b0f4560dab8e6c7e1abd76b7d0205edd81235",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified against the first-draft (b): finish/Used rows were merged and trailer was checked only for non-emptiness; split into separate rows with PASS format and used checks, non-derivable stages labelled telemetry."
+    },
+    {
+      "fingerprint": "23fe95ca7250e8ee670534ef975568dcdf4adda4196a4d159ab19b6f4a75c62f",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: finish-flow Delete-merged-branch row removes the branch, dispatch-plan-review.js:81 keeps artifacts under ~/.autopilot, check-phase-review-receipt.js:113 needs --phase-base; (b) adds uploaded receipts, derived phase-base, plan-first by commit order, and per-event timing."
+    },
+    {
+      "fingerprint": "cc8896da6d3292efb88dde6225845775257b26cbad3d967c54a3e50d9eaf4158",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: stage-graph.js:104 ignores explore when bug, :110-117 urgent-low, stage-graph.json bump_limits M 20/800 and unit_kind phase; (c) table and diagram corrected, loop-backs and the intent-to-proposal edge drawn."
+    },
+    {
+      "fingerprint": "f9f9875b5e7b065f27efe4c4b8234775861bd822c8223f69322d973abab3dbe2",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: stale export undetected by a self-checksum, canonicalization undefined, scripts/sync-manifest.json absent from the file map; (d) defines canonical form and source_sha256 checks, section 3 lists the manifest; fail-open circularity removed by degrade-and-warn."
+    },
+    {
+      "fingerprint": "6685be0533cc83048674d13dba174fa9506cf59fa910732759023e61952c2d9f",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: work-order-plan.js:15-17 parses only Size and Plan; the single issue.type enum cannot hold bug+urgent. (e) now maps to fleet SizeTag and stage.stage/fine with reported telemetry kept apart, and the full gate id is written."
+    },
+    {
+      "fingerprint": "e9fad3d12deb38caaa7309a9ddfa17442dc754ebee41ffae0830c87d60ce41ee",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: session-mode.js:216-233 refuses inherited ids under a parent session; (f) requires an explicit fresh --session-id, drops the noncq line (noncq items never call task_result) and defines the verifier as read-only by default."
+    },
+    {
+      "fingerprint": "6252b16ac5fc89871b7dd2113f9a1f0079c0e6fb6c4976b148f15d2e392556c6",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Verified: pm-dispatch-plan-guard.test.js:10,115-139 holds the only isPmConsole tests and hooks.json matcher is at :195 (not :184); (g) moves the tests first, narrows the matcher and lists every file naming the stem."
+    },
+    {
+      "fingerprint": "861c280f7a8630e5e65b6d4a1e44b1500b60202216eb33564b60b6e5a0306b3e",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: the first draft had no phases block while P4 needs this plan to parse; fleet-task.js:11-13 shows --blocked-on takes member and card targets; (h) adds the block, owner grammar, --repo and a trigger, and (i) scopes T0 to task-id edges and drops the bare character 等 from T3."
+    },
+    {
+      "fingerprint": "4c3bf78c1dd6dd66786a84414a20b27325a23d63115e9fa9e717b37771363b48",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: the first-draft (j) used - as an owner and omitted 有 for existing capability (check-backlog-entries.js --ready); table rewritten with allowed owners only."
+    },
+    {
+      "fingerprint": "933f0fb5a1bcab190b891e5cfc4dc9f80b3ad0bfa96aa982cd088941f58d0cd6",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: the first-draft P5 mixed fleet and capacity deliverables and section 3 lacked the plan-phases schema; phases split into P6a, P6b, P7 with single owners, schemas/plan-phases.schema.json added to P4."
+    }
+  ]
+}

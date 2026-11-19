@@ -33,7 +33,7 @@ const diff = path.join(tmp, 'd.diff');
 fs.writeFileSync(marked, 'Lane: x\nReads-Transcript: yes\nbody\n');
 fs.writeFileSync(plain, 'Lane: x\nbody\n');
 const small = path.join(tmp, 'small.md');
-fs.writeFileSync(small, 'Engine: kimi | Role: implementer | Lane: x | Size: S\nScope: docs/a.md, src/util/fmt.js\nbody\n');
+fs.writeFileSync(small, 'Engine: kimi | Role: implementer | Lane: x | Size: S\nScope: docs/a.md, docs/util/fmt.md\nbody\n');
 fs.writeFileSync(diff, 'diff --git a/x b/x\n');
 
 function env(extra = {}) {
@@ -79,6 +79,23 @@ test('class 2 sensitive: scope path or repo name on the list', () => {
   assert.equal(cls(K, { ...OK, AUTOPILOT_TASK_SCOPE: 'secrets-notes.md' }).cls, 'sensitive');
 });
 
+function gitRepo(name) {
+  const dir = path.join(tmp, name);
+  fs.mkdirSync(dir, { recursive: true });
+  const g = (...a) => spawnSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...a], { cwd: dir, encoding: 'utf8' });
+  const init = g('init', '-q', '-b', 'develop');
+  assert.equal(init.status, 0, init.stderr);
+  const commit = g('commit', '-q', '--allow-empty', '-m', 'i');
+  assert.equal(commit.status, 0, commit.stderr);
+  return dir;
+}
+
+function briefFile(name, text) {
+  const f = path.join(tmp, name);
+  fs.writeFileSync(f, text);
+  return f;
+}
+
 test('class 3 core: size above S, or a core dir from the repo config', () => {
   assert.equal(cls(K, { ...OK, AUTOPILOT_TASK_SIZE: 'M' }).cls, 'core-size');
   assert.equal(cls(K, { ...OK, AUTOPILOT_TASK_SIZE: 'XL' }).cls, 'core-size');
@@ -89,12 +106,51 @@ test('class 3 core: size above S, or a core dir from the repo config', () => {
   assert.equal(gate.check({ ...K, env: OK, cwd: core }).allowed, true, 'a non-core path in the same repo is allowed');
 });
 
+test('core-unset: empty core_dirs treats every path as core except the shipped allow list and absent New-Files', () => {
+  const bare = gitRepo('core-unset-bare');
+  const incident = briefFile('incident.md', 'Size: S\nRole: implementer\nScope: src/cli/install.rs\n');
+  const cliIncident = run('node', [path.join(S, 'lib', 'cn-model-dispatch-gate.js'), 'check', '--runner', 'kimi', '--model', 'kimi-code', '--cwd', bare, '--prompt-file', incident]);
+  assert.notEqual(cliIncident.status, 0);
+  assert.match(cliIncident.stderr, /cn_model_dispatch_barred moonshot core-unset/);
+  assert.equal(gate.check({ ...K, env: {}, files: [incident], cwd: bare }).cls, 'core-unset');
+
+  const docs = briefFile('allow-docs.md', 'Size: S\nRole: implementer\nScope: docs/plans/x.md\n');
+  assert.equal(gate.check({ ...K, env: {}, files: [docs], cwd: bare }).allowed, true);
+  const fix = briefFile('allow-fix.md', 'Size: S\nRole: implementer\nScope: tests/fixtures/seat_burn/a.json\n');
+  assert.equal(gate.check({ ...K, env: {}, files: [fix], cwd: bare }).allowed, true);
+  const neu = briefFile('allow-new.md', 'Size: S\nRole: implementer\nScope: tests/test_new.py\nNew-Files: tests/test_new.py\n');
+  assert.equal(fs.existsSync(path.join(bare, 'tests/test_new.py')), false);
+  assert.equal(gate.check({ ...K, env: {}, files: [neu], cwd: bare }).allowed, true);
+
+  fs.mkdirSync(path.join(bare, 'tests'), { recursive: true });
+  fs.writeFileSync(path.join(bare, 'tests/test_old.py'), 'x\n');
+  const old = briefFile('deny-old.md', 'Size: S\nRole: implementer\nScope: tests/test_old.py\nNew-Files: tests/test_old.py\n');
+  assert.equal(gate.check({ ...K, env: {}, files: [old], cwd: bare }).cls, 'core-unset');
+  const mixed = briefFile('deny-mixed.md', 'Size: S\nRole: implementer\nScope: docs/a.md, src/b.rs\n');
+  assert.equal(gate.check({ ...K, env: {}, files: [mixed], cwd: bare }).cls, 'core-unset');
+
+  const widen = gitRepo('core-unset-widen');
+  fs.mkdirSync(path.join(widen, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(widen, '.claude', 'cn-model-gate.json'), JSON.stringify({ core_unset_allow: ['src/**'] }));
+  const widened = briefFile('deny-widen.md', 'Size: S\nRole: implementer\nScope: src/b.rs\n');
+  assert.equal(gate.check({ ...K, env: {}, files: [widened], cwd: widen }).cls, 'core-unset', 'a repo cannot add to core_unset_allow');
+
+  const set = gitRepo('core-dirs-set');
+  fs.mkdirSync(path.join(set, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(set, '.claude', 'cn-model-gate.json'), JSON.stringify({ core_dirs: ['scripts/**'] }));
+  assert.equal(gate.check({ ...K, env: { ...OK, AUTOPILOT_TASK_SCOPE: 'src/x.js' }, cwd: set }).allowed, true);
+  assert.equal(gate.check({ ...K, env: { ...OK, AUTOPILOT_TASK_SCOPE: 'scripts/y.js' }, cwd: set }).cls, 'core-dir');
+
+  const sens = briefFile('deny-env.md', 'Size: S\nRole: implementer\nScope: docs/.env\n');
+  assert.equal(gate.check({ ...K, env: {}, files: [sens], cwd: bare }).cls, 'sensitive');
+});
+
 test('class 4 novel: plan/design/brainstorm/architecture/research roles, or a novel marker', () => {
   for (const r of ['plan', 'design', 'brainstorm', 'architecture', 'research']) {
     assert.equal(cls(K, { ...OK, AUTOPILOT_TASK_ROLE: r }).cls, 'novel', r);
   }
   assert.equal(cls(K, { ...OK, AUTOPILOT_TASK_NOVEL: '1' }).cls, 'novel');
-  const nov = path.join(tmp, 'novel.md'); fs.writeFileSync(nov, 'Role: implementer | Size: S\nNovel: yes\nScope: a.md\n');
+  const nov = path.join(tmp, 'novel.md'); fs.writeFileSync(nov, 'Role: implementer | Size: S\nNovel: yes\nScope: docs/a.md\n');
   assert.equal(cls(K, {}, { files: [nov] }).cls, 'novel');
 });
 

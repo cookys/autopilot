@@ -21,6 +21,10 @@
 //                 of the same family, and any other barred family on that endpoint, stay barred.
 //   [core-size]   size is above XS/S (M, L, XL)
 //   [core-dir]    the scope touches a directory the config marks `core`
+//   [core-unset]  effective core_dirs (shipped list union the repo file) is empty, so every scope path
+//                 counts as core. Allowed only when every path matches the shipped core_unset_allow list,
+//                 or is named in New-Files: and does not exist under cwd yet. A repo file cannot change
+//                 that list. An empty core list must not fail open onto source edits (01M7S88YZPPZKVARP0F2SYMRGS).
 //   [novel]       role is plan, design, brainstorm, architecture, plan_review or research, or the task is
 //                 marked novel (env AUTOPILOT_TASK_NOVEL=1, or `Novel: yes` header)
 //   [unknown-size|unknown-role|unknown-scope]  FAIL CLOSED: size, role or scope is missing
@@ -44,12 +48,15 @@
 //   size   AUTOPILOT_TASK_SIZE  / `Size: XS|S|M|L|XL`
 //   role   AUTOPILOT_TASK_ROLE  / `Role: <role>`          (a rail may pass its own implied role; a review or novel rail role is a floor that env/header cannot lower)
 //   scope  AUTOPILOT_TASK_SCOPE / `Scope: a, b`  (comma/newline separated paths), plus the `diff --git` paths of any diff file
+//   new    `New-Files: a, b` (same comma/newline split as Scope). Counts only when effective core_dirs is
+//          empty: a named path that does not exist under cwd is allowed even if it misses core_unset_allow.
 //   novel  AUTOPILOT_TASK_NOVEL=1 / `Novel: yes`
 //   class  AUTOPILOT_TASK_CLASS / `Task-Class: <value>`   (local served family only; compared case-insensitively)
 // Config: scripts/lib/cn-model-gate-defaults.json (starter lists) extended by <repo>/.claude/cn-model-gate.json
 //   (union of every list; a repo can add entries and cannot remove a starter). Fields: sensitive_paths,
 //   sensitive_repos, core_dirs, novel_roles, review_roles, local_task_classes, local_deny_repos.
-//   review_local_exceptions is read only from the shipped defaults (not unioned). Clock: check(..., { now })
+//   review_local_exceptions and core_unset_allow are read only from the shipped defaults (not unioned).
+//   Clock: check(..., { now })
 //   with an ISO string. An explicit now that does not parse fails closed and is not replaced by the real
 //   clock. When now is omitted, Date.now() is used (no env override).
 // Family inference is stage-write.js familyOfEngine (qoder included). Transcript deny list is
@@ -156,6 +163,25 @@ function shippedReviewExceptions() {
   return Array.isArray(raw) ? raw : [];
 }
 
+// Shipped defaults only. A repo file is not consulted: an empty core_dirs must not be widened
+// by a repo adding source globs to the allow list (01M7S88YZPPZKVARP0F2SYMRGS).
+function shippedCoreUnsetAllow() {
+  const raw = loadList(DEFAULTS_PATH).core_unset_allow;
+  return Array.isArray(raw) ? raw.map(String) : [];
+}
+
+function normRel(p) {
+  return String(p).replace(/^\.\//, '').replace(/^\/+/, '');
+}
+
+function splitPathList(raw) {
+  return String(raw || '').split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
+}
+
+function pathExistsUnder(cwd, p) {
+  return fs.existsSync(path.resolve(cwd, normRel(p)));
+}
+
 function instantMs(v) {
   if (typeof v !== 'string' || v === '') return null;
   const t = Date.parse(v);
@@ -240,10 +266,11 @@ function taskFacts({ files = [], diffFiles = [], role = '', env = process.env })
   const railRole = String(role || '').trim().toLowerCase();
   const roleV = envRole || headerRole || railRole;
   const scopeRaw = String(env.AUTOPILOT_TASK_SCOPE || headerValue(files, 'Scope') || '');
-  const scope = [...new Set([...scopeRaw.split(/[,\n]/).map((s) => s.trim()).filter(Boolean), ...diffFiles.filter(Boolean).flatMap(diffPaths)])];
+  const scope = [...new Set([...splitPathList(scopeRaw), ...diffFiles.filter(Boolean).flatMap(diffPaths)])];
+  const newFiles = [...new Set(splitPathList(headerValue(files, 'New-Files')))];
   const novel = String(env.AUTOPILOT_TASK_NOVEL || '') === '1' || /^yes$/i.test(headerValue(files, 'Novel'));
   const taskClass = String(env.AUTOPILOT_TASK_CLASS || headerValue(files, 'Task-Class') || '').trim().toLowerCase();
-  return { size, role: roleV, railRole, headerRole, scope, novel, transcript: isMarked(files, env), taskClass };
+  return { size, role: roleV, railRole, headerRole, scope, newFiles, novel, transcript: isMarked(files, env), taskClass };
 }
 
 // -> { allowed, family, cls?, line? }
@@ -266,7 +293,12 @@ function check(opts = {}) {
     if (!exempt) return block('review-role');
   }
   if (BIG_SIZES.includes(f.size)) return block('core-size');
-  if (f.scope.some((p) => matchesAny(p, cfg.core_dirs))) return block('core-dir');
+  if (cfg.core_dirs.length === 0) {
+    const allow = shippedCoreUnsetAllow();
+    const news = new Set(f.newFiles.map(normRel));
+    const unset = f.scope.some((p) => !matchesAny(p, allow) && !(news.has(normRel(p)) && !pathExistsUnder(cwd, p)));
+    if (unset) return block('core-unset');
+  } else if (f.scope.some((p) => matchesAny(p, cfg.core_dirs))) return block('core-dir');
   if (f.novel || cfg.novel_roles.includes(f.role) || cfg.novel_roles.includes(f.railRole)) return block('novel');
   if (!SMALL_SIZES.includes(f.size)) return block('unknown-size');
   if (!f.role) return block('unknown-role');

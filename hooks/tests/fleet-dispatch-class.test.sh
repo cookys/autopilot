@@ -7,7 +7,7 @@ HOOK_PATH="$REPO_ROOT/hooks/fleet-dispatch-class.js"
 
 build_dispatch_payload() {
   local task_text="$1"
-  local explicit_class="${2:-__OMIT__}"
+  local explicit_class="${2-__OMIT__}"
   node -e '
     const [task, cls] = process.argv.slice(1);
     const tool_input = {
@@ -68,7 +68,7 @@ assert_denied_one_line_zh() {
     if (!/[\u4e00-\u9fff]/.test(r)) process.exit(4);
     process.stdout.write(r);
   ' "$raw_stdout" 2>/dev/null || true)"
-  assert_ne "" "$reason" "${label}: deny with one-line zh-TW reason"
+  assert_neq "" "$reason" "${label}: deny with one-line zh-TW reason"
   printf '%s' "$reason"
 }
 

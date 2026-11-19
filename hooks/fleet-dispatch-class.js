@@ -49,6 +49,8 @@ function oneLine(value, maxLen = 60) {
   return String(value).replace(/[\r\n]+/g, ' ').trim().slice(0, maxLen);
 }
 
+const ALLOWED_CLASSES_TEXT = VALID_CLASSES.join(' | ');
+
 function preToolDeny(reason) {
   return {
     hookSpecificOutput: {
@@ -121,21 +123,21 @@ function decide(input) {
     }
     const shown = typeof toolInput.class === 'string' ? toolInput.class : JSON.stringify(toolInput.class);
     return preToolDeny(
-      `mcp__fleet__dispatch 的 class 值「${oneLine(shown)}」無效；允許的值僅限 plan-review、code-review、implement、chat 四種。`,
+      `mcp__fleet__dispatch 的 class 值「${oneLine(shown)}」無效；允許的值僅限 ${ALLOWED_CLASSES_TEXT} 四種。`,
     );
   }
 
   const roleHeader = extractRoleHeader(toolInput.task);
   if (!roleHeader) {
     return preToolDeny(
-      'mcp__fleet__dispatch 缺少 Role: 標頭；請在 task 前 15 行加上「Role: <角色>」，或明確傳入 class（plan-review、code-review、implement、chat 四擇一）。',
+      `mcp__fleet__dispatch 缺少 Role: 標頭；請在 task 前 15 行加上「Role: <角色>」，或明確傳入 class（${ALLOWED_CLASSES_TEXT} 四擇一）。`,
     );
   }
 
   const mappedClass = resolveClassFromRole(roleHeader);
   if (!mappedClass) {
     return preToolDeny(
-      `mcp__fleet__dispatch 的 Role:「${oneLine(roleHeader)}」不在支援的角色表內；請改用支援的 Role: 標頭（如 plan-reviewer、reviewer、implementer、chat），或明確傳入 class（plan-review、code-review、implement、chat 四擇一）。`,
+      `mcp__fleet__dispatch 的 Role:「${oneLine(roleHeader)}」不在支援的角色表內；請改用支援的 Role: 標頭（如 plan-reviewer、reviewer、implementer、chat），或明確傳入 class（${ALLOWED_CLASSES_TEXT} 四擇一）。`,
     );
   }
 

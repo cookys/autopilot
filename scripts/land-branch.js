@@ -17,7 +17,9 @@
 // `prune-merged-branch.js --repo <dir> --branch <name> --target develop --remote <remote>`.
 // Each reap step prints one `reap:` line on stderr (removed, skipped, or warning).
 // A failing reap step prints a warning and still exits 0. `--keep-branch` skips every
-// reap step. A failed merge, a failed push, merged_not_pushed, and any earlier stop
+// reap step. A branch named main, master, develop, or the merge target (the
+// --base-ref name after the remote prefix) is not reaped: one warning, exit unchanged.
+// A failed merge, a failed push, merged_not_pushed, and any earlier stop
 // remove nothing.
 //
 // --review-generation <n> is required. n is the generation of the review that passed
@@ -207,6 +209,18 @@ function branchLabel(ref) {
   return ref.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : ref;
 }
 
+function mergeTargetBranch(baseRef, remote) {
+  const label = branchLabel(baseRef);
+  const prefix = `${remote}/`;
+  if (label.startsWith(prefix)) return label.slice(prefix.length);
+  return label;
+}
+
+function reapProtected(branch, opts) {
+  if (branch === 'main' || branch === 'master' || branch === 'develop') return true;
+  return branch === mergeTargetBranch(opts.baseRef, opts.remote);
+}
+
 function commitMessage(branch, bodyText, model, fleetTask, reviewGeneration) {
   const norm = bodyText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   const splitAt = norm.indexOf('\n');
@@ -347,6 +361,10 @@ function reapAfterLand(opts, git, run) {
   const branch = branchLabel(opts.branch);
   if (opts.keepBranch) {
     reapNote('reap: skipped: --keep-branch');
+    return;
+  }
+  if (reapProtected(branch, opts)) {
+    reapNote(`reap: warning: skipped: refusing to reap protected branch ${branch}`);
     return;
   }
   const top = git(['rev-parse', '--show-toplevel']);

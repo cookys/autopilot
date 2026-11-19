@@ -485,6 +485,60 @@ if has_branch "$WORK" feat/land; then fail "reap-ok local branch still present";
 if worktree_listed "$WORK" "$WT_OK"; then fail "reap-ok worktree still listed"; else __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)); fi
 assert_contains "$LAND_ERR" "reap:" "reap-ok prints a reap line"
 
+# --- extra commit after the push, no worktree on the branch: -d keeps it ---
+reset_env
+make_repo reap_unmerged
+REAL_GIT="$(command -v git)"
+GIT_WRAP="$TEST_TMP/git-wrap-unmerged"
+mkdir -p "$GIT_WRAP"
+cat > "$GIT_WRAP/git" << EOF
+#!/bin/bash
+real="$REAL_GIT"
+if [ "\$1" = "push" ]; then
+  "\$real" "\$@"
+  rc=\$?
+  if [ \$rc -eq 0 ]; then
+    tree=\$("\$real" rev-parse 'feat/land^{tree}')
+    parent=\$("\$real" rev-parse refs/heads/feat/land)
+    new=\$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com "\$real" commit-tree "\$tree" -p "\$parent" -m 'post-land extra')
+    "\$real" update-ref refs/heads/feat/land "\$new"
+  fi
+  exit \$rc
+fi
+exec "\$real" "\$@"
+EOF
+chmod +x "$GIT_WRAP/git"
+git -C "$WORK" config advice.forceDeleteBranch false
+REVIEW="$TEST_TMP/review-reap-unmerged.json"
+write_review "$REVIEW" SHIP-AS-IS
+LAND_SUITES_CMD="$OK_SUITES_JSON"
+LAND_CHECK_CMDS="$OK_CHECKS_JSON"
+PATH="$GIT_WRAP:$PATH" run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --review-generation 1 --push
+assert_one_json_line "reap-unmerged"
+assert_eq "$LAND_RC" "0" "reap-unmerged exits 0"
+assert_eq "$(jfield status)" "landed" "reap-unmerged landed"
+if has_branch "$WORK" feat/land; then __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)); else fail "reap-unmerged branch removed"; fi
+if git -C "$WORK" worktree list --porcelain | grep -qx 'branch refs/heads/feat/land'; then fail "reap-unmerged worktree has the branch"; else __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)); fi
+assert_contains "$LAND_ERR" "reap: warning:" "reap-unmerged warning line"
+
+# --- feat/land-2 worktree must not match a feat/land prefix ---
+reset_env
+make_repo reap_prefix
+git -C "$WORK" branch feat/land-2 feat/land
+WT_PREFIX="$TEST_TMP/wt-reap-prefix"
+git -C "$WORK" worktree add -q "$WT_PREFIX" feat/land-2
+REVIEW="$TEST_TMP/review-reap-prefix.json"
+write_review "$REVIEW" SHIP-AS-IS
+LAND_SUITES_CMD="$OK_SUITES_JSON"
+LAND_CHECK_CMDS="$OK_CHECKS_JSON"
+run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --review-generation 1 --push
+assert_one_json_line "reap-prefix"
+assert_eq "$LAND_RC" "0" "reap-prefix exits 0"
+assert_eq "$(jfield status)" "landed" "reap-prefix landed"
+if has_branch "$WORK" feat/land-2; then __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)); else fail "reap-prefix feat/land-2 branch removed"; fi
+if worktree_listed "$WORK" "$WT_PREFIX"; then __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)); else fail "reap-prefix feat/land-2 worktree removed"; fi
+if has_branch "$WORK" feat/land; then fail "reap-prefix feat/land still present"; else __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)); fi
+
 # --- failed merge leaves the branch and its worktree ---
 reset_env
 make_repo reap_conflict
@@ -539,6 +593,7 @@ assert_one_json_line "reap-dirty"
 assert_eq "$LAND_RC" "0" "reap-dirty exits 0"
 assert_eq "$(jfield status)" "landed" "reap-dirty landed"
 if worktree_listed "$WORK" "$WT_DIRTY"; then __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)); else fail "reap-dirty worktree removed"; fi
+if has_branch "$WORK" feat/land; then __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)); else fail "reap-dirty branch removed"; fi
 assert_contains "$(cat "$WT_DIRTY/a.txt")" "uncommitted" "reap-dirty file preserved"
 assert_contains "$LAND_ERR" "warning" "reap-dirty warning line"
 
@@ -582,5 +637,53 @@ run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET
 assert_one_json_line "reap-noremote"
 assert_eq "$LAND_RC" "0" "reap-noremote exits 0"
 assert_contains "$(git -C "$WORK" ls-remote --heads origin feat/land)" "refs/heads/feat/land" "reap-noremote remote branch stays"
+
+# --- protected names and the merge target are not reaped ---
+for protected in main master; do
+  reset_env
+  make_repo "reap_protect_${protected}"
+  git -C "$WORK" branch -m feat/land "$protected"
+  REVIEW="$TEST_TMP/review-reap-protect-${protected}.json"
+  write_review "$REVIEW" SHIP-AS-IS
+  LAND_SUITES_CMD="$OK_SUITES_JSON"
+  LAND_CHECK_CMDS="$OK_CHECKS_JSON"
+  run_land "$WORK" --branch "$protected" --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --review-generation 1 --push
+  assert_one_json_line "reap-protect-$protected"
+  assert_eq "$LAND_RC" "0" "reap-protect-$protected exits 0"
+  assert_eq "$(jfield status)" "landed" "reap-protect-$protected landed"
+  if has_branch "$WORK" "$protected"; then __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)); else fail "reap-protect-$protected branch removed"; fi
+  assert_contains "$LAND_ERR" "reap: warning:" "reap-protect-$protected warning line"
+done
+
+reset_env
+make_repo reap_protect_develop
+printf 'extra\n' >> "$WORK/a.txt"
+git -C "$WORK" add a.txt
+git -C "$WORK" commit -qm 'develop extra'
+REVIEW="$TEST_TMP/review-reap-protect-develop.json"
+write_review "$REVIEW" SHIP-AS-IS
+LAND_SUITES_CMD="$OK_SUITES_JSON"
+LAND_CHECK_CMDS="$OK_CHECKS_JSON"
+run_land "$WORK" --branch develop --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --review-generation 1 --push
+assert_one_json_line "reap-protect-develop"
+assert_eq "$LAND_RC" "0" "reap-protect-develop exits 0"
+assert_eq "$(jfield status)" "landed" "reap-protect-develop landed"
+if has_branch "$WORK" develop; then __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)); else fail "reap-protect-develop branch removed"; fi
+assert_contains "$LAND_ERR" "reap: warning:" "reap-protect-develop warning line"
+
+reset_env
+make_repo reap_protect_target
+git -C "$WORK" branch -m feat/land release
+git -C "$WORK" push -q origin develop:release
+REVIEW="$TEST_TMP/review-reap-protect-target.json"
+write_review "$REVIEW" SHIP-AS-IS
+LAND_SUITES_CMD="$OK_SUITES_JSON"
+LAND_CHECK_CMDS="$OK_CHECKS_JSON"
+run_land "$WORK" --branch release --base-ref origin/release --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --review-generation 1 --push
+assert_one_json_line "reap-protect-target"
+assert_eq "$LAND_RC" "0" "reap-protect-target exits 0"
+assert_eq "$(jfield status)" "landed" "reap-protect-target landed"
+if has_branch "$WORK" release; then __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)); else fail "reap-protect-target branch removed"; fi
+assert_contains "$LAND_ERR" "reap: warning:" "reap-protect-target warning line"
 
 finalize_test

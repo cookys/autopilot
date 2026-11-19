@@ -173,6 +173,31 @@ reset_audit; run_at "$WORK" grep -e / -r x .; assert_allowed "grep -e / still" g
 reset_audit; run_at "$WORK" rg -g / x .; assert_allowed "rg -g / still" rg
 reset_audit; run_at "$WORK" grep x /etc/hosts; assert_allowed "grep hosts still" grep
 
+echo "round 3 refused"
+reset_audit; run_at "$WORK" grep -2 x /; assert_refused "grep -2 x /"
+reset_audit; run_at "$WORK" grep -9 x /; assert_refused "grep -9 x /"
+reset_audit; run_at "$WORK" grep -nw2 x /; assert_refused "grep -nw2 x /"
+reset_audit; run_at "$WORK" grep --depth=3 x /; assert_refused "grep --depth=3 x /"
+reset_audit; run_at "$WORK" grep --max-depth 3 x /; assert_refused "grep --max-depth 3 x /"
+reset_audit; run_at "$WORK" grep --min-de=1 x /; assert_refused "grep --min-de=1 x /"
+reset_audit; run_at "$WORK" grep x /; assert_refused "grep x /"
+reset_audit; run_at "$WORK" find -name x /; assert_refused "find -name x /"
+reset_audit; run_at "$WORK" find -f /; assert_refused "find -f /"
+reset_audit; run_at "$WORK" find -E /; assert_refused "find -E /"
+reset_audit; run_at "$WORK" find -regextype posix-extended /; assert_refused "find -regextype posix-extended /"
+reset_audit; run_at "$WORK" find -- -x /; assert_refused "find -- -x /"
+reset_audit; run_at "$WORK" find . -exec grep x / ';'; assert_refused "find . -exec grep x / ;"
+reset_audit; run_at "$WORK" grep -r x /proc/self/root; assert_refused "grep -r x /proc/self/root"
+reset_audit; run_at "$WORK" rg x /proc/1/root/; assert_refused "rg x /proc/1/root/"
+reset_audit; run_at / grep -2 x; assert_refused "cwd=/ grep -2 x"
+
+echo "round 3 allowed"
+reset_audit; run_at "$WORK" grep -2 x src; assert_allowed "grep -2 x src" grep
+reset_audit; run_at "$WORK" find . -name /; assert_allowed "find . -name /" find
+reset_audit; run_at "$WORK" find . -path / -prune; assert_allowed "find . -path / -prune" find
+reset_audit; run_at "$WORK" find /home -name x; assert_allowed "find /home round 3" find
+reset_audit; run_at "$WORK" grep -e / x file.txt; assert_allowed "grep -e / x file.txt" grep
+
 echo "audit preexisting 0644"
 reset_audit
 printf 'old-line\n' > "$AUDIT"
@@ -233,6 +258,35 @@ need(classify({ tool: "grep", args: ["-e", "/", "-r", "x", "."], cwd }).refuse =
 need(classify({ tool: "rg", args: ["-g", "/", "x", "."], cwd }).refuse === false, "rg -g / allowed");
 need(classify({ tool: "find", args: ["--", "/"], cwd }).refuse === true, "find -- /");
 need(classify({ tool: "rg", args: ["--files", "-g", "*.md", "/"], cwd }).refuse === true, "rg --files glob");
+function rootTok(tool, args, cwd2) {
+  const r = classify({ tool, args, cwd: cwd2 || cwd });
+  need(r.refuse === true && r.reason === "root-token", tool + " " + JSON.stringify(args) + " " + JSON.stringify(r));
+}
+rootTok("grep", ["-2", "x", "/"]);
+rootTok("grep", ["-9", "x", "/"]);
+rootTok("grep", ["-nw2", "x", "/"]);
+rootTok("grep", ["--depth=3", "x", "/"]);
+rootTok("grep", ["--max-depth", "3", "x", "/"]);
+rootTok("grep", ["--min-de=1", "x", "/"]);
+rootTok("grep", ["x", "/"]);
+rootTok("find", ["-name", "x", "/"]);
+rootTok("find", ["-f", "/"]);
+rootTok("find", ["-E", "/"]);
+rootTok("find", ["-s", "/"]);
+rootTok("find", ["-x", "/"]);
+rootTok("find", ["-d", "/"]);
+rootTok("find", ["-regextype", "posix-extended", "/"]);
+rootTok("find", ["--", "-x", "/"]);
+rootTok("find", [".", "-exec", "grep", "x", "/", ";"]);
+rootTok("grep", ["-r", "x", "/proc/self/root"]);
+rootTok("rg", ["x", "/proc/1/root/"]);
+rootTok("grep", ["-r", "x", "/proc/thread-self/root/."]);
+const noPath = classify({ tool: "grep", args: ["-2", "x"], cwd: "/" });
+need(noPath.refuse === true, "cwd=/ grep -2 x " + JSON.stringify(noPath));
+need(classify({ tool: "grep", args: ["-2", "x", "src"], cwd }).refuse === false, "grep -2 src");
+need(classify({ tool: "find", args: [".", "-name", "/"], cwd }).refuse === false, "find -name /");
+need(classify({ tool: "find", args: [".", "-path", "/", "-prune"], cwd }).refuse === false, "find -path /");
+need(classify({ tool: "grep", args: ["-e", "/", "x", "file.txt"], cwd }).refuse === false, "grep -e / file");
 ' "$GUARD_JS" "$WORK"
 assert_exit_code $? 0 "classify units"
 

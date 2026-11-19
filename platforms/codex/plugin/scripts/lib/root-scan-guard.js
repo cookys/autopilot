@@ -4,13 +4,19 @@
 //
 // classify({ tool, args, cwd }) -> { refuse, reason, root_path }
 // refuse is true when a starting path resolves to `/` (or the tool's implicit `.`
-// does, because cwd is `/`). Non-recursive grep of a file under / is allowed.
+// does, because cwd is `/`). Non-recursive grep of a file under / is allowed;
+// a non-recursive read of `/` itself is not.
 // Long options expand to a unique table entry (exact name, else one prefix).
 // An ambiguous or unknown long option consumes nothing. When parsing is unsure,
 // a root token that is not a known pattern/glob value refuses as `root-token`.
+// grep/egrep/fgrep: every token except -e/--regexp/-f/--file values (including --regexp= and -ePATTERN) is checked, and -[1-9] or --depth/--max-depth/--min-depth marks the search recursive.
+// find: the root-token backstop exempts only the single value after -name -iname -path -ipath -wholename -iwholename -regex -iregex -lname -ilname -newer -anewer -cnewer -samefile -fstype -user -group -perm -type -xtype -size -printf -fprintf -fprint -fls -context.
+// A token is root when path.resolve(cwd, tok) is `/`, or the resolved path matches /proc/<pid|self|thread-self>/root, or fs.realpathSync of it is `/` (realpath errors fall back to the literal check).
+// Shell-expanded `/*` is not visible to the guard (known limit).
 // Node built-ins only. Contract: references/hetero-dispatch.md § Kimi broker implementer
 // (Root-scan guard). Suite: hooks/tests/root-scan-guard.test.sh.
 
+const fs = require('fs');
 const path = require('path');
 
 const FIND_BARE = new Set(['-H', '-L', '-P']);
@@ -39,7 +45,21 @@ const GREP_LONG = {
   'group-separator': { value: true },
   color: { optional: true },
   colour: { optional: true },
+  depth: { value: true, recursive: true },
+  'max-depth': { value: true, recursive: true },
+  'min-depth': { value: true, recursive: true },
 };
+
+// bfs/GNU find predicates whose immediate next token is an operand, not a path.
+const FIND_VALUE_PRED = new Set([
+  '-name', '-iname', '-path', '-ipath', '-wholename', '-iwholename',
+  '-regex', '-iregex', '-lname', '-ilname', '-newer', '-anewer', '-cnewer',
+  '-samefile', '-fstype', '-user', '-group', '-perm', '-type', '-xtype',
+  '-size', '-printf', '-fprintf', '-fprint', '-fls', '-context',
+]);
+
+// Resolved form. path.resolve already drops trailing slashes and a final `/.`.
+const PROC_ROOT = /^\/proc\/(self|thread-self|[0-9]+)\/root\/*(\.)?\/*$/;
 
 const RG_SHORT_VALUE = new Set(['e', 'f', 'g', 't', 'T', 'm', 'A', 'B', 'C', 'j', 'M', 'r', 'E', 'd']);
 const RG_EXEMPT_SHORT = new Set(['e', 'f', 'g', 't', 'T']);
@@ -93,7 +113,14 @@ function deny(reason, rootPath) {
 
 function isFilesystemRoot(operand, cwd) {
   const resolved = path.resolve(cwd, operand);
-  return path.posix.normalize(resolved) === '/';
+  if (path.posix.normalize(resolved) === '/') return true;
+  if (PROC_ROOT.test(resolved)) return true;
+  try {
+    if (fs.realpathSync(resolved) === '/') return true;
+  } catch (e) {
+    // Missing path or unreadable: the literal checks above stand.
+  }
+  return false;
 }
 
 function firstRoot(paths, cwd) {
@@ -136,7 +163,9 @@ function classifyFind(args, cwd) {
     i += 1;
   }
   const exempt = new Set();
-  for (let k = i; k < args.length; k += 1) exempt.add(k);
+  for (let k = 0; k < args.length; k += 1) {
+    if (FIND_VALUE_PRED.has(args[k]) && k + 1 < args.length) exempt.add(k + 1);
+  }
   if (starts.length === 0) starts.push('.');
   const rootTok = backstop(args, cwd, exempt);
   if (rootTok !== null) return deny('root-token', rootTok);
@@ -150,7 +179,7 @@ function takeValue(args, i, inline) {
   return { value: args[i + 1], next: i + 1, index: i + 1 };
 }
 
-function scanOptions(args, shortValue, longTable, exemptShort) {
+function scanOptions(args, shortValue, longTable, exemptShort, depthDigits) {
   let recursive = false;
   let patternFlag = false;
   let directoriesRecurse = false;
@@ -189,7 +218,7 @@ function scanOptions(args, shortValue, longTable, exemptShort) {
     let j = 1;
     while (j < a.length) {
       const ch = a[j];
-      if (ch === 'r' || ch === 'R') recursive = true;
+      if (ch === 'r' || ch === 'R' || (depthDigits && ch >= '1' && ch <= '9')) recursive = true;
       if (shortValue.has(ch)) {
         const rest = a.slice(j + 1);
         let value;
@@ -220,11 +249,9 @@ function backstop(args, cwd, exempt) {
 }
 
 function classifyGrep(args, cwd) {
-  const scanned = scanOptions(args, GREP_SHORT_VALUE, GREP_LONG, GREP_EXEMPT_SHORT);
-  if (scanned.recursive) {
-    const rootTok = backstop(args, cwd, scanned.exempt);
-    if (rootTok !== null) return deny('root-token', rootTok);
-  }
+  const scanned = scanOptions(args, GREP_SHORT_VALUE, GREP_LONG, GREP_EXEMPT_SHORT, true);
+  const rootTok = backstop(args, cwd, scanned.exempt);
+  if (rootTok !== null) return deny('root-token', rootTok);
   if (!scanned.recursive) return allow();
   const paths = scanned.patternFlag ? scanned.operands : scanned.operands.slice(1);
   if (paths.length === 0) {
@@ -237,7 +264,7 @@ function classifyGrep(args, cwd) {
 }
 
 function classifyRg(args, cwd) {
-  const scanned = scanOptions(args, RG_SHORT_VALUE, RG_LONG, RG_EXEMPT_SHORT);
+  const scanned = scanOptions(args, RG_SHORT_VALUE, RG_LONG, RG_EXEMPT_SHORT, false);
   const rootTok = backstop(args, cwd, scanned.exempt);
   if (rootTok !== null) return deny('root-token', rootTok);
   const paths = (scanned.patternFlag || scanned.filesMode) ? scanned.operands : scanned.operands.slice(1);

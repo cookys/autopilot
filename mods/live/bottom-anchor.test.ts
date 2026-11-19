@@ -183,16 +183,17 @@ for (const [cols, rows] of [[160, 40], [80, 24]]) {
   })
 }
 
-test('shell: the menu row is first and the quick row is last', () => {
+test('shell: the menu row is second to last and the quick row is last (r5: operator rule, bottom next to the prompt)', () => {
   const plan = shellPlan({ columns: 160, t, menuTitle: 'fixture menu', mainTitle: 'fixture main', room: { rows: [], fresh: 0 }, panel: parsePanel(null, 0), fleet: [] })
   const bar = el.Text({ children: ['fixture band'] })
   const main = [el.Text({ children: ['fixture card options'] })]
   const tree = B.stackRows(el, B.Shell(el, { plan, left: [], onLeft() {}, main, progress: el.Text({ children: ['fixture progress'] }), quick: [el.Text({ children: ['fixture submit'] })], bar }))
   const out = render(tree, 160)
-  assert.equal(out[0].trim(), 'fixture band', 'ux-v7: the menu row is band row 0')
-  assert.equal(out[lastInk(out)].trim(), 'fixture submit', 'the quick row is the last band row')
+  const last = lastInk(out)
+  assert.equal(out[last].trim(), 'fixture submit', 'the quick row is the last band row')
+  assert.equal(out[last - 1].trim(), 'fixture band', 'r5: the menu row is the row just above the quick row')
   const opt = out.findIndex(r => r.includes('fixture card options'))
-  assert.equal(opt, 2, 'a short main sits on the first body row, under the menu and the top frame')
+  assert.equal(opt, 1, 'a short main sits on the first body row, under the top frame')
 })
 
 test('shell overflow: default opens at bottom, scrolling up survives redraw', () => {

@@ -333,7 +333,8 @@ export function Shell(el: { Box: El; Text: El; Button?: El }, d: ShellDraw): unk
     return <Text key={'v' + i} {...drawSeg(seg)}>{seg.text}</Text>
   }
   const blank = (k: string) => <Text key={k}>{' '}</Text>
-  const rows: unknown[] = [<Box key="menu">{d.bar}</Box>]
+  // r5 (operator 11-19): what the owner operates sits at the bottom, next to the prompt: top frame, body, bottom frame, then the menu row, and the quick row last
+  const rows: unknown[] = []
   rows.push(<Box key="top">{segsOf(plan.top, 't')}</Box>)
   const body = plan.bodyRows
   const content = plan.compact ? body : body - 2 // r4: a compact frame has no divider and no progress row
@@ -374,13 +375,23 @@ export function Shell(el: { Box: El; Text: El; Button?: El }, d: ShellDraw): unk
     rows.push(<Box key={'row' + r}>{cells}</Box>)
   }
   rows.push(<Box key="bottom">{segsOf(plan.bottom, 'b')}</Box>)
+  rows.push(<Box key="menurow">{d.bar}</Box>)
   rows.push(<Box key="quick"><Text>{' '}</Text>{d.quick}</Box>)
+  return rows
+}
+// r5: a band too short for the frames (the card is taller than rows - 4): the card's rows only, then the menu row and the quick row. No left window, no frame, no divider or progress row.
+export function ShellBare(el: { Box: El; Text: El; Button?: El }, d: { main: unknown[]; bar: unknown; quick: unknown[] }): unknown[] {
+  const { Box, Text } = el
+  const rows: unknown[] = d.main.map((m, i) => <Box key={'bare' + i}>{m}</Box>)
+  rows.push(<Box key="menurow">{d.bar}</Box>)
+  rows.push(<Box key="quickrow"><Text>{' '}</Text>{d.quick}</Box>)
   return rows
 }
 
 // The top menu row (ux-v7 §1). The host draws a letter hotkey as `k: ` in front of the label, so the label is the words
 // and the Box is as wide as that prefix plus the words. ▾ sits on the selected menu. ▲N stays on 待決. 待你動手 is the tail.
-export type MenuRowSpec = { selected: ShellMenuId; pending: number; room: number; awaiting: number; columns: number; onSelect: (id: ShellMenuId) => void }
+// r5: `note` is a dim summary at the tail (the collapsed band's `待決 N 張 · d 展開`, the bare card's position); `speed` is the forge label (`│ ϟ 83 tok/s ▁▂▃`, tok/s is back on the band), dropped when it does not fit
+export type MenuRowSpec = { selected: ShellMenuId; pending: number; room: number; awaiting: number; columns: number; onSelect: (id: ShellMenuId) => void; note?: string; speed?: readonly Seg[] | null; onSpeed?: () => void }
 export function shellMenuRow(el: { Box: El; Text: El; Button?: El }, t: T, spec: MenuRowSpec): unknown {
   const { Box, Text, Button } = el
   const word = (id: ShellMenuId): string => {
@@ -399,8 +410,9 @@ export function shellMenuRow(el: { Box: El; Text: El; Button?: El }, t: T, spec:
     return { id, label, hotkey, shown, key, width: displayWidth(shown) }
   })
   const tail = spec.awaiting > 0 ? t('shell.awaiting', { n: spec.awaiting }) : ''
+  const noteW = spec.note === undefined || spec.note === '' ? 0 : 2 + displayWidth(spec.note)
   let gaps = [1, 3, 5, 5, 5]
-  const hostWidth = (): number => displayWidth(gaps.map((g, i) => ' '.repeat(g)).join('')) + items.reduce((n, it) => n + it.width, 0) + (tail === '' ? 0 : 2 + displayWidth(tail))
+  const hostWidth = (): number => displayWidth(gaps.map((g, i) => ' '.repeat(g)).join('')) + items.reduce((n, it) => n + it.width, 0) + (tail === '' ? 0 : 2 + displayWidth(tail)) + noteW
   // gaps[0] is the leading space; the rest sit between items. Shrink from the right until the row fits.
   while (hostWidth() > spec.columns) {
     const at = gaps.map((g, i) => (i > 0 && g > 1 ? i : -1)).filter(i => i >= 0).pop()
@@ -416,6 +428,15 @@ export function shellMenuRow(el: { Box: El; Text: El; Button?: El }, t: T, spec:
     kids.push(<Box key={it.id} width={it.width} flexShrink={0}>{btn}</Box>)
   })
   if (tail !== '') kids.push(<Text key="await" color={PALETTE.attention}>{'  ' + tail}</Text>)
+  if (noteW > 0) kids.push(<Text key="note" {...dimProps()} wrap="truncate">{'  ' + spec.note}</Text>)
+  const sp = spec.speed
+  if (sp !== undefined && sp !== null && sp.length > 0) {
+    const w = sp.reduce((n, g) => n + displayWidth(g.text), 0)
+    if (hostWidth() + 1 + w <= spec.columns) {
+      const texts = sp.map((g, i) => <Text key={'sp' + i} {...drawSeg(g)} wrap="truncate">{g.text}</Text>)
+      kids.push(<Text key="spgap">{' '}</Text>, Button === undefined || spec.onSpeed === undefined ? <Box key="speed">{texts}</Box> : <Button key="speed" plain onPress={spec.onSpeed}>{texts}</Button>)
+    }
+  }
   return <Box key="shellmenu">{kids}</Box>
 }
 
@@ -443,6 +464,7 @@ export type CardView = {
   grey: boolean // an answered card (sent, or closed elsewhere): the question and the options are dim theme text, the card stays in its place
   fix: { label: string; onPress: () => void } | null // the pane's 改答案 on a card sent from here
   fill: { label: string; onPress: () => void } | null // the button that puts the reply line in the prompt box (`$.prompt.fill`): an option card's 附註／其他回答, a typed card's 打字回答; null where the surface has no prompt box or the card is a dialog's
+  tight?: boolean // r5: a band with too few rows: no padding rows under the background, and 建議 and its reason on one row
   compact?: boolean // r4: a window of 4 content rows or fewer: the title row, then the options, then the rest of the card (scrolled)
   width: number // the main window's inner width less the pad
   onPress: (k: number) => void
@@ -469,7 +491,8 @@ export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t:
   const line = (k: string, text: string, dimmed = false, lead = '') => rows.push(<Box key={k}><Text>{' ' + lead}</Text><Text {...dim(dimmed)} wrap="truncate">{text}</Text></Box>)
   const fillBtn = v.fill === null ? null : BarButton(el, 'fill', v.fill.label, v.fill.onPress)
   const fixBtn = v.fix === null ? null : BarButton(el, 'fix', v.fix.label, v.fix.onPress)
-  wrapPlain(v.question, w, w).forEach((r, i) => line('q' + i, r, v.grey))
+  // r5: the question is paragraphs, not one wrapped run: a step list `(1) ... (2) ...` or `1. 2.` puts every step on its own row, its continuation hanging under its text
+  paraRows(v.question, w, w).forEach((p, i) => line('q' + i, ' '.repeat(p.indent) + p.row, v.grey))
   // the state line of a sent or closed card (and its 改答案 Button) sits right under the question, so a window that shows only the top of a tall card still shows it
   if (v.meta !== null) rows.push(<Box key="metar"><Text>{' '}</Text><Text key="meta" {...dimProps()} wrap="truncate">{v.meta}</Text>{fixBtn === null ? <Text key="nf">{''}</Text> : <Box key="fx"><Text>{'  '}</Text>{fixBtn}</Box>}</Box>)
   // a keyed block (背景, 建議, 不授權): the key at column 1, the value from column KEY; a continuation row hangs under the value
@@ -488,7 +511,7 @@ export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t:
     bgLines = rows.length - before
   }
   // two background rows when the card is drawn whole, so a one-line question puts the first option on band row 5 at every tier
-  if (!v.split && v.compact !== true) while (bgLines < 2) { line('bgpad' + bgLines, ' ') ; bgLines++ }
+  if (!v.split && v.compact !== true && v.tight !== true) while (bgLines < 2) { line('bgpad' + bgLines, ' ') ; bgLines++ }
   const optFrom = rows.length
   v.options.forEach((o, k) => {
     if (v.split) {
@@ -554,8 +577,11 @@ export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t:
   })
   const optTo2 = rows.length
   if (v.advice !== null) {
-    block('ad', keys[1], v.advice.label, false)
-    if (v.advice.why !== null) block('aw', null, v.advice.why, false)
+    if (v.tight === true && v.advice.why !== null) block('ad', keys[1], v.advice.label + ' — ' + v.advice.why, false)
+    else {
+      block('ad', keys[1], v.advice.label, false)
+      if (v.advice.why !== null) block('aw', null, v.advice.why, false)
+    }
   }
   if (v.notAuthorized !== null) block('na', keys[2], v.notAuthorized, false)
   if (fillBtn !== null) optTo.push(<Box key="fill"><Text>{' '}</Text>{fillBtn}</Box>)
@@ -595,7 +621,7 @@ export function cardSplit(el: { Box: El; Text: El; Button?: El }, t: T, o: { top
 
 // the quick row of the 待決 card view: `0: 送出 N 張 │ 7: 上一張 │ 8: 下一張 │ 9: 下一個選單   tip`. The slots have fixed widths (15, 12, 12, 16), so the four labels sit at the same
 // columns at every tier; only the tip's length changes.
-export type CardQuick = { sendN: number; undo?: { secs: number; onUndo: () => void }; tip: string; onSend: () => void; onPrev: () => void; onNext: () => void; onMenu: () => void }
+export type CardQuick = { sendN: number; undo?: { secs: number; onUndo: () => void }; tip: string; fill?: { label: string; onPress: () => void } | null; onSend: () => void; onPrev: () => void; onNext: () => void; onMenu: () => void }
 export function cardQuick(el: { Box: El; Text: El; Button?: El }, t: T, q: CardQuick): unknown[] {
   const { Box, Text, Button } = el
   // the digits are label text, never a hotkey (a bare digit in an empty composer would press the Button). The Box width, not the text, places 0/7/8/9.
@@ -610,7 +636,7 @@ export function cardQuick(el: { Box: El; Text: El; Button?: El }, t: T, q: CardQ
     slot('prev', '7', t('shell.prev'), 12, q.onPrev, true),
     slot('next', '8', t('shell.next'), 12, q.onNext, true),
     slot('next-menu', '9', t('shell.next_menu'), 16, q.onMenu, false),
-    <Text key="tip" {...dimProps()} wrap="truncate">{q.tip}</Text>,
+    q.fill === undefined || q.fill === null ? <Text key="tip" {...dimProps()} wrap="truncate">{q.tip}</Text> : <Box key="qfill"><Text>{'  '}</Text>{BarButton(el, 'fill', q.fill.label, q.fill.onPress)}</Box>, // r5 bare card: the fill Button takes the tip's place
   ]
 }
 

@@ -447,6 +447,8 @@
   "shell.help": "Help",
   "shell.help_body": "d pending, r roundtable, u usage, p pet, h help. 9 moves to the next menu.",
   "shell.pet_soon": "Pet: not connected yet",
+  "shell.collapsed": "Pending {n} · {key} to expand",
+  "shell.bare_pos": "Card {n}/{total}",
   "shell.short_height": "Pending {n} · window is too short (now {m} rows, needs {min})",
   "shell.on_band": "Pending is on the band (d)",
   "shell.step_mark": "Your step",

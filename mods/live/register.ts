@@ -283,6 +283,7 @@ const consolePaneOf = async ($: EngineInterface, e: Parameters<EngineInterface['
     },
   })
 }
+let bandShellOff = false // console mode / framed pages: another page name was pressed, so the default 待決 shell stays closed until 待決 is pressed again; reset at session start
 let barTab: BarTabId | null = null // the tab of the band row that is open (its content is drawn under the rule); null = none; a memory state, reset at session start
 const expanded = new Set<string>() // the recent-prompt groups the person opened (by group id)
 const folded = new Set<string>() // the Now sections the person folded (SECTION ids); kept across /clear, a view preference and not tied to the transcript
@@ -1476,6 +1477,7 @@ export async function startLive($: EngineInterface): Promise<void> {
   consoleReadMs = -Infinity
   consoleFeed = makeConsoleFeed(undefined, undefined, consoleIngestFrom)
   barTab = null
+  bandShellOff = false
   folded.clear() // a new Claude Code session opens every section
   pressSeq += 1 // presses still in flight become stale: they assign nothing and leave the chain alone
   decided = null
@@ -1610,9 +1612,11 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const slot = (id: SlotId) => (consoleOn ? pageOpen(SLOT_PAGE_OF[id] ?? 'now', slotUnfolds(id), consoleSlotTab(id)) : openOn(slotTab(id), slotUnfolds(id), id === 'spend' ? 'spend' : undefined))
     // a tab of the band row: the open tab is a memory state; pressing it again closes it. In the console mode a page tab opens the pane on that page (the forge tab keeps its band behaviour)
     const onTab = (id: BarTabId | ConsoleTab | BandPageId) => {
-      // the 待決 tab is the O4 card shell (barTab 'decide', drawn at maxRows >= SHELL_ROWS) in every mode; the other page names open the pane on that page in the console mode / framed pages
-      if (id !== 'decide' && !legacyTabs) { void pageOpen(id as BandPageId); return }
-      if (id !== 'decide' && consoleOn && id !== 'forge') { void pageOpen(id as BandPageId); return }
+      // the 待決 tab is the O4 card shell (barTab 'decide', drawn at maxRows >= SHELL_ROWS). In the console mode / framed pages the shell is the default and a press on 待決 keeps it open;
+      // any other page name closes it and opens the pane on that page (forge keeps its band toggle).
+      const paged = !legacyTabs || (consoleOn && id !== 'forge')
+      if (paged && id === 'decide') { barTab = 'decide'; bandShellOff = false; $.ui.invalidate('ui.render'); return }
+      if (paged) { barTab = null; bandShellOff = true; void pageOpen(id as BandPageId); return }
       barTab = barTab === id ? null : (id as BarTabId)
       $.ui.invalidate('ui.render')
     }
@@ -1679,7 +1683,8 @@ export function registerLive(on: Parameters<Register>[0]): void {
       }
     }
     if (barTab === 'forge' && forge === null && !forgeMore) barTab = null // nothing is timed: the tab is gone
-    const active = barTab
+    // console mode: the band opens on the 待決 shell by default (O4) whenever the host gave the shell its rows; pressing another page name turns the default off
+    const active: BarTabId | null = barTab ?? (consoleOn && !bandShellOff && rows >= SHELL_ROWS ? 'decide' : null)
     // the tabs the band has no room for, in strip order; one dim `›` ends the row and steps through them (the last press closes), so the keyboard still reaches each
     const hidden: BarTabId[] = [...(usageOn ? [] : ['usage' as const]), ...(forgeMore ? ['forge' as const] : [])]
     const at = active === null ? -1 : hidden.indexOf(active)

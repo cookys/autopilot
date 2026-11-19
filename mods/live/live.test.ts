@@ -3561,8 +3561,8 @@ test('C1 fix: a 待決 band tab left open when console.json appears is closed; t
   const files = richWorld()
   const w = world(on, files)
   await start($, 'terminal')
-  const bandTexts = async () => {
-    const ui = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', requestId: 'rq-c1fix', props: { ...BAND_PROPS, maxRows: 20 }, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+  const bandTexts = async (rowsHost = 20) => {
+    const ui = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', requestId: 'rq-c1fix', props: { ...BAND_PROPS, maxRows: rowsHost }, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     const out = walkTexts((await ui.drawn()) as Node).map(textOf)
     await ui.unmount()
     return out
@@ -3574,7 +3574,7 @@ test('C1 fix: a 待決 band tab left open when console.json appears is closed; t
   files[CWD + '/.git/HEAD'] = 'ref: refs/heads/x\n'
   files[CWD + '/.claude/console.json'] = CONSOLE_PROGRAM
   await w.clock.advance(11_000) // the tick reads the mode: it turns on
-  const after = await bandTexts()
+  const after = await bandTexts(6) // 6 rows: below the shell's 12, so the console band's default 待決 shell is not what is compared
   expect(after.length, 'the 待決 body (many rows) is gone').toBeLessThan(before.length)
   expect(after.join(' ').includes('艦隊') && !after.join(' ').includes('指揮'), 'the pane is closed: the console band draws the new page names 1-8').toBe(true)
 })
@@ -3738,10 +3738,11 @@ for (const columns of [155, 75]) {
       expect(w.opens.length, 'the press sets the band tab; it does not open the pane').toBe(0)
     })
   }
-  test('O4 regression: PM seat, no key pressed (console on, legacyTabs false, pane open, 18 rows, ' + columns + ' columns): the two-row band, no shell (the default tab stays none) (terminal)', async ($, on) => {
+  test('O4 regression: PM seat, no key pressed (console on, legacyTabs false, pane open, 18 rows, ' + columns + ' columns): the console mode opens on the 待決 shell, 12 rows or more (terminal)', async ($, on) => {
     const w = await framedWorld($, on)
     const rows = await pmBandRows($, w, { panesOpen: true, columns, maxRows: 18, press: [] })
-    expect(rows.length, 'rows: ' + rows.map(r => r.slice(0, 40)).join(' | ')).toBeLessThanOrEqual(2)
+    expect(rows.length, 'rows: ' + rows.map(r => r.slice(0, 40)).join(' | ')).toBeGreaterThanOrEqual(12)
+    expect(rows.some(r => r.startsWith('\u256d')), 'the shell frame top is drawn').toBe(true)
   })
 }
 // pageview-focus-unbounded: the fold clamps the focus to the rows that are still shown, so the next unfold does not put the ▸ back on a row that was folded away
@@ -7091,7 +7092,7 @@ for (const surface of SURFACES) {
     await w.clock.advance(5_000) // the tick reads .claude/console.json; consoleOn is false until then
     TURN_PLAN = FIVE_SLOW; TURN_AT = 0
     await runPlan($, FIVE_SLOW.map(() => undefined))
-    const ui = await mount($, { bodyColumns: 240 })
+    const ui = await mount($, { bodyColumns: 240, maxRows: 6 })
     const tree = (await ui.drawn()) as Node
     const buttons = (await ui.findAll({ type: 'Button' })) as Node[]
     const speed = buttons.find(b => b.props?.key === 'speed')

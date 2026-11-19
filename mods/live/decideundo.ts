@@ -21,11 +21,12 @@ export type UndoDeps = {
   update: (fn: (s: DecideState) => DecideState) => Promise<void>
   pool: (st: DecideState) => LiveDecision[] // the cards that can be acted on now (decidebatch.ts actionable)
   claim?: ClaimCard // started in the background when a card enters its window; absent = no claim
+  onClaimFailed?: (id: string, reason: string) => void
 }
 // the real send posts; only register.ts sendDecide holds the one prompt.submit (ui-lint allowlist), so only it builds these
 export type SendDeps = UndoDeps & {
   post: (text: string) => Promise<unknown>
-  onSendFailed?: (reason: string) => void
+  onSendFailed?: (reason: string, ids: string[]) => void
 }
 
 const dropIds = <V,>(r: Record<string, V> | undefined, ids: readonly string[]): Record<string, V> => Object.fromEntries(Object.entries(r ?? {}).filter(([i]) => !ids.includes(i)))
@@ -35,7 +36,7 @@ const locked = (s: DecideState, id: string): boolean => (s.sent[id] !== undefine
 // card id -> the claim started for it by the window now running. `answerId` is filled only by a claim that returned ok with an id; the send reads it as it is at that moment.
 // An undo (or the send) deletes the entry, so a claim that returns later writes into a slot nothing reads.
 const claims = new Map<string, { answerId: string | null; error: string | null }>()
-function startClaim(claim: ClaimCard, c: LiveDecision, st: DecideState): void {
+function startClaim(claim: ClaimCard, c: LiveDecision, st: DecideState, onClaimFailed?: (id: string, reason: string) => void): void {
   const answer = decideAnswer(c, st)
   if (answer === null) return
   const id = c.id as string
@@ -43,9 +44,14 @@ function startClaim(claim: ClaimCard, c: LiveDecision, st: DecideState): void {
   claims.set(id, slot)
   void claim({ id, question: c.question }, answer).then(r => {
     if (r.ok && typeof r.answer_id === 'string' && r.answer_id !== '') slot.answerId = r.answer_id
-    else if (!r.ok && typeof r.reason === 'string' && r.reason !== '') slot.error = r.reason
+    else if (!r.ok && typeof r.reason === 'string' && r.reason !== '') {
+      slot.error = r.reason
+      onClaimFailed?.(id, r.reason)
+    }
   }).catch((e: unknown) => {
-    slot.error = e instanceof Error ? e.message : String(e)
+    const reason = e instanceof Error ? e.message : String(e)
+    slot.error = reason
+    onClaimFailed?.(id, reason)
   }) // a failed claim is just no id
 }
 
@@ -67,7 +73,7 @@ export async function holdSend(d: UndoDeps): Promise<string[]> {
   const until = (await d.now()) + DECIDE_UNDO_MS
   await d.update(s => ({ ...s, hold: { ...(s.hold ?? {}), ...Object.fromEntries(ids.map(i => [i, until])) } }))
   // a reopened (sent) card is a correction: it is never claimed
-  if (d.claim !== undefined) for (const c of cards) if (!decideFixing(c, st)) startClaim(d.claim, c, st)
+  if (d.claim !== undefined) for (const c of cards) if (!decideFixing(c, st)) startClaim(d.claim, c, st, d.onClaimFailed)
   return ids
 }
 
@@ -129,7 +135,7 @@ export async function sendNow(d: SendDeps, only: ReadonlySet<string>): Promise<s
       void d.post(reply.text).catch(async (err: unknown) => {
         const baseReason = err instanceof Error ? err.message : String(err ?? 'unknown error')
         const reason = claimErrors.length > 0 ? `${baseReason} [claim: ${claimErrors.join('; ')}]` : baseReason
-        d.onSendFailed?.(reason)
+        d.onSendFailed?.(reason, reply.ids)
         await d.update(s => { const sent = { ...s.sent }; for (const i of reply.ids) delete sent[i]; return { ...s, sent } })
       }).catch(() => undefined) // the take-back write may fail on a dead session; nothing is waiting on it
     }
@@ -137,7 +143,7 @@ export async function sendNow(d: SendDeps, only: ReadonlySet<string>): Promise<s
       await d.update(s => ({ ...s, sent: { ...s.sent, [fix.id]: at }, fixing: dropIds(s.fixing, [fix.id]) }))
       void d.post(fix.text).catch(async (err: unknown) => {
         const baseReason = err instanceof Error ? err.message : String(err ?? 'unknown error')
-        d.onSendFailed?.(baseReason)
+        d.onSendFailed?.(baseReason, [fix.id])
         await d.update(s => ({ ...s, fixing: { ...(s.fixing ?? {}), [fix.id]: at } }))
       }).catch(() => undefined)
     }

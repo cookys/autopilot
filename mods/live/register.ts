@@ -35,6 +35,7 @@
 // Every clock comparison uses $.clock.now(), so a test with a mocked clock decides fresh / stale.
 
 import { probePane } from './pane-probe'
+import { appendSendLog } from './sendlog'
 import type { EngineInterface, Register } from 'claude-code'
 
 import { newTracker, parseAdvisories, takeNew } from './advisories'
@@ -88,7 +89,7 @@ import { type ScrollModel, fixedWindow, keyed, newScroll, scrollHook } from './s
 import type { ShowRequest } from '../viewer/model'
 import { reopenLook, showPath } from '../viewer/show'
 import {
-  acceptanceToast, autoResidueCount, decideDialog, decideFillText, decideFixing, decideHeld, decideLine, decideOpen, decidePick, cleanTargets, normalizeAbs, decideReply, NO_DECIDE, makeRecentTracker, bandFactsDocument, bandLine1, bandView, buildSections, checkEnvelope, sourceMoved, sourcesOf, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
+  acceptanceToast, autoResidueCount, bandCardNote, decideDialog, decideFillText, decideFixing, decideHeld, decideLine, decideOpen, decidePick, cleanTargets, normalizeAbs, decideReply, NO_DECIDE, makeRecentTracker, bandFactsDocument, bandLine1, bandView, buildSections, checkEnvelope, sourceMoved, sourcesOf, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
   isStepCard, BAND_NARROW_STEPS, displayWidth, fittedBandWidth, layoutBand, layoutBandLine, shrinkToFitted, slotFleet, headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeDurableDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions, readDurableDecisionFiles,
   readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
   paneWidth, DEFAULT_PANE_COLS, slotTab, slotUnfolds, truncateToWidth, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
@@ -1238,6 +1239,9 @@ const undoDeps = ($: EngineInterface): UndoDeps => ({
   update: fn => update($, DECIDE, fn),
   pool: st => actionable(snapshot === null ? [] : snapshot.pending.filter(d => !isStepCard(d)), decideBatch.order.length > 0 ? decideBatch : bandBatch, st), // a reopened card the session already closed is kept in whichever batch is open
   claim: claimCard ?? claimWith($),
+  onClaimFailed: (id, reason) => {
+    void $.clock.now().then(ts => appendSendLog($.fs, liveBaseSeen, { ts, event: 'claim_failed', ids: [id], reason })).catch(() => undefined)
+  },
 })
 async function stopHoldTimerIfIdle($: EngineInterface): Promise<void> {
   if (holdTimer !== undefined && Object.keys((await read($, DECIDE)).hold ?? {}).length === 0) { holdTimer.cancel(); holdTimer = undefined }
@@ -1267,10 +1271,11 @@ async function sendDecide($: EngineInterface, only: ReadonlySet<string>): Promis
   const ids = await sendNow({
     ...undoDeps($),
     post: text => $.prompt.submit({ text }),
-    onSendFailed: reason => {
+    onSendFailed: (reason, failedIds) => {
       const oneLine = reason.replace(/[\r\n]+/g, ' ').trim()
       const truncated = oneLine.length > 120 ? oneLine.slice(0, 119) + '…' : oneLine
       $.ui.toast(t('decide.send_failed', { reason: truncated || '-' }))
+      void $.clock.now().then(ts => appendSendLog($.fs, liveBaseSeen, { ts, event: 'post_refused', ids: failedIds, reason })).catch(() => undefined)
     },
   }, only)
   const typed = submitSuccessor(snapshot === null ? [] : snapshot.pending.filter(d => !isStepCard(d)), ids)
@@ -1895,12 +1900,9 @@ export function registerLive(on: Parameters<Register>[0]): void {
             label: t(optN === 0 ? 'shell.fill_type' : 'shell.fill_note'),
             onPress: () => { void $.prompt.fill({ text: fillText, mode: 'replace' }).then(out => { if (!out.isFilled) $.ui.toast(t('shell.fill_refused', { why: out.refusal ?? '-' })) }) },
           }
-          const isStep = cur !== undefined && isStepCard(cur)
-          const note = cur === undefined || curLocked || fill !== null ? null
-            : isStep ? t('decide.step_hint')
-            : optN === 0 ? t(cur.id === null || !decideDialog(cur) ? 'decide.in_chat' : 'decide.in_dialog') : null
-          const stepId = isStep && cur.id !== null ? cur.id : null
-          const done = stepId === null || curLocked ? null : {
+          const { note: noteKey, doneId: stepId } = bandCardNote(cur, curLocked, fill)
+          const note = noteKey === null ? null : t(noteKey)
+          const done = stepId === null ? null : {
             label: t('decide.step_done'),
             onPress: () => { void dismissCard($, stepId).then(redraw) },
           }

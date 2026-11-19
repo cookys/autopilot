@@ -4,8 +4,9 @@
 import { test, expect } from 'claude-code/testing'
 import { makeT } from './i18n'
 import { cardTitleOf } from './cardtitle'
-import { DECIDE_NONE, DECIDE_REPLY_HEAD, NO_DECIDE, NO_DETAIL, NO_SECTIONS, decideFillText, decideLine, decideReply, recommendedIndex } from './model'
+import { DECIDE_NONE, DECIDE_REPLY_HEAD, NO_DECIDE, NO_DETAIL, NO_SECTIONS, bandCardNote, decideFillText, decideLine, decideReply, recommendedIndex } from './model'
 import { sendNow } from './decideundo'
+import { appendSendLog } from './sendlog'
 import { cardMain } from './band'
 import { wrapLines } from './model'
 import type { DecideView, LiveDecision, LiveSnapshot, PaneLine } from './model'
@@ -892,4 +893,60 @@ test('cardMain: step card renders step_done button and step_hint without decide.
   expect(doneBtn).toBeDefined()
   ;(doneBtn!.props.onPress as () => void)()
   expect(dismissed).toEqual(['d-step1'])
+})
+
+test('bandCardNote: step card picks step_hint + doneId; option-less non-step picks in_chat; locked step has no done', () => {
+  const stepCard = dec('d-step-1', 'Run migration manually', { kind: 'step', options: [] })
+  expect(bandCardNote(stepCard, false, null)).toEqual({ note: 'decide.step_hint', doneId: 'd-step-1' })
+
+  const freeCard = dec('d-free-1', 'What branch name?', { options: [] })
+  expect(bandCardNote(freeCard, false, null)).toEqual({ note: 'decide.in_chat', doneId: null })
+
+  expect(bandCardNote(stepCard, true, null)).toEqual({ note: null, doneId: null })
+})
+
+test('sendNow + appendSendLog: rejected prompt.submit writes one post_refused JSONL line; resolving submit writes none', async () => {
+  const files = new Map<string, string>()
+  const fakeFs = {
+    read: async (p: string) => {
+      const v = files.get(p)
+      if (v === undefined) throw new Error('ENOENT')
+      return v
+    },
+    write: async (p: string, content: string) => {
+      files.set(p, content)
+    },
+  }
+  const card = dec('d-send-1', 'Ship it?', { options: [OPT('Yes'), OPT('No')] })
+  let state = { ...NO_DECIDE, picks: { 'd-send-1': 0 } }
+  const runSend = (rejectWith: string | null) => sendNow({
+    now: async () => 1700000000000,
+    read: async () => state,
+    update: async fn => { state = fn(state) },
+    pool: () => [card],
+    post: async () => {
+      if (rejectWith !== null) throw new Error(rejectWith)
+      return {}
+    },
+    onSendFailed: (reason, ids) => {
+      void appendSendLog(fakeFs, '/tmp/live-test', { ts: 1700000000000, event: 'post_refused', ids, reason })
+    },
+  }, new Set(['d-send-1']))
+
+  await runSend(null)
+  await new Promise(r => setTimeout(r, 0))
+  expect(files.get('/tmp/live-test/decide-send.jsonl')).toBeUndefined()
+
+  state = { ...NO_DECIDE, picks: { 'd-send-1': 0 } }
+  await runSend('Prompt not submitted: test')
+  await new Promise(r => setTimeout(r, 0))
+  const raw = files.get('/tmp/live-test/decide-send.jsonl') ?? ''
+  const lines = raw.trim().split('\n').filter(Boolean)
+  expect(lines.length).toBe(1)
+  expect(JSON.parse(lines[0])).toEqual({
+    ts: 1700000000000,
+    event: 'post_refused',
+    ids: ['d-send-1'],
+    reason: 'Prompt not submitted: test',
+  })
 })

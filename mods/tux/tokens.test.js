@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const TOKENS_PATH = path.join(__dirname, 'tokens.json');
-const UI_TS_PATH = path.join(__dirname, '..', 'live', 'ui.ts');
+const UI_TS_PATH = path.join(__dirname, 'palette.ts');
 const CONTRACT_PATH = path.join(__dirname, '..', 'live', 'band-statusline-contract.json');
 const MODEL_TS_PATH = path.join(__dirname, '..', 'live', 'model.ts');
 
@@ -93,10 +93,10 @@ function stripTsComments(src) {
 
 function parsePalette(uiText) {
   const decl = /^export const PALETTE\b[^=]*=\s*\{([^}]*)\}/m.exec(uiText);
-  assert.ok(decl !== null, 'export const PALETTE = { ... } not found in mods/live/ui.ts');
+  assert.ok(decl !== null, 'export const PALETTE = { ... } not found in mods/tux/palette.ts');
   const body = stripTsComments(decl[1]).trim();
   const parts = body.split(',').map((s) => s.trim()).filter(Boolean);
-  assert.ok(parts.length > 0, 'PALETTE in mods/live/ui.ts has no entries');
+  assert.ok(parts.length > 0, 'PALETTE in mods/tux/palette.ts has no entries');
   const entries = [];
   for (const part of parts) {
     const m = /^(?:(['"])([A-Za-z_][A-Za-z0-9_]*)\1|([A-Za-z_][A-Za-z0-9_]*))\s*:\s*(['"])([^'"]+)\4$/.exec(part);
@@ -142,15 +142,27 @@ function assertPaletteParity(tokens, paletteEntries) {
   );
   const roleKeys = Object.keys(tokens.roles);
   assert.deepEqual(roleKeys, EXPECTED_ROLE_KEYS, 'roles must have the exact 13 keys in order');
-  assert.deepEqual(
-    roleKeys.slice(0, paletteEntries.length),
-    paletteEntries.map(([k]) => k),
-    'leading roles keys must equal PALETTE keys in order',
-  );
   for (const [role, themeKey] of paletteEntries) {
-    assert.ok(Object.prototype.hasOwnProperty.call(tokens.roles, role), `missing PALETTE role: ${role}`);
     assert.strictEqual(tokens.roles[role], themeKey, `roles.${role} must equal PALETTE.${role}`);
   }
+  assert.deepEqual(
+    paletteEntries.map(([k]) => k),
+    roleKeys,
+    'PALETTE keys must equal every roles key in order',
+  );
+  assert.deepEqual(Object.fromEntries(paletteEntries), tokens.roles, 'PALETTE must equal tokens.roles');
+}
+
+function parseThresholds(paletteText) {
+  const decl = /export const THRESHOLDS = \{([^}]*)\}/.exec(paletteText);
+  assert.ok(decl !== null, 'export const THRESHOLDS not found in mods/tux/palette.ts');
+  const out = {};
+  for (const part of decl[1].split(',').map((s) => s.trim()).filter(Boolean)) {
+    const m = /^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(-?\d+(?:\.\d+)?)$/.exec(part);
+    assert.ok(m !== null, `unparseable THRESHOLDS entry: ${part}`);
+    out[m[1]] = Number(m[2]);
+  }
+  return out;
 }
 
 function assertThresholdsParity(tokens, contract) {
@@ -240,7 +252,7 @@ function assertTermsAndSchema(tokens, rawText) {
   }
 }
 
-test('1: every PALETTE entry from mods/live/ui.ts appears in roles with the same value', () => {
+test('1: PALETTE in mods/tux/palette.ts equals tokens.roles (strict, every key)', () => {
   const { tokens } = readTokens();
   const palette = parsePalette(readText(UI_TS_PATH));
   assertPaletteParity(tokens, palette);
@@ -250,6 +262,7 @@ test('2: thresholds match quota_warn_pct and quota_error_pct of mods/live/band-s
   const { tokens } = readTokens();
   const contract = JSON.parse(readText(CONTRACT_PATH));
   assertThresholdsParity(tokens, contract);
+  assert.deepEqual(parseThresholds(readText(UI_TS_PATH)), tokens.thresholds, 'THRESHOLDS must equal tokens.thresholds');
 });
 
 test('3: every roles value is a ThemeKey string literal from mods/live/model.ts', () => {
@@ -277,6 +290,10 @@ test('negative controls: mutated roles.attention, thresholds.warn, glyphs.state,
   assert.throws(() => {
     assertPaletteParity({ ...tokens, roles: { ...tokens.roles, attention: 'error' } }, palette);
   }, /roles\.attention/);
+
+  assert.throws(() => {
+    assertPaletteParity(tokens, palette.filter(([role]) => role !== 'link'));
+  }, /PALETTE keys must equal every roles key/);
 
   assert.throws(() => {
     assertThresholdsParity({ ...tokens, thresholds: { ...tokens.thresholds, warn: 81 } }, contract);

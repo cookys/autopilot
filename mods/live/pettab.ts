@@ -10,7 +10,9 @@ import type { Seg } from './model.ts'
 import type { Page, Row } from './pages/frame.ts'
 import { readPet } from './panel.ts'
 import type { PanelLine, PetIconEntry } from './panel.ts'
-import { GLYPHS, PALETTE, displayWidth } from './ui.ts'
+import { GLYPHS } from '../tux/glyphs.ts'
+import { PALETTE } from '../tux/palette.ts'
+import { displayWidth } from '../tux/width.ts'
 
 const TONE_STYLE: Record<string, Partial<Seg>> = {
   subtle: { color: PALETTE.structure },

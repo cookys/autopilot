@@ -2,7 +2,7 @@
 // The roundtable pane through the engine. Run: bash mods/roundtable/run-tests.sh
 import type { On } from 'claude-code'
 import { test, expect } from 'claude-code/testing'
-import { PALETTE } from '../live/ui'
+import { PALETTE } from '../tux/palette.ts'
 
 const ROOMS = '/rooms'
 const ROOM = 'design'

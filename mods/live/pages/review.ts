@@ -4,7 +4,9 @@
 // and `[z]` fold/unfold as a visible action-area Button bound to key `z` whenever proxy decisions exist (G11).
 import type { CodeReviewView, DecisionRow, DecisionsView, LiveSnapshot, PlanReviewView, QcView, ReviewSeat, Seg } from '../model'
 import { displayWidth, truncateToWidth } from '../model'
-import { GLYPHS, PALETTE, STATES, stateOf, wrapPlain } from '../ui'
+import { GLYPHS } from '../../tux/glyphs.ts'
+import { PALETTE } from '../../tux/palette.ts'
+import { STATES, stateOf, wrapPlain } from '../ui'
 import type { Page, PageCtx } from './frame'
 import { brokenRow } from './rows'
 import type { Row } from './rows'

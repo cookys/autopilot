@@ -10,7 +10,10 @@ const path = require('node:path')
 
 let ui
 test.before(async () => {
-  ui = await import(path.join(__dirname, 'ui.ts'))
+  const glyphs = await import(path.join(__dirname, '..', 'tux', 'glyphs.ts'))
+  const width = await import(path.join(__dirname, '..', 'tux', 'width.ts'))
+  const live = await import(path.join(__dirname, 'ui.ts'))
+  ui = { ...live, ...glyphs, ...width }
 })
 
 const clone = () => JSON.parse(JSON.stringify(ui.GLYPHS))
@@ -161,7 +164,7 @@ const L7 = src => [...hits(src, new RegExp(`['"\`](${STATE_IDS_RE})['"\`]`)), ..
 // SCOPE of each rule (BL-0207, judged one by one; shared rules scan every mod through modSources(), see below):
 //   all mods:  L2 (glyphs), L5_HAND (no hand-made PaneLine), L6_CORE (no hand-formatted number in drawing code), L8 (palette), L1b/L9 (no background / inverse, bold whitelist), process and prompt.submit allowlists.
 //   live only: L1 full / L4 / L5 full / L7 name live's own files (tabs.ts, pane.tsx, band.tsx are live's chrome layer over ui.ts / model.ts; the viewer has no such layering, its
-//              look is covered by the all-mod rules and the render-level buttonFindings); L3 and the glyph tables test live's ui.ts exports (GLYPHS, PALETTE live in the one file).
+//              look is covered by the all-mod rules and the render-level buttonFindings); L3 lints mods/tux/glyphs.ts (GLYPHS) and mods/tux/palette.ts (PALETTE).
 const TABS = 'tabs.ts'
 const CHROME = ['tabs.ts', 'pane.tsx', 'band.tsx']
 
@@ -211,7 +214,7 @@ test('scan-level control: one violation planted in a copy of viewer/pane.tsx is 
       ['L9 bold on its own line', boldHits, BOLD_FILES, HINT, '<Text\n  key="hint"\n  bold\n>'],
       ['L1b inverse', src => hits(src, BG_RE), [], HINT, '<Text key="hint" inverse>'],
       ['L1b backgroundColor', src => hits(src, BG_RE), [], HINT, '<Text key="hint" backgroundColor={x}>'],
-      ['L2 glyph', L2, ['live/ui.ts'], HINT, '<Text key="hint" dimColor>{\'▲\'}</Text>' + HINT],
+      ['L2 glyph', L2, ['tux/glyphs.ts'], HINT, '<Text key="hint" dimColor>{\'▲\'}</Text>' + HINT],
       ['L5 hand-made line', L5_HAND, ['live/ui.ts'], HINT, 'void ({ text: x } as PaneLine)\n' + HINT],
       ['L6 core hand formatting', L6_CORE, modSources().filter(f => !L6_FILES().includes(f)), HINT, 'void x.toFixed(1)\n' + HINT],
     ]
@@ -228,7 +231,7 @@ test('L8: no theme-key literal outside the PALETTE table (every source file unde
   const files = modSources()
   assert.ok(files.includes('live/ui.ts') && files.includes('live/model.ts') && files.includes('live/tabs.ts') && files.includes('live/band.tsx') && files.includes('viewer/pane.tsx'))
   assert.deepEqual(scanMods(L8), [])
-  assert.match(read('ui.ts'), PALETTE_DECL, 'ui.ts declares PALETTE') // the exemption must be real: a renamed table would otherwise leave the lint with nothing to exempt
+  assert.match(readMod('tux/palette.ts'), PALETTE_DECL, 'palette.ts declares PALETTE') // the exemption must be real: a renamed table would otherwise leave the lint with nothing to exempt
 })
 test('L8 control: a planted theme-key literal in the real viewer sources is reported (the viewer pane draws no colour of its own: its quiet lines are dim)', () => {
   const pane = readMod('viewer/pane.tsx')
@@ -240,7 +243,7 @@ test('L8 control: a planted theme-key literal in the real viewer sources is repo
 // L1b / L9 (all mods): no background and no inverse anywhere; bold is a whitelist. The only bold in all of mods/ is live's ui.ts (BOLD_USES, checked by the I4 invariant) and live's model.ts (the band: pinned below).
 const BG_RE = /\b(backgroundColor|inverse)\b/
 const BOLD_ANY = /\bbold\s*[:=]|<(Text|Button|Box)[^>]*\sbold(\s|>|\/)/
-const BOLD_FILES = ['live/ui.ts', 'live/model.ts']
+const BOLD_FILES = ['live/ui.ts', 'live/model.ts', 'tux/strip.ts']
 // BL-0210: BOLD_ANY is per line, so a bare `bold` attribute that JSX wraps onto its own line escapes it. This scanner reads each <Text|Button|Box opening tag across lines (brace depth and
 // quotes tracked, so `{...}` expressions, strings and comments never count) and reports a `bold` attribute written at the tag's own level. Same whitelist as BOLD_ANY: callers pass BOLD_FILES as the except list.
 const boldTagHits = src => {
@@ -323,10 +326,10 @@ test('L9 control: a second bold in the band source is reported', () => {
   assert.equal(hits(planted, BOLD_PROP).length, 3)
 })
 
-test('L2: outside live ui.ts no mod source file carries a glyph; glyphs come from GLYPHS', () => {
-  const files = modSources().filter(f => f !== 'live/ui.ts')
-  assert.ok(files.includes('live/model.ts') && files.includes('live/tabs.ts') && files.includes('live/band.tsx') && files.includes('viewer/pane.tsx') && files.includes('viewer/strings.ts'))
-  assert.deepEqual(scanMods(L2, ['live/ui.ts']), [])
+test('L2: outside tux/glyphs.ts no mod source file carries a glyph; glyphs come from GLYPHS', () => {
+  const files = modSources()
+  assert.ok(files.includes('live/model.ts') && files.includes('live/tabs.ts') && files.includes('live/band.tsx') && files.includes('viewer/pane.tsx') && files.includes('viewer/strings.ts') && files.includes('tux/glyphs.ts'))
+  assert.deepEqual(scanMods(L2, ['tux/glyphs.ts']), [])
 })
 test('L2 control: a glyph planted in the real viewer pane and viewer strings is reported', () => {
   for (const f of ['viewer/pane.tsx', 'viewer/strings.ts']) {
@@ -765,9 +768,9 @@ test('L19: render modules (shell.ts, band.tsx, consolepages.ts) hold no forbidde
   assert.deepEqual(L19_RENDER_MODULES, ['shell.ts', 'band.tsx', 'consolepages.ts'])
   assert.deepEqual(L19_EXCEPTIONS, ['panel.ts', 'pettab.ts'])
   for (const f of L19_RENDER_MODULES) assert.deepEqual(l19Violations(f, read(f)), [], f)
-  // panel.ts is the only non-test source mentioning codeforge.panel
+  // the schema literal lives in the shared contract; panel.ts re-exports it. Render modules still must not name it.
   for (const rel of modSources()) {
-    if (rel === path.join('live', 'panel.ts')) continue
+    if (rel === path.join('live', 'panel.ts') || rel === path.join('tux', 'contracts', 'panel.ts')) continue
     assert.deepEqual(hits(readMod(rel), /codeforge\.panel/), [], rel + ' must not contain codeforge.panel')
   }
   assert.deepEqual(l19ReverseViolations(read('pettab.ts')), [], 'pettab.ts reverse check')

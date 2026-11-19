@@ -12,7 +12,7 @@ import { dispatchLines, fleetTabLines, headerLines, hygieneTabLines, legendLines
 import type { FleetView } from './fleet'
 import type { ScrollView } from './tabs'
 import { dimProps, drawSeg, onBandLine } from './ui'
-import type { Strip } from './ui'
+import type { Strip } from '../tux/strip.ts'
 import { consoleStrip } from './consoletabs'
 import { commandView } from './commandtab'
 import { consolePage } from './consolepages'

@@ -9,8 +9,12 @@
 import type { ConsoleSnapshot } from './console'
 import type { T } from './i18n'
 import type { Seg, SlotId } from './model'
-import { CHIP_LEAD, GLYPHS, chipSegs, chipsJoin, displayWidth, strip } from './ui'
-import type { Ctx, Strip, StripTab } from './ui'
+import { GLYPHS } from '../tux/glyphs.ts'
+import { displayWidth } from '../tux/width.ts'
+import { strip } from '../tux/strip.ts'
+import type { Strip, StripTab } from '../tux/strip.ts'
+import { CHIP_LEAD, chipSegs, chipsJoin } from './ui'
+import type { Ctx } from './ui'
 
 export const CONSOLE_TABS = ['command', 'team', 'quota', 'hosts', 'self'] as const
 export type ConsoleTab = (typeof CONSOLE_TABS)[number]

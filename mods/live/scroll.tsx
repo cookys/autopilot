@@ -10,7 +10,8 @@
 // Five track cells (top, quarter, middle, three quarters, bottom: scrollmath.jumpCells) are plain Buttons (no chrome, the Text child keeps its colour); a click on one jumps the window (scrollmath.jumpOffset). The host has no prop to keep a Button out of
 // the Tab ring, so the keyboard walk gains one stop per jump cell (five); the click is the pointer path, the keys scroll as before.
 // (ui.ts owns every glyph; ui-lint L2 keeps literals out of this file).
-import { GLYPHS, PALETTE } from './ui'
+import { GLYPHS } from '../tux/glyphs.ts'
+import { PALETTE } from '../tux/palette.ts'
 import { bottomRows, followsTail, jumpCells, jumpOffset, roomOf, thumbOf } from './scrollmath'
 import type { ScrollModel } from './scrollmath'
 export * from './scrollmath'

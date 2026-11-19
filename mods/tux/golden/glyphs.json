@@ -1,0 +1,116 @@
+{
+  "state": {
+    "need_you": "▲",
+    "failed": "✗",
+    "stalled": "⊘",
+    "findings": "△",
+    "running": "●",
+    "done": "✓",
+    "pending": "○",
+    "waiting": "⋯",
+    "stopped": "◌",
+    "skipped": "∅",
+    "unknown": "?",
+    "stale": "~"
+  },
+  "structure": {
+    "open": "▾",
+    "folded": "▸",
+    "rule": "─",
+    "detail": "└",
+    "command": "$",
+    "goto": "›",
+    "bullet": "◦",
+    "empty": "—",
+    "tabMark": "━",
+    "residue": "⚑",
+    "behind": "↓",
+    "bandSep": "│",
+    "info": "ⓘ",
+    "speed": "ϟ",
+    "round": "↺",
+    "decisions": "◆",
+    "age": "◷",
+    "recommend": "★",
+    "fresh": "✦",
+    "frameTL": "╭",
+    "frameTR": "╮",
+    "frameBL": "╰",
+    "frameBR": "╯",
+    "frameDown": "┬",
+    "frameUp": "┴",
+    "frameLeftT": "├",
+    "frameRightT": "┤",
+    "answer": "→"
+  },
+  "chart": {
+    "meterOn": "▰",
+    "meterOff": "▱",
+    "here": "◐"
+  },
+  "scrollbar": {
+    "track": "│",
+    "thumb": "█"
+  },
+  "spark": [
+    "▁",
+    "▂",
+    "▃",
+    "▄",
+    "▅",
+    "▆",
+    "▇",
+    "█"
+  ],
+  "fallback": {
+    "stalled": "◍",
+    "findings": "!"
+  },
+  "pet": {
+    "icons": {
+      "cat": {
+        "id": "cat",
+        "emoji": "🐱",
+        "fallback": ":3",
+        "verified": "pending-owner"
+      },
+      "chick": {
+        "id": "chick",
+        "emoji": "🐣",
+        "fallback": "o<",
+        "verified": "pending-owner"
+      },
+      "crab": {
+        "id": "crab",
+        "emoji": "🦀",
+        "fallback": "}{",
+        "verified": "pending-owner"
+      }
+    }
+  },
+  "verified": {
+    "⊘": "2026-10-13 owner-ssh-tmux",
+    "△": "2026-10-13 owner-ssh-tmux",
+    "○": "2026-10-13 owner-ssh-tmux",
+    "◌": "2026-10-13 owner-ssh-tmux",
+    "∅": "2026-10-13 owner-ssh-tmux",
+    "◦": "2026-10-13 owner-ssh-tmux",
+    "›": "2026-10-13 owner-ssh-tmux",
+    "━": "2026-10-13 owner-ssh-tmux",
+    "◐": "2026-10-13 owner-ssh-tmux",
+    "◍": "2026-10-13 owner-ssh-tmux",
+    "↓": "pending-owner",
+    "★": "pending-owner",
+    "⋯": "pending-owner",
+    "✦": "pending-owner",
+    "╭": "pending-owner",
+    "╮": "pending-owner",
+    "╰": "pending-owner",
+    "╯": "pending-owner",
+    "┬": "pending-owner",
+    "┴": "pending-owner",
+    "├": "pending-owner",
+    "┤": "pending-owner",
+    "→": "pending-owner"
+  }
+}

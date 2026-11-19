@@ -1,5 +1,5 @@
 // mods/live/scrollmath.ts — the arithmetic of the scrolling window (design plan §12.10), apart from the drawing in scroll.tsx so node --test can load it (no JSX here).
-import { displayWidth } from './ui'
+import { displayWidth } from '../tux/width.ts'
 
 // a window's state: which content it is for, how far down it stands, and the largest legal offset (the frame writes it each draw, the scroll hook clamps to it)
 // `framed` is whether the LAST draw was a frame (the draw sets it, either way); `room` the content rows that draw showed (a page move is capped to it, so no row is skipped)

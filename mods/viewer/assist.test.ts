@@ -11,7 +11,7 @@ import { test, expect } from 'claude-code/testing'
 import { AI_MAX_CHARS, GUARD_RULE } from './model'
 import { aiState, cancelAi, clearSaved, resetAssist, runAi, toggleAi } from './assist'
 import { makeVT } from './strings'
-import { PALETTE } from '../live/ui'
+import { PALETTE } from '../tux/palette.ts'
 
 const CWD = '/work/repo'
 const TOOL = 'mcp__autopilot__show'

@@ -8,7 +8,7 @@ import type { On } from 'claude-code'
 import { test, expect } from 'claude-code/testing'
 import { currentView, reopenWindow, show } from './show'
 import { makeVT } from './strings'
-import { displayWidth } from '../live/ui'
+import { displayWidth } from '../tux/width.ts'
 
 const CWD = '/work/repo'
 const TOOL = 'mcp__autopilot__show'

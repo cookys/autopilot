@@ -1,0 +1,69 @@
+{
+  "cases": [
+    {
+      "name": "ambiguous-down",
+      "text": "↓",
+      "width": 1
+    },
+    {
+      "name": "ambiguous-star",
+      "text": "★",
+      "width": 1
+    },
+    {
+      "name": "ambiguous-bar",
+      "text": "│",
+      "width": 1
+    },
+    {
+      "name": "ambiguous-section",
+      "text": "§",
+      "width": 1
+    },
+    {
+      "name": "cjk",
+      "text": "中語龍",
+      "width": 6
+    },
+    {
+      "name": "emoji-cat",
+      "text": "🐱",
+      "width": 2
+    },
+    {
+      "name": "emoji-chick",
+      "text": "🐣",
+      "width": 2
+    },
+    {
+      "name": "emoji-crab",
+      "text": "🦀",
+      "width": 2
+    },
+    {
+      "name": "zwj-family",
+      "text": "👨‍👩‍👧",
+      "width": 6
+    },
+    {
+      "name": "zwj-man-computer",
+      "text": "👨‍💻",
+      "width": 4
+    },
+    {
+      "name": "vs16-warning",
+      "text": "⚠️",
+      "width": 1
+    },
+    {
+      "name": "vs16-heart",
+      "text": "❤️",
+      "width": 1
+    },
+    {
+      "name": "ansi-cjk",
+      "text": "\u001b[31m中\u001b[0m",
+      "width": 2
+    }
+  ]
+}

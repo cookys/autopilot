@@ -10,7 +10,7 @@ import { classify, normalizedPools, worstPool } from './pages/quota-pick'
 import { bandQuotaSeg } from './band'
 import { consoleOf, POOLS, ctxOf, NOW, type Sources } from './pages/quota.fixture'
 import { makeT } from './i18n'
-import { PALETTE } from './ui'
+import { PALETTE } from '../tux/palette.ts'
 import type { ConsoleSnapshot } from './console'
 
 const t = makeT('zh-TW')

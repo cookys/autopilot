@@ -3,7 +3,10 @@
 // Missing or stale live sources render in PALETTE.broken with the full wrapped reason (never cut with an ellipsis). Every key hint has a matching Button.
 import type { ForemanView, LivePaneRow, Seg } from '../model'
 import { runAgedOut, runEndedMs, runSubject, truncateToWidth } from '../model'
-import { GLYPHS, PALETTE, SEVERITY, STATES, displayWidth, stateOf, wrapPlain } from '../ui'
+import { GLYPHS } from '../../tux/glyphs.ts'
+import { PALETTE } from '../../tux/palette.ts'
+import { displayWidth } from '../../tux/width.ts'
+import { SEVERITY, STATES, stateOf, wrapPlain } from '../ui'
 import type { StateId } from '../ui'
 import type { Page, PageCtx } from './frame'
 import { brokenRow, staleBadge } from './rows'

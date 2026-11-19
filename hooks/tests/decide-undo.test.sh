@@ -160,8 +160,8 @@ LINELIB="$REPO_ROOT/scripts/lib/decide-line.js"
 assert_eq "$(bad_count "$REPO_ROOT" "$LINELIB")" 0 "(a)(b)(c)(d)(e) the real pane code, both surfaces: every expectation holds"
 
 # --- mutants of the pane side: copy mods/live once per mutant (the loader resolves './x' inside the copy), apply ONE sed command, expect the driver to go red
-mutant_root() { # <name>: a fresh copy of mods/live under $TEST_TMP/mut-<name>
-  local d="$TEST_TMP/mut-$1"; mkdir -p "$d/mods"; cp -r "$REPO_ROOT/mods/live" "$d/mods/live"; printf '%s' "$d"
+mutant_root() { # <name>: a fresh copy of mods/live (and mods/tux, which ui.ts loads) under $TEST_TMP/mut-<name>
+  local d="$TEST_TMP/mut-$1"; mkdir -p "$d/mods"; cp -r "$REPO_ROOT/mods/live" "$d/mods/live"; cp -r "$REPO_ROOT/mods/tux" "$d/mods/tux"; printf '%s' "$d"
 }
 red() { # <label> <file under mods/live> <sed command>
   local d f="$2" c; d="$(mutant_root "$1")"

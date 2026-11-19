@@ -14,7 +14,10 @@ import type { T } from './i18n'
 import type { FleetView } from './fleet'
 import * as ui from './ui.ts' // the design system's builders; `ui.kv` etc. keep clear of this file's own legacy `kv` / `row`
 import * as U from './ui.ts'
-import { GLYPHS, PALETTE, STATES, carry, cellWidth, displayWidth, isStale, stateOf, ansiSpans, urlSpans } from './ui.ts'
+import { GLYPHS } from '../tux/glyphs.ts'
+import { PALETTE } from '../tux/palette.ts'
+import { cellWidth, displayWidth } from '../tux/width.ts'
+import { STATES, carry, isStale, stateOf, ansiSpans, urlSpans } from './ui.ts'
 import { ratioLevel, floorPercent, BAND_CONTRACT } from './band-contract.ts'
 export { BAND_CONTRACT }
 const GS = GLYPHS.state

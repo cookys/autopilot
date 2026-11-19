@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # mods/viewer/run-tests.sh — run the viewer mod's suites: model.test.js (pure, node --test) and viewer.test.ts (through the engine, `claude plugin test`).
 #
-# Same wrapper idea as mods/live/run-tests.sh: a throwaway plugin named `autopilot` in a temp dir, hooks module ../mods/register.ts (the composed module: live + viewer), holding COPIES of mods/viewer and mods/live
-# (the viewer imports the live mod's locale choice and colour roles: ../live/i18n, ../live/ui). Nothing is written into the repo. Run solo (not in parallel with other long suites).
+# Same wrapper idea as mods/live/run-tests.sh: a throwaway plugin named `autopilot` in a temp dir, hooks module ../mods/register.ts (the composed module: live + viewer), holding COPIES of mods/viewer, mods/live and mods/tux
+# (the viewer imports the live mod's locale choice and colour roles: ../live/i18n, ../live/ui; ui.ts loads ../tux). Nothing is written into the repo. Run solo (not in parallel with other long suites).
 #
 # usage: bash mods/viewer/run-tests.sh [extra args for `claude plugin test`]      exit code = the test run's
 set -euo pipefail
@@ -18,6 +18,8 @@ printf '%s\n' '{"name":"autopilot","version":"0.0.0","description":"throwaway wr
 printf '%s\n' '{"modules":["../mods/register.ts"]}' > "$tmp/hooks/hooks.json"
 cp -r "$here" "$tmp/mods/viewer"
 cp -r "$here/../live" "$tmp/mods/live"
+cp -r "$here/../tux" "$tmp/mods/tux"
+rm -f "$tmp/mods/tux/"*.test.js
 cp -r "$here/../roundtable" "$tmp/mods/roundtable"
 cp "$here/../register.ts" "$tmp/mods/register.ts"
 rm -f "$tmp/mods/viewer/run-tests.sh" "$tmp/mods/live/run-tests.sh" "$tmp/mods/roundtable/run-tests.sh"

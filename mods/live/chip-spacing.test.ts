@@ -8,7 +8,8 @@
 import { test, expect } from 'claude-code/testing'
 import { bandSlots, layoutBand, readMarker, readReview, readQc, readLoadSource, readResidue, slotDispatch, slotReview, slotDecisions, slotHygiene, slotPosition, slotUnit, qcChip } from './model'
 import type { Slot } from './model'
-import { GLYPHS, CHIP_GAP, CHIP_MARK, CHIP_META, chipSegs, chipsJoin, stateBadge, stateOf } from './ui'
+import { GLYPHS } from '../tux/glyphs.ts'
+import { CHIP_GAP, CHIP_MARK, CHIP_META, chipSegs, chipsJoin, stateBadge, stateOf } from './ui'
 import type { BadgeStated } from './ui'
 
 const KEY = 'a1b2c3d4e5f60718'

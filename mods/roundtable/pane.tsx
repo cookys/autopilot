@@ -4,7 +4,7 @@
 // No background, no inverse. The Input label has no trailing colon (the field draws its own).
 // The scrollbar thumb is scrollFrame → thumbOf (mods/live/scrollmath.ts): length visible/total of the track, minimum one cell.
 
-import { PALETTE } from '../live/ui'
+import { PALETTE } from '../tux/palette.ts'
 import { frameOf, scrollFrame } from '../live/scroll'
 import type { ScrollModel } from '../live/scroll'
 import type { DisplayLine, LineRole } from './model'

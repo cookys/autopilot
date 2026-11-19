@@ -1,7 +1,9 @@
 // mods/live/walkchart.test.ts — the stage walk drawn as aligned columns (ui.walkChart): each dot sits over its label's first cell,
 // the current label wears the `here` colour, and a narrow pane falls back to the dot row plus a "step k/n" line.
 import { test, expect } from 'claude-code/testing'
-import { walkChart, displayWidth, PALETTE, KEY_W } from './ui'
+import { PALETTE } from '../tux/palette.ts'
+import { displayWidth } from '../tux/width.ts'
+import { walkChart, KEY_W } from './ui'
 import type { Ctx } from './ui'
 import { EN, ZH_TW } from './locales'
 

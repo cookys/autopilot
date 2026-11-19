@@ -9,7 +9,7 @@ import { makeT } from '../i18n'
 import { decidePage, decideReduce, NO_NAV } from './decide'
 import { NOW } from './quota.fixture'
 import { wrapRow } from './rows'
-import { displayWidth } from '../ui'
+import { displayWidth } from '../../tux/width.ts'
 import { nowPage } from './now'
 import { NO_DETAIL, NO_SECTIONS, headerText } from '../model'
 

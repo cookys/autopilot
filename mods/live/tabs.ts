@@ -10,7 +10,8 @@ import { ratioLevel } from './band-contract.ts'
 import type { T } from './i18n'
 import * as ui from './ui'
 import * as U from './ui'
-import { cellWidth, displayWidth, isStale, stateOf } from './ui'
+import { cellWidth, displayWidth } from '../tux/width.ts'
+import { isStale, stateOf } from './ui'
 import { residueTally } from './model'
 import type { NeedsHumanEntry } from './model'
 import type { FleetLane, FleetTask, FleetView, OthersView } from './fleet'
@@ -167,6 +168,10 @@ export const BAND_MIN_COLS = 30
 // recent table appear at the same widths as then, and the 用量 tab never makes the forge tab vanish by appearing.
 export const USAGE_LABEL_ROOM = 11
 export const usageTabFits = (columns: number, t: T, forgeTab: string): boolean => columns - BAND_MIN_COLS - barStrip(null, t, null, forgeTab).width - 3 >= USAGE_LABEL_ROOM
+// Pure fit check. petLabelWidth is displayWidth(label) + 1 for the pet tab (the golden passes the cat emoji label). Not called by barStrip; BAR_PANE_TABS has no pet. L7: this file does not name the glyph table.
+export function petTabFits(columns: number, t: T, forgeTab: string, petLabelWidth: number): boolean {
+  return columns - BAND_MIN_COLS - barStrip(null, t, null, forgeTab).width - petLabelWidth - 3 >= USAGE_LABEL_ROOM
+}
 export const barRule = (strip: BarStrip, columns: number, tabsAt: number, active: BarTabId | ConsoleTab | null): Seg[] => ui.tabRule(strip.tabs, columns, tabsAt, active)
 export const stripRows = (snap: LiveSnapshot, ctx: PaneCtx, tab: PaneTab, hasButton: boolean): { rows: number; exact: boolean } => { const s = stripOf(snap, ctx, tab, hasButton); return { rows: s.rows, exact: s.exact } }
 // every line is one drawn row: pane.tsx draws a blank line as a one-cell Text (an empty Text would take no row)

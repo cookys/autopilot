@@ -3,7 +3,7 @@ import { BandBar } from './band'
 import { consoleOf, ctxOf, POOLS, NOW, MIN } from './pages/quota.fixture'
 import { makeT } from './i18n'
 import * as M from './model'
-import { displayWidth } from './ui'
+import { displayWidth } from '../tux/width.ts'
 
 type Node = { kind: string; props: Record<string, any> }
 const mk = (kind: string) => (props: Record<string, any>): Node => ({ kind, props })

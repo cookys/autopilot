@@ -110,6 +110,19 @@
       "note": "Executable accepting sg argument shape lanegit -c command, covering clone and socket operations in tests."
     },
     {
+      "kind": "env",
+      "audience": "internal",
+      "doc": "references/hetero-dispatch.md",
+      "name": "AUTOPILOT_ROOT_SCAN_AUDIT",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/root-scan-shim.js"
+      ],
+      "relates": [],
+      "note": "Append-only JSON audit file for root-scan refusals (created mode 0600). Unset means stderr only."
+    },
+    {
       "name": "AUTOPILOT_CURSOR_BROKER_SOCK",
       "kind": "env",
       "audience": "internal",

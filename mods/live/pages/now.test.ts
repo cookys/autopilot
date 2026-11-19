@@ -593,3 +593,28 @@ test('now R8 & R11: stale fleet.brief (> 10 min) marks 全艦隊 summary row; st
   expect(raw120.endsWith('2 時前')).toBe(true)
 })
 
+test('now: unknown stale ages, fleet totals and hidden seat spend errors remain accurate', async () => {
+  seatQuota.reset()
+  await seatQuota.refresh(ok('[]'), NOW - 40_000)
+  const pools = ['A', 'B', 'C'].map(pool => ({ ...POOLS[0], pool, stale: true, stale_age_min: null, observed_at_ms: null }))
+  const snap = con({
+    items: [],
+    lines: Array.from({ length: 52 }, (_, i) => ({
+      line_id: 'l' + i, label: '線' + i, lead_display: 'PM',
+      issues: [{ rule: 'T3', state: 'stalled', subject: '閒置', since_ms: NOW - MIN, to_console: false }],
+    })),
+    counts: { ...con().counts, summary: { ...con().counts.summary, hosts: { online: 1, total: 8 } } },
+    quota: { pools: pools as never, seats: [] },
+  })
+  const short = (c: ConsoleSnapshot) => nowPage.render({ ...(ctxOf(80, 24, c) as object), shortBody: true } as never).body.map(text).join('\n')
+  expect(short(snap)).toContain('席資料過期')
+  expect(short(snap)).not.toContain('資料過期 0 分')
+  const knownAges = con({ ...snap, quota: { pools: pools.map((p, i) => ({ ...p, stale_age_min: i === 0 ? null : i * 7 })) as never, seats: [] } })
+  expect(short(knownAges)).toContain('資料過期 14 分')
+  expect(nowPage.render(ctxOf(80, 3, snap)).body.map(text).join('\n')).toContain('艦隊 59')
+
+  const overflowing = con({ ...snap, lines: [], items: Array.from({ length: 30 }, (_, i) => ({ ...con().items[0], id: 'e' + i })) })
+  const body = nowPage.render(ctxOf(120, 30, overflowing)).body.map(text)
+  expect(body.some(r => r.startsWith('另有 '))).toBe(true)
+  expect(body.join('\n')).toContain('花費   ✗ seats --quota 沒有本席這一列')
+})

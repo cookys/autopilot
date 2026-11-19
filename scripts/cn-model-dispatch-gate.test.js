@@ -238,6 +238,50 @@ test('core-unset round 4: whitespace and quoted diff paths, symlink components, 
   allow('allow-two-docs-scope.md', 'Size: S\nRole: implementer\nScope: docs/a.md\nScope: docs/plans/x.md\n');
 });
 
+test('core-unset round 5: CRLF diffs, rename/copy/binary, every field on a header line, lstat only ENOENT is absent', () => {
+  const bare = gitRepo('core-unset-r5');
+  const brief = 'Size: S\nRole: implementer\nScope: docs/a.md\n';
+  const deniedDiff = (name, diffText) => {
+    const d = briefFile(`${name}.diff`, diffText);
+    const f = briefFile(`${name}.md`, brief);
+    assert.equal(gate.check({ ...K, env: {}, files: [f], diffFiles: [d], cwd: bare }).cls, 'core-unset', name);
+  };
+  deniedDiff('deny-crlf', 'diff --git a/src/a.rs b/src/a.rs\r\n--- a/src/a.rs\r\n+++ b/src/a.rs\r\n');
+  deniedDiff('deny-rename-to-src', 'diff --git a/docs/a.md b/src/a.rs\nsimilarity index 100%\nrename from docs/a.md\nrename to src/a.rs\n');
+  fs.mkdirSync(path.join(bare, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(bare, 'src', 'exist.rs'), 'fn e() {}\n');
+  deniedDiff('deny-rename-from-src', 'diff --git a/src/exist.rs b/docs/exist.rs\nsimilarity index 100%\nrename from src/exist.rs\nrename to docs/exist.rs\n');
+  deniedDiff('deny-binary-to-src', 'diff --git a/docs/a.png b/src/a.png\nBinary files a/docs/a.png and b/src/a.png differ\n');
+  deniedDiff('deny-quoted-diff-git', 'diff --git "a/docs/a.md" "b/src/a.rs"\n');
+  const pipeScope = briefFile('deny-pipe-scope.md', 'Size: S\nRole: implementer\nScope: docs/a.md | Scope: src/a.rs\n');
+  assert.equal(gate.check({ ...K, env: {}, files: [pipeScope], cwd: bare }).cls, 'core-unset', 'Scope twice on one line');
+  const pipeAll = briefFile('deny-pipe-all.md', 'Size: S | Role: implementer | Scope: docs/a.md | Scope: src/a.rs\n');
+  assert.equal(gate.check({ ...K, env: {}, files: [pipeAll], cwd: bare }).cls, 'core-unset', 'Scope twice inside a one-line header');
+
+  if (typeof process.getuid === 'function' && process.getuid() === 0) {
+    console.log('note: skip chmod 000 core-unset case (running as root)');
+  } else {
+    const pdir = path.join(bare, 'src', 'p');
+    fs.mkdirSync(pdir, { recursive: true });
+    fs.chmodSync(pdir, 0);
+    try {
+      const nf = briefFile('deny-eacces.md', 'Size: S\nRole: implementer\nScope: src/p/new.rs\nNew-Files: src/p/new.rs\n');
+      assert.equal(gate.check({ ...K, env: {}, files: [nf], cwd: bare }).cls, 'core-unset', 'EACCES is not absent');
+    } finally {
+      fs.chmodSync(pdir, 0o755);
+    }
+  }
+
+  const okRepo = gitRepo('core-unset-r5-ok');
+  const lf = briefFile('allow-lf.diff', 'diff --git a/docs/plans/x.md b/docs/plans/x.md\n+++ b/docs/plans/x.md\ndiff --git a/tests/fixtures/a.json b/tests/fixtures/a.json\n--- a/tests/fixtures/a.json\n+++ b/tests/fixtures/a.json\n');
+  const lfBrief = briefFile('allow-lf.md', brief);
+  assert.equal(gate.check({ ...K, env: {}, files: [lfBrief], diffFiles: [lf], cwd: okRepo }).allowed, true, 'LF diff docs and fixtures');
+  const ren = briefFile('allow-rename-docs.diff', 'diff --git a/docs/a.md b/docs/b.md\nsimilarity index 100%\nrename from docs/a.md\nrename to docs/b.md\n');
+  assert.equal(gate.check({ ...K, env: {}, files: [lfBrief], diffFiles: [ren], cwd: okRepo }).allowed, true, 'rename inside docs');
+  const bothDocs = briefFile('allow-pipe-docs.md', 'Size: S | Role: implementer | Scope: docs/a.md | Scope: docs/b.md\n');
+  assert.equal(gate.check({ ...K, env: {}, files: [bothDocs], cwd: okRepo }).allowed, true, 'two docs scopes on one line');
+});
+
 test('class 4 novel: plan/design/brainstorm/architecture/research roles, or a novel marker', () => {
   for (const r of ['plan', 'design', 'brainstorm', 'architecture', 'research']) {
     assert.equal(cls(K, { ...OK, AUTOPILOT_TASK_ROLE: r }).cls, 'novel', r);

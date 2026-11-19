@@ -29,6 +29,10 @@
 //                 A diff path that contains whitespace, or git's quoted `"b/..."` form, never passes.
 //                 A symlink in any existing component of the normalised path never passes.
 //                 Every Scope header and every New-Files header is read and the paths are unioned.
+//                 Diff text is split on CRLF or LF.
+//                 Rename, copy and binary lines are read, and an unparsable or mismatched `diff --git` line never passes.
+//                 Every header field on a line is read.
+//                 Only ENOENT counts as absent.
 //   [novel]       role is plan, design, brainstorm, architecture, plan_review or research, or the task is
 //                 marked novel (env AUTOPILOT_TASK_NOVEL=1, or `Novel: yes` header)
 //   [unknown-size|unknown-role|unknown-scope]  FAIL CLOSED: size, role or scope is missing
@@ -99,14 +103,13 @@ function headerValue(files, key) {
   return found.length ? found[0] : '';
 }
 
-// Every matching header line in the first 8 lines of every file. Unioning callers can only add paths.
+// Every matching field on every header line in the first 8 lines of every file. Unioning callers can only add paths.
 function headerValues(files, key) {
-  const re = new RegExp(`(^|\\|)[ \\t]*${key}:[ \\t]*([^|]*)`, 'i');
+  const re = new RegExp(`(?:^|\\|)[ \\t]*${key}:[ \\t]*([^|]*)`, 'gi');
   const out = [];
   for (const f of files.filter(Boolean)) {
     for (const l of headerLines(f)) {
-      const m = re.exec(l);
-      if (m) out.push(m[2].trim());
+      for (const m of l.matchAll(re)) out.push(m[1].trim());
     }
   }
   return out;
@@ -114,7 +117,10 @@ function headerValues(files, key) {
 
 // `+++`/`---` path runs to end of line; a tab and anything after it is git's timestamp, not the path.
 // A quoted `"b/..."` form (C-style escapes) is kept quoted so core-unset refuses it instead of decoding.
-// `diff --git` counts only when a/X and b/X are the same X; a rename or a quoted line is ignored.
+// A clean `diff --git a/X b/Y` records both paths. Anything else on that line (quoted form included) is a
+// whitespace sentinel so core-unset refuses it instead of ignoring the line.
+const UNPARSED_DIFF = 'unparsed diff';
+
 function diffPathBody(rest) {
   const tab = rest.indexOf('\t');
   if (tab !== -1) rest = rest.slice(0, tab);
@@ -128,9 +134,18 @@ function diffPaths(file) {
   let text;
   try { text = fs.readFileSync(file, 'utf8'); } catch { return []; }
   const out = new Set();
-  for (const line of text.split('\n')) {
-    const same = /^diff --git a\/(.+) b\/\1$/.exec(line);
-    if (same) { out.add(same[1]); continue; }
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.replace(/\r$/, '');
+    if (line.startsWith('diff --git ')) {
+      const halves = /^a\/(\S+) b\/(\S+)$/.exec(line.slice('diff --git '.length));
+      if (!halves) out.add(UNPARSED_DIFF);
+      else { out.add(halves[1]); out.add(halves[2]); }
+      continue;
+    }
+    const moved = /^(?:rename|copy) (?:from|to) (.*)$/.exec(line);
+    if (moved) { if (moved[1]) out.add(moved[1]); continue; }
+    const binary = /^Binary files a\/(\S+) and b\/(\S+) differ$/.exec(line);
+    if (binary) { out.add(binary[1]); out.add(binary[2]); continue; }
     const hunk = /^(?:\+\+\+|---) (.*)$/.exec(line);
     if (!hunk) continue;
     const body = diffPathBody(hunk[1]);
@@ -267,8 +282,8 @@ function absentUnderRepoRoot(root, normalised) {
   try {
     fs.lstatSync(abs);
     return false;
-  } catch {
-    return true;
+  } catch (e) {
+    return e.code === 'ENOENT';
   }
 }
 
@@ -282,7 +297,7 @@ function coreUnsetHasSymlink(root, normalised) {
     const rel = path.relative(absRoot, cur);
     if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) return true;
     let st;
-    try { st = fs.lstatSync(cur); } catch { return false; }
+    try { st = fs.lstatSync(cur); } catch (e) { return e.code !== 'ENOENT'; }
     if (st.isSymbolicLink()) return true;
   }
   return false;

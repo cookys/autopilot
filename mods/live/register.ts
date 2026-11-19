@@ -42,7 +42,7 @@ import { makeT, resolveLocale, T_EN } from './i18n'
 import type { T } from './i18n'
 import { atom, read, update } from 'claude-code'
 import type { AdvisoryTracker } from './advisories'
-import { DISMISS_PRESS, forgeFit, GLYPHS, LOOK_PRESS, SHOW_PRESS, showTarget, stateOf } from './ui'
+import { DISMISS_PRESS, forgeBar, forgeFit, GLYPHS, LOOK_PRESS, SHOW_PRESS, showTarget, stateOf } from './ui'
 import type { ForgeSegment } from './ui'
 import { cardSentenceOf } from './cardtitle'
 import { NO_BATCH, actionable, answerPlan, answerOf, batchSync, cardKey, draftOf, focusRepair, inputsFor, noteKey, optKey, submitSuccessor } from './decidebatch'
@@ -56,7 +56,7 @@ import type { ConsoleSnapshot } from './console'
 import { consoleSlotTab, nextConsoleTab } from './consoletabs'
 import type { ConsoleNav, ConsoleTab } from './consoletabs'
 
-import { BandBar, bandQuotaSeg, BarRule, Shell, barContent, barParts, cardMain, cardQuick, decideContent, progressRow, cardSplit, shellMenuRow, shellNote, speedContent, stackBand, stackRows, usageDraw } from './band'
+import { BandBar, bandQuotaSeg, BarRule, Shell, barContent, barParts, cardMain, cardQuick, ShellBare, decideContent, progressRow, cardSplit, shellMenuRow, shellNote, speedContent, stackBand, stackRows, usageDraw } from './band'
 import type { SpeedPlacement } from './band'
 import { normalizedPools } from './pages/quota-pick'
 import { consoleFleetCounts } from './pages/rows'
@@ -313,6 +313,7 @@ const consolePaneOf = async ($: EngineInterface, e: Parameters<EngineInterface['
     },
   })
 }
+let bandCollapsed = false // r5: the shell collapsed to its one band row (menu row with the pending count and the expand hint); the d key toggles it, the default is expanded; reset at session start
 let bandShellOff = false // console mode / framed pages: another page name was pressed, so the default 待決 shell stays closed until 待決 is pressed again; reset at session start
 let barTab: BarTabId | null = null // the tab of the band row that is open (its content is drawn under the rule); null = none; a memory state, reset at session start
 let shellMenu: ShellMenuId = 'd' // the O4 shell's menu (d 待決 by default). It is not barTab: d/r/u/p/h and 9 only change this.
@@ -1305,13 +1306,13 @@ async function pruneDecide($: EngineInterface, listed: ReadonlySet<string>, ok: 
 
 // r4 B(c): what the host gave the band, once per change, as one JSON line `{ts, maxRows, bodyColumns, shellRows}` in `<live base>/band-geometry.log` (the live base the pointer names, as every other live file),
 // so a real-pane screenshot can be set against the rows the draw got. The file is rewritten whole (the plugin fs only writes); it keeps the last 200 lines. A failed write never stops the draw.
-async function logBandGeometry($: EngineInterface, maxRows: number, bodyColumns: number, shellRows: number): Promise<void> {
-  const key = maxRows + 'x' + bodyColumns
+async function logBandGeometry($: EngineInterface, maxRows: number, bodyColumns: number, shellRows: number, expanded = true): Promise<void> {
+  const key = maxRows + 'x' + bodyColumns + 'x' + shellRows + (expanded ? 'e' : 'c')
   if (key === geomSeen || liveBaseSeen === null) return
   geomSeen = key
   const path = liveBaseSeen + '/band-geometry.log'
   if (geomLines === null) geomLines = ((await readText($, path)) ?? '').split('\n').filter(l => l !== '')
-  geomLines.push(JSON.stringify({ ts: await $.clock.now(), maxRows, bodyColumns, shellRows }))
+  geomLines.push(JSON.stringify({ ts: await $.clock.now(), maxRows, bodyColumns, shellRows, expanded }))
   if (geomLines.length > 200) geomLines.splice(0, geomLines.length - 200)
   await $.fs.write(path, geomLines.join('\n') + '\n').catch(() => undefined)
 }
@@ -1532,6 +1533,7 @@ export async function startLive($: EngineInterface): Promise<void> {
   shellMenu = 'd'
   shellOn = false
   bandShellOff = false
+  bandCollapsed = false
   geomSeen = null
   geomLines = null
   folded.clear() // a new Claude Code session opens every section
@@ -1849,7 +1851,8 @@ export function registerLive(on: Parameters<Register>[0]): void {
         const redraw = () => { void $.ui.invalidate('ui.render') }
         const menuItems = SHELL_MENUS.map(id => ({ id, label: id === 'd' ? t('tab.decide') : id === 'r' ? t('shell.room') : id === 'u' ? t('shell.usage') : id === 'p' ? t('tab.pet') : t('shell.help') }))
         const holdIds = Object.keys(st?.hold ?? {})
-        const quickOf = (sendN: number, holds: number[]) => cardQuick(el, t, {
+        const quickOf = (sendN: number, holds: number[], fillBtn: { label: string; onPress: () => void } | null = null) => cardQuick(el, t, {
+          fill: fillBtn,
           sendN, ...(holds.length === 0 ? {} : { undo: { secs: Math.max(0, Math.ceil((Math.max(...holds) - nowMs) / 1000)), onUndo: () => { void Promise.all(holdIds.map(i => undoDecide($, i))).then(redraw) } } }), tip: t(plan.geo.tier === 80 ? 'shell.tip_short' : 'shell.tip_full'),
           onSend: () => { void decidePress($, 'submit').then(redraw) },
           onPrev: () => { if (cards.length > 0) { decideCursor = Math.max(0, decideCursor - 1); redraw() } },
@@ -1862,6 +1865,10 @@ export function registerLive(on: Parameters<Register>[0]): void {
         let onLeft: (id: string) => void
         let progress: unknown
         let quick: unknown[]
+        let bare = false
+        let bareMain: unknown[] | null = null
+        let bareFill: { label: string; onPress: () => void } | null = null
+        let barePos = ''
         if (cardMode && st !== null && curKey !== undefined) {
           const pickPress = (k: number) => {
             if (cur === undefined || cur.id === null || curLocked) return
@@ -1885,24 +1892,40 @@ export function registerLive(on: Parameters<Register>[0]): void {
           const meta = cur === undefined ? (bandBatch.ans[curKey] ?? null) : heldNow ? t('decide.held') : sentOf(cur) ? t('decide.sent') : null
           const fixable = cur !== undefined && cur.id !== null && !heldNow && sentOf(cur) && !decideDialog(cur)
           const fixId = cur?.id ?? null
-          const view = (split: boolean) => cardMain(el, {
-            key: curKey, question: cur === undefined ? bandBatch.q[curKey] : cur.question, background: cur === undefined ? null : cur.background, note, fill, meta, locked: curLocked, grey: cur === undefined || sentOf(cur), split,
+          const view = (split: boolean, tight = false, width = mainCols - 1, noFill = false) => cardMain(el, {
+            key: curKey, question: cur === undefined ? bandBatch.q[curKey] : cur.question, background: cur === undefined ? null : cur.background, note, fill: noFill ? null : fill, meta, tight, locked: curLocked, grey: cur === undefined || sentOf(cur), split,
             fix: fixable && fixId !== null ? { label: t('decide.fix'), onPress: () => { void decidePress($, 'fix:' + fixId).then(redraw) } } : null,
             advice: cur === undefined || (cur.recommendation === null && cur.why === null) ? null : { label: cur.recommendation ?? '', why: cur.why },
             notAuthorized: cur === undefined ? null : cur.not_authorized,
-            width: mainCols - 1, onPress: pickPress, compact: plan.compact,
+            width, onPress: pickPress, compact: plan.compact,
             options: cur === undefined || optN === 0 || cur.id === null ? [] : cur.options.map((o, k) => ({ label: o.label, description: o.description, picked: decidePick(cur, st) === k, recommended: cur.recommendation === o.label, key: optKey(cur.id as string, k) })),
           }, t)
           // the frame is as tall as the card, between the 6 content rows of the ordinary frame and what the host's maxRows leaves (the menu row, the quick row and the two frames take 4, the divider and
           // the progress row 2); the tree is never taller than maxRows (the host would open a window of its own over the quick row). A card taller than that goes to the split view (§12.10): the rows
           // scroll over a scrollbar, the options and the Buttons stand fixed under them. Each card has its own offset (bandScroll).
-          const avail = shellContentRows(rows)
+          // r5: a card that does not fit the frame sheds, in this order: the padding rows and the 建議 reason's own row (tight); the divider and the progress row; the frames and the left window (bare:
+          // the card's rows, the menu row, the quick row, the fill Button on the quick row). Only a card still taller than that is split and scrolled.
+          const avail0 = shellContentRows(rows)
           let whole = view(false)
+          let tight = false
+          let forceCompact = false
+          if (whole.rows.length > avail0) {
+            const t1 = view(false, true)
+            if (t1.rows.length <= avail0) { whole = t1; tight = true }
+            else if (!plan.compact && t1.rows.length <= rows - 4) { whole = t1; tight = true; forceCompact = true }
+            else {
+              const b = view(false, true, columns - 3, true)
+              if (b.rows.length <= rows - 2) { whole = b; tight = true; bare = true }
+            }
+          }
+          const avail = bare ? rows - 2 : forceCompact ? rows - 4 : avail0
           const split = whole.rows.length > avail
           // the strip has priority (§12.10: the options stand in view): it takes its place whenever one scrolling row and the page row still fit above it, even at 12 rows where that leaves the rows less than the 3 the ruling wants (reported); a strip too tall for that, or a card with nothing to press (locked), scrolls whole with the page Buttons alone
           if (split && !curLocked && !plan.compact) { const sp = view(true); if (avail - (1 + sp.strip.length) >= 2) whole = sp }
-          const room = split ? avail : Math.min(avail, Math.max(MAIN_CONTENT_ROWS, whole.rows.length))
-          if (room + (plan.compact ? 0 : 2) !== plan.bodyRows) { const again = shellPlan({ ...planInp, bodyRows: room + (plan.compact ? 0 : 2) }); if (again !== null) plan = again }
+          const room = split ? avail : Math.min(avail, Math.max(forceCompact || bare ? 1 : MAIN_CONTENT_ROWS, whole.rows.length))
+          const compactNow = plan.compact || forceCompact
+          if (!bare && (forceCompact || room + (plan.compact ? 0 : 2) !== plan.bodyRows)) { const again = shellPlan({ ...planInp, compact: compactNow, bodyRows: room + (compactNow ? 0 : 2) }); if (again !== null) plan = again }
+          if (bare) { bareFill = fill; bareMain = whole.rows; barePos = t('shell.bare_pos', { n: decideCursor + 1, total: cards.length }) }
           const model = bandModel('decide')
           keyed(model, curKey)
           const page = (by: number) => { model.offset = Math.max(0, Math.min(model.max, model.offset + by * Math.max(1, model.room))); redraw() }
@@ -1917,6 +1940,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
           else if (split) { const sc = cardSplit(el, t, { top: whole.rows, strip: whole.strip, room, cells: plan.geo.main, model, onPage: page }); main = sc.rows; seen = whole.keyed.filter(x => x.at === null || (x.at >= sc.from && x.at < sc.to)).map(x => x.k) }
           else { fixedWindow(whole.rows.length, room, model); main = whole.rows }
           const hint = curLocked || seen.length === 0 ? '' : seen.every((k, i) => k === i) && (seen.length > 1 || optN === 1) ? t('shell.hint_pick', { n: seen.length }) : t('shell.hint_pick_some')
+          if (bare && hint !== '') barePos += ' · ' + hint // no bottom frame in the bare layout: the pick hint rides on the menu row's note
           if (hint !== (optN > 0 && !curLocked ? t('shell.hint_pick', { n: Math.min(optN, 6) }) : '')) { const again = shellPlan({ ...planInp, footMain: hint, bodyRows: plan.bodyRows }); if (again !== null) plan = again }
           left = cardRows(cards, decideCursor, plan.separate ? plan.leftInner : plan.geo.left, plan.bodyRows)
           onLeft = (id: string) => { const i = cards.findIndex(c => c.id === id); if (i >= 0) { decideCursor = i; redraw() } }
@@ -1924,7 +1948,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
           const prog = progressSegs({ cards: cards.filter(c => c.gone !== true), last: lastCard === undefined || lastCard.answer === null || lastCard.sent ? null : { name: lastCard.name, answer: lastCard.answer }, wide: plan.geo.tier >= 160, width: mainCols - 1, t })
           progress = progressRow(el, prog)
           const sendN = live.filter(d => decideOpen(d, st) && !decideHeld(d, st) && decideLine(d, st) !== null).length
-          quick = quickOf(sendN, Object.values(st.hold ?? {}))
+          quick = quickOf(sendN, Object.values(st.hold ?? {}), bare ? bareFill : null)
         } else {
           const content = plan.compact ? plan.bodyRows : plan.bodyRows - 2
           const lines = shellMenu === 'u' ? legacyUsageRows(panelRaw, nowMs, mainCols, content, t) : shellMenu === 'r' ? roomLines(shellRoom.rows, mainCols, content) : null
@@ -1936,10 +1960,25 @@ export function registerLive(on: Parameters<Register>[0]): void {
           progress = progressRow(el, [])
           quick = quickOf(0, [])
         }
+        // r5: d on the 待決 menu collapses the band to its menu row, d again expands it; another menu key expands and selects. tok/s (the forge label) sits on the menu row where it fits.
+        const selectMenu = (id: ShellMenuId) => {
+          if (id === 'd' && shellMenu === 'd' && !bandCollapsed) bandCollapsed = true
+          else { bandCollapsed = false; shellMenu = id }
+          redraw()
+        }
         const menu = shellMenuRow(el, t, {
           selected: shellMenu, pending: nonStep.length, room: shellRoom.rows.length, awaiting: (snapshot?.awaiting ?? []).length, columns,
-          onSelect: (id) => { shellMenu = id; redraw() },
+          onSelect: selectMenu, speed: forge === null ? null : forgeBar(forge).segs,
+          ...(bandCollapsed ? { note: t('shell.collapsed', { n: nonStep.length, key: 'd' }) } : bare ? { note: barePos } : {}),
         })
+        if (bandCollapsed) {
+          await logBandGeometry($, rows, columns, 1, false)
+          return stackRows(el, [menu])
+        }
+        if (bareMain !== null) {
+          await logBandGeometry($, rows, columns, bareMain.length + 2)
+          return stackRows(el, ShellBare(el, { main: bareMain, bar: menu, quick }))
+        }
         await logBandGeometry($, rows, columns, plan.bodyRows + 4)
         return stackRows(el, Shell(el, { plan, left, onLeft, main, progress, quick, bar: menu }))
       }

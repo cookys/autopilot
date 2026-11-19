@@ -43,7 +43,7 @@ Shared Cursor/Kimi broker transport and clone rail use the cursor-named helpers;
 `lib/exclude-allowlist.js` `lib/seat-id-guard.js` `lib/raw-log-path.js` `review-ledger-archive.js` `lib/review-ledger-copy.js` `lib/review-ledger-tar.js`
 
 **Verification & review synthesis (cont.)** — `review-jury.js` `render-fleet-inventory.js` `rule-effect-check.js`
-`replay-stop-guard.js` `check-unmerged-ship.js` `lesson-lint.js` `lesson-lint.test.js` `check-tip-verify-default.sh` `lib/tip-verify-repo-default.js` `lib/tip-verify-grace.json`
+`replay-stop-guard.js` `reply-precheck.js` `check-unmerged-ship.js` `lesson-lint.js` `lesson-lint.test.js` `check-tip-verify-default.sh` `lib/tip-verify-repo-default.js` `lib/tip-verify-grace.json`
 
 **Task tree & risk** — `tree.js` `risk-counter.js` `hook-harness-matrix.js` `lib/chain-command.js`
 

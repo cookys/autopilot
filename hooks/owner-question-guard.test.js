@@ -1,4 +1,5 @@
 'use strict';
+// Shared rules: hooks/lib/owner-question-rules.js.
 
 // Synthetic paraphrases only. Real transcripts are operator-owned replay inputs.
 const { test } = require('node:test');
@@ -462,17 +463,121 @@ test('--replay-language prints per-reply verdicts and numbers, never the reply t
   assert.ok(!r.stdout.includes('unit tests') && !r.stdout.includes('合併'));
 });
 
+test('reply-precheck flags owner asks, bare card ids, and passes a compliant reply', (t) => {
+  const f = fixture(t);
+  const pre = path.join(__dirname, '..', 'scripts', 'reply-precheck.js');
+  function run(text, extraArgs = []) {
+    const file = path.join(f.cwd, 'draft.txt');
+    fs.writeFileSync(file, text);
+    return spawnSync(process.execPath, [pre, '--file', file, '--json', ...extraArgs], {
+      encoding: 'utf8',
+      cwd: f.cwd,
+      env: f.env,
+    });
+  }
+  const ask = run('請你決定要不要合併。');
+  assert.equal(ask.status, 1);
+  const askJson = JSON.parse(ask.stdout);
+  assert.equal(askJson.ok, false);
+  assert.ok(askJson.problems.some((p) => p.sentence.includes('請你決定要不要合併') && /卡/.test(p.fix)));
+  const login = run('最後要請你登入一次。');
+  assert.equal(login.status, 1);
+  assert.ok(JSON.parse(login.stdout).problems.some((p) => p.sentence.includes('最後要請你登入一次')));
+  const bare = run('卡號 d-1a2b3c4d');
+  assert.equal(bare.status, 1);
+  assert.ok(JSON.parse(bare.stdout).problems.some((p) => p.rule === 'bare_card_id' && p.sentence.toLowerCase() === 'd-1a2b3c4d'));
+  const live = f.card();
+  const ok = run(`已完成合併，沒有要你決定的事。見 ${live}（合併）。`);
+  assert.equal(ok.status, 0, ok.stdout + ok.stderr);
+  assert.equal(ok.stdout.trim(), JSON.stringify({ ok: true, problems: [] }));
+  const plain = spawnSync(process.execPath, [pre, '--file', path.join(f.cwd, 'draft.txt')], {
+    encoding: 'utf8', cwd: f.cwd, env: f.env,
+  });
+  assert.equal(plain.status, 0);
+  assert.equal(plain.stdout, 'ok\n');
+});
+
+test('precheck agrees with the hook on existing single-reply fixtures', (t) => {
+  const f = fixture(t);
+  const pre = path.join(__dirname, '..', 'scripts', 'reply-precheck.js');
+  const sh = fs.readFileSync(path.join(__dirname, 'tests', 'owner-question-guard.test.sh'), 'utf8');
+  const texts = new Set();
+  for (const m of sh.matchAll(/^mk \w+ (?:'([^']*)'|"([^"]*)")/gm)) texts.add(m[1] ?? m[2]);
+  for (const text of [
+    'Please confirm the choice.',
+    '已完成更新，測試通過，沒有待決事項。',
+    'd-47602dd8 開著。',
+    'd-47602dd8（週一手機重連 Wi-Fi）開著',
+    ...replayShapes.map(([, s]) => s),
+  ]) texts.add(text);
+  assert.ok(texts.size >= 15);
+  for (const text of texts) {
+    fs.writeFileSync(f.transcript_path, JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text }] } }));
+    const hook = guard.decide({ cwd: f.cwd, transcript_path: f.transcript_path, session_id: 'synthetic' });
+    const file = path.join(f.cwd, 'draft.txt');
+    fs.writeFileSync(file, text);
+    const cli = spawnSync(process.execPath, [pre, '--file', file, '--json', '--session', 'synthetic'], {
+      encoding: 'utf8', cwd: f.cwd, env: f.env,
+    });
+    const body = JSON.parse(cli.stdout);
+    const hookBlock = hook?.decision === 'block';
+    assert.equal(body.ok, !hookBlock, text);
+    assert.equal(cli.status, hookBlock ? 1 : 0, text);
+    if (hookBlock) {
+      assert.ok(body.problems.length > 0, text);
+      assert.match(hook.reason, /只送一則短更正|回覆要用正體中文/);
+    }
+  }
+});
+
+test('short correction naming a card passes; the same text as a fresh owner question blocks', (t) => {
+  const f = fixture(t);
+  const blocked = '請你決定要不要合併。';
+  const corr = '請你決定要不要合併，卡號 d-1a2b3c4d（合併）。';
+  assert.ok(corr.length <= 400);
+  assert.equal(f.check(corr)?.decision, 'block');
+  const paired = f.check(corr, {}, [
+    { type: 'user', message: { role: 'user', content: 'go' } },
+    { type: 'assistant', message: { content: [{ type: 'text', text: blocked }] } },
+  ]);
+  assert.equal(paired, null);
+  const freshAsk = '最後要請你登入一次。';
+  assert.equal(f.check(freshAsk)?.decision, 'block');
+  assert.equal(f.check(freshAsk, {}, [
+    { type: 'user', message: { role: 'user', content: 'go' } },
+    { type: 'assistant', message: { content: [{ type: 'text', text: blocked }] } },
+  ])?.decision, 'block');
+});
+
+test('a single-problem block reason stays under 600 chars and omits the full open usage', (t) => {
+  const f = fixture(t);
+  const out = f.check('請你決定要不要合併。');
+  assert.equal(out?.decision, 'block');
+  assert.ok(out.reason.length < 600, String(out.reason.length));
+  assert.match(out.reason, /請你決定要不要合併/);
+  assert.match(out.reason, /只送一則短更正（補上缺的卡號／task id／改寫那一句），不要整則重寫。/);
+  assert.match(out.reason, /node scripts\/open-decision\.js open --category <c> --executor <addr> --question <q> --option A::<desc> --option B::<desc> --recommendation A --why <r> --not-authorized <b>/);
+  assert.doesNotMatch(out.reason, /沒帶或不在其中 exit 7/);
+  assert.doesNotMatch(out.reason, /\[待決回覆\]/);
+  assert.doesNotMatch(out.reason, /resolve-doa/);
+  assert.equal(out.reason.split('\n').filter((l) => l.includes('node scripts/open-decision.js open --category')).length, 1);
+});
+
 test('negative controls turn the closed-card, second-stop and reply-language assertions red', (t) => {
   const f = fixture(t);
-  const sourcePath = require.resolve('./owner-question-guard');
-  const source = fs.readFileSync(sourcePath, 'utf8');
+  const guardPath = require.resolve('./owner-question-guard');
+  const rulesPath = require.resolve('./lib/owner-question-rules');
   for (const [name, before, after] of [
     ['closed card must block', "return card && ['open', 'awaiting_operator_action'].includes(cardState(card.entry));", 'return true;'],
     ['second Stop must block again', 'function decide(input, opts = {}) {', 'function decide(input, opts = {}) {\n  if (input.stop_hook_active === true) return null;'],
     ['reply language waits for a final reply that reaches the transcript after Stop fires, and logs a content-free line', 'const READ_SETTLE_MS = 2000;', 'const READ_SETTLE_MS = 0;'],
     ['reply language zh-Hant blocks pure English reply', 'const LANGUAGE_MIN_CJK_RATIO = 0.60;', 'const LANGUAGE_MIN_CJK_RATIO = 0;'],
   ]) {
-    assert.equal(source.split(before).length, 2, 'mutation anchor occurs once');
+    const guardSource = fs.readFileSync(guardPath, 'utf8');
+    const rulesSource = fs.readFileSync(rulesPath, 'utf8');
+    const sourcePath = guardSource.includes(before) ? guardPath : rulesPath;
+    const source = sourcePath === guardPath ? guardSource : rulesSource;
+    assert.equal(source.split(before).length, 2, `mutation anchor occurs once (${name})`);
     const preload = path.join(f.cwd, 'mutant.cjs');
     // Change only this module in a child; production source is never overwritten.
     fs.writeFileSync(preload, `const Module=require('node:module'); const load=Module._extensions['.js'];

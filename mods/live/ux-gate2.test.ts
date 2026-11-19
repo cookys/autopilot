@@ -177,7 +177,7 @@ for (const cols of [80, 120, 160]) test(`Z3: page 0 is labelled 鍛 in both shar
 test('X1: each closed-band page button opens its matching framed page and leaves the band at two rows', async ($, on) => {
   const h = host(on)
   await $.session.start({ surface: 'terminal', cwd: REPO })
-  for (const p of PAGES.filter(p => p.id !== 'help')) {
+  for (const p of PAGES.filter(p => p.id !== 'help' && p.id !== 'decide')) { // 待決 is the O4 card shell on the band (live.test.ts 'O4 regression'), not a pane page
     const band = await mountBand($, 120, 30)
     await band.press({ key: p.id === 'forge' ? 'forge' : 'tab:' + p.id })
     expect(h.isOpen(), p.id + ' opens pane').toBe(true)

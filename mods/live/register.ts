@@ -1610,8 +1610,9 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const slot = (id: SlotId) => (consoleOn ? pageOpen(SLOT_PAGE_OF[id] ?? 'now', slotUnfolds(id), consoleSlotTab(id)) : openOn(slotTab(id), slotUnfolds(id), id === 'spend' ? 'spend' : undefined))
     // a tab of the band row: the open tab is a memory state; pressing it again closes it. In the console mode a page tab opens the pane on that page (the forge tab keeps its band behaviour)
     const onTab = (id: BarTabId | ConsoleTab | BandPageId) => {
-      if (!legacyTabs) { void pageOpen(id as BandPageId); return }
-      if (consoleOn && id !== 'forge') { void pageOpen(id as BandPageId); return }
+      // the 待決 tab is the O4 card shell (barTab 'decide', drawn at maxRows >= SHELL_ROWS) in every mode; the other page names open the pane on that page in the console mode / framed pages
+      if (id !== 'decide' && !legacyTabs) { void pageOpen(id as BandPageId); return }
+      if (id !== 'decide' && consoleOn && id !== 'forge') { void pageOpen(id as BandPageId); return }
       barTab = barTab === id ? null : (id as BarTabId)
       $.ui.invalidate('ui.render')
     }

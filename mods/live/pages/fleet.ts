@@ -7,7 +7,7 @@ import { makeT } from '../i18n'
 import type { T } from '../i18n'
 import type { Seg } from '../model'
 import { displayWidth, truncateToWidth } from '../model'
-import { GLYPHS, PALETTE, STATES, type StateId } from '../ui'
+import { GLYPHS, PALETTE, STATES, idTail, type StateId } from '../ui'
 import type { Page, PageCtx } from './frame'
 import { STRIP_SPLIT_COLS } from './layout'
 import { WRAP_HANG, brokenRow, isBriefStale, lineCounts, lineState, lineStatusText, lineTotal, staleBadge, wrapRow } from './rows'
@@ -130,7 +130,7 @@ export function fleetView(ctx: PageCtx, view: FleetView = DEFAULT_VIEW): { body:
       const room = cols - used - 2 - (stale ? 2 : 0)
       if (room > 0) {
         const text = task(r)
-        core.push({ text: '  ' + (displayWidth(text) > room ? pad(fit(text, room), room) : text) })
+        core.push({ text: '  ' + (displayWidth(text) > room ? pad(idTail(r.worst.subject, room), room) : text) })
       }
     }
     if (stale) core.push(staleBadge(' ' + GLYPHS.state.failed))

@@ -517,6 +517,7 @@
   "page.quota.v_use": "會用到 {p}%",
   "page.quota.v_waste": "約剩 {y}% 會浪費",
   "page.quota.v_stale": "{min} 分未更新（>10 分{why}）",
+  "page.quota.v_stale_plain": "過期，年紀不明（>10 分{why}）",
   "page.quota.v_nopace": "無來源：用量預測未接通",
   "page.quota.v_top7": "7 天 {p}% 最高，沒有預測",
   "page.quota.role_broken": "紅",
@@ -575,6 +576,7 @@
   "page.quota.sv_use": "會用到 {p}%",
   "page.quota.sv_waste": "浪費 {y}%",
   "page.quota.sv_stale": "{min} 分未更新",
+  "page.quota.sv_stale_plain": "過期，年紀不明",
   "page.quota.sv_stale_seat": "席過期 {min} 分",
   "page.quota.sv_stale_seat_plain": "席資料過期",
   "page.quota.sv_nopace": "無預測來源",
@@ -874,6 +876,7 @@
   "band.fleet_unknown": "艦隊 ?",
   "band.quota_nopace": "額度無預測來源",
   "page.now.quota_stale": "資料過期 {min} 分",
+  "page.now.quota_stale_plain": "資料過期（年紀不明）",
   "page.now.quota_waste": "額度浪費",
   "page.quota.col_proj_s": "預",
   "page.quota.red_summary": "額度紅 {n}（{names}）"

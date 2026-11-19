@@ -517,6 +517,7 @@
   "page.quota.v_use": "will use {p}%",
   "page.quota.v_waste": "about {y}% will go unused",
   "page.quota.v_stale": "{min} min since update (over 10 min){why}",
+  "page.quota.v_stale_plain": "stale, age unknown (over 10 min){why}",
   "page.quota.v_nopace": "no source: usage forecast is not connected",
   "page.quota.v_top7": "7-day {p}% is the highest, no forecast",
   "page.quota.role_broken": "red",
@@ -575,6 +576,7 @@
   "page.quota.sv_use": "uses {p}%",
   "page.quota.sv_waste": "{y}% unused",
   "page.quota.sv_stale": "{min} min stale",
+  "page.quota.sv_stale_plain": "stale, age unknown",
   "page.quota.sv_stale_seat": "seat {min}m stale",
   "page.quota.sv_stale_seat_plain": "seat data stale",
   "page.quota.sv_nopace": "no forecast",
@@ -874,6 +876,7 @@
   "band.fleet_unknown": "Fleet ?",
   "band.quota_nopace": "Quota forecast missing",
   "page.now.quota_stale": "Data expired {min} min",
+  "page.now.quota_stale_plain": "data stale (age unknown)",
   "page.now.quota_waste": "Quota waste",
   "page.quota.col_proj_s": "Proj",
   "page.quota.red_summary": "Quota red {n} ({names})"

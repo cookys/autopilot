@@ -10,7 +10,7 @@ import { WRAP_HANG, brokenRow, wrapRow } from './rows'
 import type { Row } from './rows'
 import type { QuotaSeat } from '../console'
 import type { Seg } from '../model'
-import { GLYPHS, PALETTE, displayWidth } from '../ui'
+import { GLYPHS, PALETTE, displayWidth, idTail } from '../ui'
 import type { QuotaPool, Verdict } from './quota-pick'
 import { ROLE_WARNING, isUnknownPool, normalizedPools, poolKey, poolLabel, rankPools } from './quota-pick'
 
@@ -74,7 +74,7 @@ function clipPlain(text: string, w: number): string {
 
 function fitCellR(text: string, w: number): string {
   if (w <= 0) return ''
-  const fitted = displayWidth(text) < w ? text : clipPlain(text, Math.max(1, w - 1))
+  const fitted = idTail(text, w)
   return padR(fitted, w)
 }
 
@@ -111,7 +111,7 @@ function shortVerdict(p: QuotaPool, v: Verdict, nowMs: number, paceOk: boolean, 
   if (v.kind === 'limit_nosw') return t('page.quota.sv_limit_nosw')
   if (v.kind === 'limit_stranded') return t('page.quota.sv_limit_stranded', { n: p.stranded_seats ?? 0 })
   if (v.kind === 'limit_switched') return t('page.quota.sv_limit_switched', { pool: typeof p.switched === 'string' ? poolLabel(p.switched) : DASH })
-  if (v.kind === 'stale') return bad + ' ' + t('page.quota.sv_stale', { min: v.staleMin === null ? DASH : v.staleMin })
+  if (v.kind === 'stale') return bad + ' ' + (v.staleMin === null ? t('page.quota.sv_stale_plain') : t('page.quota.sv_stale', { min: v.staleMin }))
   if (v.kind === 'stale_seat') return bad + ' ' + (v.staleMin === null ? t('page.quota.sv_stale_seat_plain') : t('page.quota.sv_stale_seat', { min: v.staleMin }))
   if (v.kind === 'exhaust_nosw') {
     const h = p.projected_exhaustion_at_ms === null ? '?' : Math.max(0, Math.round((p.projected_exhaustion_at_ms - nowMs) / 3600000))

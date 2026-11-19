@@ -163,6 +163,6 @@ test('W2 W4: wide overflow counts real hidden pools and calls them 額度浪費,
   const con = snapshot([...redPools, ...unknownPools, ...wastes])
   const out = frameRows(nowPage, ctx(160, 8, con)).map(text).join('\n')
   expect(out).toContain('額度浪費 ▲5')
-  expect(out).toContain('另有 8 項') // three unknown pools and five waste pools; two red pools are visible
+  expect(out).toContain('另有 9 項') // B58: the spend error row (no seats --quota source) takes one pool's place; one red pool is hidden with three unknown and five waste pools
   expect(out).not.toContain('本席 ✗')
 })

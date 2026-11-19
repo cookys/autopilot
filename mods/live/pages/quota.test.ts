@@ -9,7 +9,7 @@ import { frameRows } from './frame'
 import { PAGES } from './index'
 import { PALETTE, displayWidth } from '../ui'
 import { quotaPage, renderQuota, rowsWrappedLen } from './quota'
-import { normalizedPools, rankPools, worstPool } from './quota-pick'
+import { classify, normalizedPools, rankPools, worstPool } from './quota-pick'
 import { NOW, POOLS, SEATS, MIN, consoleOf, ctxOf } from './quota.fixture'
 
 const text = (row: { text: string }[]) => row.map(s => s.text).join('').trimEnd()
@@ -210,6 +210,20 @@ test('quota: the page row order and the band pick agree (rank 0 = worstPool), an
   expect(line).toContain('12 分未更新')
   expect(line).toContain('✗')
 })
+test('quota: a stale pool with unknown age uses plain full and short verdicts', () => {
+  const p = { ...POOLS.find(p => p.pool === 'trinity')!, stale: true, stale_age_min: null, observed_at_ms: null }
+  const ctx = ctxOf(160, 40, consoleOf([p])) as Parameters<typeof renderQuota>[0]
+  const v = classify(normalizedPools(ctx.console)![0], NOW, true, ctx.t)
+  expect(v.kind).toBe('stale')
+  expect(v.staleMin).toBeNull()
+  const row = renderQuota(ctx).body.find(r => text(r).startsWith('▸'))!
+  for (const verdict of [v.text, text(row)]) {
+    expect(verdict).toContain('年紀不明')
+    expect(verdict).not.toMatch(/[-—]\s*分/)
+  }
+  expect(v.text).toContain('statusline 沒在跑')
+})
+
 test('quota: the registry carries the framed quota page at key 4', () => {
   expect((page as { framed?: boolean }).framed).toBe(true)
   expect((page as { key: string }).key).toBe('4')

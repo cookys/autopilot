@@ -633,3 +633,65 @@ test('CLI usage & help handling', () => {
   });
   assert.equal(badMode.status, 2);
 });
+
+const HOUR_MS = 3600 * 1000;
+function realShapeMessages() {
+  const base = Date.UTC(2026, 10, 18, 10, 0, 0);
+  const mk = (i, hours, kind, body) => ({
+    id: `real-${i}`,
+    from: 'ns/courier/peer--claude',
+    content: body,
+    reply_to: i % 2 === 0 ? { id: 'real-0', kind: 'chat' } : null,
+    kind,
+    disposition: i % 3 === 0 ? { state: 'unread', at: 1 } : null,
+    priority: 0,
+    received_ms: base + hours * HOUR_MS + i * 1000,
+  });
+  return [
+    mk(1, 0, 'chat', 'zzz opaque chatter alpha'),
+    mk(2, 1, 'chat', 'zzz opaque chatter beta'),
+    mk(3, 3, 'failure_notice', 'zzz opaque chatter gamma'),
+    mk(4, 3, 'chat', 'zzz opaque chatter delta'),
+  ];
+}
+
+test('real inbox shape (received_ms, object disposition/reply_to): span and mean are non-zero', () => {
+  const report = replaySwitchboard(realShapeMessages());
+  assert.equal(report.total_messages, 4);
+  assert.equal(report.wakes_per_hour.invalid_seen_at, 0);
+  assert.equal(report.wakes_per_hour.span_hours, 4);
+  assert.ok(report.wakes_per_hour.mean > 0);
+});
+
+test('real inbox shape: id is accepted as message id and object fields are normalized', () => {
+  const { normalizeInboxMessage } = require('./fleet-replay.js');
+  const [m] = realShapeMessages().filter((x) => x.id === 'real-2');
+  const n = normalizeInboxMessage(m);
+  assert.equal(n.message_id, 'real-2');
+  assert.equal(n.reply_to, 'real-0');
+  const n3 = normalizeInboxMessage(realShapeMessages().find((x) => x.id === 'real-3'));
+  assert.equal(n3.disposition, 'unread');
+});
+
+test('residue breakdown sums to the residue count and groups by (kind, from)', () => {
+  const report = replaySwitchboard(realShapeMessages());
+  const rb = report.residue_breakdown;
+  assert.equal(rb.total, report.counts.residue);
+  assert.ok(rb.total > 0);
+  const topSum = rb.top_groups.reduce((n, g) => n + g.count, 0);
+  assert.equal(topSum + rb.other_count, report.counts.residue);
+  assert.equal(Object.values(rb.by_kind).reduce((n, c) => n + c, 0), report.counts.residue);
+  assert.ok(rb.top_groups.length <= 10);
+  assert.ok(rb.top_groups.every((g) => typeof g.kind === 'string' && typeof g.from === 'string'));
+});
+
+test('residue breakdown appears in --human output', () => {
+  const dir = fs.mkdtempSync(path.join(TMP_ROOT, 'real-shape-'));
+  const f = path.join(dir, 'in.jsonl');
+  fs.writeFileSync(f, realShapeMessages().map((m) => JSON.stringify(m)).join('\n') + '\n');
+  const res = spawnSync('node', [CLI, '--mode', 'switchboard', '--input', f, '--human'], {
+    encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  assert.equal(res.status, 0, res.stderr);
+  assert.match(res.stdout, /殘餘分組/);
+});

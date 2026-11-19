@@ -818,6 +818,9 @@ function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
     }
     if (spendError >= i) {
       const spend = wrapRow(truncateSegs(body[spendError], size.cols), size.cols, WRAP_HANG)
+      const i0 = i
+      const kept0 = kept.slice()
+      let placed = false
       while (i > 0) {
         const last = body[i - 1]
         if (last.some(s => s.text.startsWith(GLYPHS.structure.rule))) break
@@ -825,9 +828,11 @@ function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
         kept.splice(kept.length - wrapRow(last, size.cols, WRAP_HANG).length)
         if (kept.length + spend.length <= firstRoom - 1) {
           kept.push(...spend)
+          placed = true
           break
         }
       }
+      if (!placed) { i = i0; kept.splice(0, kept.length, ...kept0) } // no room before a heading: hide nothing extra
     }
     const hidden = body.slice(i).filter(r => categories.has(r)) // W4: count bus items/pools, never seat chrome or wrapped rows.
     const groups = new Map<string, Row[]>()

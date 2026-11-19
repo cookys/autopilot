@@ -393,16 +393,24 @@ export function ShellBare(el: { Box: El; Text: El; Button?: El }, d: { main: unk
 // The top menu row (ux-v7 §1). The host draws a letter hotkey as `k: ` in front of the label, so the label is the words
 // and the Box is as wide as that prefix plus the words. ▾ sits on the selected menu. ▲N stays on 待決. 待你動手 is the tail.
 // r5: `note` is a dim summary at the tail (the collapsed band's `待決 N 張 · d 展開`, the bare card's position); `speed` is the forge label (`│ ϟ 83 tok/s ▁▂▃`, tok/s is back on the band), dropped when it does not fit
-export type MenuRowSpec = { selected: ShellMenuId; pending: number; room: number; awaiting: number; columns: number; onSelect: (id: ShellMenuId) => void; note?: string; speed?: readonly Seg[] | null; onSpeed?: () => void }
+// `onRow` is set only while the band is one row: a click on the gaps, the note, the awaiting tail or the trailing blank expands. It is absent when the band is open, so blank space stays a no-op.
+// `mark` colours only the ▲N count (text colour, no background) while a new card arrived under that one row.
+export type MenuRowSpec = { selected: ShellMenuId; pending: number; room: number; awaiting: number; columns: number; onSelect: (id: ShellMenuId) => void; note?: string; speed?: readonly Seg[] | null; onSpeed?: () => void; onRow?: () => void; mark?: boolean }
 export function shellMenuRow(el: { Box: El; Text: El; Button?: El }, t: T, spec: MenuRowSpec): unknown {
   const { Box, Text, Button } = el
+  const decideParts = (): { lead: string; count: string; tail: string; label: string } => {
+    const lead = t('tab.decide') + ' '
+    const count = GLYPHS.state.need_you + String(spec.pending)
+    const tail = spec.selected === 'd' ? ' ' + GLYPHS.structure.open : ''
+    return { lead, count, tail, label: lead + count + tail }
+  }
   const word = (id: ShellMenuId): string => {
-    const base = id === 'd' ? t('tab.decide') + ' ' + GLYPHS.state.need_you + spec.pending
+    const base = id === 'd' ? decideParts().label
       : id === 'r' ? t('shell.room') + ' ' + spec.room
       : id === 'u' ? t('shell.usage')
       : id === 'p' ? t('tab.pet')
       : t('shell.help')
-    return spec.selected === id ? base + ' ' + GLYPHS.structure.open : base
+    return id === 'd' ? base : spec.selected === id ? base + ' ' + GLYPHS.structure.open : base
   }
   const items = SHELL_MENUS.map(id => {
     const label = word(id)
@@ -422,23 +430,38 @@ export function shellMenuRow(el: { Box: El; Text: El; Button?: El }, t: T, spec:
     else gaps[at] -= 1
   }
   const kids: unknown[] = []
+  // A row-body click is its own Button with no hotkey: a letter hotkey would type into the prompt when the band does not hold the keyboard.
+  const rowHit = (key: string, body: unknown): unknown => Button !== undefined && spec.onRow !== undefined ? <Button key={key} plain onPress={spec.onRow}>{body}</Button> : body
+  const decide = decideParts()
   items.forEach((it, i) => {
-    if (gaps[i] > 0) kids.push(<Text key={'g' + i}>{' '.repeat(gaps[i])}</Text>)
+    if (gaps[i] > 0) kids.push(rowHit('band:g' + i, <Text key={'g' + i}>{' '.repeat(gaps[i])}</Text>))
     const btn = Button === undefined
       ? <Text key="b">{it.shown}</Text>
-      : <Button key={it.key} hotkey={it.hotkey} plain onPress={() => spec.onSelect(it.id)}>{it.label}</Button>
+      : it.id !== 'd'
+        ? <Button key={it.key} hotkey={it.hotkey} plain onPress={() => spec.onSelect(it.id)}>{it.label}</Button>
+        : <Button key={it.key} hotkey={it.hotkey} plain onPress={() => spec.onSelect(it.id)}>
+            <Text key="lead">{decide.lead}</Text>
+            {spec.mark === true ? <Text key="count" color={PALETTE.attention}>{decide.count}</Text> : <Text key="count">{decide.count}</Text>}
+            {decide.tail === '' ? null : <Text key="tail">{decide.tail}</Text>}
+          </Button>
     kids.push(<Box key={it.id} width={it.width} flexShrink={0}>{btn}</Box>)
   })
-  if (tail !== '') kids.push(<Text key="await" color={PALETTE.attention}>{'  ' + tail}</Text>)
-  if (noteW > 0) kids.push(<Text key="note" {...dimProps()} wrap="truncate">{'  ' + spec.note}</Text>)
+  if (tail !== '') kids.push(rowHit('band:await', <Text key="await" color={PALETTE.attention}>{'  ' + tail}</Text>))
+  if (noteW > 0) kids.push(rowHit('band:note', <Text key="note" {...dimProps()} wrap="truncate">{'  ' + spec.note}</Text>))
   const sp = spec.speed
+  let used = hostWidth()
   if (sp !== undefined && sp !== null && sp.length > 0) {
     const w = sp.reduce((n, g) => n + displayWidth(g.text), 0)
     if (hostWidth() + 1 + w <= spec.columns) {
+      used = hostWidth() + 1 + w
       const texts = sp.map((g, i) => <Text key={'sp' + i} {...drawSeg(g)} wrap="truncate">{g.text}</Text>)
-      kids.push(<Text key="spgap">{' '}</Text>, Button === undefined || spec.onSpeed === undefined ? <Box key="speed">{texts}</Box> : <Button key="speed" plain onPress={spec.onSpeed}>{texts}</Button>)
+      const press = spec.onRow ?? spec.onSpeed
+      kids.push(<Text key="spgap">{' '}</Text>, Button === undefined || press === undefined ? <Box key="speed">{texts}</Box> : <Button key="speed" plain onPress={press}>{texts}</Button>)
     }
   }
+  // The trailing blank is the rest of the row, measured after the speed label so the label still fits. A 1-cell overflow button is not added.
+  const rest = spec.columns - used
+  if (rest > 0 && Button !== undefined && spec.onRow !== undefined) kids.push(<Button key="band:row" plain onPress={spec.onRow}>{' '.repeat(rest)}</Button>)
   return <Box key="shellmenu">{kids}</Box>
 }
 

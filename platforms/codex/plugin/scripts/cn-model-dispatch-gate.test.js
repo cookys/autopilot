@@ -178,6 +178,29 @@ test('core-unset paths: normalise, anchor the allow list, existence under the re
   allow('allow-absent-new.md', 'Size: S\nRole: implementer\nScope: tests/test_new.py\nNew-Files: tests/test_new.py\n');
 });
 
+test('core-unset fixtures: data extensions only; docs and absent New-Files stay extension-free', () => {
+  const bare = gitRepo('core-unset-ext');
+  const denied = (name, text) => {
+    const f = briefFile(name, text);
+    assert.equal(gate.check({ ...K, env: {}, files: [f], cwd: bare }).cls, 'core-unset', name);
+  };
+  const allow = (name, text) => {
+    const f = briefFile(name, text);
+    assert.equal(gate.check({ ...K, env: {}, files: [f], cwd: bare }).allowed, true, name);
+  };
+  denied('deny-fix-rs.md', 'Size: S\nRole: implementer\nScope: src/fixtures/a.rs\n');
+  denied('deny-fix-sh.md', 'Size: S\nRole: implementer\nScope: tests/fixtures/run.sh\n');
+  denied('deny-testdata-make.md', 'Size: S\nRole: implementer\nScope: tests/testdata/Makefile\n');
+  denied('deny-fixtures-ts.md', 'Size: S\nRole: implementer\nScope: tests/__fixtures__/x.ts\n');
+  allow('allow-fix-json.md', 'Size: S\nRole: implementer\nScope: src/fixtures/a.json\n');
+  allow('allow-fix-yaml.md', 'Size: S\nRole: implementer\nScope: tests/fixtures/seat_burn/a.yaml\n');
+  allow('allow-csv-case.md', 'Size: S\nRole: implementer\nScope: tests/testdata/b.CSV\n');
+  allow('allow-snap.md', 'Size: S\nRole: implementer\nScope: tests/fixtures/out.snap\n');
+  allow('allow-doc-rs.md', 'Size: S\nRole: implementer\nScope: docs/notes.rs\n');
+  allow('allow-docdir.md', 'Size: S\nRole: implementer\nScope: doc/guide\n');
+  allow('allow-new-rs.md', 'Size: S\nRole: implementer\nScope: src/fixtures/new.rs\nNew-Files: src/fixtures/new.rs\n');
+});
+
 test('class 4 novel: plan/design/brainstorm/architecture/research roles, or a novel marker', () => {
   for (const r of ['plan', 'design', 'brainstorm', 'architecture', 'research']) {
     assert.equal(cls(K, { ...OK, AUTOPILOT_TASK_ROLE: r }).cls, 'novel', r);

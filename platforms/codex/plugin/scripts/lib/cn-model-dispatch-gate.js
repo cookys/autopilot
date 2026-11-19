@@ -24,7 +24,7 @@
 //   [core-unset]  effective core_dirs (shipped list union the repo file) is empty, so every scope path
 //                 counts as core. Allowed only when every path matches the shipped core_unset_allow list,
 //                 or is named in New-Files: and does not exist under the repo root yet. A repo file cannot change
-//                 that list. An empty core list must not fail open onto source edits (01M7S88YZPPZKVARP0F2SYMRGS).
+//                 that list. A path allowed only by **/fixtures/**, **/testdata/** or **/__fixtures__/** also needs a basename extension in the shipped core_unset_fixture_exts list (lower-cased); docs/**, doc/** and an absent New-Files path do not, and a repo file cannot change that list. An empty core list must not fail open onto source edits (01M7S88YZPPZKVARP0F2SYMRGS).
 //                 Paths are normalised; `..`, absolute and glob paths never pass.
 //   [novel]       role is plan, design, brainstorm, architecture, plan_review or research, or the task is
 //                 marked novel (env AUTOPILOT_TASK_NOVEL=1, or `Novel: yes` header)
@@ -56,7 +56,7 @@
 // Config: scripts/lib/cn-model-gate-defaults.json (starter lists) extended by <repo>/.claude/cn-model-gate.json
 //   (union of every list; a repo can add entries and cannot remove a starter). Fields: sensitive_paths,
 //   sensitive_repos, core_dirs, novel_roles, review_roles, local_task_classes, local_deny_repos.
-//   review_local_exceptions and core_unset_allow are read only from the shipped defaults (not unioned).
+//   review_local_exceptions, core_unset_allow and core_unset_fixture_exts are read only from the shipped defaults (not unioned).
 //   Clock: check(..., { now })
 //   with an ISO string. An explicit now that does not parse fails closed and is not replaced by the real
 //   clock. When now is omitted, Date.now() is used (no env override).
@@ -171,6 +171,39 @@ function shippedCoreUnsetAllow() {
   return Array.isArray(raw) ? raw.map(String) : [];
 }
 
+// Shipped defaults only, same rule as core_unset_allow (01M7S88YZPPZKVARP0F2SYMRGS).
+const CORE_UNSET_FIXTURE_GLOBS = new Set(['**/fixtures/**', '**/testdata/**', '**/__fixtures__/**']);
+
+function shippedCoreUnsetFixtureExts() {
+  const raw = loadList(DEFAULTS_PATH).core_unset_fixture_exts;
+  return new Set(Array.isArray(raw) ? raw.map((e) => String(e).toLowerCase()) : []);
+}
+
+// Extension is the text after the last dot of the basename, lower-cased. No dot, or a
+// leading dot with nothing after it, is no extension.
+function coreUnsetFixtureExt(norm) {
+  const base = norm.split('/').pop();
+  const dot = base.lastIndexOf('.');
+  if (dot <= 0) return '';
+  return base.slice(dot + 1).toLowerCase();
+}
+
+// True when the path is not on the shipped allow list, or is on it only through a fixture
+// directory and the extension is not a shipped data extension. docs/** and doc/** skip the
+// extension rule. The caller still applies the absent New-Files exception.
+function coreUnsetAllowBlocks(norm, allow, exts) {
+  let viaFixture = false;
+  let viaOther = false;
+  for (const g of allow) {
+    if (!coreUnsetGlobRegex(g).test(norm)) continue;
+    if (CORE_UNSET_FIXTURE_GLOBS.has(g)) viaFixture = true;
+    else viaOther = true;
+  }
+  if (viaOther) return false;
+  if (!viaFixture) return true;
+  return !exts.has(coreUnsetFixtureExt(norm));
+}
+
 // core-unset only. Case-sensitive and anchored at the repo root. A leading `**/` still matches
 // any depth (the shipped fixtures / testdata / __fixtures__ entries). Other globs, including
 // `docs/**` and `doc/**`, match only from the first segment. Not matchesAny.
@@ -187,10 +220,6 @@ function coreUnsetGlobRegex(g) {
     else re += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
   }
   return new RegExp(`^${re}$`);
-}
-
-function coreUnsetAllowMatch(norm, globs) {
-  return globs.some((g) => coreUnsetGlobRegex(g).test(norm));
 }
 
 // Strip one leading `./`, then path.posix.normalize. Absolute, `..`, and glob characters never pass.
@@ -327,6 +356,7 @@ function check(opts = {}) {
   if (BIG_SIZES.includes(f.size)) return block('core-size');
   if (cfg.core_dirs.length === 0) {
     const allow = shippedCoreUnsetAllow();
+    const fixtureExts = shippedCoreUnsetFixtureExts();
     const news = new Set();
     for (const n of f.newFiles) {
       const c = coreUnsetNorm(n);
@@ -335,7 +365,7 @@ function check(opts = {}) {
     const unset = f.scope.some((p) => {
       const c = coreUnsetNorm(p);
       if (c.bad) return true;
-      if (coreUnsetAllowMatch(c.normalised, allow)) return false;
+      if (!coreUnsetAllowBlocks(c.normalised, allow, fixtureExts)) return false;
       return !(news.has(c.normalised) && absentUnderRepoRoot(root, c.normalised));
     });
     if (unset) return block('core-unset');

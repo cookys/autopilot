@@ -874,6 +874,7 @@
   "band.fleet_unknown": "艦隊 ?",
   "band.quota_nopace": "額度無預測來源",
   "page.now.quota_stale": "資料過期 {min} 分",
+  "page.now.quota_stale_plain": "資料過期（年紀不明）",
   "page.now.quota_waste": "額度浪費",
   "page.quota.col_proj_s": "預",
   "page.quota.red_summary": "額度紅 {n}（{names}）"

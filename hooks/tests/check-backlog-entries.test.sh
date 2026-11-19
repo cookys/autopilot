@@ -835,6 +835,30 @@ m="$(mutate q-queued "s/push('bad_queued_by'/push('bad_queued_by_off'/")"
 gate_run "$m" "$d"
 assert_eq "$(json_has_code "$GATE_OUT" bad_queued_by)" "no" "bad_queued_by mutation: the code is gone"
 
+d="$(repo q-short-id)"
+{ printf '<!-- next-id: BL-0002 -->\n\n'; qhead 'Queue short-id row' BL-0001 | sed 's/- \*\*Queued-By\*\*: ns\/c\/m self/- **Queued-By**: pm--claude 01M7QE5EBG4BHM1T2V831HGYC8/'; } > "$d/docs/BACKLOG.md"
+gate_run "$GATE" "$d"
+assert_eq "$(json_has_code "$GATE_OUT" bad_queued_by)" "no" "Queued-By short member with message id is valid"
+
+d="$(repo q-short-self)"
+{ printf '<!-- next-id: BL-0002 -->\n\n'; qhead 'Queue short-self row' BL-0001 | sed 's/- \*\*Queued-By\*\*: ns\/c\/m self/- **Queued-By**: autopilot--claude self/'; } > "$d/docs/BACKLOG.md"
+gate_run "$GATE" "$d"
+assert_eq "$(json_has_code "$GATE_OUT" bad_queued_by)" "no" "Queued-By short member with self is valid"
+
+d="$(repo q-two-part)"
+{ printf '<!-- next-id: BL-0002 -->\n\n'; qhead 'Queue two-part row' BL-0001 | sed 's/- \*\*Queued-By\*\*: ns\/c\/m self/- **Queued-By**: ns\/pm--claude 01M7QE5EBG4BHM1T2V831HGYC8/'; } > "$d/docs/BACKLOG.md"
+gate_run "$GATE" "$d"
+assert_eq "$(json_has_code "$GATE_OUT" bad_queued_by)" "yes" "Queued-By two-part address is bad_queued_by"
+
+d="$(repo q-short-noid)"
+{ printf '<!-- next-id: BL-0002 -->\n\n'; qhead 'Queue short-noid row' BL-0001 | sed 's/- \*\*Queued-By\*\*: ns\/c\/m self/- **Queued-By**: pm--claude/'; } > "$d/docs/BACKLOG.md"
+gate_run "$GATE" "$d"
+assert_eq "$(json_has_code "$GATE_OUT" bad_queued_by)" "yes" "Queued-By short member with no message id is bad_queued_by"
+
+m="$(mutate q-short-form "s/ && !QUEUE_MEMBER_RE.test(m\[1\])//")"
+gate_run "$m" "$TEST_TMP/q-short-id"
+assert_eq "$(json_has_code "$GATE_OUT" bad_queued_by)" "yes" "short-form mutation: q-short-id becomes bad_queued_by"
+
 d="$(repo q-text)"
 cat > "$d/docs/BACKLOG.md" <<'EOF'
 <!-- next-id: BL-0003 -->

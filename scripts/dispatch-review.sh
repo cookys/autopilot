@@ -1980,7 +1980,7 @@ _vg_msg="$(node "$_REVIEW_SELF_DIR/lib/vision-guard.js" "${_vg_args[@]}" 2>&1 >/
   || die_precondition "${_vg_msg:-vision-guard refused an image for engine ${RUNNER}/${MODEL} file ${DIFF_FILE}${SPEC_FILE:+ ${SPEC_FILE}}}"
 # Outbound scan (alfred audit 01M7QZ9T): the fully assembled prompt (diff + spec + pack + checklists) is
 # scanned right before any runner spawns, for every runner. Output is categories only, never matched text.
-_os_cats="$(node "$_REVIEW_SELF_DIR/lib/outbound-secret-scan.js" --categories "$PROMPT_FILE" 2>/dev/null)"; _os_rc=$?
+_os_cats="$(node "$_REVIEW_SELF_DIR/lib/outbound-secret-scan.js" --categories "$PROMPT_FILE")"; _os_rc=$?
 [ "$_os_rc" -eq 0 ] || die_precondition "outbound_secret: ${_os_cats:-unreadable}"
 unset _os_cats _os_rc
 record_dispatch_usage_start   # dispatch_usage/1 start row; the finished row replaces it for the reader

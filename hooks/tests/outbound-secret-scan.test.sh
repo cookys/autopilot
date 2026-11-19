@@ -18,8 +18,9 @@ SKP="s""k-$(rep b 24)"
 XOX="xo""xb-$(rep 1 12)-$(rep c 12)"
 PEM="-----BEGIN ""RSA PRIVATE KEY-----"
 BEARER="Bearer $(rep Q 30)"
-LONGB64="$(rep Q 300)$(rep 7 300)"
-LONGHEX="$(rep a 600)"
+# Long runs must look random (a repeated-character filler is not a key): sha256 hex chained 9x = 576 hex chars.
+LONGHEX="$(for i in 1 2 3 4 5 6 7 8 9; do printf '%s' "$i" | sha256sum | cut -c1-64; done | tr -d '\n')"
+LONGB64="$(printf '%s' "$LONGHEX" | base64 -w0 | tr -d '=')"
 NUMS="$(seq -s, 1 70)"
 KEY44="$(rep A 20)$(rep 5 22)z="            # 43 chars + '=' with digits
 
@@ -46,15 +47,38 @@ check_hit hex "$LONGHEX" long_hex "$LONGHEX"
 check_hit nums "[$NUMS]" number_run "$NUMS"
 check_hit key32 "key: $KEY44" b64_key32 "$KEY44"
 
+# filler is not a key: a 150000-char repeated-letter run (padding / size tests) is clean ...
+run_scan filler "$(rep y 150000)"; assert_eq "0" "$SCAN_RC" "repeated-letter filler: clean"
+run_scan filler-hex "$(rep a 600)"; assert_eq "0" "$SCAN_RC" "repeated-hex filler: clean"
+# ... but random key material hidden inside filler is still a hit (negative control)
+run_scan filler-key "$(rep y 5000)${LONGHEX}$(rep y 5000)"; assert_eq "1" "$SCAN_RC" "random key inside filler: hit"
+assert_contains "$SCAN_OUT" ":2: " "random key inside filler: reported at its line"
+# negative control: a fake AWS-shaped key (AKIA + 16 capitals, synthetic) in plain text
+run_scan akia "k=AK""IA$(rep Q 16)"; assert_eq "1" "$SCAN_RC" "fake AWS-shaped key: hit"
+assert_contains "$SCAN_OUT" "token_prefix" "fake AWS-shaped key: token_prefix"
+
+# scripts/ copied without hooks/: no crash into "unreadable"; local shapes still scan, stderr says the prefix list is skipped
+NOH="$TEST_TMP/nohooks/scripts/lib"; mkdir -p "$NOH"; cp "$SCAN" "$NOH/"
+printf 'plain text\n' > "$TEST_TMP/nh-clean.txt"; NH_OUT="$(node "$NOH/outbound-secret-scan.js" "$TEST_TMP/nh-clean.txt" 2>&1)"
+assert_eq "0" "$?" "copy without hooks/: clean file exits 0, not unreadable"
+assert_contains "$NH_OUT" "token-prefix list skipped" "copy without hooks/: stderr names the missing list"
+printf '%s\n' "$LONGHEX" > "$TEST_TMP/nh-key.txt"; node "$NOH/outbound-secret-scan.js" "$TEST_TMP/nh-key.txt" >/dev/null 2>&1
+assert_eq "1" "$?" "copy without hooks/: a random long run is still a hit"
+
 # 63 numbers is not a run; 64 is
 run_scan nums63 "$(seq -s, 1 63)"; assert_eq "0" "$SCAN_RC" "63 numbers: clean"
 run_scan nums64 "$(seq -s, 1 64)"; assert_eq "1" "$SCAN_RC" "64 numbers: hit"
 
-# unreadable: NUL byte, invalid UTF-8, missing file
-printf 'ab\0cd\n' > "$TEST_TMP/nul.txt"; node "$SCAN" "$TEST_TMP/nul.txt" >/dev/null 2>&1
-assert_eq "2" "$?" "NUL input: exit 2"
+# binary (NUL / invalid UTF-8): scanned as latin1, passes when clean, one stderr reason line; only a missing file is unreadable
+printf 'ab\0cd\n' > "$TEST_TMP/nul.txt"; BIN_OUT="$(node "$SCAN" "$TEST_TMP/nul.txt" 2>&1)"
+assert_eq "0" "$?" "NUL input: clean binary passes (exit 0)"
+assert_contains "$BIN_OUT" "binary payload" "NUL input: one reason line on stderr"
 printf 'ab\xff\xfecd\n' > "$TEST_TMP/bad8.txt"; node "$SCAN" "$TEST_TMP/bad8.txt" >/dev/null 2>&1
-assert_eq "2" "$?" "non-UTF-8 input: exit 2"
+assert_eq "0" "$?" "non-UTF-8 input: clean binary passes (exit 0)"
+# negative control: a fake AWS-shaped key (AKIA + 16 capitals, synthetic) hidden inside a binary payload is still a hit
+{ printf '\x89PNG\r\n\x1a\n\0\0\0\rIHDR'; printf 'AK''IA%s' "$(rep Q 16)"; printf '\0\xff\xfe'; } > "$TEST_TMP/png-key.bin"
+BK_OUT="$(node "$SCAN" "$TEST_TMP/png-key.bin" 2>&1)"; assert_eq "1" "$?" "binary payload with a fake AWS-shaped key: still a hit"
+assert_contains "$BK_OUT" "token_prefix" "binary payload: category token_prefix"
 node "$SCAN" "$TEST_TMP/missing.txt" >/dev/null 2>&1
 assert_eq "2" "$?" "missing file: exit 2"
 
@@ -114,6 +138,12 @@ assert_neq "0" "$RV_RC" "review: leaked token refuses the dispatch"
 assert_file_absent "$SENTINEL" "review: stub runner never invoked"
 assert_contains "$RV_OUT" "outbound_secret: token_prefix" "review: reason names the category"
 assert_not_contains "$RV_OUT" "$GHP" "review: token text not in output"
+
+# regression: a clean diff of padding filler (150000 repeated letters) reaches the runner, a PNG-bearing prompt too
+printf 'diff --git a/p b/p\n+%s\n' "$(rep y 150000)" > "$TEST_TMP/filler.diff"
+rm -f "$SENTINEL"
+DISPATCH_QUIET=1 bash "$REPO_ROOT/scripts/dispatch-review.sh" --runner codex --model gpt-test --diff-file "$TEST_TMP/filler.diff" --bin "$REVIEW_STUB" >/dev/null 2>&1
+assert_file_exists "$SENTINEL" "review: filler diff is not refused, stub runner invoked"
 
 # --- dispatch-author.sh: same ---
 printf 'Write a config. Use this token: %s\n' "$GHP" > "$TEST_TMP/leak-prompt.txt"

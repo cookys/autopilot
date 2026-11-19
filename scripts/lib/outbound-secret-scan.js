@@ -4,7 +4,7 @@
  * (dispatch-review.sh / dispatch-author.sh / dispatch-hetero.sh call it right before the runner spawn).
  *
  *   node outbound-secret-scan.js [--categories] [--allow FILE] FILE...
- *   Exit 0 clean, 1 hit, 2 unreadable (missing file, NUL byte, or not valid UTF-8).
+ *   Exit 0 clean, 1 hit, 2 unreadable (missing file). A NUL or non-UTF-8 file is binary: scanned as latin1 with a stderr note.
  *   Output: `<file>:<line>: <category>` per hit — NEVER the matched text. With
  *   --categories: one line, the sorted unique categories joined by commas.
  *
@@ -30,10 +30,32 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
-const secrets = require('../../hooks/_shared/secret-patterns');
+// scripts/ copied without its sibling hooks/ (a test fixture or a standalone copy) has no shared token-prefix
+// list: scan with the local shapes only and say so on stderr, instead of crashing into a bare "unreadable".
+let secrets = { patterns: [] };
+let prefixListMissing = false;
+try { secrets = require('../../hooks/_shared/secret-patterns'); } catch { prefixListMissing = true; }
 
 const LONG_RUN = 512;
 const NUMBER_RUN = 64;
+
+// A long run that is one repeated character or a short cycle (a filler line, a padding test) is not a key:
+// flag it only when some 64-char window has key-like entropy (random hex ~3.8 bits/char, base64 ~5.7).
+const WINDOW = 64;
+const WINDOW_ENTROPY_MIN = 3.2;
+function windowEntropy(w) {
+  const counts = new Map();
+  for (const ch of w) counts.set(ch, (counts.get(ch) || 0) + 1);
+  let h = 0;
+  for (const c of counts.values()) { const p = c / w.length; h -= p * Math.log2(p); }
+  return h;
+}
+function looksRandom(run) {
+  for (let i = 0; i + WINDOW <= run.length; i += WINDOW / 2) {
+    if (windowEntropy(run.slice(i, i + WINDOW)) >= WINDOW_ENTROPY_MIN) return true;
+  }
+  return windowEntropy(run.slice(-WINDOW)) >= WINDOW_ENTROPY_MIN;
+}
 
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 
@@ -88,6 +110,7 @@ function scanText(text, allow = new Set()) {
       for (const m of eachMatch(pattern, line)) add(n, 'token_prefix', m[0]);
     }
     for (const m of eachMatch(RE_LONG, line)) {
+      if (!looksRandom(m[0])) continue;
       add(n, /^[0-9a-fA-F]+$/.test(m[0]) ? 'long_hex' : 'long_base64', m[0]);
     }
     if (line.length >= NUMBER_RUN * 2 - 1) {
@@ -113,7 +136,7 @@ function scanText(text, allow = new Set()) {
   return hits;
 }
 
-/** Decode a buffer or refuse: NUL or invalid UTF-8 returns null. */
+/** Decode a buffer strictly: NUL or invalid UTF-8 returns null (the caller decides what binary means). */
 function decodeStrict(buf) {
   if (buf.includes(0)) return null;
   try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch { return null; }
@@ -132,6 +155,7 @@ function main(argv) {
     } else files.push(argv[i]);
   }
   if (files.length === 0) { process.stderr.write('outbound-secret-scan: no files\n'); return 2; }
+  if (prefixListMissing) process.stderr.write('outbound-secret-scan: hooks/_shared/secret-patterns.js not found next to scripts/, token-prefix list skipped\n');
   const allow = loadAllow(allowFile || defaultAllowPath());
   const out = [];
   const cats = new Set();
@@ -139,8 +163,13 @@ function main(argv) {
   for (const f of files) {
     let buf;
     try { buf = fs.readFileSync(f); } catch { out.push(`${f}: unreadable`); cats.add('unreadable'); unreadable = true; continue; }
-    const text = decodeStrict(buf);
-    if (text === null) { out.push(`${f}: unreadable (NUL or not UTF-8)`); cats.add('unreadable'); unreadable = true; continue; }
+    let text = decodeStrict(buf);
+    if (text === null) {
+      // An image or other binary attachment inside the prompt is not refused: every byte maps to one char
+      // (latin1), so an ASCII token hidden in the binary is still found. One reason line on stderr.
+      process.stderr.write(`outbound-secret-scan: ${f}: binary payload (NUL or not UTF-8), scanned as latin1, not refused\n`);
+      text = buf.toString('latin1');
+    }
     for (const h of scanText(text, allow)) { out.push(`${f}:${h.line}: ${h.category}`); cats.add(h.category); }
   }
   if (categoriesOnly) { if (cats.size) process.stdout.write([...cats].sort().join(',') + '\n'); }

@@ -1382,7 +1382,7 @@ fi
 RUNNER_ERR_FILE="$(mktemp -t dispatch-author-runner-err-XXXXXX)"
 # Outbound scan (alfred audit 01M7QZ9T): the final prompt file is scanned right before any runner spawns.
 # Output is categories only, never matched text; a hit is runner_failed and nothing is sent.
-_os_cats="$(node "$_AUTHOR_SELF_DIR/lib/outbound-secret-scan.js" --categories "$PROMPT_FILE" 2>/dev/null)"; _os_rc=$?
+_os_cats="$(node "$_AUTHOR_SELF_DIR/lib/outbound-secret-scan.js" --categories "$PROMPT_FILE")"; _os_rc=$?
 if [ "$_os_rc" -ne 0 ]; then
   emit_result "runner_failed" "$RAW_LOG" "outbound_secret: ${_os_cats:-unreadable}" 3 ", \"transport_status\": \"outbound_secret\""
 fi

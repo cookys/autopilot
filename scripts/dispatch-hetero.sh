@@ -4204,7 +4204,7 @@ _vg_msg="$(node "$SELF_DIR/lib/vision-guard.js" "${_vg_args[@]}" 2>&1 >/dev/null
 # Outbound scan: the final prompt (hands brief after skill-pack / campaign / scaffold)
 # is scanned once, after the vision and cn-model gates and before any runner spawn.
 # Categories only — never the matched text. A hit is a no-spawn precondition failure.
-_os_cats="$(node "$SELF_DIR/lib/outbound-secret-scan.js" --categories "$PROMPT_FILE" 2>/dev/null)"; _os_rc=$?
+_os_cats="$(node "$SELF_DIR/lib/outbound-secret-scan.js" --categories "$PROMPT_FILE")"; _os_rc=$?
 if [ "$_os_rc" -ne 0 ]; then
   die_precondition "outbound_secret: ${_os_cats:-unreadable}"
 fi

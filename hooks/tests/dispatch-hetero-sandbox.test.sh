@@ -333,18 +333,25 @@ sed_mutant "$REPO_ROOT/scripts/dispatch-hetero.sh" "$PRE_ENVDROP/scripts/dispatc
   's/\[ "\$_ccshim_env_probe" = "1" \] || die_precondition/true || die_precondition/'
 chmod +x "$PRE_ENVDROP/scripts/dispatch-hetero.sh"
 rm -f "$SENTINEL"
+FRED_BRANCH="feat/envdrop-red-$RANDOM$RANDOM"
 RC=0
 OUT="$(cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
     WORKER_MOUNT_FORCE_MODE=private_ns STUB_SENTINEL="$SENTINEL" PATH="$ENVDROP_BIN:$BINDIR:$PATH" \
     "$PRE_ENVDROP/scripts/dispatch-hetero.sh" --no-verify-tip --runner cc-shim --model MiniMax-M3 \
     --endpoint glm --prompt-file "$PROMPT" --context-window off \
-    --branch "feat/envdrop-red-$RANDOM$RANDOM" 2>"$TEST_TMP/stderr-f-red")" || RC=$?
+    --branch "$FRED_BRANCH" 2>"$TEST_TMP/stderr-f-red")" || RC=$?
 eq "yes" "$([ -e "$SENTINEL" ] && echo yes || echo no)" "(f-red) negative control: without the precondition, fake claude spawned under env-clearing prefix"
 eq '"engine_unavailable"' "$(status_of)" "(f-red) negative control: cleared ANTHROPIC_* surfaces as engine_unavailable (rc=$RC out=$OUT)"
 case "$(printf '%s' "$OUT" | result_json | jfield error)" in
   *endpoint_unreachable*) eq 0 0 "(f-red) negative control: cleared ANTHROPIC_* misreports endpoint_unreachable" ;;
   *) fail "(f-red) expected endpoint_unreachable in error, got: $(printf '%s' "$OUT" | result_json | jfield error)" ;;
 esac
+# (f-red) leaves its worktree and branch in "$SBX"; remove them so later cases (nested: no worktree) see a clean repo.
+git -C "$SBX" worktree list --porcelain | awk '/^worktree /{print substr($0,10)}' | while IFS= read -r FRED_WT; do
+  case "$FRED_WT" in *"/.claude/worktrees/"*) git -C "$SBX" worktree remove --force "$FRED_WT" ;; esac
+done
+git -C "$SBX" worktree prune
+git -C "$SBX" branch -D "$FRED_BRANCH" >/dev/null 2>&1 || true
 # Green: real dispatch-hetero refuses at precondition_failed with zh-TW one-line reason, no worktree, no claude spawn.
 rm -f "$SENTINEL"
 F_BRANCH="feat/envdrop-green-$RANDOM$RANDOM"

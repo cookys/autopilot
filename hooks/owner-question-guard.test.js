@@ -191,6 +191,7 @@ test('root-scoped session blocks unbound cards and points to close + reopen with
   assert.match(out.reason, new RegExp(`${unbound}.*未綁定`));
   assert.match(out.reason, new RegExp(`close --id ${unbound}`));
   assert.match(out.reason, /open --root-run-id root-xyz/);
+  assert.match(out.reason, new RegExp(path.join(__dirname, '..', 'scripts', 'open-decision.js').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 
   const statusOut = f.check(`已開立待決卡片 ${unbound}（合成待決）。`);
   assert.equal(statusOut?.decision, 'block');
@@ -533,9 +534,10 @@ test('precheck agrees with the hook on existing single-reply fixtures', (t) => {
 test('short correction naming a card passes; the same text as a fresh owner question blocks', (t) => {
   const f = fixture(t);
   const blocked = '請你決定要不要合併。';
-  const corr = '請你決定要不要合併，卡號 d-1a2b3c4d（合併）。';
+  const id = f.card();
+  const corr = `請你決定要不要合併，卡號 ${id}（合併）。`;
   assert.ok(corr.length <= 400);
-  assert.equal(f.check(corr)?.decision, 'block');
+  assert.equal(f.check(corr), null);
   const paired = f.check(corr, {}, [
     { type: 'user', message: { role: 'user', content: 'go' } },
     { type: 'assistant', message: { content: [{ type: 'text', text: blocked }] } },
@@ -549,6 +551,41 @@ test('short correction naming a card passes; the same text as a fresh owner ques
   ])?.decision, 'block');
 });
 
+test('short correction naming a card that was never opened still blocks', (t) => {
+  const f = fixture(t);
+  const blocked = '請你決定要不要合併。';
+  const corr = '請你決定要不要合併，卡號 d-00000000（合併）。';
+  const paired = f.check(corr, {}, [
+    { type: 'user', message: { role: 'user', content: 'go' } },
+    { type: 'assistant', message: { content: [{ type: 'text', text: blocked }] } },
+  ]);
+  assert.equal(paired?.decision, 'block');
+});
+
+test('a longer ask is not cleared by a card id in another sentence', (t) => {
+  const f = fixture(t);
+  const blocked = '請你決定要不要合併。';
+  const corr = 'd-00000000（合併）。請你決定要不要合併或部署？';
+  const paired = f.check(corr, {}, [
+    { type: 'user', message: { role: 'user', content: 'go' } },
+    { type: 'assistant', message: { content: [{ type: 'text', text: blocked }] } },
+  ]);
+  assert.equal(paired?.decision, 'block');
+});
+
+test('one live card clears only the ask its sentence restates', (t) => {
+  const f = fixture(t);
+  const id = f.card();
+  const blocked = '請你決定要不要合併。請你決定要不要部署。';
+  const corr = `請你決定要不要合併，卡號 ${id}（合併）。`;
+  const paired = f.check(corr, {}, [
+    { type: 'user', message: { role: 'user', content: 'go' } },
+    { type: 'assistant', message: { content: [{ type: 'text', text: blocked }] } },
+  ]);
+  assert.equal(paired?.decision, 'block');
+  assert.match(paired.reason, /請你決定要不要部署/);
+});
+
 test('a single-problem block reason stays under 600 chars and omits the full open usage', (t) => {
   const f = fixture(t);
   const out = f.check('請你決定要不要合併。');
@@ -556,11 +593,13 @@ test('a single-problem block reason stays under 600 chars and omits the full ope
   assert.ok(out.reason.length < 600, String(out.reason.length));
   assert.match(out.reason, /請你決定要不要合併/);
   assert.match(out.reason, /只送一則短更正（補上缺的卡號／task id／改寫那一句），不要整則重寫。/);
-  assert.match(out.reason, /node scripts\/open-decision\.js open --category <c> --executor <addr> --question <q> --option A::<desc> --option B::<desc> --recommendation A --why <r> --not-authorized <b>/);
+  const openJs = path.join(__dirname, '..', 'scripts', 'open-decision.js');
+  const openExample = `node ${openJs} open --category <c> --executor <addr> --question <q> --option A::<desc> --option B::<desc> --recommendation A --why <r> --not-authorized <b>`;
+  assert.ok(out.reason.includes(openExample), out.reason);
   assert.doesNotMatch(out.reason, /沒帶或不在其中 exit 7/);
   assert.doesNotMatch(out.reason, /\[待決回覆\]/);
   assert.doesNotMatch(out.reason, /resolve-doa/);
-  assert.equal(out.reason.split('\n').filter((l) => l.includes('node scripts/open-decision.js open --category')).length, 1);
+  assert.equal(out.reason.split('\n').filter((l) => l.includes(`${openJs} open --category`)).length, 1);
 });
 
 test('negative controls turn the closed-card, second-stop and reply-language assertions red', (t) => {

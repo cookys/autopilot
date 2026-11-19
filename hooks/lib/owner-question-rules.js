@@ -16,6 +16,15 @@ function envBag() {
   return process.env;
 }
 
+// Safe path characters stay bare so today's copy-paste text does not change.
+// Anything else is a single-quoted shell word, with ' written as '\'' .
+function shellQuotePath(p) {
+  if (/^[A-Za-z0-9_/.:@%+=,-]+$/.test(p)) return p;
+  return `'${String(p).replace(/'/g, `'\\''`)}'`;
+}
+const OPEN_DECISION_JS = path.join(__dirname, '..', '..', 'scripts', 'open-decision.js');
+const OPEN_DECISION_CMD = shellQuotePath(OPEN_DECISION_JS);
+
 const REQUEST_ID = /\br-[0-9a-f]{8}\b/i;
 
 function teamRole() {
@@ -387,7 +396,7 @@ function isAutonomous(sessionId) {
 }
 
 
-const OPEN_EXAMPLE = 'node scripts/open-decision.js open --category <c> --executor <addr> --question <q> --option A::<desc> --option B::<desc> --recommendation A --why <r> --not-authorized <b>';
+const OPEN_EXAMPLE = 'node ' + OPEN_DECISION_CMD + ' open --category <c> --executor <addr> --question <q> --option A::<desc> --option B::<desc> --recommendation A --why <r> --not-authorized <b>';
 const LANE_EXAMPLE = 'node scripts/request-decision.js send --question <q> --option A::<desc> --option B::<desc> --recommendation <r> --boundary <b>';
 const SHORT_CORRECTION_LINE = '只送一則短更正（補上缺的卡號／task id／改寫那一句），不要整則重寫。';
 const CARD_FIX = '同句寫出 live 卡片編號（d- 加 8 hex，狀態 open 或 awaiting_operator_action）或有 due 的 fleet task。' + OPEN_EXAMPLE + '（其餘見 --help）';
@@ -459,7 +468,7 @@ function collectProblems(text, input = {}) {
         problems.push({
           rule: 'unbound_card',
           sentence: u.id,
-          fix: '卡片 ' + u.id + ' 落在未綁定範圍（本 session 的 root 是 ' + rs.root + '）：請先執行 node scripts/open-decision.js close --id ' + u.id + '，再用 node scripts/open-decision.js open --root-run-id ' + rs.root + ' --category <c> 重新開卡。',
+          fix: '卡片 ' + u.id + ' 落在未綁定範圍（本 session 的 root 是 ' + rs.root + '）：請先執行 node ' + OPEN_DECISION_CMD + ' close --id ' + u.id + '，再用 node ' + OPEN_DECISION_CMD + ' open --root-run-id ' + rs.root + ' --category <c> 重新開卡。',
         });
       }
       const fix = CARD_FIX + (isAutonomous(input.session_id) ? ' 若在 DOA 內請自行決定，不要開卡。' : '');
@@ -482,28 +491,42 @@ function normSentence(s) {
   return String(s).replace(/[。？！?.!\s]+$/g, '');
 }
 
+// Same ask, or the same ask with only a trailing card id or due task appended.
+// A longer or shorter wording is a different ask. Substring inclusion either way is not a restatement.
+function askCore(s) {
+  let t = normSentence(s);
+  let prev;
+  do {
+    prev = t;
+    t = t.replace(/[，,、\s]*(?:卡號)?\s*\bd-[0-9a-f]{8}\b(?:\s*[（(][^）)]*[）)])?\s*$/i, '');
+    t = t.replace(/[，,、\s]*(?:fleet\s+task\s+\S+(?:\s+\S+){0,8}\s+--due(?:=|\s+)\S+|task_id=\S+\s+due=\S+)\s*$/i, '');
+    t = normSentence(t);
+  } while (t !== prev);
+  return t;
+}
+
 function restates(a, b) {
-  const x = normSentence(a);
-  const y = normSentence(b);
-  return x.length > 0 && y.length > 0 && (x === y || y.includes(x) || x.includes(y));
+  const x = askCore(a);
+  const y = askCore(b);
+  return x.length > 0 && x === y;
 }
 
-function correctionNamesId(text) {
-  return /\bd-[0-9a-f]{8}\b/i.test(text) || hasDueTask(text);
+function sentenceClearsAsk(prevSentence, corrSentence, cwd) {
+  return restates(prevSentence, corrSentence) && (hasLiveCard(corrSentence, cwd) || hasDueTask(corrSentence));
 }
 
-function applyShortCorrection(prevProblems, corrText, corrProblems) {
-  const named = correctionNamesId(corrText);
+function applyShortCorrection(prevProblems, corrText, corrProblems, cwd = process.cwd()) {
+  const corrSentences = sentences(corrText);
   const fixedPrev = (p) => {
     if (p.rule === 'reply_language' || p.rule === 'unbound_card') return false;
     if (p.rule === 'bare_card_id') return !unresolvedBareIds(corrText).some((id) => id === String(p.sentence).toLowerCase());
-    return named;
+    return corrSentences.some((s) => sentenceClearsAsk(p.sentence, s, cwd));
   };
   const stillPrev = prevProblems.filter((p) => !fixedPrev(p));
   const keptCorr = corrProblems.filter((p) => {
     if (p.rule === 'bare_card_id' || p.rule === 'reply_language' || p.rule === 'unbound_card') return true;
-    if (!named) return true;
-    return !prevProblems.some((pp) => pp.rule !== 'bare_card_id' && pp.rule !== 'reply_language' && pp.rule !== 'unbound_card' && restates(pp.sentence, p.sentence));
+    return !prevProblems.some((pp) => pp.rule !== 'bare_card_id' && pp.rule !== 'reply_language' && pp.rule !== 'unbound_card'
+      && corrSentences.some((s) => s === p.sentence && sentenceClearsAsk(pp.sentence, s, cwd)));
   });
   const seen = new Set();
   const out = [];
@@ -521,7 +544,7 @@ function reasonForTurn(input, text, prev) {
   let problems = cur.problems;
   if (prev && text.length <= SHORT_CORRECTION_MAX) {
     const prevRun = collectProblems(prev, input);
-    if (prevRun.problems.length) problems = applyShortCorrection(prevRun.problems, text, problems);
+    if (prevRun.problems.length) problems = applyShortCorrection(prevRun.problems, text, problems, input.cwd || process.cwd());
   }
   return formatReason(problems);
 }

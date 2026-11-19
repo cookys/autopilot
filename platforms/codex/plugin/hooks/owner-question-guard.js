@@ -12,7 +12,7 @@
  * operator steps and reminder promises. Each hit needs a same-sentence live local card
  * (open / awaiting_operator_action) or a fleet task with an explicit due date.
  * A short correction (<= 400 chars) after a blocked assistant message in the same turn is judged
- * as a pair: a named card id, task id, or restated sentence resolves that problem.
+ * as a pair: each prior ask is resolved only by a sentence that restates that ask and carries a live card or a due task.
  * Repeated Stops are checked again. False positives may be named individually using
  * OWNER-GUARD-FALSE-POSITIVE [class,...] exact sentence :: reason (at most 8 per reply).
  * Full syntax: references/owner-question-guard.md.

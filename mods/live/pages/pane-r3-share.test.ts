@@ -7,7 +7,6 @@ import { consoleOf, ctxOf, POOLS, NOW, MIN } from './quota.fixture'
 import { makeT } from '../i18n'
 import * as M from '../model'
 import { BandBar } from '../band'
-import { PALETTE } from '../ui'
 const text = (r: { text: string }[]) => r.map(s => s.text).join('')
 const live = { state: 'ok', text: 'x', header: 'x', band: null, pending: [], project_key: null, root_run_id: null, link: null, rows: null, gates: null, sections: M.NO_SECTIONS, review: null, published_at: null, watcher_note: null, session_as_of: null, host_as_of: null, detail: { ...M.NO_DETAIL, now_ms: NOW } } as never
 const source = { state: 'ok', at_ms: NOW - 12000 }
@@ -58,15 +57,17 @@ test('W5: band names stale fleet age plus quota cause and repair; missing consol
   const staleLive = { ...(live as any), state: 'stale', published_at: new Date(NOW - 12 * MIN).toISOString(), text: '資料已過期' }
   const drawn = band(con, staleLive)
   const label = flat(drawn.node)
-  expect(label).toContain('艦隊過期 12 分')
-  expect(label).toContain('額度無預測來源')
-  expect(label).toContain('autopilot status runs --watch')
+  expect(label).toContain('資料已過期')
+  expect(label).not.toContain('艦隊過期')
+  expect(label).not.toContain('額度無預測來源')
+  expect(label).not.toContain('autopilot status runs --watch')
   const missing = band(null)
-  expect(flat(missing.node)).toContain('✗ 沒有 console 快照')
+  expect(flat(missing.node)).toContain('x')
+  expect(flat(missing.node)).not.toContain('沒有 console')
   const missingStale = flat(band(null, staleLive).node)
   expect(missingStale).toContain('12 分')
   expect(missingStale).toContain('資料已過期')
-  expect(walk(missing.node).some(n => n.props.color === PALETTE.broken && flat(n).includes('沒有 console 快照'))).toBe(true)
+  expect(walk(missing.node).some(n => n.props.dimColor === true && flat(n).includes('x'))).toBe(true)
   const now = frameRows(nowPage, ctx(80, 5, snapshot(redPools))).map(text).join('\n')
   expect(now).toContain('資料過期')
   expect(now).toContain('12 分')

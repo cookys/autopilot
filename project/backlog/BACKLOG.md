@@ -21,10 +21,10 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: peer
 - **Reporter**: gpu-lead
 - **Report**: 01M7RYFP
-- **Reply**: 2026-11-20
-- **Problem**: 派發任務產生的建置輸出留在工作樹與儲存庫裡，既沒有清掉也沒有加入忽略清單。
-- **Impact**: 殘留產物會污染工作樹狀態並干擾後續派發與檢查。
-- **Trigger**: 下次修改派發清理或工作樹衛生檢查時處理
+- **Reply**: none
+- **Problem**: dispatch-hetero 產生的建置輸出留在 worktree 與 repo 裡，既沒有清掉也沒有加入忽略清單。
+- **Impact**: 殘留產物會污染 worktree 狀態並干擾後續 dispatch-hetero 與檢查。
+- **Trigger**: 下次修改 dispatch-hetero 清理或 worktree 衛生檢查時處理
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: PEER-REPORTED gpu-lead 2026-11-20
@@ -37,10 +37,10 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: peer
 - **Reporter**: PM
 - **Report**: 01M7S303
-- **Reply**: 2026-11-20
-- **Problem**: 權杖席位守衛把轉接席位擋下來，但這個席位應該要放行。
-- **Impact**: 合法的轉接席位無法正常派發，影響可用性。
-- **Trigger**: 下次修改權杖席位守衛邏輯時處理
+- **Reply**: none
+- **Problem**: token-seat 守衛擋下 cc-shim 席位，但 cc-shim 應該放行。
+- **Impact**: 合法的 cc-shim 席位無法通過 token-seat 守衛正常派發。
+- **Trigger**: 下次修改 token-seat 守衛放行 cc-shim 的邏輯時處理
 - **Trigger-Type**: event
 - **Effort**: XS
 - **Source**: PEER-REPORTED PM 2026-11-20
@@ -53,10 +53,10 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: peer
 - **Reporter**: PM
 - **Report**: 01M7S33V
-- **Reply**: 2026-11-20
-- **Problem**: 引擎資格測試沒有把任務相關環境變數傳遞給受測的執行器。
-- **Impact**: 受測執行器在資格測試時拿不到正確的任務上下文，導致測試失真或失敗。
-- **Trigger**: 下次修改引擎資格測試派發邏輯時處理
+- **Reply**: none
+- **Problem**: engine-qualify 沒有將 AUTOPILOT_TASK_* 環境變數傳遞給被考的 runner。
+- **Impact**: 受測 runner 在 engine-qualify 時拿不到 AUTOPILOT_TASK_* 上下文，導致測試失真或失敗。
+- **Trigger**: 下次修改 engine-qualify 傳遞 AUTOPILOT_TASK_* 的派發邏輯時處理
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: PEER-REPORTED PM 2026-11-20
@@ -69,10 +69,10 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: peer
 - **Reporter**: autopilot
 - **Report**: n/a
-- **Reply**: 2026-11-20
-- **Problem**: 異質派發測試沒有設置哨兵路徑，測試出錯時可能會真的呼叫外部命令列工具。
-- **Impact**: 測試失敗時可能產生真實的外部呼叫與額外費用。
-- **Trigger**: 下次修改異質派發測試套件時處理
+- **Reply**: none
+- **Problem**: dispatch-hetero 的測試缺少哨兵 PATH，失誤時可能會叫起真的 CLI。
+- **Impact**: dispatch-hetero 測試失敗時可能因 PATH 未隔離而產生真實外部呼叫與額外費用。
+- **Trigger**: 下次修改 dispatch-hetero 測試套件並補上哨兵 PATH 時處理
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: PEER-REPORTED autopilot 2026-11-20
@@ -85,10 +85,10 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: peer
 - **Reporter**: autopilot
 - **Report**: n/a
-- **Reply**: 2026-11-20
-- **Problem**: 呼叫模型引擎時若未指定模型參數，會預設選用低階碳版本而被區域與高價席位閘擋下。
-- **Impact**: 未帶模型參數的派發會直接被拒，無法順利執行。
-- **Trigger**: 下次修改模型預設路由或席位閘規則時處理
+- **Reply**: none
+- **Problem**: grok 不帶 --model 時預設成 carbon-low，會被 cn／昂貴席位閘擋下。
+- **Impact**: 未帶 --model 的 grok 派發因預設 carbon-low 而直接被拒，無法順利執行。
+- **Trigger**: 下次修改 grok 預設 --model 或 carbon-low 席位閘規則時處理
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: PEER-REPORTED autopilot 2026-11-20
@@ -101,10 +101,10 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: peer
 - **Reporter**: gpu-lead
 - **Report**: 01M7T5B3
-- **Reply**: 2026-11-20
-- **Problem**: 在特定主機上執行高階碳版本時執行器以錯誤碼三退出，且上游服務回傳五零三錯誤。
-- **Impact**: 該主機上的高階模型派發會直接失敗，無法完成任務。
-- **Trigger**: 下次調查主機執行器或上游五零三錯誤時處理
+- **Reply**: none
+- **Problem**: c4140 上 agy carbon-high 的 runner exited 3，且 hydrogen 回傳 503。
+- **Impact**: c4140 上的 agy carbon-high 派發會因 exited 3 與 hydrogen 503 直接失敗。
+- **Trigger**: 下次調查 c4140 上 agy carbon-high 的 exited 3 或 hydrogen 503 時處理
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: PEER-REPORTED gpu-lead 2026-11-20
@@ -117,10 +117,10 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: peer
 - **Reporter**: twgameproject
 - **Report**: 01M7T72M
-- **Reply**: 2026-11-20
-- **Problem**: 版本控制設定的圍堵機制會把維運人員合法修改的金鑰連線指令還原掉，建議還原時告警並列出還原鍵值，同時加上暫停用的鎖檔。
-- **Impact**: 維運人員合法設定的連線指令會被靜默覆蓋，導致遠端操作失敗。
-- **Trigger**: 下次修改設定圍堵機制時處理
+- **Reply**: none
+- **Problem**: gitconfig 圍堵把 ops 合法修改的 core.sshCommand 還原掉，建議告警並列出 restored_keys 且加上鎖檔。
+- **Impact**: ops 在 gitconfig 合法設定的 core.sshCommand 會被靜默還原，導致遠端操作失敗。
+- **Trigger**: 下次修改 gitconfig 圍堵並為 core.sshCommand 加上 restored_keys 告警時處理
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: PEER-REPORTED twgameproject 2026-11-20

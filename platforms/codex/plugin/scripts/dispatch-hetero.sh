@@ -3414,6 +3414,18 @@ elif [ "$IS_CCSHIM" -eq 1 ]; then
   # real-Anthropic key can't take precedence over the shim token — so accepting API_KEY
   # here would pass the precondition then leave the run with no usable auth (gpt-5.5 review).
   [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ] || die_precondition "cc-shim requires ANTHROPIC_AUTH_TOKEN in env (the shim's bearer token; ANTHROPIC_API_KEY is intentionally NOT used — it is unset before launching claude so it cannot override the shim token)"
+  # cc-shim relies on ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN reaching claude across
+  # WORKER_MOUNT_PREFIX; detect mount containment early and verify the prefix preserves env.
+  # shellcheck source=lib/worker-containment.sh
+  source "$SELF_DIR/lib/worker-containment.sh"
+  if [ "${#WORKER_MOUNT_PREFIX[@]}" -eq 0 ] && [ -z "${WORKER_MOUNT_MODE:-}" ]; then
+    worker_mount_isolation_detect
+  fi
+  if [ "${#WORKER_MOUNT_PREFIX[@]}" -gt 0 ]; then
+    _ccshim_env_probe="$(AUTOPILOT_ENV_PROBE=1 "${WORKER_MOUNT_PREFIX[@]}" bash -c 'printf "%s" "${AUTOPILOT_ENV_PROBE-}"' 2>/dev/null || true)"
+    [ "$_ccshim_env_probe" = "1" ] || die_precondition "cc-shim 拒絕啟動：mount 隔離前綴不會保留環境變數，端點環境變數（ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN）將被清空"
+    unset _ccshim_env_probe
+  fi
 elif [ "$IS_PI" -eq 1 ]; then
   command -v node >/dev/null 2>&1 || die_precondition "node not found (pi runner requires Node for the RPC supervisor)"
   command -v "$PI_BIN" >/dev/null 2>&1 || die_precondition "pi binary not found: $PI_BIN"

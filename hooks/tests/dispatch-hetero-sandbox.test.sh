@@ -299,6 +299,75 @@ case "$EOUT $(cat "$TEST_TMP/stderr-e" 2>/dev/null)" in
   *) eq 0 0 "(e) reviewer dispatch has no local-implementer sandbox refusal" ;;
 esac
 
+# (f) cc-shim precondition when mount-prefix drops caller env (01M7P91RTVG7H1A01YCTHRVH2Z):
+# without the gate, a fake claude spawned behind an env-resetting mount prefix sees no ANTHROPIC_BASE_URL
+# ("Not logged in" -> endpoint_unreachable); with the gate, dispatch-hetero dies precondition_failed
+# before creating a worktree or spawning claude, with a zh-TW one-line reason naming the cleared endpoint env.
+ENVDROP_BIN="$TEST_TMP/envdrop-bin"; mkdir -p "$ENVDROP_BIN"
+cat > "$ENVDROP_BIN/claude" <<'EOS'
+#!/usr/bin/env bash
+cat >/dev/null
+[ -n "${STUB_SENTINEL:-}" ] && echo spawned > "$STUB_SENTINEL"
+if [ -z "${ANTHROPIC_BASE_URL:-}" ] || [ -z "${ANTHROPIC_AUTH_TOKEN:-}" ]; then
+  printf '%s\n' '{"type":"result","is_error":true,"terminal_reason":"api_error","result":"Not logged in · Please run /login"}'
+  exit 1
+fi
+echo edited >> sandbox-edit.txt
+printf '%s' '{"type":"result","is_error":false,"result":"ok"}'
+EOS
+cat > "$ENVDROP_BIN/unshare" <<'EOS'
+#!/bin/sh
+while [ $# -gt 0 ]; do
+  if [ "$1" = "--" ]; then shift; break; fi
+  shift
+done
+[ $# -eq 0 ] && exit 0
+if [ "$1" = "true" ]; then exit 0; fi
+exec /usr/bin/env -i PATH="$PATH" HOME="${HOME:-}" USER="${USER:-}" LOGNAME="${LOGNAME:-}" STUB_SENTINEL="${STUB_SENTINEL:-}" "$@"
+EOS
+chmod +x "$ENVDROP_BIN/claude" "$ENVDROP_BIN/unshare"
+# Negative control (red before fix): strip the cc-shim env-probe precondition in a pre-tree copy -> fake claude runs with cleared ANTHROPIC_* and reports endpoint_unreachable.
+PRE_ENVDROP="$TEST_TMP/pre-envdrop"; make_pre_tree "$PRE_ENVDROP"
+rm -f "$PRE_ENVDROP/scripts/dispatch-hetero.sh"
+sed_mutant "$REPO_ROOT/scripts/dispatch-hetero.sh" "$PRE_ENVDROP/scripts/dispatch-hetero.sh" \
+  's/\[ "\$_ccshim_env_probe" = "1" \] || die_precondition/true || die_precondition/'
+chmod +x "$PRE_ENVDROP/scripts/dispatch-hetero.sh"
+rm -f "$SENTINEL"
+RC=0
+OUT="$(cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
+    WORKER_MOUNT_FORCE_MODE=private_ns STUB_SENTINEL="$SENTINEL" PATH="$ENVDROP_BIN:$BINDIR:$PATH" \
+    "$PRE_ENVDROP/scripts/dispatch-hetero.sh" --no-verify-tip --runner cc-shim --model MiniMax-M3 \
+    --endpoint glm --prompt-file "$PROMPT" --context-window off \
+    --branch "feat/envdrop-red-$RANDOM$RANDOM" 2>"$TEST_TMP/stderr-f-red")" || RC=$?
+eq "yes" "$([ -e "$SENTINEL" ] && echo yes || echo no)" "(f-red) negative control: without the precondition, fake claude spawned under env-clearing prefix"
+eq '"engine_unavailable"' "$(status_of)" "(f-red) negative control: cleared ANTHROPIC_* surfaces as engine_unavailable (rc=$RC out=$OUT)"
+case "$(printf '%s' "$OUT" | result_json | jfield error)" in
+  *endpoint_unreachable*) eq 0 0 "(f-red) negative control: cleared ANTHROPIC_* misreports endpoint_unreachable" ;;
+  *) fail "(f-red) expected endpoint_unreachable in error, got: $(printf '%s' "$OUT" | result_json | jfield error)" ;;
+esac
+# Green: real dispatch-hetero refuses at precondition_failed with zh-TW one-line reason, no worktree, no claude spawn.
+rm -f "$SENTINEL"
+F_BRANCH="feat/envdrop-green-$RANDOM$RANDOM"
+RC=0
+OUT="$(cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
+    WORKER_MOUNT_FORCE_MODE=private_ns STUB_SENTINEL="$SENTINEL" PATH="$ENVDROP_BIN:$BINDIR:$PATH" \
+    "$REPO_ROOT/scripts/dispatch-hetero.sh" --no-verify-tip --runner cc-shim --model MiniMax-M3 \
+    --endpoint glm --prompt-file "$PROMPT" --context-window off \
+    --branch "$F_BRANCH" 2>"$TEST_TMP/stderr-f")" || RC=$?
+eq 2 "$RC" "(f) cc-shim with env-clearing mount-prefix exits 2 (rc=$RC stderr=$(tail -c 400 "$TEST_TMP/stderr-f" 2>/dev/null))"
+eq "no" "$([ -e "$SENTINEL" ] && echo yes || echo no)" "(f) fake claude never spawned"
+FJSON="$(printf '%s' "$OUT" | result_json)" || fail "(f) stdout has no result JSON: $OUT"
+eq '"precondition_failed"' "$(printf '%s' "$FJSON" | jfield status)" "(f) status precondition_failed"
+eq 'false' "$(printf '%s' "$FJSON" | jfield dispatcher_called)" "(f) dispatcher_called false"
+eq '0' "$(printf '%s' "$FJSON" | jfield model_calls)" "(f) model_calls 0"
+eq 'null' "$(printf '%s' "$FJSON" | jfield worktree)" "(f) no worktree created"
+eq "0" "$({ git -C "$SBX" branch --list "$F_BRANCH" 2>/dev/null || true; } | wc -l | tr -d ' ')" "(f) no branch created"
+FERR="$(printf '%s' "$FJSON" | jfield error)"
+case "$FERR" in
+  *端點環境變數*清空*|*清空*端點環境變數*) eq 0 0 "(f) zh-TW one-line error explains endpoint env would be cleared ($FERR)" ;;
+  *) fail "(f) error lacks zh-TW endpoint-env-cleared reason: $FERR" ;;
+esac
+
 if ! command -v bwrap >/dev/null 2>&1 || ! bwrap --ro-bind / / --dev /dev --proc /proc true >/dev/null 2>&1; then
   echo "SKIP: bwrap is not usable on this host; the sandbox cases cannot run"
   finalize_test

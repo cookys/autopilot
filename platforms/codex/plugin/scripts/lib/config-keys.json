@@ -7643,6 +7643,20 @@
         "AUTOPILOT_FLEET_REPO"
       ],
       "note": "Selects the PM inbox adapter backend: fleet (default) or fixture:<dir> (hermetic JSON/JSONL directory seam)."
+    },
+    {
+      "name": "AUTOPILOT_ENV_PROBE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/lib/worker-containment.sh",
+        "scripts/dispatch-hetero.sh"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "Sentinel exported across WORKER_MOUNT_PREFIX to verify sudo env_reset has not cleared caller environment variables (e.g. cc-shim ANTHROPIC_*)."
     }
   ]
 }

@@ -55,8 +55,9 @@
 #                       ("${WORKER_MOUNT_PREFIX[@]}", and declare -p across detach), so each
 #                       assignment is one argv and a space in PATH or HOME stays intact. A
 #                       newline in PATH, HOME or the user cannot be represented that way and
-#                       is refused. The probe requires `id -u`, HOME, PATH and USER inside the
-#                       prefix to equal the outside values. No new account and no credential
+#                       is refused. The probe requires `id -u`, HOME, PATH, USER and an exported
+#                       AUTOPILOT_ENV_PROBE=1 sentinel inside the prefix to equal the outside
+#                       values. No new account and no credential
 #                       handling. If `setpriv` is missing, or that identity probe fails, the
 #                       drop is `sudo -n [-E] -u <user> --` behind the same unshare, with the
 #                       same env step after it. If neither drop works, detection falls through
@@ -129,14 +130,14 @@ _worker_mount_has_sys_admin() {
 WORKER_MOUNT_MODE=""; WORKER_MOUNT_REASON=""; WORKER_MOUNT_PREFIX=(); WORKER_MOUNT_REFUSE_LINE=""
 
 # _worker_mount_prefix_holds_identity <uid> <home> <path> <user> <prefix...>
-# 0 when id -u, HOME, PATH and USER inside the prefix equal the dispatcher's.
-# Values must not contain a newline; the caller refuses those before probing.
+# 0 when id -u, HOME, PATH, USER and exported AUTOPILOT_ENV_PROBE=1 inside the prefix
+# equal the dispatcher's. Values must not contain a newline; the caller refuses those before probing.
 _worker_mount_prefix_holds_identity() {
   local want_uid="$1" want_home="$2" want_path="$3" want_user="$4"
-  local out got_uid got_home got_path got_user rest
+  local out got_uid got_home got_path got_user got_probe rest
   shift 4
   # Trailing x keeps an empty value and a final newline that command substitution would eat.
-  out="$("$@" bash -c 'printf "%s\n%s\n%s\n%s\n" "$(id -u)" "${HOME-}x" "${PATH-}x" "${USER-}x"' 2>/dev/null)" || return 1
+  out="$(AUTOPILOT_ENV_PROBE=1 "$@" bash -c 'printf "%s\n%s\n%s\n%s\n%s\n" "$(id -u)" "${HOME-}x" "${PATH-}x" "${USER-}x" "${AUTOPILOT_ENV_PROBE-}x"' 2>/dev/null)" || return 1
   got_uid="${out%%$'\n'*}"
   rest="${out#*$'\n'}"
   got_home="${rest%%$'\n'*}"
@@ -144,11 +145,14 @@ _worker_mount_prefix_holds_identity() {
   got_path="${rest%%$'\n'*}"
   rest="${rest#*$'\n'}"
   got_user="${rest%%$'\n'*}"
+  rest="${rest#*$'\n'}"
+  got_probe="${rest%%$'\n'*}"
   got_home="${got_home%x}"
   got_path="${got_path%x}"
   got_user="${got_user%x}"
+  got_probe="${got_probe%x}"
   [ -n "$got_uid" ] && [ "$got_uid" = "$want_uid" ] && [ "$got_home" = "$want_home" ] \
-    && [ "$got_path" = "$want_path" ] && [ "$got_user" = "$want_user" ]
+    && [ "$got_path" = "$want_path" ] && [ "$got_user" = "$want_user" ] && [ "$got_probe" = "1" ]
 }
 
 # _worker_mount_append_dispatcher_env <array-name> <path> <home> <user>

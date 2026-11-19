@@ -33,7 +33,7 @@ Caps are UTF-8 **bytes**. The instrument is `scripts/check-backlog-entries.js`; 
 | Due | 64 | queue-form, optional. A due time. See Due time below. Absent means the row states none |
 | ms | 64 | queue-form. A milestone-step token `[a-z0-9][a-z0-9._-]{0,63}` |
 | Used-by | 120 | queue-form. `user` · `e2e` · `n/a <reason of 8 or more characters>` |
-| Queued-By | 120 | queue-form. `<ns>/<courier>/<member> <message-id>` or the same address followed by `self` |
+| Queued-By | 120 | queue-form. `<ns>/<courier>/<member> <message-id>` or `<member> <message-id>` (host-free short form, because host names are banned from some repos), or either form followed by `self` |
 | Prompt | 200 | `Artifact: text` only. One existing relative path that does not escape the repo root |
 | Inputs | 300 | `Artifact: text` only. `;`-separated existing relative paths, at least one |
 | Feeds | — | `Artifact: text` only. One Id of a row in the same file |
@@ -86,7 +86,7 @@ A queue-form code row (no `after`; Prompt, Inputs and Feeds stay absent):
 - **Needs**: none
 - **ms**: d1.queue
 - **Used-by**: e2e
-- **Queued-By**: ns/c/m self
+- **Queued-By**: ns/c/m self (or `pm--claude self` in repos that ban host names)
 ```
 
 ## READY
@@ -149,7 +149,7 @@ The code is blocking, so a flagged row is not listed by `--ready`.
 | bad_needs | block | Needs is not `none` or the `;`-separated token list |
 | bad_ms | block | ms is not a milestone-step token |
 | bad_used_by | block | Used-by is not `user`, `e2e` or `n/a <reason of 8 or more characters>` |
-| bad_queued_by | block | Queued-By is not `<ns>/<courier>/<member> <message-id>` or the same address plus `self` |
+| bad_queued_by | block | Queued-By is not `<ns>/<courier>/<member> <message-id|self>` or `<member> <message-id|self>` |
 | text_row_missing_inputs | block | `Artifact: text` is missing Prompt, Inputs or Feeds, or a path does not exist |
 | after_cycle | block | `after` ids cycle, including a self-reference; the detail names the cycle |
 | after_broken | block | an `after` id is malformed, empty, at or above next-id, absent with no next-id mark, or Status `dropped`. An empty `;`-segment is its own id |

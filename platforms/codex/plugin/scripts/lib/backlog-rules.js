@@ -48,6 +48,7 @@ const DONE_CHECK_COMMANDS = new Set(['node', 'bash', 'sh', 'git', 'test', 'grep'
 const NEED_SLUG_RE = /^[a-z0-9][a-z0-9._-]*$/;
 const NEED_CARD_RE = /^d-[0-9a-f]{8}$/;
 const MS_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+const QUEUE_MEMBER_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const QUEUE_ADDR_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const REQUIRABLE = ['Id', 'Since', 'Origin', 'Problem', 'Impact', 'Trigger-Type'];
 const PEER_FIELDS = ['Reporter', 'Report', 'Reply'];
@@ -417,7 +418,7 @@ function usedByOk(value) {
 function queuedByOk(value) {
   const v = String(value == null ? '' : value).trim();
   const m = /^(\S+)\s+(\S+)$/.exec(v);
-  if (!m || !QUEUE_ADDR_RE.test(m[1])) return false;
+  if (!m || (!QUEUE_ADDR_RE.test(m[1]) && !QUEUE_MEMBER_RE.test(m[1]))) return false;
   return m[2].length > 0;
 }
 
@@ -558,7 +559,7 @@ function checkQueueEntry(entry, cfg, repoRoot, existsFn) {
     push('bad_used_by', 'Used-by', `${String(fields['Used-by']).trim()} (expected user|e2e|n/a <reason of 8+ chars>)`);
   }
   if (queuePresent(fields, 'Queued-By') && !queuedByOk(fields['Queued-By'])) {
-    push('bad_queued_by', 'Queued-By', `${String(fields['Queued-By']).trim()} (expected <ns>/<courier>/<member> <message-id|self>)`);
+    push('bad_queued_by', 'Queued-By', `${String(fields['Queued-By']).trim()} (expected <ns>/<courier>/<member> <message-id|self> or <member> <message-id|self>)`);
   }
   if (artifact === 'text') {
     if (!queuePresent(fields, 'Prompt')) push('text_row_missing_inputs', 'Prompt', 'Prompt missing');

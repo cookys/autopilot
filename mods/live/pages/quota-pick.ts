@@ -49,7 +49,7 @@ export function classify(p: QuotaPool, nowMs: number, hasPace: boolean, t: T): V
   // a stale pool is broken with the full reason (A10): never shortened, the number stays
   if (stale) {
     const why = p.stale_note === null ? '' : '；' + p.stale_note
-    return out('broken', 'stale', t('page.quota.v_stale', { min: staleMin === null ? '-' : staleMin, why }))
+    return out('broken', 'stale', staleMin === null ? t('page.quota.v_stale_plain', { why }) : t('page.quota.v_stale', { min: staleMin, why }))
   }
   if (p.stale_note !== null) return out('broken', 'stale_seat', p.stale_note) // A1: a stale seat's older reading is higher than the fresh pool value
   if (!hasPace) return out('broken', 'nopace', t('page.quota.v_nopace'))

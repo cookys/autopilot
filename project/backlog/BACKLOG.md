@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0471 -->
+<!-- next-id: BL-0472 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1958,3 +1958,19 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: PM 01M7Q37H（capacity 工單 01M7Q34V）
 - **Pointer**: none
 - **Context**: Add a read-only grok usage-probe (no model request) feeding capacity's reading, same shape as the other quota adapters; until then the 11-19 11:45 Taipei reset check uses one minimal dispatch-author grok request.
+
+### 接線生：courier chat 殘餘前綴補規則（目標殘餘 5%）
+- **Id**: BL-0471
+- **Status**: open
+- **Since**: 2026-11-19
+- **Origin**: peer
+- **Reporter**: cookys/aimax395/pm--claude
+- **Report**: 01M7RP1YE7JDT0N66AM1KY01NK
+- **Reply**: none
+- **Problem**: PM 599 則殘餘 9.85%，最大組 courier chat 31 則沒有規則。fleet-replay 殘餘加方括號前綴直方圖（不印內文），PM 跑一次取前 3 種，各補一條規則與測試。
+- **Impact**: 31 則 courier chat 佔殘餘過半，每則都叫醒 PM 判讀。
+- **Trigger**: PM 01M7RP1Y 驗收 652105a1d 後要求
+- **Trigger-Type**: peer
+- **Effort**: XS
+- **Source**: PM 01M7RP1YE7JDT0N66AM1KY01NK
+- **Pointer**: none

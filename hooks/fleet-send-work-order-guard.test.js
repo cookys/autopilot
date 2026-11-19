@@ -54,8 +54,27 @@ test('dispatch of the same text is allowed', () => {
   assert.equal(call('mcp__fleet__dispatch', WORK), null);
 });
 
-test('the same work-order text on reply is allowed', () => {
-  assert.equal(call('mcp__fleet__reply', WORK), null);
+test('P5: fyi=true does not hide a work order (no [no-task needed)', () => {
+  const out = call('mcp__fleet__send', '請跑 nsys 這一輪，跑完交件。', { fyi: true });
+  assert.equal(out.hookSpecificOutput.permissionDecision, 'deny');
+  assert.match(out.hookSpecificOutput.permissionDecisionReason, /task_id/);
+  assert.match(out.hookSpecificOutput.permissionDecisionReason, /waiting_on/);
+});
+
+test('P5: reply carrying a work order without task context is denied', () => {
+  const out = call('mcp__fleet__reply', WORK, { message_id: 'm1' });
+  assert.equal(out.hookSpecificOutput.permissionDecision, 'deny');
+  assert.match(out.hookSpecificOutput.permissionDecisionReason, /reply/);
+});
+
+test('P5: reply that answers a task (task_id field or 26-char id in text) is allowed', () => {
+  assert.equal(call('mcp__fleet__reply', WORK, { message_id: 'm1', task_id: '01M7RSNEWJ85N4906CNC4Z3QFX' }), null);
+  assert.equal(call('mcp__fleet__reply', `${WORK} 母單 01M7RSNEWJ85N4906CNC4Z3QFX`, { message_id: 'm1' }), null);
+});
+
+test('P5: plain fact reply and fyi reply with only the noun 回報 are allowed', () => {
+  assert.equal(call('mcp__fleet__reply', '收到，路徑在 /x'), null);
+  assert.equal(call('mcp__fleet__reply', '晚點補完整回報。', { fyi: true }), null);
 });
 
 test('a fact question is allowed', () => {

@@ -5,6 +5,9 @@
  *
  *   progress(taskId, text)            ->  { ok: true } | { ok: false, status, error }   (`task update <id> <text>`, used by stage-advance)
  *   blocked(taskId, blockedOn, note)  ->  { ok: true } | { ok: false, status, error }
+ *   dispatchEnding(taskId, {role, runId, status, sha, log}, {timeoutMs})
+ *                                     ->  progress line `[dispatch:<role>] <run_id> <status> sha=<sha|-> log=<path|->`; used by the
+ *                                         SubagentStop / TaskStop write-back hook (short timeout, caller swallows failure)
  *   ownerAddress()                    ->  'ns/courier/member' | null
  *
  * Binary: FLEET_BIN, or `fleet` on PATH when that is unset.
@@ -25,8 +28,8 @@ function bin() {
   return process.env.FLEET_BIN || 'fleet';
 }
 
-function run(args) {
-  const r = spawnSync(bin(), args, { encoding: 'utf8', timeout: 15000 });
+function run(args, timeoutMs = 15000) {
+  const r = spawnSync(bin(), args, { encoding: 'utf8', timeout: timeoutMs });
   if (r.error) return { ok: false, status: null, error: r.error.message };
   if (r.status !== 0) {
     const detail = (r.stderr || '').trim().split('\n')[0];
@@ -37,6 +40,16 @@ function run(args) {
 
 function progress(taskId, text) {
   return run(['task', 'update', String(taskId), String(text)]);
+}
+
+function oneToken(v) {
+  const t = String(v == null ? '' : v).trim().replace(/\s+/g, '_');
+  return t || '-';
+}
+
+function dispatchEnding(taskId, { role, runId, status, sha, log } = {}, { timeoutMs = 3000 } = {}) {
+  const text = `[dispatch:${oneToken(role)}] ${oneToken(runId)} ${oneToken(status)} sha=${oneToken(sha)} log=${oneToken(log)}`;
+  return run(['task', 'update', String(taskId), text], timeoutMs);
 }
 
 function blocked(taskId, blockedOn, note) {
@@ -58,4 +71,4 @@ function ownerAddress() {
   return ADDR_RE.test(first) ? first : null;
 }
 
-module.exports = { progress, blocked, ownerAddress, bin };
+module.exports = { progress, dispatchEnding, blocked, ownerAddress, bin };

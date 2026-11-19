@@ -264,6 +264,7 @@ fi
 if [ -n "${FAKE_OPENCODE_STDERR:-}" ]; then
   printf '%s\n' "$FAKE_OPENCODE_STDERR" >&2
 fi
+if [ -n "${FAKE_OPENCODE_STDOUT:-}" ]; then printf '%s\n' "$FAKE_OPENCODE_STDOUT"; fi
 if [ -n "${FAKE_OPENCODE_EXIT:-}" ]; then
   exit "$FAKE_OPENCODE_EXIT"
 fi

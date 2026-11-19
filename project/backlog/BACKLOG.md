@@ -158,22 +158,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: PEER-REPORTED PM 2026-11-17
 - **Pointer**: none
 
-### band 加一個寵物分頁，先查 codepower 有沒有在做
-- **Id**: BL-0413
-- **Status**: open
-- **Since**: 2026-11-06
-- **Origin**: peer
-- **Reporter**: codeforge
-- **Report**: fleet 01M6RED2SK (codeforge, 2026-11-06)
-- **Reply**: unknown
-- **Problem**: 想在 band 上看寵物，現在沒有這個分頁；codeforge 要求。codepower 那邊可能已經在做。
-- **Impact**: 重複開工會浪費；沒人做 codeforge 就一直等。
-- **Trigger**: ready；開工前先問 codepower 是否已有進行中的工作
-- **Trigger-Type**: ready
-- **Effort**: M
-- **Source**: PEER-REPORTED codeforge 2026-11-06
-- **Pointer**: project/backlog/band-usage-pet-tabs.md
-
 ### 三支測試套件只在負載下紅，單獨跑綠
 - **Id**: BL-0414
 - **Status**: open

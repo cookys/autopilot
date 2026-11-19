@@ -727,6 +727,7 @@ cleanup() {
   [ -n "${AGY_STDERR:-}" ] && rm -f "$AGY_STDERR"
   [ -n "${AGY_PARSED:-}" ] && rm -f "$AGY_PARSED"
   [ -n "${CCSHIM_ENVELOPE:-}" ] && rm -f "$CCSHIM_ENVELOPE"
+  declare -F _reap_ccshim_env_dir >/dev/null 2>&1 && _reap_ccshim_env_dir
   reap_cnative_config_dir || true
   reap_sandbox_config_dir || true
   [ -n "${GATE_ARMED_SESSION:-}" ] && node "$SELF_DIR/per-turn-gate-arm.js" disarm --session "$GATE_ARMED_SESSION" >/dev/null 2>&1
@@ -3472,6 +3473,9 @@ elif [ "$IS_CCSHIM" -eq 1 ]; then
   # real-Anthropic key can't take precedence over the shim token — so accepting API_KEY
   # here would pass the precondition then leave the run with no usable auth (gpt-5.5 review).
   [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ] || die_precondition "cc-shim requires ANTHROPIC_AUTH_TOKEN in env (the shim's bearer token; ANTHROPIC_API_KEY is intentionally NOT used — it is unset before launching claude so it cannot override the shim token)"
+  # Endpoint vars are not probed here. sudo env_reset drops them for every runner; only
+  # cc-shim needs them, and run_agent writes a 0600 file that the post-drop command reads.
+  # The post-condition (AUTOPILOT_ENV_PROBE) refuses if they still do not arrive.
 elif [ "$IS_PI" -eq 1 ]; then
   command -v node >/dev/null 2>&1 || die_precondition "node not found (pi runner requires Node for the RPC supervisor)"
   command -v "$PI_BIN" >/dev/null 2>&1 || die_precondition "pi binary not found: $PI_BIN"
@@ -4784,6 +4788,64 @@ worker_mount_isolation_detect
 HAVE_SETSID=0; command -v setsid >/dev/null 2>&1 && grep -q -- --wait < <(setsid --help 2>&1) && HAVE_SETSID=1
 # reap_container is defined by worker-containment.sh (name kept for declare -f).
 
+# Defined before abort_dispatch. The refuse path below calls abort_dispatch, which calls
+# cleanup_managed_codex_home. A definition later in the file is not visible yet, and the
+# early refuse then dies with "command not found" (seen on a real host at this call).
+# Sibling on that path: prepare_managed_codex_home is not called from the trap; it is kept
+# beside its cleanup. Other EXIT/ERR callees (cleanup, reap_container, reap_cnative_config_dir,
+# reap_sandbox_config_dir, _cont_terminal_on_exit, _wt_check_live_or_log_skip) are defined
+# or sourced above this point.
+prepare_managed_codex_home() {
+  local controller_home="${CODEX_HOME:-$HOME/.codex}"
+  # bwrap makes / read-only except the worktree and this scratch dir. The managed home has to be created inside it.
+  if [ "${SANDBOX:-off}" = "bwrap" ] && [ -z "${SANDBOX_TMP:-}" ]; then
+    sandbox_setup || die_precondition "cannot allocate the bwrap scratch dir for the managed Codex home"
+  fi
+  if [ "${SANDBOX:-off}" = "bwrap" ]; then
+    MANAGED_CODEX_HOME="$(mktemp -d "${SANDBOX_TMP}/autopilot-managed-codex-home-XXXXXX")" \
+      || die_precondition "cannot allocate isolated managed Codex home"
+  else
+    MANAGED_CODEX_HOME="$(mktemp -d -t autopilot-managed-codex-home-XXXXXX)" \
+      || die_precondition "cannot allocate isolated managed Codex home"
+  fi
+  chmod 700 "$MANAGED_CODEX_HOME" \
+    || die_precondition "cannot protect isolated managed Codex home"
+  # Codex documents that --ignore-user-config still reads authentication from
+  # CODEX_HOME. Copy only that credential file: plugin/config/session state is
+  # deliberately excluded so the controller's PreToolUse hook cannot intercept
+  # the managed implementer.
+  if [ -r "$controller_home/auth.json" ]; then
+    cp "$controller_home/auth.json" "$MANAGED_CODEX_HOME/auth.json" \
+      || die_precondition "cannot stage managed Codex authentication"
+    chmod 600 "$MANAGED_CODEX_HOME/auth.json" \
+      || die_precondition "cannot protect managed Codex authentication"
+  fi
+}
+
+cleanup_managed_codex_home() {
+  [ -n "${MANAGED_CODEX_HOME:-}" ] || return 0
+  case "$MANAGED_CODEX_HOME" in
+    "${TMPDIR:-/tmp}"/autopilot-managed-codex-home-*|"${SANDBOX_TMP:-/nonexistent}"/autopilot-managed-codex-home-*)
+      rm -rf -- "$MANAGED_CODEX_HOME"
+      ;;
+    *)
+      echo "WARNING: refusing to remove unexpected managed Codex home: $MANAGED_CODEX_HOME" >&2
+      ;;
+  esac
+  MANAGED_CODEX_HOME=""
+}
+
+# Only the mktemp dir this run created. Called from EXIT cleanup and abort_dispatch.
+_reap_ccshim_env_dir() {
+  [ -n "${CCSHIM_ENV_DIR:-}" ] || return 0
+  case "$CCSHIM_ENV_DIR" in
+    "${TMPDIR:-/tmp}"/dispatch-hetero-ccshim-env-*|"${SANDBOX_TMP:-/nonexistent}"/dispatch-hetero-ccshim-env-*)
+      rm -rf -- "$CCSHIM_ENV_DIR"
+      ;;
+  esac
+  CCSHIM_ENV_DIR=""
+}
+
 # Managed aborts must preserve exact branch evidence before any removal. The
 # legacy minimal remover + branch deletion remains only for unmanaged one-shots.
 abort_dispatch() {
@@ -4792,6 +4854,7 @@ abort_dispatch() {
   [ -n "$SCAFFOLD_PROMPT_FILE" ] && rm -f "$SCAFFOLD_PROMPT_FILE"
   [ -n "$GROK_PROMPT_FILE" ] && rm -f "$GROK_PROMPT_FILE"
   [ -n "$CCSHIM_PROMPT_FILE" ] && rm -f "$CCSHIM_PROMPT_FILE"
+  _reap_ccshim_env_dir
   [ -n "$OPENCODE_PROMPT_FILE" ] && rm -f "$OPENCODE_PROMPT_FILE"
   [ -n "$KIMI_PROMPT_FILE" ] && rm -f "$KIMI_PROMPT_FILE"
   [ -n "$QODER_PROMPT_FILE" ] && rm -f "$QODER_PROMPT_FILE"
@@ -4849,46 +4912,6 @@ fi
 # Build the worker command line, then run it inside the strongest available
 # container. The command cd's into the worktree itself (we cannot rely on a
 # subshell cwd surviving the container boundary).
-prepare_managed_codex_home() {
-  local controller_home="${CODEX_HOME:-$HOME/.codex}"
-  # bwrap makes / read-only except the worktree and this scratch dir. The managed home has to be created inside it.
-  if [ "${SANDBOX:-off}" = "bwrap" ] && [ -z "${SANDBOX_TMP:-}" ]; then
-    sandbox_setup || die_precondition "cannot allocate the bwrap scratch dir for the managed Codex home"
-  fi
-  if [ "${SANDBOX:-off}" = "bwrap" ]; then
-    MANAGED_CODEX_HOME="$(mktemp -d "${SANDBOX_TMP}/autopilot-managed-codex-home-XXXXXX")" \
-      || die_precondition "cannot allocate isolated managed Codex home"
-  else
-    MANAGED_CODEX_HOME="$(mktemp -d -t autopilot-managed-codex-home-XXXXXX)" \
-      || die_precondition "cannot allocate isolated managed Codex home"
-  fi
-  chmod 700 "$MANAGED_CODEX_HOME" \
-    || die_precondition "cannot protect isolated managed Codex home"
-  # Codex documents that --ignore-user-config still reads authentication from
-  # CODEX_HOME. Copy only that credential file: plugin/config/session state is
-  # deliberately excluded so the controller's PreToolUse hook cannot intercept
-  # the managed implementer.
-  if [ -r "$controller_home/auth.json" ]; then
-    cp "$controller_home/auth.json" "$MANAGED_CODEX_HOME/auth.json" \
-      || die_precondition "cannot stage managed Codex authentication"
-    chmod 600 "$MANAGED_CODEX_HOME/auth.json" \
-      || die_precondition "cannot protect managed Codex authentication"
-  fi
-}
-
-cleanup_managed_codex_home() {
-  [ -n "${MANAGED_CODEX_HOME:-}" ] || return 0
-  case "$MANAGED_CODEX_HOME" in
-    "${TMPDIR:-/tmp}"/autopilot-managed-codex-home-*|"${SANDBOX_TMP:-/nonexistent}"/autopilot-managed-codex-home-*)
-      rm -rf -- "$MANAGED_CODEX_HOME"
-      ;;
-    *)
-      echo "WARNING: refusing to remove unexpected managed Codex home: $MANAGED_CODEX_HOME" >&2
-      ;;
-  esac
-  MANAGED_CODEX_HOME=""
-}
-
 WATCHDOG_PID=""
 WATCHDOG_TOKEN_FILE=""
 WATCHDOG_DISARMED=0
@@ -5488,10 +5511,40 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
     # use the Task tools, so the cc-shim hand is never given them. (claude-native branches: unchanged.)
     # "$8" (always passed, possibly empty) is the validated X-Fleet-Task line: with a gate settings
     # file $7 holds it, so the settings slot is pinned with "${GATE_ARGV[0]-}" like the claude-native arm.
-    run_worker bash -c 'cd "$1" && exec env -u ANTHROPIC_API_KEY -u ANTHROPIC_CUSTOM_HEADERS ${8:+ANTHROPIC_CUSTOM_HEADERS="$8"} claude -p ${4:+--session-id "$4"} --model "$2" \
+    # "$9" is the 0600 endpoint env file (mode set below). The token is not an argument.
+    # sudo --preserve-env / -E is not used for these two variables: sudo env_reset drops them,
+    # and the command after the privilege drop reads the file, deletes it, then execs claude.
+    _ccshim_env_parent="${TMPDIR:-/tmp}"
+    if [ "${SANDBOX:-off}" = "bwrap" ] && [ -n "${SANDBOX_TMP:-}" ]; then
+      _ccshim_env_parent="$SANDBOX_TMP"
+    fi
+    CCSHIM_ENV_DIR="$(umask 077; mktemp -d "$_ccshim_env_parent/dispatch-hetero-ccshim-env-XXXXXX")" \
+      || die_precondition "cc-shim 拒絕啟動：無法建立端點環境檔目錄"
+    CCSHIM_ENV_FILE="$CCSHIM_ENV_DIR/endpoint.env"
+    ( umask 077
+      printf 'ANTHROPIC_BASE_URL=%q\nANTHROPIC_AUTH_TOKEN=%q\n' \
+        "$ANTHROPIC_BASE_URL" "$ANTHROPIC_AUTH_TOKEN" > "$CCSHIM_ENV_FILE"
+    ) || die_precondition "cc-shim 拒絕啟動：無法寫入端點環境檔"
+    chmod 600 "$CCSHIM_ENV_FILE" || die_precondition "cc-shim 拒絕啟動：無法保護端點環境檔"
+    run_worker bash -c 'cd "$1" || exit 1
+        _ccshim_env_file="$9"
+        # ccshim-env-load
+        if [ -f "$_ccshim_env_file" ]; then
+          _ccshim_mode="$(stat -c %a "$_ccshim_env_file" 2>/dev/null || true)"
+          [ "$_ccshim_mode" = "600" ] || { printf "%s\n" "cc-shim 拒絕啟動：端點環境檔權限不是 0600" >&2; rm -f -- "$_ccshim_env_file"; exit 2; }
+          set -a
+          . "$_ccshim_env_file"
+          set +a
+          rm -f -- "$_ccshim_env_file"
+          rmdir "${_ccshim_env_file%/*}" 2>/dev/null || true
+        fi
+        _ccshim_env_probe="${ANTHROPIC_BASE_URL:+1}"
+        [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ] && [ "$_ccshim_env_probe" = "1" ] || { printf "%s\n" "cc-shim 拒絕啟動：mount 隔離前綴不會保留環境變數，端點環境變數（ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN）將被清空" >&2; exit 2; }
+        # ccshim-env-load-end
+        exec env -u ANTHROPIC_API_KEY -u ANTHROPIC_CUSTOM_HEADERS ${8:+ANTHROPIC_CUSTOM_HEADERS="$8"} claude -p ${4:+--session-id "$4"} --model "$2" \
         --strict-mcp-config --dangerously-skip-permissions --disallowedTools TaskCreate,TaskUpdate,TaskGet,TaskList \
         ${5:+--effort "$5"} ${7:+--settings "$7"} --output-format json < "$3" >"$6"' \
-        _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE" "${GATE_ARGV[0]-}" "$FLEET_TASK_HEADER"
+        _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE" "${GATE_ARGV[0]-}" "$FLEET_TASK_HEADER" "$CCSHIM_ENV_FILE"
   fi
   # The worker is done (success, failure or timeout): the gate file and the settings file go now.
   if [ -n "${GATE_ARMED_SESSION:-}" ]; then

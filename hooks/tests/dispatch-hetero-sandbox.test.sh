@@ -299,6 +299,165 @@ case "$EOUT $(cat "$TEST_TMP/stderr-e" 2>/dev/null)" in
   *) eq 0 0 "(e) reviewer dispatch has no local-implementer sandbox refusal" ;;
 esac
 
+# (f) cc-shim across an env-resetting mount prefix (01M7P91RTVG7H1A01YCTHRVH2Z).
+# AUTOPILOT_ENV_PROBE is the post-condition inside the cc-shim worker, not the shared
+# identity check. The 0600 file is read after the drop, deleted, then claude starts.
+# f-red deletes that whole block: claude runs with a cleared env and misreports endpoint_unreachable.
+# MUT_NO_PROBE / (b2) deletes only the file read: the probe still refuses.
+CCSHIM_SECRET_URL="http://127.0.0.1:9/ccshim-base"
+CCSHIM_SECRET_TOKEN="sekrit-ccshim-token-XY"
+ENVDROP_BIN="$TEST_TMP/envdrop-bin"; mkdir -p "$ENVDROP_BIN"
+cat > "$ENVDROP_BIN/claude" <<'EOS'
+#!/usr/bin/env bash
+cat >/dev/null
+[ -n "${STUB_SENTINEL:-}" ] && echo spawned > "$STUB_SENTINEL"
+{
+  printf 'URL=%s\n' "${ANTHROPIC_BASE_URL-}"
+  printf 'TOKEN=%s\n' "${ANTHROPIC_AUTH_TOKEN-}"
+  printf 'ARGV='
+  printf '%s\n' "$@"
+  printf 'CMDLINE='
+  tr '\0' '\n' < /proc/self/cmdline
+  left=0
+  for d in "${TMPDIR:-/tmp}"/dispatch-hetero-ccshim-env-*; do
+    [ -e "$d" ] && left=1
+  done
+  printf 'ENVDIR_LEFT=%s\n' "$left"
+} > "${STUB_ARGV_FILE:-/dev/null}"
+if [ -z "${ANTHROPIC_BASE_URL:-}" ] || [ -z "${ANTHROPIC_AUTH_TOKEN:-}" ]; then
+  printf '%s\n' '{"type":"result","is_error":true,"terminal_reason":"api_error","result":"Not logged in · Please run /login"}'
+  exit 1
+fi
+echo edited >> sandbox-edit.txt
+printf '%s' '{"type":"result","is_error":false,"result":"ok"}'
+EOS
+cat > "$ENVDROP_BIN/unshare" <<'EOS'
+#!/bin/sh
+while [ $# -gt 0 ]; do
+  if [ "$1" = "--" ]; then shift; break; fi
+  shift
+done
+[ $# -eq 0 ] && exit 0
+if [ "$1" = "true" ]; then exit 0; fi
+exec /usr/bin/env -i PATH="$PATH" HOME="${HOME:-}" USER="${USER:-}" LOGNAME="${LOGNAME:-}" \
+  TMPDIR="${TMPDIR:-/tmp}" STUB_SENTINEL="${STUB_SENTINEL:-}" STUB_ARGV_FILE="${STUB_ARGV_FILE:-}" "$@"
+EOS
+chmod +x "$ENVDROP_BIN/claude" "$ENVDROP_BIN/unshare"
+ARGV_REC="$TEST_TMP/ccshim-argv.txt"
+# Negative control (f-red): drop the load and the AUTOPILOT_ENV_PROBE post-condition.
+PRE_ENVDROP="$TEST_TMP/pre-envdrop"; make_pre_tree "$PRE_ENVDROP"
+rm -f "$PRE_ENVDROP/scripts/dispatch-hetero.sh"
+sed_mutant "$REPO_ROOT/scripts/dispatch-hetero.sh" "$PRE_ENVDROP/scripts/dispatch-hetero.sh" \
+  '/^        # ccshim-env-load$/,/^        # ccshim-env-load-end$/d'
+chmod +x "$PRE_ENVDROP/scripts/dispatch-hetero.sh"
+rm -f "$SENTINEL" "$ARGV_REC"
+FRED_BRANCH="feat/envdrop-red-$RANDOM$RANDOM"
+RC=0
+OUT="$(cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
+    WORKER_MOUNT_FORCE_MODE=private_ns STUB_SENTINEL="$SENTINEL" STUB_ARGV_FILE="$ARGV_REC" \
+    ANTHROPIC_BASE_URL="$CCSHIM_SECRET_URL" ANTHROPIC_AUTH_TOKEN="$CCSHIM_SECRET_TOKEN" \
+    AUTOPILOT_ENDPOINT_GLM_URL="$CCSHIM_SECRET_URL" AUTOPILOT_ENDPOINT_GLM_TOKEN="$CCSHIM_SECRET_TOKEN" \
+    PATH="$ENVDROP_BIN:$BINDIR:$PATH" \
+    "$PRE_ENVDROP/scripts/dispatch-hetero.sh" --no-verify-tip --runner cc-shim --model MiniMax-M3 \
+    --endpoint glm --prompt-file "$PROMPT" --context-window off \
+    --branch "$FRED_BRANCH" 2>"$TEST_TMP/stderr-f-red")" || RC=$?
+eq "yes" "$([ -e "$SENTINEL" ] && echo yes || echo no)" "(f-red) negative control: without the load and probe, fake claude spawned under env-clearing prefix"
+eq '"engine_unavailable"' "$(status_of)" "(f-red) negative control: cleared ANTHROPIC_* surfaces as engine_unavailable (rc=$RC out=$OUT)"
+case "$(printf '%s' "$OUT" | result_json | jfield error)" in
+  *endpoint_unreachable*) eq 0 0 "(f-red) negative control: cleared ANTHROPIC_* misreports endpoint_unreachable" ;;
+  *) fail "(f-red) expected endpoint_unreachable in error, got: $(printf '%s' "$OUT" | result_json | jfield error)" ;;
+esac
+# (f-red) leaves its worktree and branch in "$SBX"; remove them so later cases (nested: no worktree) see a clean repo.
+git -C "$SBX" worktree list --porcelain | awk '/^worktree /{print substr($0,10)}' | while IFS= read -r FRED_WT; do
+  case "$FRED_WT" in *"/.claude/worktrees/"*) git -C "$SBX" worktree remove --force "$FRED_WT" ;; esac
+done
+git -C "$SBX" worktree prune
+git -C "$SBX" branch -D "$FRED_BRANCH" >/dev/null 2>&1 || true
+# (b2) MUT_NO_PROBE: drop only the env-file read. The post-condition still refuses.
+MUT_NO_PROBE="$TEST_TMP/pre-noprobe"; make_pre_tree "$MUT_NO_PROBE"
+rm -f "$MUT_NO_PROBE/scripts/dispatch-hetero.sh"
+sed_mutant "$REPO_ROOT/scripts/dispatch-hetero.sh" "$MUT_NO_PROBE/scripts/dispatch-hetero.sh" \
+  '/^          \. "\$_ccshim_env_file"$/d'
+chmod +x "$MUT_NO_PROBE/scripts/dispatch-hetero.sh"
+rm -f "$SENTINEL" "$ARGV_REC"
+B2_BRANCH="feat/envdrop-b2-$RANDOM$RANDOM"
+RC=0
+OUT="$(cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
+    WORKER_MOUNT_FORCE_MODE=private_ns STUB_SENTINEL="$SENTINEL" STUB_ARGV_FILE="$ARGV_REC" \
+    ANTHROPIC_BASE_URL="$CCSHIM_SECRET_URL" ANTHROPIC_AUTH_TOKEN="$CCSHIM_SECRET_TOKEN" \
+    AUTOPILOT_ENDPOINT_GLM_URL="$CCSHIM_SECRET_URL" AUTOPILOT_ENDPOINT_GLM_TOKEN="$CCSHIM_SECRET_TOKEN" \
+    PATH="$ENVDROP_BIN:$BINDIR:$PATH" \
+    "$MUT_NO_PROBE/scripts/dispatch-hetero.sh" --no-verify-tip --runner cc-shim --model MiniMax-M3 \
+    --endpoint glm --prompt-file "$PROMPT" --context-window off \
+    --branch "$B2_BRANCH" 2>"$TEST_TMP/stderr-b2")" || RC=$?
+eq "no" "$([ -e "$SENTINEL" ] && echo yes || echo no)" "(b2) MUT_NO_PROBE: fake claude never spawned"
+B2_LOG="$(printf '%s' "$OUT" | result_json | jfield agent_log)"
+B2_LOG="${B2_LOG#\"}"; B2_LOG="${B2_LOG%\"}"
+B2_BLOB="$(cat "$TEST_TMP/stderr-b2" 2>/dev/null; printf '%s' "$OUT"; echo; cat "$B2_LOG" 2>/dev/null)"
+case "$B2_BLOB" in
+  *端點環境變數*清空*|*清空*端點環境變數*) eq 0 0 "(b2) refuses with the env-probe reason" ;;
+  *) fail "(b2) missing probe reason (rc=$RC log=$B2_LOG): $(tail -c 500 "$B2_LOG" 2>/dev/null)" ;;
+esac
+case "$B2_BLOB" in
+  *"$CCSHIM_SECRET_TOKEN"*) fail "(b2) token leaked into stdout or stderr" ;;
+  *) eq 0 0 "(b2) token absent from stdout and stderr" ;;
+esac
+git -C "$SBX" worktree list --porcelain | awk '/^worktree /{print substr($0,10)}' | while IFS= read -r B2_WT; do
+  case "$B2_WT" in *"/.claude/worktrees/"*) git -C "$SBX" worktree remove --force "$B2_WT" ;; esac
+done
+git -C "$SBX" worktree prune
+git -C "$SBX" branch -D "$B2_BRANCH" >/dev/null 2>&1 || true
+# (b) real script: env-clearing prefix, stub sees both vars, env dir is gone, token not in argv/log/manifest.
+rm -f "$SENTINEL" "$ARGV_REC"
+F_BRANCH="feat/envdrop-green-$RANDOM$RANDOM"
+RC=0
+OUT="$(cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
+    WORKER_MOUNT_FORCE_MODE=private_ns STUB_SENTINEL="$SENTINEL" STUB_ARGV_FILE="$ARGV_REC" \
+    ANTHROPIC_BASE_URL="$CCSHIM_SECRET_URL" ANTHROPIC_AUTH_TOKEN="$CCSHIM_SECRET_TOKEN" \
+    AUTOPILOT_ENDPOINT_GLM_URL="$CCSHIM_SECRET_URL" AUTOPILOT_ENDPOINT_GLM_TOKEN="$CCSHIM_SECRET_TOKEN" \
+    PATH="$ENVDROP_BIN:$BINDIR:$PATH" \
+    "$REPO_ROOT/scripts/dispatch-hetero.sh" --no-verify-tip --runner cc-shim --model MiniMax-M3 \
+    --endpoint glm --prompt-file "$PROMPT" --context-window off \
+    --branch "$F_BRANCH" 2>"$TEST_TMP/stderr-f")" || RC=$?
+eq 0 "$RC" "(b) cc-shim env file survives an env-clearing prefix (rc=$RC stderr=$(tail -c 400 "$TEST_TMP/stderr-f" 2>/dev/null))"
+eq "yes" "$([ -e "$SENTINEL" ] && echo yes || echo no)" "(b) fake claude spawned"
+eq "URL=$CCSHIM_SECRET_URL" "$(grep '^URL=' "$ARGV_REC")" "(b) stub saw ANTHROPIC_BASE_URL"
+eq "TOKEN=$CCSHIM_SECRET_TOKEN" "$(grep '^TOKEN=' "$ARGV_REC")" "(b) stub saw ANTHROPIC_AUTH_TOKEN"
+eq "ENVDIR_LEFT=0" "$(grep '^ENVDIR_LEFT=' "$ARGV_REC")" "(b) env file is gone when the runner starts"
+case "$(cat "$ARGV_REC")" in
+  *"$CCSHIM_SECRET_TOKEN"*) 
+    tok_lines="$(grep -n "$CCSHIM_SECRET_TOKEN" "$ARGV_REC" | cut -d: -f1 | tr '\n' ' ')"
+    case "$(grep '^TOKEN=' "$ARGV_REC")" in
+      "TOKEN=$CCSHIM_SECRET_TOKEN")
+        extra="$(grep -v '^TOKEN=' "$ARGV_REC" | grep -c "$CCSHIM_SECRET_TOKEN" || true)"
+        eq "0" "$extra" "(b) token is only the env value, not argv (lines $tok_lines)" ;;
+      *) fail "(b) token placement unexpected" ;;
+    esac ;;
+esac
+B_BLOB="$(printf '%s' "$OUT"; echo; cat "$TEST_TMP/stderr-f" 2>/dev/null)"
+case "$B_BLOB" in
+  *"$CCSHIM_SECRET_TOKEN"*) fail "(b) token leaked into stdout or stderr" ;;
+  *) eq 0 0 "(b) token absent from stdout and stderr" ;;
+esac
+MANIFEST_HITS="$(grep -R -l -- "$CCSHIM_SECRET_TOKEN" "$AUTOPILOT_DISPATCH_RUNS_DIR" "$TMPDIR" 2>/dev/null || true)"
+eq "" "$MANIFEST_HITS" "(b) token is not left in the manifest or temp files"
+# (c) mount_containment_unavailable before the worker: no "command not found".
+rm -f "$SENTINEL"
+C_BRANCH="feat/mount-refuse-$RANDOM$RANDOM"
+RC=0
+OUT="$(cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
+    WORKER_MOUNT_FORCE_MODE=refuse STUB_SENTINEL="$SENTINEL" \
+    PATH="$BINDIR:$PATH" \
+    "$REPO_ROOT/scripts/dispatch-hetero.sh" --no-verify-tip --runner cc-shim --model MiniMax-M3 \
+    --endpoint glm --prompt-file "$PROMPT" --context-window off \
+    --branch "$C_BRANCH" 2>"$TEST_TMP/stderr-c-mount")" || RC=$?
+case "$(cat "$TEST_TMP/stderr-c-mount")" in
+  *command\ not\ found*) fail "(c) early refuse still says command not found: $(tail -c 300 "$TEST_TMP/stderr-c-mount")" ;;
+  *mount_containment_unavailable*) eq 0 0 "(c) early refuse names mount_containment_unavailable (rc=$RC)" ;;
+  *) fail "(c) expected mount_containment_unavailable, got: $(tail -c 400 "$TEST_TMP/stderr-c-mount")" ;;
+esac
+eq "no" "$([ -e "$SENTINEL" ] && echo yes || echo no)" "(c) fake claude never spawned"
+
 if ! command -v bwrap >/dev/null 2>&1 || ! bwrap --ro-bind / / --dev /dev --proc /proc true >/dev/null 2>&1; then
   echo "SKIP: bwrap is not usable on this host; the sandbox cases cannot run"
   finalize_test

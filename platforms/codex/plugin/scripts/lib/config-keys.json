@@ -7673,6 +7673,21 @@
         "AUTOPILOT_CURSOR_BROKER_AUDIT"
       ],
       "note": "Overrides pace-roles.json broker_audit.kimi (default /srv/kimi-broker/audit.tsv) for the daily-run behind-pace proxy in pace-select.js."
+    },
+    {
+      "name": "AUTOPILOT_ENV_PROBE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-hetero.sh",
+        "hooks/tests/worker-mount-containment.test.sh",
+        "hooks/tests/dispatch-hetero-sandbox.test.sh"
+      ],
+      "doc": "references/hetero-dispatch.md",
+      "relates": [],
+      "note": "Sentinel exported across WORKER_MOUNT_PREFIX to verify sudo env_reset has not cleared caller environment variables (e.g. cc-shim ANTHROPIC_*)."
     }
   ]
 }

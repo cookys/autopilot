@@ -347,7 +347,7 @@ test('(a) reset-weighted quota outranks linear pace; claude rows are never candi
     qualified_source: 'pace-roles.json',
     pace_generated_at: '2026-11-13T02:00:00Z',
     candidates: [
-      { engine: 'agy', pool: 'agy', slack_pts: -25 },
+      { engine: 'agy', pool: 'agy', slack_pts: -25, basis: 'pace', demoted: 'ahead' },
       { engine: 'glm', pool: 'glm', slack_pts: -3 },
       { engine: 'codex', reason: 'unknown' },
       { engine: 'grok', pool: 'grok-cli', slack_pts: 14 },
@@ -728,7 +728,7 @@ test('(g) scarce codex row 35 pts ahead is a known reading with slack -35, not u
     candidates: [
       { engine: 'agy', reason: 'unknown' },
       { engine: 'glm', reason: 'unknown' },
-      { engine: 'codex', pool: 'codex A', slack_pts: -35 },
+      { engine: 'codex', pool: 'codex A', slack_pts: -35, basis: 'pace', demoted: 'ahead' },
       { engine: 'grok', reason: 'unknown' },
       { engine: 'opencode', reason: 'unknown' },
     ],
@@ -831,7 +831,7 @@ test('(h) endpoint readiness: glm has best slack (+30) but endpoint_not_ready ->
   assert.equal(whenNotReady.slack_pts, 14);
   assert.equal(whenNotReady.over_pace, false);
   assert.deepEqual(whenNotReady.candidates, [
-    { engine: 'agy', pool: 'agy', slack_pts: -15 },
+    { engine: 'agy', pool: 'agy', slack_pts: -15, basis: 'pace', demoted: 'ahead' },
     { engine: 'glm', reason: 'endpoint_not_ready' },
     { engine: 'codex', reason: 'unknown' },
     { engine: 'grok', pool: 'grok-cli', slack_pts: 14 },
@@ -889,7 +889,7 @@ test('(i) qualified.v1.json eligibility: fail-only excluded, provisional allowed
     assert.equal(flagOut.qualified_source, qPath);
     assert.equal(flagOut.candidates.some((c) => c.engine === 'grok'), false);
     assert.deepEqual(flagOut.candidates, [
-      { engine: 'agy', pool: 'agy', slack_pts: -25 },
+      { engine: 'agy', pool: 'agy', slack_pts: -25, basis: 'pace', demoted: 'ahead' },
       { engine: 'glm', pool: 'glm', slack_pts: -3 },
     ]);
 
@@ -3001,7 +3001,7 @@ test('WARN_ahead demotion: two eligible candidates -> non-ahead picked and ahead
   const res = selectEngine({
     pace: priorityPace([
       paceRow('agy', 10, 50, { status: 'WARN_ahead', hours_to_reset: 1 }),
-      paceRow('grok', 40, 50, { status: 'ok', hours_to_reset: 2 }),
+      paceRow('grok-cli', 40, 50, { status: 'ok', hours_to_reset: 2 }),
     ]),
     role: 'implementer',
     checkEndpoint: allEndpointsReady,

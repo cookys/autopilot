@@ -1358,6 +1358,10 @@ function parseArgs(argv) {
   return a;
 }
 
+const OVER_HALF_THRESHOLD = process.env.AFFECTED_SUITES_OVER_HALF_THRESHOLD != null
+  ? Number(process.env.AFFECTED_SUITES_OVER_HALF_THRESHOLD)
+  : 0.5;
+
 async function main(argv) {
   let a;
   try { a = parseArgs(argv); } catch (e) { process.stderr.write(e.message + '\n'); return 2; }
@@ -1440,6 +1444,22 @@ async function main(argv) {
         chains: full ? {} : r.chains, stats: { changed: changed.length, selected: full ? null : r.suites.length, total_suites: allSuites(tree).length, graph_files: r.graphFiles },
       };
       runAlways = r.alwaysRun;
+    }
+    const maxWeak = a.maxWeak == null ? DEFAULT_MAX_WEAK : a.maxWeak;
+    if (doc.mode === 'selective' && doc.stats.total_suites > 0 && (doc.suites.length / doc.stats.total_suites) > OVER_HALF_THRESHOLD) {
+      if (!tree) tree = gitTree(root, doc.head);
+      const widenedBy = doc.changed
+        .map((p) => ({ path: p, suites: select([p], tree, maxWeak).suites.length }))
+        .filter((w) => w.suites > 0)
+        .sort((x, y) => y.suites - x.suites || x.path.localeCompare(y.path))
+        .slice(0, 5);
+      const n = doc.suites.length;
+      const total = doc.stats.total_suites;
+      const pct = Math.round((n / total) * 100);
+      const summary = widenedBy.map((w) => `${w.path} (${w.suites} suites)`).join(', ');
+      process.stderr.write(`affected-suites: WARNING selected ${n}/${total} (${pct}%) — widened by: ${summary}\n`);
+      doc.over_half = true;
+      doc.widened_by = widenedBy;
     }
     if (a.run) {
       // G37: no entry may see the operator's real account registry (hooks/tests/lib.sh does the same for bash suites; Node suites

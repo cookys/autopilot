@@ -1,0 +1,4 @@
+#!/bin/sh
+# Root-scan guard wrapper. PATH entry in front of the real binary.
+here=$(CDPATH= cd -- "$(dirname "$0")" && pwd -P) || exit 127
+exec node "$here/../../root-scan-shim.js" find "$@"

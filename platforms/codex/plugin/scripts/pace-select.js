@@ -33,8 +33,10 @@
  *   - priority.<role> is only a tie-breaker, never a preference before quota.
  *   - WARN_*_low readings remain visible in low_keys; quota score sets rank.
  *   - The emitted `model` comes from pace-roles.json `role_models.<role>.<key>`
- *     when present (implementer + agy -> gemini-4-hydrogen-high; reviewer and
- *     author keep the pool's model), else the pool entry's model.
+ *     when present (agy -> gemini-4-hydrogen-low; codex -> gpt-6.1-terra), else
+ *     the pool entry's model. An unpinned `--dispatch` (no named runner/model/
+ *     endpoint) may only emit `unpinned_seats` (grok-4.7/low, gpt-6.1-terra/low,
+ *     gemini-4-hydrogen-low/low, opencode-go/beam-free/default) and sets `effort`.
  *   - `reviewer_exclude` lists the chosen key's family keys that a reviewer
  *     must not share. agy and agyclaude are different families (google vs
  *     anthropic), so choosing agy emits ["agy"] and never excludes agyclaude;
@@ -50,6 +52,18 @@
  *   - If no candidate key has a usable reading, emit
  *     { engine: null, reason: "pace_unknown", low_keys: [], ... } and exit 3.
  *     If ceiling exclusions exhaust the candidates, reason is "over_ceiling".
+ *
+ * Behind-pace preference (cursor and kimi implementers only): when eligible and
+ * behind pace, cursor or kimi gets a yes/no preference before normally-scored
+ * candidates — never scaled or boosted proportionally by how many points behind
+ * a pool is. A fresh pace row with finite used_pct and expected_pct wins
+ * (`basis: "pace"`, behind = status `ALERT_behind` or `behind_early`; for kimi,
+ * reading freshness is judged by row `seen_at` within 24 h, never by `reset_at`
+ * or file mtime); otherwise scripts/lib/broker-run-pace.js counts today's
+ * completed Asia/Taipei broker runs from the audit TSV (`basis: "proxy_runs"`,
+ * expected_runs = daily_target * elapsed_day_fraction). The proxy measures runs
+ * per day, not quota percent, and is retired automatically when a fresh reading
+ * exists. Missing/unreadable audit -> `basis: "none"` and old fallback rules.
  *
  * USAGE:
  *   node scripts/pace-select.js --role <reviewer|implementer|author>
@@ -74,8 +88,15 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { PACE_SCHEMA, finiteNum } = require('./lib/pace-reading.js');
+const {
+  PACE_SCHEMA,
+  SEEN_AT_FRESH_MS,
+  finiteNum,
+  isFreshRowForKey,
+  isSeenAtFresh,
+} = require('./lib/pace-reading.js');
 const { sameEngine, isChineseFamily } = require('./lib/engine-spelling.js');
+const { BEHIND_PACE_KEYS, evaluateBehindSignal } = require('./lib/broker-run-pace.js');
 
 const EXIT_OK = 0;
 const EXIT_USAGE = 2;
@@ -433,16 +454,36 @@ function poolEntryEligibleInQualified(entry, role, qualifiedRows) {
 }
 
 // Noncq retains its strict freshness contract; only this selector admits recent stale rows.
-function quotaReading(row, now = new Date()) {
+// For kimi, reading freshness is judged by row seen_at within 24 h, never by reset_at or file mtime.
+function quotaReading(row, now = new Date(), key = null) {
   const used = finiteNum(row.used_pct);
-  if (used === null || ![false, true].includes(row.stale)) return null;
+  if (used === null) return null;
+  const clock = now instanceof Date && !Number.isNaN(now.getTime()) ? now : new Date();
   const reset = typeof row.reset_at === 'string' ? Date.parse(row.reset_at) : NaN;
+  if (key === 'kimi') {
+    if (!isSeenAtFresh(row, clock)) return null;
+    const expected = finiteNum(row.expected_pct);
+    if (expected === null) return null;
+    const hours = finiteNum(row.hours_to_reset)
+      ?? (reset > clock.getTime() ? (reset - clock.getTime()) / 3600000 : null);
+    return {
+      pool: row.pool,
+      used_pct: used,
+      expected_pct: expected,
+      slack: expected - used,
+      hours_to_reset: hours,
+      reset_at: Number.isFinite(reset) ? row.reset_at : null,
+      status: 'fresh',
+      score: hours !== null ? (100 - used) / Math.max(hours, 1) : -Infinity,
+    };
+  }
+  if (![false, true].includes(row.stale)) return null;
   const seen = typeof row.seen_at === 'string' ? Date.parse(row.seen_at) : NaN;
-  const age = now.getTime() - seen;
+  const age = clock.getTime() - seen;
   const recent = row.stale === true;
-  if (recent && !(reset > now.getTime() && age >= 0 && age <= 24 * 3600000)) return null;
+  if (recent && !(reset > clock.getTime() && age >= 0 && age <= SEEN_AT_FRESH_MS)) return null;
   const hours = finiteNum(row.hours_to_reset)
-    ?? (reset > now.getTime() ? (reset - now.getTime()) / 3600000 : null);
+    ?? (reset > clock.getTime() ? (reset - clock.getTime()) / 3600000 : null);
   if (hours === null) return null;
   const expected = finiteNum(row.expected_pct);
   if (!recent && expected === null) return null;
@@ -452,10 +493,16 @@ function quotaReading(row, now = new Date()) {
     status: recent ? 'stale_recent' : 'fresh', score: (100 - used) / Math.max(hours, 1) };
 }
 
+function compareDesc(aVal, bVal) {
+  if (aVal === bVal) return 0;
+  return bVal > aVal ? 1 : -1;
+}
+
 function compareReadings(a, b) {
   const rank = r => ['schedule_only', 'observed_available'].includes(r.status) ? 2 : Number(r.status === 'stale_recent');
-  return rank(a) - rank(b)
-    || b.score - a.score || (b.slack ?? -Infinity) - (a.slack ?? -Infinity);
+  return (rank(a) - rank(b))
+    || compareDesc(a.score, b.score)
+    || compareDesc(a.slack ?? -Infinity, b.slack ?? -Infinity);
 }
 
 function selectEngine({
@@ -473,6 +520,8 @@ function selectEngine({
   scope,
   now,
   env,
+  cwd,
+  dispatchCheap = false,
 } = {}) {
   const resolvedEnv = env && typeof env === 'object' ? env : process.env;
   const resolvedPools = pools === undefined ? loadPools() : pools;
@@ -563,6 +612,15 @@ function selectEngine({
       (k) => typeof k === 'string' && k.length > 0 && !excluded.has(k),
     );
   }
+  const cheapSeats = (
+    dispatchCheap
+    && resolvedRoles.unpinned_seats
+    && typeof resolvedRoles.unpinned_seats === 'object'
+    && !Array.isArray(resolvedRoles.unpinned_seats)
+  ) ? resolvedRoles.unpinned_seats : null;
+  if (cheapSeats) {
+    allowedKeys = Object.keys(cheapSeats).filter((k) => !excluded.has(k) && cheapSeats[k] && typeof cheapSeats[k] === 'object');
+  }
   const allowedSet = new Set(allowedKeys);
 
   const endpointProbe = checkEndpoint || ((ep, entry) => defaultCheckEndpoint(ep, resolvedEnv, entry));
@@ -597,11 +655,29 @@ function selectEngine({
       const seamReason = seamDayBlock(entry, clock, resolvedEnv);
       if (seamReason) blocked = seamReason;
     }
-    const gate = require('./lib/cn-model-dispatch-gate').check({
-      runner: entry.runner, model: entry.model, endpoint: entry.endpoint,
-      files, diffFiles, role, env: resolvedEnv,
-    });
-    if (!blocked && !gate.allowed) blocked = 'cn_model_dispatch_barred';
+    const cnGate = require('./lib/cn-model-dispatch-gate');
+    const isKimiEntry = entry.key === 'kimi' || normRunner(entry.runner) === 'kimi';
+    const gateBaseOpts = {
+      runner: entry.runner,
+      model: entry.model,
+      endpoint: entry.endpoint,
+      diffFiles,
+      role,
+      env: resolvedEnv,
+      ...(cwd !== undefined ? { cwd } : {}),
+    };
+    let gate;
+    if (isKimiEntry && Array.isArray(files) && files.length > 0) {
+      for (const promptFile of files) {
+        gate = cnGate.check({ ...gateBaseOpts, files: [promptFile] });
+        if (!gate.allowed) break;
+      }
+    } else {
+      gate = cnGate.check({ ...gateBaseOpts, files });
+    }
+    if (!blocked && !gate.allowed) {
+      blocked = isKimiEntry ? `cn_gate:${gate.cls || 'barred'}` : 'cn_model_dispatch_barred';
+    }
     if (excludeFamily && excludeFamily.split(',').map(f => f.trim()).includes(gate.family)) blocked = 'same_family';
     if (blocked) {
       blockedKeys.set(entry.key, blocked);
@@ -616,6 +692,7 @@ function selectEngine({
   }
 
   const ceiling = Number.isFinite(resolvedRoles.PACE_CEILING_PCT) ? resolvedRoles.PACE_CEILING_PCT : 85;
+  const selectClock = now instanceof Date && !Number.isNaN(now.getTime()) ? now : new Date();
   const overCeiling = new Map();
   const bestByKey = new Map();
   for (const row of pace.rows) {
@@ -626,11 +703,11 @@ function selectEngine({
     const entry = readyPools.get(poolName);
     const key = entry.key;
     // A fresh high reading must not evade the ceiling through missing pace fields.
-    if (row.stale === false && finiteNum(row.used_pct) !== null && row.used_pct >= ceiling) {
+    if (isFreshRowForKey(row, key, selectClock) && finiteNum(row.used_pct) !== null && row.used_pct >= ceiling) {
       overCeiling.set(key, { used_pct: row.used_pct, reset_at: row.reset_at ?? null });
       continue;
     }
-    const reading = quotaReading(row, now instanceof Date ? now : new Date());
+    const reading = quotaReading(row, selectClock, key);
     if (!reading) continue;
     if (reading.used_pct >= ceiling) {
       overCeiling.set(key, reading);
@@ -647,13 +724,70 @@ function selectEngine({
     }
   }
 
+  const hasPromptFiles = Array.isArray(files) && files.length > 0;
+  const behindSignals = new Map();
+  for (const key of BEHIND_PACE_KEYS) {
+    if (!allowedSet.has(key)) continue;
+    const poolNames = new Set();
+    for (const [poolName, entry] of Object.entries(mergedPools)) {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+      if (entry.key !== key) continue;
+      if (useQualified && !poolEntryEligibleInQualified(entry, role, qualified.rows)) continue;
+      poolNames.add(poolName);
+    }
+    behindSignals.set(key, evaluateBehindSignal({
+      key,
+      paceRows: pace.rows,
+      poolNames,
+      ceiling,
+      roles: resolvedRoles,
+      now: selectClock,
+      env: resolvedEnv,
+      expandHome,
+    }));
+  }
+
   // Preserve schedule-only diagnostics, but a seat without quota ranks below every usable reading.
-  for (const entry of readyPools.values()) {
+  for (const [poolName, entry] of readyPools.entries()) {
     // A successful broker observation admits Cursor without inventing a usage
     // percentage. Rank it behind all measured readings, including recent stale.
     if (entry.key === 'cursor' && cursorState === 'available' && !bestByKey.has(entry.key) && !overCeiling.has(entry.key)) {
       bestByKey.set(entry.key, { key: entry.key, entry, low: false,
         reading: { pool: 'cursor', slack: null, used_pct: null, expected_pct: null, score: -Infinity, status: 'observed_available' } });
+    }
+    if (
+      BEHIND_PACE_KEYS.has(entry.key)
+      && !bestByKey.has(entry.key)
+      && !overCeiling.has(entry.key)
+      && (entry.key !== 'kimi' || hasPromptFiles)
+      && behindSignals.get(entry.key)?.behind === true
+    ) {
+      const sig = behindSignals.get(entry.key);
+      const fr = sig.freshReading;
+      bestByKey.set(entry.key, {
+        key: entry.key,
+        entry,
+        low: sig.freshRow ? isLowStatus(sig.freshRow.status) : false,
+        reading: fr
+          ? {
+              pool: fr.pool,
+              slack: fr.slack,
+              used_pct: fr.used_pct,
+              expected_pct: fr.expected_pct,
+              reset_at: sig.freshRow?.reset_at ?? null,
+              score: -Infinity,
+              status: 'fresh',
+            }
+          : {
+              pool: poolName,
+              slack: null,
+              used_pct: null,
+              expected_pct: null,
+              reset_at: null,
+              score: -Infinity,
+              status: 'observed_available',
+            },
+      });
     }
     if (entry.schedule_only === true && !bestByKey.has(entry.key)) {
       bestByKey.set(entry.key, {
@@ -662,6 +796,20 @@ function selectEngine({
         reading: { pool: entry.key, slack: 0, used_pct: null, expected_pct: null, score: -Infinity, status: 'schedule_only' },
         low: false,
       });
+    }
+  }
+
+  for (const [key, hit] of bestByKey.entries()) {
+    if (!BEHIND_PACE_KEYS.has(key)) continue;
+    const sig = behindSignals.get(key);
+    if (!sig) continue;
+    Object.assign(hit.reading, sig.fields);
+    const preferEligible = role === 'implementer'
+      && (key !== 'kimi' || hasPromptFiles)
+      && !blockedKeys.has(key)
+      && !overCeiling.has(key);
+    if (preferEligible && sig.behind === true) {
+      hit.preferBehind = true;
     }
   }
   // Never sole: a cn_gate seat is a candidate only while a non-Chinese-family key has a known reading to pair
@@ -686,14 +834,16 @@ function selectEngine({
   const lowKeys = [];
   for (const key of allowedKeys) {
     if (blockedKeys.get(key) === 'cn_gate_scope') continue; // not applicable without --scope mechanical: not listed
+    const behindFields = behindSignals.get(key)?.fields || {};
     if (blockedKeys.has(key)) {
-      candidates.push({ engine: key, reason: blockedKeys.get(key) });
+      candidates.push({ engine: key, reason: blockedKeys.get(key), ...behindFields });
       continue;
     }
     if (keyHadPool.has(key) && !keyHadReadyPool.has(key)) {
       candidates.push({
         engine: key,
         reason: 'endpoint_not_ready',
+        ...behindFields,
       });
       continue;
     }
@@ -704,16 +854,18 @@ function selectEngine({
         pool: hit.reading.pool,
         slack_pts: hit.reading.slack,
         ...(hit.reading.status === 'stale_recent' ? { status: 'stale_recent' } : {}),
+        ...behindFields,
       });
       known.push(hit);
       if (hit.low) lowKeys.push(key);
     } else if (overCeiling.has(key)) {
       const r = overCeiling.get(key);
-      candidates.push({ engine: key, reason: 'over_ceiling', used_pct: r.used_pct, reset_at: r.reset_at });
+      candidates.push({ engine: key, reason: 'over_ceiling', used_pct: r.used_pct, reset_at: r.reset_at, ...behindFields });
     } else {
       candidates.push({
         engine: key,
         reason: 'unknown',
+        ...behindFields,
       });
     }
   }
@@ -732,14 +884,31 @@ function selectEngine({
 
   const priorityList = Array.isArray(resolvedRoles.priority?.[role]) ? resolvedRoles.priority[role] : [];
   const priorityRank = key => { const i = priorityList.indexOf(key); return i < 0 ? Infinity : i; };
-  known.sort((a, b) => compareReadings(a.reading, b.reading)
-    || priorityRank(a.key) - priorityRank(b.key));
+  const statusRank = r => ['schedule_only', 'observed_available'].includes(r.status) ? 2 : Number(r.status === 'stale_recent');
+  known.sort((a, b) => {
+    const aPref = a.preferBehind === true ? 0 : 1;
+    const bPref = b.preferBehind === true ? 0 : 1;
+    if (aPref !== bPref) return aPref - bPref;
+    // Behind signal is a yes/no preference only: never rank behind pools by how many points/runs behind they are.
+    const rd = aPref === 0
+      ? ((statusRank(a.reading) - statusRank(b.reading)) || compareDesc(a.reading.score, b.reading.score))
+      : compareReadings(a.reading, b.reading);
+    if (rd !== 0) return rd;
+    const aPrio = priorityRank(a.key);
+    const bPrio = priorityRank(b.key);
+    if (aPrio !== bPrio) return aPrio - bPrio;
+    return 0;
+  });
   const chosen = known[0];
-  const overPace = chosen.reading.slack < OVER_PACE_SLACK_FLOOR;
-  const selectedBy = 'quota_score';
+  const overPace = chosen.reading.slack !== null && chosen.reading.slack < OVER_PACE_SLACK_FLOOR;
+  const selectedBy = chosen.preferBehind === true ? 'behind_pace' : 'quota_score';
+  const selectionReason = chosen.preferBehind === true
+    ? 'behind_pace'
+    : (known[1]?.reading.status === 'stale_recent' && chosen.reading.status === 'fresh' ? 'fresh_before_stale_recent' : 'quota_score');
+  const chosenBehindFields = behindSignals.get(chosen.key)?.fields || {};
 
-  // role_models overrides the emitted model per role (implementer + agy ->
-  // gemini-4-hydrogen-high); the pool entry's model stays the default.
+  // role_models overrides the emitted model per role. An unpinned dispatch
+  // uses unpinned_seats (cheap qualified seats only) for model and effort.
   const roleModelMap = (
     resolvedRoles.role_models
     && typeof resolvedRoles.role_models === 'object'
@@ -750,14 +919,21 @@ function selectEngine({
   )
     ? resolvedRoles.role_models[role]
     : {};
-  const modelOut = typeof roleModelMap[chosen.key] === 'string' && roleModelMap[chosen.key].trim() !== ''
-    ? roleModelMap[chosen.key].trim()
-    : (chosen.entry.model ?? null);
+  const cheapSeat = cheapSeats && cheapSeats[chosen.key];
+  const modelOut = cheapSeat && typeof cheapSeat.model === 'string' && cheapSeat.model.trim() !== ''
+    ? cheapSeat.model.trim()
+    : (typeof roleModelMap[chosen.key] === 'string' && roleModelMap[chosen.key].trim() !== ''
+      ? roleModelMap[chosen.key].trim()
+      : (chosen.entry.model ?? null));
+  const effortOut = cheapSeat && typeof cheapSeat.effort === 'string' && cheapSeat.effort.trim() !== ''
+    ? cheapSeat.effort.trim()
+    : null;
 
   const out = {
     engine: chosen.key,
     runner: chosen.entry.runner ?? null,
     model: modelOut,
+    ...(effortOut ? { effort: effortOut } : {}),
     pool: chosen.reading.pool,
     slack_pts: chosen.reading.slack,
     used_pct: chosen.reading.used_pct,
@@ -765,6 +941,7 @@ function selectEngine({
     reset_at: chosen.reading.reset_at ?? null,
     score: chosen.reading.score,
     status: chosen.reading.status,
+    ...chosenBehindFields,
     over_pace: overPace,
     selected_by: selectedBy,
     low_keys: lowKeys,
@@ -774,7 +951,7 @@ function selectEngine({
     pace_generated_at: paceGeneratedAt,
     candidates,
     runner_up: known[1]?.key ?? null,
-    reason: known[1]?.reading.status === 'stale_recent' && chosen.reading.status === 'fresh' ? 'fresh_before_stale_recent' : 'quota_score',
+    reason: selectionReason,
   };
   if (chosen.entry.cn_gate === true) {
     const pair = pairable.reduce((best, h) => (!best || h.reading.slack > best.reading.slack ? h : best), null);
@@ -864,7 +1041,7 @@ function parseArgs(argv) {
 
 // --dispatch emits five lines: runner, model, endpoint, full choice, pace_choice.
 // Named seats are never changed; only fresh over-ceiling usage produces a warning.
-function emitSelection(result, flags, pace, pools, roles) {
+function emitSelection(result, flags, pace, pools, roles, nowDate = null) {
   if (!flags.dispatch) {
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return result.engine === null ? EXIT_PACE_UNKNOWN : EXIT_OK;
@@ -882,9 +1059,10 @@ function emitSelection(result, flags, pace, pools, roles) {
       }
     }
     const singleKeyRunner = runnerKeys.size === 1;
+    const clock = nowDate instanceof Date && !Number.isNaN(nowDate.getTime()) ? nowDate : new Date();
     const rows = (Array.isArray(pace?.rows) ? pace.rows : []).filter(row => {
       const entry = entries[row.pool];
-      if (!entry || row.class === 'claude' || row.stale !== false || finiteNum(row.used_pct) === null) return false;
+      if (!entry || row.class === 'claude' || !isFreshRowForKey(row, entry.key, clock) || finiteNum(row.used_pct) === null) return false;
       if (namedRunner && normRunner(entry.runner) !== normRunner(namedRunner)) return false;
       if (flags.namedEndpoint && (entry.endpoint || '') !== flags.namedEndpoint) return false;
       if (flags.namedModel) {
@@ -897,7 +1075,13 @@ function emitSelection(result, flags, pace, pools, roles) {
     const row = rows[0];
     if (row && row.used_pct >= (roles.PACE_CEILING_PCT ?? 85)) {
       const key = entries[row.pool].key;
-      const alternative = result.engine ? result.engine + ' has ' + (100 - result.used_pct) + '% left' : 'no eligible alternative has known quota left';
+      const alternative = result.engine
+        ? (result.basis === 'proxy_runs'
+          ? `${result.engine} is behind daily run target (${result.runs_today}/${result.daily_target} runs today)`
+          : (finiteNum(result.used_pct) !== null
+            ? `${result.engine} has ${100 - result.used_pct}% left`
+            : `${result.engine} is available`))
+        : 'no eligible alternative has known quota left';
       process.stderr.write('pace: ' + key + ' is at ' + row.used_pct + '% of its 7-day window (resets ' + (row.reset_at ?? 'unknown') + '); named by caller, dispatching anyway — ' + alternative + '\n');
     }
     return EXIT_OK;
@@ -909,7 +1093,10 @@ function emitSelection(result, flags, pace, pools, roles) {
   const choice = { engine: result.engine, used_pct: result.used_pct, reset_at: result.reset_at,
     runner_up: result.runner_up, reason: result.reason };
   const rejected = result.candidates.filter(c => c.reason === 'over_ceiling').map(c => c.engine + ': over_ceiling');
-  process.stderr.write('pace: chose ' + result.engine + ' (' + result.used_pct + '% used, resets ' + result.reset_at + ') over ' + (result.runner_up ?? 'none') + ' (' + [result.reason, ...rejected].join('; ') + ')\n');
+  const usageLabel = result.basis === 'proxy_runs'
+    ? `${result.runs_today}/${result.daily_target} runs today, expected ${result.expected_runs}`
+    : `${result.used_pct}% used, resets ${result.reset_at}`;
+  process.stderr.write('pace: chose ' + result.engine + ' (' + usageLabel + ') over ' + (result.runner_up ?? 'none') + ' (' + [result.reason, ...rejected].join('; ') + ')\n');
   process.stdout.write([result.runner, result.model, result.endpoint || '', JSON.stringify(result), JSON.stringify(choice)].join('\n') + '\n');
   return EXIT_OK;
 }
@@ -996,6 +1183,7 @@ function main(argv = process.argv.slice(2), env = process.env) {
     }
   }
   const checkEndpoint = (ep, entry) => defaultCheckEndpoint(ep, env, entry);
+  const dispatchCheap = Boolean(flags.dispatch && !flags.namedRunner && !flags.namedModel && !flags.namedEndpoint);
   const paceRead = readPaceFile(flags.pace, env);
   if (!paceRead.ok) {
     if (paceRead.status === 'missing') {
@@ -1013,10 +1201,11 @@ function main(argv = process.argv.slice(2), env = process.env) {
         scope: flags.scope,
         now: nowDate,
         env,
+        dispatchCheap,
       });
-      return emitSelection(unknownResult, flags, null, pools, roles);
+      return emitSelection(unknownResult, flags, null, pools, roles, nowDate);
     }
-    if (flags.dispatch) return emitSelection({ engine: null, reason: 'pace_unknown' }, flags, null, pools, roles);
+    if (flags.dispatch) return emitSelection({ engine: null, reason: 'pace_unknown' }, flags, null, pools, roles, nowDate);
     if (paceRead.status === 'invalid_json') {
       process.stderr.write(`pace-select.js: pace file is not JSON (${paceRead.path}): ${paceRead.error}\n`);
       return EXIT_USAGE;
@@ -1041,14 +1230,15 @@ function main(argv = process.argv.slice(2), env = process.env) {
       scope: flags.scope,
       now: nowDate,
       env,
+      dispatchCheap,
     });
   } catch (err) {
-    if (flags.dispatch) return emitSelection({ engine: null, reason: 'pace_unknown' }, flags, pace, pools, roles);
+    if (flags.dispatch) return emitSelection({ engine: null, reason: 'pace_unknown' }, flags, pace, pools, roles, nowDate);
     process.stderr.write(`pace-select.js: ${err.message}\n`);
     return err.exitCode || EXIT_USAGE;
   }
 
-  return emitSelection(result, flags, pace, pools, roles);
+  return emitSelection(result, flags, pace, pools, roles, nowDate);
 }
 
 if (require.main === module) {

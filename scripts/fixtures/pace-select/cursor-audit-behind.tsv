@@ -1,0 +1,5 @@
+ts	run_id	runner	model	verdict	rc
+2026-11-17T23:45:00+08:00	run-prev-day	cursor	composer-2.5	done	0
+2026-11-18T09:10:00+08:00	run-today-1	cursor	composer-2.5	done	0
+2026-11-18T12:30:00+08:00	run-today-2	cursor	composer-2.5	done	0
+2026-11-18T13:00:00+08:00	run-today-rej	cursor	composer-2.5	rejected	1

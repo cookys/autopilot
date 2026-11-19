@@ -5,6 +5,7 @@
 # STDIN, `opencode run --dir <wt> --pure -m <model> --format json`, wrapper commits, verdict
 # from git artifacts. Only the binary is stubbed; the real dispatch-hetero.sh runs.
 . "$(dirname "$0")/lib.sh"
+install_cli_sentinels
 SCRIPT="$REPO_ROOT/scripts/dispatch-hetero.sh"
 SBX="$TEST_TMP/repo"
 mkdir -p "$SBX"
@@ -72,7 +73,7 @@ assert_contains "$ARGV" 'run --dir ' "argv starts with run --dir"
 assert_contains "$ARGV" ' --pure ' "argv carries --pure (no external plugins)"
 assert_contains "$ARGV" ' -m opencode-go/muse-spark-1.3-contributor ' "argv carries -m <model>"
 assert_contains "$ARGV" ' --format json' "argv carries --format json"
-assert_contains "$ARGV" ' --variant xhigh ' "default effort (xhigh) is forwarded as --variant xhigh"
+assert_not_contains "$ARGV" ' --variant' "no --effort given: no --variant is sent by default (never xhigh)"
 # prompt via STDIN with the EDIT-ONLY directive prepended, task text intact
 STDIN="$(cat "$STDIN_LOG")"
 assert_contains "$STDIN" 'HARNESS DIRECTIVE' "STDIN prompt carries the EDIT-ONLY directive"

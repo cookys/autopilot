@@ -198,6 +198,17 @@
             "onFailure": "continue"
           }
         ]
+      },
+      {
+        "matcher": "mcp__fleet__dispatch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/fleet-dispatch-class.js",
+            "timeout": 5,
+            "onFailure": "continue"
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -281,6 +292,17 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/subagent-fleet-task.js",
+            "timeout": 5,
+            "onFailure": "continue"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|mcp__fleet__task_progress",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/work-order-adopt.js",
             "timeout": 5,
             "onFailure": "continue"
           }

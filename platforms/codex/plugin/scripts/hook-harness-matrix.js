@@ -76,8 +76,9 @@ function registered(block) {
         }
         const mm = HOOK_CMD_RE.exec(h.command || '');
         if (!mm) continue;
-        if (!out.has(mm[1])) out.set(mm[1], new Set());
-        out.get(mm[1]).add(event);
+        const stem = mm[1];
+        if (!out.has(stem)) out.set(stem, new Set());
+        out.get(stem).add(event);
       }
     }
   }

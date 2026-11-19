@@ -33,7 +33,7 @@ const diff = path.join(tmp, 'd.diff');
 fs.writeFileSync(marked, 'Lane: x\nReads-Transcript: yes\nbody\n');
 fs.writeFileSync(plain, 'Lane: x\nbody\n');
 const small = path.join(tmp, 'small.md');
-fs.writeFileSync(small, 'Engine: kimi | Role: implementer | Lane: x | Size: S\nScope: docs/a.md, src/util/fmt.js\nbody\n');
+fs.writeFileSync(small, 'Engine: kimi | Role: implementer | Lane: x | Size: S\nScope: docs/a.md, docs/util/fmt.md\nbody\n');
 fs.writeFileSync(diff, 'diff --git a/x b/x\n');
 
 function env(extra = {}) {
@@ -79,6 +79,23 @@ test('class 2 sensitive: scope path or repo name on the list', () => {
   assert.equal(cls(K, { ...OK, AUTOPILOT_TASK_SCOPE: 'secrets-notes.md' }).cls, 'sensitive');
 });
 
+function gitRepo(name) {
+  const dir = path.join(tmp, name);
+  fs.mkdirSync(dir, { recursive: true });
+  const g = (...a) => spawnSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...a], { cwd: dir, encoding: 'utf8' });
+  const init = g('init', '-q', '-b', 'develop');
+  assert.equal(init.status, 0, init.stderr);
+  const commit = g('commit', '-q', '--allow-empty', '-m', 'i');
+  assert.equal(commit.status, 0, commit.stderr);
+  return dir;
+}
+
+function briefFile(name, text) {
+  const f = path.join(tmp, name);
+  fs.writeFileSync(f, text);
+  return f;
+}
+
 test('class 3 core: size above S, or a core dir from the repo config', () => {
   assert.equal(cls(K, { ...OK, AUTOPILOT_TASK_SIZE: 'M' }).cls, 'core-size');
   assert.equal(cls(K, { ...OK, AUTOPILOT_TASK_SIZE: 'XL' }).cls, 'core-size');
@@ -89,12 +106,188 @@ test('class 3 core: size above S, or a core dir from the repo config', () => {
   assert.equal(gate.check({ ...K, env: OK, cwd: core }).allowed, true, 'a non-core path in the same repo is allowed');
 });
 
+test('core-unset: empty core_dirs treats every path as core except the shipped allow list and absent New-Files', () => {
+  const bare = gitRepo('core-unset-bare');
+  const incident = briefFile('incident.md', 'Size: S\nRole: implementer\nScope: src/cli/install.rs\n');
+  const cliIncident = run('node', [path.join(S, 'lib', 'cn-model-dispatch-gate.js'), 'check', '--runner', 'kimi', '--model', 'kimi-code', '--cwd', bare, '--prompt-file', incident]);
+  assert.notEqual(cliIncident.status, 0);
+  assert.match(cliIncident.stderr, /cn_model_dispatch_barred moonshot core-unset/);
+  assert.equal(gate.check({ ...K, env: {}, files: [incident], cwd: bare }).cls, 'core-unset');
+
+  const docs = briefFile('allow-docs.md', 'Size: S\nRole: implementer\nScope: docs/plans/x.md\n');
+  assert.equal(gate.check({ ...K, env: {}, files: [docs], cwd: bare }).allowed, true);
+  const fix = briefFile('allow-fix.md', 'Size: S\nRole: implementer\nScope: tests/fixtures/seat_burn/a.json\n');
+  assert.equal(gate.check({ ...K, env: {}, files: [fix], cwd: bare }).allowed, true);
+  const neu = briefFile('allow-new.md', 'Size: S\nRole: implementer\nScope: tests/test_new.py\nNew-Files: tests/test_new.py\n');
+  assert.equal(fs.existsSync(path.join(bare, 'tests/test_new.py')), false);
+  assert.equal(gate.check({ ...K, env: {}, files: [neu], cwd: bare }).allowed, true);
+
+  fs.mkdirSync(path.join(bare, 'tests'), { recursive: true });
+  fs.writeFileSync(path.join(bare, 'tests/test_old.py'), 'x\n');
+  const old = briefFile('deny-old.md', 'Size: S\nRole: implementer\nScope: tests/test_old.py\nNew-Files: tests/test_old.py\n');
+  assert.equal(gate.check({ ...K, env: {}, files: [old], cwd: bare }).cls, 'core-unset');
+  const mixed = briefFile('deny-mixed.md', 'Size: S\nRole: implementer\nScope: docs/a.md, src/b.rs\n');
+  assert.equal(gate.check({ ...K, env: {}, files: [mixed], cwd: bare }).cls, 'core-unset');
+
+  const widen = gitRepo('core-unset-widen');
+  fs.mkdirSync(path.join(widen, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(widen, '.claude', 'cn-model-gate.json'), JSON.stringify({ core_unset_allow: ['src/**'] }));
+  const widened = briefFile('deny-widen.md', 'Size: S\nRole: implementer\nScope: src/b.rs\n');
+  assert.equal(gate.check({ ...K, env: {}, files: [widened], cwd: widen }).cls, 'core-unset', 'a repo cannot add to core_unset_allow');
+
+  const set = gitRepo('core-dirs-set');
+  fs.mkdirSync(path.join(set, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(set, '.claude', 'cn-model-gate.json'), JSON.stringify({ core_dirs: ['scripts/**'] }));
+  assert.equal(gate.check({ ...K, env: { ...OK, AUTOPILOT_TASK_SCOPE: 'src/x.js' }, cwd: set }).allowed, true);
+  assert.equal(gate.check({ ...K, env: { ...OK, AUTOPILOT_TASK_SCOPE: 'scripts/y.js' }, cwd: set }).cls, 'core-dir');
+
+  const sens = briefFile('deny-env.md', 'Size: S\nRole: implementer\nScope: docs/.env\n');
+  assert.equal(gate.check({ ...K, env: {}, files: [sens], cwd: bare }).cls, 'sensitive');
+});
+
+test('core-unset paths: normalise, anchor the allow list, existence under the repo root', () => {
+  const bare = gitRepo('core-unset-paths');
+  const denied = (name, text) => {
+    const f = briefFile(name, text);
+    assert.equal(gate.check({ ...K, env: {}, files: [f], cwd: bare }).cls, 'core-unset', name);
+  };
+  denied('deny-dotdot.md', 'Size: S\nRole: implementer\nScope: docs/../src/x.rs\n');
+  denied('deny-src-docs.md', 'Size: S\nRole: implementer\nScope: src/docs/x.rs\n');
+  denied('deny-outside.md', 'Size: S\nRole: implementer\nScope: ../outside.rs\nNew-Files: ../outside.rs\n');
+  denied('deny-glob.md', 'Size: S\nRole: implementer\nScope: src/*.rs\nNew-Files: src/*.rs\n');
+  denied('deny-abs.md', 'Size: S\nRole: implementer\nScope: /src/x.rs\n');
+  denied('deny-dotdot-norm.md', 'Size: S\nRole: implementer\nScope: docs/./../src/x.rs\n');
+
+  const sub = path.join(bare, 'src');
+  fs.mkdirSync(sub, { recursive: true });
+  fs.writeFileSync(path.join(sub, 'x.rs'), 'fn x() {}\n');
+  const cwdFile = briefFile('deny-cwd.md', 'Size: S\nRole: implementer\nScope: src/x.rs\nNew-Files: src/x.rs\n');
+  assert.equal(gate.check({ ...K, env: {}, files: [cwdFile], cwd: sub }).cls, 'core-unset', 'existence is under the repo root');
+  const cli = run('node', [path.join(S, 'lib', 'cn-model-dispatch-gate.js'), 'check', '--runner', 'kimi', '--model', 'kimi-code', '--cwd', sub, '--prompt-file', cwdFile]);
+  assert.notEqual(cli.status, 0);
+  assert.match(cli.stderr, /cn_model_dispatch_barred moonshot core-unset/);
+
+  const allow = (name, text) => {
+    const f = briefFile(name, text);
+    assert.equal(gate.check({ ...K, env: {}, files: [f], cwd: bare }).allowed, true, name);
+  };
+  allow('allow-docs-plan.md', 'Size: S\nRole: implementer\nScope: docs/plans/x.md\n');
+  allow('allow-dot-docs.md', 'Size: S\nRole: implementer\nScope: ./docs/a.md\n');
+  allow('allow-fixtures.md', 'Size: S\nRole: implementer\nScope: tests/fixtures/seat_burn/a.json\n');
+  allow('allow-src-fixtures.md', 'Size: S\nRole: implementer\nScope: src/fixtures/a.json\n');
+  allow('allow-absent-new.md', 'Size: S\nRole: implementer\nScope: tests/test_new.py\nNew-Files: tests/test_new.py\n');
+});
+
+test('core-unset fixtures: data extensions only; docs and absent New-Files stay extension-free', () => {
+  const bare = gitRepo('core-unset-ext');
+  const denied = (name, text) => {
+    const f = briefFile(name, text);
+    assert.equal(gate.check({ ...K, env: {}, files: [f], cwd: bare }).cls, 'core-unset', name);
+  };
+  const allow = (name, text) => {
+    const f = briefFile(name, text);
+    assert.equal(gate.check({ ...K, env: {}, files: [f], cwd: bare }).allowed, true, name);
+  };
+  denied('deny-fix-rs.md', 'Size: S\nRole: implementer\nScope: src/fixtures/a.rs\n');
+  denied('deny-fix-sh.md', 'Size: S\nRole: implementer\nScope: tests/fixtures/run.sh\n');
+  denied('deny-testdata-make.md', 'Size: S\nRole: implementer\nScope: tests/testdata/Makefile\n');
+  denied('deny-fixtures-ts.md', 'Size: S\nRole: implementer\nScope: tests/__fixtures__/x.ts\n');
+  allow('allow-fix-json.md', 'Size: S\nRole: implementer\nScope: src/fixtures/a.json\n');
+  allow('allow-fix-yaml.md', 'Size: S\nRole: implementer\nScope: tests/fixtures/seat_burn/a.yaml\n');
+  allow('allow-csv-case.md', 'Size: S\nRole: implementer\nScope: tests/testdata/b.CSV\n');
+  allow('allow-snap.md', 'Size: S\nRole: implementer\nScope: tests/fixtures/out.snap\n');
+  allow('allow-doc-rs.md', 'Size: S\nRole: implementer\nScope: docs/notes.rs\n');
+  allow('allow-docdir.md', 'Size: S\nRole: implementer\nScope: doc/guide\n');
+  allow('allow-new-rs.md', 'Size: S\nRole: implementer\nScope: src/fixtures/new.rs\nNew-Files: src/fixtures/new.rs\n');
+});
+
+test('core-unset round 4: whitespace and quoted diff paths, symlink components, every Scope and New-Files header', () => {
+  const bare = gitRepo('core-unset-r4');
+  const denied = (name, text, extra = {}) => {
+    const f = briefFile(name, text);
+    assert.equal(gate.check({ ...K, env: {}, files: [f], cwd: bare, ...extra }).cls, 'core-unset', name);
+  };
+  const allow = (name, text, extra = {}) => {
+    const f = briefFile(name, text);
+    assert.equal(gate.check({ ...K, env: {}, files: [f], cwd: bare, ...extra }).allowed, true, name);
+  };
+
+  const wsDiff = briefFile('ws-path.diff', 'diff --git a/src/fixtures/a.json z.rs b/src/fixtures/a.json z.rs\n+++ b/src/fixtures/a.json z.rs\n');
+  denied('deny-ws-brief.md', 'Size: S\nRole: implementer\n', { diffFiles: [wsDiff] });
+  const quotedDiff = briefFile('quoted-path.diff', '+++ "b/src/fixtures/a\\tb.json"\n');
+  denied('deny-quoted-brief.md', 'Size: S\nRole: implementer\n', { diffFiles: [quotedDiff] });
+
+  fs.mkdirSync(path.join(bare, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(bare, 'src', 'exist.rs'), 'fn e() {}\n');
+  fs.writeFileSync(path.join(bare, 'src', 'exist.json'), '{}\n');
+  fs.mkdirSync(path.join(bare, 'docs'), { recursive: true });
+  fs.symlinkSync('../src', path.join(bare, 'docs', 'lnk'));
+  denied('deny-docs-lnk.md', 'Size: S\nRole: implementer\nScope: docs/lnk/exist.rs\n');
+  fs.mkdirSync(path.join(bare, 'tests'), { recursive: true });
+  fs.symlinkSync('../src', path.join(bare, 'tests', 'fixtures'));
+  denied('deny-tests-fixtures-lnk.md', 'Size: S\nRole: implementer\nScope: tests/fixtures/exist.json\n');
+  denied('deny-new-under-lnk.md', 'Size: S\nRole: implementer\nScope: docs/lnk/zz.rs\nNew-Files: docs/lnk/zz.rs\n');
+  fs.symlinkSync('missing-target.rs', path.join(bare, 'src', 'dangling.rs'));
+  denied('deny-dangling.md', 'Size: S\nRole: implementer\nScope: src/dangling.rs\nNew-Files: src/dangling.rs\n');
+  denied('deny-two-scope.md', 'Size: S\nRole: implementer\nScope: docs/a.md\nScope: src/a.rs\n');
+
+  const okDiff = briefFile('ok-paths.diff', 'diff --git a/docs/plans/x.md b/docs/plans/x.md\n+++ b/docs/plans/x.md\t2020-01-01 00:00:00 +0000\ndiff --git a/tests/fixtures/a.json b/tests/fixtures/a.json\n--- a/tests/fixtures/a.json\n+++ b/tests/fixtures/a.json\n');
+  const okRepo = gitRepo('core-unset-r4-ok');
+  const okBrief = briefFile('allow-normal-diff.md', 'Size: S\nRole: implementer\n');
+  assert.equal(gate.check({ ...K, env: {}, files: [okBrief], diffFiles: [okDiff], cwd: okRepo }).allowed, true, 'normal diff docs and fixtures');
+  allow('allow-two-docs-scope.md', 'Size: S\nRole: implementer\nScope: docs/a.md\nScope: docs/plans/x.md\n');
+});
+
+test('core-unset round 5: CRLF diffs, rename/copy/binary, every field on a header line, lstat only ENOENT is absent', () => {
+  const bare = gitRepo('core-unset-r5');
+  const brief = 'Size: S\nRole: implementer\nScope: docs/a.md\n';
+  const deniedDiff = (name, diffText) => {
+    const d = briefFile(`${name}.diff`, diffText);
+    const f = briefFile(`${name}.md`, brief);
+    assert.equal(gate.check({ ...K, env: {}, files: [f], diffFiles: [d], cwd: bare }).cls, 'core-unset', name);
+  };
+  deniedDiff('deny-crlf', 'diff --git a/src/a.rs b/src/a.rs\r\n--- a/src/a.rs\r\n+++ b/src/a.rs\r\n');
+  deniedDiff('deny-rename-to-src', 'diff --git a/docs/a.md b/src/a.rs\nsimilarity index 100%\nrename from docs/a.md\nrename to src/a.rs\n');
+  fs.mkdirSync(path.join(bare, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(bare, 'src', 'exist.rs'), 'fn e() {}\n');
+  deniedDiff('deny-rename-from-src', 'diff --git a/src/exist.rs b/docs/exist.rs\nsimilarity index 100%\nrename from src/exist.rs\nrename to docs/exist.rs\n');
+  deniedDiff('deny-binary-to-src', 'diff --git a/docs/a.png b/src/a.png\nBinary files a/docs/a.png and b/src/a.png differ\n');
+  deniedDiff('deny-quoted-diff-git', 'diff --git "a/docs/a.md" "b/src/a.rs"\n');
+  const pipeScope = briefFile('deny-pipe-scope.md', 'Size: S\nRole: implementer\nScope: docs/a.md | Scope: src/a.rs\n');
+  assert.equal(gate.check({ ...K, env: {}, files: [pipeScope], cwd: bare }).cls, 'core-unset', 'Scope twice on one line');
+  const pipeAll = briefFile('deny-pipe-all.md', 'Size: S | Role: implementer | Scope: docs/a.md | Scope: src/a.rs\n');
+  assert.equal(gate.check({ ...K, env: {}, files: [pipeAll], cwd: bare }).cls, 'core-unset', 'Scope twice inside a one-line header');
+
+  if (typeof process.getuid === 'function' && process.getuid() === 0) {
+    console.log('note: skip chmod 000 core-unset case (running as root)');
+  } else {
+    const pdir = path.join(bare, 'src', 'p');
+    fs.mkdirSync(pdir, { recursive: true });
+    fs.chmodSync(pdir, 0);
+    try {
+      const nf = briefFile('deny-eacces.md', 'Size: S\nRole: implementer\nScope: src/p/new.rs\nNew-Files: src/p/new.rs\n');
+      assert.equal(gate.check({ ...K, env: {}, files: [nf], cwd: bare }).cls, 'core-unset', 'EACCES is not absent');
+    } finally {
+      fs.chmodSync(pdir, 0o755);
+    }
+  }
+
+  const okRepo = gitRepo('core-unset-r5-ok');
+  const lf = briefFile('allow-lf.diff', 'diff --git a/docs/plans/x.md b/docs/plans/x.md\n+++ b/docs/plans/x.md\ndiff --git a/tests/fixtures/a.json b/tests/fixtures/a.json\n--- a/tests/fixtures/a.json\n+++ b/tests/fixtures/a.json\n');
+  const lfBrief = briefFile('allow-lf.md', brief);
+  assert.equal(gate.check({ ...K, env: {}, files: [lfBrief], diffFiles: [lf], cwd: okRepo }).allowed, true, 'LF diff docs and fixtures');
+  const ren = briefFile('allow-rename-docs.diff', 'diff --git a/docs/a.md b/docs/b.md\nsimilarity index 100%\nrename from docs/a.md\nrename to docs/b.md\n');
+  assert.equal(gate.check({ ...K, env: {}, files: [lfBrief], diffFiles: [ren], cwd: okRepo }).allowed, true, 'rename inside docs');
+  const bothDocs = briefFile('allow-pipe-docs.md', 'Size: S | Role: implementer | Scope: docs/a.md | Scope: docs/b.md\n');
+  assert.equal(gate.check({ ...K, env: {}, files: [bothDocs], cwd: okRepo }).allowed, true, 'two docs scopes on one line');
+});
+
 test('class 4 novel: plan/design/brainstorm/architecture/research roles, or a novel marker', () => {
   for (const r of ['plan', 'design', 'brainstorm', 'architecture', 'research']) {
     assert.equal(cls(K, { ...OK, AUTOPILOT_TASK_ROLE: r }).cls, 'novel', r);
   }
   assert.equal(cls(K, { ...OK, AUTOPILOT_TASK_NOVEL: '1' }).cls, 'novel');
-  const nov = path.join(tmp, 'novel.md'); fs.writeFileSync(nov, 'Role: implementer | Size: S\nNovel: yes\nScope: a.md\n');
+  const nov = path.join(tmp, 'novel.md'); fs.writeFileSync(nov, 'Role: implementer | Size: S\nNovel: yes\nScope: docs/a.md\n');
   assert.equal(cls(K, {}, { files: [nov] }).cls, 'novel');
 });
 

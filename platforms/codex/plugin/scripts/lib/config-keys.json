@@ -7651,10 +7651,11 @@
       "class": "plumbing",
       "default": null,
       "readers": [
-        "scripts/lib/worker-containment.sh",
-        "scripts/dispatch-hetero.sh"
+        "scripts/dispatch-hetero.sh",
+        "hooks/tests/worker-mount-containment.test.sh",
+        "hooks/tests/dispatch-hetero-sandbox.test.sh"
       ],
-      "doc": null,
+      "doc": "references/hetero-dispatch.md",
       "relates": [],
       "note": "Sentinel exported across WORKER_MOUNT_PREFIX to verify sudo env_reset has not cleared caller environment variables (e.g. cc-shim ANTHROPIC_*)."
     }

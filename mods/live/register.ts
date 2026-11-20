@@ -69,6 +69,7 @@ import { FLEET_SUMMARY_V, fleetSummary, fleetView, makeFleetFeed, othersView, ut
 import type { FleetSummary, FleetTask, FleetView } from './fleet'
 import type { BandPageId, BarTabId, ScrollView } from './tabs'
 import { BODY_ROWS, MAIN_CONTENT_ROWS, SHELL_MENUS, SHELL_MIN_ROWS, SHELL_ROWS, type ShellMenuId, type ShellPlan, cardRows, freshCount, isCompact, leftItems, leftTitle, legacyUsageRows, newestSeq, nextShellMenu, parseRoom, progressSegs, roomLines, shellContentRows, shellGeometry, shellPlan } from './shell'
+import { collapsedRowMark, initialBandCollapsed, toggleBand, toggleFold, type BandTarget } from './bandfold'
 import type { Card } from './shell'
 import type { LeftItem } from './shell'
 import type { FleetLaneSum, RoomRow } from './shell'
@@ -315,7 +316,8 @@ const consolePaneOf = async ($: EngineInterface, e: Parameters<EngineInterface['
     },
   })
 }
-let bandCollapsed = false // r5: the shell collapsed to its one band row (menu row with the pending count and the expand hint); the d key toggles it, the default is expanded; reset at session start
+let bandCollapsed = initialBandCollapsed() // the shell's one band row (pending count, needs-you count, the expand hint). A click on that row expands; d on the open 待決 menu collapses. Reset at session start.
+let bandSeenCount: number | null = null // pending cards already shown. Null until the first shell draw, which baselines them so cards already waiting are not marked. A later growth while collapsed marks ▲N until one expanded draw catches up.
 let bandShellOff = false // console mode / framed pages: another page name was pressed, so the default 待決 shell stays closed until 待決 is pressed again; reset at session start
 let barTab: BarTabId | null = null // the tab of the band row that is open (its content is drawn under the rule); null = none; a memory state, reset at session start
 let shellMenu: ShellMenuId = 'd' // the O4 shell's menu (d 待決 by default). It is not barTab: d/r/u/p/h and 9 only change this.
@@ -1547,7 +1549,8 @@ export async function startLive($: EngineInterface): Promise<void> {
   shellMenu = 'd'
   shellOn = false
   bandShellOff = false
-  bandCollapsed = false
+  bandCollapsed = initialBandCollapsed()
+  bandSeenCount = null
   geomSeen = null
   geomLines = null
   folded.clear() // a new Claude Code session opens every section
@@ -1979,16 +1982,30 @@ export function registerLive(on: Parameters<Register>[0]): void {
           progress = progressRow(el, [])
           quick = quickOf(0, [])
         }
-        // r5: d on the 待決 menu collapses the band to its menu row, d again expands it; another menu key expands and selects. tok/s (the forge label) sits on the menu row where it fits.
-        const selectMenu = (id: ShellMenuId) => {
-          if (id === 'd' && shellMenu === 'd' && !bandCollapsed) bandCollapsed = true
-          else { bandCollapsed = false; shellMenu = id }
+        // One row until a click. d on the open 待決 menu collapses; another menu key expands and selects. A new card while collapsed stays collapsed and marks ▲N.
+        // No focus-free key binding exists ($.command.register is a slash command; a Button hotkey needs this surface's keyboard), so the letter d still needs ctrl+x tab.
+        const pendingCount = nonStep.length
+        const seen = bandSeenCount === null ? pendingCount : bandSeenCount
+        if (bandSeenCount === null) bandSeenCount = pendingCount
+        const mark = bandCollapsed && collapsedRowMark(seen, pendingCount)
+        if (!bandCollapsed) bandSeenCount = pendingCount
+        const applyBand = (target: BandTarget) => {
+          const fold = toggleBand({ collapsed: bandCollapsed, menu: shellMenu }, target)
+          bandCollapsed = fold.collapsed
+          shellMenu = fold.menu
           redraw()
         }
+        const applyFold = () => {
+          const fold = toggleFold({ collapsed: bandCollapsed, menu: shellMenu })
+          bandCollapsed = fold.collapsed
+          shellMenu = fold.menu
+          redraw()
+        }
+        const foldCell = { collapsed: bandCollapsed, onPress: applyFold }
         const menu = shellMenuRow(el, t, {
-          selected: shellMenu, pending: nonStep.length, room: shellRoom.rows.length, awaiting: (snapshot?.awaiting ?? []).length, columns,
-          onSelect: selectMenu, speed: forge === null ? null : forgeBar(forge).segs, onSpeed: redraw,
-          ...(bandCollapsed ? { note: t('shell.collapsed', { n: nonStep.length, key: 'd' }) } : bare ? { note: barePos } : {}),
+          selected: shellMenu, pending: pendingCount, room: shellRoom.rows.length, awaiting: (snapshot?.awaiting ?? []).length, columns,
+          onSelect: applyBand, speed: forge === null ? null : forgeBar(forge).segs, onSpeed: redraw,
+          ...(bandCollapsed ? { note: t('shell.collapsed', { n: pendingCount, key: 'd' }), onRow: () => applyBand('row'), mark, fold: foldCell } : bare ? { note: barePos } : {}),
         })
         if (bandCollapsed) {
           await logBandGeometry($, rows, columns, 1, false)
@@ -1996,10 +2013,10 @@ export function registerLive(on: Parameters<Register>[0]): void {
         }
         if (bareMain !== null) {
           await logBandGeometry($, rows, columns, bareMain.length + 2)
-          return stackRows(el, ShellBare(el, { main: bareMain, bar: menu, quick }))
+          return stackRows(el, ShellBare(el, { main: bareMain, bar: menu, quick, columns, fold: foldCell }))
         }
         await logBandGeometry($, rows, columns, plan.bodyRows + 4)
-        return stackRows(el, Shell(el, { plan, left, onLeft, main, progress, quick, bar: menu }))
+        return stackRows(el, Shell(el, { plan, left, onLeft, main, progress, quick, bar: menu, columns, fold: foldCell }))
       }
     }
     let content: unknown[] = []

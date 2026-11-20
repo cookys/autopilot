@@ -34,6 +34,8 @@ node --test "$here/band-keep-speed.test.js"
 node --test "$here/band-no-error-text.test.js"
 # the O4 shell planner (tiers, geometry, the forge-stats panel reader, the right-hand columns): pure, imports the real shell.ts
 node --test "$here/shell.test.js"
+# the band fold (default one row, one click, the new-card mark): pure, imports the real bandfold.ts
+node --test "$here/bandfold.test.js"
 # the P2 pet tab & panel/1 tuple reader (sprite, 79 vs 80 fallback, negative controls, usage/side poison isolation): pure, imports real panel.ts & pettab.ts
 node --test "$here/pettab.test.js"
 # the operator-console snapshot (the fleet.console/1 trust-boundary parser, the console.json mode reader, fictional fixtures): pure, imports the real console.ts

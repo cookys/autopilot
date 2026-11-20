@@ -75,7 +75,7 @@ import type { FleetLaneSum, RoomRow } from './shell'
 import { focusAnchorKey, Pane, noteInputKey, resetNoteInputs } from './pane'
 import { routeKey } from './pages/keys'
 import type { KeyAction } from './pages/keys'
-import { decideReduce, NO_NAV } from './pages/decide'
+import { decideReduce, NO_NAV, v74Pool } from './pages/decide'
 import type { DecideNav } from './pages/decide'
 import { SEATS_TIMEOUT_MS, seatQuota } from './pages/now'
 import { PAGES } from './pages/index'
@@ -1253,7 +1253,7 @@ const undoDeps = ($: EngineInterface): UndoDeps => ({
   now: () => $.clock.now(),
   read: () => read($, DECIDE),
   update: fn => update($, DECIDE, fn),
-  pool: st => actionable(snapshot === null ? [] : snapshot.pending.filter(d => !isStepCard(d)), decideBatch.order.length > 0 ? decideBatch : bandBatch, st), // a reopened card the session already closed is kept in whichever batch is open
+  pool: st => actionable(v74Pool(snapshot === null ? [] : snapshot.pending.filter(d => !isStepCard(d)), decideFeed.cards()), decideBatch.order.length > 0 ? decideBatch : bandBatch, st), // a reopened card the session already closed is kept in whichever batch is open
   claim: claimCard ?? claimWith($),
   onClaimFailed: (id, reason) => {
     void $.clock.now().then(ts => appendSendLog((p) => $.fs.read(p), (p, t) => $.fs.write(p, t), liveBaseSeen, { ts, event: 'claim_failed', ids: [id], reason })).catch(() => undefined)
@@ -1478,7 +1478,7 @@ export async function frameKey($: EngineInterface, k: KeyAction): Promise<void> 
     if (id === 'decide') {
       const nowMs = await $.clock.now()
       const st = await read($, DECIDE)
-      const ctx = { live: snapshot, console: consoleSnap, size: { cols: decideCols, rows: 24 }, t: tr, nowMs }
+      const ctx = { live: snapshot, console: consoleSnap, size: { cols: decideCols, rows: 24 }, t: tr, nowMs, v74: await v74CtxOf($) }
       const r = decideReduce({ ...st, ...decideLocal }, k, ctx, nowMs)
       decideLocal = { cursor: r.nav.cursor, folded: r.nav.folded, textMode: r.nav.textMode, textBuf: r.nav.textBuf, opt: r.nav.opt, detailOffset: r.nav.detailOffset }
       if (r.nav.picks !== st.picks || r.nav.notes !== st.notes) await update($, DECIDE, s => ({ ...s, picks: r.nav.picks, notes: r.nav.notes }))
@@ -1487,7 +1487,7 @@ export async function frameKey($: EngineInterface, k: KeyAction): Promise<void> 
       else if (r.effect?.kind === 'fill') await fillPrompt($, r.effect.text)
     } else if (id === 'todo') {
       const nav = await read($, V74_NAV)
-      const cards = decideFeed.cards() ?? []
+      const cards = (await v74CtxOf($)).todo ?? []
       const last = Math.max(0, cards.length - 1)
       if (k.kind === 'move') await update($, V74_NAV, () => ({ ...nav, cursor: Math.min(last, Math.max(0, nav.cursor + k.by)) }))
       else if (k.kind === 'pick') {

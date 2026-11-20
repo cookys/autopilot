@@ -11,10 +11,9 @@ import { helpPage } from './help'
 import { petPage } from '../pettab'
 import { quotaPage } from './quota'
 import { forgePage } from './forge'
+import { todoPage } from './todo'
 
 const pet = (): Page => petPage
-
-const todoShell: Page = { id: 'todo', key: '8', title: '待辦', framed: true, render: () => ({ body: [], actions: [] }) }
 
 export const PAGES: Page[] = [
   nowPage,
@@ -24,7 +23,7 @@ export const PAGES: Page[] = [
   spendPage,
   hygienePage,
   fleetPage,
-  todoShell,
+  todoPage,
   helpPage,
   pet(),
 ]
@@ -38,5 +37,6 @@ void [
   'v74.b.help.status_title', 'v74.b.help.status_1', 'v74.b.help.status_2', 'v74.b.help.status_3',
   'v74.b.help.symbol_title', 'v74.b.help.symbol_1', 'v74.b.help.symbol_2', 'v74.b.help.symbol_3',
   'v74.b.help.keys_title', 'v74.b.help.keys_1', 'v74.b.help.keys_2', 'v74.b.help.keys_3',
+  'v74.d.todo_head', 'v74.d.todo_due', 'v74.d.todo_no_due', 'v74.d.todo_back', 'v74.d.todo_no_due_note', 'v74.d.todo_no_source', 'v74.d.todo_none', 'v74.d.todo_for', 'v74.d.todo_move',
   'v74.b.help.keys_4', 'v74.b.help.keys_5', 'v74.b.help.keys_6', 'v74.b.help.keys_7',
 ]

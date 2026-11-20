@@ -84,9 +84,10 @@
 #   or utime+stime summed over that tree) resets the idle clock and appends
 #   "dispatch-author: extend: progress seen (<signal>), idle reset" to the raw log.
 #   No progress for the whole idle limit kills the tree (runner exit 124,
-#   transport_status idle_timeout). --hard-timeout (default 60m, or
+#   transport_status idle_timeout). --hard-timeout (default 4h, or
 #   AUTOPILOT_AUTHOR_HARD_TIMEOUT) is the total wall cap (transport_status
 #   hard_timeout). AUTOPILOT_AUTHOR_SAMPLE_S is the sample interval (default 15).
+#   A kill adds "killed_at": {"elapsed_s": N, "last_progress_s_ago": N, "signal": "idle"|"hard"}.
 #   DISPATCH_QUIET=1 suppresses progress notes on stderr.
 #   AUTOPILOT_SETTLE_MS         # override the late-flush settle wait bounds in milliseconds
 #                               #   (default: 3000ms; cc-shim: 10000ms)
@@ -438,14 +439,14 @@ author_remap_kill_exit() {
 }
 
 # Idle limit (--timeout) and hard wall cap (--hard-timeout / AUTOPILOT_AUTHOR_HARD_TIMEOUT,
-# default 60m). Parsed after a strict contract may rewrite TIMEOUT, before any runner.
+# default 4h). Parsed after a strict contract may rewrite TIMEOUT, before any runner.
 author_resolve_watch_limits() {
   if [ "${HARD_TIMEOUT_SUPPLIED:-0}" -eq 1 ]; then
     AUTHOR_HARD_SPEC="$HARD_TIMEOUT"
   elif [ -n "${AUTOPILOT_AUTHOR_HARD_TIMEOUT:-}" ]; then
     AUTHOR_HARD_SPEC="$AUTOPILOT_AUTHOR_HARD_TIMEOUT"
   else
-    AUTHOR_HARD_SPEC="60m"
+    AUTHOR_HARD_SPEC="4h"
   fi
   local sample="${AUTOPILOT_AUTHOR_SAMPLE_S:-15}" parsed
   if ! parsed="$(node "$_AUTHOR_SELF_DIR/lib/idle-watch.js" parse --idle "$TIMEOUT" --hard "$AUTHOR_HARD_SPEC" --sample "$sample" 2>&1)"; then
@@ -483,14 +484,20 @@ author_watch_prepare() {
 # outside that redirection. <T> and the hard cap are the configured specs.
 author_note_watch() {
   if [ -z "${AUTHOR_WATCH_KIND:-}" ] && [ -n "${AUTHOR_WATCH_STATUS:-}" ] && [ -s "$AUTHOR_WATCH_STATUS" ]; then
-    AUTHOR_WATCH_KIND="$(tr -d '[:space:]' < "$AUTHOR_WATCH_STATUS")"
+    local _aw_kind="" _aw_el="" _aw_ago=""
+    read -r _aw_kind _aw_el _aw_ago < "$AUTHOR_WATCH_STATUS" || true
+    AUTHOR_WATCH_KIND="$_aw_kind"
+    [[ "${_aw_el:-}" =~ ^[0-9]+$ ]] && AUTHOR_KILLED_ELAPSED="$_aw_el"
+    [[ "${_aw_ago:-}" =~ ^[0-9]+$ ]] && AUTHOR_KILLED_AGO="$_aw_ago"
   fi
   case "${AUTHOR_WATCH_KIND:-}" in
     idle_timeout)
+      AUTHOR_KILLED_SIGNAL="idle"
       printf 'dispatch-author: idle for %s with no output or CPU; killed (raise --timeout to allow longer idle)\n' "$TIMEOUT" >&2
       RUNNER_EXIT=124
       ;;
     hard_timeout)
+      AUTHOR_KILLED_SIGNAL="hard"
       printf 'dispatch-author: hard cap %s reached; killed\n' "$AUTHOR_HARD_SPEC" >&2
       RUNNER_EXIT=124
       ;;
@@ -581,6 +588,12 @@ emit_result() {
   fi
   if [ -n "${POLARITY_RECEIPT_DIGEST:-}" ]; then
     extra_fields="${extra_fields}, \"polarity_receipt_digest\": \"$(json_escape "$POLARITY_RECEIPT_DIGEST")\""
+  fi
+  if [ -n "${AUTHOR_KILLED_SIGNAL:-}" ]; then
+    local _ak_el="${AUTHOR_KILLED_ELAPSED:-0}" _ak_ago="${AUTHOR_KILLED_AGO:-0}"
+    [[ "$_ak_el" =~ ^[0-9]+$ ]] || _ak_el=0
+    [[ "$_ak_ago" =~ ^[0-9]+$ ]] || _ak_ago=0
+    extra_fields="${extra_fields}, \"killed_at\": {\"elapsed_s\": ${_ak_el}, \"last_progress_s_ago\": ${_ak_ago}, \"signal\": \"${AUTHOR_KILLED_SIGNAL}\"}"
   fi
 
   local raw_log_json="null"

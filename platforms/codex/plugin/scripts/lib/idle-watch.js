@@ -288,7 +288,9 @@ function cmdRun(argv) {
   function killFor(kind) {
     if (killing) return;
     killing = true;
-    try { fs.writeFileSync(opt.statusFile, `${kind}\n`); } catch { /* parent maps a bare 124 */ }
+    const elapsed = Math.max(0, Math.round((Date.now() - start) / 1000));
+    const ago = Math.max(0, Math.round((Date.now() - lastProgressAt) / 1000));
+    try { fs.writeFileSync(opt.statusFile, `${kind} ${elapsed} ${ago}\n`); } catch { /* parent maps a bare 124 */ }
     const leader = child.pid;
     const first = livePids(leader, known, proc);
     for (const pid of first) known.push(pid);
@@ -323,6 +325,7 @@ function cmdRun(argv) {
   const sampleMs = opt.sampleS * 1000;
   let idleDeadline = start + idleMs;
   const hardDeadline = start + hardMs;
+  let lastProgressAt = start;
   let baseline = null;
   let failedMeasure = false;
   let goneWaits = 0;
@@ -363,6 +366,7 @@ function cmdRun(argv) {
         const sig = progressSignal(baseline, m);
         if (now >= idleDeadline) {
           if (sig) {
+            lastProgressAt = now;
             let after = m.bytes;
             try {
               writeExtend(opt.rawLog, sig);

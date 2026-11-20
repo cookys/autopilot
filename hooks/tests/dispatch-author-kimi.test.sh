@@ -309,11 +309,11 @@ assert_exit_code "$?" "2" "kimi shim rejects a non-numeric --timeout-seconds"
 
 AUTHOR="$REPO_ROOT/scripts/dispatch-author.sh"
 # --timeout is the idle limit and is not forwarded. The adapter timeoutMs is the
-# hard cap (default 60m → 3595000). --hard-timeout 10m → 595000.
-assert_eq "$(tf_recorded tf_env env DISPATCH_DETACH=0 DISPATCH_QUIET=1 bash "$AUTHOR" --runner kimi --model kimi-code/k3 --prompt-file "$TF_PROMPT" --timeout 10m)" "3595000" \
-  "dispatch-author.sh --timeout 10m keeps the kimi adapter on the 60m hard cap (3595000 ms)"
-assert_eq "$(tf_recorded tf_env env DISPATCH_DETACH=0 DISPATCH_QUIET=1 bash "$AUTHOR" --runner kimi --model kimi-code/k3 --prompt-file "$TF_PROMPT")" "3595000" \
-  "dispatch-author.sh default idle 5m keeps the kimi adapter on the 60m hard cap (3595000 ms)"
+# hard cap (default 4h → 14395000). --hard-timeout 10m → 595000.
+assert_eq "$(tf_recorded tf_env env DISPATCH_DETACH=0 DISPATCH_QUIET=1 bash "$AUTHOR" --runner kimi --model kimi-code/k3 --prompt-file "$TF_PROMPT" --timeout 10m)" "14395000" \
+  "dispatch-author.sh --timeout 10m keeps the kimi adapter on the 4h hard cap (14395000 ms)"
+assert_eq "$(tf_recorded tf_env env DISPATCH_DETACH=0 DISPATCH_QUIET=1 bash "$AUTHOR" --runner kimi --model kimi-code/k3 --prompt-file "$TF_PROMPT")" "14395000" \
+  "dispatch-author.sh default idle 5m keeps the kimi adapter on the 4h hard cap (14395000 ms)"
 assert_eq "$(tf_recorded tf_env env DISPATCH_DETACH=0 DISPATCH_QUIET=1 bash "$AUTHOR" --runner kimi --model kimi-code/k3 --prompt-file "$TF_PROMPT" --hard-timeout 10m)" "595000" \
   "dispatch-author.sh --hard-timeout 10m reaches the kimi adapter as 595000 ms"
 

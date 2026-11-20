@@ -123,6 +123,18 @@ main_checkout_fingerprint() {
     ')" || { _fp_unverifiable refs-scope; return 0; }
   fi
   # FP_ROUND_SCOPE_END
+  # A concurrent fetch in this clone adds refs/remotes/** and FETCH_HEAD only.
+  # Those are not this worker's mutation (operator, hetero idle-timeout). Any
+  # other ref, and every working-tree change, still changes the digest.
+  refs="$(printf '%s\n' "$refs" | awk '
+    {
+      name = $0
+      sub(/=.*/, "", name)
+      if (index(name, "refs/remotes/") == 1) next
+      if (name == "FETCH_HEAD") next
+      print
+    }
+  ')" || { _fp_unverifiable refs-remote; return 0; }
   # Content, not labels: `status --porcelain` shows a path's state, so a second edit to an
   # already-dirty file, or an overwrite of an IGNORED file (.venv/bin/python), is invisible
   # to it (review, 2026-09-13). Tracked content: the unstaged and staged diffs. Everything

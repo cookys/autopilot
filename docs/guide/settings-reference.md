@@ -233,7 +233,9 @@ Opt-in copy of hetero-review report files. Finalize is wired in. It writes to th
 | `AUTOPILOT_TIP_VERIFY_REQUIRE` | Set to `1` to make `dispatch-hetero.sh` refuse before the worker starts when no acceptance command is found (no `--verify-cmd`, no fenced block under the brief `## Acceptance`, no fenced or whole-line command under `.claude/quality-gate-config.md` `## Test Command`). Unset, a non-empty `scripts/lib/tip-verify-grace.json` proceeds, records `tip_verify` `no_source`, prints one stderr line naming the repo, and does not re-run acceptance. An empty, missing or unreadable list refuses the same way as `1`. | unset |  |
 | `AUTOPILOT_CONSULT_TIMEOUT` | Timeout of a consult dispatch. | `5m` |  |
 | `AUTOPILOT_DISCUSS_TIMEOUT` | Timeout of a discuss dispatch. | `5m` |  |
-| `AUTOPILOT_AUTHOR_HARD_TIMEOUT` | Wall cap for an author dispatch when `--hard-timeout` is not passed. A duration (`60m`, `1h`). The run is killed even if it is still producing output. | `60m` |  |
+| `AUTOPILOT_AUTHOR_HARD_TIMEOUT` | Wall cap for an author dispatch when `--hard-timeout` is not passed. A duration (`4h`, `60m`). The run is killed even if it is still producing output. | `4h` |  |
+| `AUTOPILOT_HETERO_HARD_TIMEOUT` | Wall cap for a hetero dispatch when `--hard-timeout` is not passed. A duration (`4h`, `60m`). The worker is killed even if it is still producing output. | `4h` |  |
+| `AUTOPILOT_HETERO_SAMPLE_S` | How often a hetero dispatch samples the agent log bytes and process-tree CPU, in seconds. A positive number; tests set 1. | `15` |  |
 | `AUTOPILOT_AUTHOR_KILL_GRACE_SECS` | Seconds after SIGTERM before SIGKILL when an author runner is stopped for idle or the hard cap. A positive integer; zero, negatives and non-numbers fall back to 30. | `30` |  |
 | `AUTOPILOT_AUTHOR_MAX_TOKENS` | Response cap of an authoring dispatch. | `30000` |  |
 | `AUTOPILOT_AUTHOR_SAMPLE_S` | How often an author dispatch samples output bytes and process-tree CPU, in seconds. A positive number. | `15` |  |
@@ -485,7 +487,9 @@ Opt-in copy of hetero-review report files. Finalize is wired in. It writes to th
 | `AUTOPILOT_TIP_VERIFY_REQUIRE` | Set to `1` to make `dispatch-hetero.sh` refuse before the worker starts when no acceptance command is found (no `--verify-cmd`, no fenced block under the brief `## Acceptance`, no fenced or whole-line command under `.claude/quality-gate-config.md` `## Test Command`). Unset, a non-empty `scripts/lib/tip-verify-grace.json` proceeds, records `tip_verify` `no_source`, prints one stderr line naming the repo, and does not re-run acceptance. An empty, missing or unreadable list refuses the same way as `1`. | unset |  |
 | `AUTOPILOT_CONSULT_TIMEOUT` | Timeout of a consult dispatch. | `5m` |  |
 | `AUTOPILOT_DISCUSS_TIMEOUT` | Timeout of a discuss dispatch. | `5m` |  |
-| `AUTOPILOT_AUTHOR_HARD_TIMEOUT` | Wall cap for an author dispatch when `--hard-timeout` is not passed. A duration (`60m`, `1h`). The run is killed even if it is still producing output. | `60m` |  |
+| `AUTOPILOT_AUTHOR_HARD_TIMEOUT` | Wall cap for an author dispatch when `--hard-timeout` is not passed. A duration (`4h`, `60m`). The run is killed even if it is still producing output. | `4h` |  |
+| `AUTOPILOT_HETERO_HARD_TIMEOUT` | Wall cap for a hetero dispatch when `--hard-timeout` is not passed. A duration (`4h`, `60m`). The worker is killed even if it is still producing output. | `4h` |  |
+| `AUTOPILOT_HETERO_SAMPLE_S` | How often a hetero dispatch samples the agent log bytes and process-tree CPU, in seconds. A positive number; tests set 1. | `15` |  |
 | `AUTOPILOT_AUTHOR_KILL_GRACE_SECS` | Seconds after SIGTERM before SIGKILL when an author runner is stopped for idle or the hard cap. A positive integer; zero, negatives and non-numbers fall back to 30. | `30` |  |
 | `AUTOPILOT_AUTHOR_MAX_TOKENS` | Response cap of an authoring dispatch. | `30000` |  |
 | `AUTOPILOT_AUTHOR_SAMPLE_S` | How often an author dispatch samples output bytes and process-tree CPU, in seconds. A positive number. | `15` |  |

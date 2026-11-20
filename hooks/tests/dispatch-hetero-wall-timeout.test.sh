@@ -112,6 +112,7 @@ assert_timeout_kill_result() {
   assert_eq "true" "$(json_get "$json" timeout_enforced)" "$label timeout_enforced"
   assert_eq "caller" "$(json_get "$json" timeout_source)" "$label timeout_source"
   assert_contains "$(json_get "$json" error)" "wall timeout" "$label error mentions wall timeout"
+  assert_eq "timeout" "$(json_get "$json" error_category)" "$label error_category timeout (not network_failed)"
   local stubpid=""
   [ -f "$pidfile" ] && stubpid="$(cat "$pidfile")"
   [ -n "$stubpid" ] || fail "$label: stub did not write pidfile"
@@ -663,5 +664,35 @@ EOF
 }
 
 assert_case_c_term_ignoring_group_member_killed
+
+# RED (reverted passive_capture/classify_outcome timeout fix): wall timeout → network_failed from exit 143 / log "timeout".
+assert_connection_refused_not_rail_timeout() {
+  local stub="$TEST_TMP/grok-refused" runs="$TEST_TMP/runs-refused"
+  mkdir -p "$runs"
+  cat > "$stub" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--list-models" ]; then
+  echo "cursor-grok-4.6-low - Grok 4.6 (low)"
+  exit 0
+fi
+case " $* " in *" __autopilot_probe__ "*)
+  echo "Error: unknown effort" >&2
+  exit 1 ;;
+esac
+printf '%s\n' 'connection refused'
+exit 1
+EOF
+  chmod +x "$stub"
+  local out json
+  out="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
+    "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+    --branch feat/wdog-refused --prompt-file "$PROMPT" --timeout 60s 2>&1)" || true
+  json="$(last_json "$out")"
+  [ -n "$json" ] || fail "assert_connection_refused_not_rail_timeout: missing JSON"
+  assert_eq "false" "$(json_get "$json" timed_out)" "connection refused timed_out false"
+  assert_eq "network_failed" "$(json_get "$json" error_category)" "connection refused error_category network_failed"
+}
+
+assert_connection_refused_not_rail_timeout
 
 finalize_test

@@ -40,9 +40,9 @@ const ctx = (rows: number, con = snapshot(), cols = 80): PageCtx => ({ live, con
 
 // X2b: the real host supplies scroll.bodyRows independently of viewport height
 // (register.ts passes it through frameHeight). The measured inline allocations
-// at terminal 80x20 / 80x16 are 4 / 3 rows: header + 2 / 1 content + strip.
+// at terminal 80x20 / 80x16 are 5 / 4 rows: header + 2 / 1 content + border + strip (v7.4).
 function smallNow(terminalRows: 20 | 16, con = snapshot()): string[] {
-  const hostBodyRows = terminalRows === 20 ? 4 : 3
+  const hostBodyRows = terminalRows === 20 ? 5 : 4
   const mk = (kind: string) => (props: Record<string, any>) => ({ kind, props })
   const el = { Box: mk('Box'), Text: mk('Text'), Button: mk('Button'), Link: mk('Link') }
   const tree = Pane(el as never, live, 'now', () => {}, t, 80, () => {}, new Set(), () => {}, new Set(), { offset: 0, bodyRows: hostBodyRows }, null, null, null, null, {
@@ -59,7 +59,7 @@ function smallNow(terminalRows: 20 | 16, con = snapshot()): string[] {
   walk(tree)
   expect(rows.length, 'the supplied host allocation is preserved').toBe(hostBodyRows)
   for (const row of rows) expect(displayWidth(row)).toBeLessThanOrEqual(80)
-  return rows.slice(1, -1)
+  return rows.slice(1, -2)
 }
 
 test('X2b: 80x20 uses its two content rows for the most severe class then a severity-count overflow summary, dropping residue first', () => {
@@ -119,25 +119,25 @@ test('X2: 80x24 overflow names hidden severity and category, prioritizes the wor
   expect(hint).toContain('?3')
   expect(hint).toContain('艦隊')
   expect(out.slice(1, -1).some(r => r.includes('殘留'))).toBe(false)
-  expect(frameRows(nowPage, ctx(24, con)).flat().some(s => s.press === 'tab:8:hygiene')).toBe(true)
+  expect(frameRows(nowPage, ctx(24, con)).flat().some(s => s.press === 'tab:6:hygiene')).toBe(true)
   for (const row of out) expect(displayWidth(row)).toBeLessThanOrEqual(80)
 })
 
-test('X2: the only available row at 80x3 names the worst category, its counts and the most urgent pool', () => {
-  const out = frameRows(nowPage, ctx(3)).map(text)
-  expect(out.length).toBe(3)
+test('X2: the only available row at 80x4 names the worst category, its counts and the most urgent pool', () => {
+  const out = frameRows(nowPage, ctx(4)).map(text)
+  expect(out.length).toBe(4)
   expect(out.join('\n')).toContain('額度 ✗2 ?3')
   expect(out.join('\n')).toContain('urgent')
-  expect(out.join('\n')).not.toContain('殘留')
+  expect(out.slice(0, -2).join('\n')).not.toContain('殘留') // the strip names tab 6 殘留; only the page rows are checked
 })
 
-test('X2: at 80x3 quota severity stays visible with no pending decision, and seat-only quota data does not throw', () => {
+test('X2: at 80x4 quota severity stays visible with no pending decision, and seat-only quota data does not throw', () => {
   const con = snapshot()
   con.cards = []; con.counts.decisions = 0
-  expect(frameRows(nowPage, ctx(3, con)).map(text).join('\n')).toContain('額度 ✗2 ?3')
+  expect(frameRows(nowPage, ctx(4, con)).map(text).join('\n')).toContain('額度 ✗2 ?3')
   con.quota.pools = []
   con.items = [{ id: 'seat_blocked:orphan', kind: 'seat_blocked', state: 'failed', title: '池用完', text: '池用完', line_id: null, to_console: true, facts: { pool: 'orphan' } }] as never
-  expect(() => frameRows(nowPage, ctx(3, con))).not.toThrow()
+  expect(() => frameRows(nowPage, ctx(4, con))).not.toThrow()
 })
 
 test('X3: 現況, 艦隊 and the band count the same snapshot as the expanded rows, including offline and normal lines', () => {
@@ -164,7 +164,7 @@ test('Y1: a cut 艦隊 list counts hidden states and offers working previous/nex
   const out = frameRows(page, ctx(24, con)).map(text)
   expect(out.length).toBe(24)
   expect(out.some(r => /↓ 還有 \d+ 項（○\d+）/.test(r))).toBe(true)
-  const compact = frameRows(page, ctx(7, snapshot())).map(text)
+  const compact = frameRows(page, ctx(8, snapshot())).map(text)
   expect(compact.join('\n')).toContain('↓ 還有 7 項（⊘4 ○3）') // V2: reclaiming one row shows the other offline line.
   const acts = page.render(ctx(24, con)).actions.flat()
   expect(acts.some(s => s.text.includes('上一線') && s.press === 'fleet:see:乙')).toBe(true)

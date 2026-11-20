@@ -4,7 +4,7 @@ import { frameRows } from './frame'
 import { quotaPage, renderQuota } from './quota'
 import { consoleOf, ctxOf, POOLS } from './quota.fixture'
 import { Pane } from '../pane'
-import { PAGES } from './index'
+import { PAGES, EXTRA_PAGES } from './index'
 import { makeT } from '../i18n'
 import { decidePage, decideReduce, NO_NAV } from './decide'
 import { NOW } from './quota.fixture'
@@ -119,10 +119,17 @@ test('X5: the inert focus anchor shares the final strip row instead of adding a 
   const mk = (kind: string) => (props: any) => ({ kind, props })
   const el = { Box: mk('Box'), Text: mk('Text'), Button: mk('Button'), Link: mk('Link') }
   const root = Pane(el, null, 'spend', () => {}, makeT('zh-TW'), 120, undefined, undefined, undefined, undefined, null, null, null, null, null,
-    { pages: PAGES, pageId: 'quota', console: consoleOf(POOLS) as never, nowMs: 0, rows: 30 }) as any
-  const children = root.props.children.flat(9).filter(Boolean)
-  expect(children.length).toBe(30)
-  expect(children[children.length - 1].kind).toBe('Box')
-  const tail = children[children.length - 1].props.children.flat(9).filter(Boolean)
+    { pages: [...PAGES, ...EXTRA_PAGES], pageId: 'quota', console: consoleOf(POOLS) as never, nowMs: 0, rows: 30 }) as any
+  // v7.4: the frame rows sit in the root box's frame column; collect every keyed frame row (f0..fN) wherever the host box nests them
+  const rowsOf: any[] = []
+  const collect = (n: any): void => {
+    if (Array.isArray(n)) { n.forEach(collect); return }
+    if (n === null || typeof n !== 'object') return
+    if (n.kind === 'Box' && /^f\d+$/.test(String(n.props?.key ?? ''))) rowsOf.push(n)
+    else collect(n.props?.children)
+  }
+  collect(root)
+  expect(rowsOf.length).toBe(30)
+  const tail = rowsOf[rowsOf.length - 1].props.children.flat(9).filter(Boolean)
   expect(tail.some((n: any) => n.kind === 'Button' && n.props.autoFocus === true)).toBe(true)
 })

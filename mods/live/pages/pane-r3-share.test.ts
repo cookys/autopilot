@@ -34,12 +34,12 @@ const unknownPools = ['A 池', 'B 池', 'F 池'].map(pool => ({ ...POOLS[3], poo
 test('W4: overflow uses three real cards and counts only categories absent from the same row', () => {
   const con = snapshot([...redPools, ...unknownPools, ...wastes])
   con.cards = cards; con.counts.decisions = 3
-  const single = frameRows(nowPage, ctx(80, 3, con)).map(text).join('\n')
+  const single = frameRows(nowPage, ctx(80, 4, con)).map(text).join('\n')
   expect(single).toContain('待決 3 張')
   expect(single).toContain('額度浪費 ▲5')
   expect((single.match(/▲5/g) ?? []).length).toBe(1) // W4: waste pools belong to one source summary.
   expect(single).not.toContain('另有') // all three categories fit on the same row
-  const two = frameRows(nowPage, ctx(80, 4, con)).map(text).join('\n')
+  const two = frameRows(nowPage, ctx(80, 5, con)).map(text).join('\n')
   expect(two).toContain('待決 3 張')
   expect(two).not.toMatch(/待決 1(?:\D|$)/)
 })
@@ -68,14 +68,14 @@ test('W5: band names stale fleet age plus quota cause and repair; missing consol
   expect(missingStale).toContain('12 分')
   expect(missingStale).toContain('資料已過期')
   expect(walk(missing.node).some(n => n.props.dimColor === true && flat(n).includes('x'))).toBe(true)
-  const now = frameRows(nowPage, ctx(80, 5, snapshot(redPools))).map(text).join('\n')
+  const now = frameRows(nowPage, ctx(80, 6, snapshot(redPools))).map(text).join('\n')
   expect(now).toContain('資料過期')
   expect(now).toContain('12 分')
 })
 
 test('V1: narrow quota labels percentages and focused verdict; one row keeps both red pools and unknown count', () => {
   const con = snapshot([...redPools, ...unknownPools, ...wastes])
-  const table = frameRows(quotaPage, ctx(80, 8, con)).map(text)
+  const table = frameRows(quotaPage, ctx(80, 9, con)).map(text)
   const c = table.find(r => r.includes('C 池') && r.includes('31%'))
   expect(c).toBeDefined()
   expect(c).toContain('31%✗') // R4-2: this table has a header; compact headerless rows retain labels.
@@ -84,9 +84,9 @@ test('V1: narrow quota labels percentages and focused verdict; one row keeps bot
   expect(c).toContain('47%✗')
   expect(c).toContain('+0.3%/時✗') // V1: label values without dropping existing rate/reset facts.
   expect(c).toContain('週五06')
-  const compact = frameRows(quotaPage, ctx(80, 5, con)).map(text).join('\n')
+  const compact = frameRows(quotaPage, ctx(80, 6, con)).map(text).join('\n')
   expect(compact).toMatch(/C 池.*判定/)
-  const single = frameRows(quotaPage, ctx(80, 3, con)).map(text).join('\n')
+  const single = frameRows(quotaPage, ctx(80, 4, con)).map(text).join('\n')
   expect(single).toContain('✗ 額度紅 2（C 池、D 池）· ? 3')
 })
 
@@ -104,10 +104,10 @@ test('V2: fleet compact controls occupy one row, leaving summary and focused lin
   expect(page.actions.length).toBe(1)
   expect(text(page.actions[0])).toContain('上一線')
   expect(text(page.actions[0])).toContain('下一線')
-  const framed = frameRows(fleetPage, ctx(80, 7, con)).map(text).join('\n')
+  const framed = frameRows(fleetPage, ctx(80, 8, con)).map(text).join('\n')
   expect(framed).toContain('產線 9')
   expect(framed).toContain('✗ 離線 2 台主機')
-  for (const h of [3, 4, 5]) {
+  for (const h of [4, 5, 6]) {
     const out = frameRows(fleetPage, ctx(80, h, con)).map(text).join('\n')
     expect(out, 'height ' + h).toContain('乙線')
     expect(out).toContain('✗')
@@ -127,7 +127,7 @@ test('V4: quota always puts o and previous/next pool in the action row directly 
   expect(action).toContain('下一池 (1/12)')
   expect(rendered.body.flat().some(s => s.press === 'quota:open')).toBe(false)
   const framed = frameRows({ ...quotaPage, render: c => renderQuota(c, view) }, ctx(160, 40, con))
-  expect(text(framed[framed.length - 2])).toBe(action)
+  expect(text(framed[framed.length - 3])).toBe(action)
   const next = rendered.actions.flat().find(s => s.press === 'quota:pool:1')
   expect(next).toBeDefined()
   expect(text(renderQuota(ctx(160, 40, con), { ...view, focus: 1 }).actions[0])).toContain('(2/12)')
@@ -161,7 +161,7 @@ test('U3: now and fleet summaries sort failed before stalled before normal', () 
 
 test('W2 W4: wide overflow counts real hidden pools and calls them 額度浪費, excluding seat chrome', () => {
   const con = snapshot([...redPools, ...unknownPools, ...wastes])
-  const out = frameRows(nowPage, ctx(160, 8, con)).map(text).join('\n')
+  const out = frameRows(nowPage, ctx(160, 9, con)).map(text).join('\n')
   expect(out).toContain('額度浪費 ▲5')
   expect(out).toContain('另有 9 項') // B58: the spend error row (no seats --quota source) takes one pool's place; one red pool is hidden with three unknown and five waste pools
   expect(out).not.toContain('本席 ✗')

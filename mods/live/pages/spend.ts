@@ -286,7 +286,7 @@ export function renderSpend(ctx: PageCtx, view: SpendViewOpts = DEFAULT_VIEW): {
   }
 
   if (wide && !short) body.push([{ text: '' }])
-  body.push([{ text: indent + t('page.spend.see_quota') + ' ' }, { text: '[4]', press: 'tab:4:quota', color: PALETTE.action }])
+  body.push([{ text: indent + t('page.spend.see_quota') + ' ' }, { text: '[5]', press: 'tab:5:quota', color: PALETTE.action }])
   const brokenSource = row === null || staleQuota || live === null || live.state !== 'ok' || sp === null
   return { body, actions: brokenSource ? [[{ text: t('frame.unknown'), dim: true }]] : [] }
 }

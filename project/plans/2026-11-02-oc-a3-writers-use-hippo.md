@@ -1,10 +1,11 @@
 # Plan - operator console A3: autopilot writers use hippo
 
-> Status: draft for plan review (R1, generation-1 findings folded). Owner: operator (decisions), autopilot session
+> Status: plan-reviewed, frozen; scheduled. Owner: operator (decisions), autopilot session
 > (author) · Branch: `plan/oc-a3-hippo-writers` · Size: L (seven phases) ·
 > Parent: fleet repo `docs/plans/2026-11-01-operator-console.md` (approved 2026-11-01), deliverable D3, phase A3 ·
 > Frame: hippo owns records and queries; autopilot owns the flow, decides what to write and calls the `hippo` CLI
 > to write it; fleet tasks hold live coordination state (who holds the work, progress).
+> 2026-11-20 schedule (PM 01M7V31A): status scheduled; go-live (A3.7 switchover) 2026-11-23; real blocker is hippo P1.3/P1.4 delivery (A3.7 cutover preconditions, line 535: "Cutover preconditions: hippo P1.3 KR2 green"); trial metrics keep being measured but do not gate go-live.
 
 ## 0. Context / thesis
 

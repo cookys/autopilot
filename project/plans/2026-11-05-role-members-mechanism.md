@@ -1,6 +1,8 @@
 # Plan — 角色成員的機制側：role kit 版本、帶入、升版
 
-> Status: draft for plan review（凍結 rubric，最多兩代）。Owner: autopilot depth-0，回覆 PM。Branch: 無（只有計畫，不含程式、不改測試）。Size: M（設計＋一個小的實作 phase，P2 之前不出貨）。Frame: autopilot develop `8c0d36273`。Related: `project/plans/2026-11-05-rolekit-direction.md`（決定 d-c76529c3）、`evals/rolekit/README.md`、PM 草稿 role-members.md v0.1 的 §3、§4、§5，章程 v1 §8。
+> Status: parked — waits on the rolekit pilot result.（凍結 rubric，最多兩代）。Owner: autopilot depth-0，回覆 PM。Branch: 無（只有計畫，不含程式、不改測試）。Size: M（設計＋一個小的實作 phase，P2 之前不出貨）。Frame: autopilot develop `8c0d36273`。Related: `project/plans/2026-11-05-rolekit-direction.md`（決定 d-c76529c3）、`evals/rolekit/README.md`、PM 草稿 role-members.md v0.1 的 §3、§4、§5，章程 v1 §8。
+>
+> 2026-11-20 schedule (PM 01M7V31A): status parked — waits on the rolekit pilot result.
 
 > 附錄 A 是組織側（PM 草稿 v0.1 原文），正文是機制側；兩份合併，一起走同一次 plan review。
 

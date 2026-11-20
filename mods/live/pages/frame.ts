@@ -158,7 +158,17 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
   const avail = H - 1 - S
   const droppedDecideAct = first.actions.some(x => x.some(s => s.press === 'tab:2:decide'))
   const layout = (r: { body: Row[]; actions: Row[] }, short = false) => {
-    const body = r.body.filter(x => x.some(s => s.text.trim() !== '')).flatMap(x => wrapRow(x, ctx.size.cols, WRAP_HANG)) // X5: spare rows belong above the content; N3: reasons keep their hanging indent
+    const body = r.body.filter(x => x.some(s => s.text.trim() !== '')).flatMap(x => {
+      if (opts.topAnchor === true && x.map(s => s.text).join('').trimStart().startsWith(GLYPHS.structure.open + ' ')) {
+        const row = x.map(s => ({ ...s }))
+        const last = row[row.length - 1]
+        last.text = last.text.replace(new RegExp(' *' + GLYPHS.structure.rule + '+$'), '').trimEnd() + ' '
+        const width = row.reduce((n, s) => n + displayWidth(s.text), 0)
+        last.text += GLYPHS.structure.rule.repeat(Math.max(0, ctx.size.cols - width))
+        return wrapRow(row, ctx.size.cols, WRAP_HANG)
+      }
+      return wrapRow(x, ctx.size.cols, WRAP_HANG)
+    }) // X5: spare rows belong above the content; N3: reasons keep their hanging indent
     const omitEmptyAct = short && page.id === 'now' && (droppedDecideAct || decisionCount(ctx) > 0 || body.some(x => x.some(s => s.press === 'tab:2:decide')))
     const acts: Row[] = opts.topAnchor === true
       ? r.actions.filter(row => row.some(s => s.press !== undefined) || row.map(s => s.text).join('').trim() !== ctx.t('frame.unknown'))

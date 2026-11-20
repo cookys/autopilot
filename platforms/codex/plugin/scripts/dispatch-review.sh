@@ -1329,6 +1329,18 @@ validate_review_block() {
       esac
     done
   fi
+  # JSON findings (a finding object or a findings array) use the same format-reject
+  # path as the other output-rule failures. Text findings keep the line parser.
+  # class + class_sites are required on every JSON finding (scripts/lib/finding-class.js).
+  if [ -n "${BATTERY_FINDINGS:-}" ] && [ "$BATTERY_FINDINGS" != "none" ]; then
+    local _class_err _class_rc
+    _class_err="$(printf '%s' "$BATTERY_FINDINGS" | node "$_REVIEW_SELF_DIR/lib/finding-class.js" validate-review-text 2>&1)"
+    _class_rc=$?
+    if [ "$_class_rc" -ne 0 ]; then
+      BATTERY_FAIL_REASON="${_class_err:-invalid review: finding lacks class}"
+      return 1
+    fi
+  fi
   return 0
 }
 
@@ -1878,6 +1890,9 @@ NONCE=${NONCE}
 
 The VERDICT line is parsed by an exact line anchor. Write it as a bare line reading exactly VERDICT: SHIP-AS-IS or exactly VERDICT: FIX-THEN-SHIP, with no bold markers, no backticks, no code fence, no leading bullet and nothing after it on the line. A decorated verdict is unparseable and the whole review is discarded as no_verdict. (Vendors differ in how much they format by default, so this is stated rather than assumed.)
 Do NOT echo the diff or instructions. Your VERY FIRST output character MUST be the start of the opening marker line above — write NOTHING before it (no preamble, no acknowledgement, no "Here is my review", no reasoning). Output ONLY the wrapped block: nothing before the opening marker, nothing after the closing marker. Any text outside the block makes your review INVALID and it is discarded.
+
+Scan the whole diff for each defect class before answering, and list every site of that class. Do not stop at the first instance.
+Each finding carries class (short kebab-case label of the defect class) and class_sites (array of "path:line" strings: every place in this diff where the same class occurs, including the finding's own). A finding line may be one JSON object with those fields. A finding that lacks class, or whose class_sites is empty, is an invalid review.
 
 Bounded convergence contract:
 - Deliver a bounded keep/cut list and a minimum shippable version, not an unbounded hunt for more defects.

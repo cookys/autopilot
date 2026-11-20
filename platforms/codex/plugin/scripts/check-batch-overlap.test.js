@@ -203,6 +203,45 @@ test('allow-listed literal that is the only intersection clears', () => {
   assert.deepEqual(JSON.parse(cleared.stdout).overlaps, []);
 });
 
+test('two src/* scopes with --allow src/* report no overlap', () => {
+  const manifest = path.join(ROOT, 'manifest-star-allow.json');
+  fs.writeFileSync(manifest, JSON.stringify({
+    tickets: [
+      { id: 'S1', scope: ['src/*'] },
+      { id: 'S2', scope: ['src/*'] },
+    ],
+  }));
+  const r = run(['--allow', 'src/*', '--manifest', manifest]);
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  assert.deepEqual(JSON.parse(r.stdout).overlaps, []);
+});
+
+test('two src/* scopes without --allow still overlap', () => {
+  const manifest = path.join(ROOT, 'manifest-star-open.json');
+  fs.writeFileSync(manifest, JSON.stringify({
+    tickets: [
+      { id: 'S1', scope: ['src/*'] },
+      { id: 'S2', scope: ['src/*'] },
+    ],
+  }));
+  const r = run(['--manifest', manifest]);
+  assert.equal(r.status, 1, r.stderr + r.stdout);
+  assert.ok(JSON.parse(r.stdout).overlaps.length >= 1);
+});
+
+test('src/** vs src/a/* with --allow src/a/* reports no overlap', () => {
+  const manifest = path.join(ROOT, 'manifest-starstar-allow.json');
+  fs.writeFileSync(manifest, JSON.stringify({
+    tickets: [
+      { id: 'D1', scope: ['src/**'] },
+      { id: 'D2', scope: ['src/a/*'] },
+    ],
+  }));
+  const r = run(['--allow', 'src/a/*', '--manifest', manifest]);
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  assert.deepEqual(JSON.parse(r.stdout).overlaps, []);
+});
+
 test('parentheses comment is stripped from scope entries', () => {
   const a = brief('C1', 'src/a.ts (only A), platforms/** (mirrors via sync-all only)');
   const b = brief('C2', 'src/b.ts');

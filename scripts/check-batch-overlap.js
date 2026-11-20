@@ -230,8 +230,12 @@ function segmentMoves(patA, patB, allowNfas, allowSets) {
     segClose(nb, [0]),
     ...matchers.map((m) => segClose(m, [0])),
   ];
+  // `*` returns to its start after one character. Dedup must keep empty and
+  // nonempty consumption apart, or the nonempty witness is pruned and the
+  // empty one is later discarded, hiding a fully exempt intersection.
+  const stateKey = (consumed, sets) => (consumed ? '1' : '0') + '|' + sets.map(setKey).join('|');
   const q = [{ sets: start, syms: [] }];
-  const seen = new Set([start.map(setKey).join('|')]);
+  const seen = new Set([stateKey(false, start)]);
   const bySig = new Map();
   let visits = 0;
   while (q.length) {
@@ -250,7 +254,7 @@ function segmentMoves(patA, patB, allowNfas, allowSets) {
         segMove(nb, cur.sets[1], sym),
         ...matchers.map((m, i) => segMove(m, cur.sets[i + 2], sym)),
       ];
-      const k = sets.map(setKey).join('|');
+      const k = stateKey(true, sets);
       if (seen.has(k)) continue;
       seen.add(k);
       q.push({ sets, syms: cur.syms.concat(sym) });

@@ -81,6 +81,7 @@ User Override Protocol's cannot-be-overridden list.
 |------|-------|-----|----------|
 | Confirm task | all | Restate what will be done in one sentence (bug: the symptom and, when known, the root cause) | documented-only |
 | Branch check | all | `git branch --show-current`; bug ⇒ `git checkout -b fix/<description>`; production broken ⇒ `git checkout -b hotfix/<description> main` | documented-only |
+| First commit | all | The first commit on a new branch carries the trailer `Fleet-Task: <26-char id>`. No ticket ⇒ open one before that commit, or name the branch `explore/<slug>` and archive it within 1 day (`git tag archive/<branch>` before delete when the work is unmerged). One task, one branch, one worktree. Hand worktrees live at `<repo>/.worktrees/<branch>`; subagent and dispatch worktrees live under `.claude/worktrees/` or `.worktrees/`. Both directories are gitignored. The main checkout integrates only | documented-only |
 | Skill routing | all | Project skills for the target code area (CLAUDE.md, `.claude/skill-routing.md`) are invoked before code is written; L/XL via the skill-routing TaskCreate at `intent` | TaskCreate + blockedBy (L/XL); documented-only (XS–M) |
 | TaskCreate tools | all | TaskCreate missing from the tool list (Claude 5-era models are gated off by default since CC 2.1.233) ⇒ warn the user once to set `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` via `.claude/settings.json` `env` and continue — advisory, never a blocker (`references/multi-agent-portability.md`, task-persistence row) | documented-only |
 
@@ -370,6 +371,8 @@ how it is fixed).
 `node scripts/stage-advance.js --to finish`, then invoke `autopilot:finish-flow`; it owns the size-keyed closing checklist (merge, archive,
 session end, the urgent-low code-review). Never inline it, never mark the parent task done while its sub-tasks are
 pending. CEO mode: every finish sub-task is within DOA — execute all, then report.
+
+The merge step deletes the local branch, the remote branch, and the matching worktree, then prunes, using the command block marked `finish-hygiene-commands` in `skills/finish-flow/SKILL.md`. Confirm with `bash scripts/finish-hygiene-check.sh "$(git rev-parse --show-toplevel)"` (exit 0: no branch besides trunk `develop` or `main`, no worktree besides the main checkout).
 
 ---
 

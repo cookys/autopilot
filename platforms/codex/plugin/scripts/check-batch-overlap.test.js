@@ -134,6 +134,75 @@ test('a brief without Scope: exits 2 and names the file', () => {
   assert.match(r.stderr, new RegExp(a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
 
+test('untracked src/a*.ts and src/*b.ts overlap on a shared witness', () => {
+  const manifest = path.join(ROOT, 'manifest-ab.json');
+  fs.writeFileSync(manifest, JSON.stringify({
+    tickets: [
+      { id: 'GA', scope: ['src/a*.ts'] },
+      { id: 'GB', scope: ['src/*b.ts'] },
+    ],
+  }));
+  const r = run(['--manifest', manifest]);
+  assert.equal(r.status, 1, r.stderr + r.stdout);
+  const files = JSON.parse(r.stdout).overlaps[0].files;
+  assert.ok(files.some((f) => /^src\/a[^/]*b\.ts$/.test(f)), files.join(','));
+});
+
+test('a*.ts and *b.ts in different directories do not overlap', () => {
+  const manifest = path.join(ROOT, 'manifest-dirs.json');
+  fs.writeFileSync(manifest, JSON.stringify({
+    tickets: [
+      { id: 'DA', scope: ['src/a*.ts'] },
+      { id: 'DB', scope: ['lib/*b.ts'] },
+    ],
+  }));
+  const r = run(['--manifest', manifest]);
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  assert.deepEqual(JSON.parse(r.stdout).overlaps, []);
+});
+
+test('** overlaps an untracked literal', () => {
+  const manifest = path.join(ROOT, 'manifest-dstar.json');
+  fs.writeFileSync(manifest, JSON.stringify({
+    tickets: [
+      { id: 'DS', scope: ['**'] },
+      { id: 'DL', scope: ['src/new/only.ts'] },
+    ],
+  }));
+  const r = run(['--manifest', manifest]);
+  assert.equal(r.status, 1, r.stderr + r.stdout);
+  assert.ok(JSON.parse(r.stdout).overlaps[0].files.includes('src/new/only.ts'));
+});
+
+test('allow of one witness still overlaps on another file in the glob', () => {
+  const manifest = path.join(ROOT, 'manifest-allow-hide.json');
+  fs.writeFileSync(manifest, JSON.stringify({
+    tickets: [
+      { id: 'H1', scope: ['src/new/*.ts'] },
+      { id: 'H2', scope: ['src/new/*.ts'] },
+    ],
+  }));
+  const r = run(['--allow', 'src/new/x.ts', '--manifest', manifest]);
+  assert.equal(r.status, 1, r.stderr + r.stdout);
+  const files = JSON.parse(r.stdout).overlaps[0].files;
+  assert.ok(files.some((f) => f !== 'src/new/x.ts' && /^src\/new\/[^/]*\.ts$/.test(f)), files.join(','));
+});
+
+test('allow-listed literal that is the only intersection clears', () => {
+  const manifest = path.join(ROOT, 'manifest-allow-only.json');
+  fs.writeFileSync(manifest, JSON.stringify({
+    tickets: [
+      { id: 'O1', scope: ['src/new/x.ts'] },
+      { id: 'O2', scope: ['src/new/*.ts'] },
+    ],
+  }));
+  const open = run(['--manifest', manifest]);
+  assert.equal(open.status, 1, open.stderr + open.stdout);
+  const cleared = run(['--allow', 'src/new/x.ts', '--manifest', manifest]);
+  assert.equal(cleared.status, 0, cleared.stderr + cleared.stdout);
+  assert.deepEqual(JSON.parse(cleared.stdout).overlaps, []);
+});
+
 test('parentheses comment is stripped from scope entries', () => {
   const a = brief('C1', 'src/a.ts (only A), platforms/** (mirrors via sync-all only)');
   const b = brief('C2', 'src/b.ts');

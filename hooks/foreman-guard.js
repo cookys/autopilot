@@ -51,7 +51,7 @@
  * poll_scope=all (default): polling rules apply to every subagent (payload agent_id).
  * poll_scope=foreman: polling rules only inside an l4/l5/l6 marker session.
  * Events: ${XDG_RUNTIME_DIR:-tmpdir}/autopilot/foreman-guard/events.jsonl — one JSON line
- * per poll deny or poll advisory (no command text).
+ * per deny or advisory ({ts,session_id,agent_id,rule,mode,level}; no command text).
  * warn ⇒ stderr line, allow. Fail-open: any internal error ⇒ exit 0 silently.
  * State: ~/.autopilot/foreman-guard/<session>-<agent>.json (host-stable, not TMPDIR).
  */
@@ -491,6 +491,26 @@ function appendGuardEvent(fields) {
   } catch { /* fail-open */ }
 }
 
+// Stable ids for events.jsonl (internal decide() rules may use hyphens).
+function guardEventRule(rule) {
+  if (rule === 'bash-cap') return 'bash_cap';
+  if (rule === 'context-ceiling') return 'context_ceiling';
+  return rule;
+}
+
+function recordGuardEvent(payload, cfg, marker, eventRule, eventMode) {
+  const sessionId = payload.session_id || process.env.AUTOPILOT_SESSION_ID
+    || process.env.CLAUDE_CODE_SESSION_ID || process.env.CLAUDE_SESSION_ID || 'session';
+  const level = marker && marker.level ? marker.level : null;
+  appendGuardEvent({
+    session_id: sessionId,
+    agent_id: payload.agent_id,
+    rule: eventRule,
+    mode: eventMode,
+    level,
+  });
+}
+
 function isForemanMarker(marker) {
   return !!(marker && FOREMAN_LEVELS.has(marker.level));
 }
@@ -527,21 +547,10 @@ function checkPollTool(payload) {
   return { deny: true, rule: rule.id, reason: pollRuleReason(rule, '') };
 }
 
-const POLL_RULE_IDS = new Set(['monitor', 'noop-spin', 'sleep', 'while-wait', 'liveness-poll', 'leaf-output-read']);
-
 function finishPollVerdict(payload, cfg, marker, verdict) {
   if (!verdict || !verdict.deny) return false;
-  const sessionId = payload.session_id || process.env.AUTOPILOT_SESSION_ID
-    || process.env.CLAUDE_CODE_SESSION_ID || process.env.CLAUDE_SESSION_ID || 'session';
-  const level = marker && marker.level ? marker.level : null;
   const eventMode = cfg.mode === 'warn' ? 'advise' : 'deny';
-  appendGuardEvent({
-    session_id: sessionId,
-    agent_id: payload.agent_id,
-    rule: verdict.rule,
-    mode: eventMode,
-    level,
-  });
+  recordGuardEvent(payload, cfg, marker, guardEventRule(verdict.rule), eventMode);
   if (cfg.mode === 'warn') {
     const warnLine = `${verdict.reason} [mode=warn: allowed]`;
     process.stderr.write(`${warnLine}\n`);
@@ -742,6 +751,7 @@ function decide(payload, cfg, st, ceiling = {}, role = 'foreman', briefCap = nul
       try { maybeGcStateDir(); } catch { /* fail-open */ }
       const every = cfg.advisoryEvery > 0 ? cfg.advisoryEvery : DEFAULT_ADVISORY_EVERY;
       if (n > 0 && n % every === 0) {
+        recordGuardEvent(payload, cfg, marker, 'no_marker_advice', 'advise');
         emitAllowContext(
           `foreman-guard: Bash call ${n}. Consider committing your work and writing a handoff.`,
         );
@@ -777,19 +787,22 @@ function decide(payload, cfg, st, ceiling = {}, role = 'foreman', briefCap = nul
     }
     if (d.reserveDirective) advisory.push(d.reserveDirective);
     if (!d.deny) {
+      if (d.diagnostic) {
+        recordGuardEvent(payload, cfg, marker, 'context_ceiling', 'advise');
+      }
+      if (d.reserveDirective) {
+        recordGuardEvent(payload, cfg, marker, 'reserve_advice', 'advise');
+      }
       if (advisory.length) emitAllowContext(advisory.join('\n'));
       process.exit(0);
     }
-    if (POLL_RULE_IDS.has(d.rule)) {
-      const level = marker && marker.level ? marker.level : null;
-      appendGuardEvent({
-        session_id: sessionId,
-        agent_id: payload.agent_id,
-        rule: d.rule,
-        mode: cfg.mode === 'warn' ? 'advise' : 'deny',
-        level,
-      });
-    }
+    recordGuardEvent(
+      payload,
+      cfg,
+      marker,
+      guardEventRule(d.rule),
+      cfg.mode === 'warn' ? 'advise' : 'deny',
+    );
     if (cfg.mode === 'warn') {
       const warnLine = `${d.reason} [mode=warn: allowed]`;
       process.stderr.write(`${warnLine}\n`);

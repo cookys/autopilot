@@ -18,6 +18,14 @@ EVENTS_JSONL="$XDG_RUNTIME_DIR/autopilot/foreman-guard/events.jsonl"
 REPO="$FG_TMP_ROOT/repo"
 mkdir -p "$REPO"
 git -C "$REPO" init -q
+unset AUTOPILOT_PARENT_SESSION_ID AUTOPILOT_CHILD_SESSION_ID
+set_marker() { node "$REPO_ROOT/scripts/session-mode.js" set --level "$1" --repo-root "$REPO" >/dev/null 2>&1 || fail "marker set $1"; }
+reset_guard_state() { rm -f "$AUTOPILOT_FOREMAN_GUARD_DIR"/*.json "$AUTOPILOT_FOREMAN_GUARD_DIR"/*.lock; }
+
+TRANSCRIPT_ROOT="$FG_TMP_ROOT/transcripts"
+TRANSCRIPT_PATH="$TRANSCRIPT_ROOT/root.jsonl"
+mkdir -p "$TRANSCRIPT_ROOT"
+printf '%s\n' '{}' > "$TRANSCRIPT_PATH"
 
 clear_marker() { rm -f "$AUTOPILOT_SESSION_MODE_DIR"/*.json; }
 reset_events() { rm -f "$EVENTS_JSONL"; mkdir -p "$(dirname "$EVENTS_JSONL")"; }
@@ -40,6 +48,29 @@ depth0_payload() {
   json_str "$1"
   printf '{"tool_name":"Bash","session_id":"fg-all-sub-session","tool_input":{"command":%s,"run_in_background":false},"hook_event_name":"PreToolUse","cwd":"%s"}' \
     "$REPLY" "$REPO"
+}
+
+write_engine_brief() {
+  node -e '
+    const fs = require("fs");
+    const path = require("path");
+    const dir = path.join(process.argv[1], "fg-all-sub-session", "subagents");
+    fs.mkdirSync(dir, { recursive: true });
+    const rec = {
+      type: "user",
+      agentId: process.argv[2],
+      sessionId: "fg-all-sub-session",
+      message: { content: process.argv[3] },
+    };
+    fs.writeFileSync(path.join(dir, `agent-${process.argv[2]}.jsonl`), JSON.stringify(rec) + "\n");
+  ' "$TRANSCRIPT_ROOT" "$1" "$2"
+}
+
+engine_bash_payload() {
+  local agent="$1" cmd="$2"
+  json_str "$cmd"
+  printf '{"tool_name":"Bash","agent_id":"%s","session_id":"fg-all-sub-session","transcript_path":"%s","tool_input":{"command":%s,"run_in_background":false},"hook_event_name":"PreToolUse","cwd":"%s"}' \
+    "$agent" "$TRANSCRIPT_PATH" "$REPLY" "$REPO"
 }
 
 assert_event_line() {
@@ -103,5 +134,77 @@ assert_eq 0 "$__RUN_EXIT" "git status: exit 0"
 assert_eq "" "$__RUN_STDOUT" "git status: allowed"
 assert_not_contains "$__RUN_STDOUT" 'exceeds the' "git status: bash cap not applied"
 assert_file_absent "$EVENTS_JSONL" "git status: no poll event"
+
+# ── no marker: Engine subagent advisory logs no_marker_advice ──
+clear_marker
+reset_events
+reset_guard_state
+write_engine_brief agent-adv $'Engine: test\nRole: worker\nDo work.'
+export AUTOPILOT_FOREMAN_GUARD_ADVISORY_EVERY=2
+run_hook foreman-guard.js "$(engine_bash_payload agent-adv 'git status')"
+run_hook foreman-guard.js "$(engine_bash_payload agent-adv 'git status')"
+assert_event_line "no marker advice" "agent-adv" "no_marker_advice" "advise"
+unset AUTOPILOT_FOREMAN_GUARD_ADVISORY_EVERY
+
+# ── l4 marker: bash-cap deny logs bash_cap ──
+clear_marker
+reset_events
+reset_guard_state
+set_marker l4
+export AUTOPILOT_FOREMAN_GUARD_BASH_CAP=2
+export AUTOPILOT_FOREMAN_GUARD_RESERVE_CALLS=0
+run_hook foreman-guard.js "$(bash_payload agent-cap 'echo 1')"
+run_hook foreman-guard.js "$(bash_payload agent-cap 'echo 2')"
+run_hook foreman-guard.js "$(bash_payload agent-cap 'echo 3')"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "bash_cap: third call denied"
+assert_event_line "bash_cap deny" "agent-cap" "bash_cap" "deny"
+unset AUTOPILOT_FOREMAN_GUARD_BASH_CAP AUTOPILOT_FOREMAN_GUARD_RESERVE_CALLS
+
+# ── l4 marker: context-ceiling deny logs context_ceiling ──
+clear_marker
+reset_events
+reset_guard_state
+set_marker l4
+LIVE_DIR="$(mktemp -d /dev/shm/fg-all-sub-live-XXXXXX 2>/dev/null || mktemp -d "$FG_TMP_ROOT/live-XXXXXX")"
+mkdir -p "$LIVE_DIR/context"
+export AUTOPILOT_LIVE_DIR="$LIVE_DIR"
+node -e '
+  const fs = require("fs");
+  const [, sid, dir] = process.argv;
+  const obj = {
+    schema_version: 1,
+    session_id: sid,
+    written_at: new Date().toISOString(),
+    tasks: [{ id: "agent-ceil", tokenCount: 160000, contextWindowSize: 200000 }],
+  };
+  fs.writeFileSync(`${dir}/context/${sid}.tasks.json`, JSON.stringify(obj));
+' fg-all-sub-session "$LIVE_DIR"
+run_hook foreman-guard.js "$(bash_payload agent-ceil 'echo work')"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "context_ceiling: denied"
+assert_event_line "context_ceiling deny" "agent-ceil" "context_ceiling" "deny"
+unset AUTOPILOT_LIVE_DIR
+
+# ── l4 marker: reserve deny logs reserve; allowlisted logs reserve_advice ──
+clear_marker
+reset_events
+reset_guard_state
+set_marker l4
+export AUTOPILOT_FOREMAN_GUARD_BASH_CAP=5
+run_hook foreman-guard.js "$(bash_payload agent-res 'echo 1')"
+run_hook foreman-guard.js "$(bash_payload agent-res 'echo 2')"
+run_hook foreman-guard.js "$(bash_payload agent-res 'echo 3')"
+run_hook foreman-guard.js "$(bash_payload agent-res 'git status')"
+assert_event_line "reserve_advice" "agent-res" "reserve_advice" "advise"
+reset_events
+reset_guard_state
+set_marker l4
+export AUTOPILOT_FOREMAN_GUARD_BASH_CAP=5
+run_hook foreman-guard.js "$(bash_payload agent-res2 'echo 1')"
+run_hook foreman-guard.js "$(bash_payload agent-res2 'echo 2')"
+run_hook foreman-guard.js "$(bash_payload agent-res2 'echo 3')"
+run_hook foreman-guard.js "$(bash_payload agent-res2 'npm test')"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "reserve: non-allowlisted denied"
+assert_event_line "reserve deny" "agent-res2" "reserve" "deny"
+unset AUTOPILOT_FOREMAN_GUARD_BASH_CAP
 
 finalize_test

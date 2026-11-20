@@ -160,7 +160,9 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
   const layout = (r: { body: Row[]; actions: Row[] }, short = false) => {
     const body = r.body.filter(x => x.some(s => s.text.trim() !== '')).flatMap(x => wrapRow(x, ctx.size.cols, WRAP_HANG)) // X5: spare rows belong above the content; N3: reasons keep their hanging indent
     const omitEmptyAct = short && page.id === 'now' && (droppedDecideAct || decisionCount(ctx) > 0 || body.some(x => x.some(s => s.press === 'tab:2:decide')))
-    const acts: Row[] = r.actions.length === 0 ? (omitEmptyAct ? [] : [[{ text: emptyState(ctx, page), dim: true }]]) : r.actions
+    const acts: Row[] = opts.topAnchor === true
+      ? r.actions.filter(row => row.some(s => s.press !== undefined) || row.map(s => s.text).join('').trim() !== ctx.t('frame.unknown'))
+      : r.actions.length === 0 ? (omitEmptyAct ? [] : [[{ text: emptyState(ctx, page), dim: true }]]) : r.actions
     return { body, acts, room: avail - Math.min(acts.length, avail), short }
   }
   let lay = layout(first, ctx.shortBody === true || avail <= 4)

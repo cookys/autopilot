@@ -39,8 +39,11 @@
 #                                              #   CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, and sets
 #                                              #   ANTHROPIC_CUSTOM_HEADERS to the caller's existing headers
 #                                              #   plus an x-lane line after them (AUTOPILOT_LANE, or autopilot
-#                                              #   when that variable is unset). A lane value that contains CR
-#                                              #   or LF is refused (exit 2). A non-empty file
+#                                              #   when that variable is unset). A lane that is empty, "." or
+#                                              #   "..", or that contains "/" or any character outside
+#                                              #   [A-Za-z0-9._-] (including CR or LF) is refused (exit 2).
+#                                              #   The check runs once and is reused for the token path and
+#                                              #   the x-lane header. A non-empty file
 #                                              #   $AUTOPILOT_GATEWAY_TOKEN_DIR/<lane> (default
 #                                              #   $HOME/.config/local-llm-gateway/tokens) overrides
 #                                              #   ANTHROPIC_AUTH_TOKEN with its trimmed contents. Result and
@@ -3139,6 +3142,21 @@ if [ "$RUNNER" = "local" ]; then
   SANDBOX="bwrap"
   LOCAL_RUNNER=1
   RUNNER="cc-shim"
+  # One lane check, before the token-file lookup and the x-lane header.
+  # Unset stays "autopilot". A set-but-empty value is refused, as are ".",
+  # "..", "/", and any character outside [A-Za-z0-9._-] (CR/LF included).
+  # The message does not repeat the lane or any file bytes.
+  if [ -n "${AUTOPILOT_LANE+x}" ]; then
+    LOCAL_LANE="$AUTOPILOT_LANE"
+  else
+    LOCAL_LANE="autopilot"
+  fi
+  case "$LOCAL_LANE" in
+    *$'\n'*|*$'\r'*) die_precondition "--runner local refuses AUTOPILOT_LANE that contains a newline" ;;
+  esac
+  if [[ ! "$LOCAL_LANE" =~ ^[A-Za-z0-9._-]+$ ]] || [[ "$LOCAL_LANE" == "." ]] || [[ "$LOCAL_LANE" == ".." ]]; then
+    die_precondition "--runner local refuses AUTOPILOT_LANE that is empty, '.' or '..', or contains '/' or a character outside [A-Za-z0-9._-]"
+  fi
 fi
 
 case "$EFFORT" in
@@ -3474,10 +3492,7 @@ if [ -n "$ENDPOINT" ]; then
   # only which source won. set +x so an ambient trace cannot print the value.
   if [ "${LOCAL_RUNNER:-0}" -eq 1 ]; then
     GATEWAY_TOKEN_SOURCE="endpoint"
-    _gw_lane="${AUTOPILOT_LANE:-autopilot}"
-    case "$_gw_lane" in
-      *$'\n'*|*$'\r'*) die_precondition "--runner local refuses AUTOPILOT_LANE that contains a newline" ;;
-    esac
+    _gw_lane="$LOCAL_LANE"
     _gw_dir="${AUTOPILOT_GATEWAY_TOKEN_DIR:-${HOME}/.config/local-llm-gateway/tokens}"
     _gw_file="${_gw_dir}/${_gw_lane}"
     if [ -f "$_gw_file" ] && [ -s "$_gw_file" ]; then
@@ -5615,10 +5630,7 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
     # Local seats identify the lane to the fleet gateway. Caller headers stay,
     # then the fleet line, then x-lane on its own line. The lane value is not printed.
     if [ "${LOCAL_RUNNER:-0}" -eq 1 ]; then
-      _local_lane="${AUTOPILOT_LANE:-autopilot}"
-      case "$_local_lane" in
-        *$'\n'*|*$'\r'*) die_precondition "--runner local refuses AUTOPILOT_LANE that contains a newline" ;;
-      esac
+      _local_lane="$LOCAL_LANE"
       _local_prior="${ANTHROPIC_CUSTOM_HEADERS-}"
       while [ -n "$_local_prior" ]; do
         case "$_local_prior" in

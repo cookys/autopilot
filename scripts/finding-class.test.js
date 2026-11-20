@@ -98,6 +98,7 @@ test('demandsClass recognizes every bracketed-id severity header shape', () => {
       `${zh} [id]`,               // Chinese word alone
       `${emoji} ${zh} [id]`,      // emoji then Chinese word
       `**${zh}** [id]`,           // bold Chinese word
+      `${emoji} **${zh}** [id]`,  // emoji then bold Chinese word
     ];
     for (const line of positives) {
       assert.equal(findingClass.demandsClass(line), true, `expected true for: ${line}`);

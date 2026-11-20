@@ -25,6 +25,18 @@ export function toggleBand(state: BandFold, target: BandTarget): BandFold {
   return { collapsed: false, menu: target }
 }
 
+// Where the one-cell fold glyph sits. `closeRoom` is the right-hand columns the glyph must not enter.
+// The glyph column is `columns - closeRoom - 1` when that column exists; otherwise the toggle is omitted and the body width is 0.
+// A padding space is the cell before the glyph, and only when that cell exists. The body fills everything to the left of that pair.
+export type FoldPlace = { body: number; pad: boolean; toggleCol: number | null }
+
+export function foldPlace(columns: number, closeRoom: number): FoldPlace {
+  const toggleCol = columns - closeRoom - 1
+  if (toggleCol < 0) return { body: 0, pad: false, toggleCol: null }
+  const pad = toggleCol >= 1
+  return { body: toggleCol - (pad ? 1 : 0), pad, toggleCol }
+}
+
 // True when the pending count grew past what the row has already shown. The caller clears it by advancing the seen count once the band is expanded.
 export function collapsedRowMark(prevSeenCount: number, count: number): boolean {
   return count > prevSeenCount

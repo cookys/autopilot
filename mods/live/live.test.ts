@@ -9003,6 +9003,9 @@ for (const surface of SURFACES) {
       expect(hits.length, 'one toggle at ' + cols).toBe(1)
       const at = hits[0].i
       const btn = hits[0].btn as Node
+      const kids = (btn.children || []) as Node[]
+      expect(kids.length, 'the button holds only the glyph at ' + cols).toBe(1)
+      expect(displayWidth(rowStr(kids[0])), 'the button child is one cell at ' + cols).toBe(1)
       const label = rowStr(btn)
       const glyph = [...label].pop() as string
       return { rowFromBottom: rows.length - 1 - at, col: glyphCol(rows[at]), glyph, label, width: displayWidth(glyph), n: d.all.length }
@@ -9011,7 +9014,7 @@ for (const surface of SURFACES) {
       await start($, surface)
       const shut = await measure(cols, [])
       expect(shut.n, 'collapsed at ' + cols).toBe(1)
-      expect(shut.label, 'padding and folded glyph at ' + cols).toBe(foldLabel(true))
+      expect(shut.label, 'the button text is the folded glyph alone at ' + cols).toBe(foldLabel(true))
       expect(shut.glyph).toBe('▸')
       expect(shut.glyph).toBe(ui.GLYPHS.structure.folded)
       expect(shut.rowFromBottom, 'bottom row at ' + cols).toBe(0)

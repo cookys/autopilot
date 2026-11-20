@@ -22,6 +22,7 @@ import type { ConsoleNav, ConsoleTab } from './consoletabs'
 import { COL_GAP } from './speedview'
 import type { SpeedColumn } from './speedview'
 import type { BandPageId, BarStrip, BarTabId } from './tabs'
+import { foldPlace } from './bandfold'
 import { isBriefStale, staleBadge } from './pages/rows'
 import { mostSevere } from './pages/frame'
 
@@ -31,7 +32,7 @@ type El = (props: any) => any
 export const BAND_ROWS = 1
 // M5: the cells row 1 of the console band keeps free at its right end for the `[-]` control (three cells and a gap)
 export const BAND_CLOSE_ROOM = 4
-// The fold cell is one padding space plus the glyph, drawn in the column just left of BAND_CLOSE_ROOM.
+// The pressable cell is the glyph alone, in the column just left of BAND_CLOSE_ROOM. The padding space is a plain Text before that cell.
 export const FOLD_KEY = 'band:fold'
 
 export type FoldCell = { collapsed: boolean; onPress: () => void }
@@ -41,25 +42,27 @@ export function foldGlyph(collapsed: boolean): string {
 }
 
 export function foldLabel(collapsed: boolean): string {
-  return ' ' + foldGlyph(collapsed)
+  return foldGlyph(collapsed)
 }
 
 export function foldSpan(): number {
-  return displayWidth(foldLabel(false))
+  return displayWidth(' ' + foldLabel(false))
 }
 
 function foldToggle(el: { Text: El; Button?: El }, fold: FoldCell): unknown {
   const { Text, Button } = el
-  const label = foldLabel(fold.collapsed)
-  const text = <Text key="g">{label}</Text>
+  const text = <Text key="g">{foldLabel(fold.collapsed)}</Text>
   return Button === undefined ? text : <Button key={FOLD_KEY} plain onPress={fold.onPress}>{text}</Button>
 }
 
-// Body stays left of the fold cell. The cell then starts at columns - BAND_CLOSE_ROOM - foldSpan, in both fold states.
+// Body stays left of the padding and the glyph. The glyph column is columns - BAND_CLOSE_ROOM - 1 when it fits; a width of 0 is allowed.
 function foldRow(el: { Box: El; Text: El; Button?: El }, key: string, columns: number, body: unknown, fold: FoldCell): unknown {
-  const { Box } = el
-  const limit = Math.max(1, columns - BAND_CLOSE_ROOM - foldSpan())
-  return <Box key={key}><Box key="foldbody" width={limit} flexShrink={0} overflow="hidden">{body}</Box>{foldToggle(el, fold)}</Box>
+  const { Box, Text } = el
+  const place = foldPlace(columns, BAND_CLOSE_ROOM)
+  const parts: unknown[] = [<Box key="foldbody" width={place.body} flexShrink={0} overflow="hidden">{body}</Box>]
+  if (place.pad) parts.push(<Text key="pad">{' '}</Text>)
+  if (place.toggleCol !== null) parts.push(foldToggle(el, fold))
+  return <Box key={key}>{parts}</Box>
 }
 // r4 D: the console sources whose failure the band shows; slots, metrics, answer_log and changes are no_source on purpose in fleet's snapshot
 const BAND_SOURCES = ['tasks', 'peers', 'cards', 'quota_now'] as const

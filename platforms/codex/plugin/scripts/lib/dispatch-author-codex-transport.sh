@@ -607,9 +607,12 @@ codex_transport_run() {
 
 # True when stderr has a complete INITIAL chrome frame anchored at start.
 # Codex 0.145.0 may emit exactly one benign "Reading prompt from stdin..."
-# line before its version banner. No other pre-banner content is accepted, and
-# that compatibility path requires a canonical OpenAI Codex semver banner.
-# The next line must be opening "--------", then body to the next "--------".
+# line before its version banner. Codex 0.166 may also emit Rust tracing lines
+# (ISO-8601 UTC timestamp, level, text) before the banner and between the
+# prompt-source line and the banner. No other pre-banner content is accepted.
+# The prompt-source path requires an OpenAI Codex semver banner, optionally
+# followed by a space and trailing text. The next line must be opening
+# "--------", then body to the next "--------".
 # Delimiter blocks after the initial frame are ignored.
 codex_transport_has_chrome_frame() {
   local stderr_path="$1"
@@ -619,18 +622,22 @@ const fs = require("fs");
 const raw = fs.readFileSync(process.argv[1]);
 const lines = raw.toString("binary").split("\n");
 const strip = (s) => s.replace(/\r$/, "");
+const isTrace = (s) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z[ \t]+(?:TRACE|DEBUG|INFO|WARN|ERROR)[ \t]+\S/.test(s);
 let i = 0;
 while (i < lines.length && strip(lines[i]) === "") i++;
+if (i >= lines.length) process.exit(1);
+while (i < lines.length && isTrace(strip(lines[i]))) i++;
 if (i >= lines.length) process.exit(1);
 let hasPromptSourceLine = false;
 if (strip(lines[i]) === "Reading prompt from stdin...") {
   hasPromptSourceLine = true;
   i += 1;
+  while (i < lines.length && isTrace(strip(lines[i]))) i++;
   if (i >= lines.length) process.exit(1);
 }
 const banner = strip(lines[i]);
 if (hasPromptSourceLine &&
-    !/^OpenAI Codex v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$/.test(banner)) {
+    !/^OpenAI Codex v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?(?: .+)?$/.test(banner)) {
   process.exit(1);
 }
 if (banner === "--------") process.exit(1);
@@ -664,7 +671,7 @@ process.exit(1);
 
 # Extract exactly one canonical session id from the INITIAL chrome frame only.
 # Frame anchoring matches codex_transport_has_chrome_frame, including its
-# single exact Codex 0.145.0 prompt-source compatibility line.
+# prompt-source line, pre-banner tracing lines, and optional banner trailer.
 # Delimiter blocks after the anchored frame never supply or override a session id.
 # Prints the UUID on success; exits nonzero on any ambiguity/malformed/missing.
 codex_transport_extract_session_id() {
@@ -675,18 +682,22 @@ const fs = require("fs");
 const raw = fs.readFileSync(process.argv[1]);
 const lines = raw.toString("binary").split("\n");
 const strip = (s) => s.replace(/\r$/, "");
+const isTrace = (s) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z[ \t]+(?:TRACE|DEBUG|INFO|WARN|ERROR)[ \t]+\S/.test(s);
 let i = 0;
 while (i < lines.length && strip(lines[i]) === "") i++;
+if (i >= lines.length) process.exit(1);
+while (i < lines.length && isTrace(strip(lines[i]))) i++;
 if (i >= lines.length) process.exit(1);
 let hasPromptSourceLine = false;
 if (strip(lines[i]) === "Reading prompt from stdin...") {
   hasPromptSourceLine = true;
   i += 1;
+  while (i < lines.length && isTrace(strip(lines[i]))) i++;
   if (i >= lines.length) process.exit(1);
 }
 const banner = strip(lines[i]);
 if (hasPromptSourceLine &&
-    !/^OpenAI Codex v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$/.test(banner)) {
+    !/^OpenAI Codex v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?(?: .+)?$/.test(banner)) {
   process.exit(1);
 }
 if (banner === "--------") process.exit(1);

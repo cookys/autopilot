@@ -101,15 +101,15 @@ test('gate3 item 1: quota draws exactly one row per pool at 160x40, 120x30, 80x2
 test('gate3 item 2: when body has 4 rows or fewer, no section title and no column header are drawn; 額度 shows >= 1 pool row and 現況 shows >= 1 item ordered red pools -> unknown pools -> stuck lines', () => {
   const c = snap()
   // H = 5..7 at 80 cols -> S = 1, A = 1 on quota -> body room = 2, 3, 4 (all <= 4)
-  for (const H of [5, 6, 7]) {
+  for (const H of [6, 7, 8]) {
     const qOut = frameRows(quotaPage, ctxOf(80, H, c) as never, { pages: PAGES }).map(text)
     expect(qOut.length).toBe(H)
-    const qBody = qOut.slice(1, H - 2)
+    const qBody = qOut.slice(1, H - 3)
     expect(qBody.length).toBeLessThanOrEqual(4)
     expect(qBody.some(l => l.includes('──')), 'H=' + H + ' quota: no section title').toBe(false)
     expect(qBody.some(l => l.includes('重置') || l.includes('7 天')), 'H=' + H + ' quota: no column header').toBe(false)
     // M2: a cut narrow table uses a pool-count hint once two pool-area rows fit; a pool row still stays visible.
-    expect(qBody.some(l => /↓ 還有 \d+ 池（/.test(l)), 'H=' + H + ' quota: hidden-pool hint').toBe(H >= 6)
+    expect(qBody.some(l => /↓ 還有 \d+ 池（/.test(l)), 'H=' + H + ' quota: hidden-pool hint').toBe(H >= 7)
     expect(qBody.filter(l => /^[▸ ] [✗?▲✓] \S/.test(l)).length, 'H=' + H + ' quota: >= 1 pool row').toBeGreaterThanOrEqual(1)
   }
   // 現況 with no pending cards, 1 red pool, 1 unknown pool, and 1 offline/stuck line in a short body (C1: one summary row per class: fleet -> quota -> 另有 N 項)
@@ -119,20 +119,20 @@ test('gate3 item 2: when body has 4 rows or fewer, no section title and no colum
     POOLS.find(p => p.pool === 'codex')!, // green
   ]
   const cNow = { ...(snap(oneRedOneUnknown, { cards: [], lines: [c.lines![1]] }) as object), items: [] } as ConsoleSnapshot
-  expect(frameRows(nowPage, { ...(ctxOf(80, 4, cNow) as object), live: LIVE0 } as never, { pages: PAGES }).map(text)[1]).toBe('✗ 艦隊 ✗1 · 額度 ✗1 ?1 trinity') // X2b: severe classes lead; pool identity and overflow remain visible.
-  for (const H of [5, 6, 7]) {
+  expect(frameRows(nowPage, { ...(ctxOf(80, 5, cNow) as object), live: LIVE0 } as never, { pages: PAGES }).map(text)[1]).toBe('✗ 艦隊 ✗1 · 額度 ✗1 ?1 trinity') // X2b: severe classes lead; pool identity and overflow remain visible.
+  for (const H of [6, 7, 8]) {
     const nOut = frameRows(nowPage, { ...(ctxOf(80, H, cNow) as object), live: LIVE0 } as never, { pages: PAGES }).map(text)
     expect(nOut.length).toBe(H)
-    const nBody = nOut.slice(1, H - 2)
+    const nBody = nOut.slice(1, H - 3)
     expect(nBody.length).toBeLessThanOrEqual(4)
     expect(nBody.some(l => l.includes('──')), 'H=' + H + ' now: no section title').toBe(false)
     expect(nBody.filter(l => l.trim() !== '').length, 'H=' + H + ' now: >= 1 item').toBeGreaterThanOrEqual(1)
     const first = nBody.findIndex(l => l.trim() !== '')
-    if (H === 5) {
+    if (H === 6) {
       expect(nBody[first]).toBe('✗ 艦隊 離線 1 線（復原線）· 主機 2/3（離線 1）')
       expect(nBody[first + 1]).toBe('✗ 額度 紅 1（trinity） · 資料過期 180 分· ? 未知 1（personal）')
     }
-    if (H === 7) {
+    if (H === 8) {
       expect(nBody.some(l => l.includes('另有') || l.includes('還有')), 'H=7 now: both class summary rows fit without overflow').toBe(false)
       const iFleet = nBody.findIndex(l => l.includes('復原線') && l.includes('主機 2/3（離線 1）'))
       const iQuota = nBody.findIndex(l => l.includes('trinity') && l.includes('personal'))
@@ -157,8 +157,8 @@ test('gate3 item 2 (R2/C1 pending-first): short body with pending cards puts com
     POOLS.find(p => p.pool === 'grok')!,
   ]
   const withPending = { ...(snap(pools, { cards, lines: [c0.lines![1]] }) as object), items: [] } as ConsoleSnapshot
-  const out = frameRows(nowPage, { ...(ctxOf(80, 7, withPending) as object), live: LIVE0 } as never, { pages: PAGES })
-  expect(out.length).toBe(7)
+  const out = frameRows(nowPage, { ...(ctxOf(80, 8, withPending) as object), live: LIVE0 } as never, { pages: PAGES })
+  expect(out.length).toBe(8)
   expect(out[1]).toEqual([{ text: '' }])
   expect(out[2][0].press).toBe('tab:2:decide')
   expect(out.map(text).join('\n')).not.toContain('到待決頁')
@@ -170,7 +170,7 @@ test('gate3 item 2 (R2/C1 pending-first): short body with pending cards puts com
   expect(nBody[4]).toBe('額度浪費 ▲1') // X2: include hidden category/severity.
 })
 
-test('gate3 item 3: at 40, 49, 60, 65 and 66 columns every entry (1-8, 9, 0, i) is present with a non-empty label, < 66 uses 2 rows (1-6 then 7, 8, 9, 0, i) and >= 66 uses 1 row across all pages, fitting host "<key>: " width', () => {
+test('gate3 item 3: at 40, 49, 60, 65 and 66 columns every entry (1-8, 9, 0) is present with a non-empty label, < 66 uses 2 rows (1-6 then 7, 8, 9, 0) and >= 66 uses 1 row across all pages, fitting host "<key>: " width', () => {
   const c = snap()
   const shown: Page[] = PAGES.map(p => ({ ...p, framed: true as const }))
   for (const cols of [40, 49, 60, 65, 66]) {
@@ -191,11 +191,9 @@ test('gate3 item 3: at 40, 49, 60, 65 and 66 columns every entry (1-8, 9, 0, i) 
           const r2Keys = drawnStrip[1].filter(s => s.press !== undefined).map(s => s.text.split(' ')[0])
           expect(r1Keys).toEqual(['1', '2', '3', '4', '5', '6'])
           expect(r2Keys).toEqual(['7', '8', '9', '0'])
-          expect(drawnStrip[1].some(s => /^i \S/.test(s.text))).toBe(true)
         } else {
           const keys = drawnStrip[0].filter(s => s.press !== undefined).map(s => s.text.split(' ')[0])
           expect(keys).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'])
-          expect(drawnStrip[0].some(s => /^i \S/.test(s.text))).toBe(true)
         }
         for (const r of drawnStrip) {
           for (const s of r.filter(x => x.press !== undefined)) expect(s.text, 'non-empty tab label').toMatch(/^[0-9] \S/)
@@ -206,16 +204,15 @@ test('gate3 item 3: at 40, 49, 60, 65 and 66 columns every entry (1-8, 9, 0, i) 
       const allBtns = walk(tree).filter(n => n.kind === 'Button' && n.props.key !== FOCUS_ANCHOR_KEY)
       expect(allBtns.filter(b => flat(b).trim() === '').map(b => b.props.key), cols + ': no empty-label Button').toEqual([])
       expect(allBtns.filter(b => /^[0-9]$/.test(b.props.hotkey ?? '')).map(b => b.props.hotkey)).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'])
-      expect(allBtns.some(b => b.props.hotkey === 'i' && flat(b).trim().length > 0)).toBe(true)
     }
     expect(counts.size, cols + ': strip row count never changes between pages').toBe(1)
   }
   // At 65 cols (zh-TW), 2-row strip keeps full labels because both rows fit; at 40 cols row 1 shortens to first character
   const s65 = stripRows(nowPage, ctxOf(65, 24, c) as never, { pages: PAGES }).map(text)
   expect(s65[0]).toContain('1 現況')
-  expect(s65[1]).toContain('7 花費')
+  expect(s65[1]).toContain('7 艦隊')
   const s40 = stripRows(nowPage, ctxOf(40, 24, c) as never, { pages: PAGES }).map(text)
-  expect(s40[0]).toBe('1 現 2 待 3 艦 4 額 5 派 6 審')
+  expect(s40[0]).toBe('1 現 2 待 3 派 4 審 5 花 6 殘')
 })
 
 test('gate3 item 4: BandBar with pane closed in console mode draws new page names 1-8 as Buttons without digit hotkeys and no old console tab names', () => {
@@ -254,7 +251,7 @@ test('gate4 empty state with pending cards: 3 pending cards (console.cards or li
 
   const emptyActRow = (page: Page, c: ConsoleSnapshot, live: unknown = null, loc = tZh): string => {
     const out = frameRows({ ...page, render: ctx => ({ ...page.render(ctx), actions: [] }) }, { ...(ctxOf(120, 24, c) as object), live, t: loc } as never, { pages: PAGES }).map(text)
-    return out[out.length - 2]
+    return out[out.length - 3]
   }
 
   // 1. 3 pending cards in ctx.console.cards, all sources ok, empty page actions on 艦隊 (lines: []) and 額度
@@ -300,7 +297,7 @@ test('gate4 empty state with pending cards: 3 pending cards (console.cards or li
     { cards: threeConsoleCards, items: [], lines: [{ line_id: 'recovery', label: '復原線', lead_display: null, issues: [{ rule: 'T4', state: 'failed', subject: '復原線成員', since_ms: NOW - 10 * MIN, to_console: true }] }] },
   )
   const cleanSnap = { ...oneRedOneStuck, items: [] } as ConsoleSnapshot
-  const fullOut = frameRows(nowPage, { ...(ctxOf(80, 7, cleanSnap) as object), live: LIVE0 } as never, { pages: PAGES }).map(text)
+  const fullOut = frameRows(nowPage, { ...(ctxOf(80, 8, cleanSnap) as object), live: LIVE0 } as never, { pages: PAGES }).map(text)
   expect(fullOut.join('\n')).not.toContain('到待決頁')
   const nBody = fullOut.slice(1, 6)
   expect(nBody.slice(0, 2)).toEqual(['', ''])

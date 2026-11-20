@@ -53,9 +53,9 @@ test('gate2 item 1: actions sit directly above the strip, the body touches the a
   const out = frameRows(PAGES.find(p => p.id === 'pet') as Page, ctxOf(160, 24, snap(POOLS.map(p => ({ ...p, stranded_seats: 1 })), { cards: [] })) as never, { pages: PAGES }).map(text)
   expect(out.length).toBe(24)
   const last = out.length - 1
-  expect(out[last - 1]).toContain('沒有待決卡') // the action row is right above the strip
+  expect(out[last - 2]).toContain('沒有待決卡') // the action row is right above the v7.4 border row, which sits above the strip
   const content = out.indexOf(t('page.pet.none'))
-  expect(content, 'the body touches the first action').toBe(last - 2)
+  expect(content, 'the body touches the first action').toBe(last - 3)
   const blanks = out.map((l, i) => (l.trim() === '' ? i : -1)).filter(i => i >= 0)
   expect(blanks.length).toBeGreaterThan(0)
   expect(blanks.every((i, k) => k === 0 || i === blanks[k - 1] + 1), 'the blank rows are one run').toBe(true)
@@ -168,7 +168,7 @@ test('gate2 item 5: 現況 at 80 columns says the pending sentence once; the act
 
 // ---- item 6 ----
 test('gate2 item 6: 資料不足 only for a missing or not-ok source; unknown pools say how many (缺換池資料)', () => {
-  const last = (c: unknown) => frameRows({ ...quotaPage, render: ctx => ({ ...quotaPage.render(ctx), actions: [] }) }, ctxOf(120, 24, c) as never).map(text).slice(-2, -1)[0]
+  const last = (c: unknown) => frameRows({ ...quotaPage, render: ctx => ({ ...quotaPage.render(ctx), actions: [] }) }, ctxOf(120, 24, c) as never).map(text).slice(-3, -2)[0]
   const miss = snap(POOLS, { sources: { ...ALL_OK, quota_forecast: { at_ms: null, state: 'no_source' } } })
   expect(last(miss)).toContain('資料不足，無法判定')
   const unknown = snap(POOLS, { cards: [] })
@@ -196,26 +196,26 @@ import { lineTotal } from './pages/rows'
 import { decidePage } from './pages/decide'
 
 test('gate2 item 7: only the rendered action rows bind a [x] hint; a body row quoting "[s] ..." near the strip stays text', () => {
-  const body = Array.from({ length: 29 }, (_, i) => [{ text: i === 28 ? '[l] quoted in the body' : 'body ' + i }])
+  const body = Array.from({ length: 27 }, (_, i) => [{ text: i === 26 ? '[l] quoted in the body' : 'body ' + i }])
   const page: Page = { id: 'decide', key: '2', title: 'x', framed: true, render: () => ({ body, actions: [[{ text: '[h] real action' }]] }) }
-  const rows = hostRows('decide', 160, 32, { pages: [...PAGES.filter(p => p.id !== 'decide').map(p => ({ ...p, framed: true as const })), { ...page }], rows: 32 })
+  const rows = hostRows('decide', 160, 32, { pages: [...PAGES.filter(p => p.id !== 'decide').map(p => ({ ...p, framed: true as const })), { ...page }], pageId: 'decide', rows: 32 })
   const quoted = rows.find(r => r.text.includes('quoted in the body')) as { buttons: Node[] }
   expect(quoted.buttons.filter(b => b.props.hotkey === 'l')).toEqual([])
   const act = rows.find(r => r.text.includes('real action')) as { buttons: Node[] }
   expect(act.buttons.some(b => b.props.hotkey === 'h')).toBe(true)
 })
 
-test('gate2 item 8: the strip never has a label-less Button; i keeps its Button at every width; under 66 columns the strip splits onto two rows', () => {
+test('gate2 item 8: the strip never has a label-less Button; 0 keeps its Button at every width; under 66 columns the strip splits onto two rows', () => {
   for (const cols of [120, 80, 70, 60, 56, 50, 40, 36]) {
     const out = frameRows(nowPage, ctxOf(cols, 24, snap()) as never, { pages: PAGES })
     const sRows = cols < 66 ? out.slice(-2) : out.slice(-1)
     for (const r of sRows) {
       for (const s of r.filter(x => x.press !== undefined)) expect(s.text, cols + ': a Button has a label').toMatch(/^\S+ \S/)
-      const helpCount = r.filter(s => s.text.startsWith('i ')).length
+      const helpCount = 0 // v7.4: no `i` entry on the strip
       expect(displayWidth(text(r)) + r.filter(s => s.press !== undefined).length + helpCount, cols + ': within the width with the host prefix').toBeLessThanOrEqual(cols)
     }
     const last = sRows[sRows.length - 1]
-    expect(last.some(s => s.text.startsWith('i ') && s.text.length > 2), cols + ': i keeps its label').toBe(true)
+    expect(last.some(s => s.text.startsWith('0 ') && s.text.length > 2), cols + ': 0 keeps its label').toBe(true)
   }
 })
 
@@ -232,7 +232,7 @@ test('gate2 item 9: the zh-TW decide nav hints split into [h] and [l] Buttons (s
 
 test('gate2 item 10: empty state three ways (calm / unknown pools / source or seat feed not ok)', () => {
   const green = snap([POOLS.find(p => p.pool === 'codex')], { cards: [] })
-  const last = (p: Page, c: unknown, live: unknown = null) => frameRows({ ...p, render: ctx => ({ ...p.render(ctx), actions: [] }) }, { ...(ctxOf(120, 24, c) as object), live } as never).map(text).slice(-2, -1)[0]
+  const last = (p: Page, c: unknown, live: unknown = null) => frameRows({ ...p, render: ctx => ({ ...p.render(ctx), actions: [] }) }, { ...(ctxOf(120, 24, c) as object), live } as never).map(text).slice(-3, -2)[0]
   expect(last(quotaPage, green)).toBe('沒有要你處理的事')
   expect(last(quotaPage, snap(POOLS, { cards: [] }))).toBe('2 池判定未知（缺換池資料）；沒有待決卡')
   expect(last(quotaPage, snap(POOLS.map(p => ({ ...p, stranded_seats: 1 })), { cards: [] }))).toBe('沒有待決卡')

@@ -15,8 +15,10 @@
  *     with noncq-pools.json + `role_models.implementer` (agy -> grok -> glm -> agyclaude).
  *   - `codex` never appears as an automatic retreat target for either seat.
  *   - Family guard skips rungs matching known implementer families; when
- *     implementer family is `unknown`, the family guard skips nothing (and GLM
- *     remains eligible).
+ *     implementer family is `unknown`, that guard skips nothing.
+ *   - Reviewer retreat also drops every rung whose family is in the CN dispatch
+ *     gate's barred list (read from that module, not copied here). Implementer
+ *     retreat does not apply that drop.
  *   - `inferImplementerFamily` never assumes `openai` when no dispatch record
  *     exists; it returns `unknown`.
  *   - Both walks read the pace file via `pace-select.js` (`--pace` /
@@ -31,6 +33,7 @@
 const fs = require('fs');
 const path = require('path');
 const { familyOfEngine } = require('./stage-write');
+const { BARRED_FAMILIES, familyOf: cnFamilyOf } = require('./cn-model-dispatch-gate');
 const { runsDir: defaultRunsDir } = require('./runtime-paths');
 const { recordedImplementerEngines } = require('./review-family-gate');
 const { sameEngine } = require('./engine-spelling');
@@ -255,6 +258,8 @@ function reviewerFallbackPlan(opts = {}) {
     if (excluded.has(rung.key)) continue;
     if (matchesFailedSeat(rung, opts)) continue;
     if (rung.family !== 'unknown' && forbidden.has(rung.family)) continue;
+    const inferred = cnFamilyOf(rung.runner, rung.model, rung.endpoint || '');
+    if (BARRED_FAMILIES.includes(inferred) || BARRED_FAMILIES.includes(rung.family)) continue;
     eligible.push(rung);
   }
   const lowKeys = readLowKeys(opts, roles || {}, poolsDoc);
@@ -263,8 +268,8 @@ function reviewerFallbackPlan(opts = {}) {
 
 /**
  * Ordered reviewer fallback rungs from pace-roles.json `fallback.reviewer`.
- * Never returns `codex`; skips rungs whose family matches `implementerFamily`.
- * When `implementerFamily` is `unknown`, skips nothing (GLM stays eligible).
+ * Never returns `codex`; skips rungs whose family matches `implementerFamily`
+ * and every rung in the CN dispatch gate's barred families.
  */
 function reviewerFallbackChain(opts = {}) {
   return reviewerFallbackPlan(opts).chain;

@@ -1,5 +1,5 @@
 // mods/live/pages/spend.test.ts — page 7 花費 (plan r2 §2 row 7, §3.1, §5): golden rows at 160x40, 120x30, 80x24 and 80x24 stale,
-// fixed height H across every size and state, fold pair (collapsed / expanded) + overflow row, red stale/no-source wrapping, [4] & [z] Buttons, and empty states.
+// fixed height H across every size and state, fold pair (collapsed / expanded) + overflow row, red stale/no-source wrapping, [5] & [z] Buttons, and empty states.
 import type { EngineInterface, On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
 import { FOCUS_ANCHOR_KEY } from '../pane'
@@ -142,7 +142,7 @@ const GOLD_WIDE_BODY = [
   '  7 天    ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱  68%    重置 11-21 週六 12:00',
   '  今天    $3.10 · 近 24 小時 ▁▁▂▃▅▂▁▁▁▂▂▃▁▁▁▁▂▅█▃▂▁▁▁',
   // X5: the former internal spacer moves to the frame's top padding.
-  '  額度看 [4]',
+  '  額度看 [5]',
 ]
 
 const GOLD_80_BODY = [
@@ -150,7 +150,7 @@ const GOLD_80_BODY = [
   '▸5時 ▰▰▱▱▱▱▱▱▱▱ 17% 重置 03:40',
   ' 7天 ▰▰▰▰▰▰▰▱▱▱ 68% 重置 週六',
   ' 今天 $3.10 ▁▂▃▅▂▁▂▅▇▃',
-  ' 額度看 [4]',
+  ' 額度看 [5]',
 ]
 
 const GOLD_80_STALE_BODY = [
@@ -160,7 +160,7 @@ const GOLD_80_STALE_BODY = [
   ' ✗ 25 分未更新，以上是舊數字',
   ' ✗ fleet seats --quota 指令失敗，用 25 分前的舊結果',
   ' 今天 $3.10 ▁▂▃▅▂▁▂▅▇▃',
-  ' 額度看 [4]',
+  ' 額度看 [5]',
 ]
 
 const diffRows = (got: string[], want: string[]): string[] => {
@@ -185,45 +185,45 @@ test('spend golden: 160x40, 120x30, 80x24 and 80x24 stale match the four mockups
   const out160 = frameRows(spendPage, ctxOf(160, 40)).map(text)
   expect(out160.length).toBe(40)
   expect(out160[0]).toBe('花費')
-  expect(out160.slice(1, 33).every(r => r === '')).toBe(true)
-  expect(diffRows(out160.slice(33, 38), GOLD_WIDE_BODY)).toEqual([])
-  expect(out160[38]).toBe('沒有要你處理的事')
-  expect(out160[39]).toContain('7 花費')
-  expect(out160[39]).toContain('i 說明') // V5: close with host ✕ / band [-]; Escape belongs to its focused surface.
+  expect(out160.slice(1, 32).every(r => r === '')).toBe(true)
+  expect(diffRows(out160.slice(32, 37), GOLD_WIDE_BODY)).toEqual([])
+  expect(out160[37]).toBe('沒有要你處理的事')
+  expect(out160[39]).toContain('5 花費')
+  expect(out160[39]).toContain('9 說明') // V5: close with host ✕ / band [-]; Escape belongs to its focused surface.
 
   // X5: 120x30 (header 1 + blank gap 22 + body 5 + calm empty state 1 + strip 1 = 30)
   const out120 = frameRows(spendPage, ctxOf(120, 30)).map(text)
   expect(out120.length).toBe(30)
   expect(out120[0]).toBe('花費')
-  expect(out120.slice(1, 23).every(r => r === '')).toBe(true)
-  expect(diffRows(out120.slice(23, 28), GOLD_WIDE_BODY)).toEqual([])
-  expect(out120[28]).toBe('沒有要你處理的事')
-  expect(out120[29]).toContain('7 花費')
+  expect(out120.slice(1, 22).every(r => r === '')).toBe(true)
+  expect(diffRows(out120.slice(22, 27), GOLD_WIDE_BODY)).toEqual([])
+  expect(out120[27]).toBe('沒有要你處理的事')
+  expect(out120[29]).toContain('5 花費')
 
   // 3. 80x24 fresh (header 1 + blank gap 16 + body 5 + calm empty state 1 + strip 1 = 24)
   const raw80 = frameRows(spendPage, ctxOf(80, 24, calmConsole(), liveOf(HOURLY_NARROW)))
   const out80 = raw80.map(text)
   expect(out80.length).toBe(24)
   expect(out80[0]).toBe('花費')
-  expect(out80.slice(1, 17).every(r => r === '')).toBe(true)
-  expect(diffRows(out80.slice(17, 22), GOLD_80_BODY)).toEqual([])
-  expect(out80[22]).toBe('沒有要你處理的事')
-  expect(out80[23]).toContain('7 花')
-  expect(raw80[23].find(s => s.press === 'tab:7:spend')?.color).toBe(PALETTE.here)
+  expect(out80.slice(1, 16).every(r => r === '')).toBe(true)
+  expect(diffRows(out80.slice(16, 21), GOLD_80_BODY)).toEqual([])
+  expect(out80[21]).toBe('沒有要你處理的事')
+  expect(out80[23]).toContain('5 花')
+  expect(raw80[23].find(s => s.press === 'tab:5:spend')?.color).toBe(PALETTE.here)
 
   // 4. 80x24 stale own-seat quota after refresh failure (header 1 + blank gap 14 + body 7 + unknown action row 1 + strip 1 = 24)
   await feedStale25m()
   const rawStale = frameRows(spendPage, ctxOf(80, 24, calmConsole(), liveOf(HOURLY_NARROW)))
   const out80Stale = rawStale.map(text)
   expect(out80Stale.length).toBe(24)
-  expect(out80Stale.slice(1, 15).every(r => r === '')).toBe(true)
-  expect(diffRows(out80Stale.slice(15, 22), GOLD_80_STALE_BODY)).toEqual([])
-  expect(out80Stale[22]).toBe('資料不足，無法判定')
+  expect(out80Stale.slice(1, 14).every(r => r === '')).toBe(true)
+  expect(diffRows(out80Stale.slice(14, 21), GOLD_80_STALE_BODY)).toEqual([])
+  expect(out80Stale[21]).toBe('資料不足，無法判定')
   // Stale marks, age warning row and refresh failure reason row use PALETTE.broken, no background, no inverse, no bold
+  expect(rawStale[15].some(s => s.text.includes(GLYPHS.state.failed) && s.color === PALETTE.broken)).toBe(true)
   expect(rawStale[16].some(s => s.text.includes(GLYPHS.state.failed) && s.color === PALETTE.broken)).toBe(true)
-  expect(rawStale[17].some(s => s.text.includes(GLYPHS.state.failed) && s.color === PALETTE.broken)).toBe(true)
+  expect(rawStale[17][0].color).toBe(PALETTE.broken)
   expect(rawStale[18][0].color).toBe(PALETTE.broken)
-  expect(rawStale[19][0].color).toBe(PALETTE.broken)
   for (const r of rawStale) {
     for (const s of r as (M.Seg & { background?: unknown; inverse?: unknown })[]) {
       expect(s.background).toBeUndefined()
@@ -238,7 +238,7 @@ test('spend: negative control confirms diffRows reports planted golden drift', a
   const out80 = frameRows(spendPage, ctxOf(80, 24, calmConsole(), liveOf(HOURLY_NARROW))).map(text)
   const mutated = GOLD_80_BODY.slice()
   mutated[1] = '▸5時 ▰▰▱▱▱▱▱▱▱▱ 18% 重置 03:40'
-  expect(diffRows(out80.slice(17, 22), mutated).length).toBe(1)
+  expect(diffRows(out80.slice(16, 21), mutated).length).toBe(1)
 })
 
 type HostNode = { type?: string; props?: Record<string, unknown>; children?: unknown[] }
@@ -423,18 +423,18 @@ async function pressMountedButton($: any, bodyRows: number, match: (b: HostNode)
   await m.unmount()
 }
 
-test('spend real path (120x12): register key handler -> mounted Pane render toggles z expand/collapse and moves focus with j/k', async ($, on) => {
+test('spend real path (120x13): register key handler -> mounted Pane render toggles z expand/collapse and moves focus with j/k', async ($, on) => {
   await feedFresh()
   const { eng, clock } = setupMountedSpend(on)
   await $.session.start({ surface: 'terminal', cwd: CWD })
   await clock.advance(5_000)
 
   // Switch to page 7 (spend) via the mounted strip Button
-  await pressMountedButton($, 12, b => b.props?.key === 'spend' && b.props?.hotkey === '7', clock)
+  await pressMountedButton($, 13, b => b.props?.key === 'spend' && b.props?.hotkey === '5', clock)
 
-  // Initial render at 12 rows (room = 9 < 12 expanded rows): starts collapsed, focus marker on 5 小時
-  const init = await readMountedPane($, 12)
-  expect(init.rows.length).toBe(12)
+  // Initial render at 13 rows (v7.4 border row: room = 9 < 12 expanded rows): starts collapsed, focus marker on 5 小時
+  const init = await readMountedPane($, 13)
+  expect(init.rows.length).toBe(13)
   expect(init.rows[0]).toContain('花費')
   expect(init.rows.some(l => l.startsWith('▸ 5 小時'))).toBe(true)
   expect(init.rows.some(l => l.startsWith('  7 天'))).toBe(true)
@@ -442,37 +442,37 @@ test('spend real path (120x12): register key handler -> mounted Pane render togg
   expect(init.rows.some(l => l.includes('$8.20 / $50.00'))).toBe(false)
 
   // Press z on the spend page -> render: expanded content shows (with overflow ↓ 還有 4 列)
-  await pressMountedButton($, 12, b => b.props?.hotkey === 'z', clock)
-  const open1 = await readMountedPane($, 12)
-  expect(open1.rows.length).toBe(12)
+  await pressMountedButton($, 13, b => b.props?.hotkey === 'z', clock)
+  const open1 = await readMountedPane($, 13)
+  expect(open1.rows.length).toBe(13)
   expect(open1.rows.some(l => l.includes('收合明細'))).toBe(true)
   expect(open1.rows.some(l => l.includes('brain') && l.includes('$8.20 / $50.00'))).toBe(true)
   expect(open1.rows.some(l => l.includes('本機今日 $12.40'))).toBe(true)
   expect(open1.rows.some(l => l.startsWith('↓ 還有 '))).toBe(true)
 
   // Press z again -> render: collapsed
-  await pressMountedButton($, 12, b => b.props?.hotkey === 'z', clock)
-  const shut = await readMountedPane($, 12)
-  expect(shut.rows.length).toBe(12)
+  await pressMountedButton($, 13, b => b.props?.hotkey === 'z', clock)
+  const shut = await readMountedPane($, 13)
+  expect(shut.rows.length).toBe(13)
   expect(shut.rows.some(l => l.includes('展開明細（5 列）'))).toBe(true)
   expect(shut.rows.some(l => l.includes('$8.20 / $50.00'))).toBe(false)
   expect(shut.rows.some(l => l.startsWith('↓ 還有 '))).toBe(false)
 
   // Press 7 天 meter row Button -> render: focus marker moved one row while staying collapsed
-  await pressMountedButton($, 12, b => String(b.props?.key ?? '').startsWith('p:') && hostNodeText(b).includes('7 天'), clock)
-  const movedDown = await readMountedPane($, 12)
+  await pressMountedButton($, 13, b => String(b.props?.key ?? '').startsWith('p:') && hostNodeText(b).includes('7 天'), clock)
+  const movedDown = await readMountedPane($, 13)
   expect(movedDown.rows.some(l => l.startsWith('  5 小時'))).toBe(true)
   expect(movedDown.rows.some(l => l.startsWith('▸ 7 天'))).toBe(true)
   expect(movedDown.rows.some(l => l.includes('展開明細（5 列）'))).toBe(true)
 
   // Press 5 小時 meter row Button -> render: focus marker moved back to 5 小時
-  await pressMountedButton($, 12, b => String(b.props?.key ?? '').startsWith('p:') && hostNodeText(b).includes('5 小時'), clock)
-  const movedUp = await readMountedPane($, 12)
+  await pressMountedButton($, 13, b => String(b.props?.key ?? '').startsWith('p:') && hostNodeText(b).includes('5 小時'), clock)
+  const movedUp = await readMountedPane($, 13)
   expect(movedUp.rows.some(l => l.startsWith('▸ 5 小時'))).toBe(true)
   expect(movedUp.rows.some(l => l.startsWith('  7 天'))).toBe(true)
 
-  // Direct register key handler routing on '7', 'z', 'j'/'ArrowDown', and 'k'/'ArrowUp'
-  expect(await paneKey(eng, '7')).toEqual({ kind: 'page', to: 'spend' })
+  // Direct register key handler routing on '5', 'z', 'j'/'ArrowDown', and 'k'/'ArrowUp'
+  expect(await paneKey(eng, '5')).toEqual({ kind: 'page', to: 'spend' })
   expect(await paneKey(eng, 'z')).toEqual({ kind: 'fold' })
   expect(await paneKey(eng, 'j')).toEqual({ kind: 'move', by: 1 })
   expect(await paneKey(eng, 'ArrowDown')).toEqual({ kind: 'move', by: 1 })
@@ -480,14 +480,14 @@ test('spend real path (120x12): register key handler -> mounted Pane render togg
   expect(await paneKey(eng, 'ArrowUp')).toEqual({ kind: 'move', by: -1 })
 })
 
-test('spend real path (120x30): unfold callback, z / [z] Button, j / k focus movement, [4] quota jump, and direct renderSpend view parameter', async ($, on) => {
+test('spend real path (120x30): unfold callback, z / [z] Button, j / k focus movement, [5] quota jump, and direct renderSpend view parameter', async ($, on) => {
   await feedFresh()
   const { clock } = setupMountedSpend(on)
   await $.session.start({ surface: 'terminal', cwd: CWD })
   await clock.advance(5_000)
 
-  // Switch to spend via strip hotkey '7' Button
-  await pressMountedButton($, 30, b => b.props?.key === 'spend' && b.props?.hotkey === '7', clock)
+  // Switch to spend via strip hotkey '5' Button
+  await pressMountedButton($, 30, b => b.props?.key === 'spend' && b.props?.hotkey === '5', clock)
 
   // Initial tall dock render (120x30): unfold opens details when they fit whole; no empty-label or j/k Buttons
   const initial = await readMountedPane($, 30)
@@ -537,7 +537,7 @@ test('spend real path (120x30): unfold callback, z / [z] Button, j / k focus mov
   expect(afterK.rows.some(l => l.startsWith('▸ 5 小時'))).toBe(true)
   expect(afterK.rows.some(l => l.startsWith('  7 天'))).toBe(true)
 
-  // Press [4] jump Button in body -> switches mounted Pane to quota (額度)
+  // Press [5] jump Button in body -> switches mounted Pane to quota (額度)
   await pressMountedButton($, 30, b => String(b.props?.key ?? '').endsWith(':quota'), clock)
   const onQuota = await readMountedPane($, 30)
   expect(onQuota.rows[0]).toContain('額度')
@@ -561,7 +561,7 @@ test('spend: missing and stale sources render red reason rows, wrap without elli
   const emptyTexts = emptyFramed.map(text)
   expect(emptyTexts.some(l => l.includes('無來源：fleet seats --quota 還沒有結果'))).toBe(true)
   expect(emptyTexts.some(l => l.includes('無來源：本席沒有 live 資料'))).toBe(true)
-  expect(emptyTexts[22]).toBe('資料不足，無法判定')
+  expect(emptyTexts[21]).toBe('資料不足，無法判定')
   const redSegs = spendPage.render(emptyCtx).body.flat().filter(s => s.text.includes('無來源'))
   expect(redSegs.length).toBe(2)
   for (const s of redSegs) expect(s.color).toBe(PALETTE.broken)
@@ -575,8 +575,8 @@ test('spend: missing and stale sources render red reason rows, wrap without elli
   for (const l of wrapped) expect(displayWidth(l)).toBeLessThanOrEqual(80)
   expect(wrapped.some(l => l.includes('$3.10 ✗'))).toBe(true)
   expect(wrapped.join('').replace(/\s+/g, '')).toContain(('本席花費資料過期：' + longReason).replace(/\s+/g, ''))
-  expect(wrapped.some(l => l.includes('…'))).toBe(false)
-  expect(wrapped[22]).toBe('資料不足，無法判定')
+  expect(wrapped.filter(l => !l.startsWith('╰─')).some(l => l.includes('…'))).toBe(false)
+  expect(wrapped[21]).toBe('資料不足，無法判定')
 
   // 3. Pending card on console updates empty state from 沒有要你處理的事 to 待決 1 張卡等你
   const pendingCon = calmConsole({
@@ -584,7 +584,7 @@ test('spend: missing and stale sources render red reason rows, wrap without elli
     cards: [{ id: 'd-00000001', question: '是否核准預算調整', status: 'open', opened_at_ms: NOW - 5 * MIN, executor_display: 'PM' }],
   })
   const withCard = frameRows(spendPage, ctxOf(80, 24, pendingCon, liveOf(HOURLY_NARROW))).map(text)
-  expect(withCard[22]).toBe('待決 1 張卡等你')
+  expect(withCard[21]).toBe('待決 1 張卡等你')
 
   // 4. Null spend object in ok live snapshot renders red 無來源：沒有花費資料, null pct renders — (never 0%), and empty state is 資料不足，無法判定
   await seatQuota.refresh(okRun(JSON.stringify([{ seat: 'codeforge--claude', pool_key: 'team', five_hour_pct: null, seven_day_pct: null, stale: false, self: true }])), NOW + 65_000)
@@ -597,13 +597,13 @@ test('spend: missing and stale sources render red reason rows, wrap without elli
   expect(noSpendOut.some(l => l.includes('無來源：沒有花費資料'))).toBe(true)
   expect(noSpendOut.some(l => /\b0%/.test(l))).toBe(false)
   expect(noSpendOut.some(l => l.includes('5 小時') && l.includes('—'))).toBe(true)
-  expect(noSpendOut[28]).toBe('資料不足，無法判定')
+  expect(noSpendOut[27]).toBe('資料不足，無法判定')
 
   // 5. Missing live snapshot with ok console renders red 無來源：本席沒有 live 資料 and 資料不足，無法判定 (never 沒有要你處理的事)
   await feedFresh()
   const noLiveWithCon = frameRows(spendPage, ctxOf(80, 24, calmConsole(), null)).map(text)
   expect(noLiveWithCon.some(l => l.includes('無來源：本席沒有 live 資料'))).toBe(true)
-  expect(noLiveWithCon[22]).toBe('資料不足，無法判定')
+  expect(noLiveWithCon[21]).toBe('資料不足，無法判定')
 
   // 6. Unfetched seatQuota feed WITH account quota windows still emits red missing-source warning, wraps without `…`, and sets unknown empty state
   seatQuota.reset()
@@ -619,17 +619,17 @@ test('spend: missing and stale sources render red reason rows, wrap without elli
     const missingRow80 = raw80.find(r => text(r).includes(wantMissing))!
     expect(missingRow80).toBeDefined()
     expect(missingRow80[0].color).toBe(PALETTE.broken)
-    expect(text(raw80[22])).toBe(wantUnknown)
+    expect(text(raw80[21])).toBe(wantUnknown)
 
     // At 40 cols (< 41/51 cells), the red missing-source reason wraps across multiple red rows without `…`
     const raw40 = frameRows(spendPage, { ...ctxOf(40, 24, calmConsole(), liveOf(HOURLY_NARROW)), t: tr })
     expect(raw40.length).toBe(24)
     for (const r of raw40) expect(displayWidth(text(r))).toBeLessThanOrEqual(40)
-    expect(raw40.some(r => text(r).includes('…'))).toBe(false)
+    expect(raw40.some(r => !text(r).startsWith('╰─') && text(r).includes('…'))).toBe(false)
     const redRows40 = raw40.filter(r => r.length > 0 && r.every(s => s.color === PALETTE.broken))
     expect(redRows40.length).toBeGreaterThanOrEqual(2)
     expect(redRows40.map(text).join('').replace(/\s+/g, '')).toContain(wantMissing.replace(/\s+/g, ''))
-    expect(text(raw40[21])).toBe(wantUnknown)
+    expect(text(raw40[20])).toBe(wantUnknown)
   }
 
   // 7. Stale cached seatQuota row AFTER refresh failure renders BOTH red age warning AND red refresh-failure reason, wrapping without `…`
@@ -646,17 +646,17 @@ test('spend: missing and stale sources render red reason rows, wrap without elli
     expect(failRow).toBeDefined()
     expect(ageRow[0].color).toBe(PALETTE.broken)
     expect(failRow[0].color).toBe(PALETTE.broken)
-    expect(text(raw160[38])).toBe(wantUnknown)
+    expect(text(raw160[37])).toBe(wantUnknown)
 
     // At 40 cols, the refresh-failure reason (> 40 cells) wraps across red rows without `…`
     const raw40 = frameRows(spendPage, { ...ctxOf(40, 24, calmConsole(), liveOf(HOURLY_NARROW)), t: tr })
     expect(raw40.length).toBe(24)
     for (const r of raw40) expect(displayWidth(text(r))).toBeLessThanOrEqual(40)
-    expect(raw40.some(r => text(r).includes('…'))).toBe(false)
+    expect(raw40.some(r => !text(r).startsWith('╰─') && text(r).includes('…'))).toBe(false)
     const redJoined = raw40.filter(r => r.length > 0 && r.every(s => s.color === PALETTE.broken)).map(text).join('').replace(/\s+/g, '')
     expect(redJoined).toContain(wantAge.replace(/\s+/g, ''))
     expect(redJoined).toContain(wantFail.replace(/\s+/g, ''))
-    expect(text(raw40[21])).toBe(wantUnknown)
+    expect(text(raw40[20])).toBe(wantUnknown)
   }
 
   // Flagged stale row (row.stale === true, < 10 min) followed by refresh failure also emits both red rows

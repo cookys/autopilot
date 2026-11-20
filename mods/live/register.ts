@@ -78,7 +78,7 @@ import type { KeyAction } from './pages/keys'
 import { decideReduce, NO_NAV } from './pages/decide'
 import type { DecideNav } from './pages/decide'
 import { SEATS_TIMEOUT_MS, seatQuota } from './pages/now'
-import { PAGES } from './pages/index'
+import { PAGES, EXTRA_PAGES } from './pages/index'
 import { makeDecideFeed, makePmFeed } from './v74/feeds'
 import type { CardNav, V74Ctx } from './v74/contract'
 import { frameHeight } from './pages/frame'
@@ -2091,7 +2091,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       folded, e.props.scroll ?? null,
       { state: decideState, batch: decideBatch, now: decideNow, inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } },
       decideScroll, fleet, null,
-      legacy ? null : { pages: PAGES, pageId: panePage, onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, nowMs: frameNow, rows: frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), view: pageView, decide: { ...decideState, ...decideLocal }, v74, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(panePage === 'forge' ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}) },
+      legacy ? null : { pages: [...PAGES, ...EXTRA_PAGES], pageId: panePage, onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, nowMs: frameNow, rows: frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), view: pageView, decide: { ...decideState, ...decideLocal }, v74, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(panePage === 'forge' ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}) },
     )
     await probePane($, e, tree)
     return tree

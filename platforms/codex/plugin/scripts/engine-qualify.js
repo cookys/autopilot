@@ -346,11 +346,11 @@ const HELP = `Usage:
       through scripts/resolve-endpoint.sh — the SAME named-endpoint definition daily
       routing uses — instead of the raw env passthrough; not-ready exits 2 uncharged;
       the emitted row discloses endpoint {name, transport_security}; base_url stays on the rail only)
-    [--task-size <XS|S> --task-class <local class>]
+    [--task-size <XS|S> --gate-task-class <local class>]
       (only together with --endpoint: the exam prompts carry no Size/Task-Class header
       and the dispatch env is an allowlist, so the cn-model gate would otherwise refuse
       unknown-size / unknown-task-class. Sets AUTOPILOT_TASK_SIZE / AUTOPILOT_TASK_CLASS
-      on the dispatch child. The --task-class value must be one of the gate's
+      on the dispatch child. The --gate-task-class value must be one of the gate's
       local_task_classes and is NOT added to the seat scope. The row records both on
       endpoint as task_size and task_class. Omitting both changes nothing.)
   Qualification has no expiry: there is no --expires-days (it is refused). A seat loses standing
@@ -615,6 +615,7 @@ function parseArgs(argv) {
     ['--dispatch-timeout', 'dispatchTimeout'],
     ['--endpoint', 'endpoint'],
     ['--task-size', 'taskSize'],
+    ['--gate-task-class', 'gateTaskClass'],
     // Optional price inputs (all-or-nothing, see parsePricing). Never defaulted.
     ['--price-usd-per-mtok-in', 'priceUsdPerMtokIn'],
     ['--price-usd-per-mtok-out', 'priceUsdPerMtokOut'],
@@ -843,30 +844,31 @@ function parseArgs(argv) {
         usage(2, `--endpoint applies only to --runner cc-shim (got runner: ${options.runner}) — other rails do not dial an Anthropic-compatible endpoint`);
       }
     }
-    // A --task-class value that is a gate local class is the exam label, not seat scope.
-    // Seat scope keeps every other --task-class (still required). Both labels need --endpoint.
+    // --task-class is seat scope only. The exam label is --gate-task-class, and it
+    // is never copied into the seat scope. Both labels need --endpoint, together.
     const localClasses = require('./lib/cn-model-dispatch-gate').loadConfig(REPO_ROOT).local_task_classes;
-    const gateLabels = options.taskClasses.filter((value) => localClasses.includes(String(value).toLowerCase()));
-    if (options.taskSize !== undefined || gateLabels.length > 0) {
+    if (options.taskSize !== undefined || options.gateTaskClass !== undefined) {
       if (options.endpoint === undefined) {
-        usage(2, '--task-size and a gate --task-class are only accepted together with --endpoint');
+        usage(2, '--task-size and --gate-task-class are only accepted together with --endpoint');
       }
-      if (options.taskSize === undefined || gateLabels.length !== 1) {
-        usage(2, `--task-size <XS|S> and exactly one --task-class from {${localClasses.join(', ')}} are required together with --endpoint`);
+      if (options.taskSize === undefined || options.gateTaskClass === undefined) {
+        usage(2, `--task-size <XS|S> and exactly one --gate-task-class from {${localClasses.join(', ')}} are required together with --endpoint`);
       }
       const size = String(options.taskSize).toUpperCase();
       if (size !== 'XS' && size !== 'S') usage(2, '--task-size must be XS or S');
+      const gate = String(options.gateTaskClass).toLowerCase();
+      if (!localClasses.includes(gate)) {
+        usage(2, `--gate-task-class must be one of {${localClasses.join(', ')}}`);
+      }
       options.taskSize = size;
-      options.gateTaskClass = String(gateLabels[0]).toLowerCase();
-      options.taskClasses = options.taskClasses.filter((value) => !localClasses.includes(String(value).toLowerCase()));
-      if (options.taskClasses.length === 0) usage(2, '--task-class is required');
+      options.gateTaskClass = gate;
     }
     return options;
   }
   if (options.dispatchBin !== undefined || options.runnerBin !== undefined
       || options.dispatchTimeout !== undefined || options.endpoint !== undefined
-      || options.taskSize !== undefined) {
-    usage(2, '--dispatch-bin/--runner-bin/--dispatch-timeout/--endpoint/--task-size are implementer-only');
+      || options.taskSize !== undefined || options.gateTaskClass !== undefined) {
+    usage(2, '--dispatch-bin/--runner-bin/--dispatch-timeout/--endpoint/--task-size/--gate-task-class are implementer-only');
   }
   const localTransport = Boolean(options.panelCmd);
   const remoteTransport = Boolean(options.remoteProviderCmd || options.remoteProvider);

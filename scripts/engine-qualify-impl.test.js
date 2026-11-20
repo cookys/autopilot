@@ -475,6 +475,8 @@ check(!fs.existsSync(path.join(budStore, 'qualification-evidence.jsonl')), 'allo
   let ep;
   let labeled;
   let labeledSeen = '';
+  let seatScopeRun;
+  let argvAfterEndpoint = 0;
   const storeL = fs.mkdtempSync(path.join(tempRoot, 'store-label-'));
   try {
     ep = runImplQualification({ ...baseOptions(storeE), dispatchBin: wrapper, runner: 'cc-shim', endpoint: 'examlan', rawDir: rawE });
@@ -488,13 +490,28 @@ check(!fs.existsSync(path.join(budStore, 'qualification-evidence.jsonl')), 'allo
       '--prompt-config-hash', digest('a'), '--semantic-fingerprint', digest('b'), '--containment-fingerprint', digest('c'),
       '--task-class', 'bounded_implementation', '--domain', 'repository', '--language', 'en', '--tool', 'git_commit',
       '--store', storeL, '--raw-dir', rawL, '--dispatch-bin', wrapper, '--version-source', 'operator-asserted',
-      '--endpoint', 'examlan', '--task-size', 'xs', '--task-class', 'test-scaffold', '--emit-row'];
+      '--endpoint', 'examlan', '--task-size', 'XS', '--gate-task-class', 'simple-script', '--emit-row'];
     labeled = spawnSync(process.execPath, [path.join(__dirname, 'engine-qualify.js'), ...labelArgs], {
       env: process.env,
       encoding: 'utf8',
       maxBuffer: 32 * 1024 * 1024,
     });
     labeledSeen = fs.readFileSync(seen, 'utf8');
+    argvAfterEndpoint = fs.existsSync(argvFile) ? fs.readFileSync(argvFile, 'utf8').split('\n').filter(Boolean).length : 0;
+    fs.writeFileSync(path.join(tempRoot, 'fake-seed.txt'), 'seat-scope-seed');
+    fs.writeFileSync(path.join(tempRoot, 'fake-mode.txt'), 'honest');
+    process.env.AUTOPILOT_QUALIFY_SEED = 'seat-scope-seed';
+    const storeSeat = fs.mkdtempSync(path.join(tempRoot, 'store-seat-scope-'));
+    const seatArgs = ['implementer', '--engine', 'e', '--model', 'm', '--model-version', 'v', '--runner', 'cc-shim',
+      '--runner-version', '1', '--family', 'f', '--harness-version', 'h', '--effort', 'high',
+      '--prompt-config-hash', digest('a'), '--semantic-fingerprint', digest('b'), '--containment-fingerprint', digest('c'),
+      '--task-class', 'simple-script', '--domain', 'repository', '--language', 'en', '--tool', 'git_commit',
+      '--store', storeSeat, '--dispatch-bin', wrapper, '--version-source', 'operator-asserted', '--emit-row'];
+    seatScopeRun = spawnSync(process.execPath, [path.join(__dirname, 'engine-qualify.js'), ...seatArgs], {
+      env: process.env,
+      encoding: 'utf8',
+      maxBuffer: 32 * 1024 * 1024,
+    });
     fs.writeFileSync(seen, unlabeledSeen);
   } finally {
     delete process.env.AUTOPILOT_QUALIFY_SEED;
@@ -515,7 +532,7 @@ check(!fs.existsSync(path.join(budStore, 'qualification-evidence.jsonl')), 'allo
   equal(seenLines[5], '', 'without --task-size the stub receives no AUTOPILOT_TASK_SIZE');
   equal(seenLines[6], '', 'without --task-class the stub receives no AUTOPILOT_TASK_CLASS');
   check(!('task_size' in ep.row.endpoint) && !('task_class' in ep.row.endpoint), 'without the flags the endpoint object is unchanged');
-  const endpointArgv = fs.readFileSync(argvFile, 'utf8').split('\n').filter(Boolean).slice(argvBefore).map((l) => JSON.parse(l));
+  const endpointArgv = fs.readFileSync(argvFile, 'utf8').split('\n').filter(Boolean).slice(argvBefore, argvAfterEndpoint).map((l) => JSON.parse(l));
   check(endpointArgv.length > 0, '--endpoint run dispatched');
   check(endpointArgv.every((a) => {
     const i = a.indexOf('--endpoint');
@@ -537,17 +554,21 @@ check(!fs.existsSync(path.join(budStore, 'qualification-evidence.jsonl')), 'allo
   equal(labeled.status, 0, `labeled --endpoint exam qualifies: ${labeled.stderr && labeled.stderr.slice(0, 400)}`);
   const labeledRow = JSON.parse(labeled.stdout);
   equal(labeledRow.endpoint.task_size, 'XS', 'row records the task size the exam ran under');
-  equal(labeledRow.endpoint.task_class, 'test-scaffold', 'row records the task class the exam ran under');
-  equal(labeledRow.evidence.scope.task_classes, ['bounded_implementation'], 'gate --task-class is not seat scope');
+  equal(labeledRow.endpoint.task_class, 'simple-script', 'row records the task class the exam ran under');
+  equal(labeledRow.evidence.scope.task_classes, ['bounded_implementation'], 'gate --gate-task-class is not seat scope');
   const labeledLines = labeledSeen.split('\n');
   equal(labeledLines[5], 'XS', 'stub saw AUTOPILOT_TASK_SIZE from --task-size');
-  equal(labeledLines[6], 'test-scaffold', 'stub saw AUTOPILOT_TASK_CLASS from the gate --task-class');
+  equal(labeledLines[6], 'simple-script', 'stub saw AUTOPILOT_TASK_CLASS from --gate-task-class');
   const recL = spawnSync(process.execPath, [path.join(__dirname, 'engine-scorecard.js'), 'record'], {
     input: JSON.stringify(labeledRow),
     env: { ...process.env, ENGINE_SCORECARD_DIR: storeL, ENGINE_CAPABILITY_DIR: storeL },
     encoding: 'utf8',
   });
   equal(recL.status, 0, `engine-scorecard record accepts task_size/task_class on endpoint: ${recL.stderr}`);
+  equal(seatScopeRun.status, 0, `unbound --task-class simple-script qualifies: ${seatScopeRun.stderr && seatScopeRun.stderr.slice(0, 400)}`);
+  const seatScopeRow = JSON.parse(seatScopeRun.stdout);
+  equal(seatScopeRow.evidence.scope.task_classes, ['simple-script'], 'unbound --task-class simple-script stays seat scope');
+  check(!('endpoint' in seatScopeRow), 'unbound run records no endpoint gate label');
 }
 
 // ── 13. --endpoint not-ready → exit 2 UNCHARGED (nothing dispatched, no store write) ──
@@ -594,13 +615,13 @@ check(!fs.existsSync(path.join(budStore, 'qualification-evidence.jsonl')), 'allo
   const rev = spawnSync(process.execPath, [path.join(__dirname, 'engine-qualify.js'), 'reviewer', '--endpoint', 'x', '--panel-cmd', 'true'], { env: process.env, encoding: 'utf8' });
   equal(rev.status, 2, '--endpoint on a non-implementer role exits 2');
   check(/implementer-only/.test(rev.stderr), 'non-implementer refusal names implementer-only');
-  const noEp = spawnSync(process.execPath, [path.join(__dirname, 'engine-qualify.js'), ...cliArgs, '--task-size', 'XS', '--task-class', 'test-scaffold'], { env: process.env, encoding: 'utf8' });
-  equal(noEp.status, 2, '--task-size/--task-class without --endpoint exits 2');
+  const noEp = spawnSync(process.execPath, [path.join(__dirname, 'engine-qualify.js'), ...cliArgs, '--gate-task-class', 'simple-script'], { env: process.env, encoding: 'utf8' });
+  equal(noEp.status, 2, '--gate-task-class without --endpoint exits 2');
   check(/only accepted together with --endpoint/.test(noEp.stderr), `refusal names --endpoint: ${noEp.stderr.slice(0, 240)}`);
   const sizeOnly = spawnSync(process.execPath, [path.join(__dirname, 'engine-qualify.js'), ...cliArgs, '--endpoint', 'examlan', '--task-size', 'XS'], { env: process.env, encoding: 'utf8' });
-  equal(sizeOnly.status, 2, '--task-size without a gate --task-class exits 2');
-  check(/exactly one --task-class/.test(sizeOnly.stderr), 'size-only refusal names the gate class');
-  const badSize = spawnSync(process.execPath, [path.join(__dirname, 'engine-qualify.js'), ...cliArgs, '--endpoint', 'examlan', '--task-size', 'M', '--task-class', 'test-scaffold'], { env: process.env, encoding: 'utf8' });
+  equal(sizeOnly.status, 2, '--task-size without --gate-task-class exits 2');
+  check(/exactly one --gate-task-class/.test(sizeOnly.stderr), 'size-only refusal names the gate class');
+  const badSize = spawnSync(process.execPath, [path.join(__dirname, 'engine-qualify.js'), ...cliArgs, '--endpoint', 'examlan', '--task-size', 'M', '--gate-task-class', 'test-scaffold'], { env: process.env, encoding: 'utf8' });
   equal(badSize.status, 2, '--task-size M exits 2');
   check(/--task-size must be XS or S/.test(badSize.stderr), 'bad size names the allowed set');
   const revSize = spawnSync(process.execPath, [path.join(__dirname, 'engine-qualify.js'), 'reviewer', '--task-size', 'XS', '--panel-cmd', 'true'], { env: process.env, encoding: 'utf8' });

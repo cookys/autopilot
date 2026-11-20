@@ -171,11 +171,11 @@ const diffRows = (got: string[], want: string[]): string[] => {
   return bad
 }
 
-test('spend: registry places framed spendPage at key 7 with title 花費', () => {
+test('spend: registry places framed spendPage at key 5 with title 花費', () => {
   const entry = PAGES.find(p => p.id === 'spend')
   expect(entry).toBe(spendPage)
   expect(spendPage.framed).toBe(true)
-  expect(spendPage.key).toBe('7')
+  expect(spendPage.key).toBe('5')
   expect(spendPage.title).toBe('花費')
 })
 

@@ -259,10 +259,10 @@ const GOLD_80_EMPTY_BODY = [
   '○ 還沒有審查紀錄（程式碼審查、推送前檢查、plan review 都是空的）',
 ]
 
-test('review: registry replaces the shell at key 6 and marks the page framed', () => {
+test('review: registry replaces the shell at key 4 and marks the page framed', () => {
   const p = PAGES.find(x => x.id === 'review') as Page
   expect(p).toBe(reviewPage)
-  expect(p.key).toBe('6')
+  expect(p.key).toBe('4')
   expect(p.title).toBe('審查')
   expect(p.framed).toBe(true)
   expect(DEFAULT_REVIEW_VIEW).toEqual({ focus: 0, expanded: true })
@@ -377,7 +377,7 @@ test('review: fold/unfold round-trip at 160x40 and 120x30 through real Pane hide
     }
     const d1 = drawReviewPane(cols, rows, LIVE_WIDE, { view: pageView, onKey })
     expect(d1.rows.length).toBe(rows)
-    expect(d1.rows.slice(rows - 2 - goldOpen.length, rows - 2)).toEqual(goldOpen)
+    expect(d1.rows.slice(rows - 3 - goldOpen.length, rows - 3)).toEqual(goldOpen)
     expect(flatFake(d1.zBtn as FakeNode)).toBe('收合替你決定')
 
     // Collapse via z
@@ -392,13 +392,13 @@ test('review: fold/unfold round-trip at 160x40 and 120x30 through real Pane hide
     d2.zBtn!.props.onPress()
     const d3 = drawReviewPane(cols, rows, LIVE_WIDE, { view: pageView, onKey })
     expect(d3.rows.length).toBe(rows)
-    expect(d3.rows.slice(rows - 2 - goldOpen.length, rows - 2)).toEqual(goldOpen)
+    expect(d3.rows.slice(rows - 3 - goldOpen.length, rows - 3)).toEqual(goldOpen)
     expect(flatFake(d3.zBtn as FakeNode)).toBe('收合替你決定')
 
     const noDecLive = liveSnap({ code: CODE_MOCKUP, qc: QC_MOCKUP, decisions: null, plan: PLAN_MOCKUP })
     const noDec = frameRows(reviewPage, ctxOf(cols, rows, noDecLive), { pages: PAGES }).map(text)
     expect(noDec.length).toBe(rows)
-    expect(noDec[rows - 2]).toBe('沒有要你處理的事')
+    expect(noDec[rows - 3]).toBe('沒有要你處理的事')
   }
 })
 
@@ -435,7 +435,7 @@ test('review: fixed height = H, actions <= A, row width <= cols, and overflow en
     for (const [name, lv, view] of states) {
       const ctx = ctxOf(cols, rows, lv, okConsole())
       const sRows = stripRows(reviewPage, ctx, { pages: PAGES })
-      const stripLabel = sRows[sRows.length - 1].find(s => s.press === 'tab:6:review')!.text.replace(/^\d+\s+/, '')
+      const stripLabel = sRows[sRows.length - 1].find(s => s.press === 'tab:4:review')!.text.replace(/^\d+\s+/, '')
       const raw = renderReview(ctx, view)
       expect(raw.actions.length <= actionRows(rows), `${name}@${cols}x${rows} actions`).toBe(true)
       const paneOut = drawReviewPane(cols, rows, lv, { view: view === undefined ? {} : { review: view } })
@@ -447,7 +447,7 @@ test('review: fixed height = H, actions <= A, row width <= cols, and overflow en
         expect(paneOut.rows.some(r => r.includes('01M7N33J')), `${name}@${cols}x${rows} folded hides rows`).toBe(false)
       }
       if (name === 'many decisions overflow') {
-        expect(paneOut.rows[rows - 3], `overflow at ${cols}x${rows}`).toMatch(/^↓ 還有 \d+ 列$/)
+        expect(paneOut.rows[rows - 4], `overflow at ${cols}x${rows}`).toMatch(/^↓ 還有 \d+ 列$/)
       }
     }
   }
@@ -527,7 +527,7 @@ test('review en locale & aligned HEAD: renders cleanly in English across fold/un
   for (const [cols, rows] of [[160, 40], [120, 30], [80, 24]] as const) {
     const enOut = frameRows(reviewPage, ctxOf(cols, rows, LIVE_WIDE, okConsole(), tEn), { pages: PAGES }).map(text)
     expect(enOut.length).toBe(rows)
-    expect(enOut[rows - 2]).toBe('[z] fold decided items')
+    expect(enOut[rows - 3]).toBe('[z] fold decided items')
     const enFolded = drawReviewPane(cols, rows, LIVE_WIDE, { view: { review: { focus: 0, expanded: false } }, tr: tEn })
     expect(flatFake(enFolded.zBtn as FakeNode)).toBe('unfold decided items')
   }

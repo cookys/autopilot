@@ -191,13 +191,13 @@ function drawn(cols: number, rows: number, live: M.LiveSnapshot | null = liveOf(
   const out = frameRows(hygienePage, ctx)
   expect(out.length, `fixed height ${cols}x${rows}`).toBe(rows)
   expect(text(out[out.length - 1]), 'tab strip is last row').toMatch(/1\D*2\D*3\D*4\D*5\D*6\D*7\D*8/)
-  return closeGap(out.slice(0, -1).map(text), Math.max(1, hygienePage.render(ctx).actions.length))
+  return closeGap(out.slice(0, -2).map(text), Math.max(1, hygienePage.render(ctx).actions.length))
 }
 
-test('hygiene registry: replaces the shell at key 8 with a framed page', () => {
+test('hygiene registry: replaces the shell at key 6 with a framed page', () => {
   const p = PAGES.find(x => x.id === 'hygiene')
   expect(p).toBe(hygienePage)
-  expect(p?.key).toBe('8')
+  expect(p?.key).toBe('6')
   expect(p?.title).toBe('殘留')
   expect(p?.framed).toBe(true)
 })
@@ -288,7 +288,7 @@ test('hygiene fixed height & overflow: many items end in ↓ 還有 N 列 and ne
       for (const r of out) expect(displayWidth(text(r))).toBeLessThanOrEqual(cols)
       const moreWord = locale === 'zh-TW' ? '↓ 還有 ' : '↓ '
       expect(out.some(r => text(r).startsWith(moreWord))).toBe(true)
-      const actStart = rows - 1 - rendered.actions.length
+      const actStart = rows - 2 - rendered.actions.length
       expect(text(out[actStart - 1]).startsWith(moreWord)).toBe(true)
     }
   }
@@ -465,7 +465,7 @@ test('hygiene buttons & design rules: table rows have no Buttons; [o], [x], [z] 
 
     // No Button in body rows (row 0 is header, last row is strip, actions sit right above strip)
     const actCount = hygienePage.render(ctxOf(cols, rows)).actions.length
-    const bodyBoxes = rowBoxes.slice(1, rows - 1 - actCount)
+    const bodyBoxes = rowBoxes.slice(1, rows - 2 - actCount)
     for (const b of bodyBoxes) {
       expect(walk(b).filter(n => n.kind === 'Button'), `no Button in body at ${cols}x${rows}`).toEqual([])
     }

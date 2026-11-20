@@ -6,7 +6,7 @@
 // the frame bottom-anchors the body (blank rows ABOVE it) where the drawing top-anchors it; the failed glyph is GLYPHS.state.failed (✗), because ✖ is an emoji-risk glyph (EMOJI_BANNED).
 import { test, expect } from 'claude-code/testing'
 import { frameRows } from './frame'
-import { PAGES } from './index'
+import { PAGES, EXTRA_PAGES } from './index'
 import { PALETTE } from '../../tux/palette.ts'
 import { displayWidth } from '../../tux/width.ts'
 import { quotaPage, renderQuota, rowsWrappedLen } from './quota'
@@ -14,7 +14,7 @@ import { classify, normalizedPools, rankPools, worstPool } from './quota-pick'
 import { NOW, POOLS, SEATS, MIN, consoleOf, ctxOf } from './quota.fixture'
 
 const text = (row: { text: string }[]) => row.map(s => s.text).join('').trimEnd()
-const page = PAGES.find(p => p.id === 'quota') as never
+const page = EXTRA_PAGES.find(p => p.id === 'quota') as never
 const A = (rows: number) => (rows >= 32 ? 6 : 4)
 const SIZES = [[160, 40], [120, 30], [80, 24]] as const
 const NOPACE = POOLS.map(p => ({ ...p, projected_pct_at_reset: null, burn_pct_per_h: null }))
@@ -225,9 +225,9 @@ test('quota: a stale pool with unknown age uses plain full and short verdicts', 
   expect(v.text).toContain('statusline 沒在跑')
 })
 
-test('quota: the registry carries the framed quota page at key 4', () => {
+test('quota: the registry carries the framed quota page at key 5 (folded into spend, reached through EXTRA_PAGES)', () => {
   expect((page as { framed?: boolean }).framed).toBe(true)
-  expect((page as { key: string }).key).toBe('4')
+  expect((page as { key: string }).key).toBe('5')
 })
 
 test('quota: no body row of the pool table is wider than the pane (every long reason is wrapped by the frame, never cut)', () => {

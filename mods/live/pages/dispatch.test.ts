@@ -111,7 +111,7 @@ const drawn = (cols: number, rows: number, live: LiveSnapshot | null, view?: Dis
   expect(out.length, `${cols}x${rows} fixed height`).toBe(rows)
   expect(text(out[out.length - 1]), `${cols}x${rows} strip last`).toMatch(/1\D*2\D*3\D*4\D*5/)
   const acts = Math.max(1, dispatchPage.render(ctx).actions.length)
-  return closeGap(out.slice(0, -1).map(text), acts)
+  return closeGap(out.slice(0, -2).map(text), acts)
 }
 
 const GOLDEN_WIDE = [
@@ -153,10 +153,10 @@ const GOLDEN_EMPTY = [
   '沒有要你處理的事',
 ]
 
-test('dispatch registry: page 5 in PAGES is framed dispatchPage', () => {
-  expect(PAGES[4]).toBe(dispatchPage)
+test('dispatch registry: page 3 in PAGES is framed dispatchPage', () => {
+  expect(PAGES[2]).toBe(dispatchPage)
   expect(dispatchPage.id).toBe('dispatch')
-  expect(dispatchPage.key).toBe('5')
+  expect(dispatchPage.key).toBe('3')
   expect(dispatchPage.title).toBe('派工')
   expect(dispatchPage.framed).toBe(true)
 })
@@ -266,7 +266,7 @@ test('dispatch: fixed height H, actions <= A, row width <= cols, strip last acro
   ]
 
   const bad: string[] = []
-  for (const [cols, rows] of [[160, 40], [120, 30], [80, 24], [80, 7]] as const) {
+  for (const [cols, rows] of [[160, 40], [120, 30], [80, 24], [80, 8]] as const) {
     for (const loc of ['zh-TW', 'en'] as const) {
       for (const [name, live, view, con] of states) {
         const ctx = withView(ctxOf(cols, rows, live, con, loc), view)
@@ -289,8 +289,8 @@ test('dispatch: fixed height H, actions <= A, row width <= cols, strip last acro
   for (const [cols, rows] of [[80, 24], [120, 30]] as const) {
     const over = frameRows(dispatchPage, ctxOf(cols, rows, liveOf(manyFinished)), { pages: PAGES }).map(text)
     expect(over.length).toBe(rows)
-    expect(over[rows - 3]).toMatch(/^↓ 還有 \d+ 列$/)
-    expect(over[rows - 2]).toBe('[z] 收合已完成')
+    expect(over[rows - 4]).toMatch(/^↓ 還有 \d+ 列$/)
+    expect(over[rows - 3]).toBe('[z] 收合已完成')
   }
 })
 
@@ -308,7 +308,7 @@ test('dispatch [short-body-foreman-loss]: shortBody appends active foreman rows 
   }
 
   const oneRunWithForeman = liveOf([NARROW_RUNS[0]], {}, activeForeman)
-  const shortNarrow = dispatchPage.render({ ...ctxOf(80, 7, oneRunWithForeman), shortBody: true })
+  const shortNarrow = dispatchPage.render({ ...ctxOf(80, 8, oneRunWithForeman), shortBody: true })
   expect(shortNarrow.actions).toEqual([])
   expect(shortNarrow.body.map(text)).toEqual([
     '▸● console-source hand sonnet 23分',
@@ -318,8 +318,8 @@ test('dispatch [short-body-foreman-loss]: shortBody appends active foreman rows 
   ])
 
   // Real dispatchPage render path through frameRows at 80x7 and 120x7 (auto shortBody when room <= 4)
-  const framed80x7 = frameRows(dispatchPage, ctxOf(80, 7, oneRunWithForeman), { pages: PAGES }).map(text)
-  expect(framed80x7.length).toBe(7)
+  const framed80x7 = frameRows(dispatchPage, ctxOf(80, 8, oneRunWithForeman), { pages: PAGES }).map(text)
+  expect(framed80x7.length).toBe(8)
   expect(framed80x7.slice(1, 5)).toEqual([
     '▸● console-source hand sonnet 23分',
     ' ● b2-foreman 2分前',
@@ -328,8 +328,8 @@ test('dispatch [short-body-foreman-loss]: shortBody appends active foreman rows 
   ])
   expect(framed80x7[5]).toBe('沒有要你處理的事')
 
-  const framed120x7 = frameRows(dispatchPage, ctxOf(120, 7, oneRunWithForeman), { pages: PAGES }).map(text)
-  expect(framed120x7.length).toBe(7)
+  const framed120x7 = frameRows(dispatchPage, ctxOf(120, 8, oneRunWithForeman), { pages: PAGES }).map(text)
+  expect(framed120x7.length).toBe(8)
   expect(framed120x7.slice(1, 5)).toEqual([
     '▸ ● console-source            hand        sonnet           23 分    1 分前',
     '  ● b2-foreman · foreman · 2 分前',
@@ -344,15 +344,15 @@ test('dispatch [short-body-foreman-loss]: shortBody appends active foreman rows 
     runRow({ run_id: 'run-gamma', role: 'implementer', runner: 'agy', model: 'carbon', elapsed_s: 15 * 60, probe_age_s: 30 }),
   ]
   const manyWithForeman = liveOf(threeRunning, {}, activeForeman)
-  const shortOverflow = dispatchPage.render({ ...ctxOf(80, 7, manyWithForeman), shortBody: true })
+  const shortOverflow = dispatchPage.render({ ...ctxOf(80, 8, manyWithForeman), shortBody: true })
   expect(shortOverflow.body.length).toBe(6)
   expect(shortOverflow.body.slice(3).map(text)).toEqual([
     ' ● b2-foreman 2分前',
     ' ⊘ stalled-foreman 12分前',
     ' 階段 implement · 5分前',
   ])
-  const scrolled80x7 = frameRows(dispatchPage, ctxOf(80, 7, manyWithForeman), { pages: PAGES, scroll: 2 }).map(text)
-  expect(scrolled80x7.length).toBe(7)
+  const scrolled80x7 = frameRows(dispatchPage, ctxOf(80, 8, manyWithForeman), { pages: PAGES, scroll: 2 }).map(text)
+  expect(scrolled80x7.length).toBe(8)
   expect(scrolled80x7.slice(1, 5)).toEqual([
     ' ● run-gamma implementer agy/carbon 15分',
     ' ● b2-foreman 2分前',
@@ -364,7 +364,7 @@ test('dispatch [short-body-foreman-loss]: shortBody appends active foreman rows 
 test('dispatch [short-body-false-empty]: shortBody renders recent finished runs when expanded=false instead of a false empty state', () => {
   const onlyFinished = liveOf(NARROW_RUNS.slice(1))
 
-  const direct = dispatchView({ ...ctxOf(80, 7, onlyFinished), shortBody: true }, { focus: 1, expanded: false })
+  const direct = dispatchView({ ...ctxOf(80, 8, onlyFinished), shortBody: true }, { focus: 1, expanded: false })
   expect(direct.actions).toEqual([])
   expect(direct.body.map(text)).toEqual([
     ' ✓ astra g1 reviewer 18分 5時前',
@@ -374,10 +374,10 @@ test('dispatch [short-body-false-empty]: shortBody renders recent finished runs 
 
   const framed80x7 = frameRows(
     dispatchPage,
-    withView(ctxOf(80, 7, onlyFinished), { focus: 0, expanded: false }),
+    withView(ctxOf(80, 8, onlyFinished), { focus: 0, expanded: false }),
     { pages: PAGES },
   ).map(text)
-  expect(framed80x7.length).toBe(7)
+  expect(framed80x7.length).toBe(8)
   expect(framed80x7.some(l => l.includes('沒有執行中的派工，也沒有最近完成的'))).toBe(false)
   expect(framed80x7.slice(2, 5)).toEqual([
     '▸✓ astra g1 reviewer 18分 5時前',
@@ -388,10 +388,10 @@ test('dispatch [short-body-false-empty]: shortBody renders recent finished runs 
 
   const framed120x7 = frameRows(
     dispatchPage,
-    withView(ctxOf(120, 7, liveOf(WIDE_RUNS.slice(1))), { focus: 0, expanded: false }),
+    withView(ctxOf(120, 8, liveOf(WIDE_RUNS.slice(1))), { focus: 0, expanded: false }),
     { pages: PAGES },
   ).map(text)
-  expect(framed120x7.length).toBe(7)
+  expect(framed120x7.length).toBe(8)
   expect(framed120x7.slice(2, 5)).toEqual([
     '▸ ✓ plan-review astra g1      reviewer    codex/astra      18 分    5 時前',
     '  ✓ plan-review carbon g1     reviewer    agy/carbon       21 分    5 時前',
@@ -401,10 +401,10 @@ test('dispatch [short-body-false-empty]: shortBody renders recent finished runs 
   // Running + finished with expanded=false in shortBody also includes finished rows since fold controls are suppressed
   const mixed = frameRows(
     dispatchPage,
-    withView(ctxOf(80, 7, liveOf(NARROW_RUNS)), { focus: 0, expanded: false }),
+    withView(ctxOf(80, 8, liveOf(NARROW_RUNS)), { focus: 0, expanded: false }),
     { pages: PAGES },
   ).map(text)
-  expect(mixed.length).toBe(7)
+  expect(mixed.length).toBe(8)
   expect(mixed.slice(1, 5)).toEqual([
     '▸● console-source hand sonnet 23分',
     ' ✓ astra g1 reviewer 18分 5時前',
@@ -504,7 +504,7 @@ test('dispatch G11 & Pane integration: [z] action is a clickable Button bound to
     zBtn!.props.onPress()
     expect(keys).toEqual([{ kind: 'fold' }])
 
-    const iBtn = tree.find(n => n.kind === 'Button' && n.props.hotkey === 'i')
+    const iBtn = tree.find(n => n.kind === 'Button' && n.props.hotkey === '9')
     expect(iBtn).toBeDefined()
     expect(flat(iBtn).trim()).toBe('說明')
     const digits = tree.filter(n => n.kind === 'Button' && /^[0-9]$/.test(n.props.hotkey ?? '')).map(n => n.props.hotkey)

@@ -142,7 +142,7 @@ const drawn = (cols: number, rows: number, snap: unknown, view?: { focus: number
   const page = view === undefined ? fleetPage : viewPage(view)
   const out = frameRows(page, ctxOf(cols, rows, snap))
   expect(out.length, 'fixed height').toBe(rows)
-  return closeGap(out.slice(0, -1).map(text), Math.max(1, page.render(ctxOf(cols, rows, snap)).actions.length))
+  return closeGap(out.slice(0, -2).map(text), Math.max(1, page.render(ctxOf(cols, rows, snap)).actions.length))
 }
 const STALE = () => snapOf({ tasks: { at_ms: NOW - 6 * MIN, state: 'stale' } })
 

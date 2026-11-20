@@ -56,7 +56,7 @@ const fail = async () => ({ exitCode: 1, stdout: '' })
 function content(cols: number, rows: number, c: ConsoleSnapshot | null, l: unknown = live()): string[] {
   const out = frameRows(nowPage, ctxOf(cols, rows, c, l)).map(text)
   const A = nowPage.render(ctxOf(cols, rows, c, l)).actions.length
-  return out.slice(1, out.length - 1 - A).map(r => r.trimEnd()).filter(r => r !== '')
+  return out.slice(1, out.length - 2 - A).map(r => r.trimEnd()).filter(r => r !== '')
 }
 const actionsOf = (cols: number, rows: number, c: ConsoleSnapshot | null, l: unknown = live()): string[] => nowPage.render(ctxOf(cols, rows, c, l)).actions.map(text)
 

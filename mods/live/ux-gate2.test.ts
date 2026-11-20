@@ -7,6 +7,7 @@ import { displayWidth } from '../tux/width.ts'
 import { drawSeg } from './ui'
 import { makeT } from './i18n'
 import full from './fixtures/console/console-full.fixture'
+import { FOLD_KEY } from './band'
 
 const HOME = '/fake/ux-home'
 const LIVE = '/fake/ux-live'
@@ -258,5 +259,25 @@ test('B2-7 negative control: legacy tab mode and the short-height band draw no t
   const short = await mountBand($, 120, 30) // maxRows 2: the one-row 視窗高度不足 note
   expect(await toggleOf(short), 'short-height band: one row, no toggle').toBeUndefined()
   await short.unmount()
+  await $.session.end({ reason: 'exit' })
+})
+
+// r3 x v7.4 S1: the r3 fold cell (shell rows) and the S1 pane toggle (one-line BandBar) both live left of the host [-]; neither replaces the other
+test('B2-7 x r3: the shell draws the r3 fold cell, the narrow bar draws the pane toggle, and pressing the fold never opens the pane', async ($, on) => {
+  const h = host(on)
+  await $.session.start({ surface: 'terminal', cwd: REPO })
+  await h.clock.advance(5000)
+  const buttons = async (band: any) => (await band.findAll({ type: 'Button' }) as Node[])
+  const wide = await mountTallBand($, 120, 12)
+  const wideFold = (await buttons(wide)).find(b => b.props?.key === FOLD_KEY)
+  expect(wideFold, 'shell band: the r3 fold cell is drawn').toBeDefined()
+  expect(await toggleOf(wide), 'shell band: no pane toggle on the shell rows').toBeUndefined()
+  await wide.press({ key: FOLD_KEY })
+  await h.clock.advance(0)
+  expect(h.isOpen(), 'the r3 fold only folds the band; the pane stays closed').toBe(false)
+  await wide.unmount()
+  const narrow = await mountTallBand($, 50, 12)
+  expect(await toggleOf(narrow), 'narrow bar: the pane toggle is drawn').toBeDefined()
+  await narrow.unmount()
   await $.session.end({ reason: 'exit' })
 })

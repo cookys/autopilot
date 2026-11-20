@@ -13,7 +13,7 @@ export function renderHelp(ctx: PageCtx): { body: Row[]; actions: Row[] } {
   return {
     body: [
       ...block(ctx, 'v74.b.help.status_title', [
-        'v74.b.help.status_1', 'v74.b.help.status_2', 'v74.b.help.status_3',
+        'v74.b.help.status_1', 'v74.b.help.status_2',
       ]),
       ...block(ctx, 'v74.b.help.symbol_title', [
         'v74.b.help.symbol_1', 'v74.b.help.symbol_2', 'v74.b.help.symbol_3',

@@ -2986,10 +2986,10 @@ for (const surface of SURFACES) {
   })
 
   // plan r2 §3.2 + fold A5: with the `›` chip gone nothing is focused by default, so a hotkey Enter must not press the first tab (that closed the pane on 現況). The one autoFocus Button is an inert anchor.
-  test('Enter with nothing focused is a no-op: the key table says none, and the only autoFocus Button is an inert anchor that is not a tab (' + surface + ')', async ($, on) => {
+  test('Enter with nothing focused folds (v7.4 key table) and never closes or switches: the only autoFocus Button is an inert anchor that is not a tab (' + surface + ')', async ($, on) => {
     const w = world(on, richWorld())
     await start($, surface)
-    expect(routeKey('Enter', { page: 'now', paneFocus: true, focusedButton: false, textMode: false }).kind).toBe('none')
+    expect(routeKey('Enter', { page: 'now', paneFocus: true, focusedButton: false, textMode: false }).kind).toBe('fold')
     const pane = await paneTabs($, surface)
     w.panes.push('autopilot-live')
     const buttons = (await pane.findAll({ type: 'Button' })) as Node[]
@@ -3863,8 +3863,8 @@ test('G23 Fleet tab: a failing `fleet` says so; a tick while another tab shows s
   await paneParts($, 'terminal', 'now')
   await w.clock.advance(60_000)
   expect(ran.length).toBeGreaterThan(0)
-  // poll2: every tick also refreshes console and seat quota while another tab shows.
-  expect(ran.every(a => ['fleet tasks --tree --json', 'fleet console --json', 'fleet seats --quota --json'].includes(a))).toBe(true)
+  // poll2: every tick also refreshes console and seat quota while another tab shows. v7.4: and the PM status and decision-list feeds.
+  expect(ran.every(a => ['fleet tasks --tree --json', 'fleet console --json', 'fleet seats --quota --json', 'fleet pm status --json', 'fleet decision list --json'].includes(a))).toBe(true)
   for (const cmd of ['fleet tasks --tree --json', 'fleet console --json', 'fleet seats --quota --json']) expect(ran).toContain(cmd)
   await paneParts($, 'terminal', 'fleet')
   const texts = (await paneParts($, 'terminal', 'fleet')).texts

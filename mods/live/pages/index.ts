@@ -35,7 +35,7 @@ export const EXTRA_PAGES: Page[] = [quotaPage, forgePage]
 // gen-locales reads this file: anchor v74.b.help.* ids used by pages/help.ts
 void [
   'frame.help',
-  'v74.b.help.status_title', 'v74.b.help.status_1', 'v74.b.help.status_2', 'v74.b.help.status_3',
+  'v74.b.help.status_title', 'v74.b.help.status_1', 'v74.b.help.status_2',
   'v74.b.help.symbol_title', 'v74.b.help.symbol_1', 'v74.b.help.symbol_2', 'v74.b.help.symbol_3',
   'v74.b.help.keys_title', 'v74.b.help.keys_1', 'v74.b.help.keys_2', 'v74.b.help.keys_3',
   'v74.b.help.keys_4', 'v74.b.help.keys_5', 'v74.b.help.keys_6', 'v74.b.help.keys_7',

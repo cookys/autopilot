@@ -898,7 +898,6 @@
   "v74.b.help.status_title": "Status",
   "v74.b.help.status_1": "failed, idle, no source, stuck or quota waste (see status glyphs on pages)",
   "v74.b.help.status_2": "running, done, not started, needs you",
-  "v74.b.help.status_3": "",
   "v74.b.help.symbol_title": "Symbols",
   "v74.b.help.symbol_1": "expanded block, collapsed block, help marker",
   "v74.b.help.symbol_2": "tok/s, residue flag, recommended option",

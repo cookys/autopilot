@@ -1920,7 +1920,11 @@ Something to fix:
     VERDICT: FIX-THEN-SHIP
     FINDINGS:
     🟠 [retry-unbounded] MUST-FIX the retry loop has no cap, so a persistent failure spins forever; cap it at one retry
+    class: unbounded-retry
+    class_sites: ["retry.js:12"]
     🔵 [rename-helper] CUT/FOLLOW-UP renaming the helper is optional polish, excluded from this version
+    class: optional-rename
+    class_sites: ["retry.js:3"]
     (closing marker line)
 EOF
   # BL-0197: the caller's single format re-ask names what the previous answer got wrong.

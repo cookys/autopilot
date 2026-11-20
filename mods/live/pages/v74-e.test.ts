@@ -126,3 +126,40 @@ test('S5 審查: frame keeps fixed height and no row wider than the pane at 209,
     for (const r of out) expect(displayWidth(text(r))).toBeLessThanOrEqual(cols)
   }
 })
+
+test('S4 派工: a timed-out run with no elapsed_s says the time is unknown, never 0 秒 (negative control: elapsed present still names its seconds)', () => {
+  const rows = [run({ run_id: '戊線', runner: 'kimi', role: 'x', elapsed_s: null, ended: true, fresh: false, rc: 1, final_status: 'timeout', ended_at: iso(MIN) })]
+  const l = dispatchView(ctxOf(live({ rows }))).body.map(text).join('\n')
+  expect(l).toContain('逾時（時間未知）')
+  expect(l).not.toContain('0 秒')
+  const en = dispatchView({ ...ctxOf(live({ rows })), t: makeT('en') }).body.map(text).join('\n')
+  expect(en).toContain('timed out (time unknown)')
+  expect(dispatchView(ctxOf(live())).body.map(text).join('\n')).toContain('逾時（1200 秒）')
+})
+
+// Restored from dispatch.test.ts (deleted in 822f17a7d), rewritten for the S4 renderer: there is no foreman block and no fold any more (dispatch.ts renders one section from live.rows and ignores the view),
+// so the two failure modes the old tests guarded become: a foreman never displaces or replaces run rows when the room is short, and running + recent finished runs under expanded=false never draw the empty state.
+const FOREMAN = { agents: [{ id: 'fm-1', description: 'b2-foreman', label: 'foreman', ended: false, stale: false, at_ms: NOW, age_s: 120 }], stage: 'implement', stage_at_ms: NOW, stage_age_s: 300 }
+test('S4 派工 [short-body-foreman-loss]: with a foreman published and a short frame, every run row still shows and no foreman row is drawn', () => {
+  for (const cols of [80, 120]) {
+    const out = frameRows(dispatchPage, ctxOf(live({ foreman: FOREMAN }), cols, 12), { pages: PAGES }).map(text)
+    expect(out.length).toBe(12)
+    const all = out.join('\n')
+    for (const id of ['甲線', '乙線', '丙線']) expect(all, cols + ' ' + id).toContain(id)
+    expect(all).not.toMatch(/b2-foreman|階段 implement/)
+    expect(out[out.length - 1]).toMatch(/1\D*2\D*3\D*4\D*5/) // strip last
+  }
+})
+
+test('S4 派工 [short-body-false-empty]: running + recent finished with expanded=false never draw the empty state', () => {
+  for (const cols of [80, 120]) {
+    const ctx = { ...ctxOf(live(), cols, 12), dispatch: { focus: 0, expanded: false } } as PageCtx
+    const out = frameRows(dispatchPage, ctx, { pages: PAGES }).map(text)
+    expect(out.length).toBe(12)
+    const all = out.join('\n')
+    expect(all, cols + ' false-empty').not.toContain('沒有執行中的派工')
+    for (const id of ['甲線', '乙線', '丙線']) expect(all, cols + ' ' + id).toContain(id)
+  }
+  // negative control: really no runs does draw the empty row
+  expect(dispatchView(ctxOf(live({ rows: [] }))).body.map(text).join('\n')).toContain('沒有執行中的派工')
+})

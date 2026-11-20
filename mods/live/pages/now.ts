@@ -6,7 +6,6 @@
 import type { ConsoleItem, ConsoleSnapshot } from '../console'
 import type { LiveSnapshot, QcView, Seg } from '../model'
 import { displayWidth, isStepCard, truncateToWidth } from '../model'
-import { fmtCount } from '../speed'
 import { GLYPHS } from '../../tux/glyphs.ts'
 import { PALETTE } from '../../tux/palette.ts'
 import { fleetLines, type PmStatus } from '../v74/contract'
@@ -14,7 +13,7 @@ import { ROLE_WARNING, isUnknownPool, normalizedPools, poolKey, poolLabel, rankP
 import type { Verdict } from './quota-pick'
 import { STRIP_SPLIT_COLS } from './layout'
 import type { Page, PageCtx } from './frame'
-import { WRAP_HANG, brokenRow, dataMissing, decisionCount, isBriefStale, lineCounts, lineState, lineStatusText, lineTotal, pendingMissingReason, pendingSourceMissing, staleBadge, stuckLinesOf, wrapRow } from './rows'
+import { WRAP_HANG, brokenRow, dataMissing, decisionCount, isBriefStale, lineCounts, lineState, lineStatusText, lineTotal, pendingMissingReason, pendingSourceMissing, staleBadge, stuckLinesOf, tokLabel, wrapRow } from './rows'
 import type { Row } from './rows'
 
 type T = PageCtx['t']
@@ -648,17 +647,19 @@ const v74OpenRule = (title: string, wide: boolean): Row => {
   return [{ text: head + fill, color: PALETTE.structure }]
 }
 
-const v74PmCounts = (pm: PmStatus): { total: number; fail: number; idle: number; ok: number } => {
+const v74PmCounts = (pm: PmStatus): { total: number; fail: number; idle: number; ok: number; unknown: number } => {
   const lines = fleetLines(pm)
   let fail = 0
   let idle = 0
   let ok = 0
+  let unknown = 0
   for (const l of lines) {
     if (l.mark === 'fail') fail++
     else if (l.mark === 'parked') idle++
+    else if (l.mark === 'unknown') unknown++
     else ok++
   }
-  return { total: pm.projects.length, fail, idle, ok }
+  return { total: pm.projects.length, fail, idle, ok, unknown }
 }
 
 const v74ShortRange = (range: string): string => {
@@ -683,12 +684,13 @@ function v74FleetSection(ctx: PageCtx, wide: boolean): Row[] {
   const pm = v74!.pm
   const head = v74OpenRule(t('v74.c.sec_fleet_src', { source: V74_PM_SOURCE }), wide)
   if (pm === null) return [head, broken(t('v74.c.pm_missing'))]
-  const { total, fail, idle, ok } = v74PmCounts(pm)
+  const { total, fail, idle, ok, unknown } = v74PmCounts(pm)
   const summary: Seg[] = [
     ...(wide ? [dim('  ')] : []),
     plain(t('v74.c.lines') + '       ' + String(total) + '  '),
     ...(fail > 0 ? [{ text: GLYPHS.state.failed + String(fail), color: PALETTE.broken }] : []),
     ...(idle > 0 ? [plain(' ' + GLYPHS.state.stalled + String(idle))] : []),
+    ...(unknown > 0 ? [plain(' ' + GLYPHS.structure.empty + String(unknown))] : []),
     ...(ok > 0 ? [plain(' ' + GLYPHS.state.running + String(ok))] : []),
   ]
   if (con !== null) {
@@ -701,10 +703,13 @@ function v74FleetSection(ctx: PageCtx, wide: boolean): Row[] {
   const rows: Row[] = [head, summary]
   for (const line of fleetLines(pm)) {
     if (line.mark === 'ok') continue
-    const g = line.mark === 'fail' ? GLYPHS.state.failed : GLYPHS.state.stalled
+    const g = line.mark === 'fail' ? GLYPHS.state.failed : line.mark === 'unknown' ? GLYPHS.structure.empty : GLYPHS.state.stalled
+    const n = (v: number | null): number | string => v ?? GLYPHS.structure.empty
     const body = line.mark === 'fail'
-      ? t('v74.c.line_fail', { project: line.project, stuck: line.counts.stuck, overdue: line.counts.overdue })
-      : t('v74.c.line_parked', { project: line.project, waiting: line.counts.waiting })
+      ? t('v74.c.line_fail', { project: line.project, stuck: n(line.counts.stuck), overdue: n(line.counts.overdue) })
+      : line.mark === 'unknown'
+        ? t('v74.c.line_unknown', { project: line.project })
+        : t('v74.c.line_parked', { project: line.project, waiting: n(line.counts.waiting) })
     rows.push(truncateSegs([
       dim(wide ? ' ' : ''),
       { text: g + ' ' + body, ...(line.mark === 'fail' ? { color: PALETTE.broken } : {}) },
@@ -736,10 +741,9 @@ function v74SeatSection(ctx: PageCtx, wide: boolean): Row[] {
     { text: mark + ' ' + status, ...(band === null ? {} : { color: PALETTE.running }) },
     plain('  ' + t('v74.c.elapsed', { e: elapsed })),
     plain('  ' + t('header.ctx') + ' ' + ctxPct)))
-  const tokLabel = (n: number): string => (n >= 1_000_000 ? fmtCount(n) : n >= 1000 ? String(Math.round(n / 1000)) + 'k' : String(n)) + ' tok'
   const spend = live.detail.spend
-  const sessTok = spend?.brain !== null && spend?.brain !== undefined ? tokLabel(spend.brain) : GLYPHS.structure.empty
-  const hostTok = spend?.host_all_n !== null && spend?.host_all_n !== undefined ? tokLabel(spend.host_all_n) : null
+  const sessTok = spend?.tok?.session != null ? tokLabel(spend.tok.session, t) : t('v74.c.tok_unknown')
+  const hostTok = spend?.tok?.host != null ? tokLabel(spend.tok.host, t) : null
   const sessSegs: Seg[] = [plain(sessTok)]
   if (hostTok !== null) sessSegs.push(plain('  ' + t('v74.c.today_host', { v: hostTok })))
   rows.push(labelled(t('v74.c.l_session'), wide, ...sessSegs))

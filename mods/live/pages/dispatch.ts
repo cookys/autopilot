@@ -81,7 +81,7 @@ const classify = (row: LivePaneRow): ClassifiedRun => ({ row, sid: stateOf('run'
 
 // the 狀態 cell: what the run is doing (never progress). A timed-out run names its timeout seconds (the run's elapsed_s, which the producer freezes at the end).
 export function statusText(r: LivePaneRow, sid: StateId, nowMs: number, t: T): string {
-  if (r.final_status !== null && TIMEOUT_RE.test(r.final_status)) return t('v74.e.st_timeout', { n: r.elapsed_s ?? 0 })
+  if (r.final_status !== null && TIMEOUT_RE.test(r.final_status)) return r.elapsed_s === null ? t('v74.e.st_timeout_unknown') : t('v74.e.st_timeout', { n: r.elapsed_s })
   const elapsed = r.elapsed_s === null ? '' : ' ' + fmtDur(r.elapsed_s * 1000, true, t)
   if (r.ended) {
     const endMs = runEndedMs(r)

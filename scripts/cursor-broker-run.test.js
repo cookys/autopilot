@@ -55,7 +55,9 @@ function stubBroker(socketPath, reply) {
     });
   });
   return new Promise((resolve, reject) => {
-    server.once('error', reject);
+    server.once('error', (err) => {
+      server.close(() => reject(err));
+    });
     server.listen(socketPath, () => resolve(server));
   });
 }
@@ -105,7 +107,7 @@ test('invalid run id -> exit 2', () => {
   assert.match(res.stderr, /invalid/);
 });
 
-test('successful broker response writes out file and exits 0', async () => {
+test('successful broker response writes out file and exits 0', async (t) => {
   const workRoot = fs.mkdtempSync(path.join(TMP, 'ok-'));
   const socketPath = path.join(workRoot, 'broker.sock');
   const worktree = initRepo(fs.mkdtempSync(path.join(TMP, 'repo-')));
@@ -121,6 +123,7 @@ test('successful broker response writes out file and exits 0', async () => {
     verdict: 'done',
   };
   const server = await stubBroker(socketPath, reply);
+  t.after(() => new Promise((resolve) => server.close(resolve)));
   const env = {
     PATH: process.env.PATH,
     HOME: TMP,
@@ -131,7 +134,6 @@ test('successful broker response writes out file and exits 0', async () => {
     GIT_CONFIG_NOSYSTEM: '1',
   };
   const res = await runBrokerCli([worktree, prompt, 'composer-2.5', '120', runId, out], env);
-  await new Promise((resolve) => server.close(resolve));
   assert.equal(res.status, 0, `stderr: ${res.stderr}`);
   assert.ok(fs.existsSync(out));
   const body = JSON.parse(fs.readFileSync(out, 'utf8'));
@@ -139,7 +141,7 @@ test('successful broker response writes out file and exits 0', async () => {
   assert.equal(fs.existsSync(path.join(workRoot, runId)), false, 'clone cleaned up');
 });
 
-test('broker hard-fail verdict returns exit 1 but still writes response', async () => {
+test('broker hard-fail verdict returns exit 1 but still writes response', async (t) => {
   const workRoot = fs.mkdtempSync(path.join(TMP, 'fail-'));
   const socketPath = path.join(workRoot, 'broker.sock');
   const worktree = initRepo(fs.mkdtempSync(path.join(TMP, 'repo2-')));
@@ -154,6 +156,7 @@ test('broker hard-fail verdict returns exit 1 but still writes response', async 
     run_id: runId,
     verdict: 'stopped_billing',
   });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
   const env = {
     PATH: process.env.PATH,
     HOME: TMP,
@@ -164,7 +167,6 @@ test('broker hard-fail verdict returns exit 1 but still writes response', async 
     GIT_CONFIG_NOSYSTEM: '1',
   };
   const res = await runBrokerCli([worktree, prompt, 'composer-2.5', '120', runId, out], env);
-  await new Promise((resolve) => server.close(resolve));
   assert.equal(res.status, 1);
   assert.ok(fs.existsSync(out));
 });

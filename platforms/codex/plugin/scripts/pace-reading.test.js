@@ -87,7 +87,7 @@ test('isSeenAtFresh: seen_at within [now - maxAgeMs, now], inclusive', () => {
   const row = (seen_at) => ({ pool: 'kimi', seen_at });
   assert.equal(isSeenAtFresh(row(isoHoursAgo(1)), NOW), true);
   assert.equal(isSeenAtFresh(row(isoHoursAgo(24)), NOW), true); // inclusive boundary
-  assert.equal(isSeenAtFresh(row(isoHoursAgo(24) - 1), NOW), false); // 24h + 1ms
+  assert.equal(isSeenAtFresh(row(new Date(NOW.getTime() - SEEN_AT_FRESH_MS - 1).toISOString()), NOW), false); // 24h + 1ms
   assert.equal(isSeenAtFresh(row(NOW.toISOString()), NOW), true); // age 0
   assert.equal(isSeenAtFresh(row(new Date(NOW.getTime() + 1000).toISOString()), NOW), false); // future
   assert.equal(isSeenAtFresh(row('not a date'), NOW), false);

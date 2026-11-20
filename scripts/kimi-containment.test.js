@@ -48,7 +48,9 @@ test('writeToollessAgent: writes and read-back matches', () => {
 });
 
 // kimi-containment.js:63 — read-back check needs a path that write succeeds on but read fails; not reproducible portably without mocking fs.
-test.skip('writeToollessAgent: throws when read-back fails', 'kimi-containment.js:62 read-back failure needs fs mock on this host');
+test('writeToollessAgent: throws when read-back fails', {
+  skip: 'kimi-containment.js:62 read-back failure needs fs mock on this host',
+}, () => {});
 
 test('auditKimiRun: clean K2 fixture returns null', () => {
   const home = seatWith(cleanWire());

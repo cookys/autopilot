@@ -1245,8 +1245,8 @@ export function buildSections(src: Sources, foreman: ForemanView | null): PaneSe
 // either may be null. The file is project-scoped, so a project_key that is not the wanted one is an absent file.
 export const REVIEW_SCHEMA = 'autopilot.review/1'
 export type ReviewSeat = { id: string; family: string | null; status: string | null; verdict?: string | null }
-export type PlanReviewView = { logical_plan_id: string | null; generation: number; max_generations: number | null; terminal: boolean; verdict: string | null; seats: ReviewSeat[]; updated_at: string | null }
-export type CodeReviewView = { phase: string | null; generation: number | null; base: string | null; head: string | null; seats: ReviewSeat[]; converged: boolean; at: string | null }
+export type PlanReviewView = { branch?: string | null; logical_plan_id: string | null; generation: number; max_generations: number | null; terminal: boolean; verdict: string | null; seats: ReviewSeat[]; updated_at: string | null }
+export type CodeReviewView = { branch?: string | null; phase: string | null; generation: number | null; base: string | null; head: string | null; seats: ReviewSeat[]; converged: boolean; at: string | null }
 export type ReviewView = { plan: PlanReviewView | null; code: CodeReviewView | null }
 
 function reviewSeats(v: unknown, withVerdict: boolean): ReviewSeat[] {
@@ -1262,11 +1262,11 @@ export function readReview(text: string | null, projectKey: string): ReviewView 
   const p = isObject(v.plan) ? v.plan : null
   const c = isObject(v.code) ? v.code : null
   const plan: PlanReviewView | null = p === null || !Number.isInteger(p.generation) ? null : {
-    logical_plan_id: str(p.logical_plan_id), generation: p.generation as number, max_generations: Number.isInteger(p.max_generations) ? (p.max_generations as number) : null,
+    ...(str(p.branch) === null ? {} : { branch: str(p.branch) }), logical_plan_id: str(p.logical_plan_id), generation: p.generation as number, max_generations: Number.isInteger(p.max_generations) ? (p.max_generations as number) : null,
     terminal: p.terminal === true, verdict: str(p.verdict), seats: reviewSeats(p.seats, false), updated_at: str(p.updated_at),
   }
   const code: CodeReviewView | null = c === null ? null : {
-    phase: str(c.phase), generation: Number.isInteger(c.generation) ? (c.generation as number) : null, base: str(c.base), head: str(c.head),
+    ...(str(c.branch) === null ? {} : { branch: str(c.branch) }), phase: str(c.phase), generation: Number.isInteger(c.generation) ? (c.generation as number) : null, base: str(c.base), head: str(c.head),
     seats: reviewSeats(c.seats, true), converged: c.converged === true, at: str(c.at),
   }
   return plan === null && code === null ? null : { plan, code }

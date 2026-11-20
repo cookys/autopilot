@@ -40,16 +40,6 @@ const fleetSnap = (o: { lines?: unknown[]; hosts?: Src; tasks?: Src; generated?:
 }) as never
 const live0 = (o: Record<string, unknown> = {}) => ({ state: 'ok', text: 'x', header: 'x', band: null, pending: [], project_key: null, root_run_id: null, link: null, rows: null, gates: null, sections: M.NO_SECTIONS, review: null, published_at: null, watcher_note: null, session_as_of: null, host_as_of: null, detail: { ...M.NO_DETAIL, now_ms: NOW }, ...o }) as never
 
-test('M1 (S1-full-p3-80x24 row 16): a cut 80-column 艦隊 page keeps the summary with the offline hosts on top and ends in ↓ 還有 N 項', () => {
-  const out = frameRows(fleetPage, ctx(80, 8, fleetSnap())).map(text)
-  expect(out.length).toBe(8)
-  const sum = out.find(r => r.includes('產線 9'))
-  expect(sum, 'the summary row stays').toBeDefined()
-  expect(sum).toContain('✗2 ⊘1 ○6') // U3: severity first. // X3: counts are classified from the same nine bus lines.
-  expect(sum).toContain('✗ 離線 2 台主機')
-  expect(out.some(r => /↓ 還有 \d+ 項/.test(r)), 'the cut list says how much is hidden').toBe(true)
-  for (const r of out) expect(M.displayWidth(r)).toBeLessThanOrEqual(80)
-})
 
 test('M2 (S1-full-p4-80x24 row 15): a cut 80-column 額度 table says how many pools of which kind are hidden, and keeps o / prev / next as Buttons', () => {
   const c = consoleOf(POOLS)

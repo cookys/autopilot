@@ -98,22 +98,6 @@ const fleetSnap = () => {
   return con
 }
 
-test('V2: fleet compact controls occupy one row, leaving summary and focused line visible down to one row', () => {
-  const con = fleetSnap()
-  const page = fleetView(ctx(80, 7, con))
-  expect(page.actions.length).toBe(1)
-  expect(text(page.actions[0])).toContain('上一線')
-  expect(text(page.actions[0])).toContain('下一線')
-  const framed = frameRows(fleetPage, ctx(80, 8, con)).map(text).join('\n')
-  expect(framed).toContain('產線 9')
-  expect(framed).toContain('✗ 離線 2 台主機')
-  for (const h of [4, 5, 6]) {
-    const out = frameRows(fleetPage, ctx(80, h, con)).map(text).join('\n')
-    expect(out, 'height ' + h).toContain('乙線')
-    expect(out).toContain('✗')
-    expect(out).toContain('離線')
-  }
-})
 
 test('V4: quota always puts o and previous/next pool in the action row directly above tabs, even twelve pools fit', () => {
   const pools = [...redPools, ...unknownPools, ...wastes, ...['H 池', 'I 池'].map(pool => ({ ...POOLS[0], pool }))]

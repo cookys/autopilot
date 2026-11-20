@@ -37,7 +37,7 @@ test('registry: ten pages in v7.4 key order 1-9, 0 pet (quota and forge are not 
       expect(r.body).toEqual([])
       expect(r.actions.map(x => x.map(g => g.text).join('')).join('')).toBe(t('shell.on_band'))
     }
-    else if (!p.framed || p.id === 'todo') expect(r).toEqual({ body: [], actions: [] }) // the todo page is a shell until its own sub-task lands // a page that is not framed is still a shell
+    else if (!p.framed) expect(r).toEqual({ body: [], actions: [] }) // a page that is not framed is still a shell
     else expect(r.body.length).toBeGreaterThan(0) // a framed page draws something; its goldens are in pages/<id>.test.ts
   }
 })
@@ -172,7 +172,7 @@ test('key hints: every [x] in a framed page string is one of that page\'s bound 
 
 // Every fleet line and every quota pool is its own Button (Tab walks the rows, Enter presses the focused one): pressing row 2 sees line 2 / opens pool 2. There is no j / k, and no
 // Button is drawn with an empty label (the host would draw it as a row `x:`); `o` and the strip digits ride on a visible Button.
-test('keys: row 2 of fleet is its own Button (sees line 2), row 2 of quota opens its seats; decide has no o; help (9) rides the strip; no j / k', () => {
+test('keys: fleet binds no letter (v7.4 plain list), row 2 of quota opens its seats; decide has no o; help (9) rides the strip; no j / k', () => {
   const live = { state: 'ok', text: 'x', header: 'x', band: { kind: 'idle', verdict: '', reason: null, project: 'x', elapsed: '1m', phase: '', slots: [] }, pending: [], project_key: null, root_run_id: null, link: null, rows: null, gates: null, sections: M.NO_SECTIONS, review: null, published_at: null, watcher_note: null, session_as_of: null, host_as_of: null, detail: { ...M.NO_DETAIL, now_ms: NOW } } as never
   const shown: Page[] = PAGES.map(p => ({ ...p, framed: true as const }))
   const drawn = (tab: 'fleet' | 'spend' | 'decide', focus: number) => {
@@ -182,12 +182,9 @@ test('keys: row 2 of fleet is its own Button (sees line 2), row 2 of quota opens
     return { tree, pressed }
   }
   const hot = (tree: Node[], k: string) => tree.find(n => n.kind === 'Button' && n.props.hotkey === k)
-  const f = drawn('fleet', 0)
-  const lineBtns = f.tree.filter(n => n.kind === 'Button' && typeof n.props.key === 'string' && n.props.key.startsWith('p:'))
-  const seeBtns = lineBtns.filter(n => { const before = f.pressed.length; n.props.onPress(); return f.pressed.length > before && f.pressed[f.pressed.length - 1].startsWith('fleet:see:') })
-  expect(seeBtns.length, 'every shown fleet line is a Button').toBeGreaterThanOrEqual(2)
-  const seen = f.pressed.filter(x => x.startsWith('fleet:see:'))
-  expect(new Set(seen).size, 'row 2 sees another line than row 1').toBeGreaterThanOrEqual(2)
+  // v7.4 S8: the 艦隊 page is a plain list (pages/fleet.ts, covered by pages/v74-f.test.ts): no line Button, no 看 / fold / fill action, so it binds no letter
+  expect(pageHotkeys('fleet'), 'fleet binds no page letter').toEqual([])
+  expect(drawn('fleet', 0).tree.filter(n => n.kind === 'Button' && /^[a-z]$/.test(n.props.hotkey ?? '')).map(n => n.props.hotkey), 'fleet draws no letter Button').toEqual([])
   const q = drawn('spend', 0)
   const pools = q.tree.filter(n => n.kind === 'Button' && typeof n.props.key === 'string' && n.props.key.startsWith('p:')).filter(n => { n.props.onPress(); return true })
   expect(q.pressed.filter(x => x.startsWith('quota:pool:')).slice(0, 2), 'quota: row 2 is pool index 1').toEqual(['quota:pool:0', 'quota:pool:1'])
@@ -203,7 +200,7 @@ test('keys: row 2 of fleet is its own Button (sees line 2), row 2 of quota opens
     expect(letters.filter(h => !pageHotkeys(id).includes(h)), id + ' draws a hotkey it does not list').toEqual([])
     expect(tree.filter(n => n.kind === 'Button' && n.props.key !== FOCUS_ANCHOR_KEY && flat(n).trim() === '').map(n => n.props.key), id + ': a Button with an empty label').toEqual([])
   }
-  expect(hot(drawn('fleet', 0).tree, 'o'), 'o rides the visible 看 action row').toBeDefined()
+  expect(hot(drawn('fleet', 0).tree, 'o'), 'fleet has no 看 action row').toBeUndefined()
 })
 
 // review fix (codeforge screenshot): the pane has no empty-label Button, the strip is the last row on every page, its labels are the page name alone (the host adds `1: `),

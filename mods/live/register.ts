@@ -82,6 +82,7 @@ import { SEATS_TIMEOUT_MS, seatQuota } from './pages/now'
 import { PAGES, EXTRA_PAGES } from './pages/index'
 import { makeDecideFeed, makePmFeed, mergeDecideCards } from './v74/feeds'
 import type { CardNav, DecideCard, V74Ctx } from './v74/contract'
+import { v74Keylog } from './v74/keylog'
 import { frameHeight } from './pages/frame'
 import type { PageId } from './pages/frame'
 import { FOLD_AT, rowsOf as fleetRowsOf } from './pages/fleet'
@@ -93,7 +94,7 @@ import type { ShowRequest } from '../viewer/model'
 import { reopenLook, showPath } from '../viewer/show'
 import {
   acceptanceToast, autoResidueCount, bandCardNote, decideDialog, decideFillText, decideFixing, decideHeld, decideLine, decideOpen, decidePick, cleanTargets, normalizeAbs, decideReply, NO_DECIDE, makeRecentTracker, bandFactsDocument, bandLine1, bandView, buildSections, checkEnvelope, sourceMoved, sourcesOf, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
-  isStepCard, BAND_NARROW_STEPS, displayWidth, fittedBandWidth, layoutBand, layoutBandLine, shrinkToFitted, slotFleet, headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeDurableDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions, readDurableDecisionFiles,
+  isStepCard, BAND_NARROW_STEPS, displayWidth, fittedBandWidth, layoutBand, layoutBandLine, v74FitBand, slotFleet, headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeDurableDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions, readDurableDecisionFiles,
   readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
   paneWidth, DEFAULT_PANE_COLS, slotTab, slotUnfolds, truncateToWidth, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
 } from './model'
@@ -132,6 +133,19 @@ let durableOpenCards: DecideCard[] = [] // open-decision.js store, refreshed wit
 export function v74ArrowFromScroll(page: string, by: number): { kind: 'move'; by: 1 | -1 } | null {
   if ((page !== 'decide' && page !== 'todo') || by === 0) return null
   return { kind: 'move', by: by > 0 ? 1 : -1 }
+}
+// Host ui.scroll (scrollmath.ts: the event is { component, by, offset, bodyRows, contentRows }).
+// AbovePrompt is the band site. A one-row by on any other component except Pane is the same arrow:
+// spatial focus does not emit ui.scroll, and a Down that still arrives as scroll must move the cursor.
+export function v74HostScroll(e: { by?: number; component?: string }, page: string, open: boolean, legacy: boolean | null, textMode: boolean): { kind: 'move'; by: 1 | -1 } | null {
+  if (!open || legacy === true || textMode) return null
+  if (e.component === 'Pane') return null
+  if (typeof e.by !== 'number' || e.by === 0) return null
+  if (e.component !== 'AbovePrompt' && e.component !== undefined && Math.abs(e.by) !== 1) return null
+  return v74ArrowFromScroll(page, e.by)
+}
+export function v74FocusAt(e: { element?: unknown; key?: unknown }): number | null {
+  return v74CursorFromFocus(e.element) ?? v74CursorFromFocus(e.key)
 }
 // Speed text for the v7.4 band, including when nothing was timed (the bare row and the snapshot row).
 export function v74SpeedText(steps: readonly Step[], pet: string | null = null): string {
@@ -1538,7 +1552,23 @@ function syncPanePlacement($: EngineInterface, placement: 'dock' | 'inline' | un
   return panePlacementEpoch
 }
 // A key of the framed page (a visible hotkey Button or routeKey, pane.tsx). 待決 goes through decideReduce; fleet, quota and spend keep a focus row and a fold.
+const ABOVE_PROMPT = 'above-prompt' // the band site's instance id; $.ui.focus only lands on an element drawn under that request
+let noteArmed = false
+async function armNote($: EngineInterface): Promise<void> {
+  await Promise.resolve()
+  await Promise.resolve()
+  if (!decideLocal.textMode) return
+  noteArmed = true
+  void v74Keylog($, { handler: 'ui.focus', component: 'AbovePrompt', element: 'v74-note', page: panePage, cursor: decideLocal.cursor, focusOwner: 'v74-note', noteOpen: true })
+  await $.ui.focus({ requestId: ABOVE_PROMPT, key: 'v74-note' }).catch(() => undefined)
+}
 export async function frameKey($: EngineInterface, k: KeyAction): Promise<void> {
+  void v74Keylog($, {
+    handler: 'frameKey', component: 'AbovePrompt', key: k.kind, event: k.kind,
+    len: k.kind === 'text' ? [...k.ch].length : undefined,
+    page: framePageId(), cursor: decideLocal.cursor, focusOwner: decideLocal.textMode ? 'v74-note' : 'band', noteOpen: decideLocal.textMode,
+  })
+  const noteWas = decideLocal.textMode
   try {
     if (k.kind === 'page') { await panePagePress($, k.to as PageId); return }
     if (k.kind === 'close') {
@@ -1558,7 +1588,7 @@ export async function frameKey($: EngineInterface, k: KeyAction): Promise<void> 
       if (r.effect?.kind === 'send') await holdDecide($) // the hold and the claim stay decideundo's: the reducer's own hold is not written
       else if (r.effect?.kind === 'undo') await undoDecide($, r.effect.id)
       else if (r.effect?.kind === 'fill') await fillPrompt($, r.effect.text)
-      if (r.nav.textMode) void $.ui.focus({ requestId: PANE_ID, key: 'v74-note' }).catch(() => undefined)
+      if (!r.nav.textMode) noteArmed = false
     } else if (id === 'todo') {
       const nav = await read($, V74_NAV)
       const cards = (await v74CtxOf($)).todo ?? []
@@ -1579,6 +1609,7 @@ export async function frameKey($: EngineInterface, k: KeyAction): Promise<void> 
     // a key never takes the session down
   }
   void $.ui.invalidate('ui.render')
+  if (decideLocal.textMode && !noteWas && framePageId() === 'decide') void armNote($)
 }
 export async function paneKey($: EngineInterface, key: string, over: { paneFocus?: boolean; focusedButton?: boolean } = {}): Promise<KeyAction> {
   const page = framePageId()
@@ -1860,7 +1891,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       let fitted = layoutBandLine(withFleet, roomFor(parts !== null), parts, V74_NARROW, !usageOn)
       if (parts !== null && fitted.speed === null) fitted = { ...fitted, speed: parts }
       const drawMore = !usageOn || forgeMore
-      const segs = shrinkToFitted(fitted.band.segs, fitted.speed, drawMore, roomFor(fitted.speed !== null))
+      const segs = v74FitBand(fitted.band.segs, fitted.speed, drawMore, roomFor(fitted.speed !== null))
       forge = fitted.speed
       bandPreset = { segs, width: fittedBandWidth(segs.reduce((n, s) => n + displayWidth(s.text), 0), null, false) }
     } else if (v74) {
@@ -1870,7 +1901,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       const roomFor = (speedTab: boolean) => Math.max(1, columns - 1)
       let fitted = layoutBandLine(withFleet, roomFor(parts !== null), parts, V74_NARROW, false)
       if (parts !== null && fitted.speed === null) fitted = { ...fitted, speed: parts }
-      const segs = shrinkToFitted(fitted.band.segs, fitted.speed, false, roomFor(fitted.speed !== null))
+      const segs = v74FitBand(fitted.band.segs, fitted.speed, false, roomFor(fitted.speed !== null))
       forge = fitted.speed
       bandPreset = { segs, width: fittedBandWidth(segs.reduce((n, s) => n + displayWidth(s.text), 0), null, false) }
     } else if (rows >= 1) {
@@ -2183,15 +2214,33 @@ export function registerLive(on: Parameters<Register>[0]): void {
 
   // bandlayout: the band's card view scrolls its own window (the wheel and the scroll keys, when the engine sends them to the band), one offset per tab (bandScroll), kept when the tab is left
   on('ui.focus', ($, e, next) => {
-    const raw = (e as { element?: unknown }).element
-    const at = v74CursorFromFocus(raw)
+    const raw = e as { element?: unknown; key?: unknown; component?: string }
+    const named = typeof raw.element === 'string' ? raw.element : typeof raw.key === 'string' ? raw.key : undefined
+    void v74Keylog($, { handler: 'ui.focus', component: raw.component, element: named, page: panePage, cursor: decideLocal.cursor, focusOwner: decideLocal.textMode ? 'v74-note' : 'band', noteOpen: decideLocal.textMode })
+    if (decideLocal.textMode && noteArmed && named !== 'v74-note' && (named === undefined || named === '')) {
+      noteArmed = false
+      void frameKey($, { kind: 'text_cancel' })
+      return {}
+    }
+    const at = v74FocusAt(raw)
     if (at === null || decideLocal.textMode || (panePage !== 'decide' && panePage !== 'todo') || bandLegacy || !v74Open) return next(e)
     void frameKey($, { kind: 'cursor', at })
     return {}
   })
 
+  // A scroll that is not the band and not the legacy pane (scrollmath.ts takesScroll / scrollHook). One row moves the card cursor.
+  on('ui.scroll', ($, e, next) => {
+    const ev = e as { by?: number; component?: string }
+    void v74Keylog($, { handler: 'ui.scroll', component: ev.component, by: ev.by, page: panePage, cursor: decideLocal.cursor, focusOwner: decideLocal.textMode ? 'v74-note' : 'band', noteOpen: decideLocal.textMode })
+    if (ev.component === 'AbovePrompt' || ev.component === 'Pane') return next(e)
+    const arrow = v74HostScroll(ev, panePage, v74Open, bandLegacy, decideLocal.textMode)
+    if (arrow !== null) { void frameKey($, arrow); return {} }
+    return next(e)
+  })
+
   on('ui.scroll', { component: 'AbovePrompt' }, ($, e, next) => {
-    const arrow = !bandLegacy && v74Open ? v74ArrowFromScroll(panePage, e.by) : null
+    void v74Keylog($, { handler: 'ui.scroll', component: 'AbovePrompt', by: e.by, page: panePage, cursor: decideLocal.cursor, focusOwner: decideLocal.textMode ? 'v74-note' : 'band', noteOpen: decideLocal.textMode })
+    const arrow = v74HostScroll(e, panePage, v74Open, bandLegacy, decideLocal.textMode)
     if (arrow !== null) { void frameKey($, arrow); return {} }
     const model = shellOn && shellMenu === 'd' ? bandModel('decide') : barTab === null ? undefined : bandScroll[barTab]
     return model === undefined ? next(e) : scrollHook(model, e, next, () => { void $.ui.invalidate('ui.render') })
@@ -2236,7 +2285,7 @@ async function paneTree($: EngineInterface, e: { props: any; surface: string }, 
     folded, boxRows !== null ? null : e.props.scroll ?? null,
     { state: decideState, batch: decideBatch, now: decideNow, inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } },
     decideScroll, fleet, null,
-    legacy ? null : { pages: [...PAGES, ...EXTRA_PAGES], pageId: panePage, onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, others: fleet?.others ?? null, nowMs: frameNow, rows: boxRows ?? frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), ...(boxRows === null ? {} : { v74Box: true as const }), view: pageView, decide: { ...decideState, ...decideLocal }, v74, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(panePage === 'forge' ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}) },
+    legacy ? null : { pages: [...PAGES, ...EXTRA_PAGES], pageId: panePage, onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, others: fleet?.others ?? null, nowMs: frameNow, rows: boxRows ?? frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), ...(boxRows === null ? {} : { v74Box: true as const }), view: pageView, decide: { ...decideState, ...decideLocal }, v74, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { void v74Keylog($, { handler: 'input', component: 'Input', element: 'v74-note', len: [...v].length, page: panePage, cursor: decideLocal.cursor, focusOwner: 'v74-note', noteOpen: true }); decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(panePage === 'forge' ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}) },
   )
   if (boxRows === null) await probePane($, e as never, tree)
   return tree

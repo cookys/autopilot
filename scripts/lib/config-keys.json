@@ -3351,6 +3351,19 @@
       "relates": []
     },
     {
+      "name": "AUTOPILOT_V74_KEYLOG",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "mods/live/v74/keylog.ts"
+      ],
+      "doc": null,
+      "relates": [],
+      "summary": "Optional JSONL path. When set, each v7.4 host input event appends one line (handler, page, cursor, focus). Unset writes nothing. Prompt and note text are never stored, only a length."
+    },
+    {
       "name": "AUTOPILOT_MODS_PANE_PROBE",
       "kind": "env",
       "audience": "user",

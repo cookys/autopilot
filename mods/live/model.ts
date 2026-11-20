@@ -1841,6 +1841,24 @@ export function shrinkToFitted(segs: readonly Seg[], speed: readonly ForgeSegmen
   return out
 }
 
+// v7.4 narrow band (PM): 艦隊, 待決 and tok/s stay. Drop other slots first, then fleet counts. Never cut the 待決 slot.
+const V74_BAND_KEEP = new Set(['verdict', 'fleet', 'decide'])
+export function v74FitBand(segs: readonly Seg[], speed: readonly ForgeSegment[] | null, more: boolean, room: number): Seg[] {
+  const out = segs.map(s => ({ ...s }))
+  const width = (): number => fittedBandWidth(segTextWidth(out), speed, more)
+  const dropLast = (pred: (s: Seg) => boolean): boolean => {
+    for (let i = out.length - 1; i >= 0; i--) {
+      if (!pred(out[i])) continue
+      out.splice(i, 1)
+      return true
+    }
+    return false
+  }
+  while (width() > room && dropLast(s => s.slot !== undefined && !V74_BAND_KEEP.has(s.slot))) { /* other slots first */ }
+  while (width() > room && dropLast(s => s.tag === 'fleetRun' || s.tag === 'fleetWait' || s.tag === 'fleetStuck')) { /* counts before the word 艦隊 */ }
+  return out
+}
+
 // `columns` is the room for the indicator, the ⓘ, the speed label and, when `more` is set, the `›` cell (the caller already removed the tab strip and the one-cell gap).
 // The width table is shown at least 120 columns. A candidate whose verdict word was shortened is refused and the next step is tried.
 // The stuck count is not a step, so it is still on the line when every step has been applied.

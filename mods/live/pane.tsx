@@ -310,7 +310,9 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
     const draw = <Text key={'tl' + j} wrap="truncate">{tb.text}</Text>
     const choose = () => (frame.onPage !== undefined ? frame.onPage(tb.id as PageId) : onTab(PAGE_TAB[tb.id]))
     const on = tb.id === page.id
-    const btn = Button === undefined ? draw : <Button key={'tab:' + tb.id + ep} plain {...(on ? { variant: 'primary' as const } : {})} {...(V74_TAB_HOTKEYS ? { hotkey: tb.key } : {})} onPress={choose}>{draw}</Button>
+    // The host drops Button variant. The current tab is its own Text with inverse (SGR 7) so the ╰ row is not one plain string.
+    const label = on ? <Text key={'tl' + j} inverse wrap="truncate">{tb.text}</Text> : draw
+    const btn = Button === undefined ? label : <Button key={'tab:' + tb.id + ep} plain {...(V74_TAB_HOTKEYS ? { hotkey: tb.key } : {})} onPress={choose}>{label}</Button>
     return <Box key={'tb' + j}>{j === 0 ? null : <Text>{' '}</Text>}{btn}</Box>
   })
   const hidden = Button === undefined || frame.decide?.textMode === true ? [] : tabItems.map((tb, j) => {

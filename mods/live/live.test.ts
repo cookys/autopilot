@@ -2689,7 +2689,7 @@ function expectThemeOnly(tree: Drawn, _allowTabBackground = false) {
   for (const n of walkAll(tree)) {
     const p = n.props || {}
     expect(p.backgroundColor).toBeUndefined()
-    expect(p.inverse).toBeUndefined()
+    if (!(p.inverse === true && String((n as { props?: { key?: unknown } }).props?.key ?? '').startsWith('tl'))) expect(p.inverse).toBeUndefined()
     if (p.color !== undefined) expect(THEME).toContain(p.color as string)
   }
 }
@@ -8116,7 +8116,7 @@ for (const surface of SURFACES) {
     const frame = [d.tree.children?.[1], d.tree.children?.[9]].map(n => JSON.stringify(n))
     for (const f of frame) {
       expect(f).not.toContain('backgroundColor')
-      expect(f).not.toContain('inverse')
+      expect(f.replace(/"key":"tl\d+"[\s\S]{0,80}?"inverse":true/g, '')).not.toContain('inverse')
       expect(f).not.toContain('"bold":true')
     }
     const colours = new Set(Object.values(ui.PALETTE))

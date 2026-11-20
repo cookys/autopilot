@@ -31,6 +31,8 @@ type El = (props: any) => any
 export const BAND_ROWS = 1
 // M5: the cells row 1 of the console band keeps free at its right end for the `[-]` control (three cells and a gap)
 export const BAND_CLOSE_ROOM = 4
+// v7.4 S1: the collapse toggle drawn left of `[-]` while the pane is closed (the open form is GLYPHS.structure.open)
+export const PANE_TOGGLE_CLOSED = '\u25B4'
 // r4 D: the console sources whose failure the band shows; slots, metrics, answer_log and changes are no_source on purpose in fleet's snapshot
 const BAND_SOURCES = ['tasks', 'peers', 'cards', 'quota_now'] as const
 
@@ -158,7 +160,7 @@ export function bandQuotaSeg(pools: QuotaPool[] | null, nowMs: number, t: T, sou
   return { text: t('console.command.sum_quota') + ' ' + (w.role === 'broken' ? GLYPHS.state.failed + ' ' : '') + w.pool + ' ' + w.text, color }
 }
 
-export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, t: T, hd: BarHandlers, active: BarTabId | ConsoleTab | BandPageId | null, forge: readonly ForgeSegment[] | null, usage = true, moreTo: BarTabId | null = null, con: (ConsoleNav & { cols: number }) | null = null, preset: { segs: Seg[]; width: number } | null = null, quota: Seg | null = null, noTabs = false, legacyTabs = false, forgeRow = false): { node: unknown; stripRow: unknown; strip: BarStrip; tabsAt: number } {
+export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, t: T, hd: BarHandlers, active: BarTabId | ConsoleTab | BandPageId | null, forge: readonly ForgeSegment[] | null, usage = true, moreTo: BarTabId | null = null, con: (ConsoleNav & { cols: number }) | null = null, preset: { segs: Seg[]; width: number } | null = null, quota: Seg | null = null, noTabs = false, legacyTabs = false, forgeRow = false, onTogglePane?: () => void, paneOpen = false): { node: unknown; stripRow: unknown; strip: BarStrip; tabsAt: number } {
   const { Box, Text, Button } = el
   // R4-4: the host may reduce band columns beside an open pane; the terminal's
   // width is not this budget. A visible fleet group always keeps its name.
@@ -226,9 +228,17 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
   // `stripRow` alone is the menu row of the O4 shell: the shell is already 12 rows (SHELL_ROWS), so it takes the tab strip and leaves the summary row to the band's own draw
   // the quota segment sits at the right end of row 1 when two cells of room are left; it never takes a row and never pushes the speed label
   const qw = quota === null ? 0 : displayWidth(quota.text)
-  const qpad = quota === null ? 0 : columns - left.width - forgeW - qw
+  const qpad = quota === null ? 0 : (onTogglePane === undefined ? columns : columns - BAND_CLOSE_ROOM) - left.width - forgeW - qw
   const qnode = quota === null || qpad < 2 ? [] : [<Text key="[REDACTED]">{' '.repeat(qpad)}</Text>, <Text key="[REDACTED]" {...drawSeg(quota)} wrap="truncate">{quota.text}</Text>]
-  return { node: <Box flexDirection="column"><Box>{left.nodes}{speed}{qnode}</Box>{repairBelow ? <Box height={1} width={columns}><Text {...drawSeg(staleBadge('  autopilot status runs --watch'))}>{'  autopilot status runs --watch'}</Text></Box> : noTabs ? <Box height={1} width={columns} /> : stripRow}</Box>, stripRow, strip, tabsAt: gap }
+  // v7.4 S1: with `onTogglePane` the cell just left of the host's `[-]` is a pressable ▴ (pane closed) / ▾ (pane open); the row then ends BAND_CLOSE_ROOM cells short of the edge
+  const toggleNode = onTogglePane === undefined ? [] : (() => {
+    const glyph = paneOpen ? GLYPHS.structure.open : PANE_TOGGLE_CLOSED
+    const used = left.width + forgeW + (qnode.length === 0 ? 0 : qpad + qw)
+    const pad = Math.max(0, columns - BAND_CLOSE_ROOM - used)
+    const draw = <Text key="[REDACTED]" {...drawSeg(moreSeg())} wrap="truncate">{glyph}</Text>
+    return [<Text key="tgpad">{' '.repeat(pad)}</Text>, Button === undefined ? draw : <Button key="pane-toggle" plain onPress={onTogglePane}>{draw}</Button>]
+  })()
+  return { node: <Box flexDirection="column"><Box>{left.nodes}{speed}{qnode}{toggleNode}</Box>{repairBelow ? <Box height={1} width={columns}><Text {...drawSeg(staleBadge('  autopilot status runs --watch'))}>{'  autopilot status runs --watch'}</Text></Box> : noTabs ? <Box height={1} width={columns} /> : stripRow}</Box>, stripRow, strip, tabsAt: gap }
 }
 
 // the rule under the bar

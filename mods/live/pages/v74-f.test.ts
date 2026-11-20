@@ -70,9 +70,9 @@ test('v74 F S6: 5h and 7d bars with relative resets, pools table, today tokens a
   expect(out[0]).toContain('額度 依池')
   expect(out[1]).toContain('5 小時')
   expect(out[1]).toContain('42%')
-  expect(out[1]).toContain('重置 2h10m')
+  expect(out[1]).toContain('重置 2時10分')
   expect(out[2]).toContain('7 天')
-  expect(out[2]).toContain('重置 4d')
+  expect(out[2]).toContain('重置 4天')
   const header = out.findIndex(r => r.includes('池') && r.includes('狀況'))
   expect(header).toBeGreaterThan(2)
   expect(out.some(r => r.includes('✗') && r.includes('180 分未更新'))).toBe(true) // the stale pool says how long
@@ -103,10 +103,10 @@ test('v74 F S6 negative control: missing quota feed, console and spend draw red 
 })
 
 test('v74 F S6: resetIn formats the time left', () => {
-  expect(resetIn(NOW + 130 * MIN, NOW, t)).toBe('2h10m')
-  expect(resetIn(NOW + 120 * MIN, NOW, t)).toBe('2h')
-  expect(resetIn(NOW + 4 * 86_400_000, NOW, t)).toBe('4d')
-  expect(resetIn(NOW + 35 * MIN, NOW, t)).toBe('35m')
+  expect(resetIn(NOW + 130 * MIN, NOW, t)).toBe('2時10分')
+  expect(resetIn(NOW + 120 * MIN, NOW, t)).toBe('2時')
+  expect(resetIn(NOW + 4 * 86_400_000, NOW, t)).toBe('4天')
+  expect(resetIn(NOW + 35 * MIN, NOW, t)).toBe('35分')
   expect(resetIn(null, NOW, t)).toBe('—')
 })
 

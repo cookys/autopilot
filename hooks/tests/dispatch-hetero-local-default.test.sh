@@ -98,6 +98,29 @@ DISPATCHED="$(git -C "$SBX" show "${SHA_B}:got-prompt.txt")"
 assert_contains "$DISPATCHED" "Task-Class: simple-script" "b: dispatched prompt carries Task-Class: simple-script"
 assert_contains "$ERR" "dispatched copy adds Task-Class: simple-script" "b: stderr says the copy was added"
 
+# (b2) body prose names Task-Class: outside the header window. The gate reads only
+# the first 8 lines, so the dispatched copy still gains the field. Caller file stays.
+PROMPT="$TEST_TMP/prompt-b2.txt"
+{
+  printf 'edit only this line\n'
+  i=2
+  while [ "$i" -le 19 ]; do
+    printf 'filler %s\n' "$i"
+    i=$((i + 1))
+  done
+  printf 'please add a Task-Class: header\n'
+} > "$PROMPT"
+BEFORE="$(sha256sum "$PROMPT" | awk '{print $1}')"
+run_local b2 --runner local --model qwen
+[ "$EXIT" -eq 0 ] || printf 'local-default diagnostic (b2): %s\n%s\n' "$OUT" "$ERR" >&2
+assert_eq "0" "$EXIT" "b2: body mention of Task-Class exits 0"
+AFTER="$(sha256sum "$PROMPT" | awk '{print $1}')"
+assert_eq "$BEFORE" "$AFTER" "b2: caller prompt file is unchanged"
+SHA_B2="$(git -C "$SBX" rev-parse "feat/local-b2")"
+DISPATCHED="$(git -C "$SBX" show "${SHA_B2}:got-prompt.txt")"
+assert_contains "$DISPATCHED" "Task-Class: simple-script" "b2: dispatched prompt carries Task-Class: simple-script"
+assert_contains "$ERR" "dispatched copy adds Task-Class: simple-script" "b2: stderr says the copy was added"
+
 # (c) local, no --worktree-parent -> worktree is outside the repo root.
 XDG_RUNTIME_DIR="$(mktemp -d /tmp/local-default-xdg.XXXXXX)"
 chmod 700 "$XDG_RUNTIME_DIR"

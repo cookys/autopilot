@@ -32,8 +32,10 @@
 #       [--runner auto|codex|agy|grok|cc-shim|local|pi|cursor|opencode|kimi|claude-native|qoderclicn] # implementer default (no --runner, no pace selection or contract pin): local.
 #                                              #   Other roles stay auto: *gpt*/*codex*→codex,
 #                                              #   local: shorthand for cc-shim + --endpoint qwen_local + --sandbox bwrap.
-#                                              #   A local run with no Task-Class: line gets that line on a prompt
-#                                              #   copy only (Task-Class: simple-script); the caller's file is not edited.
+#                                              #   A local run whose prompt has no Task-Class field in the gate
+#                                              #   header window (first 8 lines, at line start or after |) gets
+#                                              #   that field on a prompt copy only (Task-Class: simple-script);
+#                                              #   the caller's file is not edited. Body prose is not a field.
 #                                              #   A local run with no --worktree-parent uses a 0700 per-user directory
 #                                              #   under $XDG_RUNTIME_DIR if set, else ${TMPDIR:-/tmp}, never inside the repo.
 #                                              #   --endpoint or --sandbox with any other value is a precondition
@@ -3227,8 +3229,13 @@ if [ "$LOCAL_RUNNER" -eq 1 ] && [ "$MODEL_SUPPLIED" -eq 0 ]; then
   MODEL="qwen"
   MODEL_IS_DEFAULT=0
 fi
-# The caller's prompt file stays untouched. The dispatched copy gains Task-Class when it has none.
-if [ "$LOCAL_RUNNER" -eq 1 ] && ! grep -q 'Task-Class:' "$PROMPT_FILE"; then
+# The caller's prompt file stays untouched. Insert when the gate's header parser
+# (headerValue: first 8 lines, at line start or after |) sees no Task-Class.
+# A body mention of the words is not a field.
+if [ "$LOCAL_RUNNER" -eq 1 ] && ! node -e '
+  const g = require(process.argv[1]);
+  process.exit(g.headerValue([process.argv[2]], "Task-Class") ? 0 : 1);
+' "$SELF_DIR/lib/cn-model-dispatch-gate.js" "$PROMPT_FILE"; then
   LOCAL_CLASS_PROMPT_FILE="$(mktemp -t 'dispatch-hetero-local-class-XX''XX''XX')"
   { printf '%s\n' 'Task-Class: simple-script'; cat "$PROMPT_FILE"; } > "$LOCAL_CLASS_PROMPT_FILE" \
     || die_precondition "could not copy the prompt to add Task-Class: simple-script"

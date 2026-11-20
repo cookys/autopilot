@@ -4,10 +4,13 @@
 // `seatQuota.refresh(run, nowMs)` once per tick (the 60 s cache and the keep-the-last-good rule live in the feed, nothing is spawned while drawing).
 // A broken or missing source is a red row with the reason (§5): the number stays beside it, never replaced by a dash. Colours go through PALETTE only.
 import type { ConsoleItem, ConsoleSnapshot } from '../console'
-import type { LiveSnapshot, Seg } from '../model'
+import type { LiveSnapshot, QcView, Seg } from '../model'
 import { displayWidth, isStepCard, truncateToWidth } from '../model'
+import { fmtCount } from '../speed'
 import { GLYPHS } from '../../tux/glyphs.ts'
 import { PALETTE } from '../../tux/palette.ts'
+import { STATES, stateOf } from '../ui'
+import { fleetLines, type PmStatus } from '../v74/contract'
 import { ROLE_WARNING, isUnknownPool, normalizedPools, poolKey, poolLabel, rankPools, worstPool } from './quota-pick'
 import type { Verdict } from './quota-pick'
 import { STRIP_SPLIT_COLS } from './layout'
@@ -635,8 +638,175 @@ function quotaShortSummary(ctx: PageCtx, con: ConsoleSnapshot, wide: boolean): {
   return { entry: { rows: [row], count: quotaCount }, yellowPools }
 }
 
+// ---- ux-v7.4 S2 現況 (sub-task C): fleet.pm.status first, then own seat, pre-push qc and proxy decisions folded in ----
+const V74_PM_SOURCE = 'fleet pm status --json'
+const V74_PM_SCHEMA = 'fleet.pm.status v1'
+const rowText = (r: Row): string => r.map(s => s.text).join('')
+
+const v74OpenRule = (title: string, wide: boolean): Row => {
+  const head = GLYPHS.structure.open + ' ' + title + ' '
+  const fill = wide ? GLYPHS.structure.rule.repeat(Math.max(2, 54 - displayWidth(head))) : ''
+  return [{ text: head + fill, color: PALETTE.structure }]
+}
+
+const v74PmCounts = (pm: PmStatus): { total: number; fail: number; idle: number; ok: number } => {
+  const lines = fleetLines(pm)
+  let fail = 0
+  let idle = 0
+  let ok = 0
+  for (const l of lines) {
+    if (l.mark === 'fail') fail++
+    else if (l.mark === 'parked') idle++
+    else ok++
+  }
+  return { total: pm.projects.length, fail, idle, ok }
+}
+
+const v74ShortRange = (range: string): string => {
+  const parts = range.split('..').map(p => p.trim())
+  if (parts.length >= 2) {
+    const a = parts[0].length > 8 ? parts[0].slice(0, 8) : parts[0]
+    const b = parts[1]
+    return a + '..' + b
+  }
+  return range.length > 24 ? range.slice(0, 24) : range
+}
+
+const v74QcWord = (ctx: PageCtx, q: QcView): string => {
+  if (q.state === 'ok') return ctx.t('page.review.qc_ok')
+  if (q.state === 'owed') return q.protected_files_count > 0 ? ctx.t('page.review.qc_owed_n', { n: q.protected_files_count }) : ctx.t('page.review.qc_owed')
+  if (q.state === 'not_needed') return ctx.t('page.review.qc_not_needed')
+  return ctx.t('page.review.qc_unknown')
+}
+
+function v74FleetSection(ctx: PageCtx, wide: boolean): Row[] {
+  const { t, v74, console: con, size } = ctx
+  const pm = v74!.pm
+  const head = v74OpenRule(t('v74.c.sec_fleet_src', { source: V74_PM_SOURCE }), wide)
+  if (pm === null) return [head, broken(t('v74.c.pm_missing'))]
+  const { total, fail, idle, ok } = v74PmCounts(pm)
+  const summary: Seg[] = [
+    ...(wide ? [dim('  ')] : []),
+    plain(t('v74.c.lines') + '       ' + String(total) + '  '),
+    ...(fail > 0 ? [{ text: GLYPHS.state.failed + String(fail), color: PALETTE.broken }] : []),
+    ...(idle > 0 ? [plain(' ' + GLYPHS.state.stalled + String(idle))] : []),
+    ...(ok > 0 ? [plain(' ' + GLYPHS.state.running + String(ok))] : []),
+  ]
+  if (con !== null) {
+    const h = con.counts.summary.hosts
+    const hs = con.sources.hosts
+    if (hs !== undefined && hs.state !== 'no_source' && typeof h.online === 'number' && typeof h.total === 'number') {
+      summary.push(plain('  · ' + t('page.now.hosts') + ' ' + h.online + '/' + h.total))
+    }
+  }
+  const rows: Row[] = [head, summary]
+  for (const line of fleetLines(pm)) {
+    if (line.mark === 'ok') continue
+    const g = line.mark === 'fail' ? GLYPHS.state.failed : GLYPHS.state.stalled
+    const body = line.mark === 'fail'
+      ? t('v74.c.line_fail', { project: line.project, stuck: line.counts.stuck, overdue: line.counts.overdue })
+      : t('v74.c.line_parked', { project: line.project, waiting: line.counts.waiting })
+    rows.push(truncateSegs([
+      dim(wide ? ' ' : ''),
+      { text: g + ' ' + body, ...(line.mark === 'fail' ? { color: PALETTE.broken } : {}) },
+    ], size.cols))
+  }
+  if (con !== null) {
+    for (const pr of poolRows(ctx, con, wide)) rows.push(pr)
+    const quotaExc = exceptionRows(ctx, con, wide).filter(r => rowText(r).includes(t('page.now.quota')))
+    for (const r of quotaExc) {
+      if (!rows.some(x => rowText(x) === rowText(r))) rows.push(r)
+    }
+  }
+  return rows
+}
+
+function v74SeatSection(ctx: PageCtx, wide: boolean): Row[] {
+  const { t, live } = ctx
+  if (live === null || live.state !== 'ok') {
+    return [v74OpenRule(t('v74.c.sec_seat', { project: '?' }), wide), broken(t('page.now.no_live'))]
+  }
+  const proj = live.detail.project ?? live.project_key ?? t('v74.c.project_unknown')
+  const rows: Row[] = [v74OpenRule(t('v74.c.sec_seat', { project: String(proj) }), wide)]
+  const band = live.band
+  const mark = band?.mark ?? GLYPHS.state.running
+  const status = band?.verdict?.trim() !== '' ? band!.verdict : t('v74.c.status_running')
+  const elapsed = band?.elapsed ?? GLYPHS.structure.empty
+  const ctxPct = live.metrics?.ctx ?? GLYPHS.structure.empty
+  rows.push(labelled(t('v74.c.l_status'), wide,
+    { text: mark + ' ' + status, ...(band === null ? {} : { color: PALETTE.running }) },
+    plain('  ' + t('v74.c.elapsed', { e: elapsed })),
+    plain('  ' + t('header.ctx') + ' ' + ctxPct)))
+  const tokLabel = (n: number): string => (n >= 1_000_000 ? fmtCount(n) : n >= 1000 ? String(Math.round(n / 1000)) + 'k' : String(n)) + ' tok'
+  const spend = live.detail.spend
+  const sessTok = spend?.brain !== null && spend?.brain !== undefined ? tokLabel(spend.brain) : GLYPHS.structure.empty
+  const hostTok = spend?.host_all_n !== null && spend?.host_all_n !== undefined ? tokLabel(spend.host_all_n) : null
+  const sessSegs: Seg[] = [plain(sessTok)]
+  if (hostTok !== null) sessSegs.push(plain('  ' + t('v74.c.today_host', { v: hostTok })))
+  rows.push(labelled(t('v74.c.l_session'), wide, ...sessSegs))
+  return rows
+}
+
+function v74QcSection(ctx: PageCtx, wide: boolean): Row[] {
+  const { t, live } = ctx
+  if (live === null) return []
+  const q = live.detail.qc
+  if (q === null) return [v74OpenRule(t('v74.c.sec_qc_missing'), wide), broken(t('nodata.qc'))]
+  const word = v74QcWord(ctx, q)
+  const rows: Row[] = [v74OpenRule(t('v74.c.sec_qc', { state: word }), wide)]
+  if (q.range !== null) rows.push(labelled(t('v74.c.l_range'), wide, plain(v74ShortRange(q.range))))
+  const prot = q.protected_files_count === 0 ? t('v74.c.no_protected') : t('review.protected.other', { n: q.protected_files_count })
+  rows.push(labelled(t('v74.c.l_protected'), wide, plain(prot)))
+  void STATES[stateOf('qc', q.state)]
+  return rows
+}
+
+function v74ProxySection(ctx: PageCtx, wide: boolean): Row[] {
+  const { t, live, size, nowMs } = ctx
+  if (live === null) return []
+  const dv = live.detail.decisions
+  if (dv === null) {
+    if (live.sections?.decisionsNotWired === true) return [v74OpenRule(t('v74.c.sec_proxy'), wide), broken(t('page.review.decisions_not_wired'))]
+    return [v74OpenRule(t('v74.c.sec_proxy_empty'), wide)]
+  }
+  const n = Math.max(dv.count, dv.rows.length)
+  if (n === 0) return [v74OpenRule(t('v74.c.sec_proxy_empty'), wide)]
+  const rows: Row[] = [v74OpenRule(t('v74.c.sec_proxy_n', { n }), wide)]
+  for (const r of dv.rows) {
+    const ageMs = r.at != null && Number.isFinite(Date.parse(r.at)) ? nowMs - Date.parse(r.at) : null
+    const age = ageMs === null ? '' : '  · ' + t('page.now.ago', { age: ageUnit(t, ageMs) })
+    const summary = r.decision.split('\n').find(l => l.trim() !== '')?.trim() ?? r.decision
+    rows.push(truncateSegs([dim(wide ? '  ' : ' '), plain(GLYPHS.structure.decisions + ' ' + summary + age)], size.cols))
+  }
+  return rows
+}
+
+function renderV74(ctx: PageCtx): { body: Row[]; actions: Row[] } {
+  const wide = ctx.size.cols >= 100
+  const body: Row[] = [
+    ...v74FleetSection(ctx, wide),
+    blank(),
+    ...v74SeatSection(ctx, wide),
+    blank(),
+    ...v74QcSection(ctx, wide),
+    blank(),
+    ...v74ProxySection(ctx, wide),
+  ]
+  return { body, actions: [] }
+}
+
+/** Suffix segments for the framed header when v7.4 wires pm fetch age (sub-task B may compose with tab title). */
+export function nowV74HeaderExtra(ctx: PageCtx): Seg[] {
+  if (ctx.v74 === undefined) return []
+  const { t, nowMs, v74 } = ctx
+  if (v74.pmFetchedMs === null) return [staleBadge(' ' + t('v74.c.src_missing'))]
+  const age = ageUnit(t, nowMs - v74.pmFetchedMs)
+  return [dim(' · ' + t('v74.c.header', { source: V74_PM_SOURCE, schema: V74_PM_SCHEMA, age }))]
+}
+
 // ---- the page ----
 function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
+  if (ctx.v74 !== undefined) return renderV74(ctx)
   const { t, size, console: con, live, nowMs } = ctx
   const wide = size.cols >= 100
   const decisions = decisionCount(ctx)

@@ -23,7 +23,8 @@ export function parsePmStatus(json: string): PmStatus | null {
   try { o = JSON.parse(json) } catch { return null }
   if (typeof o !== 'object' || o === null) return null
   const r = o as Record<string, unknown>
-  if (r.schema !== 'fleet.pm.status' || r.schema_version !== 1 || 'error' in r || !isInt(r.generated_at_ms) || !Array.isArray(r.projects)) return null
+  const errField = (r as Record<string, unknown>).error
+  if (r.schema !== 'fleet.pm.status' || r.schema_version !== 1 || errField !== undefined || !isInt(r.generated_at_ms) || !Array.isArray(r.projects)) return null
   const projects: PmProject[] = []
   for (const p of r.projects as unknown[]) {
     if (typeof p !== 'object' || p === null) continue
@@ -42,11 +43,11 @@ export function parsePmStatus(json: string): PmStatus | null {
 
 // The 全艦隊 block of 現況 (S2). fleet.pm.status has no host count, no offline/idle line state and no quota pools:
 // lines = projects; ✗ = a project with stuck > 0 or overdue > 0; ⊘ = only waiting; ● = the rest. Hosts and quota alerts keep their existing sources (console / quota) and are omitted when those are missing.
-export type FleetLineMark = 'fail' | 'idle' | 'ok'
+export type FleetLineMark = 'fail' | 'parked' | 'ok'
 export type FleetLine = { project: string; mark: FleetLineMark; counts: PmCounts }
 export function fleetLines(s: PmStatus): FleetLine[] {
-  const mark = (c: PmCounts): FleetLineMark => (c.stuck > 0 || c.overdue > 0 ? 'fail' : c.waiting > 0 && c.running === 0 ? 'idle' : 'ok')
-  const rank: Record<FleetLineMark, number> = { fail: 0, idle: 1, ok: 2 }
+  const mark = (c: PmCounts): FleetLineMark => (c.stuck > 0 || c.overdue > 0 ? 'fail' : c.waiting > 0 && c.running === 0 ? 'parked' : 'ok')
+  const rank: Record<FleetLineMark, number> = { fail: 0, parked: 1, ok: 2 }
   return s.projects.map(p => ({ project: p.project, mark: mark(p.counts), counts: p.counts })).sort((a, b) => rank[a.mark] - rank[b.mark]) // stable: keeps the fleet order inside a mark
 }
 

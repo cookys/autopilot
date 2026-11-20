@@ -98,9 +98,9 @@ const V74_BORDER_KEY: Record<string, string> = {
 }
 
 const TINY_FRAME_ROWS = 3
+export const frameHintText = (page: Page, ctx: PageCtx): string => ctx.t(V74_BORDER_KEY[page.id] ?? 'v74.b.border.default')
 export function frameBorderRow(page: Page, ctx: PageCtx): Row {
-  const k = V74_BORDER_KEY[page.id] ?? 'v74.b.border.default'
-  return [{ text: GLYPHS.structure.frameBL + GLYPHS.structure.rule + ' ' + ctx.t(k), dim: true }]
+  return [{ text: GLYPHS.structure.frameBL + GLYPHS.structure.rule + ' ' + frameHintText(page, ctx), dim: true }]
 }
 
 export function stripRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[] {

@@ -85,7 +85,7 @@ if (mode === 'unavailable_structured' || mode === 'unavailable_plain' || mode ==
 const canary = process.env.QUALIFY_CANARY_TOKEN || '';
 // Record the cc-shim env the rail received so the --endpoint binding test can prove the
 // resolver's base_url (and not the ambient env) reached the dispatch.
-try { fs.writeFileSync(${JSON.stringify(path.join(tempRoot, 'fake-env-seen.txt'))}, (process.env.ANTHROPIC_BASE_URL || '') + '\\n' + (process.env.ANTHROPIC_AUTH_TOKEN || '') + '\\n' + (process.env.AUTOPILOT_ENDPOINT_EXAMLAN_URL || '') + '\\n' + (process.env.AUTOPILOT_ENDPOINT_EXAMLAN_TOKEN || '') + '\\n' + (process.env.AUTOPILOT_ENDPOINT_EXAMLAN_TRANSPORT || '') + '\\n'); } catch (e) {}
+try { fs.writeFileSync(${JSON.stringify(path.join(tempRoot, 'fake-env-seen.txt'))}, (process.env.ANTHROPIC_BASE_URL || '') + '\\n' + (process.env.ANTHROPIC_AUTH_TOKEN || '') + '\\n' + (process.env.AUTOPILOT_ENDPOINT_EXAMLAN_URL || '') + '\\n' + (process.env.AUTOPILOT_ENDPOINT_EXAMLAN_TOKEN || '') + '\\n' + (process.env.AUTOPILOT_ENDPOINT_EXAMLAN_TRANSPORT || '') + '\\n' + (process.env.AUTOPILOT_TASK_SIZE || '') + '\\n' + (process.env.AUTOPILOT_TASK_CLASS || '') + '\\n'); } catch (e) {}
 
 function emit(o) {
   if (args.includes('--sandbox')) {
@@ -454,12 +454,15 @@ check(!fs.existsSync(path.join(budStore, 'qualification-evidence.jsonl')), 'allo
 {
   const seen = path.join(tempRoot, 'fake-env-seen.txt');
   const saved = {};
-  for (const k of ['AUTOPILOT_ENDPOINT_EXAMLAN_URL', 'AUTOPILOT_ENDPOINT_EXAMLAN_TOKEN', 'AUTOPILOT_ENDPOINT_EXAMLAN_TRANSPORT', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN']) saved[k] = process.env[k];
+  for (const k of ['AUTOPILOT_ENDPOINT_EXAMLAN_URL', 'AUTOPILOT_ENDPOINT_EXAMLAN_TOKEN', 'AUTOPILOT_ENDPOINT_EXAMLAN_TRANSPORT', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN', 'AUTOPILOT_TASK_SIZE', 'AUTOPILOT_TASK_CLASS']) saved[k] = process.env[k];
   process.env.AUTOPILOT_ENDPOINT_EXAMLAN_URL = 'http://10.7.7.7:8001';
   process.env.AUTOPILOT_ENDPOINT_EXAMLAN_TOKEN = 'exam-lan-bearer';
   process.env.AUTOPILOT_ENDPOINT_EXAMLAN_TRANSPORT = 'plaintext-private';
   process.env.ANTHROPIC_BASE_URL = 'https://ambient.example/must-not-win';
   process.env.ANTHROPIC_AUTH_TOKEN = 'ambient-token-must-not-win';
+  // Ambient gate labels must not leak through the allowlist when the flags are absent.
+  process.env.AUTOPILOT_TASK_SIZE = 'XL';
+  process.env.AUTOPILOT_TASK_CLASS = 'refactor';
   try { fs.unlinkSync(seen); } catch (_e) { /* absent */ }
   const argvFile = path.join(tempRoot, 'fake-argv.jsonl');
   const argvBefore = fs.existsSync(argvFile) ? fs.readFileSync(argvFile, 'utf8').split('\n').filter(Boolean).length : 0;
@@ -470,8 +473,29 @@ check(!fs.existsSync(path.join(budStore, 'qualification-evidence.jsonl')), 'allo
   fs.writeFileSync(path.join(tempRoot, 'fake-mode.txt'), 'honest');
   process.env.AUTOPILOT_QUALIFY_SEED = 'endpoint-seed';
   let ep;
+  let labeled;
+  let labeledSeen = '';
+  const storeL = fs.mkdtempSync(path.join(tempRoot, 'store-label-'));
   try {
     ep = runImplQualification({ ...baseOptions(storeE), dispatchBin: wrapper, runner: 'cc-shim', endpoint: 'examlan', rawDir: rawE });
+    const unlabeledSeen = fs.readFileSync(seen, 'utf8');
+    fs.writeFileSync(path.join(tempRoot, 'fake-seed.txt'), 'label-seed');
+    fs.writeFileSync(path.join(tempRoot, 'fake-mode.txt'), 'honest');
+    process.env.AUTOPILOT_QUALIFY_SEED = 'label-seed';
+    const rawL = fs.mkdtempSync(path.join(tempRoot, 'raw-label-'));
+    const labelArgs = ['implementer', '--engine', 'e', '--model', 'm', '--model-version', 'v', '--runner', 'cc-shim',
+      '--runner-version', '1', '--family', 'f', '--harness-version', 'h', '--effort', 'high',
+      '--prompt-config-hash', digest('a'), '--semantic-fingerprint', digest('b'), '--containment-fingerprint', digest('c'),
+      '--task-class', 'bounded_implementation', '--domain', 'repository', '--language', 'en', '--tool', 'git_commit',
+      '--store', storeL, '--raw-dir', rawL, '--dispatch-bin', wrapper, '--version-source', 'operator-asserted',
+      '--endpoint', 'examlan', '--task-size', 'xs', '--task-class', 'test-scaffold', '--emit-row'];
+    labeled = spawnSync(process.execPath, [path.join(__dirname, 'engine-qualify.js'), ...labelArgs], {
+      env: process.env,
+      encoding: 'utf8',
+      maxBuffer: 32 * 1024 * 1024,
+    });
+    labeledSeen = fs.readFileSync(seen, 'utf8');
+    fs.writeFileSync(seen, unlabeledSeen);
   } finally {
     delete process.env.AUTOPILOT_QUALIFY_SEED;
     for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
@@ -488,6 +512,9 @@ check(!fs.existsSync(path.join(budStore, 'qualification-evidence.jsonl')), 'allo
   equal(seenLines[2], 'http://10.7.7.7:8001', 'stub saw AUTOPILOT_ENDPOINT_EXAMLAN_URL equal to the bound base_url');
   equal(seenLines[3], 'exam-lan-bearer', 'stub saw the namespace token equal to the bound bearer');
   equal(seenLines[4], 'plaintext-private', 'stub saw the plaintext-private transport override');
+  equal(seenLines[5], '', 'without --task-size the stub receives no AUTOPILOT_TASK_SIZE');
+  equal(seenLines[6], '', 'without --task-class the stub receives no AUTOPILOT_TASK_CLASS');
+  check(!('task_size' in ep.row.endpoint) && !('task_class' in ep.row.endpoint), 'without the flags the endpoint object is unchanged');
   const endpointArgv = fs.readFileSync(argvFile, 'utf8').split('\n').filter(Boolean).slice(argvBefore).map((l) => JSON.parse(l));
   check(endpointArgv.length > 0, '--endpoint run dispatched');
   check(endpointArgv.every((a) => {
@@ -507,6 +534,20 @@ check(!fs.existsSync(path.join(budStore, 'qualification-evidence.jsonl')), 'allo
   equal(recE.status, 0, `engine-scorecard record accepts a row with endpoint disclosure: ${recE.stderr}`);
   // without --endpoint the row has no endpoint key (byte-compatible with every prior row)
   check(!('endpoint' in honest.row), 'no --endpoint → no endpoint key on the row');
+  equal(labeled.status, 0, `labeled --endpoint exam qualifies: ${labeled.stderr && labeled.stderr.slice(0, 400)}`);
+  const labeledRow = JSON.parse(labeled.stdout);
+  equal(labeledRow.endpoint.task_size, 'XS', 'row records the task size the exam ran under');
+  equal(labeledRow.endpoint.task_class, 'test-scaffold', 'row records the task class the exam ran under');
+  equal(labeledRow.evidence.scope.task_classes, ['bounded_implementation'], 'gate --task-class is not seat scope');
+  const labeledLines = labeledSeen.split('\n');
+  equal(labeledLines[5], 'XS', 'stub saw AUTOPILOT_TASK_SIZE from --task-size');
+  equal(labeledLines[6], 'test-scaffold', 'stub saw AUTOPILOT_TASK_CLASS from the gate --task-class');
+  const recL = spawnSync(process.execPath, [path.join(__dirname, 'engine-scorecard.js'), 'record'], {
+    input: JSON.stringify(labeledRow),
+    env: { ...process.env, ENGINE_SCORECARD_DIR: storeL, ENGINE_CAPABILITY_DIR: storeL },
+    encoding: 'utf8',
+  });
+  equal(recL.status, 0, `engine-scorecard record accepts task_size/task_class on endpoint: ${recL.stderr}`);
 }
 
 // ── 13. --endpoint not-ready → exit 2 UNCHARGED (nothing dispatched, no store write) ──
@@ -553,6 +594,18 @@ check(!fs.existsSync(path.join(budStore, 'qualification-evidence.jsonl')), 'allo
   const rev = spawnSync(process.execPath, [path.join(__dirname, 'engine-qualify.js'), 'reviewer', '--endpoint', 'x', '--panel-cmd', 'true'], { env: process.env, encoding: 'utf8' });
   equal(rev.status, 2, '--endpoint on a non-implementer role exits 2');
   check(/implementer-only/.test(rev.stderr), 'non-implementer refusal names implementer-only');
+  const noEp = spawnSync(process.execPath, [path.join(__dirname, 'engine-qualify.js'), ...cliArgs, '--task-size', 'XS', '--task-class', 'test-scaffold'], { env: process.env, encoding: 'utf8' });
+  equal(noEp.status, 2, '--task-size/--task-class without --endpoint exits 2');
+  check(/only accepted together with --endpoint/.test(noEp.stderr), `refusal names --endpoint: ${noEp.stderr.slice(0, 240)}`);
+  const sizeOnly = spawnSync(process.execPath, [path.join(__dirname, 'engine-qualify.js'), ...cliArgs, '--endpoint', 'examlan', '--task-size', 'XS'], { env: process.env, encoding: 'utf8' });
+  equal(sizeOnly.status, 2, '--task-size without a gate --task-class exits 2');
+  check(/exactly one --task-class/.test(sizeOnly.stderr), 'size-only refusal names the gate class');
+  const badSize = spawnSync(process.execPath, [path.join(__dirname, 'engine-qualify.js'), ...cliArgs, '--endpoint', 'examlan', '--task-size', 'M', '--task-class', 'test-scaffold'], { env: process.env, encoding: 'utf8' });
+  equal(badSize.status, 2, '--task-size M exits 2');
+  check(/--task-size must be XS or S/.test(badSize.stderr), 'bad size names the allowed set');
+  const revSize = spawnSync(process.execPath, [path.join(__dirname, 'engine-qualify.js'), 'reviewer', '--task-size', 'XS', '--panel-cmd', 'true'], { env: process.env, encoding: 'utf8' });
+  equal(revSize.status, 2, '--task-size on a non-implementer role exits 2');
+  check(/implementer-only/.test(revSize.stderr), 'non-implementer --task-size names implementer-only');
 }
 
 function readJsonl(file) {

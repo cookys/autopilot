@@ -9,11 +9,14 @@
 //
 // Steps, in order, each with its own timeout. One failure never stops the others.
 // --steps runs only the named step ids, still in this order. An unknown id exits 2 and runs nothing.
-// Exit 0 when at least one producer exited 0. Exit 1 when none did: every step failed
-// or was a skip. Exit 2 on usage. A step that exits 2 and whose filtered stderr reason
-// contains registry_not_configured or mode_off is a skip: it is not ok and not a failed
-// producer. Producers are usage-probe, sync-statusline, sync-provider minimax
-// and sync-provider glm.
+// Exit 0 when at least one producer exited 0. Exit 2 on usage.
+// A step that exits 2 and whose filtered stderr reason contains registry_not_configured
+// or mode_off is a skip. A step that exits 1 or 2 and whose filtered stderr reason
+// contains token_missing is a skip. A skip is not ok and not a failed producer.
+// When every step is a skip (no ok, no real fail), print
+// quota-mirror-tick: nothing_applicable after the per-step lines and exit 0.
+// When at least one step really failed and none is ok, exit 1.
+// Producers are usage-probe, sync-statusline, sync-provider minimax and sync-provider glm.
 // --out-dir is an already-existing shared directory (not a tmpfs live dir). Provider steps
 // write fleet.quota/1 rows under <dir>/quota.
 // usage-probe and sync-statusline keep writing the live dir.
@@ -120,7 +123,9 @@ function classify(spawned) {
   if (spawned.status === 0) return { ok: true, detail: '' };
   if (typeof spawned.status === 'number') {
     const reason = reasonText(spawned.stderr);
-    if (spawned.status === 2 && (reason.includes('registry_not_configured') || reason.includes('mode_off'))) {
+    const tokenMissing = reason.includes('token_missing') && (spawned.status === 1 || spawned.status === 2);
+    const configSkip = spawned.status === 2 && (reason.includes('registry_not_configured') || reason.includes('mode_off'));
+    if (tokenMissing || configSkip) {
       return { ok: false, skip: true, detail: reason };
     }
     const detail = reason ? `exit=${spawned.status} reason=${reason}` : `exit=${spawned.status}`;
@@ -271,8 +276,11 @@ function run(opts) {
     producers += 1;
     if (result.ok) ok += 1;
   }
-  process.stdout.write(`quota-mirror-tick: ${ok}/${producers} ok\n`);
+  const allSkip = results.length > 0 && results.every((result) => result.skip);
+  if (!allSkip) process.stdout.write(`quota-mirror-tick: ${ok}/${producers} ok\n`);
+  if (allSkip) process.stdout.write('quota-mirror-tick: nothing_applicable\n');
   try { appendIdleAliases({ env: process.env, nowMs: o.nowMs }); } catch (_) { /* idle never changes the producer exit */ }
+  if (allSkip) return 0;
   if (results.length > 0 && ok === 0) return 1;
   return 0;
 }

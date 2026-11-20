@@ -19,9 +19,13 @@
 # $AUTOPILOT_PLUGIN_ROOT/scripts, else $HOME/projects/autopilot/scripts, when
 # that directory exists. Inventory still runs when neither exists; --apply and
 # --rollback then exit 3 because the installer is missing.
-# verdict is the first match: no_timer, timer_disabled, no_snapshot, stale, ok.
+# verdict is the first match: no_timer, timer_disabled, no_snapshot,
+# nothing_applicable, stale, ok.
 # A statusline snapshot older than 21600 s (account-quota.js 6 h) is stale.
 # A fleet.quota mirror file older than 1800 s (timer is 10 min) is stale.
+# When that age check would say stale, and the last quota-mirror.service journal
+# line that starts with "quota-mirror-tick: " is
+# "quota-mirror-tick: nothing_applicable", the verdict is nothing_applicable.
 # No snapshot file contents are printed.
 # Exit 0 when verdict is ok and codeforge is on PATH.
 # Exit 3 when verdict is not ok, or codeforge is missing. For codeforge missing
@@ -204,9 +208,16 @@ last_tick() {
   esac
 }
 
+# Last "quota-mirror-tick: " line from the user journal of quota-mirror.service.
+last_tick_marker() {
+  local text
+  text="$(journalctl --user -u quota-mirror.service -n 80 --no-pager -o cat 2>/dev/null || true)"
+  printf '%s\n' "$text" | awk '/^quota-mirror-tick: /{line=$0} END{print line}'
+}
+
 # Prints verdict on stdout.
 verdict_of() {
-  local snap_dir_exists="$1" snap_age="$2" quota_age="$3"
+  local snap_dir_exists="$1" snap_age="$2" quota_age="$3" marker
   if ! timer_installed; then
     printf 'no_timer'
     return
@@ -219,11 +230,12 @@ verdict_of() {
     printf 'no_snapshot'
     return
   fi
-  if [ "$snap_age" -gt "$SNAPSHOT_STALE_S" ]; then
-    printf 'stale'
-    return
-  fi
-  if [ -z "$quota_age" ] || [ "$quota_age" -gt "$QUOTA_OUT_STALE_S" ]; then
+  if [ "$snap_age" -gt "$SNAPSHOT_STALE_S" ] || [ -z "$quota_age" ] || [ "$quota_age" -gt "$QUOTA_OUT_STALE_S" ]; then
+    marker="$(last_tick_marker)"
+    if [ "$marker" = "quota-mirror-tick: nothing_applicable" ]; then
+      printf 'nothing_applicable'
+      return
+    fi
     printf 'stale'
     return
   fi

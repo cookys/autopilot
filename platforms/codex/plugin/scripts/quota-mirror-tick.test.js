@@ -106,6 +106,47 @@ test('every step fails: exit non-zero after all of them ran', () => {
   assert.match(r.stdout, /quota-mirror-tick: 0\/4 ok/);
 });
 
+test('exit 1 with token_missing is a skip, not a failure', () => {
+  const codes = all(0);
+  codes['sync-provider-minimax'] = 1;
+  const { r, lines } = runTick(codes, { 'sync-provider-minimax': 'token_missing\n' });
+  assert.strictEqual(r.status, 0, r.stderr);
+  assert.deepStrictEqual(lines.map((l) => l.split(' ')[0]), IDS);
+  assert.match(r.stdout, /quota-mirror-tick: sync-provider-minimax skip token_missing/);
+  assert.ok(!r.stdout.includes('sync-provider-minimax fail'));
+  assert.ok(!r.stdout.includes('nothing_applicable'));
+});
+
+test('every step skip prints nothing_applicable and exits 0', () => {
+  const codes = all(1);
+  codes['sync-statusline'] = 2;
+  codes['sync-provider-glm'] = 2;
+  const { r, lines } = runTick(codes, {
+    'usage-probe': 'token_missing',
+    'sync-statusline': 'mode_off',
+    'sync-provider-minimax': 'token_missing',
+    'sync-provider-glm': 'registry_not_configured',
+  });
+  assert.strictEqual(r.status, 0, r.stderr);
+  assert.deepStrictEqual(lines.map((l) => l.split(' ')[0]), IDS);
+  assert.match(r.stdout, /quota-mirror-tick: nothing_applicable\n?$/);
+  assert.ok(!r.stdout.includes(' fail '));
+});
+
+test('one skip and one real fail exits 1 without nothing_applicable', () => {
+  const codes = all(0);
+  codes['usage-probe'] = 1;
+  codes['sync-statusline'] = 1;
+  const { r } = runTickArgs(codes, ['--steps', 'usage-probe,sync-statusline'], {
+    'usage-probe': 'token_missing',
+    'sync-statusline': 'boom',
+  });
+  assert.strictEqual(r.status, 1, r.stdout);
+  assert.match(r.stdout, /quota-mirror-tick: usage-probe skip token_missing/);
+  assert.match(r.stdout, /quota-mirror-tick: sync-statusline fail /);
+  assert.ok(!r.stdout.includes('nothing_applicable'));
+});
+
 test('exit 2 with registry_not_configured is a skip, not a failure', () => {
   const codes = all(0);
   codes['usage-probe'] = 2;
@@ -148,8 +189,8 @@ test('step list is the four producers and a missing check script is not spawned'
   assert.ok(!r.stdout.includes('smoke'), r.stdout);
 });
 
-function runTickArgs(codes, args) {
-  const fx = fixture(codes);
+function runTickArgs(codes, args, stderrById) {
+  const fx = fixture(codes, stderrById);
   const r = spawnSync(process.execPath, [TICK, ...args], {
     encoding: 'utf8',
     env: {

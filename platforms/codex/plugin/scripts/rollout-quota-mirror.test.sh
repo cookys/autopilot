@@ -81,7 +81,15 @@ EOF
 #!/usr/bin/env bash
 exit 0
 EOF
-  chmod 755 "$BIN/systemctl" "$BIN/node" "$BIN/codeforge"
+  cat > "$BIN/journalctl" <<'EOF'
+#!/usr/bin/env bash
+set -u
+if [ -f "$ROLLOUT_STUB/journal" ]; then
+  cat "$ROLLOUT_STUB/journal"
+fi
+exit 0
+EOF
+  chmod 755 "$BIN/systemctl" "$BIN/node" "$BIN/codeforge" "$BIN/journalctl"
 
   export HOME="$HOME_D"
   export XDG_CONFIG_HOME="$HOME_D/.config"
@@ -221,6 +229,18 @@ touch -d '8 hours ago' "$(live)/quota/claude/alias/main.json"
 run_script --inventory
 [ "$RC" = "3" ] || fail "stale exit $RC out=$OUT"
 assert_verdict stale "inventory stale"
+
+# --- nothing_applicable tick is its own verdict, not stale ---
+new_sandbox
+seed_fresh
+install_unit_file
+enable_timer
+touch -d '8 hours ago' "$(live)/codeforge/usage/quota/main.json"
+touch -d '8 hours ago' "$(live)/quota/claude/alias/main.json"
+printf '%s\n' 'quota-mirror-tick: usage-probe skip token_missing' 'quota-mirror-tick: nothing_applicable' > "$STUB/journal"
+run_script --inventory
+[ "$RC" = "3" ] || fail "nothing_applicable exit $RC out=$OUT"
+assert_verdict nothing_applicable "inventory nothing_applicable"
 
 # --- apply twice ---
 new_sandbox

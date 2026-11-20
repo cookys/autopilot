@@ -1,0 +1,24 @@
+{
+  "identity": "GLM-5.3-Flash-NVFP4",
+  "engine": "GLM-5.3-Flash-NVFP4",
+  "family": "zhipu",
+  "runner": "anthropic-compatible",
+  "runner_version": "node-direct-http-fetch",
+  "harness_version": "engine-qualify-b3d4f08c",
+  "effort": "default",
+  "prompt_config_hash": "72a9552a654986b0bb856f52763496079c72aae993230f27e36f7ecb057adf1c",
+  "semantic_fingerprint": "d4022d70925810841ce00e8cdcb24ae670c15ba7bc605d66c908e5fbfe1f0012",
+  "containment_fingerprint": "785750eba5347ffd9a5188e0b91c08bd6fcd552b5fae7a6a69a225aece19953f",
+  "_invented": [],
+  "_semantic_surface": {
+    "kind": "owner-semantic-surface-v1",
+    "model": "GLM-5.3-Flash-NVFP4",
+    "transport": "anthropic-compatible-http",
+    "endpoint": "glm_local"
+  },
+  "_containment_surface": {
+    "kind": "owner-containment-surface-v1",
+    "exam_transport": "qualification-case-broker-networkless-bwrap",
+    "credential_isolation": "broker-env-allowlist-http-token"
+  }
+}

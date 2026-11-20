@@ -1,0 +1,6 @@
+2026-11-20T15:41:29+08:00 gate: GO present, PAUSE absent, /v1/models=200
+2026-11-20T15:41:29+08:00 ping evidence: capture skipped: chat protocol not expressible by the capture server live_ping status=200 model=GLM-5.3-Flash-NVFP4 stop= output_tokens=25 finish=stop thinking_protocol=chat thinking_switch=enabled thinking_content_present=true 
+2026-11-20T15:41:29+08:00 provider=node $QRPRF/scripts/qualification-review-provider.js protocol=chat_completions thinking=enabled rf=json_schema max_tokens=32768 cap_s=3600
+2026-11-20T15:41:30+08:00 role=discuss think=on-rf START runner=anthropic-compatible model=GLM-5.3-Flash-NVFP4 model_version=GLM-5.3-Flash-NVFP4 version_source=runtime effort=default(none sent) endpoint=glm_local dry=0 identity: prompt=977f546946ba sem=50c44c8ff255 con=5fd0ff93cc01 harness=engine-qualify-93987cb5
+2026-11-20T15:47:39+08:00 role=discuss think=on-rf END rc=2
+rc=2

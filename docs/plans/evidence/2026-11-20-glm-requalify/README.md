@@ -10,4 +10,16 @@ Scripts are copies of `2026-11-08-local-models-qualify` (cell-local-rf-formal.sh
 | glm-implementer | implementer | infra_abort, no verdict: blocked by cn-model gate, NOT a model result; not recorded | 2 | none |
 
 Gate reason: `cn_model_dispatch_barred zhipu core-unset (01M7E2A1, d-1dfcf757)`. Gate fix is tracked in 01M7VSVS; retake after it lands.
-Mechanical implementer and judge (判讀): no recipe found in the 11-08/11-09 bundles or the scorecard roles (roles: owner, implementer, reviewer, verification_author, explorer), so not sat.
+
+## Seat exams (11-09 recipe, lane swapped to glm)
+
+Recipe source: `docs/plans/evidence/2026-11-09-qwen-seat-exams/scripts/cell-seat.sh` (copied to `seat-exams/`; changes: lane/endpoint line qwen->glm, and the on-rf REPO check now requires c02b06fbf to be an ancestor, because qrprf is merged into develop at cc5e836f5). Setting on-rf = chat_completions + thinking enabled + response_format json_schema, the 11-09 effective row. Questions, grading and effort unchanged; prompt_config_hash equals the Qwen rows.
+First attempt ran from the c02b06fbf tip and all three died at persist ("invalid supersedes target"; kept as `cells/*-attempt1-persistfail`, no row). Re-run from develop (carries persist fix cc7f31def).
+
+| cell | result | wall s | scorecard event (evidence) |
+|---|---|---|---|
+| cells/1-owner-think-on-rf | qualified 12/12, fpc 0, spec 0/12 | 41.0 | 42 (50) |
+| cells/2-discuss-think-on-rf | qualified 48/48, all violation columns 0 | 323.8 | 43 (51) |
+| cells/3-consult-think-on-rf | qualified 58/60, oracle_misses 2, other columns 0 | 266.7 | 44 (52) |
+
+Note: the implementer (impl-live-rail-v1) is blocked by the cn-model gate (infra_abort, no verdict) and is retaken after the gate fix. The PM's "mechanical implementer" and "judge" are oral names for the implementer and owner/discuss rows.

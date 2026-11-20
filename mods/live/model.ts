@@ -1343,7 +1343,7 @@ export function readMarker(m: Json | null): MarkerView | null {
 export const RESIDUE_SCHEMA = 'autopilot.residue/1'
 // Residue auto-reap R4 (docs/plans/evidence/2026-10-09-residue-auto-reap/contract.md): the band's `wt N` and the Hygiene tab show
 // needs_human_*, the residue a person must act on. Fields absent from an older fact read as 0 / null / [].
-export type NeedsHumanEntry = { kind: string; target: string; class: string; age_days: number | null; bytes: number | null; reason: string | null; command: string | null }
+export type NeedsHumanEntry = { branch?: string | null; kind: string; target: string; class: string; age_days: number | null; bytes: number | null; reason: string | null; command: string | null }
 export type ResidueView = {
   reapable: number; by_class: Record<string, number>; at: string | null
   needs_human_count: number; needs_human_bytes: number | null; needs_human: NeedsHumanEntry[]
@@ -1360,7 +1360,7 @@ function readNeedsHuman(list: unknown): NeedsHumanEntry[] {
     const target = str(e.path) ?? str(e.branch) ?? str(e.ref)
     if (target === null) continue
     rows.push({
-      kind: str(e.kind) ?? '—', target, class: str(e.class) ?? '—',
+      ...(str(e.branch) === null ? {} : { branch: str(e.branch) }), kind: str(e.kind) ?? '—', target, class: str(e.class) ?? '—',
       age_days: typeof e.age_days === 'number' && Number.isFinite(e.age_days) ? e.age_days : null,
       bytes: isCount(e.bytes) ? e.bytes : null, reason: str(e.reason), command: str(e.command),
     })

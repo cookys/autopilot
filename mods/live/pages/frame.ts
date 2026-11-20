@@ -14,7 +14,8 @@ import { displayWidth, truncateToWidth } from '../model'
 import { GLYPHS } from '../../tux/glyphs.ts'
 import { PALETTE } from '../../tux/palette.ts'
 import { PAGES } from './index'
-import { STRIP_SPLIT_COLS } from './layout'
+import { PAGE_KEYS, STRIP_SPLIT_COLS, V74_STRIP_ORDER } from './layout'
+import { V74_KEY } from '../v74/contract'
 import { WRAP_HANG, brokenRow, decisionCount, poolsNeedLook, sourceMissing, staleBadge, unknownPoolCount, wrapRow } from './rows'
 import type { Row } from './rows'
 import type { Step } from '../speed'
@@ -88,52 +89,54 @@ function clip(row: Row, cols: number): Row {
 // neighbouring Buttons has a one-cell separator. Under 66 columns the strip takes 2 rows (entries 1-6 on row 1, then 7, 8, 9, 0, i on row 2); at 66+ columns it takes 1 row. Labels shorten to
 // compact localized names only when a row does not fit; pet, forge and Fleet never become ambiguous action letters. No entry is dropped.
 export { STRIP_SPLIT_COLS } from './layout'
-import { PAGE_KEYS } from './layout'
 const HOST_PREFIX = 1
-const HELP_KEY = 'i'
+
+const V74_BORDER_KEY: Record<string, string> = {
+  now: 'v74.b.border.now', decide: 'v74.b.border.decide', dispatch: 'v74.b.border.dispatch', review: 'v74.b.border.review',
+  spend: 'v74.b.border.spend', hygiene: 'v74.b.border.hygiene', fleet: 'v74.b.border.fleet', todo: 'v74.b.border.todo',
+  help: 'v74.b.border.help', pet: 'v74.b.border.pet', quota: 'v74.b.border.spend', forge: 'v74.b.border.default',
+}
+
+export function frameBorderRow(page: Page, ctx: PageCtx): Row {
+  const k = V74_BORDER_KEY[page.id] ?? 'v74.b.border.default'
+  return [{ text: GLYPHS.structure.frameBL + GLYPHS.structure.rule + ' ' + ctx.t(k), dim: true }]
+}
+
 export function stripRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[] {
   const pages = opts.pages ?? PAGES
+  const byId = new Map(pages.map(p => [p.id, p]))
   const active = opts.active ?? page.id
-  const all = [...pages.filter(p => p.id !== 'help').map(p => ({ id: p.id as string, key: PAGE_KEYS[p.id] ?? p.key, label: ctx.t('tab.' + p.id) })), ...(opts.extra ?? [])]
+  const all = V74_STRIP_ORDER.filter(id => byId.has(id)).map(id => ({
+    id,
+    key: PAGE_KEYS[id] ?? V74_KEY[id as keyof typeof V74_KEY] ?? byId.get(id)!.key,
+    label: ctx.t('tab.' + id),
+  }))
   const first = (s: string): string => [...s][0] ?? s
-  const helpLabel = ctx.t('frame.help')
   type Form = 'full' | 'short'
-  const labelOf = (x: { id?: string; label: string }, f: Form): string => (f === 'full' ? x.label : x.id === 'pet' || x.id === 'forge' || x.id === 'fleet' ? ctx.t('tab.' + x.id + '_short') : first(x.label))
+  const labelOf = (x: { id: string; label: string }, f: Form): string =>
+    (f === 'full' ? x.label : x.id === 'pet' || x.id === 'fleet' ? ctx.t('tab.' + x.id + '_short') : first(x.label))
   const entrySeg = (x: { id: string; key: string; label: string }, f: Form): Seg => {
     const on = x.id === active
     return { text: x.key + ' ' + labelOf(x, f), press: 'tab:' + x.key + ':' + x.id, ...(on ? { color: PALETTE.here } : {}) }
   }
-  const entryW = (x: { key: string; label: string }, f: Form): number => displayWidth(x.key) + 1 + displayWidth(labelOf(x, f)) + HOST_PREFIX
+  const entryW = (x: { key: string; label: string; id: string }, f: Form): number =>
+    displayWidth(x.key) + 1 + displayWidth(labelOf(x, f)) + HOST_PREFIX
   const buildEntries = (list: typeof all, f: Form): { row: Row; width: number } => ({
     row: list.flatMap((x, i) => (i === 0 ? [entrySeg(x, f)] : [{ text: ' ' }, entrySeg(x, f)])),
     width: list.reduce((w, x, i) => w + (i === 0 ? 0 : 1) + entryW(x, f), 0),
   })
-  const buildWithHelp = (list: typeof all, f: Form, gap: string, help: string): { row: Row; width: number } => {
-    const head = buildEntries(list, f)
-    const sep = head.row.length === 0 ? '' : gap
-    return {
-      row: [...head.row, ...(sep === '' ? [] : [{ text: sep }]), { text: HELP_KEY + ' ' + help, dim: true }],
-      width: head.width + displayWidth(sep) + displayWidth(HELP_KEY) + HOST_PREFIX + 1 + displayWidth(help),
-    }
-  }
   const pick = (tries: { row: Row; width: number }[]): Row => (tries.find(x => x.width <= ctx.size.cols) ?? tries[tries.length - 1]).row
+  const withPet = (list: typeof all) => (ctx.size.cols >= STRIP_SPLIT_COLS ? list : list)
   if (ctx.size.cols < STRIP_SPLIT_COLS) {
-    const top = all.slice(0, 6)
-    const bot = all.slice(6)
+    const full = withPet(all)
+    const top = full.slice(0, 6)
+    const bot = full.slice(6)
     const row1 = pick([buildEntries(top, 'full'), buildEntries(top, 'short')])
-    const row2 = pick([
-      buildWithHelp(bot, 'full', '  ', helpLabel),
-      buildWithHelp(bot, 'short', '  ', helpLabel),
-      buildWithHelp(bot, 'short', ' ', first(helpLabel)),
-    ])
+    const row2 = pick([buildEntries(bot, 'full'), buildEntries(bot, 'short')])
     return [row1, row2]
   }
-  return [pick([
-    buildWithHelp(all, 'full', '  ', helpLabel),
-    buildWithHelp(all, 'short', '  ', helpLabel),
-    buildWithHelp(all, 'short', ' ', helpLabel),
-    buildWithHelp(all, 'short', ' ', first(helpLabel)),
-  ])]
+  const one = withPet(all)
+  return [pick([buildEntries(one, 'full'), buildEntries(one, 'short')])]
 }
 
 // EXACTLY ctx.size.rows rows, whatever the page returned, and the strip is always at the bottom (fixed height, PM 01M7N33J): head, padding, bottom-anchored body, actions, strip.
@@ -145,9 +148,11 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
   const first = page.render(ctx)
   if (first.actions.length > full) throw new Error('frame: ' + page.id + ' returned ' + first.actions.length + ' actions, the action area holds ' + full)
   if (H <= 0) return []
+  const borderRow = frameBorderRow(page, ctx)
   const sRows = stripRows(page, ctx, opts)
-  const S = sRows.length
-  if (H <= S) return sRows.slice(-H).map(r => clip(r, ctx.size.cols))
+  const foot = [borderRow, ...sRows]
+  const S = foot.length
+  if (H <= S) return foot.slice(-H).map(r => clip(r, ctx.size.cols))
   const avail = H - 1 - S
   const droppedDecideAct = first.actions.some(x => x.some(s => s.press === 'tab:2:decide'))
   const layout = (r: { body: Row[]; actions: Row[] }, short = false) => {
@@ -181,5 +186,5 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
     }
   }
   const gap: Row[] = Array.from({ length: room - shown.length }, blank)
-  return [head, ...gap, ...shown, ...(A === 0 ? [] : acts.slice(-A)), ...sRows].map(r => clip(r, ctx.size.cols))
+  return [head, ...gap, ...shown, ...(A === 0 ? [] : acts.slice(-A)), ...foot].map(r => clip(r, ctx.size.cols))
 }

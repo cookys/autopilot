@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # impl-defaults.test.sh — dispatch-hetero.sh implementer defaults go cheap (Fleet task 01M7S1X1TD391XTGJ2Q6SEJN6S).
-#   unpinned (no --runner/--model)  -> grok-4.7 @ low        (official:implementer:grok-4.7:grok:194)
+#   no --runner (implementer)       -> local / qwen           (hooks/tests/dispatch-hetero-local-default.test.sh)
+#   --runner grok, no --model       -> grok-4.7 @ low        (official:implementer:grok-4.7:grok:194)
 #   --runner codex                  -> gpt-6.1-terra @ low     (scorecard event 38)
 #   --runner opencode              -> opencode-go/beam-free, no variant (official:implementer:opencode-go/beam-free:opencode:339)
 #   --runner agy                   -> gemini-4-hydrogen-low @ low (official scorecard event 37)
@@ -118,16 +119,16 @@ assert_recorded() { # <tag> <model> <effort>: result JSON and manifest carry wha
   assert_eq "$3" "$(file_json_get "$MF" effort)" "$1: manifest effort is $3"
 }
 
-# Case 1: no --runner / --model / --effort -> grok-4.7 @ low, never an expensive model.
+# Case 1: --runner grok, no model/effort -> grok-4.7 @ low. No --runner is local (see dispatch-hetero-local-default.test.sh).
 : > "$GROK_ARGV"; : > "$AGY_SPAWN"
-run_case unpinned --grok-bin "$STUB_GROK" --agy-bin "$STUB_AGY" --codex-bin "$STUB_CODEX"
-assert_eq "0" "$EXIT" "unpinned: exits 0 ($OUT)"
-assert_eq "grok-4.7" "$(argv_flag_val "$GROK_ARGV" --model)" "unpinned: argv carries --model grok-4.7"
-assert_eq "low" "$(argv_flag_val "$GROK_ARGV" --reasoning-effort)" "unpinned: argv carries --reasoning-effort low"
-assert_eq "0" "$(grep -ciE 'carbon|argon|astra|fable' "$GROK_ARGV")" "unpinned: argv never names carbon|argon|astra|fable"
-assert_eq "0" "$(wc -c < "$AGY_SPAWN" | tr -d ' ')" "unpinned: agy is not spawned"
-assert_eq "grok" "$(json_last_get "$OUT" runner)" "unpinned: runner is grok"
-assert_recorded unpinned grok-4.7 low
+run_case unpinned --runner grok --grok-bin "$STUB_GROK" --agy-bin "$STUB_AGY" --codex-bin "$STUB_CODEX"
+assert_eq "0" "$EXIT" "grok default: exits 0 ($OUT)"
+assert_eq "grok-4.7" "$(argv_flag_val "$GROK_ARGV" --model)" "grok default: argv carries --model grok-4.7"
+assert_eq "low" "$(argv_flag_val "$GROK_ARGV" --reasoning-effort)" "grok default: argv carries --reasoning-effort low"
+assert_eq "0" "$(grep -ciE 'carbon|argon|astra|fable' "$GROK_ARGV")" "grok default: argv never names carbon|argon|astra|fable"
+assert_eq "0" "$(wc -c < "$AGY_SPAWN" | tr -d ' ')" "grok default: agy is not spawned"
+assert_eq "grok" "$(json_last_get "$OUT" runner)" "grok default: runner is grok"
+assert_recorded "grok default" grok-4.7 low
 
 # Case 2: --runner codex, no model/effort -> gpt-6.1-terra @ low; explicit --effort high still high.
 : > "$CODEX_ARGV"
@@ -308,6 +309,8 @@ PRE2="$TEST_TMP/pre-auto"
 make_pre_tree "$PRE2"
 rm -f "$PRE2/scripts/dispatch-hetero.sh"
 sed_mutant "$HETERO" "$PRE2/scripts/dispatch-hetero.sh" \
+  's/RUNNER="local"/RUNNER="auto"/'
+sed_mutate "$PRE2/scripts/dispatch-hetero.sh" \
   '0,/      elif \[ "$MODEL_IS_DEFAULT" -eq 1 \]; then/s//      elif [ "$MODEL_IS_DEFAULT" -eq 99 ]; then/'
 chmod +x "$PRE2/scripts/dispatch-hetero.sh"
 RED_OUT2="$(cd "$SBX" && "$PRE2/scripts/dispatch-hetero.sh" --no-verify-tip --branch feat/impl-red-auto \

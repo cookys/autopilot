@@ -20,14 +20,17 @@
 #
 # USAGE:
 #   scripts/dispatch-hetero.sh --branch <name> --prompt-file <file>
-#       [--model <id>]                        # no built-in model. Unpinned (no --runner/--model) goes to
-#                                             # grok-4.7 at effort low; --runner codex -> gpt-6.1-terra low,
+#       [--model <id>]                        # no built-in model. An implementer call with no --runner,
+#                                             # and no pace selection or strict-contract pin, uses runner local
+#                                             # and, when --model is omitted, model qwen. --runner grok with
+#                                             # no --model is still grok-4.7 at effort low; --runner codex -> gpt-6.1-terra low,
 #                                             # --runner agy -> gemini-4-hydrogen-low low (never carbon),
 #                                             # --runner opencode -> opencode-go/beam-free (no variant),
 #                                             # cursor/kimi use broker defaults; other runners REQUIRE --model.
 #                                             # A gemini-flash[-tier] alias still resolves against the live
 #                                             # `agy models` inventory. Explicit --model/--effort always win.
-#       [--runner auto|codex|agy|grok|cc-shim|local|pi|cursor|opencode|kimi|claude-native|qoderclicn] # default auto: *gpt*/*codex*→codex,
+#       [--runner auto|codex|agy|grok|cc-shim|local|pi|cursor|opencode|kimi|claude-native|qoderclicn] # implementer default (no --runner, no pace selection or contract pin): local.
+#                                              #   Other roles stay auto: *gpt*/*codex*→codex,
 #                                              #   local: shorthand for cc-shim + --sandbox bwrap + an endpoint that
 #                                              #   is qwen_local by default, or --endpoint when that name is listed
 #                                              #   in scripts/lib/local-sandbox-endpoints.json. An unlisted
@@ -35,6 +38,12 @@
 #                                              #   is a precondition conflict. Result and manifest record runner
 #                                              #   local, resolved_runner cc-shim, and the endpoint actually used
 #                                              #   (qwen_local by default, or the listed --endpoint).
+#                                              #   A local run whose prompt has no Task-Class field in the gate
+#                                              #   header window (first 8 lines, at line start or after |) gets
+#                                              #   that field on a prompt copy only (Task-Class: simple-script);
+#                                              #   the caller's file is not edited. Body prose is not a field.
+#                                              #   A local run with no --worktree-parent uses a 0700 per-user directory
+#                                              #   under $XDG_RUNTIME_DIR if set, else ${TMPDIR:-/tmp}, never inside the repo.
 #                                              #   Child env sets ENABLE_TOOL_SEARCH=false, does not set
 #                                              #   CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, and sets
 #                                              #   ANTHROPIC_CUSTOM_HEADERS to the caller's existing headers
@@ -113,7 +122,8 @@
 #                                              #   references/hetero-dispatch.md § Write sandbox.
 #       [--worktree-parent <abs dir>]          # place the new worktree under this directory instead of
 #                                              #   <main checkout>/.claude/worktrees (required with --sandbox bwrap
-#                                              #   unless --reuse-worktree: the default place is inside the repo)
+#                                              #   unless --reuse-worktree, except --runner local, which fills this
+#                                              #   with a 0700 per-user dir outside the repo when the flag is omitted)
 #       [--context-window off|warn|block]      # pre-dispatch context-window gate (default:
 #                                              #   block; also AUTOPILOT_CONTEXT_WINDOW_GATE).
 #                                              #   Over budget ⇒ fail closed BEFORE the runner
@@ -561,6 +571,7 @@ CURSOR_FAST=0          # --cursor-fast opt-in (default non-fast); runner-scoped,
 SCAFFOLD_TIER_ARG="auto"      # --scaffold-tier auto|T0|T1|T2 (explicit may only ADD scaffolding)
 SCAFFOLD_TIER_EFFECTIVE="off" # recorded in the run manifest
 SCAFFOLD_PROMPT_FILE=""       # tier-envelope temp; init early for trap reap
+LOCAL_CLASS_PROMPT_FILE=""    # local Task-Class copy; caller's prompt file is never edited
 AGY_ENVELOPE=""       # private native JSON stdout; never exposed as agent_log
 CCSHIM_ENVELOPE=""    # private claude -p --output-format json stdout; result text is what reaches LOG
 SANDBOX="off"          # --sandbox off|bwrap (cc-shim, or the one cloud fallback re-exec)
@@ -3154,7 +3165,8 @@ validate_d2_agy_claims() {
 # The endpoint is qwen_local by default, or --endpoint when that name is listed
 # in scripts/lib/local-sandbox-endpoints.json. The public name stays local
 # (LOCAL_RUNNER) for the result and the manifest.
-if [ "$RUNNER" = "local" ]; then
+# The implementer default sets RUNNER=local after pace, so both sites call this.
+apply_runner_local() {
   if [ "$ENDPOINT_SUPPLIED" -eq 1 ]; then
     _local_listed_rc=0
     local_sandbox_endpoint_listed "$ENDPOINT" || _local_listed_rc=$?
@@ -3188,6 +3200,9 @@ if [ "$RUNNER" = "local" ]; then
   if [[ ! "$LOCAL_LANE" =~ ^[A-Za-z0-9._-]+$ ]] || [[ "$LOCAL_LANE" == "." ]] || [[ "$LOCAL_LANE" == ".." ]]; then
     die_precondition "--runner local refuses AUTOPILOT_LANE that is empty, '.' or '..', or contains '/' or a character outside [A-Za-z0-9._-]"
   fi
+}
+if [ "$RUNNER" = "local" ]; then
+  apply_runner_local
 fi
 
 case "$EFFORT" in
@@ -3266,6 +3281,44 @@ if [ -n "$_ps_parsed" ]; then
 fi
 # Saved before skill-pack / scaffold prepend text, which would hide image magic bytes.
 VISION_PROMPT_FILE="$PROMPT_FILE"
+# Implementer with no --runner is the local qwen seat, unless a pin already chose one:
+# --pace-role or a pace file that returned a seat, a strict contract, or
+# AUTOPILOT_QUALIFICATION_OVERRIDE. Explicit --runner is already RUNNER_SUPPLIED.
+_impl_role="${PACE_ROLE:-${AUTOPILOT_DISPATCH_ROLE:-implementer}}"
+if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$RUNNER" = "auto" ] && [ "$STRICT_CONTRACT" -eq 0 ] \
+   && [ -z "${ENGINE_CHOICE_JSON:-}" ] && [ -z "${AUTOPILOT_QUALIFICATION_OVERRIDE:-}" ] \
+   && [ "$_impl_role" = "implementer" ]; then
+  RUNNER="local"
+fi
+unset _impl_role
+if [ "$RUNNER" = "local" ]; then
+  apply_runner_local
+fi
+# --runner local (explicit or the implementer default) with no --model is qwen. An explicit --model wins.
+if [ "$LOCAL_RUNNER" -eq 1 ] && [ "$MODEL_SUPPLIED" -eq 0 ]; then
+  MODEL="qwen"
+  MODEL_IS_DEFAULT=0
+fi
+# The caller's prompt file stays untouched. Insert when the gate's header parser
+# (headerValue: first 8 lines, at line start or after |) sees no Task-Class.
+# A body mention of the words is not a field.
+if [ "$LOCAL_RUNNER" -eq 1 ] && ! node -e '
+  const g = require(process.argv[1]);
+  process.exit(g.headerValue([process.argv[2]], "Task-Class") ? 0 : 1);
+' "$SELF_DIR/lib/cn-model-dispatch-gate.js" "$PROMPT_FILE"; then
+  LOCAL_CLASS_PROMPT_FILE="$(mktemp -t 'dispatch-hetero-local-class-XX''XX''XX')"
+  { printf '%s\n' 'Task-Class: simple-script'; cat "$PROMPT_FILE"; } > "$LOCAL_CLASS_PROMPT_FILE" \
+    || die_precondition "could not copy the prompt to add Task-Class: simple-script"
+  PROMPT_FILE="$LOCAL_CLASS_PROMPT_FILE"
+  echo "dispatch-hetero: prompt has no Task-Class line; dispatched copy adds Task-Class: simple-script" >&2
+fi
+# bwrap refuses a worktree inside a repo. Local fills a 0700 per-user parent outside the checkout.
+if [ "$LOCAL_RUNNER" -eq 1 ] && [ -z "$WORKTREE_PARENT" ] && [ -z "$REUSE_WORKTREE" ]; then
+  _local_wt_base="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}"
+  WORKTREE_PARENT="$(node "$SELF_DIR/lib/local-sandbox-parent.js" "$_local_wt_base")" \
+    || die_precondition "local runner could not create a worktree parent outside the repo"
+  unset _local_wt_base
+fi
 # d-1dfcf757 / 01M7E2A1: Chinese-model dispatch gate (barred family blocked for transcript, sensitive, core, novel or unknown-scope/size/role tasks).
 _tfg_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --role implementer --runner "$RUNNER" --model "$MODEL" ${ENDPOINT:+--endpoint "$ENDPOINT"} --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" \
   || die_precondition "${_tfg_msg:-cn_model_dispatch_barred unknown unknown (01M7E2A1, d-1dfcf757)}"
@@ -5005,6 +5058,7 @@ abort_dispatch() {
   reap_container
   cleanup_managed_codex_home
   [ -n "$SCAFFOLD_PROMPT_FILE" ] && rm -f "$SCAFFOLD_PROMPT_FILE"
+  [ -n "${LOCAL_CLASS_PROMPT_FILE:-}" ] && rm -f "$LOCAL_CLASS_PROMPT_FILE"
   [ -n "$GROK_PROMPT_FILE" ] && rm -f "$GROK_PROMPT_FILE"
   [ -n "$CCSHIM_PROMPT_FILE" ] && rm -f "$CCSHIM_PROMPT_FILE"
   _reap_ccshim_env_dir

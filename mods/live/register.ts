@@ -133,6 +133,28 @@ export function v74ArrowFromScroll(page: string, by: number): { kind: 'move'; by
   if ((page !== 'decide' && page !== 'todo') || by === 0) return null
   return { kind: 'move', by: by > 0 ? 1 : -1 }
 }
+// Speed text for the v7.4 band, including when nothing was timed (the bare row and the snapshot row).
+export function v74SpeedText(steps: readonly Step[], pet: string | null = null): string {
+  const parts = speedLabelParts(steps, pet) ?? [
+    { role: 'bolt' as const, text: GLYPHS.structure.speed + ' ' },
+    { role: 'value' as const, text: GLYPHS.structure.empty },
+    { role: 'unit' as const, text: ' tok/s' },
+  ]
+  return parts.map(s => s.text).join('')
+}
+const V74_NARROW = BAND_NARROW_STEPS.map(step => step.filter(id => id !== 'speed')).filter(step => step.length > 0)
+function v74SpeedParts(steps: readonly Step[], pet: string | null) {
+  return speedLabelParts(steps, pet) ?? [
+    { role: 'bolt' as const, text: GLYPHS.structure.speed + ' ' },
+    { role: 'value' as const, text: GLYPHS.structure.empty },
+    { role: 'unit' as const, text: ' tok/s' },
+  ]
+}
+export function v74CursorFromFocus(element: unknown): number | null {
+  if (typeof element !== 'string') return null
+  const m = /^card:(\d+)$/.exec(element)
+  return m === null ? null : Number(m[1])
+}
 export function v74BareBandSlots(own: string, fleet: { stuck: number; running: number; waiting: number } | null, decideN: number, t: T): Slot[] {
   const fleetSlot = slotFleet(fleet ?? { stuck: 0, running: 0, waiting: 0 }, t)
   return [
@@ -1536,11 +1558,13 @@ export async function frameKey($: EngineInterface, k: KeyAction): Promise<void> 
       if (r.effect?.kind === 'send') await holdDecide($) // the hold and the claim stay decideundo's: the reducer's own hold is not written
       else if (r.effect?.kind === 'undo') await undoDecide($, r.effect.id)
       else if (r.effect?.kind === 'fill') await fillPrompt($, r.effect.text)
+      if (r.nav.textMode) void $.ui.focus({ requestId: PANE_ID, key: 'v74-note' }).catch(() => undefined)
     } else if (id === 'todo') {
       const nav = await read($, V74_NAV)
       const cards = (await v74CtxOf($)).todo ?? []
       const last = Math.max(0, cards.length - 1)
       if (k.kind === 'move') await update($, V74_NAV, () => ({ ...nav, cursor: Math.min(last, Math.max(0, nav.cursor + k.by)) }))
+      else if (k.kind === 'cursor') await update($, V74_NAV, () => ({ ...nav, cursor: Math.min(last, Math.max(0, k.at)) }))
       else if (k.kind === 'pick') {
         const c = cards[nav.cursor]
         if (c !== undefined) await update($, V74_NAV, () => ({ ...nav, picks: { ...nav.picks, [c.id]: k.index } }))
@@ -1826,19 +1850,15 @@ export function registerLive(on: Parameters<Register>[0]): void {
       const decideN = v74 ? mergedDecide()?.length ?? 0 : 0
       const decideSlot: Slot | null = decideN > 0 && !base.some(s => s.id === 'decide') ? { id: 'decide', segs: [{ text: t('v74.b.decide_word'), dim: true, tag: 'chip' }, { text: ' ', tag: 'chip' }, { text: String(decideN), tag: 'chip' }] } : null
       const withFleet = [...base.slice(0, atV + 1), fleetSlot, ...(decideSlot === null ? [] : [decideSlot]), ...base.slice(atV + 1)]
-      const parts = rows >= 1 ? speedLabelParts(steps, petText) : null
+      const parts = rows >= 1 ? v74SpeedParts(steps, petText) : null
       // room is the cells left after the strip and the one-cell gap. The › is not subtracted here: fittedBandWidth counts it when `more` is set.
       const roomFor = (speedTab: boolean) => {
         const stripW = barStrip(snap, t, null, speedTab ? GLYPHS.structure.speed : null, usageOn, con).width
         return Math.max(1, columns - stripW - 1)
       }
-      // `!usageOn` draws the dim `›` (the 用量 tab had no room) even when the speed label itself fits, so the first pass counts those 2 cells
-      let fitted = layoutBandLine(withFleet, roomFor(parts !== null), parts, BAND_NARROW_STEPS, !usageOn)
-      if (parts !== null && fitted.speed === null) {
-        forgeMore = true
-        // null speed: the wider room (no forge tab) must not put the label back beside the › that stands in for it
-        fitted = layoutBandLine(withFleet, roomFor(false), null, BAND_NARROW_STEPS, true)
-      }
+      // v7.4 keeps tok/s on this row (a dash when nothing was timed). Narrowing may drop other chips, not the speed label.
+      let fitted = layoutBandLine(withFleet, roomFor(parts !== null), parts, V74_NARROW, !usageOn)
+      if (parts !== null && fitted.speed === null) fitted = { ...fitted, speed: parts }
       const drawMore = !usageOn || forgeMore
       const segs = shrinkToFitted(fitted.band.segs, fitted.speed, drawMore, roomFor(fitted.speed !== null))
       forge = fitted.speed
@@ -1846,10 +1866,10 @@ export function registerLive(on: Parameters<Register>[0]): void {
     } else if (v74) {
       // No project (or no band slots): the status row still keeps 狀態, 艦隊, 來源, 待決 N, ⓘ and tok/s. Only the own-seat segment says there is no project.
       const withFleet = v74BareBandSlots(snap?.text ?? t('band.waiting'), fleetCounts, mergedDecide()?.length ?? 0, t)
-      const parts = rows >= 1 ? speedLabelParts(steps, consoleOn ? null : petText) : null
+      const parts = rows >= 1 ? v74SpeedParts(steps, consoleOn ? null : petText) : null
       const roomFor = (speedTab: boolean) => Math.max(1, columns - 1)
-      let fitted = layoutBandLine(withFleet, roomFor(parts !== null), parts, BAND_NARROW_STEPS, false)
-      if (parts !== null && fitted.speed === null) fitted = layoutBandLine(withFleet, roomFor(false), null, BAND_NARROW_STEPS, true)
+      let fitted = layoutBandLine(withFleet, roomFor(parts !== null), parts, V74_NARROW, false)
+      if (parts !== null && fitted.speed === null) fitted = { ...fitted, speed: parts }
       const segs = shrinkToFitted(fitted.band.segs, fitted.speed, false, roomFor(fitted.speed !== null))
       forge = fitted.speed
       bandPreset = { segs, width: fittedBandWidth(segs.reduce((n, s) => n + displayWidth(s.text), 0), null, false) }
@@ -1892,7 +1912,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge, usageOn, moreTo, con, bandPreset, consoleOn && consoleSnap !== null ? bandQuotaSeg(normalizedPools(consoleSnap), bandNow, t, qSrc) : null, paneOpen || v74, legacyTabs, forgeRow !== null, legacyTabs ? undefined : () => { void togglePane() }, paneOpen)
     // v7.4: the O4 shell and the two-row band never draw. Closed: the one-line BandBar. Open: the page as a full-width framed tree (title in the top border, hint in the bottom border), the tab row, then the BandBar row.
     if (v74) {
-      const height = Math.min(rows - 2, V74_FRAME_MAX) // the band row and the tab row stay; the frame takes the rest, never more than the design's 27 rows (inline layout: maxRows can exceed the screen)
+      const height = Math.min(rows - 1, V74_FRAME_MAX) // the band row stays; the tab row is the frame's bottom border. Never more than the design's 27 rows.
       if (!v74Open || height < V74_FRAME_MIN) return stackRows(el, [bar.row1])
       const page = await paneTree($, e as never, false, height)
       await logBandGeometry($, rows, columns, height + 2)
@@ -2162,6 +2182,14 @@ export function registerLive(on: Parameters<Register>[0]): void {
   })
 
   // bandlayout: the band's card view scrolls its own window (the wheel and the scroll keys, when the engine sends them to the band), one offset per tab (bandScroll), kept when the tab is left
+  on('ui.focus', ($, e, next) => {
+    const raw = (e as { element?: unknown }).element
+    const at = v74CursorFromFocus(raw)
+    if (at === null || decideLocal.textMode || (panePage !== 'decide' && panePage !== 'todo') || bandLegacy || !v74Open) return next(e)
+    void frameKey($, { kind: 'cursor', at })
+    return {}
+  })
+
   on('ui.scroll', { component: 'AbovePrompt' }, ($, e, next) => {
     const arrow = !bandLegacy && v74Open ? v74ArrowFromScroll(panePage, e.by) : null
     if (arrow !== null) { void frameKey($, arrow); return {} }

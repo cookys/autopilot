@@ -100,8 +100,32 @@ const V74_BORDER_KEY: Record<string, string> = {
 
 const TINY_FRAME_ROWS = 3
 export const frameHintText = (page: Page, ctx: PageCtx): string => ctx.t(V74_BORDER_KEY[page.id] ?? 'v74.b.border.default', { ud: GLYPHS.structure.up + GLYPHS.structure.behind })
+export const frameHintShort = (page: Page, ctx: PageCtx): string => {
+  const full = frameHintText(page, ctx)
+  const cut = full.split(' · ')[0]
+  return cut === '' ? full : cut
+}
 export function frameBorderRow(page: Page, ctx: PageCtx): Row {
   return [{ text: GLYPHS.structure.frameBL + GLYPHS.structure.rule + ' ' + frameHintText(page, ctx), dim: true }]
+}
+
+// PM 01M7XB0B: one bottom border. Hints on the left, page tabs on the right, the current page marked.
+// Short width: shorten the hint first, then tabs become digits (the current page keeps its name). Never a second row.
+export type BorderTab = { key: string; id: string; text: string }
+export function frameBottomFit(cols: number, hintFull: string, hintShort: string, tabs: readonly BorderTab[], active: string): { hint: string; tabs: BorderTab[] } {
+  const digits = tabs.map(x => ({ ...x, text: x.id === active ? x.key + ' ' + x.text.replace(/^\d+\s+/, '') : x.key }))
+  const fullTabs = tabs.map(x => ({ ...x, text: x.text }))
+  const chrome = 2 + 2 + 1 + 1 // ╰─, two spaces, the gap before the tabs, ╯
+  const tabW = (list: readonly BorderTab[]): number => list.reduce((n, x, i) => n + (i === 0 ? 0 : 1) + displayWidth(x.text), 0)
+  const fits = (hint: string, list: readonly BorderTab[]): boolean => chrome + displayWidth(hint) + 1 + tabW(list) <= cols
+  // Short width: shorten the hint first. Only after the shortest hint still does not fit do the tabs become digits.
+  for (const hint of [hintFull, hintShort, '']) {
+    if (fits(hint, fullTabs)) return { hint, tabs: fullTabs }
+  }
+  for (const hint of [hintShort, '']) {
+    if (fits(hint, digits)) return { hint, tabs: digits }
+  }
+  return { hint: '', tabs: digits }
 }
 
 export function stripRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[] {
@@ -158,7 +182,8 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
   const avail = H - 1 - S
   const droppedDecideAct = first.actions.some(x => x.some(s => s.press === 'tab:2:decide'))
   const layout = (r: { body: Row[]; actions: Row[] }, short = false) => {
-    const body = r.body.filter(x => x.some(s => s.text.trim() !== '')).flatMap(x => {
+    const read = page.id === 'decide' || page.id === 'todo' || page.id === 'help'
+    const body = r.body.filter(x => read || x.some(s => s.text.trim() !== '')).flatMap(x => {
       if (opts.topAnchor === true && x.map(s => s.text).join('').trimStart().startsWith(GLYPHS.structure.open + ' ') && x.map(s => s.text).join('').trimEnd().endsWith(GLYPHS.structure.rule)) { // only section rules (they end in ─); a ▾ legend row is text
         const row = x.map(s => ({ ...s }))
         const last = row[row.length - 1]
@@ -167,8 +192,14 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
         last.text += GLYPHS.structure.rule.repeat(Math.max(0, ctx.size.cols - width))
         return wrapRow(row, ctx.size.cols, WRAP_HANG)
       }
-      return wrapRow(x, ctx.size.cols, WRAP_HANG)
-    }) // X5: spare rows belong above the content; N3: reasons keep their hanging indent
+      const joined = x.map(s => s.text).join('')
+      const lead = /^ */.exec(joined)?.[0].length ?? 0
+      const width = read ? Math.min(80, ctx.size.cols) : ctx.size.cols
+      const hang = read ? Math.max(WRAP_HANG, Math.min(lead, Math.max(0, width - 4))) : WRAP_HANG
+      return wrapRow(x, width, hang)
+    })
+    while (read && body.length > 0 && body[body.length - 1].every(s => s.text.trim() === '')) body.pop() // a blank between options stays; the row that touches the actions does not
+    // X5: spare rows belong above the content; N3: reasons keep their hanging indent. Reading pages (待決、待辦、說明) wrap at 70–80 columns.
     const omitEmptyAct = short && page.id === 'now' && (droppedDecideAct || decisionCount(ctx) > 0 || body.some(x => x.some(s => s.press === 'tab:2:decide')))
     const acts: Row[] = opts.topAnchor === true
       ? r.actions.filter(row => row.some(s => s.press !== undefined) || row.map(s => s.text).join('').trim() !== ctx.t('frame.unknown'))

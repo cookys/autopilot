@@ -13,7 +13,7 @@ const PUBLISHED = '2026-10-04T10:00:00.000Z'
 const NOW = Date.parse(PUBLISHED) + 30_000
 const PANE = 'autopilot-live'
 type Node = { type?: string; props?: Record<string, any>; children?: any[] }
-const text = (n: any): string => typeof n === 'string' ? n : Array.isArray(n) ? n.map(text).join('') : n?.props?.label ?? text(n?.children ?? [])
+const text = (n: any): string => typeof n === 'string' ? n : Array.isArray(n) ? n.map(text).join('') : (n?.props?.width === 0 || n?.props?.height === 0) ? '' : n?.props?.label ?? text(n?.children ?? [])
 const walk = (n: any): Node[] => !n || typeof n !== 'object' ? [] : Array.isArray(n) ? n.flatMap(walk) : [n, ...walk(n.children)]
 const buttons = (n: any): Node[] => walk(n).filter(n => n.type === 'Button')
 
@@ -63,8 +63,6 @@ const rowsOf = (tree: Node): Node[] => {
   visit(tree)
   return out
 }
-const DESIGN_TABS = '  1 現況  2 待決  3 派工  4 審查  5 花費  6 殘留  7 艦隊  8 待辦  9 說明'
-
 for (const cols of [209, 120, 80]) {
   test(`v74 host: closed at ${cols} columns is one band row, no O4 shell rows`, async ($, on) => {
     const h = host(on)
@@ -97,14 +95,16 @@ test('v74 host: /live-pane opens the full-width page at 209 columns: title in th
   expect(tree.children?.length, 'page tree + band row').toBe(2)
   const page = tree.children![0] as Node
   const rows = lines(page)
-  expect(rows.length, 'top + 25 body rows + bottom (27, the design cap) + tab row').toBe(27 + 1)
+  expect(rows.length, 'top + body + the bottom border that also carries the tabs (27, the design cap)').toBe(27)
   expect(rows[0].startsWith('╭─ 現況')).toBe(true)
   expect(rows[0].endsWith('╮')).toBe(true)
-  expect(rows[rows.length - 2].startsWith('╰─  ↑↓ 捲動 · Enter 摺疊 · ctrl+x tab 拿鍵盤 · Esc 還給輸入框  ─')).toBe(true)
-  expect(rows[rows.length - 2].endsWith('╯')).toBe(true)
-  expect(rows[rows.length - 1].trimEnd()).toBe(DESIGN_TABS)
-  for (const r of [rows[0], rows[rows.length - 2]]) expect(displayWidth(r), r).toBe(209) // the borders; a body row's right `│` is pushed to the edge by the engine (flexGrow)
-  for (const r of rows.slice(1, -2)) { expect(r.startsWith('│ ')).toBe(true); expect(r.endsWith(' │')).toBe(true) }
+  expect(rows[rows.length - 1].startsWith('╰─  ↑↓ 捲動 · Enter 摺疊 · ctrl+x tab 拿鍵盤 · Esc 還給輸入框')).toBe(true)
+  expect(rows[rows.length - 1].endsWith('╯')).toBe(true)
+  expect(rows[rows.length - 1]).toContain('1 現況')
+  expect(rows[rows.length - 1]).toContain('9 說明')
+  expect(rows.slice(0, -1).some(r => r.includes('1 現況') && r.includes('9 說明'))).toBe(false)
+  for (const r of [rows[0], rows[rows.length - 1]]) expect(displayWidth(r), r).toBe(209) // the borders; a body row's right `│` is pushed to the edge by the engine (flexGrow)
+  for (const r of rows.slice(1, -1)) { expect(r.startsWith('│ ')).toBe(true); expect(r.endsWith(' │')).toBe(true) }
   const bandRow = text(tree.children![1])
   expect(bandRow.endsWith('▾')).toBe(true)
   expect(bandRow).not.toContain('圓桌')
@@ -122,10 +122,13 @@ for (const cols of [120, 80]) {
     const band = await mountBand($, cols, 24)
     const tree = await band.drawn() as Node
     const rows = lines(tree.children![0])
-    expect(rows.length).toBe(24 - 2 + 1)
-    for (const r of [rows[0], rows[rows.length - 2]]) expect(displayWidth(r), r).toBe(cols)
-    for (const r of rows.slice(1, -2)) expect(r.startsWith('│ ') && r.endsWith(' │')).toBe(true)
-    expect(rows[rows.length - 1].trimEnd()).toBe(DESIGN_TABS)
+    expect(rows.length).toBe(24 - 1)
+    for (const r of [rows[0], rows[rows.length - 1]]) expect(displayWidth(r), r).toBe(cols)
+    for (const r of rows.slice(1, -1)) expect(r.startsWith('│ ') && r.endsWith(' │')).toBe(true)
+    expect(rows[rows.length - 1].startsWith('╰─')).toBe(true)
+    expect(rows[rows.length - 1].endsWith('╯')).toBe(true)
+    expect(rows[rows.length - 1]).toContain('1 現況')
+    expect(rows[rows.length - 1]).toContain('9 說明')
     expect(text(tree)).not.toContain('圓桌')
     await band.unmount()
     await $.session.end({ reason: 'exit' })

@@ -6,7 +6,7 @@ import { NO_NAV } from './pages/decide'
 import { makeT } from './i18n'
 import { mergeDecideCards } from './v74/feeds'
 import { routeKey } from './pages/keys'
-import { v74ArrowFromScroll, v74BareBandSlots } from './register'
+import { v74ArrowFromScroll, v74BareBandSlots, v74CursorFromFocus, v74SpeedText } from './register'
 import type { DecideCard } from './v74/contract'
 import decideFx from './fixtures/v74/decide.fixture'
 
@@ -43,6 +43,54 @@ test('r4 focus: the v7.4 frame has a visible autoFocus button (ctrl+x Tab can la
   expect(focus.length).toBeGreaterThan(0)
   expect(focus.every(b => flat(b).trim() !== '')).toBe(true)
   expect(buttons.some(b => b.props.width === 0 || b.props.height === 0)).toBe(false)
+})
+
+test('r5 arrows: the host focus event on card:N is what moves the cursor (ui.scroll is not delivered while the frame is shorter than the viewport)', () => {
+  expect(v74CursorFromFocus('card:2')).toBe(2)
+  expect(v74CursorFromFocus('card:0')).toBe(0)
+  expect(v74CursorFromFocus('tab:decide')).toBeNull()
+  expect(v74CursorFromFocus(undefined)).toBeNull()
+  const buttons = framed().filter(n => n.kind === 'Button')
+  const heads = buttons.filter(b => String(b.props.key).startsWith('card:'))
+  expect(heads.length).toBeGreaterThan(1)
+  const focus = buttons.filter(b => b.props.autoFocus === true)
+  expect(focus.map(b => b.props.key)).toEqual(['card:0'])
+  focus[0].props.onPress()
+})
+
+test('r5 pick: a chosen option changes the line, not only its colour', () => {
+  const shown = PAGES.map(p => ({ ...p, framed: true as const }))
+  const tree = walk(Pane(EL as never, live, 'decide', () => {}, t, 100, () => {}, new Set(), () => {}, new Set(), null, null, null, null, null, {
+    pages: shown, pageId: 'decide', console: null, nowMs: 1, rows: 24, v74Box: true,
+    v74: { pm: null, pmFetchedMs: null, decide: cards, todo: null, nav: { cursor: 0, picks: { [cards[0].id]: 1 }, notes: {}, noteMode: false } },
+    decide: { ...NO_NAV, picks: { [cards[0].id]: 1 } },
+  }))
+  const line = walk(tree).filter(n => n.kind === 'Text').map(flat).join('\n')
+  expect(line).toContain('◆')
+  expect(line).toMatch(/b: .*\u25c6|◆/)
+})
+
+test('r5 note: while typing, the note Input is the only autoFocus and a later digit hotkey is gone', () => {
+  const shown = PAGES.map(p => ({ ...p, framed: true as const }))
+  const tree = walk(Pane(EL as never, live, 'decide', () => {}, t, 100, () => {}, new Set(), () => {}, new Set(), null, null, null, null, null, {
+    pages: shown, pageId: 'decide', console: null, nowMs: 1, rows: 24, v74Box: true,
+    v74: { pm: null, pmFetchedMs: null, decide: cards, todo: null, nav: { cursor: 0, picks: {}, notes: {}, noteMode: true } },
+    decide: { ...NO_NAV, textMode: true, textBuf: 'test note' },
+  }))
+  const nodes = walk(tree)
+  const input = nodes.find(n => n.kind === 'Input')
+  expect(input?.props.autoFocus).toBe(true)
+  expect(input?.props.key).toBe('v74-note')
+  const focused = nodes.filter(n => n.props?.autoFocus === true)
+  expect(focused.filter(n => n.kind === 'Button')).toEqual([])
+  const noteInputs = focused.filter(n => n.kind === 'Input' && n.props.key === 'v74-note')
+  expect(new Set(noteInputs).size).toBe(1)
+  expect(nodes.some(n => n.kind === 'Button' && n.props.hotkey === '4')).toBe(false)
+  expect(nodes.map(flat).join('\n')).toContain('test note')
+})
+
+test('r5 speed: the bare band still names tok/s when nothing was timed', () => {
+  expect(v74SpeedText([])).toContain('tok/s')
 })
 
 test('r4 arrows: up and down move the decide and todo cursor by one, and other pages keep scrolling', () => {

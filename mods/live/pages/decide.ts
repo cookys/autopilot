@@ -87,6 +87,7 @@ export function decideReduce(nav: DecideNav, key: KeyAction, ctx: PageCtx, nowMs
   const heldNow = d !== null && d.id !== null && nav.hold?.[d.id] !== undefined
   const sentNow = d !== null && d.id !== null && nav.sent[d.id] !== undefined && nav.fixing?.[d.id] === undefined
   if (v74Cards(ctx) !== null && key.kind === 'move') return same({ cursor: Math.min(Math.max(0, m.all.length - 1), Math.max(0, cursor + key.by)), opt: null, detailOffset: 0 })
+  if (v74Cards(ctx) !== null && key.kind === 'cursor') return same({ cursor: Math.min(Math.max(0, m.all.length - 1), Math.max(0, key.at)), opt: null, detailOffset: 0 })
   if (v74Cards(ctx) !== null && key.kind === 'submit') { // s sends every answered card that is not already in its window (holdSend); the effect carries the first one
     const ready = m.all.flatMap(it => (it.kind === 'own' && it.d.id !== null && nav.hold?.[it.d.id] === undefined && !(nav.sent[it.d.id] !== undefined && nav.fixing?.[it.d.id] === undefined) ? [it.d] : []))
       .flatMap(c => { const line = decideLine(c, nav); return line === null ? [] : [{ id: c.id as string, line }] })
@@ -442,32 +443,46 @@ function v74Card(c: DecideCard, i: number, selected: boolean, nav: DecideNav, ct
   const out: Row[] = []
   const mark = selected ? GLYPHS.structure.folded : ' '
   const title = seg(c.title, selected ? { color: PALETTE.here, here: true } : {})
-  // The band frame has no host Pane, so the selected card's ▸ is the focus landing (autoFocus). A zero-size hotkey is not a Tab stop.
-  const head = selected && ctx.box === true
-    ? [seg(mark, { press: 'band-focus' }), seg('  ' + String(i + 1) + '. '), title, seg('：' + c.question)]
+  const box = ctx.box === true
+  // The band frame has no host Pane. Each card head is a Button keyed card:N so the host's spatial up/down
+  // (a focused Button consumes arrows; they never become ui.scroll while the frame is shorter than the viewport)
+  // lands on the next card and ui.focus reports that key. Only the selected ▸ takes autoFocus.
+  const head = box
+    ? [seg(mark + '  ' + String(i + 1) + '. ', { press: 'card:' + i }), title, seg('：' + c.question)]
     : [seg(mark + '  ' + String(i + 1) + '. '), title, seg('：' + c.question)]
-  out.push(truncateSegs(head, cols))
-  out.push(truncateSegs([seg('    '), dimSeg(t('v74.d.bg')), seg('   ' + (c.background ?? t('v74.d.bg_none')))], cols))
+  out.push(box ? head : truncateSegs(head, cols))
+  const bg = c.background ?? t('v74.d.bg_none')
+  out.push(box ? [seg('    '), dimSeg(t('v74.d.bg')), seg('   ' + bg)] : truncateSegs([seg('    '), dimSeg(t('v74.d.bg')), seg('   ' + bg)], cols))
   const picked = picks[c.id]
   const held = nav.hold?.[c.id] !== undefined
   const sent = nav.sent[c.id] !== undefined && nav.fixing?.[c.id] === undefined
   const room = Math.max(4, Math.floor(cols / 2))
   c.options.forEach((o, k) => {
     const rec = o.recommended ? ' ' + GLYPHS.structure.recommend : ''
-    const here = picked === k ? { color: PALETTE.here } : {}
-    if (!selected || k >= THREE) { out.push(truncateSegs([seg('      ' + DOT + ' '), seg(truncateToWidth(o.label, room) + rec, here)], cols)); return }
+    const markPick = picked === k ? ' ' + GLYPHS.structure.decisions : ''
+    const tone = picked === k ? { color: PALETTE.here } : o.recommended ? { color: PALETTE.attention } : {}
+    if (box && k > 0) out.push([seg('')])
+    if (!selected || k >= THREE || box) {
+      const text = selected && k < THREE ? PICK_KEYS[k] + ': ' + o.label + rec + markPick : truncateToWidth(o.label, room) + rec + markPick
+      const row = selected && k < THREE
+        ? [seg('      '), seg(text, tone)]
+        : [seg('      ' + DOT + ' '), seg(text, tone)]
+      out.push(box ? row : truncateSegs(row, cols))
+      return
+    }
     const press = 'key:' + PICK_KEYS[k]
-    const label = PICK_KEYS[k] + ': ' + truncateToWidth(o.label, room) + rec
+    const label = PICK_KEYS[k] + ': ' + truncateToWidth(o.label, room) + rec + markPick
     const pad = ' '.repeat(Math.max(2, 14 - displayWidth(label)))
-    out.push(truncateSegs([seg('      '), seg(label, { press, ...here }), ...(o.detail === '' ? [] : [seg(pad), dimSeg(o.detail)])], cols))
+    out.push(truncateSegs([seg('      '), seg(label, { press, ...tone }), ...(o.detail === '' ? [] : [seg(pad), dimSeg(o.detail)])], cols))
   })
   if (held) out.push([seg('      '), dimSeg(t('v74.d.held', { k: picked === undefined ? '-' : String(PICK_KEYS[picked] ?? picked + 1) }))])
   else if (sent) out.push([seg('      '), dimSeg(t('v74.d.sent'))])
   const note = notes[c.id] ?? ''
   const noteText = selected && nav.textMode ? nav.textBuf + CARET : note === '' ? t('v74.d.note_empty') : note
-  out.push(truncateSegs(selected
-    ? [seg('      '), seg('m ' + t('v74.d.note'), { press: 'key:m' }), seg(noteText)]
-    : [seg('      ' + t('v74.d.note')), seg(noteText)], cols))
+  const noteRow = selected
+    ? [seg('      '), seg('m ' + t('v74.d.note'), box ? {} : { press: 'key:m' }), seg(noteText)]
+    : [seg('      ' + t('v74.d.note')), seg(noteText)]
+  out.push(box ? noteRow : truncateSegs(noteRow, cols))
   return out
 }
 

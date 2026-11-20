@@ -8,6 +8,8 @@ export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session-mode"
 export AUTOPILOT_FOREMAN_GUARD_DIR="$TEST_TMP/foreman-guard"
 export AUTOPILOT_SESSION_ID="fg-test-session"
 unset AUTOPILOT_FOREMAN_GUARD_MODE AUTOPILOT_FOREMAN_GUARD_BASH_CAP
+unset AUTOPILOT_PARENT_SESSION_ID AUTOPILOT_CHILD_SESSION_ID
+export AUTOPILOT_FOREMAN_GUARD_POLL_ENFORCE_FROM='2020-01-01T00:00:00Z'
 mkdir -p "$AUTOPILOT_SESSION_MODE_DIR" "$AUTOPILOT_FOREMAN_GUARD_DIR"
 
 REPO="$TEST_TMP/repo"; mkdir -p "$REPO"; git -C "$REPO" init -q
@@ -23,21 +25,22 @@ bash_payload() { # <agent_id|""> <command> [background]
 }
 monitor_payload() { printf '{"tool_name":"Monitor","agent_id":"%s","session_id":"fg-test-session","tool_input":{"command":"tail -f x"},"hook_event_name":"PreToolUse"}' "$1"; }
 
-# ── 1. inert outside scope ─────────────────────────────────────────────
+# ── 1. poll_scope=all: subagent polls denied without l4-l6 marker ──────
 clear_marker; reset_state
 run_hook foreman-guard.js "$(bash_payload agent-1 'sleep 60')"
 assert_eq 0 "$__RUN_EXIT" "no marker: exit 0"
-assert_eq "" "$__RUN_STDOUT" "no marker: silent even for a sleep"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "no marker: sleep denied"
+assert_contains "$__RUN_STDOUT" 'run_in_background' "no marker: names run_in_background"
 
 set_marker l3
 run_hook foreman-guard.js "$(bash_payload agent-1 'sleep 60')"
-assert_eq "" "$__RUN_STDOUT" "l3 marker: inert (not an orchestrated session)"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "l3 marker: polling still denied for subagent"
 
 set_marker l4
 run_hook foreman-guard.js "$(bash_payload '' 'sleep 60')"
-assert_eq "" "$__RUN_STDOUT" "l4 marker but no agent_id (depth-0): inert"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "depth-0 sleep denied once poll_enforce_from is past"
 run_hook foreman-guard.js "$(monitor_payload '')"
-assert_eq "" "$__RUN_STDOUT" "depth-0 keeps Monitor"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "depth-0 Monitor denied once poll_enforce_from is past"
 
 # ── 2. polling deny for a subagent in an l4 session ───────────────────
 reset_state
@@ -187,7 +190,7 @@ done
 node "$REPO_ROOT/scripts/session-mode.js" set --level l4 --repo-root "$REPO" --ttl-hours 0 >/dev/null 2>&1 || true
 sleep 1
 run_hook foreman-guard.js "$(bash_payload agent-1 'sleep 30')"
-assert_eq "" "$__RUN_STDOUT" "expired marker: inert (fail-open)"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "expired marker: poll still denied for subagent"
 
 # ── 7. garbage payload: fail-open ─────────────────────────────────────
 set_marker l4

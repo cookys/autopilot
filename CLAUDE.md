@@ -80,6 +80,7 @@ Bump with `scripts/sync-version.js` only. 3.0.0 final is the operator's "3.0.0.0
 - Never read, print or copy credentials, and give dispatch children a throwaway config dir seeded with only `.credentials.json`, never the real `~/.claude` ([`references/hetero-dispatch.md`](references/hetero-dispatch.md)); destructive ops follow the global Red lines tiers.
 - A SHIP-AS-IS reviewed branch merges to `develop` once suites are green, never batched; `check-unmerged-ship.js` flags it after 1 h.
 - Cloud Kimi/GLM/Qwen/DeepSeek/MiniMax/qoder: no transcript/sensitive/core/novel/review-role (`scripts/lib/cn-model-dispatch-gate.js`). qwen_local review skip is shipped-only until 2026-11-21.
+- Subagents never poll a background job (sleep loops, re-reading output, Monitor): `foreman-guard` denies it in every subagent; wait for the completion notification.
 
 ## Where context lives
 

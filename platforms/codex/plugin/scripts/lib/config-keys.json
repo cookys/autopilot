@@ -1186,6 +1186,42 @@
       ]
     },
     {
+      "name": "foreman_guard.poll_scope",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": "all",
+      "readers": [
+        "hooks/foreman-guard.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_FOREMAN_GUARD_POLL_SCOPE"
+      ],
+      "summary": "all (default): polling rules deny in every subagent; foreman: only inside l4-l6 marker sessions",
+      "type": "enum",
+      "allowed": [
+        "all",
+        "foreman"
+      ]
+    },
+    {
+      "name": "foreman_guard.poll_enforce_from",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": "2026-11-24T00:00:00+08:00",
+      "readers": [
+        "hooks/foreman-guard.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_FOREMAN_GUARD_POLL_ENFORCE_FROM"
+      ],
+      "summary": "ISO date-time when polling-rule hits switch from warn to deny. Before it, a hit is allowed with a stderr warning. An unparsable value denies immediately. With poll_scope=all this covers depth-0 as well as subagents.",
+      "type": "string"
+    },
+    {
       "name": "foreman_guard.reserve_calls",
       "kind": "config_key",
       "audience": "user",
@@ -5503,6 +5539,36 @@
         "foreman_guard.mode"
       ],
       "summary": "Environment override of foreman_guard.mode."
+    },
+    {
+      "name": "AUTOPILOT_FOREMAN_GUARD_POLL_SCOPE",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/foreman-guard.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "foreman_guard.poll_scope"
+      ],
+      "summary": "Environment override of foreman_guard.poll_scope."
+    },
+    {
+      "name": "AUTOPILOT_FOREMAN_GUARD_POLL_ENFORCE_FROM",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/foreman-guard.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "foreman_guard.poll_enforce_from"
+      ],
+      "summary": "Environment override of foreman_guard.poll_enforce_from."
     },
     {
       "name": "AUTOPILOT_FOREMAN_GUARD_RESERVE_CALLS",

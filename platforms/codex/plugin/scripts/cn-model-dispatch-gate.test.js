@@ -551,7 +551,7 @@ test('local fleet endpoint (PM 01M7F6TK): qwen_local is not cloud dispatch; clou
   const env0 = { ...OK, AUTOPILOT_TASK_SCOPE: 'lib/engine/run.js', AUTOPILOT_TASK_SIZE: 'L', AUTOPILOT_TASK_READS_TRANSCRIPT: '1' };
   const at = (x) => gate.check({ ...x, env: env0, cwd: core });
   const LOCAL = { runner: 'cc-shim', model: 'Qwen3.8-27B-QUASAR-NVFP4', endpoint: 'qwen_local' };
-  assert.deepEqual(gate.localEndpoints(), ['qwen_local']);
+  assert.deepEqual(gate.localEndpoints(), ['qwen_local', 'glm_local']);
   assert.equal(at(LOCAL).cls, 'transcript', 'local qwen is not exempt: transcript still bars');
   assert.equal(at(LOCAL).family, 'alibaba');
   assert.equal(at({ runner: 'anthropic-compatible', endpoint: 'qwen_local' }).cls, 'transcript');
@@ -776,4 +776,43 @@ test('review_local_exceptions: qwen_local review role is allowed only before the
   assert.equal(cliOk.status, 0, cliOk.stderr);
   const cliAliasOk = run('node', ['-e', wrapScript, gateMod, 'qwen_local', 'Qwen3.8-27B-QUASAR-NVFP4', '', normal, EXC_BEFORE], EXC_REV);
   assert.equal(cliAliasOk.status, 0, cliAliasOk.stderr);
+});
+
+test('local served family skips core-dir and core-unset (operator via PM, ledger fadf8dc9)', () => {
+  const hooksRepo = gitRepo('local-core-hooks');
+  fs.mkdirSync(path.join(hooksRepo, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(hooksRepo, '.claude', 'cn-model-gate.json'), JSON.stringify({ core_dirs: ['hooks/**'] }));
+  const QWEN = { runner: 'cc-shim', model: 'Qwen3.8-27B-QUASAR-NVFP4', endpoint: 'qwen_local' };
+  const GLM = { runner: 'cc-shim', model: 'glm-4.6', endpoint: 'glm_local' };
+  const base = {
+    AUTOPILOT_TASK_SIZE: 'XS',
+    AUTOPILOT_TASK_ROLE: 'implementer',
+    AUTOPILOT_TASK_SCOPE: 'hooks/foo.sh',
+    AUTOPILOT_TASK_CLASS: 'simple-script',
+  };
+  const qwenCore = gate.check({ ...QWEN, env: base, cwd: hooksRepo });
+  assert.equal(qwenCore.allowed, true, 'qwen_local may edit a configured core dir');
+  assert.equal(qwenCore.family, 'alibaba');
+  const glmCore = gate.check({ ...GLM, env: base, cwd: hooksRepo });
+  assert.equal(glmCore.allowed, true, 'glm_local serving GLM may edit a configured core dir');
+  assert.equal(glmCore.family, 'zhipu');
+  const cloud = gate.check({ runner: 'cc-shim', model: 'Qwen3.8-Max', endpoint: 'qwen', env: base, cwd: hooksRepo });
+  assert.equal(cloud.allowed, false);
+  assert.equal(cloud.cls, 'core-dir', 'cloud qwen keeps core-dir');
+  const kimiOnLocal = gate.check({ runner: 'cc-shim', model: 'kimi-code/kimi-for-coding', endpoint: 'qwen_local', env: base, cwd: hooksRepo });
+  assert.equal(kimiOnLocal.cls, 'core-dir', 'a different barred family on qwen_local keeps core-dir');
+  assert.equal(kimiOnLocal.family, 'moonshot');
+  const big = gate.check({ ...QWEN, env: { ...base, AUTOPILOT_TASK_SIZE: 'M' }, cwd: hooksRepo });
+  assert.equal(big.cls, 'core-size', 'local served family still blocks core-size');
+  const bare = gitRepo('local-core-unset');
+  fs.mkdirSync(path.join(bare, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(bare, '.claude', 'cn-model-gate.json'), JSON.stringify({ core_dirs: [] }));
+  const src = gate.check({ ...QWEN, env: { ...base, AUTOPILOT_TASK_SCOPE: 'src/a.js' }, cwd: bare });
+  assert.equal(src.allowed, true, 'empty core_dirs does not core-unset a local served family');
+  const noClass = gate.check({
+    ...QWEN,
+    env: { AUTOPILOT_TASK_SIZE: 'XS', AUTOPILOT_TASK_ROLE: 'implementer', AUTOPILOT_TASK_SCOPE: 'hooks/foo.sh' },
+    cwd: hooksRepo,
+  });
+  assert.equal(noClass.cls, 'unknown-task-class', 'missing Task-Class still blocks');
 });

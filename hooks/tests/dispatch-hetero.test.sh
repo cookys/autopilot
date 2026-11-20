@@ -2786,6 +2786,9 @@ assert_contains "$OUT" "precondition_failed" "hetero cc-shim invalid effort is a
 assert_file_absent "$HETERO_CC_ARGV" "hetero cc-shim invalid effort never launched claude"
 
 # --runner local is cc-shim + qwen_local + bwrap. The public runner stays local.
+# Empty token dir: these cases must not stat the real ~/.config gateway token dir.
+mkdir -p "$TEST_TMP/no-gw-tokens"
+export AUTOPILOT_GATEWAY_TOKEN_DIR="$TEST_TMP/no-gw-tokens"
 STUB_LOCAL="$TEST_TMP/cc-local"
 cat > "$STUB_LOCAL" <<EOF
 #!/usr/bin/env bash
@@ -2800,6 +2803,19 @@ printf '%s\n' "\$@" > local-argv.txt
     printf 'DISABLE_TRAFFIC=unset\n'
   fi
 } > local-runner-probe.txt
+# Record only the x-lane line. Other header values stay out of this file.
+printf '%s\n' "\${ANTHROPIC_CUSTOM_HEADERS-}" | grep -E '^x-lane: ' > local-lane.txt || true
+# Header names only, in order. Values never land in the worktree.
+printf '%s\n' "\${ANTHROPIC_CUSTOM_HEADERS-}" | awk -F: '{ gsub(/\r/, "", \$1); if (\$1 != "") print \$1 }' > local-header-names.txt
+if [ -n "\${AUTOPILOT_TEST_AUTH_EXPECT_FILE:-}" ] && [ -r "\${AUTOPILOT_TEST_AUTH_EXPECT_FILE}" ]; then
+  _exp=\$(cat "\${AUTOPILOT_TEST_AUTH_EXPECT_FILE}")
+  if [ "\${ANTHROPIC_AUTH_TOKEN-}" = "\$_exp" ]; then
+    printf 'match\n' > local-auth.txt
+  else
+    printf 'mismatch\n' > local-auth.txt
+  fi
+  unset _exp
+fi
 printf '%s' '{"type":"result","is_error":false,"result":"ok"}'
 EOF
 chmod +x "$STUB_LOCAL"
@@ -2826,6 +2842,8 @@ assert_contains "$LOCAL_ARGV" "-p " "hetero local claude argv is the cc-shim -p 
 PROBE_TXT="$(git -C "$SBX" show "${PROBE_SHA}:local-runner-probe.txt")"
 assert_contains "$PROBE_TXT" "TOOL_SEARCH=false" "hetero local child sets ENABLE_TOOL_SEARCH=false"
 assert_contains "$PROBE_TXT" "DISABLE_TRAFFIC=unset" "hetero local child does not set CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"
+LANE_TXT="$(git -C "$SBX" show "${PROBE_SHA}:local-lane.txt")"
+assert_eq "x-lane: autopilot" "$LANE_TXT" "hetero local default child x-lane is autopilot"
 LOCAL_MF="$(find "$TEST_TMP/local-runs" -name '*.manifest.json' | head -1)"
 assert_contains "$(cat "$LOCAL_MF")" '"runner": "local"' "hetero local manifest runner is local"
 assert_contains "$(cat "$LOCAL_MF")" '"resolved_runner": "cc-shim"' "hetero local manifest resolved_runner is cc-shim"
@@ -2837,7 +2855,212 @@ OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-local-bin:$PATH" \
   --branch feat/local-conflict --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "hetero --runner local --endpoint other exits 2"
 assert_contains "$OUT" "precondition_failed" "hetero local endpoint conflict is a precondition failure"
-assert_contains "$OUT" "conflicts with --endpoint other" "hetero local endpoint conflict names --endpoint other"
+assert_contains "$OUT" "refuses unlisted --endpoint other" "hetero local unlisted endpoint names --endpoint other"
+# (a) listed --endpoint glm_local is the endpoint recorded, and the child sees x-lane.
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-local-bin:$PATH" \
+  AUTOPILOT_TEST_CN_GATE_OFF=1 AUTOPILOT_ENDPOINT_PREPROBE=off \
+  AUTOPILOT_DISPATCH_RUNS_DIR="$TEST_TMP/local-runs" \
+  AUTOPILOT_LANE=fleet-glm \
+  AUTOPILOT_ENDPOINT_GLM_LOCAL_URL=http://127.0.0.1:9 \
+  AUTOPILOT_ENDPOINT_GLM_LOCAL_TOKEN=fake-test-token \
+  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --endpoint glm_local --model mini \
+  --worktree-parent "$TEST_TMP/local-wts" \
+  --run-id local-glm --branch feat/local-glm --prompt-file "$PROMPT" 2>"$TEST_TMP/local-glm.err")"; EXIT=$?
+[ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (local glm): %s\n%s\n' "$OUT" "$(cat "$TEST_TMP/local-glm.err" 2>/dev/null)" >&2
+assert_eq "0" "$EXIT" "hetero --runner local --endpoint glm_local exit 0"
+assert_contains "$OUT" '"endpoint": "glm_local"' "hetero local glm result endpoint is glm_local"
+GLM_SHA="$(git -C "$SBX" rev-parse feat/local-glm)"
+assert_eq "x-lane: fleet-glm" "$(git -C "$SBX" show "${GLM_SHA}:local-lane.txt")" "hetero local glm child sees x-lane"
+GLM_MF="$TEST_TMP/local-runs/local-glm.manifest.json"
+assert_contains "$(cat "$GLM_MF")" '"endpoint": "glm_local"' "hetero local glm manifest endpoint is glm_local"
+# (c) unlisted glm_cloud is exit 2 and never spawns the child.
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-local-bin:$PATH" \
+  AUTOPILOT_TEST_CN_GATE_OFF=1 AUTOPILOT_ENDPOINT_PREPROBE=off \
+  AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL=http://127.0.0.1:9 \
+  AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token \
+  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --endpoint glm_cloud --model mini \
+  --worktree-parent "$TEST_TMP/local-wts" \
+  --branch feat/local-glm-cloud --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "hetero --runner local --endpoint glm_cloud exits 2"
+assert_contains "$OUT" "refuses unlisted --endpoint glm_cloud" "hetero local glm_cloud names the unlisted endpoint"
+if git -C "$SBX" rev-parse --verify feat/local-glm-cloud >/dev/null 2>&1; then
+  fail "hetero local glm_cloud spawned a worktree"
+fi
+
+# Caller headers survive a local dispatch, and x-lane is appended after them.
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-local-bin:$PATH" \
+  AUTOPILOT_TEST_CN_GATE_OFF=1 AUTOPILOT_ENDPOINT_PREPROBE=off \
+  AUTOPILOT_GATEWAY_TOKEN_DIR="$TEST_TMP/no-gw-tokens" \
+  AUTOPILOT_LANE=fleet-keep \
+  AUTOPILOT_UPSTREAM_TASK_ID= \
+  ANTHROPIC_CUSTOM_HEADERS=$'X-Caller-Keep: hidden-value\nX-Second: also-hidden' \
+  AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL=http://127.0.0.1:9 \
+  AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token \
+  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --model mini \
+  --worktree-parent "$TEST_TMP/local-wts" \
+  --branch feat/local-headers --prompt-file "$PROMPT" 2>"$TEST_TMP/local-headers.err")"; EXIT=$?
+[ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (local headers): %s\n%s\n' "$OUT" "$(cat "$TEST_TMP/local-headers.err" 2>/dev/null)" >&2
+assert_eq "0" "$EXIT" "hetero local keeps caller headers and exits 0"
+HDR_SHA="$(git -C "$SBX" rev-parse feat/local-headers)"
+HDR_NAMES="$(git -C "$SBX" show "${HDR_SHA}:local-header-names.txt")"
+assert_eq "$(printf '%s\n' X-Caller-Keep X-Second x-lane)" "$HDR_NAMES" "hetero local header names keep the caller header and put x-lane last"
+assert_not_contains "$HDR_NAMES" "hidden-value" "hetero local header-name file has no header value"
+assert_not_contains "$(git -C "$SBX" show "${HDR_SHA}:local-lane.txt")" "hidden-value" "hetero local lane file has no caller header value"
+# A lane value with CR or LF is refused before the child starts.
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-local-bin:$PATH" \
+  AUTOPILOT_TEST_CN_GATE_OFF=1 AUTOPILOT_ENDPOINT_PREPROBE=off \
+  AUTOPILOT_GATEWAY_TOKEN_DIR="$TEST_TMP/no-gw-tokens" \
+  AUTOPILOT_LANE=$'bad\nlane' \
+  AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL=http://127.0.0.1:9 \
+  AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token \
+  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --model mini \
+  --branch feat/local-lane-lf --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "hetero local AUTOPILOT_LANE with LF exits 2"
+assert_contains "$OUT" "contains a newline" "hetero local LF lane error is one line naming the newline"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-local-bin:$PATH" \
+  AUTOPILOT_TEST_CN_GATE_OFF=1 AUTOPILOT_ENDPOINT_PREPROBE=off \
+  AUTOPILOT_GATEWAY_TOKEN_DIR="$TEST_TMP/no-gw-tokens" \
+  AUTOPILOT_LANE=$'bad\rlane' \
+  AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL=http://127.0.0.1:9 \
+  AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token \
+  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --model mini \
+  --branch feat/local-lane-cr --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "hetero local AUTOPILOT_LANE with CR exits 2"
+assert_contains "$OUT" "contains a newline" "hetero local CR lane error is one line naming the newline"
+# Lane is one path segment. ../x and a/b are refused before any child, and the
+# error does not repeat bytes from a file outside the token dir.
+printf '%s\n' 'outside-lane-marker' > "$TEST_TMP/x"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-local-bin:$PATH" \
+  AUTOPILOT_TEST_CN_GATE_OFF=1 AUTOPILOT_ENDPOINT_PREPROBE=off \
+  AUTOPILOT_GATEWAY_TOKEN_DIR="$TEST_TMP/no-gw-tokens" \
+  AUTOPILOT_LANE='../x' \
+  AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL=http://127.0.0.1:9 \
+  AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token \
+  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --model mini \
+  --worktree-parent "$TEST_TMP/local-wts" \
+  --branch feat/local-lane-dotdot --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "hetero local AUTOPILOT_LANE=../x exits 2"
+assert_contains "$OUT" "precondition_failed" "hetero local ../x lane is a precondition failure"
+assert_not_contains "$OUT" "outside-lane-marker" "hetero local ../x error does not echo a file outside the token dir"
+if git -C "$SBX" rev-parse --verify feat/local-lane-dotdot >/dev/null 2>&1; then
+  fail "hetero local AUTOPILOT_LANE=../x spawned a worktree"
+fi
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-local-bin:$PATH" \
+  AUTOPILOT_TEST_CN_GATE_OFF=1 AUTOPILOT_ENDPOINT_PREPROBE=off \
+  AUTOPILOT_GATEWAY_TOKEN_DIR="$TEST_TMP/no-gw-tokens" \
+  AUTOPILOT_LANE='a/b' \
+  AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL=http://127.0.0.1:9 \
+  AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token \
+  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --model mini \
+  --worktree-parent "$TEST_TMP/local-wts" \
+  --branch feat/local-lane-slash --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "hetero local AUTOPILOT_LANE=a/b exits 2"
+assert_contains "$OUT" "precondition_failed" "hetero local a/b lane is a precondition failure"
+if git -C "$SBX" rev-parse --verify feat/local-lane-slash >/dev/null 2>&1; then
+  fail "hetero local AUTOPILOT_LANE=a/b spawned a worktree"
+fi
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-local-bin:$PATH" \
+  AUTOPILOT_TEST_CN_GATE_OFF=1 AUTOPILOT_ENDPOINT_PREPROBE=off \
+  AUTOPILOT_GATEWAY_TOKEN_DIR="$TEST_TMP/no-gw-tokens" \
+  AUTOPILOT_LANE='' \
+  AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL=http://127.0.0.1:9 \
+  AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token \
+  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --model mini \
+  --branch feat/local-lane-empty --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "hetero local empty AUTOPILOT_LANE exits 2"
+if git -C "$SBX" rev-parse --verify feat/local-lane-empty >/dev/null 2>&1; then
+  fail "hetero local empty AUTOPILOT_LANE spawned a worktree"
+fi
+
+# Per-lane gateway token. The sentinel lives only in the token file and the expect file.
+GW_DIR="$TEST_TMP/gw-tokens"
+mkdir -p "$GW_DIR"
+GW_LANE="gw-lane"
+GW_SENTINEL='lane-file-sentinel-7f3a'
+printf '%s\n' "  ${GW_SENTINEL}  " > "$GW_DIR/$GW_LANE"
+GW_EXPECT="$TEST_TMP/gw-expect"
+printf '%s' "$GW_SENTINEL" > "$GW_EXPECT"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-local-bin:$PATH" \
+  AUTOPILOT_TEST_CN_GATE_OFF=1 AUTOPILOT_ENDPOINT_PREPROBE=off \
+  AUTOPILOT_DISPATCH_RUNS_DIR="$TEST_TMP/local-runs" \
+  AUTOPILOT_GATEWAY_TOKEN_DIR="$GW_DIR" \
+  AUTOPILOT_LANE="$GW_LANE" \
+  AUTOPILOT_TEST_AUTH_EXPECT_FILE="$GW_EXPECT" \
+  AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL=http://127.0.0.1:9 \
+  AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token \
+  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --model mini \
+  --worktree-parent "$TEST_TMP/local-wts" \
+  --run-id local-gw --branch feat/local-gw --prompt-file "$PROMPT" 2>"$TEST_TMP/local-gw.err")"; EXIT=$?
+[ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (local gateway token): %s\n%s\n' "$OUT" "$(cat "$TEST_TMP/local-gw.err" 2>/dev/null)" >&2
+assert_eq "0" "$EXIT" "hetero local lane gateway token exits 0"
+GW_SHA="$(git -C "$SBX" rev-parse feat/local-gw)"
+assert_eq "match" "$(git -C "$SBX" show "${GW_SHA}:local-auth.txt")" "hetero local child auth token matches the lane file"
+assert_contains "$OUT" '"gateway_token": "lane-file"' "hetero local result records gateway_token lane-file"
+GW_MF="$TEST_TMP/local-runs/local-gw.manifest.json"
+assert_contains "$(cat "$GW_MF")" '"gateway_token": "lane-file"' "hetero local manifest records gateway_token lane-file"
+# The sentinel must not appear in the result, the manifest, the stderr log, the agent log,
+# or the files this child wrote. The sandbox tree also contains a copy of this test, which
+# names the sentinel, so the search is limited to the probe files.
+GW_WHERE=""
+printf '%s\n' "$OUT" | grep -F -q -- "$GW_SENTINEL" && GW_WHERE="${GW_WHERE} result"
+grep -F -q -- "$GW_SENTINEL" "$GW_MF" && GW_WHERE="${GW_WHERE} manifest"
+grep -F -q -- "$GW_SENTINEL" "$TEST_TMP/local-gw.err" && GW_WHERE="${GW_WHERE} stderr"
+GW_HIT="$(git -C "$SBX" grep -F -l -e "$GW_SENTINEL" "$GW_SHA" -- \
+  local-argv.txt local-auth.txt local-header-names.txt local-lane.txt local-runner-probe.txt 2>/dev/null || true)"
+[ -n "$GW_HIT" ] && GW_WHERE="${GW_WHERE} commit"
+GW_LOG="$(node -e 'const fs=require("fs"); try{process.stdout.write(JSON.parse(fs.readFileSync(process.argv[1],"utf8")).log_path||"")}catch{}' "$GW_MF")"
+if [ -n "$GW_LOG" ] && [ -f "$GW_LOG" ]; then
+  grep -F -q -- "$GW_SENTINEL" "$GW_LOG" && GW_WHERE="${GW_WHERE} agent-log"
+fi
+assert_eq "$GW_WHERE" "" "hetero local lane token value is absent from result, manifest, stderr and the commit"
+# (b) no lane file: the endpoint key remains, recorded as endpoint.
+# The child compares ANTHROPIC_AUTH_TOKEN to the endpoint token. Neither value is printed.
+EP_EXPECT="$TEST_TMP/ep-expect"
+printf '%s' 'fake-test-token' > "$EP_EXPECT"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-local-bin:$PATH" \
+  AUTOPILOT_TEST_CN_GATE_OFF=1 AUTOPILOT_ENDPOINT_PREPROBE=off \
+  AUTOPILOT_DISPATCH_RUNS_DIR="$TEST_TMP/local-runs" \
+  AUTOPILOT_GATEWAY_TOKEN_DIR="$TEST_TMP/no-gw-tokens" \
+  AUTOPILOT_LANE=missing-lane \
+  AUTOPILOT_TEST_AUTH_EXPECT_FILE="$EP_EXPECT" \
+  AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL=http://127.0.0.1:9 \
+  AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token \
+  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --model mini \
+  --worktree-parent "$TEST_TMP/local-wts" \
+  --run-id local-gw-absent --branch feat/local-gw-absent --prompt-file "$PROMPT" 2>"$TEST_TMP/local-gw-absent.err")"; EXIT=$?
+[ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (local gateway absent): %s\n%s\n' "$OUT" "$(cat "$TEST_TMP/local-gw-absent.err" 2>/dev/null)" >&2
+assert_eq "0" "$EXIT" "hetero local absent lane token file exits 0"
+ABSENT_SHA="$(git -C "$SBX" rev-parse feat/local-gw-absent)"
+assert_eq "match" "$(git -C "$SBX" show "${ABSENT_SHA}:local-auth.txt")" "hetero local absent lane file leaves the endpoint token on the child"
+assert_contains "$OUT" '"gateway_token": "endpoint"' "hetero local absent lane file records gateway_token endpoint"
+assert_contains "$(cat "$TEST_TMP/local-runs/local-gw-absent.manifest.json")" '"gateway_token": "endpoint"' "hetero local absent manifest records gateway_token endpoint"
+# Non-local cc-shim with the same endpoint ignores a present lane token file
+# and does not forward an inherited ANTHROPIC_CUSTOM_HEADERS name.
+NL_LANE="nl-lane"
+printf '%s\n' 'lane-only-sentinel-9c2e' > "$GW_DIR/$NL_LANE"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-local-bin:$PATH" \
+  AUTOPILOT_TEST_CN_GATE_OFF=1 AUTOPILOT_ENDPOINT_PREPROBE=off \
+  AUTOPILOT_DISPATCH_RUNS_DIR="$TEST_TMP/local-runs" \
+  AUTOPILOT_GATEWAY_TOKEN_DIR="$GW_DIR" \
+  AUTOPILOT_LANE="$NL_LANE" \
+  AUTOPILOT_TEST_AUTH_EXPECT_FILE="$EP_EXPECT" \
+  ANTHROPIC_CUSTOM_HEADERS=$'X-Not-For-Child: hidden' \
+  AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL=http://127.0.0.1:9 \
+  AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token \
+  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner cc-shim --sandbox bwrap --endpoint qwen_local --model mini \
+  --worktree-parent "$TEST_TMP/local-wts" \
+  --run-id local-gw-nonlocal --branch feat/local-gw-nonlocal --prompt-file "$PROMPT" 2>"$TEST_TMP/local-gw-nonlocal.err")"; EXIT=$?
+[ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (nonlocal gateway): %s\n%s\n' "$OUT" "$(cat "$TEST_TMP/local-gw-nonlocal.err" 2>/dev/null)" >&2
+assert_eq "0" "$EXIT" "hetero cc-shim ignores a lane token file and exits 0"
+NL_SHA="$(git -C "$SBX" rev-parse feat/local-gw-nonlocal)"
+assert_eq "match" "$(git -C "$SBX" show "${NL_SHA}:local-auth.txt")" "hetero cc-shim child auth token matches the endpoint token"
+assert_not_contains "$(git -C "$SBX" show "${NL_SHA}:local-header-names.txt")" "X-Not-For-Child" "hetero cc-shim child does not receive an inherited ANTHROPIC_CUSTOM_HEADERS name"
+NL_MF_GW="$(node -e '
+  const fs = require("fs");
+  const mf = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  process.stdout.write(Object.prototype.hasOwnProperty.call(mf, "gateway_token") ? "present" : "absent");
+' "$TEST_TMP/local-runs/local-gw-nonlocal.manifest.json")"
+assert_eq "absent" "$NL_MF_GW" "hetero cc-shim manifest has no gateway_token field"
 
 # --- --pace-role: pace-aware engine selection & manifest engine_choice ---
 PACE_RUNS_DIR="$TEST_TMP/pace-runs"

@@ -29,7 +29,7 @@
 #                                             # cursor/kimi use broker defaults; other runners REQUIRE --model.
 #                                             # A gemini-flash[-tier] alias still resolves against the live
 #                                             # `agy models` inventory. Explicit --model/--effort always win.
-#       [--runner auto|codex|agy|grok|cc-shim|local|pi|cursor|opencode|kimi|claude-native|qoderclicn] # implementer default (no --runner, no pace selection or contract pin): local.
+#       [--runner auto|codex|agy|grok|cc-shim|local|pi|cursor|opencode|kimi|claude-native|qoderclicn] # implementer default (no --runner, no pace selection or contract pin): local only when qwen_local resolves ready and the cn gate allows that seat; otherwise grok-4.7.
 #                                              #   Other roles stay auto: *gpt*/*codex*→codex,
 #                                              #   local: shorthand for cc-shim + --sandbox bwrap + an endpoint that
 #                                              #   is qwen_local by default, or --endpoint when that name is listed
@@ -3281,14 +3281,35 @@ if [ -n "$_ps_parsed" ]; then
 fi
 # Saved before skill-pack / scaffold prepend text, which would hide image magic bytes.
 VISION_PROMPT_FILE="$PROMPT_FILE"
-# Implementer with no --runner is the local qwen seat, unless a pin already chose one:
-# --pace-role or a pace file that returned a seat, a strict contract, or
-# AUTOPILOT_QUALIFICATION_OVERRIDE. Explicit --runner is already RUNNER_SUPPLIED.
+# Implementer with no --runner is the local qwen seat only when qwen_local
+# resolves ready and the cn gate allows that seat (same prompt the local path
+# will dispatch, including the Task-Class line it would add). Otherwise the
+# unpinned path stays pace-select / grok-4.7 and the checks below keep their
+# previous order. A pin already chose a seat when --pace-role or a pace file
+# returned one, a strict contract is on, or AUTOPILOT_QUALIFICATION_OVERRIDE
+# is set. Explicit --runner is already RUNNER_SUPPLIED.
 _impl_role="${PACE_ROLE:-${AUTOPILOT_DISPATCH_ROLE:-implementer}}"
-if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$RUNNER" = "auto" ] && [ "$STRICT_CONTRACT" -eq 0 ] \
+if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_SUPPLIED" -eq 0 ] && [ "$RUNNER" = "auto" ] && [ "$STRICT_CONTRACT" -eq 0 ] \
    && [ -z "${ENGINE_CHOICE_JSON:-}" ] && [ -z "${AUTOPILOT_QUALIFICATION_OVERRIDE:-}" ] \
-   && [ "$_impl_role" = "implementer" ]; then
-  RUNNER="local"
+   && [ "$_impl_role" = "implementer" ] \
+   && "$SELF_DIR/resolve-endpoint.sh" qwen_local >/dev/null 2>&1; then
+  _local_gate_prompt="$PROMPT_FILE"
+  _local_gate_tmp=""
+  if ! node -e '
+    const g = require(process.argv[1]);
+    process.exit(g.headerValue([process.argv[2]], "Task-Class") ? 0 : 1);
+  ' "$SELF_DIR/lib/cn-model-dispatch-gate.js" "$PROMPT_FILE"; then
+    _local_gate_tmp="$(mktemp -t 'dispatch-hetero-local-gate-XX''XX''XX')" && \
+      { printf '%s\n' 'Task-Class: simple-script'; cat "$PROMPT_FILE"; } > "$_local_gate_tmp" && \
+      _local_gate_prompt="$_local_gate_tmp"
+  fi
+  if [ "$_local_gate_prompt" = "$PROMPT_FILE" ] || [ -n "$_local_gate_tmp" ]; then
+    if node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --role implementer --runner cc-shim --model qwen --endpoint qwen_local --prompt-file "$_local_gate_prompt" >/dev/null 2>&1; then
+      RUNNER="local"
+    fi
+  fi
+  [ -n "$_local_gate_tmp" ] && rm -f "$_local_gate_tmp"
+  unset _local_gate_prompt _local_gate_tmp
 fi
 unset _impl_role
 if [ "$RUNNER" = "local" ]; then

@@ -157,4 +157,22 @@ assert_eq "0" "$EXIT" "d: explicit --runner grok exits 0"
 assert_eq "grok" "$(json_get "$OUT" runner)" "d: result runner is grok"
 assert_contains "$(cat "$GROK_ARGV")" "grok-4.7" "d: grok stub received the grok default model"
 
+# (e) no local endpoint configured -> previous unpinned default (grok-4.7), exit 0.
+PROMPT="$TEST_TMP/prompt-e.txt"
+printf 'edit impl-defaults-fixture.txt\n' > "$PROMPT"
+: > "$GROK_ARGV"
+RUNS="$TEST_TMP/runs-e"
+mkdir -p "$RUNS"
+OUT="$(cd "$SBX" && env -u AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL -u AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN \
+  -u AUTOPILOT_ENDPOINT_GLM_LOCAL_URL -u AUTOPILOT_ENDPOINT_GLM_LOCAL_TOKEN \
+  AUTOPILOT_ENDPOINTS_ENV=/nonexistent AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
+  "$SCRIPT" --no-verify-tip --context-window off --grok-bin "$STUB_GROK" \
+  --branch feat/local-e --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/e.err")"
+EXIT=$?
+[ "$EXIT" -eq 0 ] || printf 'local-default diagnostic (e): %s\n%s\n' "$OUT" "$(cat "$TEST_TMP/e.err")" >&2
+assert_eq "0" "$EXIT" "e: no local endpoint configured exits 0"
+assert_eq "grok" "$(json_get "$OUT" runner)" "e: no local endpoint uses the grok default"
+assert_eq "grok-4.7" "$(json_get "$OUT" model)" "e: no local endpoint model is grok-4.7"
+assert_contains "$(cat "$GROK_ARGV")" "grok-4.7" "e: grok stub received grok-4.7"
+
 finalize_test

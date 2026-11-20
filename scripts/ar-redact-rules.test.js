@@ -7,6 +7,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { redactText, defaultRules, decodeVariant, tag } = require('./lib/ar-redact-rules');
+const { planted } = require('./lib/ar-redact-fixtures');
 
 test('tag builds REDACTED marker', () => {
   assert.equal(tag('jwt'), '[REDACTED:jwt]');
@@ -32,7 +33,7 @@ test('redactText: empty custom rules leaves text intact', () => {
 });
 
 test('redactText: JWT masked with default rules', () => {
-  const jwt = '[MASKED]';
+  const jwt = planted().jwt;
   const r = redactText(`token ${jwt}`, defaultRules());
   assert.ok(r.text.includes('[REDACTED:jwt]'));
   assert.equal(r.text.includes(jwt), false);
@@ -40,7 +41,7 @@ test('redactText: JWT masked with default rules', () => {
 });
 
 test('redactText: decoded variant catches URL-encoded secret', () => {
-  const secret = '[MASKED]';
+  const secret = planted().anthropic;
   const enc = encodeURIComponent(secret);
   const r = redactText(`q=${enc}&tail=1`, defaultRules());
   assert.equal(r.text.includes(secret), false);

@@ -13,7 +13,6 @@ const path = require('node:path');
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'personal-data-redact-test-'));
 const hostsFile = path.join(TMP, 'leak-guard-hosts.json');
 fs.writeFileSync(hostsFile, JSON.stringify({ strong: [], contextual: [] }));
-const env = { AUTOPILOT_LEAK_GUARD_HOSTS: hostsFile };
 
 test.after(() => fs.rmSync(TMP, { recursive: true, force: true }));
 

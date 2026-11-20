@@ -107,7 +107,7 @@ function clipRowPlain(row: Row, cols: number, verdict = false): Row {
   return out.length === 0 ? [{ text: '' }] : out
 }
 
-function shortVerdict(p: QuotaPool, v: Verdict, nowMs: number, paceOk: boolean, t: PageCtx['t']): string {
+export function shortVerdict(p: QuotaPool, v: Verdict, nowMs: number, paceOk: boolean, t: PageCtx['t']): string {
   const stalled = v.kind === 'stale' || v.kind === 'stale_seat'
   const fact = p.limit_hit === true || stalled
   if (!paceOk && !fact) return bad + ' ' + t('page.quota.sv_nopace')

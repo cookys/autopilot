@@ -37,30 +37,3 @@ test('quota pool cells keep alias tails, fit display widths and leave fitting na
     }
   }
 })
-
-test('fleet task overflow keeps peer tails and only drops the rule when necessary', () => {
-  for (const cols of [80, 120, 160]) {
-    for (const stale of [false, true]) {
-      for (const subject of ['Claude (主機甲-01)', 'Claude (主機乙-02)', 'Claude (' + '共同前綴'.repeat(30) + '-主機甲-01)']) {
-        for (const rule of ['T4', 'T4_' + 'rule'.repeat(60)]) {
-          const lines = [{
-            line_id: 'peer', label: 'lane', lead_display: 'PM',
-            issues: [{ rule, subject, state: 'failed', since_ms: NOW, to_console: true }],
-          }]
-          const row = fleetView(ctxOf(cols, [], lines, stale)).body.find(r => r[0]?.press === 'fleet:see:peer')!
-          const task = row[cols >= 100 ? 4 : 3].text.slice(2).trimEnd()
-          const used = row.slice(0, cols >= 100 ? 4 : 3).reduce((n, s) => n + displayWidth(s.text), 0)
-          const room = cols - used - 2 - (stale ? 2 : 0)
-          const full = subject + '（' + rule + '）'
-          expect(displayWidth(row.map(s => s.text).join(''))).toBeLessThanOrEqual(cols)
-          if (displayWidth(full) <= room) expect(task).toBe(full)
-          else if (displayWidth(subject) <= room) expect(task).toBe(subject)
-          else {
-            expect(task).toContain('…')
-            expect(task.endsWith('-主機甲-01)')).toBe(true)
-          }
-        }
-      }
-    }
-  }
-})

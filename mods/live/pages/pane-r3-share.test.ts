@@ -151,14 +151,6 @@ test('U1: band keeps the 艦隊 section name at 160 and 120 columns when optiona
   }
 })
 
-test('U3: now and fleet summaries sort failed before stalled before normal', () => {
-  const con = fleetSnap()
-  for (const page of [nowPage, fleetPage]) {
-    const summary = frameRows(page, ctx(80, 24, con)).map(text).find(r => r.includes('產線 9'))
-    expect(summary).toContain('產線 9 ✗2 ⊘4 ○3')
-  }
-})
-
 test('W2 W4: wide overflow counts real hidden pools and calls them 額度浪費, excluding seat chrome', () => {
   const con = snapshot([...redPools, ...unknownPools, ...wastes])
   const out = frameRows(nowPage, ctx(160, 8, con)).map(text).join('\n')

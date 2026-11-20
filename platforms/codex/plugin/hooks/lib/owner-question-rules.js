@@ -7,6 +7,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const { configPath } = require('../../scripts/lib/config-path.js');
 
 // The whole-process.env scanner does not understand regex literals, and the
@@ -33,7 +34,8 @@ function teamRole() {
 const CARD_ID = /\bd-[0-9a-f]{8}\b/gi;
 // A textual scheduling reference, not a claim that this hook queried the fleet.
 // ISO calendar day, optionally a UTC/offset timestamp; invalid calendar days do not qualify.
-const FLEET_DUE = /\b(?:fleet\s+task\s+[^\n]*?\s--due(?:=|\s+)|task_id=[A-Za-z0-9][A-Za-z0-9_-]{2,63}\s+due=)["']?(\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:\d{2}))?)(?=["'\s)\],.;:?!，。；：、）？！】]|$)/g;
+// Group 1 is the task id (only the task_id= form; the fleet task line has none), group 2 the due.
+const FLEET_DUE = /\b(?:fleet\s+task\s+[^\n]*?\s--due(?:=|\s+)|task_id=([A-Za-z0-9][A-Za-z0-9_-]{2,63})\s+due=)["']?(\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:\d{2}))?)(?=["'\s)\],.;:?!，。；：、）？！】]|$)/g;
 const ESCAPE_PREFIX = 'OWNER-GUARD-FALSE-POSITIVE';
 const MAX_ESCAPES = 8;
 
@@ -237,12 +239,55 @@ function findHits(text) {
 
 function findOwnerQuestion(text) { return findHits(text)[0]?.sentence || null; }
 
-function hasDueTask(sentence) {
-  return [...sentence.matchAll(FLEET_DUE)].some(([, due]) => {
+// A task's fleet record as JSON (fields top level: next_evidence_due, hard_deadline, state).
+// The default shells out to `fleet task show <id> --json`; tests inject a fake so a test
+// never runs a real fleet. Returns the parsed object, or null when the exit status is not 0,
+// the output is not a JSON object, or the fleet binary is missing.
+function defaultFleetTaskLookup(id) {
+  const r = spawnSync('fleet', ['task', 'show', id, '--json'], {
+    encoding: 'utf8',
+    timeout: 5000,
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  if (r.error || r.status !== 0) return null;
+  try {
+    const parsed = JSON.parse(r.stdout);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch { return null; }
+}
+
+let fleetTaskLookup = defaultFleetTaskLookup;
+
+function setFleetTaskLookup(fn) {
+  fleetTaskLookup = typeof fn === 'function' ? fn : defaultFleetTaskLookup;
+}
+
+// A quoted `task_id=<ID> due=<T>` is real only when the task exists, <T> is not later than the
+// task's earliest fleet due, and that due is not already past at `now` (opts.now, ms; Date.now()).
+function quotedDueIsReal(taskId, due, now) {
+  const task = fleetTaskLookup(taskId);
+  if (!task || typeof task !== 'object') return false; // unknown task
+  const fleet = [task.next_evidence_due, task.hard_deadline].filter((v) => typeof v === 'string' && v !== '');
+  if (!fleet.length) return false; // the task has no due
+  let earliest = null;
+  for (const v of fleet) {
+    const ms = Date.parse(v);
+    if (Number.isFinite(ms) && (earliest === null || ms < earliest)) earliest = ms;
+  }
+  if (earliest === null) return false;
+  if (earliest < now) return false; // the real due is already past
+  return Date.parse(due) <= earliest; // the quoted time must not beat the real due
+}
+
+function hasDueTask(sentence, opts = {}) {
+  const now = typeof opts.now === 'number' ? opts.now : Date.now();
+  return [...sentence.matchAll(FLEET_DUE)].some(([, taskId, due]) => {
     const day = due.slice(0, 10);
     const date = new Date(`${day}T00:00:00Z`);
-    return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === day
-      && Number.isFinite(Date.parse(due));
+    if (!(Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === day)) return false;
+    if (!Number.isFinite(Date.parse(due))) return false;
+    if (taskId === undefined) return true; // a fleet task line has no id to check: today's behaviour
+    return quotedDueIsReal(taskId, due, now);
   });
 }
 
@@ -553,6 +598,8 @@ module.exports = {
   findOwnerQuestion,
   findHits,
   unresolvedHits,
+  hasDueTask,
+  setFleetTaskLookup,
   unresolvedBareIds,
   lastAssistantText,
   assistantTextsThisTurn,

@@ -81,7 +81,7 @@ import * as ui from './ui'
 import consoleFull from './fixtures/console/console-full.fixture'
 import { FOCUS_ANCHOR_KEY } from './pane'
 import { routeKey } from './pages/keys'
-import { BAND_ROWS } from './band'
+import { BAND_CLOSE_ROOM, BAND_ROWS, FOLD_KEY, foldLabel, foldSpan } from './band'
 import { forgeAliveAt, forgeRowAsk } from './register'
 import { COL_GAP, RECENT_COL_W, SPEED_COL_W } from './speedview'
 import { BAND_MIN_COLS, FORGE_LABEL_MIN, barStrip, usageTabFits } from './tabs'
@@ -3603,6 +3603,7 @@ test('C1 U7 control: console mode with no heartbeat is never asked for a row (te
   expect(forgeRowAsk(null, await g33AliveNow(undefined), BAND_PROPS.maxRows, 120)).toBe(null) // no heartbeat: never asked
 })
 // C1 fix: a band tab that is open (barTab) when the console mode turns on must not stay: the strip is highlighted with the console tab, so the body under it has to be the console's too.
+// The legacy 待決 tab only sets barTab. The shell then draws at its default, one collapsed row, until a click on that row. Console mode draws that same fresh row, not the old 指揮 strip.
 test('C1 fix: a 待決 band tab left open when console.json appears is closed; the band body is the one a fresh console-mode band draws (terminal)', async ($, on) => {
   g33Ran(on)
   const files = richWorld()
@@ -3622,12 +3623,20 @@ test('C1 fix: a 待決 band tab left open when console.json appears is closed; t
   files[CWD + '/.claude/console.json'] = CONSOLE_PROGRAM
   await w.clock.advance(11_000) // the tick reads the mode: it turns on
   const after = await bandTexts()
-  // O4: at maxRows >= 12 the shell is the band in console mode too. It does not collapse to the two-row page strip, and 指揮 is not a shell menu.
-  expect(before.join(''), 'the shell is up before console mode').toContain('╭')
-  expect(after.length, 'console mode keeps the shell').toBeGreaterThanOrEqual(12)
-  expect(after.join(''), 'the shell frame stays').toContain('╭')
-  expect(after.join(''), '待決 stays the shell menu').toContain('待決')
-  expect(after.join(' '), 'the old console tab 指揮 is not a shell row').not.toContain('指揮')
+  await start($, 'terminal') // a fresh session: bandCollapsed resets; console mode stays on, so this draw is a fresh console-mode band
+  const fresh = await bandTexts()
+  // O4: at maxRows >= 12 the shell is the band in console mode too. It stays the one-row shell menu (the default), and 指揮 is not a shell menu.
+  const collapsedShell = (rows: string[], label: string) => {
+    const flat = rows.join('')
+    expect(flat, label + ' keeps 待決').toContain('待決')
+    expect(flat, label + ' is the collapsed row').toContain('展開')
+    expect(flat, label + ' has no frame').not.toContain('╭')
+    expect(rows.join(' '), label + ' has no old console tab 指揮').not.toContain('指揮')
+  }
+  collapsedShell(before, 'before console mode')
+  collapsedShell(after, 'console mode')
+  collapsedShell(fresh, 'a fresh console-mode band')
+  expect(after.join(''), 'console mode matches a fresh console-mode band').toBe(fresh.join(''))
 })
 // review fix 3: the console feed (triedMs, snap) belongs to the session; a new session.start must not inherit the 60 s throttle or the first run's snapshot
 test('review fix: consolefeed-session-reset: a second session.start on the same clock asks `fleet console --json` again', async ($, on) => {
@@ -3753,17 +3762,24 @@ const pmBandRows = async ($: any, w: any, o: { panesOpen: boolean; columns: numb
 }
 for (const columns of [155, 75]) {
   for (const panesOpen of [true, false]) {
-    test('O4 regression: PM seat (console on, legacyTabs false, pane ' + (panesOpen ? 'open' : 'closed') + ', 18 rows, ' + columns + ' columns): pressing 待決 draws the 12-row shell, not the two-row strip (terminal)', async ($, on) => {
+    test('O4 regression: PM seat (console on, legacyTabs false, pane ' + (panesOpen ? 'open' : 'closed') + ', 18 rows, ' + columns + ' columns): the band starts as one row; pressing 待決 draws the 12-row shell, not the two-row strip (terminal)', async ($, on) => {
       const w = await framedWorld($, on)
-      const rows = await pmBandRows($, w, { panesOpen, columns, maxRows: 18, press: [] })
+      const folded = await pmBandRows($, w, { panesOpen, columns, maxRows: 18, press: [] })
+      expect(folded.length, 'starts as one row: ' + folded.map(r => r.slice(0, 40)).join(' | ')).toBe(1)
+      expect(folded[0]).toContain('待決')
+      expect(folded.some(r => r.startsWith('\u256d')), 'no frame while folded').toBe(false)
+      const rows = await pmBandRows($, w, { panesOpen, columns, maxRows: 18, press: ['tab:decide'] })
       expect(rows.length, 'rows after pressing 待決: ' + rows.map(r => r.slice(0, 40)).join(' | ')).toBeGreaterThanOrEqual(12)
       expect(rows.some(r => r.startsWith('\u256d')), 'the shell frame top is drawn').toBe(true)
       expect(w.opens.length, 'the press sets the band tab; it does not open the pane').toBe(0)
     })
   }
-  test('O4 regression: PM seat, no key pressed (console on, legacyTabs false, pane open, 18 rows, ' + columns + ' columns): the console mode opens on the 待決 shell, 12 rows or more (terminal)', async ($, on) => {
+  test('O4 regression: PM seat, no key pressed (console on, legacyTabs false, pane open, 18 rows, ' + columns + ' columns): one row; a click on the row opens the 待決 shell, 12 rows or more (terminal)', async ($, on) => {
     const w = await framedWorld($, on)
-    const rows = await pmBandRows($, w, { panesOpen: true, columns, maxRows: 18, press: [] })
+    const folded = await pmBandRows($, w, { panesOpen: true, columns, maxRows: 18, press: [] })
+    expect(folded.length, 'no key is one row: ' + folded.map(r => r.slice(0, 40)).join(' | ')).toBe(1)
+    expect(folded.some(r => r.startsWith('\u256d'))).toBe(false)
+    const rows = await pmBandRows($, w, { panesOpen: true, columns, maxRows: 18, press: ['band:note'] })
     expect(rows.length, 'rows: ' + rows.map(r => r.slice(0, 40)).join(' | ')).toBeGreaterThanOrEqual(12)
     expect(rows.some(r => r.startsWith('\u256d')), 'the shell frame top is drawn').toBe(true)
   })
@@ -7604,13 +7620,30 @@ for (const surface of SURFACES) {
     return world(on, files, nowMs)
   }
   const mountShell = ($: any, columns: number, maxRows = 12, extra: Record<string, unknown> = {}) => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-shell', props: { ...BAND_PROPS, legacyTabs: false, maxRows, bodyColumns: columns, ...extra }, viewport: { columns: columns + 5, rows: 50, isFullscreen: true } })
+  // The band starts as one row. A layout test wants the open shell, so this presses the collapsed row once (band:row, or the note when the row is already full).
+  // `observe: true` skips that press: the default, the toggle and the geometry log are measured as drawn. The flag is not a component prop.
+  const rowTarget = (buttons: Node[]): string | null => {
+    const keys = buttons.map(b => b.props?.key).filter((k): k is string => typeof k === 'string')
+    if (keys.includes('band:row')) return 'band:row'
+    if (keys.includes('band:note')) return 'band:note'
+    return keys.find(k => k.startsWith('band:g') || k === 'band:await') ?? null
+  }
   const drawShell = async ($: any, columns: number, press: string[] = [], maxRows = 12, extra: Record<string, unknown> = {}) => {
+    const observe = extra.observe === true
+    const mountExtra = { ...extra }
+    delete mountExtra.observe
+    if (!observe) {
+      const probe = await mountShell($, columns, maxRows, mountExtra)
+      const hit = rowTarget((await probe.findAll({ type: 'Button' })) as Node[])
+      if (hit !== null) await probe.press({ key: hit })
+      await probe.unmount()
+    }
     for (const key of press) {
-      const ui = await mountShell($, columns, maxRows, extra)
+      const ui = await mountShell($, columns, maxRows, mountExtra)
       await ui.press({ key })
       await ui.unmount()
     }
-    const ui = await mountShell($, columns, maxRows, extra)
+    const ui = await mountShell($, columns, maxRows, mountExtra)
     const tree = (await ui.drawn()) as Node
     const found = (await ui.findAll({ type: 'Button' })) as Node[]
     const buttons = found.map(b => b.props?.key as string)
@@ -7919,8 +7952,10 @@ for (const surface of SURFACES) {
     expect(small.rows.length).toBeLessThanOrEqual(11)
     const eight = await drawShell($, 240, [], 8, { legacyTabs: true }) // the tab is still open (a memory state); 8 rows are no room for the frame
     expect(eight.rows.some(r => r.includes('╭'))).toBe(false)
-    await start($, surface) // a new session, no key: the shell is the normal state once 12 rows fit
-    const none = await drawShell($, 240, [], 12)
+    await start($, surface) // a new session starts collapsed; one click on the row opens the shell once 12 rows fit
+    const folded = await drawShell($, 240, [], 12, { observe: true })
+    expect(folded.all.length, 'a new session is one row').toBe(1)
+    const none = await drawShell($, 240, ['band:row'], 12, { observe: true })
     expect(none.rows.length).toBeGreaterThanOrEqual(12)
     expect(none.rows[0]).toContain('待決')
     expect(none.rows.some(r => r.includes('╭'))).toBe(true)
@@ -8665,13 +8700,16 @@ for (const surface of SURFACES) {
 
   // The band's height must not jump: with a band tab open the drawn band has the same number of rows whichever tab is open (the 12-row shell at the two common widths; 160 and 80 columns are
   // the widths of a 160x40 and an 80x24 terminal), and no open-pane buttons row (`[ 開面板 ]` / `[ 看派工 ]`) sits in it. S0 (plan r2 §3.1): the band's bar is two rows (summary, tab strip) in every state, so the closed band is two rows, not one; the golden's count moved from 1 to 2, its intent (the bar never changes height with state) is kept.
-  test('band height golden: every open band tab draws the same number of rows at 160 and 80 columns, no tab draws an open-pane buttons row; the closed band is two rows, the summary row and the tab strip (' + surface + ')', { plugins: [FORGE_STATS_WRITER] }, async ($, on) => {
+  test('band height golden: the band starts as one row; once open, every menu draws the same number of rows at 160 and 80 columns, and no tab draws an open-pane buttons row (' + surface + ')', { plugins: [FORGE_STATS_WRITER] }, async ($, on) => {
     shellWorld(on, { [W_MODEL]: j(model({ needs_decision: false, decisions: [] })), '/fake/forge-panel.json': usageRowsOf(3) })
     const heights: Record<string, number> = {}
     for (const cols of [160, 80]) {
       await start($, surface)
-      const closed = await drawShell($, cols, [], 12)
-      heights['closed@' + cols] = closed.rows.length // no key pressed: the shell, not the two-row bar
+      const folded = await drawShell($, cols, [], 12, { observe: true })
+      expect(folded.all.length, 'the band starts as one row at ' + cols).toBe(1)
+      expect(folded.all[0]).toContain('待決')
+      const closed = await drawShell($, cols, [], 12) // opens the row (band:row, or the note when the row is already full)
+      heights['closed@' + cols] = closed.rows.length // the shell after the row is opened, not the two-row bar
       expect(closed.rows[0]).toContain('待決')
       for (const key of ['tab:decide', 'menu:r', 'menu:u', 'menu:p', 'menu:h']) {
         await start($, surface)
@@ -8689,8 +8727,8 @@ for (const surface of SURFACES) {
       heights['tabrow-' + tab + '@160'] = d.tree.type === 'Box' && d.tree.props?.flexDirection === 'column' ? d.rows.length : 1
     }
     if (surface === 'terminal') console.log('BAND-HEIGHTS ' + JSON.stringify(heights))
-    expect(heights['closed@160'], 'shell with no key, 160').toBeGreaterThanOrEqual(12)
-    expect(heights['closed@80'], 'shell with no key, 80').toBeGreaterThanOrEqual(12)
+    expect(heights['closed@160'], 'shell once the row is opened, 160').toBeGreaterThanOrEqual(12)
+    expect(heights['closed@80'], 'shell once the row is opened, 80').toBeGreaterThanOrEqual(12)
     for (const cols of [160, 80]) {
       const open = ['tab:decide', 'menu:r', 'menu:u', 'menu:p', 'menu:h'].map(t => heights[t + '@' + cols])
       expect(new Set(open).size, 'menu heights at ' + cols + ': ' + open.join(',')).toBe(1)
@@ -8731,7 +8769,7 @@ for (const surface of SURFACES) {
     return out
   }
 
-  test('O4 shell: PM pane case, no key pressed, is the 12-row 待決 card shell at 155 and 75 columns (' + surface + ')', async ($, on) => {
+  test('O4 shell: PM pane case starts as one row; one click opens the 12-row 待決 card shell at 155 and 75 columns (' + surface + ')', async ($, on) => {
     const w = shellWorld(on, { [CWD + '/.git/HEAD']: 'ref: refs/heads/x\n', [CWD + '/.claude/console.json']: CONSOLE_PROGRAM })
     await start($, surface)
     await w.clock.advance(5_000)
@@ -8739,7 +8777,11 @@ for (const surface of SURFACES) {
     w.panes = ['autopilot-live']
     const opens = w.opens.length
     for (const cols of [155, 75]) {
-      const d = await drawShell($, cols, [], 18, { legacyTabs: false })
+      const folded = await drawShell($, cols, [], 18, { legacyTabs: false, observe: true })
+      expect(folded.all.length, 'starts as one row at ' + cols).toBe(1)
+      expect(folded.all[0], 'menu at ' + cols).toContain('待決')
+      expect(folded.all.some(r => r.includes('╭')), 'no frame while folded at ' + cols).toBe(false)
+      const d = await drawShell($, cols, ['band:note'], 18, { legacyTabs: false, observe: true })
       expect(d.rows.length, 'rows at ' + cols).toBeGreaterThanOrEqual(12)
       expect(d.rows[0], 'menu at ' + cols).toContain('待決')
       expect(d.rows.some(r => r.includes('╭')), 'frame at ' + cols).toBe(true)
@@ -8750,6 +8792,7 @@ for (const surface of SURFACES) {
       expect(d.hot['menu:u']).toBe('u')
       expect(d.hot['menu:p']).toBe('p')
       expect(d.hot['menu:h']).toBe('h')
+      await drawShell($, cols, ['tab:decide'], 18, { legacyTabs: false, observe: true }) // back to one row before the next width
     }
     await drawShell($, 155, ['menu:r', 'menu:u', 'menu:p', 'menu:h', 'tab:decide', 'next-menu'], 18, { legacyTabs: false })
     expect(w.opens.length, 'd/r/u/p/h and 9 do not open a pane page').toBe(opens)
@@ -8859,23 +8902,130 @@ for (const surface of SURFACES) {
       expect(d.all[d.all.length - 1], 'quick row last').toContain('0:')
     })
   }
-  test('r5 B: d collapses the band to its one row (待決 N 張 and the expand hint), d again expands it; another menu key expands and selects (' + surface + ')', async ($, on) => {
+  test('r5 B: the band starts as one row; a click on the row expands, d collapses, blank space in the open band does not (' + surface + ')', async ($, on) => {
     r5World(on)
     await start($, surface)
-    const open = await drawShell($, 205, [], 19)
-    expect(open.all.length, 'the default is expanded').toBeGreaterThan(6)
-    const shut = await drawShell($, 205, ['tab:decide'], 19)
-    expect(shut.all.length, 'collapsed is one row').toBe(1)
+    const shut = await drawShell($, 205, [], 19, { observe: true })
+    expect(shut.all.length, 'the default is one row').toBe(1)
     expect(shut.all[0]).toContain('待決')
     expect(shut.all[0]).toContain('2 張')
     expect(shut.all[0], 'the expand hint').toContain('展開')
+    expect(shut.buttons, 'the trailing blank is a click').toContain('band:row')
+    expect(shut.buttons, 'the note is a click').toContain('band:note')
     expect(shut.buttons, 'the menu stays pressable when collapsed').toContain('menu:r')
-    const back = await drawShell($, 205, ['tab:decide'], 19)
-    expect(back.all.length, 'the same key expands again').toBe(open.all.length)
-    await drawShell($, 205, ['tab:decide'], 19)
-    const other = await drawShell($, 205, ['menu:r'], 19)
+    const open = await drawShell($, 205, ['band:row'], 19, { observe: true })
+    expect(open.all.length, 'a click on the row expands').toBeGreaterThan(6)
+    expect(open.buttons, 'the open band has no row-body click').not.toContain('band:row')
+    expect(open.buttons).not.toContain('band:note')
+    const again = await drawShell($, 205, [], 19, { observe: true })
+    expect(again.all.length, 'blank space in the open band changes nothing').toBe(open.all.length)
+    expect(again.buttons).not.toContain('band:row')
+    const closed = await drawShell($, 205, ['tab:decide'], 19, { observe: true })
+    expect(closed.all.length, 'd on the open 待決 menu collapses').toBe(1)
+    const byNote = await drawShell($, 205, ['band:note'], 19, { observe: true })
+    expect(byNote.all.length, 'the note is not the only click').toBeGreaterThan(6)
+    await drawShell($, 205, ['tab:decide'], 19, { observe: true })
+    const other = await drawShell($, 205, ['menu:r'], 19, { observe: true })
     expect(other.all.length, 'another menu key expands and selects').toBeGreaterThan(1)
     expect(other.all.join('\n')).toContain('圓桌')
+  })
+  test('r3 fold toggle: the same bottom-row cell folds and unfolds at 209 and 80 columns (' + surface + ')', async ($, on) => {
+    r5World(on)
+    await start($, surface)
+    const shellRows = (tree: Node): Node[] => ((tree.children || []) as Node[]).flatMap(function rows(c: Node): Node[] {
+      const kids = (c.children || []) as Node[]
+      return c.type === 'Box' && c.props?.flexDirection === 'column' ? kids : c.type === 'Box' && kids.length === 1 && kids[0].type === 'Box' && kids[0].props?.flexDirection === 'column' ? rows(kids[0]) : [c]
+    })
+    const findKey = (n: Node | string, key: string): Node | null => {
+      if (typeof n !== 'object' || n === null) return null
+      if (n.props?.key === key) return n
+      for (const ch of n.children || []) {
+        const hit = findKey(ch as Node, key)
+        if (hit !== null) return hit
+      }
+      return null
+    }
+    const glyphCol = (row: Node): number => {
+      let found = -1
+      const walk = (n: Node | string | unknown[], x: number): number => {
+        if (typeof n === 'string') return x + displayWidth(n)
+        if (Array.isArray(n)) { let c = x; for (const ch of n) c = walk(ch as Node, c); return c }
+        if (n.props?.key === FOLD_KEY) { found = x + displayWidth(foldLabel(true)) - 1; return x }
+        const box = typeof n.props?.width === 'number' ? n.props.width as number : null
+        const kids = (n.children || []) as (Node | string | unknown[])[]
+        if (n.type === 'Text' || (kids.length === 0 && typeof n.props?.label === 'string')) {
+          const text = n.type === 'Text' ? textOf(n) : n.props?.label as string
+          return x + displayWidth(text)
+        }
+        let c = x
+        for (const ch of kids) c = walk(ch, c)
+        return box === null ? c : x + box
+      }
+      walk(row, 0)
+      return found
+    }
+    const measure = async (cols: number, press: string[]) => {
+      const d = await drawShell($, cols, press, 19, { observe: true })
+      const rows = shellRows(d.tree)
+      const hits = rows.map((r, i) => ({ i, btn: findKey(r, FOLD_KEY) })).filter(h => h.btn !== null)
+      expect(hits.length, 'one toggle at ' + cols).toBe(1)
+      const at = hits[0].i
+      const btn = hits[0].btn as Node
+      const kids = (btn.children || []) as Node[]
+      expect(kids.length, 'the button holds only the glyph at ' + cols).toBe(1)
+      expect(displayWidth(rowStr(kids[0])), 'the button child is one cell at ' + cols).toBe(1)
+      const label = rowStr(btn)
+      const glyph = [...label].pop() as string
+      return { rowFromBottom: rows.length - 1 - at, col: glyphCol(rows[at]), glyph, label, width: displayWidth(glyph), n: d.all.length }
+    }
+    for (const cols of [209, 80]) {
+      await start($, surface)
+      const shut = await measure(cols, [])
+      expect(shut.n, 'collapsed at ' + cols).toBe(1)
+      expect(shut.label, 'the button text is the folded glyph alone at ' + cols).toBe(foldLabel(true))
+      expect(shut.glyph).toBe('▸')
+      expect(shut.glyph).toBe(ui.GLYPHS.structure.folded)
+      expect(shut.rowFromBottom, 'bottom row at ' + cols).toBe(0)
+      expect(shut.col + shut.width <= cols - BAND_CLOSE_ROOM, 'ends before the close room at ' + cols).toBe(true)
+      expect(shut.col, 'glyph sits in the cell just left of the close room at ' + cols).toBe(cols - BAND_CLOSE_ROOM - 1)
+      const open = await measure(cols, [FOLD_KEY])
+      expect(open.n, 'the toggle expands at ' + cols).toBeGreaterThan(1)
+      expect(open.label).toBe(foldLabel(false))
+      expect(open.glyph).toBe('▾')
+      expect(open.glyph).toBe(ui.GLYPHS.structure.open)
+      expect(open.rowFromBottom).toBe(shut.rowFromBottom)
+      expect(open.col).toBe(shut.col)
+      expect(open.col + open.width <= cols - BAND_CLOSE_ROOM, 'expanded cell ends before the close room at ' + cols).toBe(true)
+      const again = await measure(cols, [FOLD_KEY])
+      expect(again.n, 'the same cell collapses at ' + cols).toBe(1)
+      expect(again.glyph).toBe('▸')
+      expect(again.col).toBe(shut.col)
+      expect(again.rowFromBottom).toBe(shut.rowFromBottom)
+    }
+  })
+
+  test('r5 B2: a new card while collapsed stays one row and marks ▲N; expanding clears the mark (' + surface + ')', async ($, on) => {
+    const w = r5World(on, [PMCARD])
+    await start($, surface)
+    const countOf = (tree: Node) => walkTexts(tree).filter(n => /^▲\d+$/.test(textOf(n)))
+    const first = await drawShell($, 205, [], 19, { observe: true })
+    expect(first.all.length, 'starts collapsed').toBe(1)
+    const base = countOf(first.tree)
+    expect(base.length, '▲N is its own text').toBeGreaterThan(0)
+    expect(base.every(n => n.props?.color === undefined), 'cards already waiting are not marked').toBe(true)
+    w.files[W_MODEL] = j(model({ needs_decision: true, decisions: [PMCARD, DQ2] }))
+    await w.clock.advance(5_000)
+    const marked = await drawShell($, 205, [], 19, { observe: true })
+    expect(marked.all.length, 'a new card does not expand').toBe(1)
+    const flagged = countOf(marked.tree)
+    expect(flagged.some(n => textOf(n) === '▲2' && n.props?.color === 'warning'), 'the count is attention text').toBe(true)
+    expect(flagged.every(n => n.props?.backgroundColor === undefined && n.props?.inverse === undefined), 'text colour only').toBe(true)
+    const opened = await drawShell($, 205, ['band:row'], 19, { observe: true })
+    expect(opened.all.length, 'still expandable').toBeGreaterThan(1)
+    expect(countOf(opened.tree).every(n => n.props?.color === undefined), 'expanding clears the mark').toBe(true)
+    const shut = await drawShell($, 205, ['tab:decide'], 19, { observe: true })
+    expect(shut.all.length).toBe(1)
+    expect(countOf(shut.tree).every(n => n.props?.color === undefined), 'the mark stays clear once the count was seen').toBe(true)
   })
   test('r5 C: a card whose question has (1)(2)(3) and four options: each step and each option has its own row (' + surface + ')', async ($, on) => {
     r5World(on, [STEPCARD, DQ2])
@@ -8927,18 +9077,29 @@ for (const surface of SURFACES) {
     const w = await r4World($, on, false)
     const logOf = () => (w.bodies[LIVE + '/band-geometry.log'] ?? '').split('\n').filter(l => l !== '')
     const n0 = logOf().length
-    await drawShell($, 155, [], 19, { legacyTabs: false })
+    await drawShell($, 155, [], 19, { legacyTabs: false, observe: true })
     const n1 = logOf().length
     expect(n1 - n0, 'a first draw writes one line').toBe(1)
-    await drawShell($, 155, [], 19, { legacyTabs: false })
+    const first = JSON.parse(logOf()[logOf().length - 1])
+    expect(first.shellRows, 'the first draw is the one row').toBe(1)
+    expect(first.expanded).toBe(false)
+    await drawShell($, 155, [], 19, { legacyTabs: false, observe: true })
     expect(logOf().length, 'the same geometry writes none').toBe(n1)
-    await drawShell($, 205, [], 17, { legacyTabs: false })
+    await drawShell($, 205, [], 17, { legacyTabs: false, observe: true })
+    expect(logOf().length, 'a change writes one more').toBe(n1 + 1)
+    const mid = JSON.parse(logOf()[logOf().length - 1])
+    expect(mid.maxRows).toBe(17)
+    expect(mid.bodyColumns).toBe(205)
+    expect(mid.shellRows).toBe(1)
+    expect(mid.expanded).toBe(false)
+    await drawShell($, 205, ['band:row'], 17, { legacyTabs: false, observe: true })
     const lines = logOf()
-    expect(lines.length, 'a change writes one more').toBe(n1 + 1)
+    expect(lines.length, 'opening the row writes one more').toBe(n1 + 2)
     const last = JSON.parse(lines[lines.length - 1])
     expect(last.maxRows).toBe(17)
     expect(last.bodyColumns).toBe(205)
     expect(last.shellRows).toBe(12)
+    expect(last.expanded).toBe(true)
     expect(typeof last.ts).toBe('number')
   })
 

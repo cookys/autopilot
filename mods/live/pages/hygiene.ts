@@ -340,4 +340,4 @@ export function hygieneView(ctx: HygieneCtx, view?: Partial<HygieneView>): { bod
   return { body, actions }
 }
 
-export const hygienePage: Page = { id: 'hygiene', key: '8', title: '殘留', framed: true, render: ctx => hygieneView(ctx) }
+export const hygienePage: Page = { id: 'hygiene', key: '6', title: '殘留', framed: true, render: ctx => hygieneView(ctx) }

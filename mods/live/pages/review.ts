@@ -343,7 +343,7 @@ export function renderReview(ctx: PageCtx, view: ReviewView = DEFAULT_REVIEW_VIE
 
 export const reviewPage: Page = {
   id: 'review',
-  key: '6',
+  key: '4',
   title: '審查',
   framed: true,
   render: ctx => renderReview(ctx),

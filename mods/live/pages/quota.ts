@@ -381,4 +381,4 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
   return { body: [...keptHeader, ...picked.rows, ...keptFocus], actions }
 }
 
-export const quotaPage: Page = { id: 'quota', key: '4', title: '額度', framed: true, render: ctx => renderQuota(ctx) }
+export const quotaPage: Page = { id: 'quota', key: '5', title: '額度', framed: true, render: ctx => renderQuota(ctx) }

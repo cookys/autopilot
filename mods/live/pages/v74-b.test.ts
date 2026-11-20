@@ -1,5 +1,4 @@
 import { test, expect } from 'claude-code/testing'
-import { readFileSync } from 'node:fs'
 import { routeKey } from './keys'
 import { frameBorderRow, frameRows, stripRows } from './frame'
 import { PAGES } from './index'
@@ -47,12 +46,11 @@ test('v74-b: help page draws S10 sections', () => {
   expect(body).toContain('1 到 9 只管切頁')
 })
 
-test('v74-b: feeds parse fixture json (not used at page render time)', () => {
-  const pm = readFileSync(new URL('../fixtures/v74/pm-status.json', import.meta.url), 'utf8')
+test('v74-b: feeds parse inline json (not used at page render time)', () => {
+  const pm = JSON.stringify({ schema: 'fleet.pm.status', schema_version: 1, generated_at_ms: 1, selector: null, projects: [{ project: 'p', root_id: null, counts: { stuck: 0, overdue: 0, running: 1, waiting: 0, total: 1 }, tasks: [] }] })
   expect(parsePmStatus(pm)?.schema).toBe('fleet.pm.status')
-  const decide = readFileSync(new URL('../fixtures/v74/decide.json', import.meta.url), 'utf8')
-  const wrapped = JSON.stringify({ cards: JSON.parse(decide).map((c: { id: string }) => ({ card: { card_id: c.id, question: c.question, options: c.options?.map((o: { label: string; detail: string; recommended: boolean }) => ({ label: o.label, description: o.detail })), recommendation: c.options?.find((o: { recommended: boolean }) => o.recommended)?.label } })) })
-  expect(parseDecideList(wrapped)?.length).toBe(3)
+  const cards = ['d-1', 'd-2', 'd-3'].map(id => ({ card: { card_id: id, question: 'q ' + id, options: [{ label: 'a', description: '' }, { label: 'b', description: '' }], recommendation: 'a' } }))
+  expect(parseDecideList(JSON.stringify({ cards }))?.length).toBe(3)
   expect(parseDecideList('{"cards":[]}')).toBeNull()
   const feed = makePmFeed(0)
   expect(feed.status()).toBeNull()

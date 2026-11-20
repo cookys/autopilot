@@ -235,4 +235,4 @@ function hostsRows(ctx: PageCtx, snap: ConsoleSnapshot, wide: boolean): Row[] {
   return out
 }
 
-export const fleetPage: Page = { id: 'fleet', key: '3', title: '艦隊', framed: true, render: ctx => fleetView(ctx) }
+export const fleetPage: Page = { id: 'fleet', key: '7', title: '艦隊', framed: true, render: ctx => fleetView(ctx) }

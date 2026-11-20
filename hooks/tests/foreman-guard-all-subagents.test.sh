@@ -165,7 +165,7 @@ clear_marker
 reset_events
 reset_guard_state
 set_marker l4
-LIVE_DIR="$(mktemp -d /dev/shm/fg-all-sub-live-XXXXXX 2>/dev/null || mktemp -d "$FG_TMP_ROOT/live-XXXXXX")"
+LIVE_DIR="$(mktemp -d "$FG_TMP_ROOT/live-XXXXXX")"
 mkdir -p "$LIVE_DIR/context"
 export AUTOPILOT_LIVE_DIR="$LIVE_DIR"
 node -e '

@@ -9,8 +9,10 @@
 //
 // Steps, in order, each with its own timeout. One failure never stops the others.
 // --steps runs only the named step ids, still in this order. An unknown id exits 2 and runs nothing.
-// Exit 0 when at least one producer exited 0; exit 1 only when every producer failed;
-// exit 2 on usage. Producers are usage-probe, sync-statusline, sync-provider minimax
+// Exit 0 when at least one producer exited 0. Exit 1 when none did: every step failed
+// or was a skip. Exit 2 on usage. A step that exits 2 and whose filtered stderr reason
+// contains registry_not_configured or mode_off is a skip: it is not ok and not a failed
+// producer. Producers are usage-probe, sync-statusline, sync-provider minimax
 // and sync-provider glm.
 // --out-dir is an already-existing shared directory (not a tmpfs live dir). Provider steps
 // write fleet.quota/1 rows under <dir>/quota.
@@ -20,8 +22,10 @@
 // has no attempt for that alias in the last 5.5 h. The same label is not repeated unless activity
 // happened after that line (an audit attempt with ts after the line's observed_at, or rolling_5h
 // resets_at after it). The line is <live_dir>/quota/idle-alias.jsonl.
-// One summary line per step. Child stdout and stderr are discarded, so a credential a child
-// printed is never read back and never printed. This process opens no credential file.
+// One summary line per step. Child stdout is discarded. Child stderr is read only to attach
+// one reason on failure: the last non-empty line, chars outside [A-Za-z0-9_ .:=()/-] removed,
+// capped at 120. A credential a child printed cannot pass that filter as a token blob.
+// This process opens no credential file.
 //
 // QUOTA_MIRROR_BIN (tests only) is a directory of executables named after each step id.
 // They receive the same argv the real command would, after the script path.
@@ -103,11 +107,25 @@ function stubArgs(id, outDir) {
   }
 }
 
+function reasonText(stderr) {
+  const text = Buffer.isBuffer(stderr) ? stderr.toString('utf8') : (typeof stderr === 'string' ? stderr : '');
+  const lines = text.split(/\r?\n/).filter((line) => line.trim() !== '');
+  if (lines.length === 0) return '';
+  return lines[lines.length - 1].replace(/[^A-Za-z0-9_ .:=()/-]/g, '').slice(0, 120);
+}
+
 function classify(spawned) {
   if (spawned.error && spawned.error.code === 'ENOENT') return { ok: false, detail: 'missing' };
   if (spawned.error && spawned.error.code === 'ETIMEDOUT') return { ok: false, detail: 'timeout' };
   if (spawned.status === 0) return { ok: true, detail: '' };
-  if (typeof spawned.status === 'number') return { ok: false, detail: `exit=${spawned.status}` };
+  if (typeof spawned.status === 'number') {
+    const reason = reasonText(spawned.stderr);
+    if (spawned.status === 2 && (reason.includes('registry_not_configured') || reason.includes('mode_off'))) {
+      return { ok: false, skip: true, detail: reason };
+    }
+    const detail = reason ? `exit=${spawned.status} reason=${reason}` : `exit=${spawned.status}`;
+    return { ok: false, detail };
+  }
   if (spawned.signal) return { ok: false, detail: 'timeout' };
   return { ok: false, detail: 'fail' };
 }
@@ -115,7 +133,7 @@ function classify(spawned) {
 function spawnStep(file, args, timeoutMs) {
   return spawnSync(file, args, {
     timeout: timeoutMs,
-    stdio: ['ignore', 'ignore', 'ignore'],
+    stdio: ['ignore', 'ignore', 'pipe'],
     env: process.env,
   });
 }
@@ -130,6 +148,7 @@ function runStep(id, outDir) {
 
 function summary(result) {
   if (result.ok) return `quota-mirror-tick: ${result.id} ok`;
+  if (result.skip) return `quota-mirror-tick: ${result.id} skip ${result.detail}`;
   return `quota-mirror-tick: ${result.id} fail ${result.detail}`;
 }
 
@@ -248,12 +267,13 @@ function run(opts) {
   let producers = 0;
   for (const result of results) {
     process.stdout.write(`${summary(result)}\n`);
+    if (result.skip) continue;
     producers += 1;
     if (result.ok) ok += 1;
   }
   process.stdout.write(`quota-mirror-tick: ${ok}/${producers} ok\n`);
   try { appendIdleAliases({ env: process.env, nowMs: o.nowMs }); } catch (_) { /* idle never changes the producer exit */ }
-  if (producers > 0 && ok === 0) return 1;
+  if (results.length > 0 && ok === 0) return 1;
   return 0;
 }
 

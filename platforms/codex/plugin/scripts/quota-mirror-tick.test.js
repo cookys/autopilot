@@ -20,32 +20,37 @@ const IDS = [
   'sync-provider-glm',
 ];
 
-function writeStub(dir, id, code, log) {
+function writeStub(dir, id, code, log, stderrText) {
   const file = path.join(dir, id);
+  let errPart = '';
+  if (stderrText != null) {
+    const errFile = `${file}.err`;
+    fs.writeFileSync(errFile, stderrText.endsWith('\n') ? stderrText : `${stderrText}\n`);
+    errPart = `cat '${errFile}' >&2\n`;
+  }
   const body = `#!/bin/sh
 printf '%s' '${id}' >> '${log}'
 if [ "$#" -gt 0 ]; then printf ' %s' "$@" >> '${log}'; fi
 printf '\\n' >> '${log}'
 echo ${SENTINEL}
-echo ${SENTINEL} >&2
-exit ${code}
+${errPart}exit ${code}
 `;
   fs.writeFileSync(file, body, { mode: 0o755 });
 }
 
-function fixture(codes) {
+function fixture(codes, stderrById) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'quota-mirror-tick-'));
   const bin = path.join(root, 'bin');
   const live = path.join(root, 'live');
   const log = path.join(root, 'log');
   fs.mkdirSync(bin);
   fs.mkdirSync(live, { mode: 0o700 });
-  for (const id of IDS) writeStub(bin, id, codes[id], log);
+  for (const id of IDS) writeStub(bin, id, codes[id], log, stderrById && stderrById[id]);
   return { root, bin, live, log };
 }
 
-function runTick(codes) {
-  const fx = fixture(codes);
+function runTick(codes, stderrById) {
+  const fx = fixture(codes, stderrById);
   const r = spawnSync(process.execPath, [TICK], {
     encoding: 'utf8',
     env: {
@@ -99,6 +104,39 @@ test('every step fails: exit non-zero after all of them ran', () => {
   assert.notStrictEqual(r.status, 0);
   assert.deepStrictEqual(lines.map((l) => l.split(' ')[0]), IDS);
   assert.match(r.stdout, /quota-mirror-tick: 0\/4 ok/);
+});
+
+test('exit 2 with registry_not_configured is a skip, not a failure', () => {
+  const codes = all(0);
+  codes['usage-probe'] = 2;
+  const { r, lines } = runTick(codes, { 'usage-probe': 'noise\nregistry_not_configured\n' });
+  assert.strictEqual(r.status, 0, r.stderr);
+  assert.deepStrictEqual(lines.map((l) => l.split(' ')[0]), IDS);
+  assert.match(r.stdout, /quota-mirror-tick: usage-probe skip registry_not_configured/);
+  assert.ok(!r.stdout.includes('usage-probe fail'));
+  assert.match(r.stdout, /quota-mirror-tick: 3\/3 ok/);
+  const probeLines = r.stdout.split('\n').filter((l) => l.includes('usage-probe'));
+  assert.deepStrictEqual(probeLines, ['quota-mirror-tick: usage-probe skip registry_not_configured']);
+});
+
+test('failure reason is the last stderr line, filtered and capped at 120', () => {
+  const codes = all(0);
+  codes['sync-statusline'] = 1;
+  const raw = `ignored earlier\nKEEP_ME mode=1 (a/b) ${'!@#<>'.repeat(5)}${'A'.repeat(200)}\n`;
+  const { r } = runTick(codes, { 'sync-statusline': raw });
+  assert.strictEqual(r.status, 0, r.stderr);
+  const line = r.stdout.split('\n').find((l) => l.includes('sync-statusline'));
+  assert.ok(line, r.stdout);
+  const prefix = 'quota-mirror-tick: sync-statusline fail exit=1 reason=';
+  assert.ok(line.startsWith(prefix), line);
+  const reason = line.slice(prefix.length);
+  assert.strictEqual(reason.length, 120);
+  assert.match(reason, /^KEEP_ME mode=1 \(a\/b\) A+$/);
+  assert.ok(!reason.includes('!'));
+  assert.ok(!reason.includes('<'));
+  assert.ok(!line.includes('ignored earlier'));
+  const statusLines = r.stdout.split('\n').filter((l) => l.includes('sync-statusline'));
+  assert.strictEqual(statusLines.length, 1);
 });
 
 test('step list is the four producers and a missing check script is not spawned', () => {

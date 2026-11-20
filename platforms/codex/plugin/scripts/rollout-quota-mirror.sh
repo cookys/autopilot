@@ -39,7 +39,13 @@
 # --rollback <epoch> restores those backups, or uninstalls when none exist,
 # then daemon-reload and restart (restored) or disable --now (uninstalled).
 #
-# Exit 2 on usage. Exit 1 when a step fails.
+# Exit 2 on usage. Exit 1 when a step fails. Exit 4 when --apply's
+# systemctl --user daemon-reload or enable --now fails (for example no user
+# bus). That path prints one line naming the failed step.
+# When the script is read from stdin, the rollback line is
+#   rollback: bash -s -- --rollback <epoch> < <repo>/scripts/rollout-quota-mirror.sh
+# using the repo path already resolved for the installer. A path invocation keeps
+#   rollback: <script> --rollback <epoch>
 set -euo pipefail
 
 resolve_script_dir() {
@@ -104,6 +110,28 @@ else
   REPO_ROOT=""
   INSTALLER=""
 fi
+RUN_FROM_STDIN=0
+if [ -z "${BASH_SOURCE[0]:-}" ] || [ ! -f "${BASH_SOURCE[0]}" ]; then
+  RUN_FROM_STDIN=1
+fi
+
+print_rollback() {
+  local epoch="$1"
+  if [ "$RUN_FROM_STDIN" = "1" ]; then
+    printf 'rollback: bash -s -- --rollback %s < %s/scripts/rollout-quota-mirror.sh\n' "$epoch" "$REPO_ROOT"
+  else
+    printf 'rollback: %s --rollback %s\n' "$SCRIPT_DIR/rollout-quota-mirror.sh" "$epoch"
+  fi
+}
+
+systemctl_apply() {
+  local step="$1"
+  shift
+  if ! systemctl --user "$@"; then
+    printf 'rollout-quota-mirror: systemctl %s failed\n' "$step" >&2
+    return 4
+  fi
+}
 NODE_BIN="$(resolve_node || true)"
 UNITS=(quota-mirror.service quota-mirror.timer)
 SNAPSHOT_STALE_S=21600
@@ -331,7 +359,7 @@ do_apply() {
       done
     fi
     printf 'would run: systemctl --user daemon-reload && systemctl --user enable --now quota-mirror.timer\n'
-    printf 'rollback: %s --rollback %s\n' "$SCRIPT_DIR/rollout-quota-mirror.sh" "$epoch"
+    print_rollback "$epoch"
     emit_inventory
     return
   fi
@@ -358,9 +386,9 @@ do_apply() {
       print_sha_line unchanged "$name" "$dir/$name"
     done
   fi
-  systemctl --user daemon-reload
-  systemctl --user enable --now quota-mirror.timer
-  printf 'rollback: %s --rollback %s\n' "$SCRIPT_DIR/rollout-quota-mirror.sh" "$epoch"
+  systemctl_apply daemon-reload daemon-reload
+  systemctl_apply enable enable --now quota-mirror.timer
+  print_rollback "$epoch"
   emit_inventory
 }
 

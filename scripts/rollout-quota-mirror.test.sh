@@ -53,6 +53,9 @@ case "$cmd" in
     if [ "$(cat "$ROLLOUT_STUB/last")" = "n/a" ]; then
       printf 'Fri 2026-11-21 00:00:00 UTC\n' > "$ROLLOUT_STUB/last"
     fi
+    if [ -f "$ROLLOUT_STUB/enable_rc" ]; then
+      exit "$(cat "$ROLLOUT_STUB/enable_rc")"
+    fi
     exit 0
     ;;
   disable)
@@ -348,6 +351,30 @@ run_script_stdin --apply --dry-run
 [ "$RC" = "0" ] || fail "home scripts dry-run exit $RC err=$ERR out=$OUT"
 printf '%s\n' "$OUT" | grep -q "$HOME_D/projects/autopilot/scripts/install-quota-mirror.js" || fail "home installer not used: $OUT"
 ok "stdin HOME projects scripts"
+
+# systemctl enable failure names the step and exits 4. Sandbox stub only.
+new_sandbox
+seed_fresh
+install_unit_file
+enable_timer
+printf '1\n' > "$STUB/enable_rc"
+run_script --apply
+[ "$RC" = "4" ] || fail "enable fail exit $RC err=$ERR out=$OUT"
+printf '%s\n' "$ERR" | grep -qx 'rollout-quota-mirror: systemctl enable failed' || fail "enable fail did not name the step: out=$OUT err=$ERR"
+ok "systemctl enable failure exits 4"
+
+# stdin invocation prints a copyable bash -s rollback line.
+new_sandbox
+seed_fresh
+install_unit_file
+enable_timer
+export AUTOPILOT_PLUGIN_ROOT="$ROOT"
+run_script_stdin --apply --dry-run
+unset AUTOPILOT_PLUGIN_ROOT
+[ "$RC" = "0" ] || fail "stdin dry-run rollback exit $RC err=$ERR out=$OUT"
+printf '%s\n' "$OUT" | grep -F "rollback: bash -s -- --rollback" >/dev/null || fail "stdin rollback form: $OUT"
+printf '%s\n' "$OUT" | grep -F "< $ROOT/scripts/rollout-quota-mirror.sh" >/dev/null || fail "stdin rollback repo path: $OUT"
+ok "stdin rollback uses bash -s"
 
 # No node anywhere: inventory verdict unchanged (node_path null); --apply exits 3.
 new_sandbox

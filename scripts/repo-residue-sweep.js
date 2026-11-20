@@ -47,8 +47,10 @@
 //            `git update-ref -d refs/heads/<branch> <tip>` (compare-and-swap).
 //            Without the flag the branch stays in branches_kept (why delete_branches_off, plus tip).
 //            main, master, develop, the integration ref, the main checkout's current branch,
-//            and any branch checked out in a live worktree are never deleted: one stderr line
-//            `reap: keep protected branch <b>` and a JSON entry { branch, skipped: "protected" }.
+//            and any branch checked out in a live worktree are never deleted. That report is
+//            written when the branch is excluded, including when it is already checked out:
+//            one stderr line `reap: keep protected branch <b>` and a JSON entry
+//            { branch, skipped: "protected" }.
 //   never    live worktrees, unintegrated branches, unpreserved dirty worktrees
 //   --older-than-days narrows the candidate set (age from the marker's created_at, else the
 //   branch's last commit date, else the directory mtime); it never widens it.
@@ -1665,8 +1667,16 @@ function main() {
   // branches: only integrated + not checked out (re-read checkouts after the removals above)
   const stillCheckedOut = new Set(listWorktrees(mainPath).map((x) => x.branch).filter(Boolean));
   const protectRefs = [integrationBranch, o.integrationRef];
+  const protectedNames = protectedBranchNames(mainPath, protectRefs);
   const candidates = onlyWt.length > 0 ? [] : branches.filter((b) => (b.class === 'integrated' || b.class === 'integration-ref') && !stillCheckedOut.has(b.branch) && !tooYoung(b.last_commit_unix ? (Date.now() / 1000 - b.last_commit_unix) / 86400 : null));
-  if (onlyWt.length === 0) for (const b of branches) if (!candidates.includes(b) && b.class !== 'integration-ref') actions.branches_kept.push({ branch: b.branch, class: b.class, ahead: b.ahead });
+  // Protected wins over the checked-out exclusion. A branch filtered out here never reaches the
+  // candidate predicate below, so record skipped:"protected" at this gate too. Checked-out branches
+  // stay out of candidates.
+  if (onlyWt.length === 0) for (const b of branches) {
+    if (candidates.includes(b)) continue;
+    if (branchIsProtected(b.branch, protectedNames)) { actions.branches_kept.push(protectedSkip(b.branch)); continue; }
+    if (b.class !== 'integration-ref') actions.branches_kept.push({ branch: b.branch, class: b.class, ahead: b.ahead });
+  }
   const branchDelete = branchDeleteOn(o, loadResidueConfig());
   if (candidates.length > 0 && !branchDelete) {
     for (const b of candidates) actions.branches_kept.push({ branch: b.branch, class: b.class, why: 'delete_branches_off', tip: b.tip });

@@ -109,6 +109,45 @@ test('residue.delete_branches still keeps develop', () => {
   }
 });
 
+function assertProtectedKept(repo, run, branch) {
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(branchExists(repo, branch), true, `${branch} still exists`);
+  assert.match(run.stderr, new RegExp(`reap: keep protected branch ${branch}`));
+  const report = JSON.parse(run.stdout);
+  assert.ok(report.actions.branches_kept.some((row) => row.branch === branch && row.skipped === 'protected'), JSON.stringify(report.actions.branches_kept));
+  assert.equal(report.actions.branches_deleted.some((row) => row.branch === branch), false);
+}
+
+test('reap --delete-branches reports develop checked out in the main checkout as protected', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'reap-protect-main-develop-'));
+  const configFile = writeConfig(root, {});
+  try {
+    const repo = makeRepo(root);
+    git(repo, ['checkout', '-q', '-b', 'develop']);
+    const run = runReap(repo, ['--delete-branches'], configFile);
+    assertProtectedKept(repo, run, 'develop');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('reap --delete-branches reports main checked out in a surviving worktree as protected', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'reap-protect-wt-main-'));
+  const configFile = writeConfig(root, {});
+  try {
+    const repo = makeRepo(root);
+    git(repo, ['branch', 'main', 'HEAD']);
+    const wt = path.join(root, 'wt-main');
+    git(repo, ['worktree', 'add', '-q', wt, 'main']);
+    fs.writeFileSync(path.join(wt, 'dirty.txt'), 'dirty\n');
+    const run = runReap(repo, ['--delete-branches'], configFile);
+    assert.equal(fs.existsSync(wt), true);
+    assertProtectedKept(repo, run, 'main');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('integration ref trunk is protected when passed as refs/heads/trunk', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'reap-protect-trunk-'));
   const configFile = writeConfig(root, {});

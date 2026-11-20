@@ -105,7 +105,7 @@ for (const [cols, rows] of [[120, 30], [160, 40]]) {
     const pane = await mountPane($, cols, rows)
     const band = await mountBand($, cols, rows)
     const nav = buttons(await pane.drawn()).filter(n => /^[0-9]$/.test(n.props?.hotkey ?? ''))
-    expect(nav.map(n => n.props?.hotkey)).toEqual(PAGES.filter(p => p.id !== 'help').map(p => p.key))
+    expect(nav.map(n => n.props?.hotkey)).toEqual(PAGES.map(p => p.key))
     expect(buttons(await band.drawn()).filter(n => /^(tab:|forge$)/.test(n.props?.key ?? '')).map(n => n.props?.key)).toEqual([])
     await band.unmount()
     await pane.unmount()
@@ -124,16 +124,16 @@ for (const [cols, rows] of [[120, 30], [160, 40]]) {
   })
 }
 
-test('K1: at 80x24 pressing 0 after an old scroll offset shows the forge header on the first row', async ($, on) => {
+test('K1: at 80x24 pressing 0 after an old scroll offset shows the pet header on the first row', async ($, on) => {
   host(on)
   await $.session.start({ surface: 'terminal', cwd: REPO })
   await $.command.run({ command: 'live-pane', args: '' })
   const before = await mountPane($, 80, 24, 18)
-  await before.press({ key: 'forge' })
+  await before.press({ key: 'pet' })
   await before.unmount()
   const after = await mountPane($, 80, 24)
   const rows = walk(await after.drawn()).filter(n => /^f\d+$/.test(n.props?.key ?? ''))
-  expect(text(rows[0])).toBe(makeT('zh-TW')('tab.forge'))
+  expect(text(rows[0])).toBe(makeT('zh-TW')('tab.pet'))
   expect(rows.length).toBe(24)
   expect(text(await after.drawn())).not.toContain('上面還有 18 行')
   await after.unmount()
@@ -162,7 +162,7 @@ test('K1: every page has exactly one shared strip with the same digit mapping an
   await $.session.end({ reason: 'exit' })
 })
 
-for (const cols of [80, 120, 160]) test(`Z3: page 0 is labelled 鍛 in both shared strips at ${cols} columns`, async ($, on) => {
+for (const cols of [80, 120, 160]) test(`Z3: page 0 is labelled 寵物 in both shared strips at ${cols} columns`, async ($, on) => {
   host(on)
   await $.session.start({ surface: 'terminal', cwd: REPO })
   const band = await mountBand($, cols, 30)
@@ -173,7 +173,7 @@ for (const cols of [80, 120, 160]) test(`Z3: page 0 is labelled 鍛 in both shar
   await band.unmount()
   const pane = await mountPane($, cols, 24)
   const forgePane = buttons(await pane.drawn()).find(n => n.props?.hotkey === '0')
-  expect(text(forgePane).trim()).toBe('鍛')
+  expect(text(forgePane).trim()).toBe('寵物')
   await pane.unmount()
   await $.session.end({ reason: 'exit' })
 })

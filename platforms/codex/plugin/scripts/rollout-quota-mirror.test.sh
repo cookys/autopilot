@@ -88,6 +88,51 @@ EOF
   export ROLLOUT_STUB="$STUB"
   export ROLLOUT_OUTSIDE="$OUTSIDE"
   unset AUTOPILOT_LIVE_DIR
+  unset AUTOPILOT_PLUGIN_ROOT
+  unset NODE
+}
+
+# PATH with the sandbox systemctl stub and the usual tools, and no node binary.
+isolate_path_no_node() {
+  local dest="$BASE/nonode" c
+  mkdir -p "$dest"
+  ln -sf "$BIN/systemctl" "$dest/systemctl"
+  ln -sf "$BIN/codeforge" "$dest/codeforge"
+  for c in bash env sort hostname id date stat find sha256sum awk grep cp mkdir cat touch chmod sed ls basename head xargs wc mktemp readlink; do
+    if [ -x "/usr/bin/$c" ]; then ln -sf "/usr/bin/$c" "$dest/$c"
+    elif [ -x "/bin/$c" ]; then ln -sf "/bin/$c" "$dest/$c"
+    fi
+  done
+  export PATH="$dest"
+}
+
+# Fake nvm tree. v22 is not executable; newest executable is v20.11.1.
+plant_nvm() {
+  local v dest
+  for v in v18.20.0 v20.9.0 v20.11.1; do
+    dest="$HOME_D/.nvm/versions/node/$v/bin"
+    mkdir -p "$dest"
+    cat > "$dest/node" <<EOF
+#!/usr/bin/env bash
+exec "$REAL_NODE" "\$@"
+EOF
+    chmod 755 "$dest/node"
+  done
+  dest="$HOME_D/.nvm/versions/node/v22.0.0/bin"
+  mkdir -p "$dest"
+  printf 'not executable\n' > "$dest/node"
+}
+
+run_script_stdin() {
+  set +e
+  OUT="$(bash -u -s -- "$@" < "$SCRIPT" 2>"$BASE/err")"
+  RC=$?
+  ERR="$(cat "$BASE/err")"
+  set -e
+}
+
+json_node_path() {
+  printf '%s\n' "$OUT" | "$REAL_NODE" -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const lines=s.trim().split(/\n/).filter(l=>l.startsWith("{")); const o=JSON.parse(lines[lines.length-1]); process.stdout.write(o.node_path===null?"null":String(o.node_path));});'
 }
 
 live() { printf '%s/autopilot' "$RUNTIME"; }
@@ -232,6 +277,109 @@ assert_outside_clean
 # unit files live under the sandbox home only
 find "$HOME_D" -type f | grep -q '/systemd/user/quota-mirror.service' || fail "unit not in sandbox"
 ok "negative control outside sandbox"
+
+# --- stdin + set -u, PATH has no node, newest executable nvm node ---
+new_sandbox
+seed_fresh
+install_unit_file
+enable_timer
+printf 'Fri 2026-11-21 00:00:00 UTC\n' > "$STUB/last"
+isolate_path_no_node
+plant_nvm
+run_script_stdin --inventory
+printf '%s\n' "$ERR" | grep -q 'BASH_SOURCE' && fail "stdin unbound BASH_SOURCE: $ERR"
+[ "$RC" = "0" ] || fail "stdin nvm exit $RC err=$ERR out=$OUT"
+assert_verdict ok "stdin inventory ok"
+GOT_NODE="$(json_node_path)"
+WANT_NODE="$HOME_D/.nvm/versions/node/v20.11.1/bin/node"
+[ "$GOT_NODE" = "$WANT_NODE" ] || fail "stdin node_path $GOT_NODE != $WANT_NODE"
+ok "stdin set -u uses newest nvm node"
+
+# NODE, when executable, wins over nvm and PATH.
+export NODE="$HOME_D/.nvm/versions/node/v18.20.0/bin/node"
+run_script_stdin --inventory
+GOT_NODE="$(json_node_path)"
+[ "$GOT_NODE" = "$NODE" ] || fail "NODE override $GOT_NODE != $NODE"
+unset NODE
+ok "NODE override"
+
+# No plugin root and no ~/projects/autopilot/scripts: inventory still runs;
+# --apply exits 3 because the installer is missing.
+new_sandbox
+seed_fresh
+install_unit_file
+enable_timer
+printf 'Fri 2026-11-21 00:00:00 UTC\n' > "$STUB/last"
+run_script_stdin --inventory
+[ "$RC" = "0" ] || fail "stdin no script dir inventory exit $RC err=$ERR out=$OUT"
+assert_verdict ok "stdin inventory without script dir"
+run_script_stdin --apply
+[ "$RC" = "3" ] || fail "stdin apply without installer exit $RC err=$ERR"
+printf '%s\n' "$ERR" | grep -q 'installer not found' || fail "stdin apply missing installer reason: $ERR"
+ok "stdin apply without installer exits 3"
+
+# AUTOPILOT_PLUGIN_ROOT/scripts wins over ~/projects/autopilot/scripts.
+new_sandbox
+seed_fresh
+install_unit_file
+enable_timer
+printf 'Fri 2026-11-21 00:00:00 UTC\n' > "$STUB/last"
+FAKE="$BASE/pluginroot"
+mkdir -p "$FAKE/scripts" "$HOME_D/projects/autopilot/scripts"
+printf '%s\n' 'console.log("would write: home-copy");' > "$HOME_D/projects/autopilot/scripts/install-quota-mirror.js"
+printf '%s\n' 'console.log("would write: plugin-root");' > "$FAKE/scripts/install-quota-mirror.js"
+export AUTOPILOT_PLUGIN_ROOT="$FAKE"
+run_script_stdin --apply --dry-run
+[ "$RC" = "0" ] || fail "plugin root dry-run exit $RC err=$ERR out=$OUT"
+printf '%s\n' "$OUT" | grep -q "$FAKE/scripts/install-quota-mirror.js" || fail "plugin root installer not used: $OUT"
+printf '%s\n' "$OUT" | grep -q 'home-copy' && fail "home copy installer ran"
+unset AUTOPILOT_PLUGIN_ROOT
+ok "stdin AUTOPILOT_PLUGIN_ROOT"
+
+# Neither plugin root: the home projects path is the installer.
+new_sandbox
+seed_fresh
+install_unit_file
+enable_timer
+printf 'Fri 2026-11-21 00:00:00 UTC\n' > "$STUB/last"
+mkdir -p "$HOME_D/projects/autopilot/scripts"
+printf '%s\n' 'console.log("would write: home-copy");' > "$HOME_D/projects/autopilot/scripts/install-quota-mirror.js"
+run_script_stdin --apply --dry-run
+[ "$RC" = "0" ] || fail "home scripts dry-run exit $RC err=$ERR out=$OUT"
+printf '%s\n' "$OUT" | grep -q "$HOME_D/projects/autopilot/scripts/install-quota-mirror.js" || fail "home installer not used: $OUT"
+ok "stdin HOME projects scripts"
+
+# No node anywhere: inventory verdict unchanged (node_path null); --apply exits 3.
+new_sandbox
+seed_fresh
+install_unit_file
+enable_timer
+printf 'Fri 2026-11-21 00:00:00 UTC\n' > "$STUB/last"
+isolate_path_no_node
+EMPTYF="$BASE/not-node"
+: > "$EMPTYF"
+chmod 644 "$EMPTYF"
+BINDS=(--bind "$EMPTYF" /usr/bin/node)
+if [ -e /usr/local/bin/node ]; then
+  BINDS+=(--bind "$EMPTYF" "$(readlink -f /usr/local/bin/node)")
+fi
+set +e
+OUT="$(/usr/bin/bwrap --ro-bind / / --bind "$BASE" "$BASE" --dev /dev "${BINDS[@]}" -- bash -u -s -- --inventory < "$SCRIPT" 2>"$BASE/err")"
+RC=$?
+ERR="$(cat "$BASE/err")"
+set -e
+[ "$RC" = "0" ] || fail "no-node inventory exit $RC err=$ERR out=$OUT"
+assert_verdict ok "no-node inventory verdict"
+GOT_NODE="$(json_node_path)"
+[ "$GOT_NODE" = "null" ] || fail "no-node node_path $GOT_NODE"
+set +e
+OUT="$(/usr/bin/bwrap --ro-bind / / --bind "$BASE" "$BASE" --dev /dev "${BINDS[@]}" -- bash "$SCRIPT" --apply 2>"$BASE/err")"
+RC=$?
+ERR="$(cat "$BASE/err")"
+set -e
+[ "$RC" = "3" ] || fail "no-node apply exit $RC err=$ERR out=$OUT"
+printf '%s\n' "$ERR" | grep -q 'node not found' || fail "no-node apply reason: $ERR"
+ok "no node inventory unchanged apply exits 3"
 
 if [ "$FAIL" != "0" ]; then
   printf 'rollout-quota-mirror.test.sh FAILED\n' >&2

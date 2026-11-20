@@ -3474,6 +3474,19 @@
       "relates": []
     },
     {
+      "name": "AUTOPILOT_PLUGIN_ROOT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/rollout-quota-mirror.sh"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "When rollout-quota-mirror.sh is fed on stdin and has no script path, its script directory is $AUTOPILOT_PLUGIN_ROOT/scripts if that directory exists."
+    },
+    {
       "name": "AUTOPILOT_PLATFORM_CAPABILITY_RECEIPT",
       "kind": "env",
       "audience": "internal",

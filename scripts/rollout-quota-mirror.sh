@@ -8,7 +8,17 @@
 #
 # --inventory (default) prints one JSON line and does not write:
 #   host, user, timer_installed, timer_enabled, last_tick, snapshot_dir_exists,
-#   newest_snapshot_age_s, quota_out_newest_age_s, codeforge_on_path, verdict.
+#   newest_snapshot_age_s, quota_out_newest_age_s, codeforge_on_path, node_path,
+#   verdict.
+# node_path is the node binary used for every node call, or null when none was
+# found. Search order: $NODE if it is an executable file, else command -v node,
+# else the newest executable $HOME/.nvm/versions/node/*/bin/node (sort -V),
+# else /usr/local/bin/node, else /usr/bin/node. With no node, the verdict is
+# unchanged and --apply / --rollback exit 3.
+# Fed on stdin (`bash -s`), there is no script path. SCRIPT_DIR is then
+# $AUTOPILOT_PLUGIN_ROOT/scripts, else $HOME/projects/autopilot/scripts, when
+# that directory exists. Inventory still runs when neither exists; --apply and
+# --rollback then exit 3 because the installer is missing.
 # verdict is the first match: no_timer, timer_disabled, no_snapshot, stale, ok.
 # A statusline snapshot older than 21600 s (account-quota.js 6 h) is stale.
 # A fleet.quota mirror file older than 1800 s (timer is 10 min) is stale.
@@ -32,9 +42,69 @@
 # Exit 2 on usage. Exit 1 when a step fails.
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-INSTALLER="$SCRIPT_DIR/install-quota-mirror.js"
+resolve_script_dir() {
+  local src=""
+  src="${BASH_SOURCE[0]:-}"
+  if [ -n "$src" ] && [ -f "$src" ]; then
+    (cd "$(dirname "$src")" && pwd)
+    return 0
+  fi
+  if [ -n "${AUTOPILOT_PLUGIN_ROOT:-}" ] && [ -d "${AUTOPILOT_PLUGIN_ROOT}/scripts" ]; then
+    (cd "${AUTOPILOT_PLUGIN_ROOT}/scripts" && pwd)
+    return 0
+  fi
+  if [ -n "${HOME:-}" ] && [ -d "$HOME/projects/autopilot/scripts" ]; then
+    (cd "$HOME/projects/autopilot/scripts" && pwd)
+    return 0
+  fi
+  printf ''
+}
+
+resolve_node() {
+  local cand newest ng
+  if [ -n "${NODE:-}" ] && [ -f "$NODE" ] && [ -x "$NODE" ]; then
+    printf '%s' "$NODE"
+    return 0
+  fi
+  cand="$(command -v node 2>/dev/null || true)"
+  if [ -n "$cand" ] && [ -f "$cand" ] && [ -x "$cand" ]; then
+    printf '%s' "$cand"
+    return 0
+  fi
+  newest=""
+  ng="$(shopt -p nullglob)"
+  shopt -s nullglob
+  local cands=( "${HOME:-}"/.nvm/versions/node/*/bin/node )
+  eval "$ng"
+  if [ "${#cands[@]}" -gt 0 ]; then
+    while IFS= read -r cand; do
+      if [ -n "$cand" ] && [ -f "$cand" ] && [ -x "$cand" ]; then
+        newest="$cand"
+      fi
+    done < <(printf '%s\n' "${cands[@]}" | sort -V)
+  fi
+  if [ -n "$newest" ]; then
+    printf '%s' "$newest"
+    return 0
+  fi
+  for cand in /usr/local/bin/node /usr/bin/node; do
+    if [ -f "$cand" ] && [ -x "$cand" ]; then
+      printf '%s' "$cand"
+      return 0
+    fi
+  done
+  return 1
+}
+
+SCRIPT_DIR="$(resolve_script_dir)"
+if [ -n "$SCRIPT_DIR" ]; then
+  REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+  INSTALLER="$SCRIPT_DIR/install-quota-mirror.js"
+else
+  REPO_ROOT=""
+  INSTALLER=""
+fi
+NODE_BIN="$(resolve_node || true)"
 UNITS=(quota-mirror.service quota-mirror.timer)
 SNAPSHOT_STALE_S=21600
 QUOTA_OUT_STALE_S=1800
@@ -149,27 +219,48 @@ emit_inventory() {
   user="$(id -un)"
   if command -v codeforge >/dev/null 2>&1; then codeforge=1; else codeforge=0; fi
 
-  I_HOST="$host" I_USER="$user" I_INST="$(timer_installed && echo 1 || echo 0)" \
-  I_EN="$(timer_enabled && echo 1 || echo 0)" I_TICK="$tick" \
-  I_SNAP_DIR="$snap_exists" I_SNAP_AGE="$snap_age" I_QUOTA_AGE="$quota_age" \
-  I_CODEFORGE="$codeforge" I_VERDICT="$verdict" \
-  node -e '
-    const env = process.env;
-    const num = (v) => (v === "" ? null : Number(v));
-    const o = {
-      host: env.I_HOST,
-      user: env.I_USER,
-      timer_installed: env.I_INST === "1",
-      timer_enabled: env.I_EN === "1",
-      last_tick: env.I_TICK === "" ? null : env.I_TICK,
-      snapshot_dir_exists: env.I_SNAP_DIR === "1",
-      newest_snapshot_age_s: num(env.I_SNAP_AGE),
-      quota_out_newest_age_s: num(env.I_QUOTA_AGE),
-      codeforge_on_path: env.I_CODEFORGE === "1",
-      verdict: env.I_VERDICT,
-    };
-    process.stdout.write(JSON.stringify(o) + "\n");
-  '
+  if [ -n "$NODE_BIN" ]; then
+    I_HOST="$host" I_USER="$user" I_INST="$(timer_installed && echo 1 || echo 0)" \
+    I_EN="$(timer_enabled && echo 1 || echo 0)" I_TICK="$tick" \
+    I_SNAP_DIR="$snap_exists" I_SNAP_AGE="$snap_age" I_QUOTA_AGE="$quota_age" \
+    I_CODEFORGE="$codeforge" I_VERDICT="$verdict" I_NODE="$NODE_BIN" \
+    "$NODE_BIN" -e '
+      const env = process.env;
+      const num = (v) => (v === "" ? null : Number(v));
+      const o = {
+        host: env.I_HOST,
+        user: env.I_USER,
+        timer_installed: env.I_INST === "1",
+        timer_enabled: env.I_EN === "1",
+        last_tick: env.I_TICK === "" ? null : env.I_TICK,
+        snapshot_dir_exists: env.I_SNAP_DIR === "1",
+        newest_snapshot_age_s: num(env.I_SNAP_AGE),
+        quota_out_newest_age_s: num(env.I_QUOTA_AGE),
+        codeforge_on_path: env.I_CODEFORGE === "1",
+        node_path: env.I_NODE === "" ? null : env.I_NODE,
+        verdict: env.I_VERDICT,
+      };
+      process.stdout.write(JSON.stringify(o) + "\n");
+    '
+  else
+    json_str() {
+      local s="$1"
+      s="${s//\\/\\\\}"
+      s="${s//\"/\\\"}"
+      s="${s//$'\n'/\\n}"
+      printf '"%s"' "$s"
+    }
+    json_num() { if [ -z "$1" ]; then printf 'null'; else printf '%s' "$1"; fi; }
+    json_bool() { if [ "$1" = "1" ]; then printf 'true'; else printf 'false'; fi; }
+    printf '{"host":%s,"user":%s,"timer_installed":%s,"timer_enabled":%s,"last_tick":%s,"snapshot_dir_exists":%s,"newest_snapshot_age_s":%s,"quota_out_newest_age_s":%s,"codeforge_on_path":%s,"node_path":null,"verdict":%s}\n' \
+      "$(json_str "$host")" "$(json_str "$user")" \
+      "$(timer_installed && json_bool 1 || json_bool 0)" \
+      "$(timer_enabled && json_bool 1 || json_bool 0)" \
+      "$([ -z "$tick" ] && printf 'null' || json_str "$tick")" \
+      "$(json_bool "$snap_exists")" \
+      "$(json_num "$snap_age")" "$(json_num "$quota_age")" \
+      "$(json_bool "$codeforge")" "$(json_str "$verdict")"
+  fi
 
   if [ "$codeforge" != "1" ]; then
     printf 'rollout-quota-mirror: codeforge not on PATH; hangar: %s\n' "$HANGAR_CMD" >&2
@@ -183,8 +274,19 @@ emit_inventory() {
   return 0
 }
 
+require_node_and_installer() {
+  if [ -z "$NODE_BIN" ]; then
+    printf 'rollout-quota-mirror: node not found\n' >&2
+    return 3
+  fi
+  if [ -z "$INSTALLER" ] || [ ! -f "$INSTALLER" ]; then
+    printf 'rollout-quota-mirror: installer not found\n' >&2
+    return 3
+  fi
+}
+
 installer_dry_out() {
-  node "$INSTALLER" install --dry-run
+  "$NODE_BIN" "$INSTALLER" install --dry-run
 }
 
 needs_install_write() {
@@ -203,6 +305,7 @@ print_sha_line() {
 
 do_apply() {
   local dry="$1" dir epoch name src bak out changed
+  require_node_and_installer
   dir="$(unit_dir)"
   epoch="$(date +%s)"
   out="$(installer_dry_out)"
@@ -245,7 +348,7 @@ do_apply() {
         printf 'backup sha16 %s none\n' "$name"
       fi
     done
-    node "$INSTALLER" install
+    "$NODE_BIN" "$INSTALLER" install
     for name in "${UNITS[@]}"; do
       print_sha_line new "$name" "$dir/$name"
     done
@@ -263,6 +366,7 @@ do_apply() {
 
 do_rollback() {
   local epoch="$1" dir name src bak any=0
+  require_node_and_installer
   case "$epoch" in
     ''|*[!0-9]*) printf 'rollout-quota-mirror: epoch must be digits\n' >&2; return 2 ;;
   esac
@@ -284,7 +388,7 @@ do_rollback() {
       systemctl --user restart quota-mirror.timer
     fi
   else
-    node "$INSTALLER" uninstall
+    "$NODE_BIN" "$INSTALLER" uninstall
     systemctl --user daemon-reload
     systemctl --user disable --now quota-mirror.timer
     printf 'uninstalled\n'

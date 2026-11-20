@@ -7768,7 +7768,7 @@
       "readers": ["scripts/lib/engine-preflight.js"],
       "doc": "docs/guide/settings-reference.md",
       "relates": ["AUTOPILOT_ENGINE_PREFLIGHT_WINDOW_MIN"],
-      "summary": "Optional probe executable. Args are runner and model. Exit 0 ok, 75 overloaded, 76 rate_limited, 77 unsupported. Any other exit is a warning, not a skip. Unset runs no probe."
+      "summary": "Optional probe executable. Args are runner and model. Exit 0 ok, 75 overloaded, 76 rate_limited, 77 unsupported. A 20s timeout is SIGKILL, skip probe:timeout, warning probe_unknown:timeout. Any other exit is a warning, not a skip. Unset runs no probe."
     }
   ]
 }

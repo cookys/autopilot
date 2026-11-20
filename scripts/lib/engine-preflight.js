@@ -15,7 +15,7 @@
 // Skip reasons:
 //   capacity:<availability>/<suggest>   engines table row is spent, stopped, paused, or 不派*
 //   recent:<category>@<run_id>          manifest in the last WINDOW minutes
-//   probe:<overloaded|rate_limited|unsupported>
+//   probe:<overloaded|rate_limited|unsupported|timeout>
 //
 // Capacity table older than 30 minutes, missing, or unparseable is ignored
 // (warnings capacity_table_stale / capacity_table_missing). It never blocks.
@@ -195,12 +195,17 @@ function probeCandidate(probe, candidate) {
   if (!probe) return { skip: null, warning: null };
   const result = spawnSync(probe, [candidate.runner, candidate.model], {
     timeout: PROBE_TIMEOUT_MS,
+    // SIGTERM is the default. A probe that traps it keeps spawnSync blocked past the budget.
+    killSignal: 'SIGKILL',
     stdio: ['ignore', 'ignore', 'ignore'],
     encoding: 'utf8',
   });
   if (result.error) {
-    const kind = result.error.code === 'ETIMEDOUT' ? 'timeout' : 'spawn';
-    return { skip: null, warning: `probe_unknown:${kind}` };
+    const timedOut = result.error.code === 'ETIMEDOUT';
+    return {
+      skip: timedOut ? 'probe:timeout' : null,
+      warning: `probe_unknown:${timedOut ? 'timeout' : 'spawn'}`,
+    };
   }
   const code = result.status;
   if (code === 0) return { skip: null, warning: null };

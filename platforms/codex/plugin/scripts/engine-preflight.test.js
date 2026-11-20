@@ -177,6 +177,39 @@ function probeStub(code) {
   return file;
 }
 
+function probeIgnoreTerm() {
+  const file = path.join(bin, 'probe-ignore-term.js');
+  // In-process timer. A child sleep would survive SIGKILL of the parent. stdin is ignored, so `read -t` returns at once.
+  fs.writeFileSync(file, `#!/usr/bin/env node
+'use strict';
+process.on('SIGTERM', () => {});
+if (process.argv[3] === 'gpt-6.1-terra') {
+  const until = Date.now() + 60000;
+  setInterval(() => { if (Date.now() >= until) process.exit(0); }, 200);
+} else {
+  process.exit(0);
+}
+`);
+  fs.chmodSync(file, 0o755);
+  return file;
+}
+
+test('probe that ignores SIGTERM is killed and the next candidate is chosen', { timeout: 30000 }, () => {
+  const started = Date.now();
+  const out = preflight({
+    candidates: [terra, sol],
+    now: NOW,
+    sources: sources(caseDir('probe-term'), { probe: probeIgnoreTerm() }),
+  });
+  const elapsed = Date.now() - started;
+  assert.ok(elapsed < 25000, `preflight returned in ${elapsed}ms`);
+  assert.equal(out.skipped[0].runner, 'codex');
+  assert.equal(out.skipped[0].model, 'gpt-6.1-terra');
+  assert.equal(out.skipped[0].reason, 'probe:timeout');
+  assert.ok(out.warnings.includes('probe_unknown:timeout'));
+  assert.deepEqual(out.chosen, sol);
+});
+
 test('probe stub exit 76 skips probe:rate_limited; exit 1 is a warning only', () => {
   const skip = preflight({
     candidates: [terra, sol],

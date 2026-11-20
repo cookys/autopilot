@@ -492,7 +492,7 @@
 {"path":"evals/orchestration/tasks/t4-config-layer/repo/data/golden.txt","sha256":"0875a397553192ac886b5ce3508d108db817d8ed627fdf12ae8ef0c41a6445f2","via":["golden-fixture"]},
 {"path":"evals/owner-capability-evidence-corpus.json","sha256":"b7b4d6159d9b01a7be06a663d35d205379a8df18b7a87dfbcb9a796d33be07a6","via":["hash-pin:engine-qualify.js"]},
 {"path":"evals/owner-eval-generator.js","sha256":"68d02894f8c685979daac2e5e2149f204d70c5bbf22d2e2261e3b4609a0cbd83","via":["hash-pin:engine-qualify.js"]},
-{"path":"evals/reviewer-bench/prompt-skeleton.golden","sha256":"a8910bdf2b81a25bcca185b3801ba76a4b6dd5bdad5ac0c9bc7a6a39402983ce","via":["golden-fixture"]},
+{"path":"evals/reviewer-bench/prompt-skeleton.golden","sha256":"a316fe8869f6a2db09e2c61b9393fb7e6beb6c11b7804c078e6fb3d203704769","via":["golden-fixture"]},
 {"path":"evals/reviewer-eval-generator.js","sha256":"ae3e4f1a90e82b20008fa7e2fc5bb9516394e123b4b1d9d947b32cf199663af9","via":["hash-pin:engine-qualify.js"]},
 {"path":"evals/skill-onoff/README.md","sha256":"44a02cb6e551d5fb8b377821acfbfdf312c99df0155284ea17acc988b12e1ae0","via":["baseline:frozen-table","baseline:g67-amendment"]},
 {"path":"evals/skill-onoff/arms/bpack/base.json","sha256":"fd69e68fa0fef9b88f23b4d7c5842281be7ab0388881a861795a809b02547609","via":["baseline:frozen-table","baseline:stamp-row"]},

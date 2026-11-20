@@ -54,3 +54,42 @@ test('keys: a/b/c pick on decide and todo only (negative on now)', () => {
   expect(routeKey('a', st({ page: 'todo' }))).toEqual({ kind: 'pick', index: 0 })
   expect(routeKey('a', st({ page: 'now' })).kind).toBe('none')
 })
+// Restored invariants (dropped by the B hand; still v7.4 rules).
+test('keys: with focus in the prompt box every key is passed to Claude Code, on every page', () => {
+  const bad: string[] = []
+  const keys = [...DIGITS, '0', 'a', 'b', 'c', 'm', 's', 'n', 'u', 'j', 'k', 'z', 'o', 'PageUp', 'PageDown', 'ArrowUp', 'ArrowDown', 'Enter', 'Escape']
+  for (const page of ALL)
+    for (const k of keys) {
+      const a = routeKey(k, st({ page, paneFocus: false }))
+      if (a.kind !== 'pass') bad.push(`${page}:${k}=${show(a)}`)
+    }
+  expect(bad.join(' ')).toBe('')
+})
+
+test('keys: Esc with the pane focused closes it; in text mode it only leaves text mode', () => {
+  expect(routeKey('Escape', st({ page: 'fleet' }))).toEqual({ kind: 'close' })
+  expect(routeKey('Escape', st({ page: 'decide', textMode: true }))).toEqual({ kind: 'text_cancel' })
+  expect(routeKey('Enter', st({ page: 'decide', textMode: true }))).toEqual({ kind: 'text_save' })
+})
+
+test('keys: decide note mode — digits, 0 and a/b/c/m/s are text, never page switches or picks', () => {
+  expect(routeKey('m', st({ page: 'decide' })).kind).toBe('note')
+  const bad: string[] = []
+  for (const ch of [...DIGITS, '0', 'a', 'b', 'c', 'm', 's', 'j', 'k', 'z', 'o']) {
+    const a = routeKey(ch, st({ page: 'decide', textMode: true }))
+    if (show(a) !== show({ kind: 'text', ch })) bad.push(`${ch}=${show(a)}`)
+  }
+  expect(bad.join(' ')).toBe('')
+})
+
+test('keys: a/b/c/m/s mean nothing outside decide/todo (no pick, page, note or submit)', () => {
+  const bad: string[] = []
+  for (const page of ALL) {
+    if (page === 'decide' || page === 'todo') continue
+    for (const k of ['a', 'b', 'c', 'm', 's', 'n', 'u']) {
+      const a = routeKey(k, st({ page }))
+      if (['pick', 'page', 'note', 'submit'].includes(a.kind)) bad.push(`${page}:${k}=${show(a)}`)
+    }
+  }
+  expect(bad.join(' ')).toBe('')
+})

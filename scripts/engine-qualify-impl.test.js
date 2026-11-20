@@ -85,7 +85,7 @@ if (mode === 'unavailable_structured' || mode === 'unavailable_plain' || mode ==
 const canary = process.env.QUALIFY_CANARY_TOKEN || '';
 // Record the cc-shim env the rail received so the --endpoint binding test can prove the
 // resolver's base_url (and not the ambient env) reached the dispatch.
-try { fs.writeFileSync(${JSON.stringify(path.join(tempRoot, 'fake-env-seen.txt'))}, (process.env.ANTHROPIC_BASE_URL || '') + '\\n' + (process.env.ANTHROPIC_AUTH_TOKEN || '') + '\\n'); } catch (e) {}
+try { fs.writeFileSync(${JSON.stringify(path.join(tempRoot, 'fake-env-seen.txt'))}, (process.env.ANTHROPIC_BASE_URL || '') + '\\n' + (process.env.ANTHROPIC_AUTH_TOKEN || '') + '\\n' + (process.env.AUTOPILOT_ENDPOINT_EXAMLAN_URL || '') + '\\n' + (process.env.AUTOPILOT_ENDPOINT_EXAMLAN_TOKEN || '') + '\\n' + (process.env.AUTOPILOT_ENDPOINT_EXAMLAN_TRANSPORT || '') + '\\n' + (process.env.AUTOPILOT_TASK_SIZE || '') + '\\n' + (process.env.AUTOPILOT_TASK_CLASS || '') + '\\n'); } catch (e) {}
 
 function emit(o) {
   if (args.includes('--sandbox')) {
@@ -454,13 +454,18 @@ check(!fs.existsSync(path.join(budStore, 'qualification-evidence.jsonl')), 'allo
 {
   const seen = path.join(tempRoot, 'fake-env-seen.txt');
   const saved = {};
-  for (const k of ['AUTOPILOT_ENDPOINT_EXAMLAN_URL', 'AUTOPILOT_ENDPOINT_EXAMLAN_TOKEN', 'AUTOPILOT_ENDPOINT_EXAMLAN_TRANSPORT', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN']) saved[k] = process.env[k];
+  for (const k of ['AUTOPILOT_ENDPOINT_EXAMLAN_URL', 'AUTOPILOT_ENDPOINT_EXAMLAN_TOKEN', 'AUTOPILOT_ENDPOINT_EXAMLAN_TRANSPORT', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN', 'AUTOPILOT_TASK_SIZE', 'AUTOPILOT_TASK_CLASS']) saved[k] = process.env[k];
   process.env.AUTOPILOT_ENDPOINT_EXAMLAN_URL = 'http://10.7.7.7:8001';
   process.env.AUTOPILOT_ENDPOINT_EXAMLAN_TOKEN = 'exam-lan-bearer';
   process.env.AUTOPILOT_ENDPOINT_EXAMLAN_TRANSPORT = 'plaintext-private';
   process.env.ANTHROPIC_BASE_URL = 'https://ambient.example/must-not-win';
   process.env.ANTHROPIC_AUTH_TOKEN = 'ambient-token-must-not-win';
+  // Ambient gate labels must not leak through the allowlist when the flags are absent.
+  process.env.AUTOPILOT_TASK_SIZE = 'XL';
+  process.env.AUTOPILOT_TASK_CLASS = 'refactor';
   try { fs.unlinkSync(seen); } catch (_e) { /* absent */ }
+  const argvFile = path.join(tempRoot, 'fake-argv.jsonl');
+  const argvBefore = fs.existsSync(argvFile) ? fs.readFileSync(argvFile, 'utf8').split('\n').filter(Boolean).length : 0;
   const storeE = fs.mkdtempSync(path.join(tempRoot, 'store-endpoint-'));
   const rawE = fs.mkdtempSync(path.join(tempRoot, 'raw-endpoint-'));
   const wrapper = path.join(tempRoot, 'disp.sh');
@@ -468,8 +473,46 @@ check(!fs.existsSync(path.join(budStore, 'qualification-evidence.jsonl')), 'allo
   fs.writeFileSync(path.join(tempRoot, 'fake-mode.txt'), 'honest');
   process.env.AUTOPILOT_QUALIFY_SEED = 'endpoint-seed';
   let ep;
+  let labeled;
+  let labeledSeen = '';
+  let seatScopeRun;
+  let argvAfterEndpoint = 0;
+  const storeL = fs.mkdtempSync(path.join(tempRoot, 'store-label-'));
   try {
     ep = runImplQualification({ ...baseOptions(storeE), dispatchBin: wrapper, runner: 'cc-shim', endpoint: 'examlan', rawDir: rawE });
+    const unlabeledSeen = fs.readFileSync(seen, 'utf8');
+    fs.writeFileSync(path.join(tempRoot, 'fake-seed.txt'), 'label-seed');
+    fs.writeFileSync(path.join(tempRoot, 'fake-mode.txt'), 'honest');
+    process.env.AUTOPILOT_QUALIFY_SEED = 'label-seed';
+    const rawL = fs.mkdtempSync(path.join(tempRoot, 'raw-label-'));
+    const labelArgs = ['implementer', '--engine', 'e', '--model', 'm', '--model-version', 'v', '--runner', 'cc-shim',
+      '--runner-version', '1', '--family', 'f', '--harness-version', 'h', '--effort', 'high',
+      '--prompt-config-hash', digest('a'), '--semantic-fingerprint', digest('b'), '--containment-fingerprint', digest('c'),
+      '--task-class', 'bounded_implementation', '--domain', 'repository', '--language', 'en', '--tool', 'git_commit',
+      '--store', storeL, '--raw-dir', rawL, '--dispatch-bin', wrapper, '--version-source', 'operator-asserted',
+      '--endpoint', 'examlan', '--task-size', 'XS', '--gate-task-class', 'simple-script', '--emit-row'];
+    labeled = spawnSync(process.execPath, [path.join(__dirname, 'engine-qualify.js'), ...labelArgs], {
+      env: process.env,
+      encoding: 'utf8',
+      maxBuffer: 32 * 1024 * 1024,
+    });
+    labeledSeen = fs.readFileSync(seen, 'utf8');
+    argvAfterEndpoint = fs.existsSync(argvFile) ? fs.readFileSync(argvFile, 'utf8').split('\n').filter(Boolean).length : 0;
+    fs.writeFileSync(path.join(tempRoot, 'fake-seed.txt'), 'seat-scope-seed');
+    fs.writeFileSync(path.join(tempRoot, 'fake-mode.txt'), 'honest');
+    process.env.AUTOPILOT_QUALIFY_SEED = 'seat-scope-seed';
+    const storeSeat = fs.mkdtempSync(path.join(tempRoot, 'store-seat-scope-'));
+    const seatArgs = ['implementer', '--engine', 'e', '--model', 'm', '--model-version', 'v', '--runner', 'cc-shim',
+      '--runner-version', '1', '--family', 'f', '--harness-version', 'h', '--effort', 'high',
+      '--prompt-config-hash', digest('a'), '--semantic-fingerprint', digest('b'), '--containment-fingerprint', digest('c'),
+      '--task-class', 'simple-script', '--domain', 'repository', '--language', 'en', '--tool', 'git_commit',
+      '--store', storeSeat, '--dispatch-bin', wrapper, '--version-source', 'operator-asserted', '--emit-row'];
+    seatScopeRun = spawnSync(process.execPath, [path.join(__dirname, 'engine-qualify.js'), ...seatArgs], {
+      env: process.env,
+      encoding: 'utf8',
+      maxBuffer: 32 * 1024 * 1024,
+    });
+    fs.writeFileSync(seen, unlabeledSeen);
   } finally {
     delete process.env.AUTOPILOT_QUALIFY_SEED;
     for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
@@ -483,6 +526,18 @@ check(!fs.existsSync(path.join(budStore, 'qualification-evidence.jsonl')), 'allo
   const seenLines = fs.readFileSync(seen, 'utf8').split('\n');
   equal(seenLines[0], 'http://10.7.7.7:8001', 'rail received the RESOLVED base_url, not the ambient ANTHROPIC_BASE_URL');
   equal(seenLines[1], 'exam-lan-bearer', 'rail received the named endpoint bearer, not the ambient token');
+  equal(seenLines[2], 'http://10.7.7.7:8001', 'stub saw AUTOPILOT_ENDPOINT_EXAMLAN_URL equal to the bound base_url');
+  equal(seenLines[3], 'exam-lan-bearer', 'stub saw the namespace token equal to the bound bearer');
+  equal(seenLines[4], 'plaintext-private', 'stub saw the plaintext-private transport override');
+  equal(seenLines[5], '', 'without --task-size the stub receives no AUTOPILOT_TASK_SIZE');
+  equal(seenLines[6], '', 'without --task-class the stub receives no AUTOPILOT_TASK_CLASS');
+  check(!('task_size' in ep.row.endpoint) && !('task_class' in ep.row.endpoint), 'without the flags the endpoint object is unchanged');
+  const endpointArgv = fs.readFileSync(argvFile, 'utf8').split('\n').filter(Boolean).slice(argvBefore, argvAfterEndpoint).map((l) => JSON.parse(l));
+  check(endpointArgv.length > 0, '--endpoint run dispatched');
+  check(endpointArgv.every((a) => {
+    const i = a.indexOf('--endpoint');
+    return i >= 0 && a[i + 1] === 'examlan';
+  }), '--endpoint run passes --endpoint examlan to the dispatcher');
   const endpointFile = fs.readFileSync(path.join(rawE, 'impl-endpoint.json'), 'utf8');
   const disclosed = JSON.parse(endpointFile);
   equal(disclosed, { name: 'examlan', transport_security: 'plaintext_private' }, 'raw/impl-endpoint.json is name + transport only');
@@ -496,6 +551,24 @@ check(!fs.existsSync(path.join(budStore, 'qualification-evidence.jsonl')), 'allo
   equal(recE.status, 0, `engine-scorecard record accepts a row with endpoint disclosure: ${recE.stderr}`);
   // without --endpoint the row has no endpoint key (byte-compatible with every prior row)
   check(!('endpoint' in honest.row), 'no --endpoint → no endpoint key on the row');
+  equal(labeled.status, 0, `labeled --endpoint exam qualifies: ${labeled.stderr && labeled.stderr.slice(0, 400)}`);
+  const labeledRow = JSON.parse(labeled.stdout);
+  equal(labeledRow.endpoint.task_size, 'XS', 'row records the task size the exam ran under');
+  equal(labeledRow.endpoint.task_class, 'simple-script', 'row records the task class the exam ran under');
+  equal(labeledRow.evidence.scope.task_classes, ['bounded_implementation'], 'gate --gate-task-class is not seat scope');
+  const labeledLines = labeledSeen.split('\n');
+  equal(labeledLines[5], 'XS', 'stub saw AUTOPILOT_TASK_SIZE from --task-size');
+  equal(labeledLines[6], 'simple-script', 'stub saw AUTOPILOT_TASK_CLASS from --gate-task-class');
+  const recL = spawnSync(process.execPath, [path.join(__dirname, 'engine-scorecard.js'), 'record'], {
+    input: JSON.stringify(labeledRow),
+    env: { ...process.env, ENGINE_SCORECARD_DIR: storeL, ENGINE_CAPABILITY_DIR: storeL },
+    encoding: 'utf8',
+  });
+  equal(recL.status, 0, `engine-scorecard record accepts task_size/task_class on endpoint: ${recL.stderr}`);
+  equal(seatScopeRun.status, 0, `unbound --task-class simple-script qualifies: ${seatScopeRun.stderr && seatScopeRun.stderr.slice(0, 400)}`);
+  const seatScopeRow = JSON.parse(seatScopeRun.stdout);
+  equal(seatScopeRow.evidence.scope.task_classes, ['simple-script'], 'unbound --task-class simple-script stays seat scope');
+  check(!('endpoint' in seatScopeRow), 'unbound run records no endpoint gate label');
 }
 
 // ── 13. --endpoint not-ready → exit 2 UNCHARGED (nothing dispatched, no store write) ──
@@ -542,6 +615,18 @@ check(!fs.existsSync(path.join(budStore, 'qualification-evidence.jsonl')), 'allo
   const rev = spawnSync(process.execPath, [path.join(__dirname, 'engine-qualify.js'), 'reviewer', '--endpoint', 'x', '--panel-cmd', 'true'], { env: process.env, encoding: 'utf8' });
   equal(rev.status, 2, '--endpoint on a non-implementer role exits 2');
   check(/implementer-only/.test(rev.stderr), 'non-implementer refusal names implementer-only');
+  const noEp = spawnSync(process.execPath, [path.join(__dirname, 'engine-qualify.js'), ...cliArgs, '--gate-task-class', 'simple-script'], { env: process.env, encoding: 'utf8' });
+  equal(noEp.status, 2, '--gate-task-class without --endpoint exits 2');
+  check(/only accepted together with --endpoint/.test(noEp.stderr), `refusal names --endpoint: ${noEp.stderr.slice(0, 240)}`);
+  const sizeOnly = spawnSync(process.execPath, [path.join(__dirname, 'engine-qualify.js'), ...cliArgs, '--endpoint', 'examlan', '--task-size', 'XS'], { env: process.env, encoding: 'utf8' });
+  equal(sizeOnly.status, 2, '--task-size without --gate-task-class exits 2');
+  check(/exactly one --gate-task-class/.test(sizeOnly.stderr), 'size-only refusal names the gate class');
+  const badSize = spawnSync(process.execPath, [path.join(__dirname, 'engine-qualify.js'), ...cliArgs, '--endpoint', 'examlan', '--task-size', 'M', '--gate-task-class', 'test-scaffold'], { env: process.env, encoding: 'utf8' });
+  equal(badSize.status, 2, '--task-size M exits 2');
+  check(/--task-size must be XS or S/.test(badSize.stderr), 'bad size names the allowed set');
+  const revSize = spawnSync(process.execPath, [path.join(__dirname, 'engine-qualify.js'), 'reviewer', '--task-size', 'XS', '--panel-cmd', 'true'], { env: process.env, encoding: 'utf8' });
+  equal(revSize.status, 2, '--task-size on a non-implementer role exits 2');
+  check(/implementer-only/.test(revSize.stderr), 'non-implementer --task-size names implementer-only');
 }
 
 function readJsonl(file) {
@@ -897,6 +982,8 @@ function runTrunc(mode, seed, truncate) {
   check(grokArgv.length > 0, 'unsandboxed run dispatched');
   check(grokArgv.every((a) => !a.includes('--sandbox') && !a.includes('--worktree-parent')),
     'non-cc-shim runner: the exam passes neither --sandbox nor --worktree-parent');
+  check(grokArgv.every((a) => !a.includes('--endpoint')),
+    'a run without --endpoint passes no --endpoint');
   check(grokArgv.every((a) => a.includes('--no-verify-tip')),
     'qualification exam passes --no-verify-tip');
   check(!('sandbox_blocked_writes' in grokRun.row.quality), 'unsandboxed row has no sandbox_blocked_writes key');
@@ -948,6 +1035,78 @@ function runTrunc(mode, seed, truncate) {
   } catch (error) { missing = error; }
   check(missing && /required implementer sandbox is unavailable/.test(missing.message), `bwrap missing fails closed: ${missing && missing.message}`);
   check(!fs.existsSync(argvFile), 'bwrap missing: nothing was dispatched');
+}
+
+// A listed local endpoint (scripts/lib/local-sandbox-endpoints.json) forces the same
+// sandbox the argv already passes, including on a runner whose own mode is off.
+// The identity input is the sandboxed containment (exam_sandbox bound in). An
+// unlisted endpoint on that same runner stays the operator fingerprint.
+{
+  const argvFile = path.join(tempRoot, 'fake-argv.jsonl');
+  const readNew = (before) => fs.readFileSync(argvFile, 'utf8').split('\n').filter(Boolean).slice(before).map((l) => JSON.parse(l));
+  const saved = {};
+  for (const k of ['AUTOPILOT_ENDPOINT_GLM_LOCAL_URL', 'AUTOPILOT_ENDPOINT_GLM_LOCAL_TOKEN', 'AUTOPILOT_ENDPOINT_EXAMLAN_URL', 'AUTOPILOT_ENDPOINT_EXAMLAN_TOKEN', 'AUTOPILOT_ENDPOINT_EXAMLAN_TRANSPORT']) {
+    saved[k] = process.env[k];
+  }
+  const wrapper = path.join(tempRoot, 'disp.sh');
+  process.env.AUTOPILOT_ENDPOINT_GLM_LOCAL_URL = 'https://glm.example/v1';
+  process.env.AUTOPILOT_ENDPOINT_GLM_LOCAL_TOKEN = 'glm-local-bearer';
+  fs.writeFileSync(path.join(tempRoot, 'fake-seed.txt'), 'glm-local-seed');
+  fs.writeFileSync(path.join(tempRoot, 'fake-mode.txt'), 'honest');
+  fs.writeFileSync(path.join(tempRoot, 'fake-blocked.txt'), '1');
+  const beforeListed = fs.existsSync(argvFile) ? fs.readFileSync(argvFile, 'utf8').split('\n').filter(Boolean).length : 0;
+  process.env.AUTOPILOT_QUALIFY_SEED = 'glm-local-seed';
+  let listed;
+  try {
+    listed = runImplQualification({
+      ...baseOptions(fs.mkdtempSync(path.join(tempRoot, 'store-glm-local-'))),
+      dispatchBin: wrapper,
+      endpoint: 'glm_local',
+    });
+  } finally {
+    delete process.env.AUTOPILOT_QUALIFY_SEED;
+  }
+  const listedArgv = readNew(beforeListed);
+  check(listedArgv.length > 0, 'listed endpoint run dispatched');
+  check(listedArgv.every((a) => {
+    const i = a.indexOf('--sandbox');
+    return i >= 0 && a[i + 1] === 'bwrap' && a.includes('--worktree-parent');
+  }), 'listed endpoint passes --sandbox bwrap');
+  equal(listed.evidence.identity.containment_fingerprint, implSandboxedContainment(digest('c')),
+    'listed endpoint records sandbox bwrap in the identity input');
+  check(examIdentityHashOf(listed.evidence.identity) !== examIdentityHashOf({
+    ...listed.evidence.identity,
+    containment_fingerprint: digest('c'),
+  }), 'listed endpoint identity hash is not the unsandboxed hash');
+
+  process.env.AUTOPILOT_ENDPOINT_EXAMLAN_URL = 'https://examlan.example/v1';
+  process.env.AUTOPILOT_ENDPOINT_EXAMLAN_TOKEN = 'examlan-bearer';
+  delete process.env.AUTOPILOT_ENDPOINT_EXAMLAN_TRANSPORT;
+  fs.writeFileSync(path.join(tempRoot, 'fake-seed.txt'), 'examlan-off-seed');
+  fs.writeFileSync(path.join(tempRoot, 'fake-mode.txt'), 'honest');
+  const beforeOff = fs.readFileSync(argvFile, 'utf8').split('\n').filter(Boolean).length;
+  process.env.AUTOPILOT_QUALIFY_SEED = 'examlan-off-seed';
+  let unlisted;
+  try {
+    unlisted = runImplQualification({
+      ...baseOptions(fs.mkdtempSync(path.join(tempRoot, 'store-examlan-off-'))),
+      dispatchBin: wrapper,
+      endpoint: 'examlan',
+    });
+  } finally {
+    delete process.env.AUTOPILOT_QUALIFY_SEED;
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+  const offArgv = readNew(beforeOff);
+  check(offArgv.length > 0, 'unlisted endpoint run dispatched');
+  check(offArgv.every((a) => !a.includes('--sandbox') && !a.includes('--worktree-parent')),
+    'unlisted endpoint on a non-cc-shim runner stays sandbox off');
+  equal(unlisted.evidence.identity.containment_fingerprint, digest('c'),
+    'unlisted endpoint identity stays the operator fingerprint');
+  check(!('sandbox_blocked_writes' in unlisted.row.quality), 'unlisted endpoint row has no sandbox_blocked_writes');
 }
 
 process.stdout.write(`PASS [engine-qualify-impl] ${assertions} assertions\n`);

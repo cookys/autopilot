@@ -346,6 +346,13 @@ const HELP = `Usage:
       through scripts/resolve-endpoint.sh — the SAME named-endpoint definition daily
       routing uses — instead of the raw env passthrough; not-ready exits 2 uncharged;
       the emitted row discloses endpoint {name, transport_security}; base_url stays on the rail only)
+    [--task-size <XS|S> --gate-task-class <local class>]
+      (only together with --endpoint: the exam prompts carry no Size/Task-Class header
+      and the dispatch env is an allowlist, so the cn-model gate would otherwise refuse
+      unknown-size / unknown-task-class. Sets AUTOPILOT_TASK_SIZE / AUTOPILOT_TASK_CLASS
+      on the dispatch child. The --gate-task-class value must be one of the gate's
+      local_task_classes and is NOT added to the seat scope. The row records both on
+      endpoint as task_size and task_class. Omitting both changes nothing.)
   Qualification has no expiry: there is no --expires-days (it is refused). A seat loses standing
   only through accumulated strikes (references/strike-decay.md), and regains it by re-sitting.
 
@@ -607,6 +614,8 @@ function parseArgs(argv) {
     ['--runner-bin', 'runnerBin'],
     ['--dispatch-timeout', 'dispatchTimeout'],
     ['--endpoint', 'endpoint'],
+    ['--task-size', 'taskSize'],
+    ['--gate-task-class', 'gateTaskClass'],
     // Optional price inputs (all-or-nothing, see parsePricing). Never defaulted.
     ['--price-usd-per-mtok-in', 'priceUsdPerMtokIn'],
     ['--price-usd-per-mtok-out', 'priceUsdPerMtokOut'],
@@ -835,11 +844,31 @@ function parseArgs(argv) {
         usage(2, `--endpoint applies only to --runner cc-shim (got runner: ${options.runner}) — other rails do not dial an Anthropic-compatible endpoint`);
       }
     }
+    // --task-class is seat scope only. The exam label is --gate-task-class, and it
+    // is never copied into the seat scope. Both labels need --endpoint, together.
+    const localClasses = require('./lib/cn-model-dispatch-gate').loadConfig(REPO_ROOT).local_task_classes;
+    if (options.taskSize !== undefined || options.gateTaskClass !== undefined) {
+      if (options.endpoint === undefined) {
+        usage(2, '--task-size and --gate-task-class are only accepted together with --endpoint');
+      }
+      if (options.taskSize === undefined || options.gateTaskClass === undefined) {
+        usage(2, `--task-size <XS|S> and exactly one --gate-task-class from {${localClasses.join(', ')}} are required together with --endpoint`);
+      }
+      const size = String(options.taskSize).toUpperCase();
+      if (size !== 'XS' && size !== 'S') usage(2, '--task-size must be XS or S');
+      const gate = String(options.gateTaskClass).toLowerCase();
+      if (!localClasses.includes(gate)) {
+        usage(2, `--gate-task-class must be one of {${localClasses.join(', ')}}`);
+      }
+      options.taskSize = size;
+      options.gateTaskClass = gate;
+    }
     return options;
   }
   if (options.dispatchBin !== undefined || options.runnerBin !== undefined
-      || options.dispatchTimeout !== undefined || options.endpoint !== undefined) {
-    usage(2, '--dispatch-bin/--runner-bin/--dispatch-timeout/--endpoint are implementer-only');
+      || options.dispatchTimeout !== undefined || options.endpoint !== undefined
+      || options.taskSize !== undefined || options.gateTaskClass !== undefined) {
+    usage(2, '--dispatch-bin/--runner-bin/--dispatch-timeout/--endpoint/--task-size/--gate-task-class are implementer-only');
   }
   const localTransport = Boolean(options.panelCmd);
   const remoteTransport = Boolean(options.remoteProviderCmd || options.remoteProvider);
@@ -3644,6 +3673,21 @@ function implSandboxMode(runner) {
   return runner === 'cc-shim' ? 'bwrap' : 'off';
 }
 
+// dispatch-hetero refuses a cc-shim implementer of a listed local endpoint unless
+// --sandbox bwrap is on the argv (scripts/lib/local-sandbox-endpoints.json).
+function implEndpointNeedsSandbox(binding) {
+  if (!binding || typeof binding.name !== 'string') return false;
+  const registry = path.join(__dirname, 'lib', 'local-sandbox-endpoints.json');
+  let listed;
+  try {
+    listed = JSON.parse(fs.readFileSync(registry, 'utf8'));
+  } catch (error) {
+    usage(2, `local implementer sandbox registry unreadable (${registry}): ${error.message}`);
+  }
+  const names = listed && Array.isArray(listed.local_sandbox_endpoints) ? listed.local_sandbox_endpoints : [];
+  return names.includes(binding.name);
+}
+
 // The sandbox mode is part of the exam identity through containment_fingerprint: the operator's
 // fingerprint stays an input, the identity carries sha256(canonical{containment_fingerprint, sandbox}).
 // An old unsandboxed record and a new sandboxed one therefore hash to different identity_hash.
@@ -3726,11 +3770,11 @@ function runImplQualification(options) {
     );
   }
   const sandboxMode = implSandboxMode(options.runner);
+  options = { ...options, implSandbox: sandboxMode };
   if (sandboxMode === 'bwrap') {
     verifyImplSandbox(options.testBwrapPath || BWRAP_PATH);
     options = {
       ...options,
-      implSandbox: sandboxMode,
       containmentFingerprint: implSandboxedContainment(options.containmentFingerprint),
     };
   }
@@ -3738,6 +3782,18 @@ function runImplQualification(options) {
     options = { ...options, endpointBinding: resolveImplEndpoint(options.endpoint) };
     if (options.endpointBinding.transport_security === 'plaintext_private') {
       process.stderr.write(`engine-qualify: --endpoint '${options.endpoint}' is PLAINTEXT to a private-range address (${options.endpointBinding.base_url}); the row will disclose transport_security=plaintext_private\n`);
+    }
+    // One mode for argv, containment_fingerprint / identity_hash, and the recorded
+    // blocked-write fields. A listed local endpoint sandboxes even when the runner's
+    // own mode is off. Do not wrap the fingerprint twice when the runner already did.
+    // Always consult the registry: an unreadable file is usage(2), not "not listed".
+    if (implEndpointNeedsSandbox(options.endpointBinding) && options.implSandbox !== 'bwrap') {
+      verifyImplSandbox(options.testBwrapPath || BWRAP_PATH);
+      options = {
+        ...options,
+        implSandbox: 'bwrap',
+        containmentFingerprint: implSandboxedContainment(options.containmentFingerprint),
+      };
     }
   }
   const staticAssets = verifyPinnedImplEvaluationAssets();
@@ -4125,6 +4181,11 @@ function runImplQualification(options) {
       name: options.endpointBinding.name,
       transport_security: options.endpointBinding.transport_security,
     };
+    // Labels the exam actually ran under. Absent unless both flags were given.
+    if (options.taskSize && options.gateTaskClass) {
+      row.endpoint.task_size = options.taskSize;
+      row.endpoint.task_class = options.gateTaskClass;
+    }
   }
   const failures = [];
   for (const trial of trialResults) {
@@ -4383,6 +4444,10 @@ function runImplCase(context) {
       const flag = implRunnerBinFlag(options.runner);
       if (flag) argv.push(flag, options.runnerBin);
     }
+    if (options.endpointBinding) {
+      // dispatch-hetero's cn-model gate reads --endpoint. Env-only binding never reaches it.
+      argv.push('--endpoint', options.endpointBinding.name);
+    }
     if (options.implSandbox === 'bwrap') {
       // Same flags production write dispatches use. The worktree must sit outside every repo
       // (the exam repo is a repo), so each case gets its own parent under workRoot.
@@ -4409,6 +4474,21 @@ function runImplCase(context) {
       // different one through ambient env.
       env.ANTHROPIC_BASE_URL = options.endpointBinding.base_url;
       env.ANTHROPIC_AUTH_TOKEN = process.env[options.endpointBinding.token_env];
+      // The child env is an allowlist, so dispatch-hetero's resolve-endpoint.sh cannot
+      // see the parent namespace. Pin the same URL, token and transport under the
+      // names load-endpoints-env.sh / resolve-endpoint.sh honour. A set key also
+      // blocks a different URL from ~/.autopilot/endpoints.env.
+      const endpointUc = String(options.endpointBinding.name).toUpperCase();
+      env[`AUTOPILOT_ENDPOINT_${endpointUc}_URL`] = options.endpointBinding.base_url;
+      env[`AUTOPILOT_ENDPOINT_${endpointUc}_TOKEN`] = process.env[options.endpointBinding.token_env];
+      if (options.endpointBinding.transport_security === 'plaintext_private') {
+        env[`AUTOPILOT_ENDPOINT_${endpointUc}_TRANSPORT`] = 'plaintext-private';
+      }
+    }
+    // Allowlist: a caller's AUTOPILOT_TASK_SIZE / AUTOPILOT_TASK_CLASS never arrives on its own.
+    if (options.taskSize && options.gateTaskClass) {
+      env.AUTOPILOT_TASK_SIZE = options.taskSize;
+      env.AUTOPILOT_TASK_CLASS = options.gateTaskClass;
     }
     budget.spent += 1;
     const dispatchStartedAt = process.hrtime.bigint();

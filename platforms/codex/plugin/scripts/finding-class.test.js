@@ -1,0 +1,154 @@
+#!/usr/bin/env node
+'use strict';
+
+const { test, after } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
+
+const findingClass = require('./lib/finding-class.js');
+
+const temps = [];
+after(() => {
+  for (const dir of temps) fs.rmSync(dir, { recursive: true, force: true });
+});
+
+function tempDir() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'finding-class-'));
+  temps.push(dir);
+  return dir;
+}
+
+function review(klass, sites) {
+  return { findings: [{ class: klass, class_sites: sites, severity: 'Major', text: klass }] };
+}
+
+function reportFor(klass) {
+  return {
+    class_scan: [{ class: klass, sites: [{ site: 'a.js:1', test: 'a.test.js' }] }],
+  };
+}
+
+test('review JSON missing class is invalid', () => {
+  const result = findingClass.validateReview({ findings: [{ class_sites: ['a.js:1'] }] });
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /lacks class/);
+});
+
+test('review JSON with empty class_sites is invalid', () => {
+  const result = findingClass.validateReview({ findings: [{ class: 'bad-value', class_sites: [] }] });
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /empty class_sites/);
+});
+
+test('complete review JSON is valid', () => {
+  const result = findingClass.validateReview(review('bad-value', ['a.js:1', 'b.js:4']));
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.findings[0].class_sites, ['a.js:1', 'b.js:4']);
+});
+
+test('fix report missing class_scan names that class', () => {
+  const missing = findingClass.missingClassScan({ class_scan: [] }, ['bad-value']);
+  assert.equal(missing, 'bad-value');
+});
+
+test('normaliser collapses Bad Value, bad_value, and bad-value', () => {
+  assert.equal(findingClass.normalizeClass('Bad Value'), 'bad-value');
+  assert.equal(findingClass.normalizeClass('bad_value'), 'bad-value');
+  assert.equal(findingClass.normalizeClass('bad-value '), 'bad-value');
+  assert.equal(findingClass.sameClass('Bad Value', 'bad_value'), true);
+});
+
+const CLASSES = ['bad-value', 'missing-field', 'stale-age', 'old-format', 'display-surface'];
+
+test('five classes escalate when round 2 repeats the class; a different class does not', () => {
+  for (const klass of CLASSES) {
+    const repeated = findingClass.repeatedClass(
+      review(klass, ['a.js:1']),
+      review(klass, ['b.js:9']),
+    );
+    assert.equal(repeated, klass);
+    assert.equal(`same_class_repeat:${repeated}`, `same_class_repeat:${klass}`);
+  }
+  const other = findingClass.repeatedClass(
+    review('bad-value', ['a.js:1']),
+    review('missing-field', ['c.js:2']),
+  );
+  assert.equal(other, null);
+  const folded = findingClass.repeatedClass(
+    review('Bad Value', ['a.js:1']),
+    review('bad_value', ['b.js:2']),
+  );
+  assert.equal(folded, 'bad-value');
+});
+
+test('fix-round CLI rejects a missing class_scan and escalates a repeated class', () => {
+  const dir = tempDir();
+  const ledger = path.join(dir, 'ledger');
+  const reviewPath = path.join(dir, 'review.json');
+  const reportPath = path.join(dir, 'report.json');
+  const prevPath = path.join(dir, 'prev.json');
+  const loop = path.join(__dirname, 'hetero-review-loop.js');
+  const env = { PATH: process.env.PATH, HOME: dir, TMPDIR: dir };
+
+  function run(args) {
+    return spawnSync(process.execPath, [loop, 'fix-round', '--ledger', ledger, '--phase', 'p', ...args], {
+      encoding: 'utf8',
+      env,
+    });
+  }
+
+  fs.writeFileSync(reviewPath, JSON.stringify({ findings: [{ class_sites: ['a.js:1'] }] }));
+  fs.writeFileSync(reportPath, JSON.stringify(reportFor('bad-value')));
+  let res = run(['--generation', '1', '--review', reviewPath, '--report', reportPath, '--implementer-engine', 'grok']);
+  assert.equal(res.status, 1);
+  assert.match(res.stderr, /lacks class/);
+
+  fs.writeFileSync(reviewPath, JSON.stringify(review('bad-value', [])));
+  res = run(['--generation', '1', '--review', reviewPath, '--report', reportPath, '--implementer-engine', 'grok']);
+  assert.equal(res.status, 1);
+  assert.match(res.stderr, /empty class_sites/);
+
+  fs.writeFileSync(reviewPath, JSON.stringify(review('bad-value', ['a.js:1'])));
+  fs.writeFileSync(reportPath, JSON.stringify({ note: 'no scan' }));
+  res = run(['--generation', '1', '--review', reviewPath, '--report', reportPath, '--implementer-engine', 'grok']);
+  assert.equal(res.status, 1);
+  assert.match(res.stderr, /missing class_scan for bad-value/);
+  const rejected = JSON.parse(fs.readFileSync(path.join(ledger, 'review-p', 'class-gate.json'), 'utf8'));
+  assert.equal(rejected.merged, false);
+  assert.equal(rejected.missing_class, 'bad-value');
+
+  fs.writeFileSync(reportPath, JSON.stringify(reportFor('bad-value')));
+  for (const klass of CLASSES) {
+    fs.writeFileSync(prevPath, JSON.stringify(review(klass, ['a.js:1'])));
+    fs.writeFileSync(reviewPath, JSON.stringify(review(klass, ['b.js:9'])));
+    fs.writeFileSync(reportPath, JSON.stringify(reportFor(klass)));
+    res = run([
+      '--generation', '2', '--review', reviewPath, '--report', reportPath,
+      '--prev', prevPath, '--implementer-engine', 'grok', '--ladder', 'grok,other-engine',
+    ]);
+    assert.equal(res.status, 0, res.stderr);
+    const state = JSON.parse(fs.readFileSync(path.join(ledger, 'review-p', 'class-gate.json'), 'utf8'));
+    assert.equal(state.reason, `same_class_repeat:${klass}`);
+    assert.equal(state.to, 'other-engine');
+    assert.notEqual(state.to, state.from);
+    const brief = fs.readFileSync(path.join(ledger, 'review-p', 'g2', 'hands-brief.md'), 'utf8');
+    assert.match(brief, new RegExp(`Class ${klass} sites`));
+    assert.match(brief, /class_scan/);
+    assert.match(brief, /other-engine/);
+  }
+
+  fs.writeFileSync(prevPath, JSON.stringify(review('bad-value', ['a.js:1'])));
+  fs.writeFileSync(reviewPath, JSON.stringify(review('missing-field', ['c.js:3'])));
+  fs.writeFileSync(reportPath, JSON.stringify(reportFor('missing-field')));
+  res = run([
+    '--generation', '2', '--review', reviewPath, '--report', reportPath,
+    '--prev', prevPath, '--implementer-engine', 'grok', '--ladder', 'grok,other-engine',
+  ]);
+  assert.equal(res.status, 0, res.stderr);
+  const quiet = JSON.parse(fs.readFileSync(path.join(ledger, 'review-p', 'class-gate.json'), 'utf8'));
+  assert.equal(quiet.status, 'accepted');
+  assert.equal(quiet.reason, undefined);
+});

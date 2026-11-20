@@ -22,6 +22,7 @@ const { invalidSeatModels } = require('./lib/seat-model-id');
 const { portableRawLogInPlace } = require('./lib/raw-log-path');
 const codexFallback = require('./lib/qc-panel-codex-fallback');
 const { resolvePmGate } = require('./lib/fleet-task-ref');
+const findingClass = require('./lib/finding-class');
 
 function assertSafeSeatId(id) {
   if (!isSafeSeatId(id)) {
@@ -209,6 +210,12 @@ Subcommands:
               closes open verified findings after the fact through review-<phase>/resolutions-addendum.json
               (pinned in the receipt as resolutions_addendum). Verified against the chain and git, else exit 1.
   opt-out     Record opt-out receipt for review loop
+  fix-round   Admit an implementer fix report against a review JSON (fixture or ledger).
+              Rejects a report that omits class_scan for a class the review gave.
+              From generation 2, a class that also appeared in the previous round is
+              same_class_repeat:<class>: the previous round was incomplete, and the
+              class is escalated to another implementer engine (or the lane seat),
+              never sent back to the same engine.
 
 Common flags:
   --repo-root <path>    Path to target git repository
@@ -1394,7 +1401,27 @@ async function handleCollect(flags) {
     const trimmedFindings = findingsStr.trim();
     const lowerFindings = trimmedFindings.toLowerCase();
     const isPlaceholder = lowerFindings === 'none' || lowerFindings === 'n/a' || lowerFindings === 'no findings';
-    const extracted = extractFindings(res.seat.id, findingsStr);
+    const classCheck = findingClass.validateReviewText(findingsStr);
+    if (classCheck.json && !classCheck.ok) {
+      saveChainEntry({
+        generation,
+        base,
+        status: 'aborted',
+        reason: 'invalid_review',
+      });
+      console.error(`ERROR: ${classCheck.reason}`);
+      process.exit(1);
+    }
+    const extracted = classCheck.json
+      ? classCheck.findings.map((f) => ({
+        id: typeof f.id === 'string' && f.id.trim() ? f.id.trim() : crypto.createHash('sha256').update(`${res.seat.id}|${f.class}|${(f.class_sites || []).join(',')}`, 'utf8').digest('hex'),
+        severity: SEVERITY_WORDS.has(f.severity) ? f.severity : 'Major',
+        seat: res.seat.id,
+        text: typeof f.text === 'string' ? f.text : `${f.class} ${ (f.class_sites || []).join(' ') }`,
+        class: f.class,
+        class_sites: f.class_sites,
+      }))
+      : extractFindings(res.seat.id, findingsStr);
     seatFindingMap.set(res.seat.id, extracted);
 
     // If findingsStr is non-empty and nothing parses out of it and the text is not a placeholder token,
@@ -1524,6 +1551,47 @@ async function handleCollect(flags) {
     }
   }
 
+  // From round 2, a class that already appeared in the previous round means that
+  // round did not list the whole class. Do not send it back to the same implementer.
+  let sameClassEscalation = null;
+  if (generation >= 2) {
+    const prevPath = path.join(reviewPhaseDir, `g${generation - 1}`, 'findings.json');
+    if (fs.existsSync(prevPath)) {
+      try {
+        const prevFindings = JSON.parse(fs.readFileSync(prevPath, 'utf8'));
+        const repeated = findingClass.repeatedClass(prevFindings, { findings: allFindings });
+        if (repeated) {
+          const ladder = [];
+          const topologyPath = process.env.AUTOPILOT_TOPOLOGY_FILE || path.join(process.env.HOME || '', '.autopilot', 'topology.json');
+          if (fs.existsSync(topologyPath)) {
+            try {
+              const topData = JSON.parse(fs.readFileSync(topologyPath, 'utf8'));
+              if (Array.isArray(topData.implementer_ladder)) {
+                for (const rung of topData.implementer_ladder) {
+                  if (rung && rung.engine) ladder.push(rung.engine);
+                }
+              }
+            } catch (_err) { /* no ladder: escalate to the lane seat */ }
+          }
+          const to = findingClass.escalateTarget(implementerEngine, ladder);
+          sameClassEscalation = {
+            reason: `same_class_repeat:${repeated}`,
+            from: implementerEngine,
+            to,
+          };
+          console.error(`WARN: ${sameClassEscalation.reason}: previous round incomplete; escalating from ${implementerEngine} to ${to}`);
+          writeFileSyncAtomic(path.join(reviewPhaseDir, 'class-gate.json'), `${JSON.stringify({
+            status: 'escalated',
+            merged: false,
+            reason: sameClassEscalation.reason,
+            from: sameClassEscalation.from,
+            to: sameClassEscalation.to,
+          }, null, 2)}\n`);
+        }
+      } catch (_e) { /* a missing or unreadable previous findings file is not a repeat */ }
+    }
+  }
+
   // Write findings.json
   const findingsJson = {
     findings: allFindings,
@@ -1570,6 +1638,7 @@ async function handleCollect(flags) {
       panel_report: substitutedSeats.map((s) => s.notice),
     } : {}),
     ...(packetRecord ? { packet: packetRecord } : {}),
+    ...(sameClassEscalation ? { same_class_escalation: sameClassEscalation } : {}),
     collected_at: new Date().toISOString(),
     fleet_task: attributionFromEnv(process.env).fleet_task,
   }, { recordPointer: true });
@@ -1607,6 +1676,7 @@ async function handleCollect(flags) {
       substituted_seats: substitutedSeats,
       panel_report: substitutedSeats.map((s) => s.notice),
     } : {}),
+    ...(sameClassEscalation ? { same_class_escalation: sameClassEscalation } : {}),
   };
   console.log(JSON.stringify(summary, null, 2));
   process.exit(0);
@@ -2008,6 +2078,10 @@ async function handleFinalize(flags) {
   const briefPath = path.join(gDir, 'hands-brief.md');
   if (verdict === 'FIX-THEN-SHIP' && !(familyWarnings && !sameFamilyException)) {
     let engineLine = 'Engine: sonnet@claude-native effort=high';
+    if (targetChainEntry.same_class_escalation && targetChainEntry.same_class_escalation.to
+      && targetChainEntry.same_class_escalation.to !== targetChainEntry.same_class_escalation.from) {
+      engineLine = `Engine: ${targetChainEntry.same_class_escalation.to}`;
+    }
     const topologyPath = process.env.AUTOPILOT_TOPOLOGY_FILE || path.join(process.env.HOME || '', '.autopilot', 'topology.json');
     if (fs.existsSync(topologyPath)) {
       try {
@@ -2060,8 +2134,26 @@ async function handleFinalize(flags) {
           .trim();
         const findingPrefix = `Finding ${f.id} from seat ${f.seat}:`;
         briefLines.push(`${findingPrefix} ${cleanText}`);
+        if (typeof f.class === 'string' && f.class && Array.isArray(f.class_sites) && f.class_sites.length > 0) {
+          const classLine = `Class ${f.class} sites ${f.class_sites.join(' ')}.`;
+          briefLines.push(classLine);
+          controllerFields.push({ label: 'the class line', text: classLine });
+        }
         briefLines.push('');
       }
+    }
+    const givenClasses = [];
+    for (const f of findingsList) {
+      const disp = dispMap.get(f.id);
+      if (disp && disp.disposition === 'verified' && typeof f.class === 'string' && f.class && !givenClasses.includes(f.class)) {
+        givenClasses.push(f.class);
+      }
+    }
+    if (givenClasses.length > 0) {
+      const scanLine = `Return a class_scan table for ${givenClasses.join(' ')}: every site found (path:line) and the test that covers it.`;
+      briefLines.push(scanLine);
+      briefLines.push('');
+      controllerFields.push({ label: 'the class_scan line', text: scanLine });
     }
 
     if (flags['controller-notes']) {
@@ -2189,6 +2281,7 @@ async function handleFinalize(flags) {
     chain,
     verdict,
     open_findings: openFindings,
+    ...(targetChainEntry.same_class_escalation ? { same_class_escalation: targetChainEntry.same_class_escalation } : {}),
     ...(unresolvedAllowed ? { unresolved_allowed: unresolvedAllowed } : {}),
     ...(genSubstitutedSeats.length ? {
       substituted_seats: genSubstitutedSeats,
@@ -2576,6 +2669,87 @@ async function handleOptOut(flags) {
   process.exit(0);
 }
 
+function loadJsonFile(filePath, label) {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch (e) {
+    console.error(`ERROR: cannot read ${label}: ${e.message}`);
+    process.exit(1);
+  }
+}
+
+// fix-round: the implementer redispatch step. Review JSON and the fix report are
+// files (a real engine is never invoked). A missing class_scan is returned, not merged.
+function handleFixRound(flags) {
+  const ledgerDir = flags.ledger ? path.resolve(flags.ledger) : '';
+  const phase = flags.phase;
+  const generation = Number(flags.generation);
+  const reviewPath = flags.review ? path.resolve(flags.review) : '';
+  const reportPath = flags.report ? path.resolve(flags.report) : '';
+  if (!ledgerDir || !phase || !generation || !reviewPath || !reportPath) {
+    console.error('ERROR: fix-round needs --ledger, --phase, --generation, --review, and --report');
+    process.exit(2);
+  }
+  const review = loadJsonFile(reviewPath, 'review JSON');
+  const checked = findingClass.validateReview(review);
+  if (!checked.ok) {
+    console.error(`ERROR: ${checked.reason}`);
+    process.exit(1);
+  }
+  const report = loadJsonFile(reportPath, 'fix report');
+  const classes = findingClass.classesOf(checked);
+  const missing = findingClass.missingClassScan(report, classes);
+  const reviewPhaseDir = path.join(ledgerDir, `review-${phase}`);
+  const gDir = path.join(reviewPhaseDir, `g${generation}`);
+  fs.mkdirSync(gDir, { recursive: true });
+  const implementer = typeof flags['implementer-engine'] === 'string' ? flags['implementer-engine'] : '';
+  const ladder = typeof flags.ladder === 'string' ? flags.ladder : '';
+  if (missing) {
+    const state = {
+      status: 'rejected',
+      merged: false,
+      missing_class: missing,
+      reason: `missing class_scan for ${missing}`,
+    };
+    writeFileSyncAtomic(path.join(reviewPhaseDir, 'class-gate.json'), `${JSON.stringify(state, null, 2)}\n`);
+    console.error(`rejected: missing class_scan for ${missing}`);
+    process.exit(1);
+  }
+  let previous = { findings: [] };
+  if (flags.prev) {
+    previous = loadJsonFile(path.resolve(flags.prev), 'previous review');
+  } else if (generation >= 2) {
+    const prevPath = path.join(reviewPhaseDir, `g${generation - 1}`, 'findings.json');
+    if (fs.existsSync(prevPath)) previous = loadJsonFile(prevPath, 'previous findings');
+  }
+  const repeated = generation >= 2 ? findingClass.repeatedClass(previous, checked) : null;
+  const to = repeated ? findingClass.escalateTarget(implementer, ladder) : implementer;
+  const state = {
+    status: repeated ? 'escalated' : 'accepted',
+    merged: !repeated,
+    generation,
+    ...(repeated ? {
+      reason: `same_class_repeat:${repeated}`,
+      from: implementer,
+      to,
+    } : {}),
+  };
+  writeFileSyncAtomic(path.join(reviewPhaseDir, 'class-gate.json'), `${JSON.stringify(state, null, 2)}\n`);
+  const briefLines = [
+    `Engine: ${repeated ? to : (implementer || 'lane-seat')}`,
+  ];
+  for (const finding of checked.findings) {
+    briefLines.push(`Class ${finding.class} sites ${finding.class_sites.join(' ')}.`);
+  }
+  briefLines.push(`Return a class_scan table for ${classes.join(' ')}: every site found (path:line) and the test that covers it.`);
+  writeFileSyncAtomic(path.join(gDir, 'hands-brief.md'), `${briefLines.join('\n')}\n`);
+  if (repeated) {
+    console.error(`WARN: same_class_repeat:${repeated}: previous round incomplete; escalating from ${implementer} to ${to}`);
+  }
+  console.log(JSON.stringify(state));
+  process.exit(0);
+}
+
 async function main() {
   const argv = process.argv.slice(2);
   const { positional, flags } = parseArgv(argv);
@@ -2595,6 +2769,8 @@ async function main() {
     await handleRefinalize(flags);
   } else if (subcommand === 'opt-out') {
     await handleOptOut(flags);
+  } else if (subcommand === 'fix-round') {
+    handleFixRound(flags);
   } else {
     console.error(`Subcommand '${subcommand}' is not yet implemented.`);
     console.error('Usage: node scripts/hetero-review-loop.js <subcommand> [flags]');

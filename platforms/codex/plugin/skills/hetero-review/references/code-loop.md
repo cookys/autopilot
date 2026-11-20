@@ -4,7 +4,7 @@ This document specifies the judgment rules and freeze discipline for heterogeneo
 
 ## Core Principle: Claims vs Gates (ADR-0001)
 
-A hetero implementer's green or reviewer green verdict is a claim that depth-0 must independently re-derive, never a gate that stands on its own. Depth-0 re-derives the verdict from the reviewer's structured JSON artifact and the exact `base..head` commit range it reviewed. Each finding in that JSON carries `class` (kebab-case defect class) and `class_sites` (every `path:line` of that class in the diff); a later generation is collected only when `class_scan` gives every site as `path:line` plus a nonempty covering test.
+A hetero implementer's green or reviewer green verdict is a claim that depth-0 must independently re-derive, never a gate that stands on its own. Depth-0 re-derives the verdict from the reviewer's structured JSON artifact and the exact `base..head` commit range it reviewed. Each finding in that JSON carries `class` (kebab-case defect class) and `class_sites` (every `path:line` of that class in the diff); a plain-text severity emoji or Critical/Major/Minor/Suggestion line with a bracketed id, with or without MUST-FIX, is the same contract, and each severity-emoji header is its own finding; a later generation is collected only when `class_scan` gives every site as `path:line` plus a nonempty covering test.
 
 No trust machinery (no hash chains, event ledgers, witness receipts, attestation, or trust roots) is used. The integrity is established by snapshot shas, reviewer artifacts, and verifiable execution receipts.
 

@@ -71,14 +71,37 @@ function isJsonLine(line) {
   return line.startsWith('{') || line.startsWith('[');
 }
 
-// A review that uses the class contract (JSON, MUST-FIX, or a class field) must
-// carry class metadata on every finding. Severity-word paragraphs that name
-// neither are the pre-class line shape and stay with the line parser.
+// Emoji is not a word character, so \b never sits between a glyph and the
+// following space or end of line. Words stay on \b. Both shapes are findings.
+const SEVERITY_HEADER = /^(?:[-*#>\s\d.)]*)(?:(?:🔴|🟠|🟡|🔵)(?:\s|$)|(?:Critical|Major|Minor|Suggestion)\b)/i;
+
+// A bracketed-id severity header (emoji or word, with or without MUST-FIX) is a
+// finding under the class contract. Colon prose such as "Critical: ..." has no
+// bracketed id and stays on the legacy line parser.
+const SEVERITY_FINDING = /^(?:[-*#>\s\d.)]*)(?:(?:🔴|🟠|🟡|🔵)[ \t]+\[|(?:Critical|Major|Minor|Suggestion)\b[ \t]+\[)/i;
+
 function demandsClass(text) {
-  return /MUST-FIX/i.test(text) || /class_sites/i.test(text) || /"class"/.test(text) || /^\s*class\s*[:=]/im.test(text);
+  if (/MUST-FIX/i.test(text) || /class_sites/i.test(text) || /"class"/.test(text) || /^\s*class\s*[:=]/im.test(text)) {
+    return true;
+  }
+  return text.split(/\r?\n/).some((line) => SEVERITY_FINDING.test(line.trim()));
 }
 
-const SEVERITY_HEADER = /^(?:[-*#>\s\d.)]*)(?:🔴|🟠|🟡|🔵|Critical|Major|Minor|Suggestion)\b/i;
+const EMOJI_SEVERITY = { '🔴': 'Critical', '🟠': 'Major', '🟡': 'Minor', '🔵': 'Suggestion' };
+
+function severityOf(block) {
+  const header = block.split(/\r?\n/).map((line) => line.trim()).find((line) => SEVERITY_HEADER.test(line));
+  if (!header) return 'Major';
+  const emoji = /🔴|🟠|🟡|🔵/.exec(header);
+  if (emoji) return EMOJI_SEVERITY[emoji[0]];
+  const word = /Critical|Major|Minor|Suggestion/i.exec(header);
+  if (!word) return 'Major';
+  const lower = word[0].toLowerCase();
+  if (lower === 'critical') return 'Critical';
+  if (lower === 'minor') return 'Minor';
+  if (lower === 'suggestion') return 'Suggestion';
+  return 'Major';
+}
 
 function parseClassBlock(block) {
   const classMatch = /(?:^|\n)\s*class\s*[:=]\s*([^\n]+)/i.exec(block);
@@ -102,7 +125,7 @@ function parseClassBlock(block) {
     class: klass,
     class_sites: sites.map((site) => (typeof site === 'string' ? site.trim() : site)),
     text: block.trim(),
-    severity: 'Major',
+    severity: severityOf(block),
   };
 }
 

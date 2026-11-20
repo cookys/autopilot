@@ -166,4 +166,32 @@ assert_contains "$plain" "lacks class" "plain finding names the missing class me
 chain="$(cat "$PLAIN_LEDGER/review-plain/chain.json")"
 assert_contains "$chain" '"reason": "invalid_review"' "plain finding aborts as invalid_review"
 
+# Severity word without MUST-FIX is still a finding and needs class metadata.
+printf '%s\n' 'Major [id] broken check' > "$TEST_TMP/severity-only.txt"
+set +e
+sev="$("${CHILD_ENV[@]}" node "$CLASS_JS" validate-review-text "$TEST_TMP/severity-only.txt" 2>&1)"
+sev_rc=$?
+set -e
+assert_exit_code "$sev_rc" "1" "severity word without MUST-FIX exits 1"
+assert_contains "$sev" "lacks class" "severity word without MUST-FIX lacks class"
+
+# Two emoji headers: metadata on only one is invalid; metadata on each counts as two.
+printf '%s\n' '🟠 [id-a] first' 'class: emoji-split' 'class_sites: a.js:1' '🟠 [id-b] second has no metadata' > "$TEST_TMP/emoji-one.txt"
+set +e
+one="$("${CHILD_ENV[@]}" node "$CLASS_JS" validate-review-text "$TEST_TMP/emoji-one.txt" 2>&1)"
+one_rc=$?
+set -e
+assert_exit_code "$one_rc" "1" "two emoji findings with one metadata pair exit 1"
+assert_contains "$one" "lacks class" "collapsed emoji finding lacks class"
+
+printf '%s\n' '🟠 [id-a] first' 'class: emoji-a' 'class_sites: a.js:1' '🟠 [id-b] second' 'class: emoji-b' 'class_sites: b.js:2' > "$TEST_TMP/emoji-two.txt"
+node -e '
+const fs = require("fs");
+const findingClass = require(process.argv[1]);
+const result = findingClass.validateReviewText(fs.readFileSync(process.argv[2], "utf8"));
+if (!result.ok || result.findings.length !== 2) process.exit(1);
+if (result.findings[0].class !== "emoji-a" || result.findings[1].class !== "emoji-b") process.exit(1);
+' "$CLASS_JS" "$TEST_TMP/emoji-two.txt" < /dev/null
+assert_exit_code "$?" "0" "two emoji findings with metadata count as two"
+
 finalize_test

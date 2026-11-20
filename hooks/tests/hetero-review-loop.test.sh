@@ -1512,12 +1512,20 @@ assert_contains "$HELP2_OUT" "AUTOPILOT_DISPATCH_REVIEW_SCRIPT" "case 10 (help):
 T1_FINDINGS_TEXT=$(cat << 'EOF'
 🔴
 SQL injection reported via glyph alone
+class: glyph-alone
+class_sites: a.js:1
 🟠 Major
 Unhandled promise reported via glyph plus word
+class: glyph-word
+class_sites: b.js:2
 Minor
 Unused import reported via plain word alone
+class: plain-word
+class_sites: c.js:3
 🔵 [sugg-101]
 Naming nit reported via glyph followed by bracket
+class: glyph-bracket
+class_sites: d.js:4
 EOF
 )
 export STUB_SEAT_RESPONSE="$(node -e 'console.log(JSON.stringify({status: "reviewed", verdict: "FIX-THEN-SHIP", findings: process.argv[1]}));' "$T1_FINDINGS_TEXT")"

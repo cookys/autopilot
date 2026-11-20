@@ -60,6 +60,52 @@ test('plain-text finding without class is invalid', () => {
   assert.match(result.reason, /lacks class/);
 });
 
+test('severity word without MUST-FIX still requires class', () => {
+  const result = findingClass.validateReviewText('Major [id] broken check');
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /lacks class/);
+});
+
+test('emoji finding without MUST-FIX still requires class', () => {
+  const result = findingClass.validateReviewText('🟠 [id] broken check');
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /lacks class/);
+});
+
+test('legacy colon severity prose stays on the line parser', () => {
+  const colon = findingClass.validateReviewText('Critical: SQL injection vulnerability\n\nMajor: Unhandled promise rejection');
+  assert.equal(colon.ok, true);
+  assert.equal(colon.json, false);
+});
+
+test('two emoji findings where only one has metadata are rejected', () => {
+  const text = [
+    '🟠 [id-a] first check',
+    'class: emoji-split',
+    'class_sites: a.js:1',
+    '🟠 [id-b] second check has no metadata',
+  ].join('\n');
+  const result = findingClass.validateReviewText(text);
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /lacks class/);
+});
+
+test('two emoji findings each with metadata count as two', () => {
+  const text = [
+    '🟠 [id-a] first',
+    'class: emoji-a',
+    'class_sites: a.js:1',
+    '🟠 [id-b] second',
+    'class: emoji-b',
+    'class_sites: b.js:2',
+  ].join('\n');
+  const result = findingClass.validateReviewText(text);
+  assert.equal(result.ok, true);
+  assert.equal(result.findings.length, 2);
+  assert.equal(result.findings[0].class, 'emoji-a');
+  assert.equal(result.findings[1].class, 'emoji-b');
+});
+
 test('plain-text finding with class and class_sites is kept', () => {
   const text = '🟠 [id] MUST-FIX skipped site\nclass: bad-value\nclass_sites: a.js:1 b.js:4';
   const result = findingClass.validateReviewText(text);

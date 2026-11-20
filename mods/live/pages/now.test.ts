@@ -382,8 +382,9 @@ test('now C1: short 現況 summarises each class once (pending -> fleet -> quota
   expect(en7[4]).toBe('✗ Fleet offline 1 lines (復原線) · stuck 1 lines (遊…) · hosts 17/18 (1 offline)')
   expect(en7[5]).toBe('✗ quota red 2 (F 池, trinity) · Data expired 180 min')
   // At 84 cols (untruncated English fleet row is 83 display cells), neither CJK lane name is truncated
-  const en84 = frameRows(nowPage, { ...(ctxOf(84, 7, c1Snap, liveNoRes) as object), t: makeT('en') } as never, { pages: PAGES }).map(text)
-  expect(en84[4]).toBe('✗ Fleet offline 1 lines (復原線) · stuck 1 lines (遊戲線) · hosts 17/18 (1 offline)')
+  const en84 = frameRows(nowPage, { ...(ctxOf(84, 8, c1Snap, liveNoRes) as object), t: makeT('en') } as never, { pages: PAGES }).map(text)
+  expect(en84.join('\n'), 'at 84 columns the untruncated English fleet row stays whole').toContain('✗ Fleet offline 1 lines (復原線) · stuck 1 lines (遊戲線) · hosts 17/18 (1 offline)')
+  expect(en84.some(r => r.startsWith('✗ Fleet offline')), 'the fleet row is a whole row').toBe(true)
 
   // Summary-only offline host (no host item in console.items, summary.hosts 17/18) also surfaces in the fleet summary row
   const summaryOnlySnap = con({ ...c1Snap, items: dupPoolItems as never })

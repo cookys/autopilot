@@ -3,7 +3,7 @@ import type { Page } from './frame'
 import { recentColumn, speedColumn } from '../speedview'
 
 export const forgePage: Page = {
-  id: 'forge', key: '0', title: '鍛', framed: true,
+  id: 'forge', key: '', title: '鍛', framed: true,
   render(ctx) {
     const steps = ctx.steps ?? []
     const body = speedColumn(steps, ctx.t, ctx.size.cols).lines

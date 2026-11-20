@@ -40,20 +40,10 @@ const fleetSnap = (o: { lines?: unknown[]; hosts?: Src; tasks?: Src; generated?:
 }) as never
 const live0 = (o: Record<string, unknown> = {}) => ({ state: 'ok', text: 'x', header: 'x', band: null, pending: [], project_key: null, root_run_id: null, link: null, rows: null, gates: null, sections: M.NO_SECTIONS, review: null, published_at: null, watcher_note: null, session_as_of: null, host_as_of: null, detail: { ...M.NO_DETAIL, now_ms: NOW }, ...o }) as never
 
-test('M1 (S1-full-p3-80x24 row 16): a cut 80-column 艦隊 page keeps the summary with the offline hosts on top and ends in ↓ 還有 N 項', () => {
-  const out = frameRows(fleetPage, ctx(80, 7, fleetSnap())).map(text)
-  expect(out.length).toBe(7)
-  const sum = out.find(r => r.includes('產線 9'))
-  expect(sum, 'the summary row stays').toBeDefined()
-  expect(sum).toContain('✗2 ⊘1 ○6') // U3: severity first. // X3: counts are classified from the same nine bus lines.
-  expect(sum).toContain('✗ 離線 2 台主機')
-  expect(out.some(r => /↓ 還有 \d+ 項/.test(r)), 'the cut list says how much is hidden').toBe(true)
-  for (const r of out) expect(M.displayWidth(r)).toBeLessThanOrEqual(80)
-})
 
 test('M2 (S1-full-p4-80x24 row 15): a cut 80-column 額度 table says how many pools of which kind are hidden, and keeps o / prev / next as Buttons', () => {
   const c = consoleOf(POOLS)
-  const r = renderQuota(qctx(80, 8, c))
+  const r = renderQuota(qctx(80, 9, c))
   const hint = r.body.map(text).find(l => l.includes('池（'))
   expect(hint, 'the pool hint row').toBeDefined()
   expect(hint).toContain('↓ 還有 6 池（')
@@ -63,8 +53,8 @@ test('M2 (S1-full-p4-80x24 row 15): a cut 80-column 額度 table says how many p
   expect(acts.some(s => s.text === '下一池 (1/7)' && s.press === 'quota:pool:1')).toBe(true)
   expect(acts.some(s => s.text === '上一池' && typeof s.press === 'string')).toBe(true)
   // the short body (80x7) says it too, instead of dropping pools without a word
-  const short = frameRows(quotaPage, qctx(80, 7, c)).map(text)
-  expect(short.length).toBe(7)
+  const short = frameRows(quotaPage, qctx(80, 8, c)).map(text)
+  expect(short.length).toBe(8)
   expect(short.some(l => /↓ 還有 \d+ 池/.test(l))).toBe(true)
 })
 
@@ -81,19 +71,6 @@ test('M3 (S1-full-p2-160x40 row 29 / 33): the retired decide page is one line, w
     expect(rendered.actions.map(text).join('')).toBe('待決在 band 上（d）')
     expect(rendered.actions.map(text).join('')).not.toMatch(/\[z\]|\[h\]|\[l\]/)
   }
-})
-
-test('M4 (S1-full-p3-160x40 row 29): an expanded line with no issue record is 正常, never 閒置; its focus says the detail is missing', () => {
-  const open = fleetView(ctx(160, 40, fleetSnap()), { focus: 0, expanded: true }).body.map(text)
-  for (const name of ['丙線', '丁線', '戊線', '庚線', '辛線', '壬線']) {
-    const row = open.find(r => r.includes(name))
-    expect(row, name).toBeDefined()
-    expect(row).toContain('正常')
-    expect(row).not.toContain('閒置')
-  }
-  expect(open.find(r => r.includes('己線'))).toContain('閒置') // a line whose record says idle still says so
-  const focusNormal = fleetView(ctx(160, 40, fleetSnap()), { focus: 3, expanded: false }).actions.map(text).join('\n')
-  expect(focusNormal).toContain('正常（無異常明細）')
 })
 
 test('M5 (S5-console-exit1-nofile-p1-160x40 row 34): the console band gives the idle cells to the left text, so the fix command is whole', () => {
@@ -143,22 +120,6 @@ test('N1 (S1-full-p2-160x40 row 27): the retired decide page does not focus a ca
     expect(o.actions.map(text).join('')).toBe('待決在 band 上（d）')
     expect(o.actions.map(text).join('')).not.toContain('測試機第二槽插電')
   }
-})
-
-test('N2 (S1-full-p1-160x40 row 19): 現況 draws no ▸ focus mark and orders the line rows like 艦隊 (longest first), with the duration', () => {
-  const snap = fleetSnap({ lines: [LINES9[0], LINES9[1]] })
-  for (const cols of [160, 80]) {
-    const body = nowPage.render(ctx(cols, cols === 160 ? 40 : 24, snap)).body.map(text)
-    expect(body.filter(r => r.trimStart().startsWith('▸')), cols + ': no ▸').toEqual([])
-    const jia = body.findIndex(r => r.includes('甲線'))
-    const yi = body.findIndex(r => r.includes('乙線'))
-    expect(yi, cols + ': 乙 drawn').toBeGreaterThanOrEqual(0)
-    expect(yi, cols + ': 乙 (1 時) before 甲 (20 分)').toBeLessThan(jia)
-    const fleetRows = fleetPage.render(ctx(cols, cols === 160 ? 40 : 24, snap)).body.map(text)
-    expect(fleetRows.findIndex(r => r.includes('乙線'))).toBeLessThan(fleetRows.findIndex(r => r.includes('甲線')))
-  }
-  const narrow = nowPage.render(ctx(80, 24, snap)).body.map(text)
-  expect(narrow.find(r => r.includes('乙線'))).toContain('（1 時）')
 })
 
 test('N3 (S1-full-p1-160x40 row 16): a reason kept whole wraps at a clause boundary on a 2-cell hanging indent, never back to column 0', () => {

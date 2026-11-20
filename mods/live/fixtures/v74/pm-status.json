@@ -1,0 +1,116 @@
+{
+  "schema": "fleet.pm.status",
+  "schema_version": 1,
+  "generated_at_ms": 1795149000000,
+  "selector": null,
+  "projects": [
+    {
+      "project": "line-b",
+      "root_id": null,
+      "counts": {
+        "stuck": 1,
+        "overdue": 1,
+        "running": 0,
+        "waiting": 0,
+        "total": 1
+      },
+      "tasks": []
+    },
+    {
+      "project": "line-a",
+      "root_id": null,
+      "counts": {
+        "stuck": 1,
+        "overdue": 0,
+        "running": 0,
+        "waiting": 0,
+        "total": 1
+      },
+      "tasks": []
+    },
+    {
+      "project": "line-f",
+      "root_id": null,
+      "counts": {
+        "stuck": 0,
+        "overdue": 0,
+        "running": 0,
+        "waiting": 2,
+        "total": 2
+      },
+      "tasks": []
+    },
+    {
+      "project": "line-e",
+      "root_id": null,
+      "counts": {
+        "stuck": 0,
+        "overdue": 0,
+        "running": 0,
+        "waiting": 1,
+        "total": 1
+      },
+      "tasks": []
+    },
+    {
+      "project": "line-d",
+      "root_id": null,
+      "counts": {
+        "stuck": 0,
+        "overdue": 0,
+        "running": 0,
+        "waiting": 1,
+        "total": 1
+      },
+      "tasks": []
+    },
+    {
+      "project": "line-c",
+      "root_id": null,
+      "counts": {
+        "stuck": 0,
+        "overdue": 0,
+        "running": 0,
+        "waiting": 1,
+        "total": 1
+      },
+      "tasks": []
+    },
+    {
+      "project": "line-g",
+      "root_id": null,
+      "counts": {
+        "stuck": 0,
+        "overdue": 0,
+        "running": 2,
+        "waiting": 0,
+        "total": 2
+      },
+      "tasks": []
+    },
+    {
+      "project": "line-h",
+      "root_id": null,
+      "counts": {
+        "stuck": 0,
+        "overdue": 0,
+        "running": 1,
+        "waiting": 0,
+        "total": 1
+      },
+      "tasks": []
+    },
+    {
+      "project": "line-i",
+      "root_id": null,
+      "counts": {
+        "stuck": 0,
+        "overdue": 0,
+        "running": 1,
+        "waiting": 0,
+        "total": 1
+      },
+      "tasks": []
+    }
+  ]
+}

@@ -149,7 +149,8 @@ export type LiveSnapshot = {
   account?: AccountSnap
 }
 
-export type SpendView = { session: string; host_all: string; host_all_n: number | null; brain: number | null; cap: number | null; mode: string; hourly?: number[] | null }
+// host_all_n and brain are MONEY (spend vs cap); tok holds the real token counts (no feed yet: undefined = unknown)
+export type SpendView = { session: string; host_all: string; host_all_n: number | null; brain: number | null; tok?: { session: number | null; host: number | null } | null; cap: number | null; mode: string; hourly?: number[] | null }
 export type PaneDetail = {
   counts: Counts | null // the envelope's dispatch counts (merged over the root set); null = not published
   stalled: number // stalled runs + a stalled foreman (the band's ⊘ count)

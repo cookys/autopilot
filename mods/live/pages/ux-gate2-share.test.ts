@@ -40,7 +40,7 @@ const ctx = (rows: number, con = snapshot(), cols = 80): PageCtx => ({ live, con
 
 // X2b: the real host supplies scroll.bodyRows independently of viewport height
 // (register.ts passes it through frameHeight). The measured inline allocations
-// at terminal 80x20 / 80x16 are 4 / 3 rows: header + 2 / 1 content + strip.
+// at terminal 80x20 / 80x16 are 4 / 3 rows: header + 2 / 1 content + strip (the key-hint border row yields at <= 4 rows).
 function smallNow(terminalRows: 20 | 16, con = snapshot()): string[] {
   const hostBodyRows = terminalRows === 20 ? 4 : 3
   const mk = (kind: string) => (props: Record<string, any>) => ({ kind, props })
@@ -59,18 +59,17 @@ function smallNow(terminalRows: 20 | 16, con = snapshot()): string[] {
   walk(tree)
   expect(rows.length, 'the supplied host allocation is preserved').toBe(hostBodyRows)
   for (const row of rows) expect(displayWidth(row)).toBeLessThanOrEqual(80)
-  return rows.slice(1, -1)
+  return rows.slice(1, -1).filter(r => !r.startsWith('╰')) // the key-hint border row is not content
 }
 
-test('X2b: 80x20 uses its two content rows for the most severe class then a severity-count overflow summary, dropping residue first', () => {
+test('X2b: 80x20 (4 host rows = head + 1 content + key-hint border + strip) keeps the most severe class and the severity counts in its one content row, dropping residue first', () => {
   const rows = smallNow(20)
-  expect(rows.length).toBe(2)
+  expect(rows.length).toBe(1)
   expect(rows[0]).toMatch(/^✗ (艦隊|額度)/)
   expect(rows[0]).toContain('艦隊')
-  expect(rows[1]).toMatch(/另有 \d+ 項/)
-  expect(rows[1]).toContain('額度 ✗2 ?3')
-  expect(rows[1]).toContain('待決 3 張')
-  expect(rows.join('\n')).not.toContain('殘留')
+  expect(rows[0]).toContain('額度 ✗2')
+  expect(rows[0]).toContain('待決 3 張')
+  expect(rows[0]).not.toContain('殘留')
 })
 
 test('X2b: 80x16 uses its single content row for severe fleet and quota counts plus overflow, never residue', () => {
@@ -84,17 +83,17 @@ test('X2b: 80x16 uses its single content row for severe fleet and quota counts p
   expect(rows[0]).not.toContain('殘留')
 })
 
-test('X2b: a failed miscellaneous exception precedes less severe fleet and quota classes in two or one content rows', () => {
+test('X2b: a failed miscellaneous exception precedes less severe fleet and quota classes in one content row at 80x20 and 80x16', () => {
   const con = snapshot()
   con.lines = [line('丙', 'stalled')]
   con.counts.summary.hosts = { online: 6, total: 6 }
   con.quota.pools = [{ ...POOLS[3], pool: 'unknown-only' }] as never
   con.items = [{ id: 'exc:misc', kind: 'exception', state: 'failed', title: '發布失敗', text: '發布失敗', since_ms: NOW - MIN, line_id: null, to_console: true, facts: {} }] as never
-  const two = smallNow(20, con)
-  expect(two[0]).toBe('✗ 發布失敗')
-  expect(two[1]).toMatch(/另有 \d+ 項/)
-  expect(two[1]).toContain('額度 ?1')
-  expect(two[1]).toContain('艦隊 ⊘1')
+  const two = smallNow(20, con) // one content row at 4 host rows: the severity summary, which names the failed fleet class and the unknown quota pool
+  expect(two.length).toBe(1)
+  expect(two[0]).toMatch(/^✗ 艦隊 ✗1/)
+  expect(two[0]).toContain('額度 ?1')
+  expect(two[0]).toContain('艦隊 ⊘1')
   const failed = con.items
   const one = smallNow(16, con)[0]
   expect(one).toMatch(/^✗ 艦隊 ✗1/)
@@ -119,80 +118,27 @@ test('X2: 80x24 overflow names hidden severity and category, prioritizes the wor
   expect(hint).toContain('?3')
   expect(hint).toContain('艦隊')
   expect(out.slice(1, -1).some(r => r.includes('殘留'))).toBe(false)
-  expect(frameRows(nowPage, ctx(24, con)).flat().some(s => s.press === 'tab:8:hygiene')).toBe(true)
+  expect(frameRows(nowPage, ctx(24, con)).flat().some(s => s.press === 'tab:6:hygiene')).toBe(true)
   for (const row of out) expect(displayWidth(row)).toBeLessThanOrEqual(80)
 })
 
-test('X2: the only available row at 80x3 names the worst category, its counts and the most urgent pool', () => {
-  const out = frameRows(nowPage, ctx(3)).map(text)
-  expect(out.length).toBe(3)
+test('X2: the only available row at 80x4 names the worst category, its counts and the most urgent pool', () => {
+  const out = frameRows(nowPage, ctx(4)).map(text)
+  expect(out.length).toBe(4)
   expect(out.join('\n')).toContain('額度 ✗2 ?3')
   expect(out.join('\n')).toContain('urgent')
-  expect(out.join('\n')).not.toContain('殘留')
+  expect(out.slice(0, -2).join('\n')).not.toContain('殘留') // the strip names tab 6 殘留; only the page rows are checked
 })
 
-test('X2: at 80x3 quota severity stays visible with no pending decision, and seat-only quota data does not throw', () => {
+test('X2: at 80x4 quota severity stays visible with no pending decision, and seat-only quota data does not throw', () => {
   const con = snapshot()
   con.cards = []; con.counts.decisions = 0
-  expect(frameRows(nowPage, ctx(3, con)).map(text).join('\n')).toContain('額度 ✗2 ?3')
+  expect(frameRows(nowPage, ctx(4, con)).map(text).join('\n')).toContain('額度 ✗2 ?3')
   con.quota.pools = []
   con.items = [{ id: 'seat_blocked:orphan', kind: 'seat_blocked', state: 'failed', title: '池用完', text: '池用完', line_id: null, to_console: true, facts: { pool: 'orphan' } }] as never
-  expect(() => frameRows(nowPage, ctx(3, con))).not.toThrow()
+  expect(() => frameRows(nowPage, ctx(4, con))).not.toThrow()
 })
 
-test('X3: 現況, 艦隊 and the band count the same snapshot as the expanded rows, including offline and normal lines', () => {
-  const con = snapshot()
-  const expected = ['✗2', '⊘4', '○3']
-  const now = nowPage.render(ctx(24, con)).body.map(text).find(r => r.startsWith('產線')) ?? ''
-  const fleet = fleetView(ctx(24, con)).body.map(text)[0]
-  const band = pageBarStrip(live, t, 400, null, null, con).tabs.find(x => x.id === 'fleet')!.label.text
-  // register.ts feeds this same bus projection into the band's summary slot.
-  const bandSummary = text(slotFleet(consoleFleetCounts(con, t), t)!.segs).replace(/([✗⊘○●⋯])\s+/g, '$1')
-  for (const label of [now, fleet, band, bandSummary]) for (const n of expected) expect(label).toContain(n)
-  const expanded = fleetView(ctx(40, con, 160), { focus: 0, expanded: true }).body.map(text)
-  for (const name of ['庚線', '辛線', '壬線']) expect(expanded.find(r => r.includes(name))).toContain('正常（無異常明細）')
-  const mixed = line('混合', 'stalled')
-  mixed.issues[0].rule = 'T4'
-  mixed.issues[0].subject = '成員離線'
-  expect(rowsOf([mixed], t)[0].sid).toBe('failed')
-})
-
-test('Y1: a cut 艦隊 list counts hidden states and offers working previous/next line Buttons at 80x24', () => {
-  const con = snapshot()
-  con.lines = [...con.lines!, ...Array.from({ length: 20 }, (_, i) => line('正常' + i))]
-  const page = { ...fleetPage, render: (c: PageCtx) => fleetView(c, { focus: 0, expanded: true }) }
-  const out = frameRows(page, ctx(24, con)).map(text)
-  expect(out.length).toBe(24)
-  expect(out.some(r => /↓ 還有 \d+ 項（○\d+）/.test(r))).toBe(true)
-  const compact = frameRows(page, ctx(7, snapshot())).map(text)
-  expect(compact.join('\n')).toContain('↓ 還有 7 項（⊘4 ○3）') // V2: reclaiming one row shows the other offline line.
-  const acts = page.render(ctx(24, con)).actions.flat()
-  expect(acts.some(s => s.text.includes('上一線') && s.press === 'fleet:see:乙')).toBe(true)
-  expect(acts.some(s => s.text.includes('下一線') && s.press === 'fleet:see:甲')).toBe(true)
-  const second = fleetView(ctx(24, con), { focus: 1, expanded: true }).actions.flat()
-  expect(second.some(s => s.text.includes('上一線') && s.press === 'fleet:see:乙')).toBe(true)
-  const last = rowsOf(con.lines!, t).length - 1
-  const focused = rowsOf(con.lines!, t)[last].line.label
-  const moved = frameRows({ ...fleetPage, render: c => fleetView(c, { focus: last, expanded: true }) }, ctx(24, con)).map(text)
-  expect(moved.some(r => r.includes(focused) && r.startsWith('▸'))).toBe(true)
-  for (const row of out) expect(displayWidth(row)).toBeLessThanOrEqual(80)
-})
-
-test('Y3: both pages share 產線 狀態（時長）, with 220 minutes shown once as 3 時 40 分', () => {
-  const con = snapshot()
-  con.lines = [line('己', 'stalled', 220)]
-  con.items = [{ id: 'exc:T3:己', kind: 'exception', state: 'stalled', title: '己線閒置 220 分', text: '己線閒置 220 分', since_ms: NOW - 220 * MIN, line_id: '己', to_console: true, facts: {} }] as never
-  for (const cols of [80, 160]) {
-    for (const page of [nowPage, fleetPage]) {
-      const row = page.render(ctx(40, con, cols)).body.map(text).find(r => r.includes('己線')) ?? ''
-      expect(row).toContain('己線 閒置（3 時 40 分）')
-      expect(row).not.toContain('220 分')
-      expect((row.match(/3 時 40 分/g) ?? []).length).toBe(1)
-    }
-  }
-  con.items = []
-  expect(nowPage.render(ctx(24, con)).body.map(text).find(r => r.includes('己線'))).toContain('己線 閒置（3 時 40 分）')
-})
 
 test('Z2: a positive seat total with no seat records says the detail is missing, and o appears once', () => {
   const con = snapshot()

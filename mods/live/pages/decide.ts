@@ -16,6 +16,8 @@ import type { Page, PageCtx } from './frame'
 import { brokenRow, pendingMissingReason, pendingSourceMissing, wrapRow } from './rows'
 import type { Row } from './rows'
 import { STRIP_SPLIT_COLS } from './layout'
+import { PICK_KEYS } from '../v74/contract'
+import type { DecideCard } from '../v74/contract'
 
 // ---- view state and the key reducer ----
 // DecideState (model.ts) carries picks, notes, sent and hold (the 10 s undo window, by card id); the rest is this page's own: which card shows in full, whether the others are folded, the note mode and its buffer, the focused option beyond a)–e)
@@ -36,6 +38,8 @@ const idOf = (it: Item): string => (it.kind === 'own' ? it.d.id ?? '' : it.c.id)
 
 // every card of this page: the seat's own decision cards, then the console cards it does not hold
 function modelOf(ctx: PageCtx): Model {
+  const v74 = v74Cards(ctx)
+  if (v74 !== null) return { all: v74.map((c): Item => ({ kind: 'own', d: cardToLive(c) })), steps: [], far: [] }
   const pending = ctx.live === null ? [] : ctx.live.pending
   const own = pending.filter(d => !isStepCard(d))
   const held = new Set(own.map(d => d.id))
@@ -56,6 +60,21 @@ function modelOf(ctx: PageCtx): Model {
   return { all, steps: pending.filter(isStepCard), far }
 }
 
+
+// ---- v7.4 (S3): the cards come from ctx.v74.decide (fleet decision list); the send / undo path stays decidebatch.ts / decideundo.ts, which read them as LiveDecision ----
+export const cardToLive = (c: DecideCard): LiveDecision => ({
+  id: c.id, title: c.title, question: c.question, background: c.background, options: c.options.map(o => ({ label: o.label, description: o.detail })),
+  recommendation: c.options.find(o => o.recommended)?.label ?? null, why: null, blocks: null, not_authorized: null, source: null, opened_at: null,
+  stale: false, age_s: null, origin: null, orphaned: false, kind: 'decide',
+})
+// null = the v7.4 source is not on the ctx (legacy draw) or broken; [] = a working source with no open card
+export const v74Cards = (ctx: PageCtx): DecideCard[] | null => ctx.v74?.decide ?? null
+// the send pool: the seat's own pending cards plus the v7.4 list cards it does not already hold (the same card id counts once)
+export const v74Pool = (pending: readonly LiveDecision[], feed: readonly DecideCard[] | null): LiveDecision[] => {
+  const held = new Set(pending.map(d => d.id))
+  return [...pending, ...(feed ?? []).filter(c => !held.has(c.id)).map(cardToLive)]
+}
+
 const clampCursor = (nav: DecideNav, n: number): number => (n === 0 ? 0 : Math.max(0, Math.min(n - 1, nav.cursor)))
 
 // one key of routeKey's table applied to the page state. The host calls it with the cards of the current draw (`cards` = the seat's own decision cards and the console cards, in page order), and does the effect.
@@ -67,6 +86,13 @@ export function decideReduce(nav: DecideNav, key: KeyAction, ctx: PageCtx, nowMs
   const same = (patch: Partial<DecideNav>): { nav: DecideNav; effect: DecideEffect } => ({ nav: { ...nav, cursor, ...patch }, effect: null })
   const heldNow = d !== null && d.id !== null && nav.hold?.[d.id] !== undefined
   const sentNow = d !== null && d.id !== null && nav.sent[d.id] !== undefined && nav.fixing?.[d.id] === undefined
+  if (v74Cards(ctx) !== null && key.kind === 'move') return same({ cursor: Math.min(Math.max(0, m.all.length - 1), Math.max(0, cursor + key.by)), opt: null, detailOffset: 0 })
+  if (v74Cards(ctx) !== null && key.kind === 'submit') { // s sends every answered card that is not already in its window (holdSend); the effect carries the first one
+    const ready = m.all.flatMap(it => (it.kind === 'own' && it.d.id !== null && nav.hold?.[it.d.id] === undefined && !(nav.sent[it.d.id] !== undefined && nav.fixing?.[it.d.id] === undefined) ? [it.d] : []))
+      .flatMap(c => { const line = decideLine(c, nav); return line === null ? [] : [{ id: c.id as string, line }] })
+    if (ready.length === 0) return same({})
+    return { nav: { ...nav, cursor, hold: { ...(nav.hold ?? {}), ...Object.fromEntries(ready.map(r => [r.id, nowMs])) } }, effect: { kind: 'send', id: ready[0].id, line: ready[0].line } }
+  }
   switch (key.kind) {
     case 'text': {
       if (!nav.textMode) return same({})
@@ -288,6 +314,7 @@ const brokenRows = (text: string, cols: number): Row[] => wrapPlain(text, cols, 
 const noSource = (ctx: PageCtx, id: string): Row => brokenRow(GLYPHS.state.failed + ' ' + ctx.t(id))
 
 function render(ctx0: PageCtx): { body: Row[]; actions: Row[] } {
+  if (ctx0.v74 !== undefined) return renderV74(ctx0)
   // The pane's 待決 page is retired: the O4 band shell is the only pending-decision panel. The tab and its key stay.
   // One action row, so a short frame still shows it (an empty action area would be replaced by the old 「待決 N 張卡等你」 line).
   return { body: [], actions: [[seg(ctx0.t('shell.on_band'))]] }
@@ -401,6 +428,65 @@ function actionRows(cur: Item, _cursor: number, nav: DecideNav, ctx: PageCtx, wi
   if (decideDialog(d)) return R(navKeys)
   return R(k === '' ? '' : GLYPHS.structure.decisions + ' ' + k, t('page.decide.act_note_c'), t('page.decide.act_send_c'), navKeys,
     total > 1 ? fold : '', t('page.decide.act_fill_c')) // V3: folding never replaces filling.
+}
+
+// ---- v7.4 S3: every card top to bottom; only the card at the cursor has Buttons (a/b/c, m); the others are plain text ----
+const DOT = '·'
+const CARET = '_'
+const ruleTo = (text: string, cols: number): Row => [dimSeg(text + ' ' + GLYPHS.structure.rule.repeat(Math.max(0, cols - displayWidth(text) - 1)))]
+const THREE = PICK_KEYS.length
+
+function v74Card(c: DecideCard, i: number, selected: boolean, nav: DecideNav, ctx: PageCtx, picks: Record<string, number>, notes: Record<string, string>): Row[] {
+  const { t } = ctx
+  const cols = ctx.size.cols
+  const out: Row[] = []
+  const mark = selected ? GLYPHS.structure.folded : ' '
+  const title = seg(c.title, selected ? { color: PALETTE.here, here: true } : {})
+  out.push(truncateSegs([seg(mark + '  ' + String(i + 1) + '. '), title, seg('：' + c.question)], cols))
+  out.push(truncateSegs([seg('    '), dimSeg(t('v74.d.bg')), seg('   ' + (c.background ?? t('v74.d.bg_none')))], cols))
+  const picked = picks[c.id]
+  const held = nav.hold?.[c.id] !== undefined
+  const sent = nav.sent[c.id] !== undefined && nav.fixing?.[c.id] === undefined
+  const room = Math.max(4, Math.floor(cols / 2))
+  c.options.forEach((o, k) => {
+    const rec = o.recommended ? ' ' + GLYPHS.structure.recommend : ''
+    const here = picked === k ? { color: PALETTE.here } : {}
+    if (!selected || k >= THREE) { out.push(truncateSegs([seg('      ' + DOT + ' '), seg(truncateToWidth(o.label, room) + rec, here)], cols)); return }
+    const press = 'key:' + PICK_KEYS[k]
+    const label = PICK_KEYS[k] + ': ' + truncateToWidth(o.label, room) + rec
+    const pad = ' '.repeat(Math.max(2, 14 - displayWidth(label)))
+    out.push(truncateSegs([seg('      '), seg(label, { press, ...here }), ...(o.detail === '' ? [] : [seg(pad), dimSeg(o.detail)])], cols))
+  })
+  if (held) out.push([seg('      '), dimSeg(t('v74.d.held', { k: picked === undefined ? '-' : String(PICK_KEYS[picked] ?? picked + 1) }))])
+  else if (sent) out.push([seg('      '), dimSeg(t('v74.d.sent'))])
+  const note = notes[c.id] ?? ''
+  const noteText = selected && nav.textMode ? nav.textBuf + CARET : note === '' ? t('v74.d.note_empty') : note
+  out.push(truncateSegs(selected
+    ? [seg('      '), seg('m ' + t('v74.d.note'), { press: 'key:m' }), seg(noteText)]
+    : [seg('      ' + t('v74.d.note')), seg(noteText)], cols))
+  return out
+}
+
+function renderV74(ctx: PageCtx): { body: Row[]; actions: Row[] } {
+  const { t } = ctx
+  const cols = ctx.size.cols
+  const v = ctx.v74 as NonNullable<PageCtx['v74']>
+  const cards = v.decide
+  if (cards === null) return { body: [brokenRow(GLYPHS.state.failed + ' ' + t('v74.d.no_source'))], actions: [[seg(t('shell.on_band'))]] } // no source: the red row, and the old pointer to the band's own card view
+  if (cards.length === 0) return { body: [[seg(GLYPHS.state.pending + ' '), dimSeg(t('page.decide.none_cards'))]], actions: [] }
+  const dn = ctx.decide
+  const nav: DecideNav = { ...NO_NAV, ...(dn ?? {}), cursor: dn?.cursor ?? v.nav.cursor, picks: dn?.picks ?? v.nav.picks, notes: dn?.notes ?? v.nav.notes, textMode: dn?.textMode ?? v.nav.noteMode }
+  const cursor = Math.max(0, Math.min(cards.length - 1, nav.cursor))
+  const ready = cards.filter(c => decideLine(cardToLive(c), nav) !== null && nav.hold?.[c.id] === undefined).length
+  const actions: Row[] = [[seg('[s] ' + t('v74.d.send_all', { n: ready }), { press: 'key:s' })]]
+  const head = ruleTo(GLYPHS.structure.open + ' ' + t('v74.d.head', { n: cards.length, k: cursor + 1 }), cols)
+  const blocks = cards.map((c, i) => [...v74Card(c, i, i === cursor, nav, ctx, nav.picks, nav.notes), [seg('')]])
+  // a short allocation: leading cards go first so the selected one stays on screen (the frame cuts the tail)
+  const room = Math.max(1, ctx.size.rows - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - actions.length)
+  let first = 0
+  const total = (): number => 1 + blocks.slice(first).reduce((n, b) => n + b.length, 0)
+  while (total() > room && first < cursor) first++
+  return { body: [head, ...blocks.slice(first).flat()], actions }
 }
 
 export const decidePage: Page = { id: 'decide', key: '2', title: '待決', framed: true, render }

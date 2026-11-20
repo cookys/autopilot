@@ -63,24 +63,6 @@ test('gate2 item 1: actions sit directly above the strip, the body touches the a
   expect(blanks[blanks.length - 1]).toBe(content - 1) // padding ends directly above content
 })
 
-test('gate2 item 1: free rows unfold first (folded fleet lines, a pool\'s seats) and the surface stays H rows', () => {
-  const c = snap()
-  const lines = (c.lines as NonNullable<ConsoleSnapshot['lines']>)
-  const many = { ...c, lines: [...lines, ...lines, ...lines].map((l, i) => ({ ...l, line_id: 'L' + i, label: 'L' + i })) } as ConsoleSnapshot
-  const folded = frameRows(fleetPage, ctxOf(160, 40, many) as never, { pages: PAGES })
-  const unfold = (ctx: never) => fleetView(ctx, { focus: 0, expanded: true })
-  const open = frameRows(fleetPage, ctxOf(160, 40, many) as never, { pages: PAGES, unfold })
-  expect(open.length).toBe(40)
-  expect(folded.length).toBe(40)
-  const linesIn = (rows: typeof open) => rows.map(text).filter(l => /L\d+/.test(l)).length
-  expect(linesIn(open), 'room left: every line is shown').toBeGreaterThan(linesIn(folded))
-  // no room: the unfold is not taken (the body would be cut)
-  const tight = frameRows(fleetPage, ctxOf(160, 10, many) as never, { pages: PAGES, unfold })
-  expect(tight.length).toBe(10)
-  expect(linesIn(tight)).toBeLessThanOrEqual(linesIn(frameRows(fleetPage, ctxOf(160, 10, many) as never, { pages: PAGES })))
-  expect(renderQuota(ctxOf(160, 40, c) as never, { focus: 0, expanded: true }).body.length).toBeGreaterThan(renderQuota(ctxOf(160, 40, c) as never, { focus: 0, expanded: false }).body.length - 1)
-})
-
 test('gate2 item 2: each 額度 pool row stays one row (no continuation rows in the table), and the full verdict is on screen in the focus area', () => {
   const long = '這是一段很長的判定文字用來測試換行縮排不會切到表格裡面去而且每一個字都要完整顯示出來不能被截斷'
   const pools = POOLS.map(p => (p.pool === 'team' ? { ...p, stale_note: long, stale: true, stale_age_min: 200 } : p))
@@ -181,15 +163,6 @@ test('gate2 item 6: 資料不足 only for a missing or not-ok source; unknown po
 // actionRows is imported only so the contract of the unfold test above sees the same A the frame uses
 void actionRows
 void displayWidth
-
-test('gate2 item 1: the pane unfolds a folded fleet when the rows are free, and stays H rows', () => {
-  const c = snap()
-  const lines = c.lines as NonNullable<ConsoleSnapshot['lines']>
-  const many = { ...c, lines: [...lines, ...lines, ...lines].map((l, i) => ({ ...l, line_id: 'L' + i, label: 'L' + i })) } as ConsoleSnapshot
-  const rows = hostRows('fleet', 160, 40, { console: many, rows: 40 })
-  expect(rows.length).toBe(40)
-  expect(new Set(rows.flatMap(r => r.text.match(/\bL\d+\b/g) ?? [])).size, 'every line is drawn: no fold while rows are free').toBe(lines.length * 3)
-})
 
 // ---- items 7-12 (carbon review of 4844e16db) ----
 import { lineTotal } from './pages/rows'

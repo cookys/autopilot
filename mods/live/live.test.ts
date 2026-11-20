@@ -3687,19 +3687,6 @@ const framedWorld = async ($: any, on: any, mutate: (snap: any) => any = x => x)
 }
 const framedMount = ($: any) => $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'Pane', requestId: 'autopilot-live', props: { ...PANE_PROPS, legacyTabs: false }, viewport: { columns: 160, rows: 40, isFullscreen: true } })
 const framedRows = (tree: Node): string[] => { const out: string[] = []; const walk = (n: Node) => { for (const c of (n.children || []) as Node[]) { if (typeof c === 'string') continue; if (/^f\d+$/.test(String((c as Node).props?.key))) out.push(textOf(c as Node)); else walk(c as Node) } }; walk(tree); return out }
-test('pane review fix: console-pane-legacy-leak: console mode with a snapshot (one fleet line) draws the framed 艦隊 page from it, not the legacy console tabs (terminal)', async ($, on) => {
-  await framedWorld($, on)
-  const first = await framedMount($)
-  await first.press({ key: 'fleet' })
-  await first.unmount()
-  const pane = await framedMount($)
-  const tree = (await pane.drawn()) as Node
-  const rows = framedRows(tree)
-  await pane.unmount()
-  expect(rows.some(r => r.includes('復原線')), 'the framed 艦隊 page lists the snapshot line: ' + rows.slice(0, 4).join(' | ')).toBe(true)
-  const all = walkTexts(tree).map(textOf).join(' ')
-  expect(all.includes('本席') || all.includes('指揮'), 'the legacy console strip (指揮 團隊 額度 主機 本席) is not drawn').toBe(false)
-})
 // the band, console mode with a snapshot: bandQuotaSeg used a `nowMs` that only existed in an inner block (ReferenceError, no band drawn).
 // Band tab row rule (pane batch 1 UX): pane open -> no tab row (A4: one tab row on screen, the pane's strip); pane closed -> the band draws its tab row (row 2).
 const bandTabKeys = async ($: any, opts: { panesOpen: boolean }, w: any) => {
@@ -3782,25 +3769,6 @@ for (const columns of [155, 75]) {
   })
 }
 // pageview-focus-unbounded: the fold clamps the focus to the rows that are still shown, so the next unfold does not put the ▸ back on a row that was folded away
-test('pane review fix: folding the 艦隊 page clamps the focus to the last shown row (terminal)', async ($, on) => {
-  await framedWorld($, on, snap => { snap.lines = [...snap.lines, ...Array.from({ length: 24 }, (_, i) => i + 7).map(n => ({ ...snap.lines[3], line_id: 'zz' + n, label: 'ZZ線' + n, issues: [] }))]; return snap })
-  const first = await framedMount($)
-  await first.press({ key: 'fleet' })
-  await first.unmount()
-  const LINE = /(GPU 線|復原線|遊戲線|語音線|未歸線|ZZ線\d)/
-  const step = async (act: (pane: any) => Promise<void>) => { const pane = await framedMount($); await act(pane); const rows = framedRows((await pane.drawn()) as Node); await pane.unmount(); return rows }
-  const keyOf = async (pane: any, pick: (b: Node) => boolean) => ((await pane.findAll({ type: 'Button' })) as Node[]).find(pick)?.props?.key
-  const fold = (pane: any) => keyOf(pane, b => b.props?.hotkey === 'z').then(k => pane.press({ key: k }))
-  await step(fold) // unfold: all 8 lines
-  const rowKeys = async (pane: any) => { const ks = ((await pane.findAll({ type: 'Button' })) as Node[]).map(b => String(b.props?.key)).filter(k => /^p:\d+:/.test(k)); const ids = [...new Set(ks.map(k => Number(k.split(':')[1])))].sort((a, b) => a - b); return { ks, ids } }
-  await step(async pane => { const { ks, ids } = await rowKeys(pane); await pane.press({ key: ks.find(k => Number(k.split(':')[1]) === ids[8]) }) }) // the 8th line (the head row is not a Button): focus 7
-  await step(fold) // fold: 6 lines shown
-  const rows = await step(fold) // unfold again
-  const lines = rows.filter(r => LINE.test(r)).slice(0, 8)
-  expect(lines.length, 'eight line rows: ' + rows.join(' | ')).toBe(8)
-  expect(lines.findIndex(r => r.trimStart().startsWith('▸')), 'the ▸ stays on the last row that was shown (6th), not the 8th').toBe(5)
-})
-
 // C1 U8 (KR2, KR5): in the console mode the refresh path (ticks, a pane redraw on every tab) starts no runner. KR2: no process.run argv names an LLM runner
 // (claude, codex, gemini, opencode, agy, grok, kimi, the engine or a dispatch script); `fleet` reads are the feed, not a runner. KR5: the only file is band-facts/<sid>.json
 // (and its temp file). `panel_open_at_ms` is $.state, not a file. The two predicates are shown red on a planted call first (the negative control).

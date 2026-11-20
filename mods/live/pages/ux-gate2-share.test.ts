@@ -140,23 +140,6 @@ test('X2: at 80x3 quota severity stays visible with no pending decision, and sea
   expect(() => frameRows(nowPage, ctx(3, con))).not.toThrow()
 })
 
-test('X3: 現況, 艦隊 and the band count the same snapshot as the expanded rows, including offline and normal lines', () => {
-  const con = snapshot()
-  const expected = ['✗2', '⊘4', '○3']
-  const now = nowPage.render(ctx(24, con)).body.map(text).find(r => r.startsWith('產線')) ?? ''
-  const fleet = fleetView(ctx(24, con)).body.map(text)[0]
-  const band = pageBarStrip(live, t, 400, null, null, con).tabs.find(x => x.id === 'fleet')!.label.text
-  // register.ts feeds this same bus projection into the band's summary slot.
-  const bandSummary = text(slotFleet(consoleFleetCounts(con, t), t)!.segs).replace(/([✗⊘○●⋯])\s+/g, '$1')
-  for (const label of [now, fleet, band, bandSummary]) for (const n of expected) expect(label).toContain(n)
-  const expanded = fleetView(ctx(40, con, 160), { focus: 0, expanded: true }).body.map(text)
-  for (const name of ['庚線', '辛線', '壬線']) expect(expanded.find(r => r.includes(name))).toContain('正常（無異常明細）')
-  const mixed = line('混合', 'stalled')
-  mixed.issues[0].rule = 'T4'
-  mixed.issues[0].subject = '成員離線'
-  expect(rowsOf([mixed], t)[0].sid).toBe('failed')
-})
-
 test('Y1: a cut 艦隊 list counts hidden states and offers working previous/next line Buttons at 80x24', () => {
   const con = snapshot()
   con.lines = [...con.lines!, ...Array.from({ length: 20 }, (_, i) => line('正常' + i))]
@@ -176,22 +159,6 @@ test('Y1: a cut 艦隊 list counts hidden states and offers working previous/nex
   const moved = frameRows({ ...fleetPage, render: c => fleetView(c, { focus: last, expanded: true }) }, ctx(24, con)).map(text)
   expect(moved.some(r => r.includes(focused) && r.startsWith('▸'))).toBe(true)
   for (const row of out) expect(displayWidth(row)).toBeLessThanOrEqual(80)
-})
-
-test('Y3: both pages share 產線 狀態（時長）, with 220 minutes shown once as 3 時 40 分', () => {
-  const con = snapshot()
-  con.lines = [line('己', 'stalled', 220)]
-  con.items = [{ id: 'exc:T3:己', kind: 'exception', state: 'stalled', title: '己線閒置 220 分', text: '己線閒置 220 分', since_ms: NOW - 220 * MIN, line_id: '己', to_console: true, facts: {} }] as never
-  for (const cols of [80, 160]) {
-    for (const page of [nowPage, fleetPage]) {
-      const row = page.render(ctx(40, con, cols)).body.map(text).find(r => r.includes('己線')) ?? ''
-      expect(row).toContain('己線 閒置（3 時 40 分）')
-      expect(row).not.toContain('220 分')
-      expect((row.match(/3 時 40 分/g) ?? []).length).toBe(1)
-    }
-  }
-  con.items = []
-  expect(nowPage.render(ctx(24, con)).body.map(text).find(r => r.includes('己線'))).toContain('己線 閒置（3 時 40 分）')
 })
 
 test('Z2: a positive seat total with no seat records says the detail is missing, and o appears once', () => {

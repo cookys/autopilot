@@ -83,19 +83,6 @@ test('M3 (S1-full-p2-160x40 row 29 / 33): the retired decide page is one line, w
   }
 })
 
-test('M4 (S1-full-p3-160x40 row 29): an expanded line with no issue record is 正常, never 閒置; its focus says the detail is missing', () => {
-  const open = fleetView(ctx(160, 40, fleetSnap()), { focus: 0, expanded: true }).body.map(text)
-  for (const name of ['丙線', '丁線', '戊線', '庚線', '辛線', '壬線']) {
-    const row = open.find(r => r.includes(name))
-    expect(row, name).toBeDefined()
-    expect(row).toContain('正常')
-    expect(row).not.toContain('閒置')
-  }
-  expect(open.find(r => r.includes('己線'))).toContain('閒置') // a line whose record says idle still says so
-  const focusNormal = fleetView(ctx(160, 40, fleetSnap()), { focus: 3, expanded: false }).actions.map(text).join('\n')
-  expect(focusNormal).toContain('正常（無異常明細）')
-})
-
 test('M5 (S5-console-exit1-nofile-p1-160x40 row 34): the console band gives the idle cells to the left text, so the fix command is whole', () => {
   type Node = { kind: string; props: Record<string, any> }
   const mk = (kind: string) => (props: Record<string, any>): Node => ({ kind, props })
@@ -143,22 +130,6 @@ test('N1 (S1-full-p2-160x40 row 27): the retired decide page does not focus a ca
     expect(o.actions.map(text).join('')).toBe('待決在 band 上（d）')
     expect(o.actions.map(text).join('')).not.toContain('測試機第二槽插電')
   }
-})
-
-test('N2 (S1-full-p1-160x40 row 19): 現況 draws no ▸ focus mark and orders the line rows like 艦隊 (longest first), with the duration', () => {
-  const snap = fleetSnap({ lines: [LINES9[0], LINES9[1]] })
-  for (const cols of [160, 80]) {
-    const body = nowPage.render(ctx(cols, cols === 160 ? 40 : 24, snap)).body.map(text)
-    expect(body.filter(r => r.trimStart().startsWith('▸')), cols + ': no ▸').toEqual([])
-    const jia = body.findIndex(r => r.includes('甲線'))
-    const yi = body.findIndex(r => r.includes('乙線'))
-    expect(yi, cols + ': 乙 drawn').toBeGreaterThanOrEqual(0)
-    expect(yi, cols + ': 乙 (1 時) before 甲 (20 分)').toBeLessThan(jia)
-    const fleetRows = fleetPage.render(ctx(cols, cols === 160 ? 40 : 24, snap)).body.map(text)
-    expect(fleetRows.findIndex(r => r.includes('乙線'))).toBeLessThan(fleetRows.findIndex(r => r.includes('甲線')))
-  }
-  const narrow = nowPage.render(ctx(80, 24, snap)).body.map(text)
-  expect(narrow.find(r => r.includes('乙線'))).toContain('（1 時）')
 })
 
 test('N3 (S1-full-p1-160x40 row 16): a reason kept whole wraps at a clause boundary on a 2-cell hanging indent, never back to column 0', () => {

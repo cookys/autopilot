@@ -12,6 +12,8 @@ export AUTOPILOT_FOREMAN_GUARD_DIR="$FG_TMP_ROOT/foreman-guard"
 export AUTOPILOT_SESSION_MODE_DIR="$FG_TMP_ROOT/session-mode"
 export AUTOPILOT_SESSION_ID="fg-all-sub-session"
 unset AUTOPILOT_FOREMAN_GUARD_MODE AUTOPILOT_FOREMAN_GUARD_BASH_CAP AUTOPILOT_FOREMAN_GUARD_POLL_SCOPE
+export AUTOPILOT_FOREMAN_GUARD_POLL_ENFORCE_FROM='2020-01-01T00:00:00Z'
+POLLHITS="$HOOK_HOME/.autopilot/foreman-guard/poll-hits.jsonl"
 
 EVENTS_JSONL="$XDG_RUNTIME_DIR/autopilot/foreman-guard/events.jsonl"
 
@@ -119,12 +121,68 @@ assert_eq "" "$__RUN_STDOUT" "foreman scope no marker: no deny"
 assert_file_absent "$EVENTS_JSONL" "foreman scope: no events"
 unset AUTOPILOT_FOREMAN_GUARD_POLL_SCOPE
 
-# ── depth-0 (no agent_id): inert ──
+# ── (a) depth-0, enforce date in the future: allowed, warn, one poll-hit ──
 reset_events
+rm -f "$POLLHITS"
+export AUTOPILOT_FOREMAN_GUARD_POLL_ENFORCE_FROM='2099-01-01T00:00:00+08:00'
 run_hook foreman-guard.js "$(depth0_payload 'sleep 30')"
-assert_eq 0 "$__RUN_EXIT" "depth-0: exit 0"
-assert_eq "" "$__RUN_STDOUT" "depth-0: empty stdout"
-assert_file_absent "$EVENTS_JSONL" "depth-0: no events"
+assert_eq 0 "$__RUN_EXIT" "depth-0 future: exit 0"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "depth-0 future: allowed"
+assert_contains "$__RUN_STDERR" 'warn (blocking from' "depth-0 future: stderr warn prefix"
+node -e '
+  const fs = require("fs");
+  const file = process.argv[1];
+  const raw = fs.readFileSync(file, "utf8");
+  const lines = raw.trim().split("\n");
+  if (lines.length !== 1) { console.error("lines " + lines.length); process.exit(1); }
+  const row = JSON.parse(lines[0]);
+  if (row.agent_id !== null) process.exit(2);
+  if (row.mode !== "warn") process.exit(3);
+  if (row.rule !== "sleep") process.exit(4);
+  if (row.session_id !== "fg-all-sub-session") process.exit(5);
+  if (typeof row.ts !== "string" || !row.ts) process.exit(6);
+  if (/sleep 30/.test(raw)) process.exit(7);
+' "$POLLHITS" || fail "depth-0 future: poll-hits line"
+
+# ── (b) depth-0, enforce date in the past: denied ──
+reset_events
+rm -f "$POLLHITS"
+export AUTOPILOT_FOREMAN_GUARD_POLL_ENFORCE_FROM='2020-01-01T00:00:00Z'
+run_hook foreman-guard.js "$(depth0_payload 'sleep 30')"
+assert_eq 0 "$__RUN_EXIT" "depth-0 past: exit 0"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "depth-0 past: denied"
+node -e '
+  const fs = require("fs");
+  const row = JSON.parse(fs.readFileSync(process.argv[1], "utf8").trim().split("\n").pop());
+  if (row.agent_id !== null || row.mode !== "deny" || row.rule !== "sleep") process.exit(1);
+' "$POLLHITS" || fail "depth-0 past: poll-hits mode deny"
+
+# ── (c) subagent, enforce date in the past: denied as before ──
+clear_marker
+reset_events
+rm -f "$POLLHITS"
+export AUTOPILOT_FOREMAN_GUARD_POLL_ENFORCE_FROM='2020-01-01T00:00:00Z'
+run_hook foreman-guard.js "$(bash_payload agent-past 'sleep 30')"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "subagent past: denied"
+assert_event_line "subagent past deny" "agent-past" "sleep" "deny"
+node -e '
+  const fs = require("fs");
+  const row = JSON.parse(fs.readFileSync(process.argv[1], "utf8").trim().split("\n").pop());
+  if (row.agent_id !== "agent-past" || row.mode !== "deny") process.exit(1);
+' "$POLLHITS" || fail "subagent past: poll-hits mode deny"
+
+# ── (d) poll_scope=foreman, depth-0: inert, no poll-hits line ──
+clear_marker
+reset_events
+rm -f "$POLLHITS"
+export AUTOPILOT_FOREMAN_GUARD_POLL_SCOPE=foreman
+export AUTOPILOT_FOREMAN_GUARD_POLL_ENFORCE_FROM='2020-01-01T00:00:00Z'
+run_hook foreman-guard.js "$(depth0_payload 'sleep 30')"
+assert_eq 0 "$__RUN_EXIT" "foreman scope depth-0: exit 0"
+assert_eq "" "$__RUN_STDOUT" "foreman scope depth-0: inert"
+assert_file_absent "$EVENTS_JSONL" "foreman scope depth-0: no events"
+assert_file_absent "$POLLHITS" "foreman scope depth-0: no poll-hits"
+unset AUTOPILOT_FOREMAN_GUARD_POLL_SCOPE
 
 # ── no marker: ordinary git status allowed; no bash-cap deny ──
 clear_marker

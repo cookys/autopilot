@@ -8,6 +8,8 @@ export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session-mode"
 export AUTOPILOT_FOREMAN_GUARD_DIR="$TEST_TMP/foreman-guard"
 export AUTOPILOT_SESSION_ID="fg-test-session"
 unset AUTOPILOT_FOREMAN_GUARD_MODE AUTOPILOT_FOREMAN_GUARD_BASH_CAP
+unset AUTOPILOT_PARENT_SESSION_ID AUTOPILOT_CHILD_SESSION_ID
+export AUTOPILOT_FOREMAN_GUARD_POLL_ENFORCE_FROM='2020-01-01T00:00:00Z'
 mkdir -p "$AUTOPILOT_SESSION_MODE_DIR" "$AUTOPILOT_FOREMAN_GUARD_DIR"
 
 REPO="$TEST_TMP/repo"; mkdir -p "$REPO"; git -C "$REPO" init -q
@@ -36,9 +38,9 @@ assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "l3 marker: pollin
 
 set_marker l4
 run_hook foreman-guard.js "$(bash_payload '' 'sleep 60')"
-assert_eq "" "$__RUN_STDOUT" "l4 marker but no agent_id (depth-0): inert"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "depth-0 sleep denied once poll_enforce_from is past"
 run_hook foreman-guard.js "$(monitor_payload '')"
-assert_eq "" "$__RUN_STDOUT" "depth-0 keeps Monitor"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "depth-0 Monitor denied once poll_enforce_from is past"
 
 # ── 2. polling deny for a subagent in an l4 session ───────────────────
 reset_state

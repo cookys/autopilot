@@ -10,10 +10,14 @@
  * `while ! grep …; do sleep 10; done`, and lived 13–33 hours, at ≈$2,200 API-equivalent
  * in 36 hours. Nothing had stopped them because nothing was IN the loop.
  *
- * SCOPE (payload must carry `agent_id` — depth-0 never has it — else inert):
- *   - Poll / Monitor (when poll_scope=all, default): every subagent at any marker
- *     level; denied polls log one row to events.jsonl (no command text).
- *   - Poll / Monitor (poll_scope=foreman): l4|l5|l6 marker only, same as pre-v3 rule.
+ * SCOPE (Bash cap and the other non-poll rules still require `agent_id`):
+ *   - Poll / Monitor (when poll_scope=all, default): every session, including
+ *     depth-0 (no `agent_id`), at any marker level. A hit before
+ *     poll_enforce_from is allowed with a stderr warning; at or after that
+ *     instant it is denied. Each hit appends events.jsonl and poll-hits.jsonl
+ *     (no command text).
+ *   - Poll / Monitor (poll_scope=foreman): l4|l5|l6 marker subagents only;
+ *     depth-0 stays inert. The same warn-until date applies when a rule hits.
  *   - Marker path (l4|l5|l6): Bash cap, reserve, context-ceiling on top of poll rules.
  *   - No-marker advisory: Engine:-first Bash increments bash_calls and may advise;
  *     never capped. Other subagents stay inert except poll rules when poll_scope=all.
@@ -45,13 +49,19 @@
  * stripped); quoted strings are kept because `bash -c` executes them.
  *
  * MODES: ~/.autopilot/config.json {"foreman_guard": {"mode": "block"|"warn"|"off",
- * "bash_cap": 40, "advisory_every": 40, "poll_scope": "all"|"foreman"}} or
+ * "bash_cap": 40, "advisory_every": 40, "poll_scope": "all"|"foreman",
+ * "poll_enforce_from": "<ISO date-time>"}} or
  * AUTOPILOT_FOREMAN_GUARD_MODE / AUTOPILOT_FOREMAN_GUARD_BASH_CAP /
- * AUTOPILOT_FOREMAN_GUARD_ADVISORY_EVERY / AUTOPILOT_FOREMAN_GUARD_POLL_SCOPE.
- * poll_scope=all (default): polling rules apply to every subagent (payload agent_id).
+ * AUTOPILOT_FOREMAN_GUARD_ADVISORY_EVERY / AUTOPILOT_FOREMAN_GUARD_POLL_SCOPE /
+ * AUTOPILOT_FOREMAN_GUARD_POLL_ENFORCE_FROM.
+ * poll_scope=all (default): polling rules apply to every session, including depth-0.
  * poll_scope=foreman: polling rules only inside an l4/l5/l6 marker session.
+ * poll_enforce_from (default 2026-11-24T00:00:00+08:00): before that instant a polling
+ * hit is allowed; at or after it the hit is denied. An unparsable value enforces now.
  * Events: ${XDG_RUNTIME_DIR:-tmpdir}/autopilot/foreman-guard/events.jsonl — one JSON line
  * per deny or advisory ({ts,session_id,agent_id,rule,mode,level}; no command text).
+ * Poll hits also append ~/.autopilot/foreman-guard/poll-hits.jsonl
+ * ({ts,session_id,agent_id,rule,mode}; mode warn|deny; no command text).
  * warn ⇒ stderr line, allow. Fail-open: any internal error ⇒ exit 0 silently.
  * State: ~/.autopilot/foreman-guard/<session>-<agent>.json (host-stable, not TMPDIR).
  */
@@ -72,6 +82,7 @@ const { execFileSync } = require('child_process');
 const DEFAULT_BASH_CAP = 40;
 const DEFAULT_ADVISORY_EVERY = 40;
 const DEFAULT_POLL_SCOPE = 'all';
+const DEFAULT_POLL_ENFORCE_FROM = '2026-11-24T00:00:00+08:00';
 const POLL_SCOPES = new Set(['all', 'foreman']);
 const POLL_WAIT_DIRECTIVE =
   'Wait with run_in_background: true and the harness completion notification '
@@ -255,6 +266,7 @@ function loadConfig() {
     reserveCalls: DEFAULT_RESERVE_CALLS,
     advisoryEvery: DEFAULT_ADVISORY_EVERY,
     pollScope: DEFAULT_POLL_SCOPE,
+    pollEnforceFrom: DEFAULT_POLL_ENFORCE_FROM,
   };
   let fileRoleCaps = null;
   try {
@@ -269,6 +281,9 @@ function loadConfig() {
         if (Number.isInteger(fg.advisory_every) && fg.advisory_every > 0) cfg.advisoryEvery = fg.advisory_every;
         if (typeof fg.poll_scope === 'string' && POLL_SCOPES.has(fg.poll_scope)) {
           cfg.pollScope = fg.poll_scope;
+        }
+        if (typeof fg.poll_enforce_from === 'string' && fg.poll_enforce_from.trim()) {
+          cfg.pollEnforceFrom = fg.poll_enforce_from.trim();
         }
         if (fg.role_caps && typeof fg.role_caps === 'object') fileRoleCaps = fg.role_caps;
       }
@@ -285,6 +300,10 @@ function loadConfig() {
   const envPollScope = process.env.AUTOPILOT_FOREMAN_GUARD_POLL_SCOPE;
   if (typeof envPollScope === 'string' && POLL_SCOPES.has(envPollScope)) {
     cfg.pollScope = envPollScope;
+  }
+  const envPollEnforce = process.env.AUTOPILOT_FOREMAN_GUARD_POLL_ENFORCE_FROM;
+  if (typeof envPollEnforce === 'string' && envPollEnforce.trim()) {
+    cfg.pollEnforceFrom = envPollEnforce.trim();
   }
   cfg.roleCaps = {
     foreman: cfg.bashCap,
@@ -475,6 +494,47 @@ function eventsLogFile() {
   return path.join(base, 'autopilot', 'foreman-guard', 'events.jsonl');
 }
 
+function pollHitsFile() {
+  return path.join(os.homedir(), '.autopilot', 'foreman-guard', 'poll-hits.jsonl');
+}
+
+function appendPollHit(payload, rule, hitMode) {
+  try {
+    const file = pollHitsFile();
+    const sessionId = payload.session_id || process.env.AUTOPILOT_SESSION_ID
+      || process.env.CLAUDE_CODE_SESSION_ID || process.env.CLAUDE_SESSION_ID || 'session';
+    const row = {
+      ts: new Date().toISOString(),
+      session_id: sessionId,
+      agent_id: payload.agent_id ? payload.agent_id : null,
+      rule,
+      mode: hitMode,
+    };
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.appendFileSync(file, `${JSON.stringify(row)}\n`);
+  } catch { /* fail-open */ }
+}
+
+// true when a polling hit must be denied. Unparsable poll_enforce_from enforces now.
+function pollBlocks(cfg) {
+  if (cfg.mode === 'warn') return false;
+  const t = Date.parse(String(cfg.pollEnforceFrom || ''));
+  if (!Number.isFinite(t)) return true;
+  return Date.now() >= t;
+}
+
+function pollAllowLine(cfg, reason) {
+  const t = Date.parse(String(cfg.pollEnforceFrom || ''));
+  const calendarActive = Number.isFinite(t) && Date.now() >= t;
+  if (cfg.mode === 'warn' && calendarActive) return `${reason} [mode=warn: allowed]`;
+  return `warn (blocking from ${cfg.pollEnforceFrom}): ${reason}`;
+}
+
+function isPollRuleId(rule) {
+  if (rule === 'monitor') return true;
+  return POLL_RULES.some((r) => r.id === rule);
+}
+
 function appendGuardEvent(fields) {
   try {
     const file = eventsLogFile();
@@ -549,10 +609,12 @@ function checkPollTool(payload) {
 
 function finishPollVerdict(payload, cfg, marker, verdict) {
   if (!verdict || !verdict.deny) return false;
-  const eventMode = cfg.mode === 'warn' ? 'advise' : 'deny';
-  recordGuardEvent(payload, cfg, marker, guardEventRule(verdict.rule), eventMode);
-  if (cfg.mode === 'warn') {
-    const warnLine = `${verdict.reason} [mode=warn: allowed]`;
+  const block = pollBlocks(cfg);
+  const rule = guardEventRule(verdict.rule);
+  appendPollHit(payload, rule, block ? 'deny' : 'warn');
+  recordGuardEvent(payload, cfg, marker, rule, block ? 'deny' : 'advise');
+  if (!block) {
+    const warnLine = pollAllowLine(cfg, verdict.reason);
     process.stderr.write(`${warnLine}\n`);
     emitAllowContext(warnLine);
     process.exit(0);
@@ -727,8 +789,16 @@ function decide(payload, cfg, st, ceiling = {}, role = 'foreman', briefCap = nul
     try { raw = fs.readFileSync(0, 'utf8'); } catch { raw = ''; }
     let payload = {};
     try { payload = raw.trim() ? JSON.parse(raw) : {}; } catch { process.exit(0); }
-    if (!payload || !payload.agent_id) process.exit(0); // depth-0 or unknown actor: inert
     const marker = readMarker();
+    // poll_scope=all covers depth-0 (no agent_id). Bash cap and the other
+    // non-poll rules stay subagent-only. poll_scope=foreman leaves depth-0 inert.
+    if (!payload || !payload.agent_id) {
+      if (cfg.pollScope === 'all') {
+        const pollVerdict = checkPollTool(payload || {});
+        if (pollVerdict) finishPollVerdict(payload || {}, cfg, marker, pollVerdict);
+      }
+      process.exit(0);
+    }
     const foremanSession = isForemanMarker(marker);
     if (!foremanSession) {
       if (cfg.pollScope === 'all') {
@@ -786,6 +856,9 @@ function decide(payload, cfg, st, ceiling = {}, role = 'foreman', briefCap = nul
       advisory.push(d.diagnostic);
     }
     if (d.reserveDirective) advisory.push(d.reserveDirective);
+    if (d.deny && isPollRuleId(d.rule)) {
+      finishPollVerdict(payload, cfg, marker, d);
+    }
     if (!d.deny) {
       if (d.diagnostic) {
         recordGuardEvent(payload, cfg, marker, 'context_ceiling', 'advise');

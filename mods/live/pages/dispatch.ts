@@ -151,7 +151,7 @@ export function dispatchView(ctx: PageCtx, _view: DispatchView = DEFAULT_VIEW): 
 
 export const dispatchPage: Page = {
   id: 'dispatch',
-  key: '5',
+  key: '3',
   title: '派工',
   framed: true,
   render: ctx => dispatchView(ctx),

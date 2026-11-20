@@ -1,5 +1,5 @@
 // mods/live/pages/spend.test.ts — page 7 花費 (plan r2 §2 row 7, §3.1, §5): golden rows at 160x40, 120x30, 80x24 and 80x24 stale,
-// fixed height H across every size and state, fold pair (collapsed / expanded) + overflow row, red stale/no-source wrapping, [4] & [z] Buttons, and empty states.
+// fixed height H across every size and state, fold pair (collapsed / expanded) + overflow row, red stale/no-source wrapping, [5] & [z] Buttons, and empty states.
 import type { EngineInterface, On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
 import { FOCUS_ANCHOR_KEY } from '../pane'
@@ -142,7 +142,7 @@ const GOLD_WIDE_BODY = [
   '  7 天    ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱  68%    重置 11-21 週六 12:00',
   '  今天    $3.10 · 近 24 小時 ▁▁▂▃▅▂▁▁▁▂▂▃▁▁▁▁▂▅█▃▂▁▁▁',
   // X5: the former internal spacer moves to the frame's top padding.
-  '  額度看 [4]',
+  '  額度看 [5]',
 ]
 
 const GOLD_80_BODY = [
@@ -150,7 +150,7 @@ const GOLD_80_BODY = [
   '▸5時 ▰▰▱▱▱▱▱▱▱▱ 17% 重置 03:40',
   ' 7天 ▰▰▰▰▰▰▰▱▱▱ 68% 重置 週六',
   ' 今天 $3.10 ▁▂▃▅▂▁▂▅▇▃',
-  ' 額度看 [4]',
+  ' 額度看 [5]',
 ]
 
 const GOLD_80_STALE_BODY = [
@@ -160,7 +160,7 @@ const GOLD_80_STALE_BODY = [
   ' ✗ 25 分未更新，以上是舊數字',
   ' ✗ fleet seats --quota 指令失敗，用 25 分前的舊結果',
   ' 今天 $3.10 ▁▂▃▅▂▁▂▅▇▃',
-  ' 額度看 [4]',
+  ' 額度看 [5]',
 ]
 
 const diffRows = (got: string[], want: string[]): string[] => {
@@ -171,11 +171,11 @@ const diffRows = (got: string[], want: string[]): string[] => {
   return bad
 }
 
-test('spend: registry places framed spendPage at key 7 with title 花費', () => {
+test('spend: registry places framed spendPage at key 5 with title 花費', () => {
   const entry = PAGES.find(p => p.id === 'spend')
   expect(entry).toBe(spendPage)
   expect(spendPage.framed).toBe(true)
-  expect(spendPage.key).toBe('7')
+  expect(spendPage.key).toBe('5')
   expect(spendPage.title).toBe('花費')
 })
 

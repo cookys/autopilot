@@ -121,4 +121,4 @@ export function renderSpend(ctx: PageCtx, _view: SpendViewOpts = DEFAULT_VIEW): 
   return { body, actions: broken ? [[{ text: t('frame.unknown'), dim: true }]] : [] }
 }
 
-export const spendPage: Page = { id: 'spend', key: '7', title: '花費', framed: true, render: ctx => renderSpend(ctx) }
+export const spendPage: Page = { id: 'spend', key: '5', title: '花費', framed: true, render: ctx => renderSpend(ctx) }

@@ -78,7 +78,7 @@ import type { KeyAction } from './pages/keys'
 import { decideReduce, NO_NAV, v74Pool } from './pages/decide'
 import type { DecideNav } from './pages/decide'
 import { SEATS_TIMEOUT_MS, seatQuota } from './pages/now'
-import { PAGES } from './pages/index'
+import { PAGES, EXTRA_PAGES } from './pages/index'
 import { makeDecideFeed, makePmFeed } from './v74/feeds'
 import type { CardNav, V74Ctx } from './v74/contract'
 import { frameHeight } from './pages/frame'
@@ -1707,6 +1707,15 @@ export function registerLive(on: Parameters<Register>[0]): void {
       const nextPage: BandPageId = isOpen && at >= 0 ? BAND_PAGE_TABS[(at + 1) % BAND_PAGE_TABS.length] : 'now'
       await pageOpen(nextPage, null, nextCon)
     }
+    // v7.4 S1: the band's ▴ / ▾ toggle. Closed -> the same open path as the ⓘ (pageOpen('now')); open -> the same close path as a tab press on the showing tab (markPaneClosed + ui.close).
+    const togglePane = async () => {
+      let isOpen = false
+      try { isOpen = (await $.ui.panes()).some(p => p.id === PANE_ID) } catch (_e) { /* the engine could not list panes: treat the pane as closed */ }
+      if (!isOpen) { await pageOpen('now'); return }
+      markPaneClosed()
+      try { await $.ui.close({ id: PANE_ID }) } catch (_e) { /* already closed */ }
+      $.ui.invalidate('ui.render')
+    }
     const slot = (id: SlotId) => (consoleOn ? pageOpen(SLOT_PAGE_OF[id] ?? 'now', slotUnfolds(id), consoleSlotTab(id)) : openOn(slotTab(id), slotUnfolds(id), id === 'spend' ? 'spend' : undefined))
     // a tab of the band row: the open tab is a memory state; pressing it again closes it. In the console mode a page tab opens the pane on that page (the forge tab keeps its band behaviour)
     const onTab = (id: BarTabId | ConsoleTab | BandPageId) => {
@@ -1808,7 +1817,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       const answer = await lower(forgeAsk.maxRows, forgeAsk.bodyColumns)
       if (answer !== undefined && answer !== null && (answer as { type?: string }).type !== 'engine') forgeRow = answer
     }
-    const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge, usageOn, moreTo, con, bandPreset, consoleOn && consoleSnap !== null ? bandQuotaSeg(normalizedPools(consoleSnap), bandNow, t, qSrc) : null, paneOpen, legacyTabs, forgeRow !== null)
+    const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge, usageOn, moreTo, con, bandPreset, consoleOn && consoleSnap !== null ? bandQuotaSeg(normalizedPools(consoleSnap), bandNow, t, qSrc) : null, paneOpen, legacyTabs, forgeRow !== null, legacyTabs ? undefined : () => { void togglePane() }, paneOpen)
     if (shellMode && rows < SHELL_MIN_ROWS) {
       const n = snapshot === null ? 0 : new Set(snapshot.pending.filter(d => !isStepCard(d)).map(cardKey)).size
       await logBandGeometry($, rows, columns, 1)
@@ -2091,7 +2100,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       folded, e.props.scroll ?? null,
       { state: decideState, batch: decideBatch, now: decideNow, inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } },
       decideScroll, fleet, null,
-      legacy ? null : { pages: PAGES, pageId: panePage, onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, nowMs: frameNow, rows: frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), view: pageView, decide: { ...decideState, ...decideLocal }, v74, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(panePage === 'forge' ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}) },
+      legacy ? null : { pages: [...PAGES, ...EXTRA_PAGES], pageId: panePage, onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, nowMs: frameNow, rows: frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), view: pageView, decide: { ...decideState, ...decideLocal }, v74, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(panePage === 'forge' ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}) },
     )
     await probePane($, e, tree)
     return tree

@@ -112,4 +112,4 @@ export function fleetView(ctx: FleetCtx, _view: FleetView = DEFAULT_VIEW): { bod
   return { body: [...cardRows(ctx, wide), ...othersRows(ctx, wide), ...runBlocks(ctx, wide)], actions: [] }
 }
 
-export const fleetPage: Page = { id: 'fleet', key: '3', title: '艦隊', framed: true, render: ctx => fleetView(ctx) }
+export const fleetPage: Page = { id: 'fleet', key: '7', title: '艦隊', framed: true, render: ctx => fleetView(ctx) }

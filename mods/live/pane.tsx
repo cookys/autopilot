@@ -41,7 +41,7 @@ export type ConsolePane = { nav: ConsoleNav; onTab: (t: ConsoleTab) => void; onN
 // The console pane (C1 U4, U6): the page grows above the five-tab strip and its badges. The command page's own content is U5; 團隊 · 額度 · 主機 are a skeleton (consolepages.ts: a name line and a summary line, or
 // "no source", never an empty table); 本席 folds this session's own 現況, 派工 and 審查 (the non-console pane's builders, tabs.ts) under one header. `own` is what 本席 draws: null = this session has no snapshot yet.
 type SelfDraw = (l: PaneLine, i: number, k: string) => unknown
-function consolePane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El }, con: ConsolePane, t: T, cols: number, own: { parts: { title: string | null; lines: PaneLine[] }[]; draw: SelfDraw } | null) {
+function consolePane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El }, con: ConsolePane, t: T, cols: number, fleet: FleetView | null, own: { parts: { title: string | null; lines: PaneLine[] }[]; draw: SelfDraw } | null) {
   const { Box, Text } = el
   const strip = stripView(el, consoleStrip({ t, cols }, con.nav, false), con.onTab, {}, con.epoch ?? 0)
   const tab = con.nav.tab
@@ -50,7 +50,7 @@ function consolePane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El 
   if (win !== null) win.framed = false
   if (con.nav.snap !== null && tab === 'command') {
     const decide = con.decide ?? null
-    const ctx = { t, cols, expanded: new Set<string>(), folded: con.folded ?? new Set<string>(), fleet: null, ...(decide === null ? {} : { decide: { ...decide.state, ...(decide.batch === undefined ? {} : { batch: decide.batch }), ...(decide.now === undefined ? {} : { now: decide.now }), inputs: decide.inputs && el.Input !== undefined } }) }
+    const ctx = { t, cols, expanded: new Set<string>(), folded: con.folded ?? new Set<string>(), fleet, ...(decide === null ? {} : { decide: { ...decide.state, ...(decide.batch === undefined ? {} : { batch: decide.batch }), ...(decide.now === undefined ? {} : { now: decide.now }), inputs: decide.inputs && el.Input !== undefined } }) }
     const view = commandView(con.nav.snap, con.live ?? null, ctx, con.now ?? con.nav.snap.generated_at_ms)
     const line = lineView(el, decide, con.onToggle ?? (() => {}), () => {}, con.epoch ?? 0)
     const scroll = con.scroll ?? null
@@ -321,7 +321,7 @@ export function Pane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El 
   if (con !== null) {
     // 本席: the header (spend, context), then 現況, 派工, 審查 under a dim name each; the lines are the ones the non-console tabs draw
     const own = snap === null ? null : { parts: [{ title: null, lines: headerLines(snap, ctx) }, { title: t('console.self.now'), lines: nowLines(snap, ctx) }, { title: t('console.self.dispatch'), lines: dispatchLines(snap, ctx) }, { title: t('console.self.review'), lines: reviewTabLines(snap, ctx) }], draw: line }
-    return consolePane(el, con, t, cols, own)
+    return consolePane(el, con, t, cols, fleet, own)
   }
   const framed = framedPage(frame, tab)
   if (frame !== null && framed !== undefined) return framedView(el, framed, frame, snap, onTab, t, cols)

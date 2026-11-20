@@ -72,8 +72,7 @@ const GOLDEN: Record<string, string[]> = {
     " ○ lane-09 · h1 正常（無異常明細）",
     " ○ lane-10 · h1 正常（無異常明細）",
     " ○ lane-11 · h1 正常（無異常明細）",
-    " ○ lane-12 · h1 正常（無異常明細）",
-    " ↓ 還有 33 項（○33）",
+    " ↓ 還有 34 項（○34）",
     "[o] 看 · [z] 收合 · [f] 催辦 · 上一線 · 下一線"
   ],
   "stale80": [
@@ -142,7 +141,7 @@ const drawn = (cols: number, rows: number, snap: unknown, view?: { focus: number
   const page = view === undefined ? fleetPage : viewPage(view)
   const out = frameRows(page, ctxOf(cols, rows, snap))
   expect(out.length, 'fixed height').toBe(rows)
-  return closeGap(out.slice(0, -1).map(text), Math.max(1, page.render(ctxOf(cols, rows, snap)).actions.length))
+  return closeGap(out.slice(0, -2).map(text), Math.max(1, page.render(ctxOf(cols, rows, snap)).actions.length))
 }
 const STALE = () => snapOf({ tasks: { at_ms: NOW - 6 * MIN, state: 'stale' } })
 

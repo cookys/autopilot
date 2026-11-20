@@ -41,8 +41,8 @@ const fleetSnap = (o: { lines?: unknown[]; hosts?: Src; tasks?: Src; generated?:
 const live0 = (o: Record<string, unknown> = {}) => ({ state: 'ok', text: 'x', header: 'x', band: null, pending: [], project_key: null, root_run_id: null, link: null, rows: null, gates: null, sections: M.NO_SECTIONS, review: null, published_at: null, watcher_note: null, session_as_of: null, host_as_of: null, detail: { ...M.NO_DETAIL, now_ms: NOW }, ...o }) as never
 
 test('M1 (S1-full-p3-80x24 row 16): a cut 80-column 艦隊 page keeps the summary with the offline hosts on top and ends in ↓ 還有 N 項', () => {
-  const out = frameRows(fleetPage, ctx(80, 7, fleetSnap())).map(text)
-  expect(out.length).toBe(7)
+  const out = frameRows(fleetPage, ctx(80, 8, fleetSnap())).map(text)
+  expect(out.length).toBe(8)
   const sum = out.find(r => r.includes('產線 9'))
   expect(sum, 'the summary row stays').toBeDefined()
   expect(sum).toContain('✗2 ⊘1 ○6') // U3: severity first. // X3: counts are classified from the same nine bus lines.
@@ -53,7 +53,7 @@ test('M1 (S1-full-p3-80x24 row 16): a cut 80-column 艦隊 page keeps the summar
 
 test('M2 (S1-full-p4-80x24 row 15): a cut 80-column 額度 table says how many pools of which kind are hidden, and keeps o / prev / next as Buttons', () => {
   const c = consoleOf(POOLS)
-  const r = renderQuota(qctx(80, 8, c))
+  const r = renderQuota(qctx(80, 9, c))
   const hint = r.body.map(text).find(l => l.includes('池（'))
   expect(hint, 'the pool hint row').toBeDefined()
   expect(hint).toContain('↓ 還有 6 池（')
@@ -63,8 +63,8 @@ test('M2 (S1-full-p4-80x24 row 15): a cut 80-column 額度 table says how many p
   expect(acts.some(s => s.text === '下一池 (1/7)' && s.press === 'quota:pool:1')).toBe(true)
   expect(acts.some(s => s.text === '上一池' && typeof s.press === 'string')).toBe(true)
   // the short body (80x7) says it too, instead of dropping pools without a word
-  const short = frameRows(quotaPage, qctx(80, 7, c)).map(text)
-  expect(short.length).toBe(7)
+  const short = frameRows(quotaPage, qctx(80, 8, c)).map(text)
+  expect(short.length).toBe(8)
   expect(short.some(l => /↓ 還有 \d+ 池/.test(l))).toBe(true)
 })
 

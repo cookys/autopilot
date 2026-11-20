@@ -245,7 +245,7 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
   const fp = byName.get(fv.pool) as QuotaPool
   const actions: Row[] = fp.switch_suggestion === null ? [] : [[{ text: t('page.quota.action_f'), color: PALETTE.action, press: 'fill:quota:' + fp.pool }]]
   const stripLen = cols < STRIP_SPLIT_COLS ? Math.min(2, ctx.size.rows) : Math.min(1, ctx.size.rows)
-  const avail = Math.max(0, ctx.size.rows - 1 - stripLen)
+  const avail = Math.max(0, ctx.size.rows - 2 - stripLen)
   const actLen = Math.max(1, actions.length)
   const room = Math.max(0, avail - Math.min(actLen, avail))
 
@@ -381,4 +381,4 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
   return { body: [...keptHeader, ...picked.rows, ...keptFocus], actions }
 }
 
-export const quotaPage: Page = { id: 'quota', key: '4', title: '額度', framed: true, render: ctx => renderQuota(ctx) }
+export const quotaPage: Page = { id: 'quota', key: '5', title: '額度', framed: true, render: ctx => renderQuota(ctx) }

@@ -220,3 +220,43 @@ test('W3: mounted remote detail buttons page through the full text and return to
   await pane.unmount()
   await $.session.end({ reason: 'exit' })
 })
+
+// v7.4 S1 wiring (B2 item 7): the band's ▴ / ▾ toggle is wired to the pane's own open and close paths.
+const mountTallBand = ($: any, columns: number, rows: number, legacyTabs = false) => $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', props: { bodyColumns: columns, maxRows: rows, view: { agentId: undefined }, ...(legacyTabs ? { legacyTabs: true } : {}) }, viewport: { columns, rows: 50, isFullscreen: true } })
+const toggleOf = async (band: any) => (await band.findAll({ type: 'Button' }) as Node[]).find(b => b.props?.key === 'pane-toggle')
+
+// the toggle lives on the BandBar node, which the band draws when the shell does not fit (narrow width); the shell and the short-height note carry no toggle
+test('B2-7: the band toggle opens the pane when closed and closes it when open (the pane\'s own paths)', async ($, on) => {
+  const h = host(on)
+  await $.session.start({ surface: 'terminal', cwd: REPO })
+  await h.clock.advance(5000)
+  expect(h.isOpen()).toBe(false)
+  const closed = await mountTallBand($, 50, 12)
+  const t1 = await toggleOf(closed)
+  expect(t1, 'the closed band draws the toggle').toBeDefined()
+  expect(text(t1)).toBe('▴')
+  await closed.press({ key: 'pane-toggle' })
+  await h.clock.advance(0)
+  expect(h.isOpen(), 'pressed while closed: the pane opened').toBe(true)
+  await closed.unmount()
+  const open = await mountTallBand($, 50, 12)
+  const t2 = await toggleOf(open)
+  expect(text(t2), 'the open band draws ▾').not.toBe('▴')
+  await open.press({ key: 'pane-toggle' })
+  await h.clock.advance(0)
+  expect(h.isOpen(), 'pressed while open: the pane closed').toBe(false)
+  await open.unmount()
+  await $.session.end({ reason: 'exit' })
+})
+
+test('B2-7 negative control: legacy tab mode and the short-height band draw no toggle', async ($, on) => {
+  host(on)
+  await $.session.start({ surface: 'terminal', cwd: REPO })
+  const legacy = await mountTallBand($, 120, 12, true)
+  expect(await toggleOf(legacy), 'legacy mode: no toggle').toBeUndefined()
+  await legacy.unmount()
+  const short = await mountBand($, 120, 30) // maxRows 2: the one-row 視窗高度不足 note
+  expect(await toggleOf(short), 'short-height band: one row, no toggle').toBeUndefined()
+  await short.unmount()
+  await $.session.end({ reason: 'exit' })
+})

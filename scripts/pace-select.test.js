@@ -1056,7 +1056,7 @@ test('(seat-fallback a) reviewer retreat skips google/hydrogen and picks grok, n
   );
 
   const chain = reviewerFallbackChain({ implementerFamily: 'google' });
-  assert.deepEqual(chain.map((r) => r.key), ['grok', 'glm', 'agyclaude']);
+  assert.deepEqual(chain.map((r) => r.key), ['grok', 'agyclaude']);
   const first = selectReviewerFallback({ implementerFamily: 'google' });
   assert.equal(first.key, 'grok');
   assert.equal(first.runner, 'grok');
@@ -1068,7 +1068,7 @@ test('(seat-fallback a) reviewer retreat skips google/hydrogen and picks grok, n
 
   // xai / grok implementer skips the grok rung (same family) and keeps hydrogen first.
   const xaiChain = reviewerFallbackChain({ implementerFamily: 'xai' });
-  assert.deepEqual(xaiChain.map((r) => r.key), ['hydrogen', 'glm', 'agyclaude']);
+  assert.deepEqual(xaiChain.map((r) => r.key), ['hydrogen', 'agyclaude']);
   assert.equal(xaiChain.some((r) => r.key === 'grok'), false);
 }));
 
@@ -1079,12 +1079,12 @@ test('(seat-fallback b) reviewer retreat for anthropic/agyclaude implementer pic
     assert.equal(first.runner, 'agy');
     assert.equal(first.model, 'gemini-4-hydrogen-high');
     const chain = reviewerFallbackChain({ implementerFamily: imp });
-    assert.deepEqual(chain.map((r) => r.key), ['hydrogen', 'grok', 'glm']);
+    assert.deepEqual(chain.map((r) => r.key), ['hydrogen', 'grok']);
     assert.equal(chain.some((r) => r.runner === 'codex'), false);
   }
 }));
 
-test('(seat-fallback c) unknown implementer family never assumes openai and keeps glm eligible', () => withEnv({ AUTOPILOT_PACE_FILE: MISSING_PACE }, () => {
+test('(seat-fallback c) unknown implementer family never assumes openai and drops barred reviewer rungs', () => withEnv({ AUTOPILOT_PACE_FILE: MISSING_PACE }, () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'seat-fb-infer-'));
   try {
     const emptyRuns = path.join(tmpDir, 'runs');
@@ -1102,9 +1102,9 @@ test('(seat-fallback c) unknown implementer family never assumes openai and keep
     assert.equal(inferred.source, 'none');
 
     const chain = reviewerFallbackChain({ implementerFamily: inferred.family });
-    assert.deepEqual(chain.map((r) => r.key), ['hydrogen', 'grok', 'glm', 'agyclaude']);
+    assert.deepEqual(chain.map((r) => r.key), ['hydrogen', 'grok', 'agyclaude']);
     assert.equal(chain[0].model, 'gemini-4-hydrogen-high');
-    assert.equal(chain.some((r) => r.key === 'glm'), true);
+    assert.equal(chain.some((r) => r.key === 'glm'), false);
 
     // Inference from runsDir when recorded: matches by branch/diff without defaulting to openai.
     const runsFile = path.join(emptyRuns, 'impl-run-1.manifest.json');
@@ -1135,6 +1135,31 @@ test('(seat-fallback c) unknown implementer family never assumes openai and keep
     });
     assert.equal(fromChain.family, 'anthropic');
     assert.equal(fromChain.source, 'chain_file');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+}));
+
+test('(seat-fallback cn) reviewer fallback drops every barred Chinese-model rung', () => withEnv({ AUTOPILOT_PACE_FILE: MISSING_PACE }, () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'seat-fb-nocn-'));
+  try {
+    const rolesPath = path.join(tmpDir, 'roles.json');
+    fs.writeFileSync(rolesPath, JSON.stringify({
+      fallback: {
+        reviewer: [
+          { key: 'minimax', runner: 'cc-shim', endpoint: 'minimax', model: 'MiniMax-M3', effort: 'high', family: 'minimax' },
+          { key: 'kimi', runner: 'kimi', model: 'kimi-code/k3', effort: 'high', family: 'moonshot' },
+          { key: 'glm', runner: 'cc-shim', endpoint: 'glm', model: 'glm-5.3', effort: 'high', family: 'zhipu' },
+          { key: 'grok', runner: 'grok', model: 'grok-4.7', effort: 'high', family: 'xai' },
+        ],
+      },
+    }));
+    const plan = reviewerFallbackPlan({
+      rolesPath,
+      pacePath: MISSING_PACE,
+      implementerFamily: 'unknown',
+    });
+    assert.deepEqual(plan.chain.map((r) => r.key), ['grok']);
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
@@ -1571,7 +1596,7 @@ test('(seat-fallback g / 3d) missing or unreadable pace file leaves fallback ord
       assert.deepEqual(revZhipu.demoted, []);
 
       const revGoogle = reviewerFallbackPlan({ implementerFamily: 'google', pacePath });
-      assert.deepEqual(revGoogle.chain.map((r) => r.key), ['grok', 'glm', 'agyclaude']);
+      assert.deepEqual(revGoogle.chain.map((r) => r.key), ['grok', 'agyclaude']);
       assert.deepEqual(revGoogle.demoted, []);
 
       const imp = implementerFallbackPlan({ pacePath });

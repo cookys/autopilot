@@ -6700,6 +6700,11 @@ _capability_write_suppress_now() {
 
 passive_capture() {
   local status="${1:-}"
+  # Rail wall watchdog: not a runner/network failure — skip log classifier and capability writes.
+  if [ "${WORKER_TIMED_OUT:-0}" -eq 1 ]; then
+    CLASSIFIED_ERROR="timeout"
+    return 0
+  fi
   # Structured class was derived once before this call. Text classification
   # still runs for the quota side effect, then the structured class is put back
   # so a later branch cannot decide from prose.
@@ -7133,6 +7138,7 @@ classify_outcome() {
     OUTCOME_STATUS="failure"
     OUTCOME_EXIT=1
     OUTCOME_ERR="wall timeout (${__wt_secs}s) exceeded — worker terminated"
+    CLASSIFIED_ERROR="timeout"
   fi
   # Do not default an empty verdict to done: that hid a missing verdict on exit 0.
   if [ -n "${BROKER_RUNNER:-}" ] && { [ "${AGENT_EXIT:-0}" -ne 0 ] || [ "${BROKER_VERDICT:-}" != done ]; }; then

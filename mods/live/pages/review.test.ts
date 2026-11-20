@@ -562,10 +562,8 @@ test('review G11: every [x] hint in page.review.* is a bound hotkey, and Pane mo
   for (const [cols, rows, snap] of [[160, 40, LIVE_WIDE], [120, 30, LIVE_WIDE], [80, 24, LIVE_NARROW]] as const) {
     const keys: unknown[] = []
     const drawn = drawReviewPane(cols, rows, snap, { onKey: k => keys.push(k) })
-    expect(drawn.zBtn, `z Button mounted at ${cols}x${rows}`).toBeDefined()
-    expect(flatFake(drawn.zBtn as FakeNode)).toBe('收合替你決定')
-    drawn.zBtn!.props.onPress()
-    expect(keys).toEqual([{ kind: 'fold' }])
+    // v7.4 S5 has no action-area Button (the page is read-only; Enter folds)
+    expect(drawn.zBtn, `no z Button at ${cols}x${rows}`).toBeUndefined()
     expect(drawn.tree.filter(n => n.kind === 'Button' && n.props.key !== FOCUS_ANCHOR_KEY && flatFake(n).trim() === '')).toEqual([])
   }
 

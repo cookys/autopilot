@@ -92,4 +92,78 @@ out="$(run_loop fix-round --ledger "$LEDGER" --phase sweep --generation 2 \
 assert_exit_code "$?" "0" "normalised class still matches"
 assert_contains "$out" "same_class_repeat:bad-value" "Bad Value and bad_value are one class"
 
+# Production collect (not fix-round) refuses the next generation without class_scan.
+REPO="$TEST_TMP/repo"
+mkdir -p "$REPO/scripts"
+(
+  cd "$REPO"
+  git init -q
+  git config user.email "test@example.com"
+  git config user.name "Test User"
+  echo "initial" > file.txt
+  git add file.txt
+  git commit -q -m "c1"
+  echo "second" > file.txt
+  git add file.txt
+  git commit -q -m "c2"
+  git checkout -q -b work
+)
+BASE=$(git -C "$REPO" rev-parse HEAD~1)
+HEAD1=$(git -C "$REPO" rev-parse HEAD)
+mkdir -p "$TEST_TMP/collect-ledger/review-prod/g1"
+printf '%s\n' "{\"findings\":[{\"id\":\"f1\",\"severity\":\"Major\",\"seat\":\"s0\",\"text\":\"bad\",\"class\":\"bad-value\",\"class_sites\":[\"a.js:1\"]}]}" > "$TEST_TMP/collect-ledger/review-prod/g1/findings.json"
+printf '%s\n' "[{\"generation\":1,\"base\":\"$BASE\",\"head\":\"$HEAD1\",\"status\":\"finalized\",\"seats\":[{\"id\":\"s0\",\"status\":\"reviewed\",\"engine\":\"gpt-m1\",\"family\":\"openai\"}]}]" > "$TEST_TMP/collect-ledger/review-prod/chain.json"
+(
+  cd "$REPO"
+  echo "third" >> file.txt
+  git add file.txt
+  git commit -q -m "c3"
+)
+STUB="$TEST_TMP/dispatch-stub.sh"
+cat > "$STUB" << 'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$STUB_SEAT_RESPONSE"
+EOF
+chmod +x "$STUB"
+export STUB_SEAT_RESPONSE='{"status":"reviewed","verdict":"SHIP-AS-IS","findings":"none","no_finding_proof":"checked=all; evidence=clean; conclusion=safe"}'
+COLLECT_ENV=(env -i "PATH=$PATH" "HOME=$TEST_TMP" "TMPDIR=$TEST_TMP" "AUTOPILOT_TEST_CN_GATE_OFF=1" "AUTOPILOT_DISPATCH_REVIEW_SCRIPT=$STUB" "STUB_SEAT_RESPONSE=$STUB_SEAT_RESPONSE")
+set +e
+col="$("${COLLECT_ENV[@]}" node "$LOOP" collect --implementer-engine claude-sonnet-5 --repo-root "$REPO" --ledger "$TEST_TMP/collect-ledger" --phase prod --generation 2 --branch work --seats "gpt-m1/low@codex" 2>&1)"
+col_rc=$?
+set -e
+assert_exit_code "$col_rc" "1" "collect without class_scan exits 1"
+assert_contains "$col" "missing class_scan for bad-value" "collect names the missing class"
+assert_file_absent "$TEST_TMP/collect-ledger/review-prod/g2" "collect does not open the next generation"
+gate="$(cat "$TEST_TMP/collect-ledger/review-prod/class-gate.json")"
+assert_contains "$gate" '"missing_class": "bad-value"' "collect gate names the class"
+printf '%s\n' '{"class_scan":[{"class":"bad-value","sites":["a.js:1"]}]}' > "$TEST_TMP/collect-ledger/review-prod/class-scan.json"
+set +e
+bad="$("${COLLECT_ENV[@]}" node "$LOOP" collect --implementer-engine claude-sonnet-5 --repo-root "$REPO" --ledger "$TEST_TMP/collect-ledger" --phase prod --generation 2 --branch work --seats "gpt-m1/low@codex" 2>&1)"
+bad_rc=$?
+set -e
+assert_exit_code "$bad_rc" "1" "collect rejects a string site with no test"
+assert_contains "$bad" "missing class_scan for bad-value" "malformed class_scan names the class"
+printf '%s\n' '{"class_scan":[{"class":"bad-value","sites":[{"site":"a.js:1","test":"a.test.js"}]}]}' > "$TEST_TMP/collect-ledger/review-prod/class-scan.json"
+set +e
+okc="$("${COLLECT_ENV[@]}" node "$LOOP" collect --implementer-engine claude-sonnet-5 --repo-root "$REPO" --ledger "$TEST_TMP/collect-ledger" --phase prod --generation 2 --branch work --seats "gpt-m1/low@codex" 2>&1)"
+okc_rc=$?
+set -e
+assert_exit_code "$okc_rc" "0" "collect accepts a covered class_scan"
+assert_file_exists "$TEST_TMP/collect-ledger/review-prod/g2/findings.json" "collect wrote the next generation"
+
+# Plain text and mixed reviews take the invalid-review path inside collect.
+PLAIN_LEDGER="$TEST_TMP/plain-ledger"
+mkdir -p "$PLAIN_LEDGER"
+export STUB_SEAT_RESPONSE='{"status":"reviewed","verdict":"FIX-THEN-SHIP","findings":"🟠 [id] MUST-FIX skipped site"}'
+PLAIN_ENV=(env -i "PATH=$PATH" "HOME=$TEST_TMP" "TMPDIR=$TEST_TMP" "AUTOPILOT_TEST_CN_GATE_OFF=1" "AUTOPILOT_DISPATCH_REVIEW_SCRIPT=$STUB" "STUB_SEAT_RESPONSE=$STUB_SEAT_RESPONSE")
+set +e
+plain="$("${PLAIN_ENV[@]}" node "$LOOP" collect --implementer-engine claude-sonnet-5 --repo-root "$REPO" --ledger "$PLAIN_LEDGER" --phase plain --generation 1 --branch work --phase-base "$BASE" --seats "gpt-m1/low@codex" 2>&1)"
+plain_rc=$?
+set -e
+assert_exit_code "$plain_rc" "1" "plain finding without class is invalid"
+assert_contains "$plain" "invalid review" "plain finding uses the invalid-review path"
+assert_contains "$plain" "lacks class" "plain finding names the missing class metadata"
+chain="$(cat "$PLAIN_LEDGER/review-plain/chain.json")"
+assert_contains "$chain" '"reason": "invalid_review"' "plain finding aborts as invalid_review"
+
 finalize_test

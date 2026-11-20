@@ -54,6 +54,56 @@ test('fix report missing class_scan names that class', () => {
   assert.equal(missing, 'bad-value');
 });
 
+test('plain-text finding without class is invalid', () => {
+  const result = findingClass.validateReviewText('🟠 [id] MUST-FIX the check skips a second site');
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /lacks class/);
+});
+
+test('plain-text finding with class and class_sites is kept', () => {
+  const text = '🟠 [id] MUST-FIX skipped site\nclass: bad-value\nclass_sites: a.js:1 b.js:4';
+  const result = findingClass.validateReviewText(text);
+  assert.equal(result.ok, true);
+  assert.equal(result.findings.length, 1);
+  assert.equal(result.findings[0].class, 'bad-value');
+  assert.deepEqual(result.findings[0].class_sites, ['a.js:1', 'b.js:4']);
+});
+
+test('mixed JSON and unstructured text is invalid and keeps no partial findings', () => {
+  const text = [
+    '{"class":"bad-value","class_sites":["a.js:1"],"severity":"Major","text":"json"}',
+    '🟠 [other] MUST-FIX plain sibling with no class',
+  ].join('\n');
+  const result = findingClass.validateReviewText(text);
+  assert.equal(result.ok, false);
+  assert.equal(result.findings, undefined);
+  assert.match(result.reason, /mixed JSON and unstructured findings/);
+});
+
+test('string class_scan site without a covering test names that class', () => {
+  const missing = findingClass.missingClassScan(
+    { class_scan: [{ class: 'bad-value', sites: ['a.js:1'] }] },
+    ['bad-value'],
+  );
+  assert.equal(missing, 'bad-value');
+});
+
+test('object-map class_scan rejects an invalid row and names the class', () => {
+  const missing = findingClass.missingClassScan(
+    { class_scan: { 'bad-value': [{}] } },
+    ['bad-value'],
+  );
+  assert.equal(missing, 'bad-value');
+});
+
+test('object-map class_scan accepts path:line plus a nonempty test', () => {
+  const missing = findingClass.missingClassScan(
+    { class_scan: { 'Bad Value': [{ site: 'a.js:1', test: 'a.test.js' }] } },
+    ['bad-value'],
+  );
+  assert.equal(missing, null);
+});
+
 test('normaliser collapses Bad Value, bad_value, and bad-value', () => {
   assert.equal(findingClass.normalizeClass('Bad Value'), 'bad-value');
   assert.equal(findingClass.normalizeClass('bad_value'), 'bad-value');

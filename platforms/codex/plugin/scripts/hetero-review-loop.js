@@ -852,6 +852,46 @@ function rangeMismatches(declared, ctx) {
   return out;
 }
 
+// Admit the next generation only when the implementer report covers every class
+// the previous round named. Shared by collect and finalize so the normal loop
+// cannot continue past a missing or malformed class_scan. Writes nothing else.
+function gateClassScan(reviewPhaseDir, generation, reportFlag) {
+  if (!(generation > 1)) return null;
+  const prevFindingsPath = path.join(reviewPhaseDir, `g${generation - 1}`, 'findings.json');
+  if (!fs.existsSync(prevFindingsPath)) return null;
+  let prevFindings = null;
+  try {
+    prevFindings = JSON.parse(fs.readFileSync(prevFindingsPath, 'utf8'));
+  } catch (_err) {
+    return null;
+  }
+  const givenClasses = findingClass.classesOf(prevFindings);
+  if (givenClasses.length === 0) return null;
+  const reportPath = reportFlag
+    ? path.resolve(reportFlag)
+    : path.join(reviewPhaseDir, 'class-scan.json');
+  let report = null;
+  if (fs.existsSync(reportPath)) {
+    try {
+      report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+    } catch (_err) {
+      report = null;
+    }
+  }
+  const missing = findingClass.missingClassScan(report, givenClasses);
+  if (!missing) return null;
+  fs.mkdirSync(reviewPhaseDir, { recursive: true });
+  const state = {
+    status: 'rejected',
+    merged: false,
+    missing_class: missing,
+    reason: `missing class_scan for ${missing}`,
+  };
+  writeFileSyncAtomic(path.join(reviewPhaseDir, 'class-gate.json'), `${JSON.stringify(state, null, 2)}\n`);
+  console.error(`ERROR: missing class_scan for ${missing}`);
+  return missing;
+}
+
 async function handleCollect(flags) {
   // v2.36.5: validate the reviewed-seat floor FIRST — before any generation directory or seat
   // dispatch exists — so a garbage value costs nothing and cannot leave g<N>/ without a chain
@@ -1150,6 +1190,10 @@ async function handleCollect(flags) {
       process.env.AUTOPILOT_FLEET_TASK = pmGate.taskId;
     }
   }
+
+  // Fix acceptance for a later generation: the previous round's classes must be
+  // covered before this generation is collected. Before g<N>/ exists.
+  if (gateClassScan(reviewPhaseDir, generation, flags.report)) process.exit(1);
 
   // Range and diff
   fs.mkdirSync(reviewPhaseDir, { recursive: true });
@@ -1727,6 +1771,9 @@ async function handleFinalize(flags) {
   const reviewPhaseDir = path.join(ledgerDir, `review-${phase}`);
   const gDir = path.join(reviewPhaseDir, `g${generation}`);
   const findingsPath = path.join(gDir, 'findings.json');
+  // Same fix-acceptance gate as collect: finalizing the next generation does
+  // not proceed when the implementer report omits a class.
+  if (gateClassScan(reviewPhaseDir, generation, flags.report)) process.exit(1);
   const rangePath = path.join(gDir, 'range.json');
 
   // Require readable range.json file for that generation

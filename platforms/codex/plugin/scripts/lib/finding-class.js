@@ -62,17 +62,98 @@ function validateReview(doc) {
   return { ok: true, findings };
 }
 
-// Text from a review block. Non-JSON finding lines are left to the existing
-// line parser (ok, json:false). A JSON finding object or a findings array is
-// schema-checked here.
+function isPlaceholderLine(line) {
+  const lower = line.toLowerCase();
+  return lower === 'none' || lower === 'n/a' || lower === 'no findings';
+}
+
+function isJsonLine(line) {
+  return line.startsWith('{') || line.startsWith('[');
+}
+
+// A review that uses the class contract (JSON, MUST-FIX, or a class field) must
+// carry class metadata on every finding. Severity-word paragraphs that name
+// neither are the pre-class line shape and stay with the line parser.
+function demandsClass(text) {
+  return /MUST-FIX/i.test(text) || /class_sites/i.test(text) || /"class"/.test(text) || /^\s*class\s*[:=]/im.test(text);
+}
+
+const SEVERITY_HEADER = /^(?:[-*#>\s\d.)]*)(?:🔴|🟠|🟡|🔵|Critical|Major|Minor|Suggestion)\b/i;
+
+function parseClassBlock(block) {
+  const classMatch = /(?:^|\n)\s*class\s*[:=]\s*([^\n]+)/i.exec(block);
+  let sites = [];
+  const sitesMatch = /class_sites\s*[:=]\s*([^\n]+)/i.exec(block);
+  if (sitesMatch) {
+    const rawSites = sitesMatch[1].trim();
+    if (rawSites.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(rawSites);
+        sites = Array.isArray(parsed) ? parsed : [];
+      } catch (_err) {
+        sites = [];
+      }
+    } else {
+      sites = rawSites.split(/[\s,]+/).filter(Boolean);
+    }
+  }
+  const klass = classMatch ? normalizeClass(classMatch[1].replace(/["'].*$/, '').trim()) : '';
+  return {
+    class: klass,
+    class_sites: sites.map((site) => (typeof site === 'string' ? site.trim() : site)),
+    text: block.trim(),
+    severity: 'Major',
+  };
+}
+
+function blockComplete(parsed) {
+  return Boolean(parsed.class)
+    && Array.isArray(parsed.class_sites)
+    && parsed.class_sites.length > 0
+    && parsed.class_sites.every((site) => isPathLine(site));
+}
+
+// null when any block lacks class or class_sites. Otherwise the finding list.
+function plainClassFindings(raw) {
+  const lines = raw.split(/\r?\n/);
+  const blocks = [];
+  let current = [];
+  for (const line of lines) {
+    if (SEVERITY_HEADER.test(line.trim()) && current.some((part) => part.trim().length > 0)) {
+      blocks.push(current.join('\n'));
+      current = [line];
+    } else {
+      current.push(line);
+    }
+  }
+  if (current.length > 0) blocks.push(current.join('\n'));
+  const findings = [];
+  for (const block of blocks) {
+    if (!block.trim()) continue;
+    const parsed = parseClassBlock(block);
+    if (!blockComplete(parsed)) return null;
+    findings.push(parsed);
+  }
+  return findings.length > 0 ? findings : null;
+}
+
+// Text from a review block. JSON findings are schema-checked. Plain text that
+// uses the class contract is schema-checked the same way. A mix of JSON and
+// unstructured text is invalid, so a JSON line cannot drop the rest.
 function validateReviewText(text) {
   const raw = typeof text === 'string' ? text.trim() : '';
-  if (!raw || raw.toLowerCase() === 'none' || raw.toLowerCase() === 'n/a' || raw.toLowerCase() === 'no findings') {
+  if (!raw || isPlaceholderLine(raw)) {
     return { ok: true, json: false, findings: [] };
   }
   const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0);
-  const jsonLines = lines.filter((line) => line.startsWith('{') || line.startsWith('['));
-  if (jsonLines.length === 0) return { ok: true, json: false, findings: [] };
+  const jsonLines = lines.filter((line) => isJsonLine(line));
+  const otherLines = lines.filter((line) => !isJsonLine(line) && !isPlaceholderLine(line));
+  if (jsonLines.length === 0) {
+    if (!demandsClass(raw)) return { ok: true, json: false, findings: [] };
+    const findings = plainClassFindings(raw);
+    if (!findings) return { ok: false, json: true, reason: 'invalid review: finding lacks class' };
+    return { ok: true, json: true, findings };
+  }
   const collected = [];
   for (const line of jsonLines) {
     let parsed;
@@ -93,6 +174,14 @@ function validateReviewText(text) {
     if (!checked.ok) return { ok: false, json: true, reason: checked.reason };
     collected.push(...checked.findings);
   }
+  if (otherLines.length > 0) {
+    const otherText = otherLines.join('\n');
+    const extra = plainClassFindings(otherText);
+    if (!extra) {
+      return { ok: false, json: true, reason: 'invalid review: mixed JSON and unstructured findings' };
+    }
+    collected.push(...extra);
+  }
   return { ok: true, json: true, findings: collected };
 }
 
@@ -110,6 +199,21 @@ function classesOf(doc) {
   return out;
 }
 
+// A site is path:line plus a nonempty covering test, in every table shape.
+function siteRecordOk(site) {
+  if (typeof site === 'string') {
+    const parts = site.trim().split(/\s+/);
+    return parts.length >= 2 && isPathLine(parts[0]) && parts.slice(1).join(' ').trim().length > 0;
+  }
+  if (!site || typeof site !== 'object' || Array.isArray(site)) return false;
+  const loc = typeof site.site === 'string' ? site.site : site.path;
+  return isPathLine(loc) && typeof site.test === 'string' && site.test.trim().length > 0;
+}
+
+function sitesOk(sites) {
+  return Array.isArray(sites) && sites.length > 0 && sites.every((site) => siteRecordOk(site));
+}
+
 function scanCovers(report, klass) {
   if (!report || typeof report !== 'object') return false;
   const scan = report.class_scan;
@@ -117,20 +221,16 @@ function scanCovers(report, klass) {
   if (!want) return false;
   if (Array.isArray(scan)) {
     return scan.some((row) => {
-      if (!row || typeof row !== 'object') return false;
+      if (!row || typeof row !== 'object' || Array.isArray(row)) return false;
       if (!sameClass(row.class, want)) return false;
       const sites = Array.isArray(row.sites) ? row.sites : row.class_sites;
-      return Array.isArray(sites) && sites.length > 0 && sites.every((site) => {
-        if (typeof site === 'string') return isPathLine(site);
-        return site && isPathLine(site.site) && typeof site.test === 'string' && site.test.trim().length > 0;
-      });
+      return sitesOk(sites);
     });
   }
-  if (scan && typeof scan === 'object') {
+  if (scan && typeof scan === 'object' && !Array.isArray(scan)) {
     const key = Object.keys(scan).find((name) => sameClass(name, want));
     if (!key) return false;
-    const sites = scan[key];
-    return Array.isArray(sites) && sites.length > 0;
+    return sitesOk(scan[key]);
   }
   return false;
 }

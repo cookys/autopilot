@@ -75,10 +75,13 @@ function isJsonLine(line) {
 // following space or end of line. Words stay on \b. Both shapes are findings.
 const SEVERITY_HEADER = /^(?:[-*#>\s\d.)]*)(?:(?:🔴|🟠|🟡|🔵)(?:\s|$)|(?:Critical|Major|Minor|Suggestion)\b)/i;
 
-// A bracketed-id severity header (emoji or word, with or without MUST-FIX) is a
-// finding under the class contract. Colon prose such as "Critical: ..." has no
-// bracketed id and stays on the legacy line parser.
-const SEVERITY_FINDING = /^(?:[-*#>\s\d.)]*)(?:(?:🔴|🟠|🟡|🔵)[ \t]+\[|(?:Critical|Major|Minor|Suggestion)\b[ \t]+\[)/i;
+// A bracketed-id severity header is a finding under the class contract. The
+// header is an emoji, an English word (Critical/Major/Minor/Suggestion), or a
+// Chinese word (嚴重/主要/次要/建議), any optionally bolded (**word**), with an
+// optional emoji in front of the word, each followed by a bracketed id. Colon
+// prose such as "Critical: ..." has no bracketed id and stays on the legacy
+// line parser.
+const SEVERITY_FINDING = /^(?:[-*#>\s\d.)]*)(?:(?:🔴|🟠|🟡|🔵)(?:[ \t]*(?:(?:\*\*)?(?:Critical|Major|Minor|Suggestion|嚴重|主要|次要|建議)(?:\*\*)?))?|(?:(?:\*\*)?(?:Critical|Major|Minor|Suggestion|嚴重|主要|次要|建議)(?:\*\*)?))[ \t]*\[/i;
 
 function demandsClass(text) {
   if (/MUST-FIX/i.test(text) || /class_sites/i.test(text) || /"class"/.test(text) || /^\s*class\s*[:=]/im.test(text)) {
@@ -321,6 +324,7 @@ module.exports = {
   sameClass,
   validateReview,
   validateReviewText,
+  demandsClass,
   classesOf,
   missingClassScan,
   repeatedClass,

@@ -78,6 +78,44 @@ test('legacy colon severity prose stays on the line parser', () => {
   assert.equal(colon.json, false);
 });
 
+test('demandsClass recognizes every bracketed-id severity header shape', () => {
+  // One row per severity level: its emoji, English word, and Chinese word.
+  const levels = [
+    { emoji: '🔴', word: 'Critical', zh: '嚴重' },
+    { emoji: '🟠', word: 'Major', zh: '主要' },
+    { emoji: '🟡', word: 'Minor', zh: '次要' },
+    { emoji: '🔵', word: 'Suggestion', zh: '建議' },
+  ];
+  for (const { emoji, word, zh } of levels) {
+    // Every required header shape, each followed by a bracketed id, must demand a class.
+    const positives = [
+      `${emoji} [id]`,            // emoji alone
+      `${word} [id]`,             // word alone
+      `${word.toLowerCase()} [id]`, // word, lowercase (case-insensitive)
+      `${emoji} ${word} [id]`,    // emoji then word
+      `**${word}** [id]`,         // bold word
+      `${emoji} **${word}** [id]`, // emoji then bold word
+      `${zh} [id]`,               // Chinese word alone
+      `${emoji} ${zh} [id]`,      // emoji then Chinese word
+      `**${zh}** [id]`,           // bold Chinese word
+    ];
+    for (const line of positives) {
+      assert.equal(findingClass.demandsClass(line), true, `expected true for: ${line}`);
+    }
+  }
+  assert.equal(findingClass.demandsClass('CRITICAL [id]'), true, 'uppercase word must match');
+
+  // Colon prose and prose without a bracketed id must NOT demand a class.
+  const negatives = [
+    'Critical: text',
+    'Major issue here',
+    '🟠 text without id',
+  ];
+  for (const line of negatives) {
+    assert.equal(findingClass.demandsClass(line), false, `expected false for: ${line}`);
+  }
+});
+
 test('two emoji findings where only one has metadata are rejected', () => {
   const text = [
     '🟠 [id-a] first check',

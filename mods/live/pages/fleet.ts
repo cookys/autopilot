@@ -13,7 +13,7 @@ import { PALETTE } from '../../tux/palette.ts'
 import { STATES, stateOf } from '../ui'
 import type { StateId } from '../ui'
 import type { Page, PageCtx } from './frame'
-import { brokenRow, lineState } from './rows'
+import { brokenRow, lineDuration, lineState } from './rows'
 import type { Row } from './rows'
 
 export const FOLD_AT = 6 // rows shown before the fold (the console-line focus clamp in register.ts)
@@ -41,16 +41,9 @@ const openRule = (title: string, right: string | null, wide: boolean): Row => {
 }
 const miss = (text: string): Row => brokenRow(' ' + GLYPHS.state.failed + ' ' + text)
 
-function ageText(t: T, ms: number): string {
-  const m = Math.max(0, Math.floor(ms / 60_000))
-  if (m < 60) return t('page.now.ago', { age: t('page.now.age_m', { n: m }) })
-  const h = Math.floor(m / 60)
-  return t('page.now.ago', { age: h < 24 ? t('page.now.age_h', { n: h }) : t('page.now.age_d', { n: Math.floor(h / 24) }) })
-}
-const durText = (t: T, s: number): string => {
-  const m = Math.floor(s / 60)
-  return m < 60 ? t('page.now.age_m', { n: m }) : Math.floor(m / 60) < 24 ? t('page.now.age_h', { n: Math.floor(m / 60) }) : t('page.now.age_d', { n: Math.floor(m / 1440) })
-}
+// Y3: one duration grammar on every page (rows.ts lineDuration: 3 時 40 分)
+const ageText = (t: T, ms: number): string => t('page.now.ago', { age: lineDuration(ms, t) })
+const durText = (t: T, s: number): string => lineDuration(s * 1000, t)
 
 function cardRows(ctx: FleetCtx, wide: boolean): Row[] {
   const { t } = ctx

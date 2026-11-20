@@ -519,6 +519,7 @@ cnative_account_state() {
 }
 PI_BIN="pi"
 GROK_PROMPT_FILE=""   # grok-only combined prompt temp; init early so the INT/TERM trap can reap it
+PROMPT_SHA256_SEALED="" # sha256 of the exact bytes the selected runner reads; empty until sealed
 EFFORT_SENT=""        # final effort actually sent (or "default" when none is); set once before the worker, read by emit/manifest and detach declare -p
 QODER_PROMPT_FILE=""  # qoder combined prompt temp; init early so the INT/TERM trap and detach declare -p can reap it
 CCSHIM_PROMPT_FILE="" # cc-shim combined prompt temp; same trap-reap rationale
@@ -2558,6 +2559,23 @@ die_resource_budget() {
   exit 2
 }
 
+# seal_runner_prompt_bytes <file> — scan and hash the exact bytes one runner will read.
+# The early PROMPT_FILE scan stays. This second scan covers the banner plus the prompt
+# (or the raw file, when that runner reads it unchanged). A hit refuses before spawn.
+# PROMPT_SHA256_SEALED is what write_manifest records, including the later finalize.
+seal_runner_prompt_bytes() {
+  local file="$1" cats="" rc=0 _psha=""
+  [ -n "$file" ] && [ -f "$file" ] || die_precondition "outbound_secret: unreadable"
+  cats="$(node "$SELF_DIR/lib/outbound-secret-scan.js" --categories "$file")"; rc=$?
+  if [ "$rc" -ne 0 ]; then
+    die_precondition "outbound_secret: ${cats:-unreadable}"
+  fi
+  _psha="$(sha256sum -- "$file" 2>/dev/null | awk 'NR==1 { print $1 }')"
+  [[ "$_psha" =~ ^[0-9a-f]{64}$ ]] || die_precondition "outbound_secret: prompt digest failed"
+  PROMPT_SHA256_SEALED="$_psha"
+  write_manifest "${MANIFEST_PID_RECORDED:-$$}"
+}
+
 # write_manifest [pid] — (re)write the run manifest atomically. Best-effort: ANY failure
 # is swallowed (the manifest is a telemetry sidecar, never a dispatch dependency).
 # Called at three points: pre-dispatch (parent pid), detached-child start (child pid —
@@ -2692,10 +2710,13 @@ write_manifest() {
     printf '%s\n' "$tip_verify_json" | grep -Eq '^(null|"pass"|"fail"|"timeout"|"no_source"|"skipped_by_flag")$' || tip_verify_json="null"
     printf '%s\n' "$tip_verify_source_json" | grep -Eq '^(null|"flag"|"brief"|"repo_config")$' || tip_verify_source_json="null"
   fi
-  # sha256 of the prompt file after the outbound scan: the bytes the runner is given.
+  # sha256 of the bytes this runner actually reads (banner + prompt when the runner
+  # gets a banner). Sealed just before spawn. Before that, the scanned PROMPT_FILE.
   # Absent file stays JSON null. The digest is hex, so it needs no further escaping.
   local prompt_sha_json="null"
-  if [ -n "${PROMPT_FILE:-}" ] && [ -f "$PROMPT_FILE" ]; then
+  if [[ "${PROMPT_SHA256_SEALED:-}" =~ ^[0-9a-f]{64}$ ]]; then
+    prompt_sha_json="\"$PROMPT_SHA256_SEALED\""
+  elif [ -n "${PROMPT_FILE:-}" ] && [ -f "$PROMPT_FILE" ]; then
     local _psha=""
     _psha="$(sha256sum -- "$PROMPT_FILE" 2>/dev/null | awk 'NR==1 { print $1 }')"
     if [[ "$_psha" =~ ^[0-9a-f]{64}$ ]]; then
@@ -5458,6 +5479,8 @@ run_agent() {
 if [ "$IS_CODEX" -eq 1 ]; then
   EFFORT_SENT="$EFFORT"
   prepare_managed_codex_home
+  # Codex reads PROMPT_FILE on stdin, with no harness banner added here.
+  seal_runner_prompt_bytes "$PROMPT_FILE"
   run_worker bash -c 'cd "$1" && exec env -u CODEX_THREAD_ID CODEX_HOME="$6" \
       "$5" exec --ignore-user-config --model "$2" \
       --dangerously-bypass-approvals-and-sandbox \
@@ -5484,6 +5507,7 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
 "
   CCSHIM_PROMPT_FILE="$(mktemp -t dispatch-hetero-ccshim-prompt-XXXXXX)"
   printf '%s' "${CCSHIM_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$CCSHIM_PROMPT_FILE"
+  seal_runner_prompt_bytes "$CCSHIM_PROMPT_FILE"
   # Harness-owned envelope: claude's JSON stdout never shares the worker log.
   # The result string (or the raw bytes if it does not parse) is appended to
   # LOG so classify-error and other log consumers still see the old plain text.
@@ -5701,6 +5725,7 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
   # resolves --prompt-file relative to --cwd (Spike-verified 2026-06-29). mktemp is absolute.
   GROK_PROMPT_FILE="$(mktemp -t dispatch-hetero-grok-prompt-XXXXXX)"
   printf '%s' "${GROK_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$GROK_PROMPT_FILE"
+  seal_runner_prompt_bytes "$GROK_PROMPT_FILE"
   # effort enum is per-MODEL (grok-4.5 rejects xhigh; 4.6+ accept) ⇒ clamp against THIS model's live enum.
   GROK_EFFORT="$(grok_effort_clamp "$EFFORT" "$MODEL" "$GROK_BIN")"
   EFFORT_SENT="$GROK_EFFORT"
@@ -5732,6 +5757,7 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
 "
   QODER_PROMPT_FILE="$(mktemp -t dispatch-hetero-qoder-prompt-XXXXXX)"
   printf '%s' "${QODER_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$QODER_PROMPT_FILE"
+  seal_runner_prompt_bytes "$QODER_PROMPT_FILE"
   QODER_CFG_ARGS=()
   [ -n "${QODER_CONFIG_DIR:-}" ] && QODER_CFG_ARGS+=(--config-dir "$QODER_CONFIG_DIR")
   run_worker bash -c 'cd "$1" && exec "$2" -p --model "$4" -w "$1" \
@@ -5766,6 +5792,7 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
 "
   OPENCODE_PROMPT_FILE="$(mktemp -t dispatch-hetero-opencode-prompt-XXXXXX)"
   printf '%s' "${OPENCODE_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$OPENCODE_PROMPT_FILE"
+  seal_runner_prompt_bytes "$OPENCODE_PROMPT_FILE"
   EFFORT_SENT="$EFFORT"
   # argv/env come from lib/opencode-containment.js (`plan --profile implement`): v1 =
   # `run --dir <wt> --pure -m M --variant V --format json`; v2 (opencode 2.x removed those flags) =
@@ -5797,10 +5824,14 @@ elif [ "$IS_KIMI" -eq 1 ] && [ "$BIN_FLAG_KIMI" -eq 1 ]; then
   #   (above) so the run here sends the EXACT bytes that were size-checked.
   KIMI_PROMPT_FILE="$(mktemp -t dispatch-hetero-kimi-prompt-XXXXXX)"
   printf '%s' "${KIMI_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$KIMI_PROMPT_FILE"
+  # -p "$(cat file)" drops trailing newlines. Hash and send those exact argv bytes.
+  KIMI_SENT_FILE="$(mktemp -t dispatch-hetero-kimi-sent-XXXXXX)"
+  printf '%s' "$(cat "$KIMI_PROMPT_FILE")" > "$KIMI_SENT_FILE"
+  seal_runner_prompt_bytes "$KIMI_SENT_FILE"
   EFFORT_SENT="${KIMI_EFFORT_SEND:-default}"
   run_worker bash -c 'cd "$1" && exec "$2" -m "$4" -p "$(cat "$3")" --output-format text' \
-      _ "$WT" "$KIMI_BIN" "$KIMI_PROMPT_FILE" "$MODEL"
-  rm -f "$KIMI_PROMPT_FILE"
+      _ "$WT" "$KIMI_BIN" "$KIMI_SENT_FILE" "$MODEL"
+  rm -f "$KIMI_SENT_FILE" "$KIMI_PROMPT_FILE"
   # Part 3: kimi has no usage command; its result is the quota signal (429 -> exhausted + reset, clean -> available).
   node "$SELF_DIR/lib/kimi-quota-observe.js" observe --rc "${AGENT_EXIT:-0}" --log-file "$LOG" >/dev/null 2>&1 || true
 elif [ "$IS_CURSOR" -eq 1 ] || [ "$IS_KIMI" -eq 1 ]; then
@@ -5813,6 +5844,17 @@ elif [ "$IS_CURSOR" -eq 1 ] || [ "$IS_KIMI" -eq 1 ]; then
     broker_group_wrapper="${AUTOPILOT_KIMI_GROUP_WRAPPER:-sg}"
   fi
   BROKER_RESULT="$LOG.$BROKER_RUNNER-broker.json"
+  # The broker prepends EDIT_ONLY inside readPrompt. Hash that string, not PROMPT_FILE.
+  BROKER_PROMPT_FILE="$(mktemp -t dispatch-hetero-broker-prompt-XXXXXX)"
+  node - "$SELF_DIR/lib/cursor-broker-client.js" "$BROKER_PROMPT_FILE" "$PROMPT_FILE" "$BROKER_RUNNER" <<'NODE' \
+    || die_precondition "broker prompt materialize failed"
+const fs = require('fs');
+const { readPrompt } = require(process.argv[2]);
+fs.writeFileSync(process.argv[3], readPrompt(process.argv[4], process.argv[5]));
+NODE
+  seal_runner_prompt_bytes "$BROKER_PROMPT_FILE"
+  rm -f "$BROKER_PROMPT_FILE"
+  BROKER_PROMPT_FILE=""
   printf -v broker_group_cmd '%q ' "$(command -v node)" "$SELF_DIR/lib/cursor-broker-run.js" \
     "$WT" "$PROMPT_FILE" "$MODEL" "$BROKER_TIMEOUT_S" "$DISPATCH_RUN_ID" "$BROKER_RESULT" "$BROKER_RUNNER"
   run_worker "$broker_group_wrapper" lanegit -c "$broker_group_cmd"
@@ -5853,6 +5895,19 @@ elif [ "$IS_PI" -eq 1 ]; then
   # supervisor polls + steers + acks; it gates cleanly on absence). Gated on ALL three
   # coords — a partial set forwards nothing (supervisor would refuse anyway; keep the
   # no-coords invocation byte-identical to pre-Phase-2).
+  # pi-rpc-run prepends HARNESS_EDIT_ONLY before the RPC prompt message. Hash those bytes.
+  PI_FINAL_PROMPT="$(mktemp -t dispatch-hetero-pi-prompt-XXXXXX)"
+  node - "$SELF_DIR/lib/pi-rpc-run.js" "$PI_FINAL_PROMPT" "$PROMPT_FILE" <<'NODE' \
+    || die_precondition "pi prompt materialize failed"
+const fs = require('fs');
+const src = fs.readFileSync(process.argv[2], 'utf8');
+const m = src.match(/const HARNESS_EDIT_ONLY = `([\s\S]*?)`;\r?\n/);
+if (!m) { process.stderr.write('pi harness banner missing\n'); process.exit(2); }
+fs.writeFileSync(process.argv[3], Buffer.concat([Buffer.from(m[1], 'utf8'), fs.readFileSync(process.argv[4])]));
+NODE
+  seal_runner_prompt_bytes "$PI_FINAL_PROMPT"
+  rm -f "$PI_FINAL_PROMPT"
+  PI_FINAL_PROMPT=""
   if [ -n "$LEDGER" ] && [ -n "$RUN_ID" ] && [ -n "$STAGE" ]; then
     run_worker bash -c 'cd "$1" && exec node "$2" --pi-bin "$3" --provider "$4" --model "$5" --cwd "$1" --prompt-file "$6" --ledger "$7" --run-id "$8" --stage "$9"' _ "$WT" "$SELF_DIR/lib/pi-rpc-run.js" "$PI_BIN" "${PI_RPC_PROVIDER:-minimax}" "$MODEL" "$PROMPT_FILE" "$LEDGER" "$RUN_ID" "$STAGE"
   else
@@ -5908,13 +5963,20 @@ else
   # non-zero-agent path (agent_log gets stderr, status from git artifacts).
   # NOTE: no positional parameter above $9 — systemd-run (the scope branch of run_worker) expands
   # `${10}` in the command line, so the script `shift`s the worktree off instead.
+  # agy-stream-json concatenates --prefix and the prompt file. Write that once and
+  # pass it with an empty prefix so the sealed file is what agy is given.
+  AGY_FINAL_PROMPT="$(mktemp -t dispatch-hetero-agy-prompt-XXXXXX)"
+  { printf '%s' "$AGY_EDIT_ONLY"; cat "$PROMPT_FILE"; } > "$AGY_FINAL_PROMPT"
+  seal_runner_prompt_bytes "$AGY_FINAL_PROMPT"
   run_worker bash -c 'cd "$1" && shift && exec node "$8" run --prompt-file "$9" --prefix "$2" --emit envelope \
       -- "$1" --new-project --model "$3" --effort "$7" \
       --dangerously-skip-permissions --print-timeout "$4" \
       >"$5" 2>"$6"' \
-      _ "$WT" "$AGY_BIN" "$AGY_EDIT_ONLY" "$MODEL" "$AGY_PRINT_TIMEOUT" \
+      _ "$WT" "$AGY_BIN" "" "$MODEL" "$AGY_PRINT_TIMEOUT" \
       "$AGY_ENVELOPE" "$AGY_STDERR" "$AGY_EFFORT" \
-      "$SELF_DIR/lib/agy-stream-json.js" "$PROMPT_FILE"
+      "$SELF_DIR/lib/agy-stream-json.js" "$AGY_FINAL_PROMPT"
+  rm -f "$AGY_FINAL_PROMPT"
+  AGY_FINAL_PROMPT=""
   local _agy_early_return=0
   if [ "$AGENT_EXIT" -ne 0 ]; then
     cat "$AGY_STDERR" >> "$LOG"
@@ -7284,7 +7346,7 @@ dispatch_detached_run() {
     # detached child dies with "command not found" before the claude worker starts.
     declare -f token_seat_guard 2>/dev/null || true
     declare -f agy_print_timeout agy_assert_disposable_home die_precondition fell_back_json_suffix hetero_log_fallback child_session_env_setup repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_worker_alive _watchdog_signal_worker _arm_worker_watchdog _worker_has_busy_descendant _supervise_commit_quiet _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts capture_structured_provider_error _prefer_structured_classified_error passive_capture \
-      _is_engine_unavailable _hetero_runner_token _capability_write_note _capability_write_suppress_now seat_strike_capture classify_outcome _emit_question_waiting_event heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks resolve_tip_verify_commands run_tip_verify _fp_unverifiable main_checkout_fingerprint main_checkout_parts_digest main_checkout_describe_delta main_checkout_wt_symlink_leaks check_main_checkout_boundary run_hands_content_gate run_hands_backlog_gate \
+      _is_engine_unavailable _hetero_runner_token _capability_write_note _capability_write_suppress_now seat_strike_capture classify_outcome _emit_question_waiting_event heartbeat_loop detached_main seal_runner_prompt_bytes write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks resolve_tip_verify_commands run_tip_verify _fp_unverifiable main_checkout_fingerprint main_checkout_parts_digest main_checkout_describe_delta main_checkout_wt_symlink_leaks check_main_checkout_boundary run_hands_content_gate run_hands_backlog_gate \
       _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \
       _wt_has_control_chars _wt_resolve_repo_root _wt_read_marker_created_at _wt_json_escape _wt_is_live \

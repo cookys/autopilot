@@ -245,11 +245,10 @@ test('clean prompt dispatches and manifest prompt_sha256 matches the prompt the 
   const got = fs.readFileSync(received);
   const banner = Buffer.from(HARNESS_BANNER, 'utf8');
   assert.ok(got.subarray(0, banner.length).equals(banner), 'stub prompt is missing the harness banner');
-  // Grok prepends a fixed harness banner after the scan. The scanned prompt is the rest:
-  // those are the prompt bytes the stub received, and prompt_sha256 must name them.
   const promptBody = got.subarray(banner.length);
   assert.ok(promptBody.equals(Buffer.from(body)), 'stub prompt body is not the scanned prompt');
-  const expectSha = sha256(promptBody);
+  // prompt_sha256 names the exact bytes the stub read, banner included. No stripping.
+  const expectSha = sha256(got);
   const manifests = fs.readdirSync(path.join(dir, 'runs')).filter((n) => n.endsWith('.manifest.json'));
   assert.ok(manifests.length >= 1, `no manifest\n${combined}`);
   const raw = fs.readFileSync(path.join(dir, 'runs', manifests[0]), 'utf8');

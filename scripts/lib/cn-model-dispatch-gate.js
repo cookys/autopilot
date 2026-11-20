@@ -20,9 +20,12 @@
 //                 operator's decision, not a repo's. Every other check still applies. A cloud endpoint
 //                 of the same family, and any other barred family on that endpoint, stay barred.
 //   [core-size]   size is above XS/S (M, L, XL)
-//   [core-dir]    the scope touches a directory the config marks `core`
+//   [core-dir]    the scope touches a directory the config marks `core`. Skipped when resolution()
+//                 returns localServed (operator via PM, ledger fadf8dc9). A different barred family
+//                 named on a local endpoint, and every cloud endpoint, keep this check.
 //   [core-unset]  effective core_dirs (shipped list union the repo file) is empty, so every scope path
-//                 counts as core. Allowed only when every path matches the shipped core_unset_allow list,
+//                 counts as core. Skipped for the same localServed case (operator via PM, ledger fadf8dc9).
+//                 Otherwise allowed only when every path matches the shipped core_unset_allow list,
 //                 or is named in New-Files: and does not exist under the repo root yet. A repo file cannot change
 //                 that list. A path allowed only by **/fixtures/**, **/testdata/** or **/__fixtures__/** also needs a basename extension in the shipped core_unset_fixture_exts list (lower-cased); docs/**, doc/** and an absent New-Files path do not, and a repo file cannot change that list. An empty core list must not fail open onto source edits (01M7S88YZPPZKVARP0F2SYMRGS).
 //                 Paths are normalised; `..`, absolute and glob paths never pass.
@@ -37,11 +40,14 @@
 //                 marked novel (env AUTOPILOT_TASK_NOVEL=1, or `Novel: yes` header)
 //   [unknown-size|unknown-role|unknown-scope]  FAIL CLOSED: size, role or scope is missing
 // Local endpoint (interim, PM 01M7HQ92; operator rule 2026-11-15 applies to local qwen too, so being local
-//   is not an exemption; this stands until the AR data-class allowlist replaces it): when --endpoint is listed
-//   in scripts/lib/local-sandbox-endpoints.json (today qwen_local) and the family is the one that endpoint
+//   is not a blanket exemption; this stands until the AR data-class allowlist replaces it): when --endpoint is listed
+//   in scripts/lib/local-sandbox-endpoints.json (today qwen_local and glm_local) and the family is the one that endpoint
 //   serves, every check above applies exactly as for a cloud endpoint of that family, except [review-role]
 //   when a shipped review_local_exceptions entry names that endpoint, now < until, and the repo is outside
-//   local_deny_repos. Past that, [review-role] applies and is decided before the later local checks.
+//   local_deny_repos, and except [core-dir] and [core-unset], which that local served family skips
+//   (operator via PM, ledger fadf8dc9). A different barred family named on the endpoint, and every cloud
+//   endpoint, keep [core-dir] and [core-unset]. Past the review window, [review-role] applies and is decided
+//   before the later local checks.
 //   Two further checks then apply, and only then: [local-deny-repo] the repo directory name matches local_deny_repos; [unknown-task-class]
 //   Task-Class is missing; [task-class] it is not in local_task_classes (format-convert, log-summary,
 //   simple-script, test-scaffold). A different barred family on that endpoint (a kimi model on qwen_local)
@@ -411,15 +417,17 @@ function check(opts = {}) {
   if (f.transcript) return block('transcript');
   if (matchesAny(path.basename(root), cfg.sensitive_repos) || f.scope.some((p) => matchesAny(p, cfg.sensitive_paths))) return block('sensitive');
   // Review roles are refused at every size. A review rail role (or brief Role:) is a floor that
-  // env/header Role: implementer cannot lower. The local served family skips only this class, and
-  // only inside a shipped review_local_exceptions window on a repo outside local_deny_repos.
+  // env/header Role: implementer cannot lower. The local served family skips this class only
+  // inside a shipped review_local_exceptions window on a repo outside local_deny_repos.
   const reviewRolesToCheck = [f.role, f.railRole, f.headerRole].filter(Boolean);
   if (reviewRolesToCheck.some((r) => cfg.review_roles.includes(r))) {
     const exempt = localServed && reviewLocalExempt(effectiveEndpoint, gateNow(opts), root, cfg.local_deny_repos);
     if (!exempt) return block('review-role');
   }
   if (BIG_SIZES.includes(f.size)) return block('core-size');
-  if (cfg.core_dirs.length === 0) {
+  // localServed may edit core directories: the gate exists to stop data leaving the fleet
+  // (operator via PM, ledger fadf8dc9). Other classes above and below are unchanged.
+  if (!localServed && cfg.core_dirs.length === 0) {
     const allow = shippedCoreUnsetAllow();
     const fixtureExts = shippedCoreUnsetFixtureExts();
     const news = new Set();
@@ -436,7 +444,7 @@ function check(opts = {}) {
       return !(news.has(c.normalised) && absentUnderRepoRoot(root, c.normalised));
     });
     if (unset) return block('core-unset');
-  } else if (f.scope.some((p) => matchesAny(p, cfg.core_dirs))) return block('core-dir');
+  } else if (!localServed && f.scope.some((p) => matchesAny(p, cfg.core_dirs))) return block('core-dir');
   if (f.novel || cfg.novel_roles.includes(f.role) || cfg.novel_roles.includes(f.railRole)) return block('novel');
   if (!SMALL_SIZES.includes(f.size)) return block('unknown-size');
   if (!f.role) return block('unknown-role');

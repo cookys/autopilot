@@ -68,10 +68,10 @@ const cards = [1, 2, 3].map(i => ({ id: 'd-0000000' + i, question: '測試機第
 test('R4-3: 80x16 with one body row shows the focused title and card count before controls', () => {
   const con = consoleOf([], { cards })
   for (const cursor of [0, 1, 2]) {
-    // The host gives three rows: header, one content row and the single navigation strip.
-    const ctx = { ...(ctxOf(80, 3, con) as any), live, decide: { ...NO_NAV, cursor } }
+    // The host gives four rows: header, one content row, the v7.4 border row and the single navigation strip.
+    const ctx = { ...(ctxOf(80, 4, con) as any), live, decide: { ...NO_NAV, cursor } }
     const rows = frameRows(decidePage, ctx).map(rowText)
-    expect(rows.length).toBe(3)
+    expect(rows.length).toBe(4)
     expect(rows[1]).toContain('待決在 band 上（d）')
     expect(rows[1]).not.toContain(cards[cursor].question)
     expect(rows[1]).not.toContain('第 ' + (cursor + 1) + ' 張／共 3 張')

@@ -212,8 +212,8 @@ test('shell overflow: default opens at bottom, scrolling up survives redraw', ()
 const R14_SIZES = [[80, 24, 'inline'], [120, 30, 'dock'], [160, 40, 'dock']] as const
 const rowText = row => row.map(s => s.text).join('')
 
-test('R14: every page bottom-anchors short content in a fixed frame at all three sizes and H=5..7', () => {
-  const sizes = [...R14_SIZES, ...[60, 80, 120, 160].flatMap(cols => [5, 6, 7].map(rows => [cols, rows, 'dock'] as const))]
+test('R14: every page bottom-anchors short content in a fixed frame at all three sizes and H=6..8', () => {
+  const sizes = [...R14_SIZES, ...[60, 80, 120, 160].flatMap(cols => [6, 7, 8].map(rows => [cols, rows, 'dock'] as const))]
   for (const [cols, available, placement] of sizes) for (const page of PAGES) {
     const H = frameHeight(available, placement)
     const ctx = { live: null, console: null, size: { cols, rows: H }, t, nowMs: 0 }
@@ -221,17 +221,17 @@ test('R14: every page bottom-anchors short content in a fixed frame at all three
     const actions = [[{ text: page.id + ' action' }]]
     const out = frameRows({ ...page, render: () => ({ body, actions }) }, ctx).map(rowText)
     const S = stripRows(page, ctx).length
-    const kept = body.slice(0, Math.min(body.length, H - S - 2)).map(rowText)
+    const kept = body.slice(0, Math.min(body.length, H - S - 3)).map(rowText) // v7.4: the border row costs one more
     const at = out.indexOf(kept[0])
     const action = out.indexOf(page.id + ' action')
     const label = page.id + ' ' + cols + 'x' + H
     expect(out.length, label).toBe(H)
     expect(out[0], label + ' header').toBe(t('tab.' + page.id))
-    expect(action, label + ' action precedes strip').toBe(H - S - 1)
+    expect(action, label + ' action precedes strip').toBe(H - S - 2) // the v7.4 border row sits between the action and the strip
     expect(out.slice(-S), label + ' strip remains last').toEqual(stripRows(page, ctx).map(rowText))
     expect(out.slice(at, action), label + ' content order and adjacency').toEqual(kept)
     expect(out.slice(1, at).every(r => r.trim() === ''), label + ' padding only above content').toBe(true)
-    expect(at - 1, label + ' all spare rows are above content').toBe(H - S - 2 - kept.length)
+    expect(at - 1, label + ' all spare rows are above content').toBe(H - S - 3 - kept.length)
   }
 })
 
@@ -242,7 +242,7 @@ test('R14: real page content ends directly above actions with null or short snap
     const source = page.render(ctx)
     const out = frameRows(page, ctx).map(rowText)
     const S = stripRows(page, ctx).length
-    const action = H - S - Math.max(1, source.actions.length)
+    const action = H - S - 1 - Math.max(1, source.actions.length) // minus the border row
     const body = out.slice(1, action)
     const label = page.id + ' ' + cols + 'x' + H
     expect(out.length, label).toBe(H)

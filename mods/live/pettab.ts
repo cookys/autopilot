@@ -59,7 +59,7 @@ export function renderPet(raw: unknown, cols: number, t: T): { body: Row[]; acti
 
 export const petPage: Page = {
   id: 'pet',
-  key: '9',
+  key: '0',
   title: '寵物',
   framed: true,
   render: ctx => renderPet(ctx.pet, ctx.size.cols, ctx.t),

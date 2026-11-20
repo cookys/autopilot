@@ -49,20 +49,6 @@ test('gate G2: 現況 at 80 columns: pending count + oldest card title, then stu
   expect(out.join('\n')).not.toMatch(/\+\d+/)
 })
 
-test('gate G3: one production-line total on every page, and shown + folded = total', () => {
-  const c0 = snap()
-  const l0 = (c0.lines as NonNullable<ConsoleSnapshot['lines']>)[0]
-  const c = { ...c0, counts: { ...c0.counts, summary: { ...c0.counts.summary, lines: { running: 2, waiting: 1, stalled: 6 } } }, lines: Array.from({ length: 8 }, (_, i) => ({ ...l0, line_id: 'L' + i, label: 'L' + i })) } as ConsoleSnapshot
-  const a = screen(nowPage, 160, 40, c).join('\n').match(/產線 (\d+)/)
-  const b = screen(fleetPage, 160, 40, c).join('\n').match(/產線 (\d+)/)
-  expect(a?.[1]).toBe('9')
-  expect(b?.[1], '艦隊 says the same total').toBe(a?.[1])
-  const fold = screen(fleetPage, 160, 40, c).join('\n').match(/（(\d+)\+(\d+)=(\d+)）/)
-  expect(fold, 'the fold line states the arithmetic').not.toBeNull()
-  expect(Number(fold?.[1]) + Number(fold?.[2])).toBe(Number(fold?.[3]))
-  expect(fold?.[3]).toBe('9')
-})
-
 test('gate G4: missing data never reads as nothing to do; red pools never read 沒有要你處理的事', () => {
   // V4: quota has fixed navigation; exercise the frame's actionless fallback explicitly.
   const quotaFallback = { ...quotaPage, render: (ctx: Parameters<typeof quotaPage.render>[0]) => ({ ...quotaPage.render(ctx), actions: [] }) }
@@ -71,11 +57,11 @@ test('gate G4: missing data never reads as nothing to do; red pools never read �
     const out = screen(p, 120, 30, miss)
     expect(out.join('\n')).not.toContain('沒有要你處理的事')
   }
-  expect(screen(quotaFallback, 120, 30, miss).slice(-2, -1)[0]).toContain('資料不足，無法判定')
+  expect(screen(quotaFallback, 120, 30, miss).slice(-3, -2)[0]).toContain('資料不足，無法判定')
   const known = snap(POOLS.map(p => ({ ...p, stranded_seats: 1 })), { cards: [] })
-  expect(screen(quotaFallback, 120, 30, known).slice(-2, -1)[0], 'all sources ok, every verdict known: the scoped line').toContain('沒有待決卡')
-  expect(screen(quotaFallback, 120, 30, null).slice(-2, -1)[0]).toContain('資料不足，無法判定')
-  expect(screen(quotaPage, 120, 30, miss).slice(-2, -1)[0]).toContain('上一池') // V4: real quota remains navigable beside red data.
+  expect(screen(quotaFallback, 120, 30, known).slice(-3, -2)[0], 'all sources ok, every verdict known: the scoped line').toContain('沒有待決卡')
+  expect(screen(quotaFallback, 120, 30, null).slice(-3, -2)[0]).toContain('資料不足，無法判定')
+  expect(screen(quotaPage, 120, 30, miss).slice(-3, -2)[0]).toContain('上一池') // V4: real quota remains navigable beside red data.
   expect(screen(nowPage, 160, 40, miss).join('\n'), '現況 does not claim 沒有例外 beside red data').not.toContain('沒有例外')
 })
 
@@ -113,11 +99,11 @@ test('gate G6: a stale reason is wrapped, never cut with an ellipsis', () => {
   expect(now.filter(l => !l.includes('還有')).some(l => l.endsWith('…'))).toBe(false)
 })
 
-test('gate G7: when the strip does not fit every entry 1-8, 9, 0 and i stays, names shorten first (2 rows under 66 columns)', () => {
+test('gate G7: when the strip does not fit every entry 1-8, 9, 0 stays, names shorten first (2 rows under 66 columns)', () => {
   for (const cols of [100, 70, 60, 50, 40]) {
     const out = screen(nowPage, cols, 30, snap())
     const strip = (cols < 66 ? out.slice(-2) : out.slice(-1)).join(' ')
-    for (const k of ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', 'i']) expect(strip, 'cols ' + cols + ' keeps ' + k).toMatch(new RegExp('(^|\\s)' + k + '(\\s|$)'))
+    for (const k of ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']) expect(strip, 'cols ' + cols + ' keeps ' + k).toMatch(new RegExp('(^|\\s)' + k + '(\\s|$)'))
     expect(strip.includes('…'), 'cols ' + cols + ': no fold').toBe(false)
   }
 })
@@ -138,22 +124,4 @@ test('gate G9: no raw field names on any framed page at three sizes', () => {
     const s = screen(p, cols, rows, c).join('\n')
     for (const re of bad) expect(s, p.id + ' ' + cols + 'x' + rows + ' shows ' + re).not.toMatch(re)
   }
-})
-
-test('gate G10: one set of names: pool "F 池" on every page, line states 離線 / 閒置 / 卡住', () => {
-  const pools = [...POOLS, { ...POOLS[1], pool: 'pool-f', seven_day_pct: 100, five_hour_pct: 100, limit_hit: true, stranded_seats: 2 }]
-  const c = snap(pools)
-  for (const p of [quotaPage, nowPage]) expect(screen(p, 160, 40, c).join('\n'), p.id).not.toContain('pool-f')
-  expect(screen(quotaPage, 160, 40, c).join('\n')).toContain('F 池')
-  const c0 = snap()
-  const l0 = (c0.lines as NonNullable<ConsoleSnapshot['lines']>)[0]
-  const mk = (id: string, issues: unknown[]) => ({ ...l0, line_id: id, label: id, issues })
-  const issue = (rule: string) => ({ ...l0.issues[0], rule, state: 'stalled', since_ms: NOW - 3_600_000 })
-  const c2 = { ...c0, lines: [mk('甲', [issue('member_offline')]), mk('乙', []), mk('丙', [issue('wait_untyped')])] } as ConsoleSnapshot
-  const out = screen(fleetPage, 160, 40, c2)
-  expect(out.find(l => l.includes('甲'))).toContain('離線')
-  // M4: an issue-free line is normal; only an explicit idle issue means 閒置.
-  expect(out.find(l => l.includes('乙'))).toContain('正常')
-  expect(out.find(l => l.includes('丙'))).toContain('卡住')
-  expect(out.join('\n')).toContain('正常（無異常明細）') // X3: explicitly label missing issue detail.
 })

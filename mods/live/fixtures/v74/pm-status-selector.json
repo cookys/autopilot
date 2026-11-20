@@ -1,0 +1,86 @@
+{
+  "schema": "fleet.pm.status",
+  "schema_version": 1,
+  "generated_at_ms": 1795143600000,
+  "selector": "fleet",
+  "projects": [
+    {
+      "project": "fleet",
+      "root_id": null,
+      "counts": {
+        "stuck": 1,
+        "overdue": 1,
+        "running": 3,
+        "waiting": 1,
+        "total": 5
+      },
+      "tasks": [
+        {
+          "id": "01TESTCHLD0000000000000002",
+          "short_id": "01TESTCHLD0000000000000002",
+          "title": "hub schema migration (逾期)",
+          "state": "running",
+          "owner": "nsc40/hub-dev--claude",
+          "last_progress_at_ms": 1794970800000,
+          "last_progress": "waiting for review",
+          "next_evidence_due_ms": 1795089600000,
+          "waiting_on": null,
+          "overdue": true,
+          "stuck": false
+        },
+        {
+          "id": "01TESTCHLD0000000000000006",
+          "short_id": "01TESTCHLD0000000000000006",
+          "title": "卡住的人工項目",
+          "state": "blocked_human",
+          "owner": "nsbravo1/fleet--claude",
+          "last_progress_at_ms": 1795046400000,
+          "last_progress": "needs the operator",
+          "next_evidence_due_ms": null,
+          "waiting_on": null,
+          "overdue": false,
+          "stuck": true
+        },
+        {
+          "id": "01TESTROOT0000000000000001",
+          "short_id": "01TESTROOT0000000000000001",
+          "title": "[M] 重構訊息佈線並補上完整的測試覆蓋與文件，確保每一台機器都能收到",
+          "state": "running",
+          "owner": "nsbravo1/fleet--claude",
+          "last_progress_at_ms": 1795137000000,
+          "last_progress": "[dispatch:implementer] 已提交 sha=66b3fcd6 並開始跑全部測試",
+          "next_evidence_due_ms": null,
+          "waiting_on": null,
+          "overdue": false,
+          "stuck": false
+        },
+        {
+          "id": "01TESTCHLD0000000000000001",
+          "short_id": "01TESTCHLD0000000000000001",
+          "title": "Rust courier 端的 ack 修正",
+          "state": "running",
+          "owner": "nsbravo1/fleet--claude#1",
+          "last_progress_at_ms": 1795141800000,
+          "last_progress": "red-check done",
+          "next_evidence_due_ms": null,
+          "waiting_on": null,
+          "overdue": false,
+          "stuck": false
+        },
+        {
+          "id": "01TESTGRND0000000000000003",
+          "short_id": "01TESTGRN",
+          "title": "孫任務：寫 golden 測試，內容很長很長很長很長很長很長很長很長很長很長很長",
+          "state": "waiting",
+          "owner": "nsbravo1/fleet--claude",
+          "last_progress_at_ms": 1795133100000,
+          "last_progress": null,
+          "next_evidence_due_ms": null,
+          "waiting_on": "external:nsalpha1/team canary 觀察 24h 之後再決定要不要往下推",
+          "overdue": false,
+          "stuck": false
+        }
+      ]
+    }
+  ]
+}

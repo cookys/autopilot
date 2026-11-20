@@ -1,12 +1,12 @@
-// mods/live/pages/dispatch.ts — page 5 派工 (plan r2 §2 row 5, §3.1, §3.2, §5): running dispatches, foreman activity, and recent finished dispatches from ctx.live.
+// mods/live/pages/dispatch.ts — page 3 派工 (ux-v7.4 S4): ONE section 派工 N 筆, columns 線 / 引擎 / 工作 / 狀態 from ctx.live rows (running first, then recent finished); no foreman / 其他分頁 block, no action buttons.
 // Pure: PageCtx in, body and action rows out; frameRows draws the header, padding, empty-action fallback, overflow hint, and bottom tab strip.
 // Missing or stale live sources render in PALETTE.broken with the full wrapped reason (never cut with an ellipsis). Every key hint has a matching Button.
-import type { ForemanView, LivePaneRow, Seg } from '../model'
+import type { LivePaneRow, Seg } from '../model'
 import { runAgedOut, runEndedMs, runSubject, truncateToWidth } from '../model'
 import { GLYPHS } from '../../tux/glyphs.ts'
 import { PALETTE } from '../../tux/palette.ts'
 import { displayWidth } from '../../tux/width.ts'
-import { SEVERITY, STATES, stateOf, wrapPlain } from '../ui'
+import { STATES, stateOf, wrapPlain } from '../ui'
 import type { StateId } from '../ui'
 import type { Page, PageCtx } from './frame'
 import { brokenRow, staleBadge } from './rows'
@@ -18,11 +18,11 @@ export type DispatchView = { focus: number; expanded: boolean }
 export const DEFAULT_VIEW: DispatchView = { focus: 0, expanded: true }
 export type DispatchCtx = PageCtx & { dispatch?: Partial<DispatchView> }
 
-const WIDE_COLS = 100
-const W_RUN = 26
-const W_ROLE = 12
-const W_ENGINE = 17
-const W_ELAPSED = 9
+const W_LINE = 12
+const W_ENGINE = 14
+const W_WORK_MAX = 34
+const STATUS_MIN = 14
+const TIMEOUT_RE = /time[-_ ]?out|timed[-_ ]?out/i
 
 const pad = (s: string, w: number): string => s + ' '.repeat(Math.max(0, w - displayWidth(s)))
 const fit = (s: string, w: number): string => (displayWidth(s) <= w ? s : truncateToWidth(s, w))
@@ -69,121 +69,55 @@ function engineOrEmpty(r: LivePaneRow): string {
   return runner || model || ''
 }
 
-function secRule(label: string, wide: boolean): Row {
-  const r = GLYPHS.structure.rule
-  const head = r + r + ' ' + label + (label.endsWith('）') ? '' : ' ')
-  const tail = wide ? r.repeat(Math.max(2, (label.endsWith('）') ? 52 : 58) - displayWidth(head))) : r + r
-  return [{ text: head + tail, color: PALETTE.structure }]
-}
 
-function foremanRule(t: T): Row {
-  const r = GLYPHS.structure.rule
-  return [{ text: r + r + ' ' + t('page.dispatch.sec_foreman') + ' ' + r + r, color: PALETTE.structure }]
+const RULE = GLYPHS.structure.rule
+function sectionRule(label: string, cols: number): Row {
+  const head = GLYPHS.structure.open + ' ' + label + ' '
+  return [{ text: head + RULE.repeat(Math.max(2, cols - displayWidth(head) - 2)), color: PALETTE.structure }]
 }
 
 type ClassifiedRun = { row: LivePaneRow; sid: StateId }
+const classify = (row: LivePaneRow): ClassifiedRun => ({ row, sid: stateOf('run', runSubject(row)).id })
 
-function classifyRuns(rows: readonly LivePaneRow[]): ClassifiedRun[] {
-  return rows
-    .map(row => ({ row, sid: stateOf('run', runSubject(row)).id }))
-    .sort((a, b) => SEVERITY.indexOf(a.sid) - SEVERITY.indexOf(b.sid))
+// the 狀態 cell: what the run is doing (never progress). A timed-out run names its timeout seconds (the run's elapsed_s, which the producer freezes at the end).
+export function statusText(r: LivePaneRow, sid: StateId, nowMs: number, t: T): string {
+  if (r.final_status !== null && TIMEOUT_RE.test(r.final_status)) return r.elapsed_s === null ? t('v74.e.st_timeout_unknown') : t('v74.e.st_timeout', { n: r.elapsed_s })
+  const elapsed = r.elapsed_s === null ? '' : ' ' + fmtDur(r.elapsed_s * 1000, true, t)
+  if (r.ended) {
+    const endMs = runEndedMs(r)
+    const ago = endMs === null || nowMs <= 0 ? '' : ' ' + fmtAgo(Math.max(0, nowMs - endMs), true, t)
+    if (sid === 'done') return t('v74.e.st_done') + ago
+    if (sid === 'failed') return t('v74.e.st_failed') + ago
+    return t('v74.e.st_stopped') + ago
+  }
+  if (sid === 'stalled') return t('v74.e.st_stalled') + elapsed
+  if (sid === 'running') return t('v74.e.st_running') + elapsed
+  if (sid === 'pending') return t('v74.e.st_starting')
+  return t('v74.e.st_stopped') + elapsed
 }
 
-function colHeaderRow(t: T): Row {
-  const text =
-    '  '
-    + pad(t('page.dispatch.col_run'), W_RUN + 2)
-    + pad(t('page.dispatch.col_role'), W_ROLE)
-    + pad(t('page.dispatch.col_engine'), W_ENGINE)
-    + pad(t('page.dispatch.col_elapsed'), W_ELAPSED)
-    + t('page.dispatch.col_last')
+function colHeaderRow(wWork: number, t: T): Row {
+  const text = '    ' + pad(t('v74.e.col_line'), W_LINE) + pad(t('v74.e.col_engine'), W_ENGINE) + pad(t('v74.e.col_work'), wWork + 2) + t('v74.e.col_status')
   return [{ text, color: PALETTE.structure }]
 }
 
-function drawRunRow(
-  item: ClassifiedRun,
-  focused: boolean,
-  isFinished: boolean,
-  wide: boolean,
-  stale: boolean,
-  cols: number,
-  nowMs: number,
-  t: T,
-): Row {
+function drawRunRow(item: ClassifiedRun, wWork: number, stale: boolean, cols: number, nowMs: number, t: T): Row {
   const { row: r, sid } = item
   const st = STATES[sid]
-  const endMs = isFinished ? runEndedMs(r) : null
-  const elapsedRaw = r.elapsed_s === null ? null : fmtDur(r.elapsed_s * 1000, wide, t)
-  const lastRaw = isFinished
-    ? (endMs === null || nowMs <= 0 ? null : fmtAgo(Math.max(0, nowMs - endMs), wide, t))
-    : (r.probe_age_s === null ? null : fmtAgo(r.probe_age_s * 1000, wide, t))
   const eng = engineOrEmpty(r)
-
-  if (wide) {
-    const mark: Seg = { text: (focused ? GLYPHS.structure.folded : ' ') + ' ', ...(focused ? { color: PALETTE.structure } : {}) }
-    const glyph: Seg = { text: st.glyph + ' ', ...(st.key === undefined ? {} : { color: st.key }) }
-    const elapsedText = (elapsedRaw ?? GLYPHS.structure.empty) + (stale && elapsedRaw !== null ? GLYPHS.state.failed : '')
-    const lastText = (stale && lastRaw !== null ? GLYPHS.state.failed : '') + (lastRaw ?? GLYPHS.structure.empty)
-    const mid =
-      pad(fit(r.run_id, W_RUN - 1), W_RUN)
-      + pad(fit(r.role ?? GLYPHS.structure.empty, W_ROLE - 1), W_ROLE)
-      + pad(fit(eng === '' ? GLYPHS.structure.empty : eng, W_ENGINE - 1), W_ENGINE)
-    const elapsedSeg: Seg = stale && elapsedRaw !== null ? staleBadge(pad(elapsedText, W_ELAPSED)) : { text: pad(elapsedText, W_ELAPSED) }
-    const lastSeg: Seg = stale && lastRaw !== null ? staleBadge(lastText) : { text: lastText }
-    return truncateSegs([mark, glyph, { text: mid }, elapsedSeg, lastSeg], cols)
-  }
-
-  const mark: Seg = { text: focused ? GLYPHS.structure.folded : ' ', ...(focused ? { color: PALETTE.structure } : {}) }
-  const glyph: Seg = { text: st.glyph + ' ', ...(st.key === undefined ? {} : { color: st.key }) }
-  const tailParts = isFinished
-    ? [r.role, elapsedRaw, lastRaw !== null && stale ? GLYPHS.state.failed + lastRaw : lastRaw]
-    : [r.role, eng === '' ? null : eng, elapsedRaw !== null && stale ? elapsedRaw + GLYPHS.state.failed : elapsedRaw]
-  const tail = tailParts.filter((x): x is string => x !== null && x !== '').join(' ')
-  const suffix = tail === '' ? '' : ' ' + tail
-  const maxRun = Math.max(4, cols - 3 - displayWidth(suffix))
-  const shownRun = fit(r.run_id, maxRun)
-  if (stale && (elapsedRaw !== null || lastRaw !== null)) {
-    return truncateSegs([mark, glyph, { text: shownRun }, staleBadge(suffix)], cols)
-  }
-  return truncateSegs([mark, glyph, { text: shownRun + suffix }], cols)
+  const status = statusText(r, sid, nowMs, t)
+  const statusSeg: Seg = stale ? staleBadge(GLYPHS.state.failed + ' ' + status) : { text: status }
+  return truncateSegs([
+    { text: ' ' },
+    { text: st.glyph + ' ', ...(st.key === undefined ? {} : { color: st.key }) },
+    { text: pad(fit(r.run_id, W_LINE - 1), W_LINE) + pad(fit(eng === '' ? GLYPHS.structure.empty : eng, W_ENGINE - 1), W_ENGINE) + pad(fit(r.role ?? GLYPHS.structure.empty, wWork), wWork + 2) },
+    statusSeg,
+  ], cols)
 }
 
-function foremanRowsOf(fm: ForemanView | null, wide: boolean, cols: number, nowMs: number, t: T): Row[] {
-  const hasForeman = fm !== null && (fm.agents.length > 0 || fm.stage !== null)
-  if (!hasForeman) {
-    if (!wide) return []
-    return [
-      foremanRule(t),
-      [{ text: '  ' }, { text: GLYPHS.state.pending + ' ', color: PALETTE.idle }, { text: t('page.dispatch.foreman_none'), dim: true }],
-    ]
-  }
-  const out: Row[] = [foremanRule(t)]
-  const indent = wide ? '  ' : ' '
-  for (const g of fm.agents) {
-    const sid = stateOf('run', { rc: g.ended ? 0 : null, final_status: null, stall: !g.ended && g.stale, fresh: !g.ended && !g.stale }).id
-    const st = STATES[sid]
-    const ageMs = g.at_ms !== null && nowMs > 0 ? Math.max(0, nowMs - g.at_ms) : g.age_s !== null ? g.age_s * 1000 : null
-    const ageStr = ageMs === null ? null : fmtAgo(ageMs, wide, t)
-    const name = g.description || g.id
-    const meta = wide
-      ? [g.label, ageStr, !g.ended && g.stale ? t('foreman.quiet') : null].filter((x): x is string => x !== null && x !== '')
-      : [ageStr].filter((x): x is string => x !== null && x !== '')
-    const sep = wide ? ' · ' : ' '
-    const tail = meta.length === 0 ? '' : sep + meta.join(sep)
-    out.push(truncateSegs([{ text: indent }, { text: st.glyph + ' ', ...(st.key === undefined ? {} : { color: st.key }) }, { text: name }, ...(tail === '' ? [] : [{ text: tail, dim: true }])], cols))
-  }
-  if (fm.stage !== null) {
-    const stMs = fm.stage_at_ms !== null && nowMs > 0 ? Math.max(0, nowMs - fm.stage_at_ms) : fm.stage_age_s !== null ? fm.stage_age_s * 1000 : null
-    const stAge = stMs === null ? GLYPHS.structure.empty : fmtAgo(stMs, wide, t)
-    out.push(truncateSegs([{ text: indent }, { text: t('foreman.stage', { stage: fm.stage, age: stAge }), dim: true }], cols))
-  }
-  return out
-}
-
-export function dispatchView(ctx: PageCtx, view: DispatchView = DEFAULT_VIEW): { body: Row[]; actions: Row[] } {
+export function dispatchView(ctx: PageCtx, _view: DispatchView = DEFAULT_VIEW): { body: Row[]; actions: Row[] } {
   const { t, size } = ctx
   const cols = size.cols
-  const wide = cols >= WIDE_COLS
   if (ctx.live === null) return { body: brokenRows(GLYPHS.state.failed + ' ' + t('page.dispatch.no_live'), cols), actions: [] }
 
   const live = ctx.live
@@ -198,65 +132,27 @@ export function dispatchView(ctx: PageCtx, view: DispatchView = DEFAULT_VIEW): {
 
   const nowMs = ctx.nowMs > 0 ? ctx.nowMs : (live.detail.now_ms ?? 0)
   const ageRef = nowMs > 0 ? nowMs : null
-  const running = classifyRuns(live.rows.filter(r => !r.ended))
-  const finished = classifyRuns(live.rows.filter(r => r.ended && !runAgedOut(r, ageRef)))
-  const fm = live.sections.foreman
-  const hasForeman = fm !== null && (fm.agents.length > 0 || fm.stage !== null)
-
-  if (running.length === 0 && finished.length === 0 && !hasForeman) {
+  const running = live.rows.filter(r => !r.ended).map(classify)
+  const finished = live.rows.filter(r => r.ended && !runAgedOut(r, ageRef)).map(classify)
+  const all = [...running, ...finished]
+  if (all.length === 0) {
     body.push([{ text: GLYPHS.state.pending + ' ', color: PALETTE.idle }, { text: t('page.dispatch.none'), dim: true }])
     return { body, actions: [] }
   }
 
-  const shownFinished = ctx.shortBody === true || view.expanded ? finished : []
-  const visibleTotal = running.length + shownFinished.length
-  const focus = Math.max(0, Math.min(view.focus, Math.max(0, visibleTotal - 1)))
-  let rowIdx = 0
-
-  if (ctx.shortBody === true) {
-    for (const item of running) body.push(drawRunRow(item, rowIdx++ === focus, false, wide, stale, cols, nowMs, t))
-    for (const item of shownFinished) body.push(drawRunRow(item, rowIdx++ === focus, true, wide, stale, cols, nowMs, t))
-    if (hasForeman) body.push(...foremanRowsOf(fm, wide, cols, nowMs, t).slice(1))
-    return { body, actions: [] }
-  }
-
-  body.push(secRule(t('page.dispatch.sec_running', { n: running.length }), wide))
-  if (running.length === 0) {
-    body.push([{ text: wide ? '  ' : ' ' }, { text: GLYPHS.state.pending + ' ', color: PALETTE.idle }, { text: t('page.dispatch.foreman_none'), dim: true }])
-  } else {
-    if (wide) body.push(colHeaderRow(t))
-    for (const item of running) body.push(drawRunRow(item, rowIdx++ === focus, false, wide, stale, cols, nowMs, t))
-  }
-
-  body.push(...foremanRowsOf(fm, wide, cols, nowMs, t))
-
-  const doneLabel = finished.length === 0
-    ? t('page.dispatch.sec_done_plain', { n: 0 })
-    : view.expanded
-      ? t('page.dispatch.sec_done_open', { n: finished.length })
-      : t('page.dispatch.sec_done_folded', { n: finished.length })
-  body.push(secRule(doneLabel, wide))
-  if (finished.length === 0) {
-    body.push([{ text: wide ? '  ' : ' ' }, { text: GLYPHS.state.pending + ' ', color: PALETTE.idle }, { text: t('page.dispatch.foreman_none'), dim: true }])
-  } else if (view.expanded) {
-    if (wide && running.length === 0) body.push(colHeaderRow(t))
-    for (const item of finished) body.push(drawRunRow(item, rowIdx++ === focus, true, wide, stale, cols, nowMs, t))
-  }
-
-  const actions: Row[] = finished.length > 0
-    ? [[{ text: t(view.expanded ? 'page.dispatch.act_fold' : 'page.dispatch.act_unfold'), color: PALETTE.action, press: 'key:z' }]]
-    : []
-
-  return { body, actions }
+  const wWork = Math.max(8, Math.min(W_WORK_MAX, cols - 4 - W_LINE - W_ENGINE - 2 - STATUS_MIN))
+  body.push(sectionRule(t('v74.e.section', { n: all.length }), cols))
+  body.push(colHeaderRow(wWork, t))
+  for (const item of all) body.push(drawRunRow(item, wWork, stale, cols, nowMs, t))
+  body.push([{ text: '' }])
+  body.push([{ text: ' ' + t('v74.e.note'), dim: true }])
+  return { body, actions: [] }
 }
 
 export const dispatchPage: Page = {
   id: 'dispatch',
-  key: '5',
+  key: '3',
   title: '派工',
   framed: true,
-  render: ctx => {
-    const over = (ctx as DispatchCtx).dispatch
-    return dispatchView(ctx, over === undefined ? DEFAULT_VIEW : { focus: over.focus ?? DEFAULT_VIEW.focus, expanded: over.expanded ?? DEFAULT_VIEW.expanded })
-  },
+  render: ctx => dispatchView(ctx),
 }

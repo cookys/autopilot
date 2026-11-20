@@ -325,6 +325,8 @@ Kimi, GLM, Qwen, DeepSeek, MiniMax and qoder are barred for: tasks that read age
 
 A dispatch to `qwen_local` must carry `Task-Class:` (or `AUTOPILOT_TASK_CLASS`, which wins) set to one of `format-convert`, `log-summary`, `simple-script`, `test-scaffold`. The cloud checks above still apply, and the repo directory name must not match `local_deny_repos` in that defaults file.
 
+The local served family on `qwen_local` and `glm_local` skips `core-dir` and `core-unset` (operator via PM, ledger fadf8dc9). A different barred family named on that endpoint, and every cloud endpoint, keep both checks.
+
 ### Cross-family rule for plan review (and consult labelling)
 
 `dispatch-plan-review.js` applies the code-review family gate (`scripts/lib/review-family-gate.js`): READY needs at

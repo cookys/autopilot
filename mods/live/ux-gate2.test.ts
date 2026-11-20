@@ -7,6 +7,7 @@ import { displayWidth } from '../tux/width.ts'
 import { drawSeg } from './ui'
 import { makeT } from './i18n'
 import full from './fixtures/console/console-full.fixture'
+import { FOLD_KEY } from './band'
 
 const HOME = '/fake/ux-home'
 const LIVE = '/fake/ux-live'
@@ -105,7 +106,7 @@ for (const [cols, rows] of [[120, 30], [160, 40]]) {
     const pane = await mountPane($, cols, rows)
     const band = await mountBand($, cols, rows)
     const nav = buttons(await pane.drawn()).filter(n => /^[0-9]$/.test(n.props?.hotkey ?? ''))
-    expect(nav.map(n => n.props?.hotkey)).toEqual(PAGES.filter(p => p.id !== 'help').map(p => p.key))
+    expect(nav.map(n => n.props?.hotkey)).toEqual(PAGES.map(p => p.key))
     expect(buttons(await band.drawn()).filter(n => /^(tab:|forge$)/.test(n.props?.key ?? '')).map(n => n.props?.key)).toEqual([])
     await band.unmount()
     await pane.unmount()
@@ -124,16 +125,16 @@ for (const [cols, rows] of [[120, 30], [160, 40]]) {
   })
 }
 
-test('K1: at 80x24 pressing 0 after an old scroll offset shows the forge header on the first row', async ($, on) => {
+test('K1: at 80x24 pressing 0 after an old scroll offset shows the pet header on the first row', async ($, on) => {
   host(on)
   await $.session.start({ surface: 'terminal', cwd: REPO })
   await $.command.run({ command: 'live-pane', args: '' })
   const before = await mountPane($, 80, 24, 18)
-  await before.press({ key: 'forge' })
+  await before.press({ key: 'pet' })
   await before.unmount()
   const after = await mountPane($, 80, 24)
   const rows = walk(await after.drawn()).filter(n => /^f\d+$/.test(n.props?.key ?? ''))
-  expect(text(rows[0])).toBe(makeT('zh-TW')('tab.forge'))
+  expect(text(rows[0])).toBe(makeT('zh-TW')('tab.pet'))
   expect(rows.length).toBe(24)
   expect(text(await after.drawn())).not.toContain('上面還有 18 行')
   await after.unmount()
@@ -162,7 +163,7 @@ test('K1: every page has exactly one shared strip with the same digit mapping an
   await $.session.end({ reason: 'exit' })
 })
 
-for (const cols of [80, 120, 160]) test(`Z3: page 0 is labelled 鍛 in both shared strips at ${cols} columns`, async ($, on) => {
+for (const cols of [80, 120, 160]) test(`Z3: page 0 is labelled 寵物 in both shared strips at ${cols} columns`, async ($, on) => {
   host(on)
   await $.session.start({ surface: 'terminal', cwd: REPO })
   const band = await mountBand($, cols, 30)
@@ -173,7 +174,7 @@ for (const cols of [80, 120, 160]) test(`Z3: page 0 is labelled 鍛 in both shar
   await band.unmount()
   const pane = await mountPane($, cols, 24)
   const forgePane = buttons(await pane.drawn()).find(n => n.props?.hotkey === '0')
-  expect(text(forgePane).trim()).toBe('鍛')
+  expect(text(forgePane).trim()).toBe('寵物')
   await pane.unmount()
   await $.session.end({ reason: 'exit' })
 })
@@ -218,5 +219,65 @@ test('W3: mounted remote detail buttons page through the full text and return to
   expect(drawn).not.toContain('[a] 先跑回歸')
   expect(buttons(await pane.drawn()).some(n => n.props?.hotkey === 'a' || n.props?.hotkey === 'b')).toBe(false)
   await pane.unmount()
+  await $.session.end({ reason: 'exit' })
+})
+
+// v7.4 S1 wiring (B2 item 7): the band's ▴ / ▾ toggle is wired to the pane's own open and close paths.
+const mountTallBand = ($: any, columns: number, rows: number, legacyTabs = false) => $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', props: { bodyColumns: columns, maxRows: rows, view: { agentId: undefined }, ...(legacyTabs ? { legacyTabs: true } : {}) }, viewport: { columns, rows: 50, isFullscreen: true } })
+const toggleOf = async (band: any) => (await band.findAll({ type: 'Button' }) as Node[]).find(b => b.props?.key === 'pane-toggle')
+
+// the toggle lives on the BandBar node, which the band draws when the shell does not fit (narrow width); the shell and the short-height note carry no toggle
+test('B2-7: the band toggle opens the pane when closed and closes it when open (the pane\'s own paths)', async ($, on) => {
+  const h = host(on)
+  await $.session.start({ surface: 'terminal', cwd: REPO })
+  await h.clock.advance(5000)
+  expect(h.isOpen()).toBe(false)
+  const closed = await mountTallBand($, 50, 12)
+  const t1 = await toggleOf(closed)
+  expect(t1, 'the closed band draws the toggle').toBeDefined()
+  expect(text(t1)).toBe('▴')
+  await closed.press({ key: 'pane-toggle' })
+  await h.clock.advance(0)
+  expect(h.isOpen(), 'pressed while closed: the pane opened').toBe(true)
+  await closed.unmount()
+  const open = await mountTallBand($, 50, 12)
+  const t2 = await toggleOf(open)
+  expect(text(t2), 'the open band draws ▾').not.toBe('▴')
+  await open.press({ key: 'pane-toggle' })
+  await h.clock.advance(0)
+  expect(h.isOpen(), 'pressed while open: the pane closed').toBe(false)
+  await open.unmount()
+  await $.session.end({ reason: 'exit' })
+})
+
+test('B2-7 negative control: legacy tab mode and the short-height band draw no toggle', async ($, on) => {
+  host(on)
+  await $.session.start({ surface: 'terminal', cwd: REPO })
+  const legacy = await mountTallBand($, 120, 12, true)
+  expect(await toggleOf(legacy), 'legacy mode: no toggle').toBeUndefined()
+  await legacy.unmount()
+  const short = await mountBand($, 120, 30) // maxRows 2: the one-row 視窗高度不足 note
+  expect(await toggleOf(short), 'short-height band: one row, no toggle').toBeUndefined()
+  await short.unmount()
+  await $.session.end({ reason: 'exit' })
+})
+
+// r3 x v7.4 S1: the r3 fold cell (shell rows) and the S1 pane toggle (one-line BandBar) both live left of the host [-]; neither replaces the other
+test('B2-7 x r3: the shell draws the r3 fold cell, the narrow bar draws the pane toggle, and pressing the fold never opens the pane', async ($, on) => {
+  const h = host(on)
+  await $.session.start({ surface: 'terminal', cwd: REPO })
+  await h.clock.advance(5000)
+  const buttons = async (band: any) => (await band.findAll({ type: 'Button' }) as Node[])
+  const wide = await mountTallBand($, 120, 12)
+  const wideFold = (await buttons(wide)).find(b => b.props?.key === FOLD_KEY)
+  expect(wideFold, 'shell band: the r3 fold cell is drawn').toBeDefined()
+  expect(await toggleOf(wide), 'shell band: no pane toggle on the shell rows').toBeUndefined()
+  await wide.press({ key: FOLD_KEY })
+  await h.clock.advance(0)
+  expect(h.isOpen(), 'the r3 fold only folds the band; the pane stays closed').toBe(false)
+  await wide.unmount()
+  const narrow = await mountTallBand($, 50, 12)
+  expect(await toggleOf(narrow), 'narrow bar: the pane toggle is drawn').toBeDefined()
+  await narrow.unmount()
   await $.session.end({ reason: 'exit' })
 })

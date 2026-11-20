@@ -6,7 +6,7 @@ import { EN, ZH_TW } from './locales'
 import { makeT } from './i18n'
 import { actionRows, brokenRow, frameRows, mostSevere } from './pages/frame'
 import type { Page, PageCtx, Row } from './pages/frame'
-import { PAGES } from './pages/index'
+import { PAGES, EXTRA_PAGES } from './pages/index'
 import { NO_NAV } from './pages/decide'
 import { consoleOf, POOLS } from './pages/quota.fixture'
 import { bandQuotaSeg } from './band'
@@ -28,8 +28,8 @@ const withBody = (p: Page, body: number, actions: number): Page => ({ ...p, rend
 const text = (r: Row): string => r.map(s => s.text).join('')
 const stale = (): NonNullable<PageCtx['console']> => ({ ...(SNAP as NonNullable<typeof SNAP>), sources: { fleet: { at_ms: NOW - 6 * 60000, state: 'stale' }, quota: { at_ms: null, state: 'no_source' } } })
 
-test('registry: eleven pages in key order 1-8, 9 pet, 0 forge, i help; shells are empty, the pet page renders its no-pet state when absent (g2 folds A6)', () => {
-  expect(PAGES.map(p => p.id + p.key)).toEqual(['now1', 'decide2', 'fleet3', 'quota4', 'dispatch5', 'review6', 'spend7', 'hygiene8', 'pet9', 'forge0', 'helpi'])
+test('registry: ten pages in v7.4 key order 1-9, 0 pet (quota and forge are not on the strip); shells are empty, the pet page renders its no-pet state when absent (g2 folds A6)', () => {
+  expect(PAGES.map(p => p.id + p.key)).toEqual(['now1', 'decide2', 'dispatch3', 'review4', 'spend5', 'hygiene6', 'fleet7', 'todo8', 'help9', 'pet0'])
   for (const p of PAGES) {
     const r = p.render(ctxOf(SIZES[0]))
     if (p.id === 'pet') expect(r.body.map(x => x.map(g => g.text).join(''))).toEqual(['沒有寵物資料'])
@@ -69,33 +69,34 @@ test('frame: layout, header on row 0, strip on the last row, A = 6 from 32 rows 
   expect(text(rows[0])).toBe('待決')
   expect(text(rows[29])).toContain('1 現況')
   expect(text(rows[29])).toContain('2 待決')
-  expect(text(rows[29])).toContain('i 說明') // V5: close with host ✕ / band [-]; Escape belongs to its focused surface.
-  expect(text(rows[28])).toBe('act 1') // the last action is the bottom row, directly over the strip
-  expect(text(rows[27])).toBe('act 0')
-  const bodyRoom = 30 - 2 - 2 // two actions: the area is as tall as the actions, not a fixed A
+  expect(text(rows[29])).toContain('9 說明') // V5: close with host ✕ / band [-]; Escape belongs to its focused surface.
+  expect(text(rows[28])).toMatch(/^╰─/) // v7.4: the bottom border row sits between the actions and the strip
+  expect(text(rows[27])).toBe('act 1') // the last action is directly over the border
+  expect(text(rows[26])).toBe('act 0')
+  const bodyRoom = 30 - 3 - 2 // border row + two actions: the area is as tall as the actions, not a fixed A
   expect(text(rows[bodyRoom])).toBe('↓ 還有 ' + (200 - (bodyRoom - 1)) + ' 列') // the last body row; the total did not change
   expect(text(rows[bodyRoom - 1])).toBe('body ' + (bodyRoom - 2))
 })
 
 test('frame: no action says 沒有待決卡 on one row only; a short body keeps the strip on the last row, blank rows only above the body', () => {
-  const rows = frameRows(withBody(PAGES[2], 2, 0), ctxOf({ cols: 80, rows: 24 }, WHOLE), { pages: PAGES })
+  const rows = frameRows(withBody(PAGES[6], 2, 0), ctxOf({ cols: 80, rows: 24 }, WHOLE), { pages: PAGES })
   const out = rows.map(text)
   const first = out.indexOf('body 0')
   expect(out[0]).toBe('艦隊')
-  expect(out.slice(first, out.length - 1)).toEqual(['body 0', 'body 1', '沒有待決卡'])
+  expect(out.slice(first, out.length - 2)).toEqual(['body 0', 'body 1', '沒有待決卡']) // then the border row and the strip
   expect(out.slice(1, first).every(r => r === '')).toBe(true)
   expect(rows.length).toBe(24)
-  expect(text(rows[22])).toBe('沒有待決卡') // directly above the strip
+  expect(text(rows[21])).toBe('沒有待決卡') // directly above the border row and the strip
   expect(rows.filter(r => text(r) === '沒有待決卡').length).toBe(1)
 })
 
 test('frame: scroll moves the window, and an offset past the end is clamped (still H rows)', () => {
   const rows = frameRows(withBody(PAGES[0], 100, 0), ctxOf({ cols: 80, rows: 24 }), { pages: PAGES, scroll: 9999 })
   expect(rows.length).toBe(24) // an overflowing body fills the surface
-  const body = rows.slice(1, 1 + 21) // 24 - head - strip - the one empty-state row
-  expect(text(body[20])).toBe('body 99') // clamped to the end: the window shows the last rows and no hint
-  expect(text(body[0])).toBe('body 79')
-  expect(frameRows(withBody(PAGES[0], 100, 0), ctxOf({ cols: 80, rows: 24 }), { pages: PAGES, scroll: 10 }).slice(1, 22).map(text)[20]).toBe('↓ 還有 70 列')
+  const body = rows.slice(1, 1 + 20) // 24 - head - border - strip - the one empty-state row
+  expect(text(body[19])).toBe('body 99') // clamped to the end: the window shows the last rows and no hint
+  expect(text(body[0])).toBe('body 80')
+  expect(frameRows(withBody(PAGES[0], 100, 0), ctxOf({ cols: 80, rows: 24 }), { pages: PAGES, scroll: 10 }).slice(1, 21).map(text)[19]).toBe('↓ 還有 71 列')
 })
 
 test('frame: more actions than the area holds throws (a programming error), at both A sizes', () => {
@@ -113,7 +114,7 @@ test('§5: a broken source is a red text colour (the broken palette key, no back
   const only = { ...(SNAP as NonNullable<typeof SNAP>), sources: { fleet: { at_ms: NOW - 6 * 60000, state: 'stale' as const } } }
   expect(mostSevere(ctxOf({ cols: 120, rows: 30 }, only))?.text).toBe('✗ fleet 資料過期，6 分鐘前')
   expect(mostSevere(ctxOf({ cols: 120, rows: 30 }, null))).toBeNull()
-  const rows = frameRows(PAGES[2], ctxOf({ cols: 120, rows: 30 }, stale()), { pages: PAGES })
+  const rows = frameRows(PAGES[6], ctxOf({ cols: 120, rows: 30 }, stale()), { pages: PAGES })
   expect(text(rows[0])).toContain('✗ quota 無來源')
   expect(rows[0].some(s => s.color === 'error')).toBe(true)
 })
@@ -136,7 +137,7 @@ test('pane strip: no `›` next chip anywhere, every digit tab is a Button with 
   const old = walk(Pane(EL as never, live, 'now', () => {}, t, 120))
   expect(old.filter(n => n.kind === 'Button').map(n => n.props.key)).not.toContain('next')
   expect(old.some(n => n.kind === 'Text' && flat(n).trim() === '›')).toBe(false)
-  expect(Object.fromEntries(old.filter(n => n.kind === 'Button' && n.props.hotkey !== undefined).map(n => [n.props.key, n.props.hotkey]))).toEqual({ now: '1', decide: '2', fleet: '3', spend: '4', dispatch: '5', review: '6', hygiene: '8' })
+  expect(Object.fromEntries(old.filter(n => n.kind === 'Button' && n.props.hotkey !== undefined).map(n => [n.props.key, n.props.hotkey]))).toEqual({ now: '1', decide: '2', dispatch: '3', review: '4', spend: '5', hygiene: '6', fleet: '7' })
   const shown: Page[] = PAGES.map(p => ({ ...p, framed: true as const }))
   const framed = walk(Pane(EL as never, live, 'decide', () => {}, t, 120, () => {}, new Set(), () => {}, new Set(), null, null, null, null, null, { pages: shown, console: null, nowMs: NOW, rows: 30 }))
   const anchor = framed.filter(n => n.kind === 'Button' && n.props.autoFocus === true)
@@ -170,23 +171,20 @@ test('key hints: every [x] in a framed page string is one of that page\'s bound 
 })
 
 // Every fleet line and every quota pool is its own Button (Tab walks the rows, Enter presses the focused one): pressing row 2 sees line 2 / opens pool 2. There is no j / k, and no
-// Button is drawn with an empty label (the host would draw it as a row `x:`); `o` and `i` ride on a visible Button.
-test('keys: row 2 of fleet is its own Button (sees line 2), row 2 of quota opens its seats; decide has no o; i rides the strip; no j / k', () => {
+// Button is drawn with an empty label (the host would draw it as a row `x:`); `o` and the strip digits ride on a visible Button.
+test('keys: fleet binds no letter (v7.4 plain list), row 2 of quota opens its seats; decide has no o; help (9) rides the strip; no j / k', () => {
   const live = { state: 'ok', text: 'x', header: 'x', band: { kind: 'idle', verdict: '', reason: null, project: 'x', elapsed: '1m', phase: '', slots: [] }, pending: [], project_key: null, root_run_id: null, link: null, rows: null, gates: null, sections: M.NO_SECTIONS, review: null, published_at: null, watcher_note: null, session_as_of: null, host_as_of: null, detail: { ...M.NO_DETAIL, now_ms: NOW } } as never
   const shown: Page[] = PAGES.map(p => ({ ...p, framed: true as const }))
   const drawn = (tab: 'fleet' | 'spend' | 'decide', focus: number) => {
     const pressed: string[] = []
-    const pageId = tab === 'spend' ? 'quota' : tab
-    const tree = walk(Pane(EL as never, live, tab, () => {}, t, 120, () => {}, new Set(), () => {}, new Set(), null, null, null, null, null, { pages: shown, console: SNAP, nowMs: NOW, rows: 30, view: { [pageId]: { focus, expanded: false } }, onPress: (id: string) => { pressed.push(id) } } as never))
+    const pageId = tab === 'spend' ? 'quota' : tab // the quota page is not on the strip (folded into spend): it is reached with an explicit pageId
+    const tree = walk(Pane(EL as never, live, tab, () => {}, t, 120, () => {}, new Set(), () => {}, new Set(), null, null, null, null, null, { pages: [...shown, ...EXTRA_PAGES], ...(tab === 'spend' ? { pageId: 'quota' } : {}), console: SNAP, nowMs: NOW, rows: 30, view: { [pageId]: { focus, expanded: false } }, onPress: (id: string) => { pressed.push(id) } } as never))
     return { tree, pressed }
   }
   const hot = (tree: Node[], k: string) => tree.find(n => n.kind === 'Button' && n.props.hotkey === k)
-  const f = drawn('fleet', 0)
-  const lineBtns = f.tree.filter(n => n.kind === 'Button' && typeof n.props.key === 'string' && n.props.key.startsWith('p:'))
-  const seeBtns = lineBtns.filter(n => { const before = f.pressed.length; n.props.onPress(); return f.pressed.length > before && f.pressed[f.pressed.length - 1].startsWith('fleet:see:') })
-  expect(seeBtns.length, 'every shown fleet line is a Button').toBeGreaterThanOrEqual(2)
-  const seen = f.pressed.filter(x => x.startsWith('fleet:see:'))
-  expect(new Set(seen).size, 'row 2 sees another line than row 1').toBeGreaterThanOrEqual(2)
+  // v7.4 S8: the 艦隊 page is a plain list (pages/fleet.ts, covered by pages/v74-f.test.ts): no line Button, no 看 / fold / fill action, so it binds no letter
+  expect(pageHotkeys('fleet'), 'fleet binds no page letter').toEqual([])
+  expect(drawn('fleet', 0).tree.filter(n => n.kind === 'Button' && /^[a-z]$/.test(n.props.hotkey ?? '')).map(n => n.props.hotkey), 'fleet draws no letter Button').toEqual([])
   const q = drawn('spend', 0)
   const pools = q.tree.filter(n => n.kind === 'Button' && typeof n.props.key === 'string' && n.props.key.startsWith('p:')).filter(n => { n.props.onPress(); return true })
   expect(q.pressed.filter(x => x.startsWith('quota:pool:')).slice(0, 2), 'quota: row 2 is pool index 1').toEqual(['quota:pool:0', 'quota:pool:1'])
@@ -194,15 +192,15 @@ test('keys: row 2 of fleet is its own Button (sees line 2), row 2 of quota opens
   expect(hot(drawn('decide', 0).tree, 'o')).toBeUndefined()
   for (const tab of ['fleet', 'spend', 'decide'] as const) {
     const tree = drawn(tab, 0).tree
-    expect(hot(tree, 'i'), 'i is a Button with a visible label').toBeDefined()
-    expect(flat(hot(tree, 'i') as Node)).toBe('說明')
+    expect(hot(tree, '9'), 'the help tab 9 is a Button with a visible label').toBeDefined()
+    expect(flat(hot(tree, '9') as Node)).toBe('說明')
     expect(hot(tree, 'j') ?? hot(tree, 'k'), 'no j / k').toBeUndefined()
     const id = tab === 'spend' ? 'quota' : tab
     const letters = tree.filter(n => n.kind === 'Button' && /^[a-z]$/.test(n.props.hotkey ?? '')).map(n => n.props.hotkey as string)
     expect(letters.filter(h => !pageHotkeys(id).includes(h)), id + ' draws a hotkey it does not list').toEqual([])
     expect(tree.filter(n => n.kind === 'Button' && n.props.key !== FOCUS_ANCHOR_KEY && flat(n).trim() === '').map(n => n.props.key), id + ': a Button with an empty label').toEqual([])
   }
-  expect(hot(drawn('fleet', 0).tree, 'o'), 'o rides the visible 看 action row').toBeDefined()
+  expect(hot(drawn('fleet', 0).tree, 'o'), 'fleet has no 看 action row').toBeUndefined()
 })
 
 // review fix (codeforge screenshot): the pane has no empty-label Button, the strip is the last row on every page, its labels are the page name alone (the host adds `1: `),
@@ -256,7 +254,8 @@ test('frame: a pane under 6 rows is exactly H rows (0 -> none, 1 -> the strip, 2
   const one = frameRows(withBody(PAGES[0], 9, 3), ctxOf({ cols: 80, rows: 1 }), { pages: PAGES })
   expect(text(one[0])).toContain('說明') // the strip
   const four = frameRows(withBody(PAGES[0], 9, 3), ctxOf({ cols: 80, rows: 4 }), { pages: PAGES })
-  expect(four.map(text).slice(1, 3)).toEqual(['act 1', 'act 2']) // the last actions that fit
+  expect(text(four[1])).toBe('act 2') // the last action that fits, then the border row and the strip
+  expect(text(four[2])).toMatch(/^╰─/)
 })
 
 // review fix 4: an empty segment is 0 cells in clip(); the pane must not draw it as one blank cell
@@ -285,8 +284,8 @@ test('band quota segment: source state no_source -> absent, stale -> warning rol
 })
 
 // ---- pane UX fix (real-host screenshots, 160x40, pane ~70 columns): the strip counts the host's `<key>: ` prefix, folds when it must ----
-// The host draws each hotkey Button as `<key>: <label>`: one cell wider than the segment text. A strip segment is a Button when it carries a tab press or is the help entry `i ...`.
-const isButtonSeg = (s: { text: string; press?: string }): boolean => (s.press !== undefined && s.press.startsWith('tab:')) || s.text.startsWith('i ')
+// The host draws each hotkey Button as `<key>: <label>`: one cell wider than the segment text. A strip segment is a Button when it carries a tab press (the help entry is tab 9).
+const isButtonSeg = (s: { text: string; press?: string }): boolean => s.press !== undefined && s.press.startsWith('tab:')
 const hostWidth = (r: Row): number => r.reduce((w, s) => w + displayWidth(s.text) + (isButtonSeg(s) ? 1 : 0), 0)
 test('pane UX fix: strip at 70 / 60 / 40 columns stays within the width (host prefix counted, 2 rows under 66 cols), no two Buttons touch, help and all entries stay reachable', () => {
   for (const cols of [70, 60, 40]) {
@@ -297,34 +296,36 @@ test('pane UX fix: strip at 70 / 60 / 40 columns stays within the width (host pr
       expect(hostWidth(strip), cols + ': the strip with the host prefix is ' + hostWidth(strip) + ' wide: ' + text(strip)).toBeLessThanOrEqual(cols)
       for (let i = 1; i < strip.length; i++) expect(isButtonSeg(strip[i - 1]) && isButtonSeg(strip[i]), cols + ': two Buttons run together at ' + i + ': ' + text(strip)).toBe(false)
     }
-    expect(rows[rows.length - 1].some(s => s.text.startsWith('i ')), cols + ': the help entry is in the strip').toBe(true)
+    expect(rows[rows.length - 1].some(s => s.press === 'tab:9:help'), cols + ': the help entry is in the strip').toBe(true)
   }
   const wide = frameRows(PAGES[1], ctxOf({ cols: 70, rows: 24 }), { pages: PAGES })
   const last = (r: Row[]) => text(r[r.length - 1])
   expect(last(wide).startsWith('1 現 2 待'), 'at 70 the labels shrink to the first character: ' + last(wide)).toBe(true)
   const narrow = frameRows(PAGES[1], ctxOf({ cols: 40, rows: 24 }), { pages: PAGES })
   const joined = narrow.slice(-2).map(text).join(' ')
-  for (const key of ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', 'i']) expect(joined, 'G7: at 40 the entry ' + key + ' is still there: ' + joined).toMatch(new RegExp('(^|\\s)' + key + '(\\s|$)'))
+  for (const key of ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']) expect(joined, 'G7: at 40 the entry ' + key + ' is still there: ' + joined).toMatch(new RegExp('(^|\\s)' + key + '(\\s|$)'))
   expect(joined.includes('…'), 'G7: no fold').toBe(false)
 })
 test('pane UX fix: the quota page empty state says 沒有待決卡, not 沒有要你處理的事 (pools above can be red)', () => {
-  const rows = frameRows(withBody(PAGES[3], 2, 0), ctxOf({ cols: 80, rows: 24 }, WHOLE), { pages: PAGES })
-  expect(text(rows[rows.length - 2])).toBe('沒有待決卡')
+  const rows = frameRows(withBody(EXTRA_PAGES[0], 2, 0), ctxOf({ cols: 80, rows: 24 }, WHOLE), { pages: PAGES })
+  expect(text(rows[rows.length - 3])).toBe('沒有待決卡') // above the border row and the strip
   expect(makeT('en')('frame.nothing')).toBe('No pending cards')
 })
 
 // R1 pane-inline-hint-hijack: a `[x] ` inside a head / body row (a question, code) is text, never a hotkey. Only an action row's own hint (at the start or after two spaces, with a label)
 // and the strip's `i ` bind a letter; the decide option rows carry their press id and keep a-e.
-test('pane R1: a question with [a] / [b] and code with [i] in the body leave a-e on the option rows and i on the strip', () => {
+test('pane R1: a question with [a] / [b] and code with [i] in the body leave a-e on the option rows and help on the strip (tab 9)', () => {
   const body: Row[] = [[{ text: 'Use [a] sync or [b] async?' }], [{ text: 'buf[i] == 0' }]]
   const actions: Row[] = [[{ text: '[a] 同步', press: 'decide:pick:0' }], [{ text: '[b] 非同步', press: 'decide:pick:1' }], [{ text: '[n] 補充  [s] 送出' }]]
   const page: Page = { ...PAGES[1], framed: true as const, render: () => ({ body, actions }) }
   const tree = walk(Pane(EL as never, LIVE0, 'decide', () => {}, t, 160, () => {}, new Set(), () => {}, new Set(), null, null, null, null, null, { pages: [PAGES[0], page, ...PAGES.slice(2)], console: null, nowMs: NOW, rows: 30 } as never))
   const hot = tree.filter(n => n.kind === 'Button' && n.props.key !== FOCUS_ANCHOR_KEY && /^[a-z]$/.test(n.props.hotkey ?? ''))
   const by = (k: string) => hot.filter(n => n.props.hotkey === k)
+  const help = tree.filter(n => n.kind === 'Button' && n.props.hotkey === '9')
   expect(by('a').map(n => flat(n).trim()), 'option A keeps a').toEqual(['同步'])
   expect(by('b').map(n => flat(n).trim()), 'option B keeps b').toEqual(['非同步'])
-  expect(by('i').map(n => flat(n).trim()), 'the strip keeps i').toEqual(['說明'])
+  expect(help.map(n => flat(n).trim()), 'the strip keeps the help tab 9').toEqual(['說明'])
+  expect(by('i'), 'a body `buf[i]` never becomes a hotkey').toEqual([])
   expect(by('n').length + by('s').length, 'a real action-row hint ([n] / [s] after two spaces) is still a key').toBe(2)
 })
 
@@ -362,8 +363,8 @@ test('gate G11: every key in a page key table has a Button with that hotkey and 
     for (const k of cardKeys) if (have.has(k)) missing.push(id + ':retired-' + k)
   }
   need('fleet', hotkeys(drawn('fleet', {})), pageHotkeys('fleet'))
-  need('quota', hotkeys(drawn('spend', { console: consoleOf(POOLS.map(p => ({ ...p, switch_suggestion: 'personal -> team' }))) })), pageHotkeys('quota').filter(k => k !== 'z')) // z folds nothing on the quota page
-  need('now', hotkeys(drawn('now', {})), ['i'])
+  need('quota', hotkeys(drawn('spend', { pages: [...shown, ...EXTRA_PAGES], pageId: 'quota', console: consoleOf(POOLS.map(p => ({ ...p, switch_suggestion: 'personal -> team' }))) })), pageHotkeys('quota').filter(k => k !== 'z')) // z folds nothing on the quota page
+  need('now', hotkeys(drawn('now', {})), ['9']) // help is tab 9
   expect(missing).toEqual([])
 })
 
@@ -389,13 +390,13 @@ test('pet page: renders sprite + stat rows bottom-anchored at 80x24 and 120x30, 
     for (const r of rows) expect(displayWidth(text(r))).toBeLessThanOrEqual(size.cols)
     const rendered = rows.map(text)
     expect(rendered[0]).toBe('寵物')
-    // bottom-anchored: body sits directly above empty-state action row (rows - 2) and strip (rows - 1)
+    // bottom-anchored: body sits directly above the empty-state action row (rows - 3), the border row (rows - 2) and the strip (rows - 1)
     const statLine = size.cols >= 100 ? 'HP 100  EXP 42%  MOOD good' : 'HP 60  EXP 42%'
-    expect(rendered[size.rows - 3]).toBe(statLine)
-    expect(rendered[size.rows - 4]).toBe(sprite[1])
-    expect(rendered[size.rows - 5]).toBe(sprite[0])
-    expect(rendered[size.rows - 6]).toBe('🐱 Mochi Lv.3')
-    expect(rendered.slice(1, size.rows - 6).every(r => r === '')).toBe(true)
+    expect(rendered[size.rows - 4]).toBe(statLine)
+    expect(rendered[size.rows - 5]).toBe(sprite[1])
+    expect(rendered[size.rows - 6]).toBe(sprite[0])
+    expect(rendered[size.rows - 7]).toBe('🐱 Mochi Lv.3')
+    expect(rendered.slice(1, size.rows - 7).every(r => r === '')).toBe(true)
   }
   // 79 cols (< 80): draws entry fallback (:3) instead of payload text (🐱)
   const r79 = frameRows(petPage, { ...ctxOf({ cols: 79, rows: 24 }), pet: validPanel }, { pages: PAGES }).map(text)

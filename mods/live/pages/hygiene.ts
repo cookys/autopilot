@@ -1,17 +1,15 @@
-// mods/live/pages/hygiene.ts — page 8 殘留 (plan r2 §2 row 8, §3.1, §3.2, §5): what needs your judgement (要你處理),
-// what is safe to clear (可清除), the foldable auto-cleanup log (自動清理紀錄 / 自動清理), and the plugin load source (外掛來源).
-// Pure: rows come from `ctx.live.detail.residue` and `ctx.live.detail.load_source`. Table rows carry no buttons; all buttons live
-// in the action area (`[o]` clear focused, `[x]` clear all, `[z]` fold/unfold auto-cleanup). Stale or missing sources are red and
-// wrapped in full, never truncated.
+// mods/live/pages/hygiene.ts — v7.4 S7 殘留 (PM 01M7N307, sub-task F): three blocks, 要你處理 / 自動清理 / 外掛來源, every row with its full description, no buttons, no fold.
+// Pure: rows come from `ctx.live.detail.residue` and `ctx.live.detail.load_source`. A stale or missing source is red and wrapped in full, never truncated.
+// The old 可清除 block and its [o]/[x]/[z] buttons are gone with the buttons (the auto-cleanup block says what was cleared).
 //
 // Import order: pages/frame.ts imports ./index, which imports this file; import ./frame (or ./index) before ./hygiene in tests.
 import type { LoadSourceView, NeedsHumanEntry, ResidueView } from '../model'
-import { displayWidth, residueTally, truncateToWidth } from '../model'
+import { displayWidth, residueTally } from '../model'
 import { GLYPHS } from '../../tux/glyphs.ts'
 import { PALETTE } from '../../tux/palette.ts'
 import { residueNameOf, residueWhy, wrapPlain } from '../ui'
 import type { Page, PageCtx } from './frame'
-import { brokenRow, staleBadge } from './rows'
+import { brokenRow } from './rows'
 import type { Row } from './rows'
 
 type T = PageCtx['t']
@@ -21,13 +19,10 @@ export const DEFAULT_VIEW: HygieneView = { focus: 0, expanded: true }
 export type HygieneCtx = PageCtx & { hygiene?: Partial<HygieneView> }
 
 const WIDE_COLS = 100
-const WIDE_RULE_ATTENTION = 57
-const WIDE_RULE_AUTO = 52
 const RULE2 = GLYPHS.structure.rule.repeat(2)
 const BAD_SOURCE_FLAGS = ['marketplace_not_directory', 'marketplace_not_this_repo', 'dev_link_missing_or_stale']
 const SCAN_CLASSES = new Set(['live', 'busy', 'missing-dir', 'dirty', 'clean-integrated', 'clean-unintegrated', 'unintegrated-branch', 'unverifiable'])
 
-type CleanItem = { target: string; shortName: string; wideTail: string; narrowTail: string }
 type AutoInfo = { total: number; age: string; wideDetail: string; narrowDetail: string }
 
 const brokenRows = (text: string, cols: number): Row[] =>
@@ -42,13 +37,6 @@ const ageUnit = (t: T, ms: number): string => {
   return h < 24 ? t('page.now.age_h', { n: h }) : t('page.now.age_d', { n: Math.floor(h / 24) })
 }
 const ageAgo = (t: T, ms: number): string => t('page.now.ago', { age: ageUnit(t, ms) })
-
-function secRule(label: string, wide: boolean, cols: number, wideTarget: number): Row {
-  const r = GLYPHS.structure.rule
-  const prefix = RULE2 + ' ' + label + (label.endsWith('）') || label.endsWith(')') ? '' : ' ')
-  const count = wide ? Math.max(2, Math.min(wideTarget, cols) - displayWidth(prefix)) : 2
-  return [{ text: prefix + r.repeat(count), color: PALETTE.structure }]
-}
 
 function judgeRow(e: NeedsHumanEntry, wide: boolean, t: T): Row {
   const entry = { kind: e.kind, target: e.target, cls: e.class, ageMs: null, bytes: e.bytes, reason: e.reason, command: e.command }
@@ -65,54 +53,6 @@ function judgeRow(e: NeedsHumanEntry, wide: boolean, t: T): Row {
     { text: wide ? '  ' : ' ' },
     { text: GLYPHS.state.need_you + ' ', color: PALETTE.attention },
     { text: kindPrefix + shortName + sep + why },
-  ]
-}
-
-function shortenCleanReason(reason: string): string {
-  const stripped = reason.replace(/（[^）]*）|\([^)]*\)/g, '').trim()
-  if (stripped.endsWith('沙盒') && displayWidth(stripped) > 6) return '沙盒'
-  return stripped
-}
-
-function collectCleanItems(clean: readonly NeedsHumanEntry[], ls: LoadSourceView | null, t: T): CleanItem[] {
-  const out: CleanItem[] = []
-  const seen = new Set<string>()
-  for (const e of clean) {
-    seen.add(e.target)
-    const entry = { kind: e.kind, target: e.target, cls: e.class, ageMs: null, bytes: e.bytes, reason: e.reason, command: e.command }
-    const shortName = residueNameOf(entry)
-    const wideTail = e.reason !== null
-      ? e.reason
-      : e.age_days !== null
-        ? t('page.now.ago', { age: t('page.now.age_d', { n: Math.max(0, Math.floor(e.age_days)) }) })
-        : (residueWhy(t, entry)[0] ?? '')
-    const narrowTail = e.reason !== null ? shortenCleanReason(e.reason) : ''
-    out.push({ target: e.target, shortName, wideTail, narrowTail })
-  }
-  for (const d of ls?.stale_cache_dirs ?? []) {
-    if (d.alive.length > 0 || seen.has(d.dir)) continue
-    seen.add(d.dir)
-    const v = d.dir.split('/').filter(x => x !== '').pop() ?? d.dir
-    out.push({
-      target: d.dir,
-      shortName: v,
-      wideTail: t('residue.why.hyg_cache_why_w', { v }),
-      narrowTail: t('residue.why.hyg_cache_why_c'),
-    })
-  }
-  return out
-}
-
-function cleanRow(it: CleanItem, focused: boolean, wide: boolean): Row {
-  const mark = wide
-    ? (focused ? GLYPHS.structure.folded + ' ' : '  ')
-    : (focused ? GLYPHS.structure.folded : ' ')
-  const name = wide ? it.target : it.shortName
-  const tail = wide ? it.wideTail : it.narrowTail
-  return [
-    { text: mark },
-    { text: GLYPHS.state.pending + ' ', color: PALETTE.idle },
-    { text: name + (tail === '' ? '' : ' ' + tail) },
   ]
 }
 
@@ -136,7 +76,7 @@ function autoInfoOf(residue: ResidueView, ctx: PageCtx): AutoInfo | null {
     }
   }
   const wideParts = [
-    ...(removed > 0 ? [t('residue.why.hyg_auto_wt_w', { n: removed })] : []),
+    ...(removed > 0 ? [t('v74.f.auto_wt', { n: removed })] : []),
     ...(archived > 0 ? [t('residue.why.hyg_auto_br', { n: archived })] : []),
   ]
   const narrowParts = [
@@ -193,55 +133,29 @@ function loadSourceIsClean(ls: LoadSourceView): boolean {
   return ls.stale_cache_dirs.every(d => d.alive.length === 0)
 }
 
-function brokenSourceRows(leadText: string, reason: string, cols: number): Row[] {
-  const errText = GLYPHS.state.failed + ' ' + reason
-  if (displayWidth(leadText) + displayWidth(errText) <= cols) {
-    return [[{ text: leadText, color: PALETTE.structure }, staleBadge(errText)]]
-  }
-  return [[{ text: leadText.trimEnd(), color: PALETTE.structure }], ...brokenRows(errText, cols)]
+
+const openRule = (title: string, wide: boolean): Row => {
+  const head = GLYPHS.structure.open + ' ' + title + ' '
+  return [{ text: head + (wide ? GLYPHS.structure.rule.repeat(Math.max(2, 54 - displayWidth(head))) : ''), color: PALETTE.structure }]
 }
 
-function loadSourceRows(ls: LoadSourceView | null, wide: boolean, cols: number, t: T): Row[] {
-  const leadText = wide
-    ? RULE2 + ' ' + t('hygiene.load') + ' ' + RULE2 + ' '
-    : RULE2 + ' ' + t('residue.why.hyg_load_short') + ' '
-  if (ls === null) {
-    return brokenSourceRows(leadText, t('residue.why.hyg_no_load_source'), cols)
-  }
-  if (loadSourceIsClean(ls)) {
-    const ref = devRefOf(ls)
-    return [[
-      { text: leadText, color: PALETTE.structure },
-      { text: GLYPHS.state.done, color: PALETTE.done },
-      { text: ' ' + (wide ? t('residue.why.hyg_load_dev_w', { ref }) : ref) },
-    ]]
-  }
+// the plugin-source block's rows: one full sentence (clean: `forge-stats 從 develop 主 clone 載入`), the issues appended; a missing or broken source is red
+function loadSourceBody(ls: LoadSourceView | null, cols: number, t: T): Row[] {
+  if (ls === null) return brokenRows(GLYPHS.state.failed + ' ' + t('residue.why.hyg_no_load_source'), cols)
   const src = ls.source.toLowerCase()
   const issues = loadSourceIssues(ls, t)
   const detailSuffix = issues.length > 0 ? '（' + issues.join('；') + '）' : ''
-  if (src === 'unknown' || src === 'missing') {
-    return brokenSourceRows(leadText, t('src.unknown') + detailSuffix, cols)
-  }
+  if (src === 'unknown' || src === 'missing') return brokenRows(GLYPHS.state.failed + ' ' + t('src.unknown') + detailSuffix, cols)
   const cacheV = src.startsWith('cache:') ? ls.source.slice('cache:'.length) : null
-  const baseText = cacheV !== null
-    ? (wide ? t('src.cache', { v: cacheV }) : t('band.src_cache') + ' ' + cacheV)
-    : (wide ? t('residue.why.hyg_load_dev_w', { ref: devRefOf(ls) }) : devRefOf(ls))
-  if (isLoadSourceBroken(ls)) {
-    return brokenSourceRows(leadText, baseText + detailSuffix, cols)
-  }
-  return [[
-    { text: leadText, color: PALETTE.structure },
-    { text: GLYPHS.state.need_you, color: PALETTE.attention },
-    { text: ' ' + baseText + detailSuffix },
-  ]]
+  const base = cacheV !== null ? t('src.cache', { v: cacheV }) : t('v74.f.load_dev', { ref: devRefOf(ls) })
+  if (isLoadSourceBroken(ls)) return brokenRows(GLYPHS.state.failed + ' ' + base + detailSuffix, cols)
+  return [[{ text: ' ' + base + detailSuffix, ...(loadSourceIsClean(ls) ? {} : { color: PALETTE.attention }) }]]
 }
 
-export function hygieneView(ctx: HygieneCtx, view?: Partial<HygieneView>): { body: Row[]; actions: Row[] } {
+export function hygieneView(ctx: HygieneCtx, _view?: Partial<HygieneView>): { body: Row[]; actions: Row[] } {
   const { t, size, live } = ctx
   const cols = size.cols
   const wide = cols >= WIDE_COLS
-  const expanded = view?.expanded ?? ctx.hygiene?.expanded ?? DEFAULT_VIEW.expanded
-  const rawFocus = view?.focus ?? ctx.hygiene?.focus ?? DEFAULT_VIEW.focus
 
   if (live === null) {
     return { body: brokenRows(GLYPHS.state.failed + ' ' + t('residue.why.hyg_no_live'), cols), actions: [] }
@@ -254,90 +168,31 @@ export function hygieneView(ctx: HygieneCtx, view?: Partial<HygieneView>): { bod
 
   const residue = live.detail.residue
   const ls = live.detail.load_source
+  const sourceBlock = (): Row[] => [openRule(t('hygiene.load'), wide), ...loadSourceBody(ls, cols, t)]
   if (residue === null) {
-    if (live.state === 'ok') {
-      body.push(...brokenRows(GLYPHS.state.failed + ' ' + t('residue.why.hyg_no_residue'), cols))
-      body.push(...loadSourceRows(ls, wide, cols, t))
-    } else if (ls !== null) {
-      body.push(...loadSourceRows(ls, wide, cols, t))
-    }
+    if (live.state === 'ok') body.push(...brokenRows(GLYPHS.state.failed + ' ' + t('residue.why.hyg_no_residue'), cols))
+    body.push(...sourceBlock())
     return { body, actions: [] }
   }
 
+  // v7.4 S7: three blocks, every row with its full description (the wide wording at every width, the frame wraps it), no buttons and no fold
   const tl = residueTally(residue)
-  const cleanItems = collectCleanItems(tl.clean, ls, t)
+  const kinds = [...new Set(tl.judge.map(e => e.kind))]
+  const needTitle = tl.judgeCount === 0
+    ? t('hygiene.need_you')
+    : kinds.length === 1 && tl.unlisted === 0 ? t('v74.f.need_kind', { n: tl.judgeCount, kind: kinds[0] }) : t('v74.f.need_n', { n: tl.judgeCount })
+  body.push(openRule(needTitle, wide))
+  if (tl.judgeCount === 0) body.push([{ text: ' ' + GLYPHS.state.done + ' ', color: PALETTE.done }, { text: t('v74.f.need_none'), dim: true }])
+  for (const e of tl.judge) body.push(judgeRow(e, true, t))
+  if (tl.unlisted > 0) body.push([{ text: ' ' + t('hygiene.more', { n: tl.unlisted }), dim: true }])
+
   const auto = autoInfoOf(residue, ctx)
-  const focus = Math.max(0, Math.min(rawFocus, Math.max(0, cleanItems.length - 1)))
+  body.push(openRule(auto === null || auto.age === '' ? t('v74.f.sec_auto') : t('v74.f.sec_auto_age', { age: auto.age }), wide))
+  if (auto === null) body.push([{ text: ' ' + t('v74.f.auto_none'), dim: true }])
+  else body.push([{ text: ' ' + auto.wideDetail }])
 
-  if (live.state === 'ok' && tl.judgeCount === 0 && cleanItems.length === 0 && auto === null && ls !== null && loadSourceIsClean(ls)) {
-    return {
-      body: [[{ text: GLYPHS.state.pending + ' ', color: PALETTE.idle }, { text: t('residue.why.hyg_empty'), dim: true }]],
-      actions: [],
-    }
-  }
-
-  if (ctx.shortBody === true) {
-    for (const e of tl.judge) body.push(judgeRow(e, wide, t))
-    cleanItems.forEach((it, i) => body.push(cleanRow(it, i === focus, wide)))
-    if (isLoadSourceBroken(ls)) body.push(...loadSourceRows(ls, wide, cols, t))
-    if (body.length === 0 && auto !== null) {
-      const text = wide
-        ? '  ' + (auto.age === '' ? auto.wideDetail : t('residue.why.hyg_auto_line_w', { age: auto.age, n: auto.total, detail: auto.wideDetail }))
-        : ' ' + (auto.age === '' ? auto.narrowDetail : t('residue.why.hyg_auto_line_c', { age: auto.age, detail: auto.narrowDetail }))
-      body.push([{ text }])
-    }
-    if (body.length === 0) body.push(...loadSourceRows(ls, wide, cols, t))
-    const shortActions: Row[] = cleanItems.length > 0
-      ? [[{ text: t('residue.why.hyg_act_clear'), color: PALETTE.action, press: 'clean:' + cleanItems[focus].target }]]
-      : []
-    return { body, actions: shortActions }
-  }
-
-  // 1. 要你處理 (judge items)
-  if (tl.judgeCount > 0) {
-    body.push(secRule(t('hygiene.need_you'), wide, cols, WIDE_RULE_ATTENTION))
-    for (const e of tl.judge) body.push(judgeRow(e, wide, t))
-    if (tl.unlisted > 0) body.push([{ text: (wide ? '  ' : ' ') + t('hygiene.more', { n: tl.unlisted }), dim: true }])
-  }
-
-  // 2. 可清除 N (cleanable items; table rows themselves carry no Buttons)
-  if (cleanItems.length > 0) {
-    body.push([{ text: RULE2 + ' ' + t('residue.why.hyg_sec_clean', { n: cleanItems.length }) + ' ' + RULE2, color: PALETTE.structure }])
-    cleanItems.forEach((it, i) => body.push(cleanRow(it, i === focus, wide)))
-  }
-
-  // 3. 自動清理紀錄 / 自動清理 (foldable via z)
-  if (auto !== null) {
-    const autoLabel = wide
-      ? t(expanded ? 'residue.why.hyg_sec_auto_open_w' : 'residue.why.hyg_sec_auto_folded_w', { n: auto.total })
-      : t(expanded ? 'residue.why.hyg_sec_auto_open_c' : 'residue.why.hyg_sec_auto_folded_c', { n: auto.total })
-    body.push(secRule(autoLabel, wide, cols, WIDE_RULE_AUTO))
-    if (expanded) {
-      const autoText = wide
-        ? '  ' + (auto.age === '' ? auto.wideDetail : t('residue.why.hyg_auto_line_w', { age: auto.age, n: auto.total, detail: auto.wideDetail }))
-        : ' ' + (auto.age === '' ? auto.narrowDetail : t('residue.why.hyg_auto_line_c', { age: auto.age, detail: auto.narrowDetail }))
-      body.push([{ text: autoText }])
-    }
-  }
-
-  // 4. 外掛來源 / 外掛
-  body.push(...loadSourceRows(ls, wide, cols, t))
-
-  // Actions area: every clickable action and every key hint has a matching Button bound to its key
-  const actions: Row[] = []
-  if (cleanItems.length > 0) {
-    const focused = cleanItems[focus]
-    if (wide) {
-      actions.push([{ text: GLYPHS.structure.folded + ' ' + truncateToWidth(t('residue.why.hyg_focus', { target: focused.target }), Math.max(8, cols - 2)), color: PALETTE.structure }])
-    }
-    actions.push([{ text: t('residue.why.hyg_act_clear'), color: PALETTE.action, press: 'clean:' + focused.target }])
-    actions.push([{ text: t(wide ? 'residue.why.hyg_act_clear_all_w' : 'residue.why.hyg_act_clear_all_c', { n: cleanItems.length }), color: PALETTE.action, press: 'clean:all' }])
-  }
-  if (auto !== null) {
-    actions.push([{ text: t(expanded ? 'residue.why.hyg_act_fold_close' : 'residue.why.hyg_act_fold_open'), color: PALETTE.action, press: 'key:z' }])
-  }
-
-  return { body, actions }
+  body.push(...sourceBlock())
+  return { body, actions: [] }
 }
 
-export const hygienePage: Page = { id: 'hygiene', key: '8', title: '殘留', framed: true, render: ctx => hygieneView(ctx) }
+export const hygienePage: Page = { id: 'hygiene', key: '6', title: '殘留', framed: true, render: ctx => hygieneView(ctx) }

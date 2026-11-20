@@ -76,10 +76,12 @@ import type { FleetLaneSum, RoomRow } from './shell'
 import { focusAnchorKey, Pane, noteInputKey, resetNoteInputs } from './pane'
 import { routeKey } from './pages/keys'
 import type { KeyAction } from './pages/keys'
-import { decideReduce, NO_NAV } from './pages/decide'
+import { decideReduce, NO_NAV, v74Pool } from './pages/decide'
 import type { DecideNav } from './pages/decide'
 import { SEATS_TIMEOUT_MS, seatQuota } from './pages/now'
-import { PAGES } from './pages/index'
+import { PAGES, EXTRA_PAGES } from './pages/index'
+import { makeDecideFeed, makePmFeed } from './v74/feeds'
+import type { CardNav, V74Ctx } from './v74/contract'
 import { frameHeight } from './pages/frame'
 import type { PageId } from './pages/frame'
 import { FOLD_AT, rowsOf as fleetRowsOf } from './pages/fleet'
@@ -122,6 +124,19 @@ let panePage: PageId = 'now'
 // the Fleet tab's feed (fleet.ts): `fleet tasks --tree --json`, kicked on every tick and when the Fleet tab is drawn. The TTL inside the feed keeps the runs 30 s apart.
 // Never awaited by a render.
 const fleetFeed = makeFleetFeed()
+const pmFeed = makePmFeed()
+const decideFeed = makeDecideFeed()
+const NO_V74_NAV: CardNav = { cursor: 0, picks: {}, notes: {}, noteMode: false }
+const V74_NAV = atom({ plugin: 'autopilot', key: 'v74_nav' } as const, NO_V74_NAV)
+function kickV74($: EngineInterface, nowMs: number): void {
+  const run = (argv: readonly string[]) => $.process.run(argv, { timeoutMs: 8000 })
+  void pmFeed.refresh(run, nowMs).then(r => { if (r) void $.ui.invalidate('ui.render') }).catch(() => {})
+  void decideFeed.refresh(run, nowMs).then(r => { if (r) void $.ui.invalidate('ui.render') }).catch(() => {})
+}
+async function v74CtxOf($: EngineInterface): Promise<V74Ctx> {
+  const nav = await read($, V74_NAV)
+  return { pm: pmFeed.status(), pmFetchedMs: pmFeed.fetchedMs(), decide: decideFeed.cards(), todo: null, nav }
+}
 // The summary other plugins read (PM G33a; fleet.ts `FleetSummary`, `v: 1`): written by the feed after each run, success or failure, never while drawing. Each row is counted
 // by the state the Fleet tab draws for it, so the band reader and the tab never disagree.
 const FLEET = atom({ plugin: 'autopilot', key: 'fleet' } as const, { v: FLEET_SUMMARY_V, fetchedMs: null, error: null, capped: 0, totals: { needYou: 0, failed: 0, stuck: 0, running: 0, waiting: 0 }, lanes: [], topStuck: null } as FleetSummary)
@@ -194,6 +209,7 @@ async function fleetTick($: EngineInterface): Promise<void> {
   void seatQuota.refresh(argv => $.process.run([...argv], { timeoutMs: SEATS_TIMEOUT_MS }), nowMs).then(ran => { if (ran) void $.ui.invalidate('ui.render') }, () => undefined) // the 現況 page's seat quota row: 60 s cache inside the feed, never awaited by a render
   forgeSummaryRow = await forgeBand($, nowMs)
   kickFleet($, nowMs) // the band's own fleet segment reads the summary this publishes; the feed's TTL spaces the runs
+  kickV74($, nowMs)
   await shellTick($, nowMs).catch(() => undefined)
 }
 // ---- the O4 shell (shell.ts): the render never reads a file; the tick keeps what it draws from while the shell is on screen ----
@@ -1239,7 +1255,7 @@ const undoDeps = ($: EngineInterface): UndoDeps => ({
   now: () => $.clock.now(),
   read: () => read($, DECIDE),
   update: fn => update($, DECIDE, fn),
-  pool: st => actionable(snapshot === null ? [] : snapshot.pending.filter(d => !isStepCard(d)), decideBatch.order.length > 0 ? decideBatch : bandBatch, st), // a reopened card the session already closed is kept in whichever batch is open
+  pool: st => actionable(v74Pool(snapshot === null ? [] : snapshot.pending.filter(d => !isStepCard(d)), decideFeed.cards()), decideBatch.order.length > 0 ? decideBatch : bandBatch, st), // a reopened card the session already closed is kept in whichever batch is open
   claim: claimCard ?? claimWith($),
   onClaimFailed: (id, reason) => {
     void $.clock.now().then(ts => appendSendLog((p) => $.fs.read(p), (p, t) => $.fs.write(p, t), liveBaseSeen, { ts, event: 'claim_failed', ids: [id], reason })).catch(() => undefined)
@@ -1347,8 +1363,8 @@ const SPEED_PLACEMENT: SpeedPlacement = 'beside'
 
 const nextTab = (t: PaneTab): PaneTab => PANE_TABS[(PANE_TABS.indexOf(t) + 1) % PANE_TABS.length]
 const PAGE_TAB_OF: Partial<Record<PageId, PaneTab>> = {
-  now: 'now', decide: 'decide', fleet: 'fleet', quota: 'spend',
-  dispatch: 'dispatch', review: 'review', spend: 'spend', hygiene: 'hygiene', help: 'legend',
+  now: 'now', decide: 'decide', dispatch: 'dispatch', review: 'review', spend: 'spend',
+  hygiene: 'hygiene', fleet: 'fleet', todo: 'decide', help: 'legend', quota: 'spend',
 }
 const PAGE_CONSOLE_OF: Partial<Record<PageId, ConsoleTab>> = {
   now: 'command', decide: 'command', fleet: 'team', quota: 'quota',
@@ -1358,7 +1374,7 @@ const SLOT_PAGE_OF: Partial<Record<SlotId, BandPageId>> = {
   verdict: 'now', decisions: 'decide', fleet: 'fleet', quota: 'quota',
   dispatch: 'dispatch', review: 'review', spend: 'spend', hygiene: 'hygiene',
 }
-const pageOfTab = (t: PaneTab): PageId => (t === 'spend' ? 'quota' : t === 'legend' ? 'help' : t)
+const pageOfTab = (t: PaneTab): PageId => (t === 'legend' ? 'help' : t as PageId)
 
 // A page digit selects that page; pressing the current page again leaves the pane and its state alone.
 async function panePagePress($: EngineInterface, id: PageId): Promise<void> {
@@ -1464,13 +1480,22 @@ export async function frameKey($: EngineInterface, k: KeyAction): Promise<void> 
     if (id === 'decide') {
       const nowMs = await $.clock.now()
       const st = await read($, DECIDE)
-      const ctx = { live: snapshot, console: consoleSnap, size: { cols: decideCols, rows: 24 }, t: tr, nowMs }
+      const ctx = { live: snapshot, console: consoleSnap, size: { cols: decideCols, rows: 24 }, t: tr, nowMs, v74: await v74CtxOf($) }
       const r = decideReduce({ ...st, ...decideLocal }, k, ctx, nowMs)
       decideLocal = { cursor: r.nav.cursor, folded: r.nav.folded, textMode: r.nav.textMode, textBuf: r.nav.textBuf, opt: r.nav.opt, detailOffset: r.nav.detailOffset }
       if (r.nav.picks !== st.picks || r.nav.notes !== st.notes) await update($, DECIDE, s => ({ ...s, picks: r.nav.picks, notes: r.nav.notes }))
       if (r.effect?.kind === 'send') await holdDecide($) // the hold and the claim stay decideundo's: the reducer's own hold is not written
       else if (r.effect?.kind === 'undo') await undoDecide($, r.effect.id)
       else if (r.effect?.kind === 'fill') await fillPrompt($, r.effect.text)
+    } else if (id === 'todo') {
+      const nav = await read($, V74_NAV)
+      const cards = (await v74CtxOf($)).todo ?? []
+      const last = Math.max(0, cards.length - 1)
+      if (k.kind === 'move') await update($, V74_NAV, () => ({ ...nav, cursor: Math.min(last, Math.max(0, nav.cursor + k.by)) }))
+      else if (k.kind === 'pick') {
+        const c = cards[nav.cursor]
+        if (c !== undefined) await update($, V74_NAV, () => ({ ...nav, picks: { ...nav.picks, [c.id]: k.index } }))
+      }
     } else {
       const v = pageView[id] ?? (id === 'review' ? DEFAULT_REVIEW_VIEW : { focus: 0, expanded: false })
       const last = Math.max(0, focusRows(id, v.expanded) - 1)
@@ -1685,6 +1710,15 @@ export function registerLive(on: Parameters<Register>[0]): void {
       const nextPage: BandPageId = isOpen && at >= 0 ? BAND_PAGE_TABS[(at + 1) % BAND_PAGE_TABS.length] : 'now'
       await pageOpen(nextPage, null, nextCon)
     }
+    // v7.4 S1: the band's ▴ / ▾ toggle. Closed -> the same open path as the ⓘ (pageOpen('now')); open -> the same close path as a tab press on the showing tab (markPaneClosed + ui.close).
+    const togglePane = async () => {
+      let isOpen = false
+      try { isOpen = (await $.ui.panes()).some(p => p.id === PANE_ID) } catch (_e) { /* the engine could not list panes: treat the pane as closed */ }
+      if (!isOpen) { await pageOpen('now'); return }
+      markPaneClosed()
+      try { await $.ui.close({ id: PANE_ID }) } catch (_e) { /* already closed */ }
+      $.ui.invalidate('ui.render')
+    }
     const slot = (id: SlotId) => (consoleOn ? pageOpen(SLOT_PAGE_OF[id] ?? 'now', slotUnfolds(id), consoleSlotTab(id)) : openOn(slotTab(id), slotUnfolds(id), id === 'spend' ? 'spend' : undefined))
     // a tab of the band row: the open tab is a memory state; pressing it again closes it. In the console mode a page tab opens the pane on that page (the forge tab keeps its band behaviour)
     const onTab = (id: BarTabId | ConsoleTab | BandPageId) => {
@@ -1786,7 +1820,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       const answer = await lower(forgeAsk.maxRows, forgeAsk.bodyColumns)
       if (answer !== undefined && answer !== null && (answer as { type?: string }).type !== 'engine') forgeRow = answer
     }
-    const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge, usageOn, moreTo, con, bandPreset, consoleOn && consoleSnap !== null ? bandQuotaSeg(normalizedPools(consoleSnap), bandNow, t, qSrc) : null, paneOpen, legacyTabs, forgeRow !== null)
+    const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge, usageOn, moreTo, con, bandPreset, consoleOn && consoleSnap !== null ? bandQuotaSeg(normalizedPools(consoleSnap), bandNow, t, qSrc) : null, paneOpen, legacyTabs, forgeRow !== null, legacyTabs ? undefined : () => { void togglePane() }, paneOpen)
     if (shellMode && rows < SHELL_MIN_ROWS) {
       const n = snapshot === null ? 0 : new Set(snapshot.pending.filter(d => !isStepCard(d)).map(cardKey)).size
       await logBandGeometry($, rows, columns, 1)
@@ -2075,6 +2109,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const petPanel = !legacy && panePage === 'pet'
       ? await ($.state.get as (ref: { plugin: string; key: string }) => Promise<{ value: unknown }>)({ plugin: 'forge-stats', key: 'panel' }).then(g => g.value, () => null)
       : undefined
+    const v74 = legacy ? undefined : await v74CtxOf($)
     const tree = Pane(
       $.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { void paneTabPress($, t, legacy) }, tr, e.props.bodyColumns,
       () => { paneTab = nextTab(paneTab); panePage = pageOfTab(paneTab); $.ui.invalidate('ui.render') },
@@ -2082,7 +2117,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       folded, e.props.scroll ?? null,
       { state: decideState, batch: decideBatch, now: decideNow, inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } },
       decideScroll, fleet, null,
-      legacy ? null : { pages: PAGES, pageId: panePage, onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, nowMs: frameNow, rows: frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), view: pageView, decide: { ...decideState, ...decideLocal }, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(panePage === 'forge' ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}) },
+      legacy ? null : { pages: [...PAGES, ...EXTRA_PAGES], pageId: panePage, onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, others: fleet?.others ?? null, nowMs: frameNow, rows: frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), view: pageView, decide: { ...decideState, ...decideLocal }, v74, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(panePage === 'forge' ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}) },
     )
     await probePane($, e, tree)
     return tree

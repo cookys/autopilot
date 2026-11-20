@@ -67,7 +67,7 @@ GROK_HANG_OUT="$(printf '%s\n' "$GROK_HANG_RAW" | sed -n '3,$p')"
 
 assert_eq "0" "$([[ "$GROK_HANG_ELAPSED" -le "$BOUND_SECS" ]] && echo 0 || echo "$GROK_HANG_ELAPSED")" \
   "grok TERM-ignoring sleeper returns within timeout+grace+slack (elapsed=${GROK_HANG_ELAPSED}s exit=${GROK_HANG_EXIT})"
-assert_contains "$GROK_HANG_OUT" '"transport_status": "timeout"' "grok kill-after maps to transport_status timeout"
+assert_contains "$GROK_HANG_OUT" '"transport_status": "idle_timeout"' "grok kill-after maps to transport_status idle_timeout"
 sleep 0.5
 GROK_LEFT="$(pgrep -f "$GROK_SLEEP_PAT" || true)"
 assert_eq "" "$GROK_LEFT" "no fake grok sleeper remains after timeout plus grace"
@@ -141,7 +141,7 @@ CLAUDE_HANG_OUT="$(printf '%s\n' "$CLAUDE_HANG_RAW" | sed -n '3,$p')"
 
 assert_eq "0" "$([[ "$CLAUDE_HANG_ELAPSED" -le "$BOUND_SECS" ]] && echo 0 || echo "$CLAUDE_HANG_ELAPSED")" \
   "claude-native TERM-ignoring sleeper returns within timeout+grace+slack (elapsed=${CLAUDE_HANG_ELAPSED}s exit=${CLAUDE_HANG_EXIT})"
-assert_contains "$CLAUDE_HANG_OUT" '"transport_status": "timeout"' "claude-native kill-after maps to transport_status timeout"
+assert_contains "$CLAUDE_HANG_OUT" '"transport_status": "idle_timeout"' "claude-native kill-after maps to transport_status idle_timeout"
 sleep 0.5
 CLAUDE_LEFT="$(pgrep -f "$CLAUDE_SLEEP_PAT" || true)"
 assert_eq "" "$CLAUDE_LEFT" "no fake claude sleeper remains after timeout plus grace"

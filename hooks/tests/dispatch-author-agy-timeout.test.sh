@@ -74,7 +74,7 @@ HANG_ELAPSED=$(( $(date +%s) - HANG_START ))
 assert_eq "0" "$([[ "$HANG_ELAPSED" -le 20 ]] && echo 0 || echo "$HANG_ELAPSED")" \
   "agy TERM-ignoring sleeper returns within timeout+grace+buffer (elapsed=${HANG_ELAPSED}s exit=${HANG_EXIT})"
 assert_eq "3" "$HANG_EXIT" "agy outer timeout exits 3 (runner_failed)"
-assert_contains "$HANG_OUT" '"transport_status": "timeout"' "agy outer timeout maps to transport_status timeout"
+assert_contains "$HANG_OUT" '"transport_status": "idle_timeout"' "agy outer timeout maps to transport_status idle_timeout"
 assert_contains "$HANG_OUT" '"status": "runner_failed"' "agy outer timeout is runner_failed"
 
 sleep 0.5
@@ -101,7 +101,7 @@ BOTH_ELAPSED=$(( $(date +%s) - BOTH_START ))
 assert_eq "0" "$([[ "$BOTH_ELAPSED" -le 20 ]] && echo 0 || echo "$BOTH_ELAPSED")" \
   "agy TERM+HUP sleeper returns within timeout+grace+buffer (elapsed=${BOTH_ELAPSED}s exit=${BOTH_EXIT})"
 assert_eq "3" "$BOTH_EXIT" "agy TERM+HUP outer timeout exits 3 (runner_failed)"
-assert_contains "$BOTH_OUT" '"transport_status": "timeout"' "agy TERM+HUP outer timeout maps to transport_status timeout"
+assert_contains "$BOTH_OUT" '"transport_status": "idle_timeout"' "agy TERM+HUP outer timeout maps to transport_status idle_timeout"
 assert_contains "$BOTH_OUT" '"status": "runner_failed"' "agy TERM+HUP outer timeout is runner_failed"
 
 sleep 0.5
@@ -174,7 +174,7 @@ GRACE0_ELAPSED=$(( $(date +%s) - GRACE0_START ))
 assert_eq "0" "$([[ "$GRACE0_ELAPSED" -lt 45 ]] && echo 0 || echo "$GRACE0_ELAPSED")" \
   "grace 0 falls back to a positive grace and returns within the outer wrapper (elapsed=${GRACE0_ELAPSED}s exit=${GRACE0_EXIT})"
 assert_eq "3" "$GRACE0_EXIT" "grace 0 fallback still exits 3 within the outer wrapper (elapsed=${GRACE0_ELAPSED}s)"
-assert_contains "$GRACE0_OUT" '"transport_status": "timeout"' "grace 0 fallback maps to transport_status timeout"
+assert_contains "$GRACE0_OUT" '"transport_status": "idle_timeout"' "grace 0 fallback maps to transport_status idle_timeout"
 assert_contains "$GRACE0_OUT" '"status": "runner_failed"' "grace 0 fallback is runner_failed"
 
 sleep 0.5

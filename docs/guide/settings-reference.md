@@ -233,8 +233,10 @@ Opt-in copy of hetero-review report files. Finalize is wired in. It writes to th
 | `AUTOPILOT_TIP_VERIFY_REQUIRE` | Set to `1` to make `dispatch-hetero.sh` refuse before the worker starts when no acceptance command is found (no `--verify-cmd`, no fenced block under the brief `## Acceptance`, no fenced or whole-line command under `.claude/quality-gate-config.md` `## Test Command`). Unset, a non-empty `scripts/lib/tip-verify-grace.json` proceeds, records `tip_verify` `no_source`, prints one stderr line naming the repo, and does not re-run acceptance. An empty, missing or unreadable list refuses the same way as `1`. | unset |  |
 | `AUTOPILOT_CONSULT_TIMEOUT` | Timeout of a consult dispatch. | `5m` |  |
 | `AUTOPILOT_DISCUSS_TIMEOUT` | Timeout of a discuss dispatch. | `5m` |  |
-| `AUTOPILOT_AUTHOR_KILL_GRACE_SECS` | Seconds the agy author runner is given after the outer timeout before it is killed. A positive integer; zero, negatives and non-numbers fall back to 30. | `30` |  |
+| `AUTOPILOT_AUTHOR_HARD_TIMEOUT` | Wall cap for an author dispatch when `--hard-timeout` is not passed. A duration (`60m`, `1h`). The run is killed even if it is still producing output. | `60m` |  |
+| `AUTOPILOT_AUTHOR_KILL_GRACE_SECS` | Seconds after SIGTERM before SIGKILL when an author runner is stopped for idle or the hard cap. A positive integer; zero, negatives and non-numbers fall back to 30. | `30` |  |
 | `AUTOPILOT_AUTHOR_MAX_TOKENS` | Response cap of an authoring dispatch. | `30000` |  |
+| `AUTOPILOT_AUTHOR_SAMPLE_S` | How often an author dispatch samples output bytes and process-tree CPU, in seconds. A positive number. | `15` |  |
 | `AUTOPILOT_CONTEXT_WINDOW_GATE` | off, warn or block: what a dispatch does when its prompt would not fit the engine context window. | block |  |
 | `AUTOPILOT_NONCQ_DIR` | Queue root for `scripts/noncq.js` (non-Claude work queue). Created `0700`; persistent on purpose. See [`references/noncq.md`](../../references/noncq.md). | `~/.autopilot/noncq` |  |
 | `AUTOPILOT_NONCQ_REPORT_TO` | Fleet address (`namespace/courier/member`) that receives `[noncq-empty]` reports from `noncq.js drain`. The report's second line names lane backlog items tagged noncq-ok (fixed text; see [`references/noncq.md`](../../references/noncq.md)). Falls back to `AUTOPILOT_PM_ADDRESS`; with neither, drain prints one stderr line only. | unset |  |
@@ -483,8 +485,10 @@ Opt-in copy of hetero-review report files. Finalize is wired in. It writes to th
 | `AUTOPILOT_TIP_VERIFY_REQUIRE` | Set to `1` to make `dispatch-hetero.sh` refuse before the worker starts when no acceptance command is found (no `--verify-cmd`, no fenced block under the brief `## Acceptance`, no fenced or whole-line command under `.claude/quality-gate-config.md` `## Test Command`). Unset, a non-empty `scripts/lib/tip-verify-grace.json` proceeds, records `tip_verify` `no_source`, prints one stderr line naming the repo, and does not re-run acceptance. An empty, missing or unreadable list refuses the same way as `1`. | unset |  |
 | `AUTOPILOT_CONSULT_TIMEOUT` | Timeout of a consult dispatch. | `5m` |  |
 | `AUTOPILOT_DISCUSS_TIMEOUT` | Timeout of a discuss dispatch. | `5m` |  |
-| `AUTOPILOT_AUTHOR_KILL_GRACE_SECS` | Seconds the agy author runner is given after the outer timeout before it is killed. A positive integer; zero, negatives and non-numbers fall back to 30. | `30` |  |
+| `AUTOPILOT_AUTHOR_HARD_TIMEOUT` | Wall cap for an author dispatch when `--hard-timeout` is not passed. A duration (`60m`, `1h`). The run is killed even if it is still producing output. | `60m` |  |
+| `AUTOPILOT_AUTHOR_KILL_GRACE_SECS` | Seconds after SIGTERM before SIGKILL when an author runner is stopped for idle or the hard cap. A positive integer; zero, negatives and non-numbers fall back to 30. | `30` |  |
 | `AUTOPILOT_AUTHOR_MAX_TOKENS` | Response cap of an authoring dispatch. | `30000` |  |
+| `AUTOPILOT_AUTHOR_SAMPLE_S` | How often an author dispatch samples output bytes and process-tree CPU, in seconds. A positive number. | `15` |  |
 | `AUTOPILOT_CONTEXT_WINDOW_GATE` | off, warn or block: what a dispatch does when its prompt would not fit the engine context window. | block |  |
 | `AUTOPILOT_NONCQ_DIR` | Queue root for `scripts/noncq.js` (non-Claude work queue). Created `0700`; persistent on purpose. See [`references/noncq.md`](../../references/noncq.md). | `~/.autopilot/noncq` |  |
 | `AUTOPILOT_NONCQ_REPORT_TO` | Fleet address (`namespace/courier/member`) that receives `[noncq-empty]` reports from `noncq.js drain`. The report's second line names lane backlog items tagged noncq-ok (fixed text; see [`references/noncq.md`](../../references/noncq.md)). Falls back to `AUTOPILOT_PM_ADDRESS`; with neither, drain prints one stderr line only. | unset |  |

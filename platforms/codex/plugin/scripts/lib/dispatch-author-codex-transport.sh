@@ -509,6 +509,26 @@ codex_transport_run() {
   local timed_out=0
   seen_set=""
   poll_i=0
+  # Idle/hard when dispatch-author exported the limits. A direct caller that
+  # leaves AUTOPILOT_AUTHOR_IDLE_S unset keeps the wall-clock deadline above.
+  local idle_watch=0 idle_s=0 hard_s=0 sample_s=15
+  local idle_deadline=0 hard_deadline=0 next_sample=0
+  local base_bytes=0 base_cpu="" have_base=0 failed_measure=0
+  local sample_line="" sample_rc=0 sb="" sc="" sa="" sig="" ext_line=""
+  local idle_js
+  idle_js="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/idle-watch.js"
+  if [[ "${AUTOPILOT_AUTHOR_IDLE_S:-}" =~ ^[1-9][0-9]*$ ]] \
+    && [[ "${AUTOPILOT_AUTHOR_HARD_S:-}" =~ ^[1-9][0-9]*$ ]]; then
+    idle_watch=1
+    idle_s="$AUTOPILOT_AUTHOR_IDLE_S"
+    hard_s="$AUTOPILOT_AUTHOR_HARD_S"
+    if [[ "${AUTOPILOT_AUTHOR_SAMPLE_S:-}" =~ ^([0-9]+(\.[0-9]*)?|\.[0-9]+)$ ]]; then
+      sample_s="$(awk -v s="$AUTOPILOT_AUTHOR_SAMPLE_S" 'BEGIN { v=int(s); if ((s - v) > 0) v++; if (v < 1) v=1; printf "%d", v }')"
+    fi
+    idle_deadline=$((start + idle_s))
+    hard_deadline=$((start + hard_s))
+    next_sample="$start"
+  fi
 
   while kill -0 "$worker_pid" 2>/dev/null; do
     state="$(awk '{ print $3 }' "/proc/$worker_pid/stat" 2>/dev/null || echo Z)"
@@ -516,7 +536,70 @@ codex_transport_run() {
       break
     fi
     now="$(date +%s)"
-    if [ $((now - start)) -ge "$deadline_secs" ]; then
+    if [ "$idle_watch" -eq 1 ]; then
+      # Hard cap wins over an extend in the same second.
+      if [ "$now" -ge "$hard_deadline" ]; then
+        timed_out=1
+        AUTHOR_WATCH_KIND=hard_timeout
+        break
+      fi
+      if [ "$now" -ge "$next_sample" ] || [ "$now" -ge "$idle_deadline" ]; then
+        sample_rc=0
+        sample_line="$(node "$idle_js" sample --pid "$worker_pid" \
+          --watch "$stdout_path" --watch "$stderr_path" --watch "$sidecar_path" 2>/dev/null)" || sample_rc=$?
+        if [ "$sample_rc" -ne 0 ] || ! [[ "$sample_line" =~ ^bytes=([0-9]+)[[:space:]]cpu=([0-9]+|null)[[:space:]]alive=([01])$ ]]; then
+          failed_measure=1
+          if [ "$now" -ge "$idle_deadline" ]; then
+            timed_out=1
+            AUTHOR_WATCH_KIND=idle_timeout
+            break
+          fi
+        else
+          sb="${BASH_REMATCH[1]}"
+          sc="${BASH_REMATCH[2]}"
+          sa="${BASH_REMATCH[3]}"
+          if [ "$sa" = "0" ]; then
+            break
+          fi
+          if [ "$have_base" -eq 0 ] || [ "$failed_measure" -eq 1 ]; then
+            # A failed sample is not progress. At the deadline, fail closed.
+            if [ "$failed_measure" -eq 1 ] && [ "$now" -ge "$idle_deadline" ]; then
+              timed_out=1
+              AUTHOR_WATCH_KIND=idle_timeout
+              break
+            fi
+            base_bytes="$sb"
+            base_cpu="$sc"
+            have_base=1
+            failed_measure=0
+          else
+            sig=""
+            if [ "$sb" -gt "$base_bytes" ]; then sig="bytes"; fi
+            if [ "$base_cpu" != "null" ] && [ "$sc" != "null" ] && [ "$sc" -gt "$base_cpu" ]; then
+              if [ -n "$sig" ]; then sig="bytes+cpu"; else sig="cpu"; fi
+            fi
+            if [ "$now" -ge "$idle_deadline" ]; then
+              if [ -n "$sig" ]; then
+                ext_line="dispatch-author: extend: progress seen (${sig}), idle reset"
+                printf '%s\n' "$ext_line" >> "$stdout_path"
+                # The note itself must not count as the next window's progress.
+                base_bytes=$((sb + ${#ext_line} + 1))
+                base_cpu="$sc"
+                idle_deadline=$((now + idle_s))
+              else
+                timed_out=1
+                AUTHOR_WATCH_KIND=idle_timeout
+                break
+              fi
+            else
+              base_bytes="$sb"
+              base_cpu="$sc"
+            fi
+          fi
+        fi
+        next_sample=$((now + sample_s))
+      fi
+    elif [ $((now - start)) -ge "$deadline_secs" ]; then
       timed_out=1
       break
     fi
@@ -655,9 +738,27 @@ const fs = require("fs");
 const stdout = fs.readFileSync(process.argv[1]);
 const sidecar = fs.readFileSync(process.argv[2]);
 if (sidecar.length === 0) process.exit(1);
-if (Buffer.compare(stdout, sidecar) === 0) process.exit(0);
+const marker = Buffer.from("dispatch-author: extend:");
+let left = stdout;
+if (stdout.includes(marker)) {
+  const re = /^dispatch-author: extend: progress seen \([^)\r\n]*\), idle reset\r?$/;
+  const parts = [];
+  let start = 0;
+  for (let i = 0; i <= stdout.length; i++) {
+    if (i === stdout.length || stdout[i] === 0x0a) {
+      const line = stdout.subarray(start, i);
+      if (!re.test(line.toString("utf8"))) {
+        if (parts.length) parts.push(Buffer.from("\n"));
+        parts.push(line);
+      }
+      start = i + 1;
+    }
+  }
+  left = Buffer.concat(parts);
+}
+if (Buffer.compare(left, sidecar) === 0) process.exit(0);
 const withLf = Buffer.concat([sidecar, Buffer.from([0x0a])]);
-if (Buffer.compare(stdout, withLf) === 0) process.exit(0);
+if (Buffer.compare(left, withLf) === 0) process.exit(0);
 process.exit(1);
 ' "$stdout_path" "$sidecar_path" 2>/dev/null
 }

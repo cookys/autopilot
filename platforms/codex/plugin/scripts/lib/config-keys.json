@@ -3239,6 +3239,17 @@
       "relates": []
     },
     {
+      "name": "AUTOPILOT_LOCAL_GATEWAY_HOSTS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": ["scripts/lib/cn-model-dispatch-gate.js"],
+      "doc": null,
+      "relates": [],
+      "summary": "Comma-separated hostnames added to local_gateway_hosts for tests. Production hosts live in local-sandbox-endpoints.json."
+    },
+    {
       "name": "AUTOPILOT_LOCAL_LEASE_DIR",
       "kind": "env",
       "audience": "internal",

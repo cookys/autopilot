@@ -1,4 +1,5 @@
 {
-  "_note": "Named endpoints whose cc-shim IMPLEMENTER dispatches must run under --sandbox bwrap (PM 01M748P8G8). One list, read by scripts/dispatch-hetero.sh and src/engine/autopilot-engine.js. Not transport_security: that field is the usage-ledger account alias and is credential-dependent. Today qwen_local and glm_local. Add a local DeepSeek endpoint name here when one exists; none is registered today.",
-  "local_sandbox_endpoints": ["qwen_local", "glm_local"]
+  "_note": "Named endpoints whose cc-shim IMPLEMENTER dispatches must run under --sandbox bwrap (PM 01M748P8G8). One list, read by scripts/dispatch-hetero.sh and src/engine/autopilot-engine.js. Not transport_security: that field is the usage-ledger account alias and is credential-dependent. Today qwen_local and glm_local. Add a local DeepSeek endpoint name here when one exists; none is registered today. local_gateway_hosts: hostnames only (no IP literals) of fleet-owned gateways. The CN dispatch gate treats a listed endpoint as local only when resolve-endpoint.sh shows loopback or one of these hosts. Empty here; hangar sets the hosts per machine.",
+  "local_sandbox_endpoints": ["qwen_local", "glm_local"],
+  "local_gateway_hosts": []
 }

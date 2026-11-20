@@ -23,6 +23,13 @@ for (const b of ['kimi', 'grok', 'agy', 'codex', 'claude', 'cursor', 'opencode']
 }
 const home = path.join(tmp, 'home');
 fs.mkdirSync(home);
+// Resolver input for in-process checks. A missing endpoints file so the resolver does not open a real one.
+// Loopback proves the listed names are the fleet's own gateway. A case overrides the URL or gateway list.
+process.env.AUTOPILOT_ENDPOINTS_ENV = path.join(tmp, 'no-endpoints.env');
+process.env.AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL = 'http://127.0.0.1:9/v1';
+process.env.AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN = 'local-test';
+process.env.AUTOPILOT_ENDPOINT_GLM_LOCAL_URL = 'http://127.0.0.1:9/v1';
+process.env.AUTOPILOT_ENDPOINT_GLM_LOCAL_TOKEN = 'local-test';
 const repo = path.join(tmp, 'repo');
 fs.mkdirSync(repo);
 const git = (...a) => spawnSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...a], { cwd: repo, encoding: 'utf8' });
@@ -321,7 +328,7 @@ test('review-role: barred cloud families refuse a review role at any size; grok 
   const localOk = gate.check({ ...LOCAL, env: { ...rev, AUTOPILOT_TASK_CLASS: 'test-scaffold' }, cwd: auto, now: '2026-11-17T12:00:00+08:00' });
   assert.equal(localOk.allowed, true, 'qwen_local reviewer with an allowed Task-Class is not review-role');
   assert.notEqual(localOk.cls, 'review-role');
-  assert.equal(gate.check({ ...LOCAL, env: { ...rev, AUTOPILOT_TASK_SIZE: 'M', AUTOPILOT_TASK_CLASS: 'test-scaffold' }, cwd: auto, now: '2026-11-17T12:00:00+08:00' }).cls, 'core-size');
+  assert.equal(gate.check({ ...LOCAL, env: { ...rev, AUTOPILOT_TASK_SIZE: 'M', AUTOPILOT_TASK_CLASS: 'test-scaffold' }, cwd: auto, now: '2026-11-17T12:00:00+08:00' }).allowed, true, 'proven-local served family is not core-size');
   const ext = path.join(tmp, 'review-ext');
   fs.mkdirSync(path.join(ext, '.claude'), { recursive: true });
   fs.writeFileSync(path.join(ext, '.claude', 'cn-model-gate.json'), JSON.stringify({ review_roles: ['auditor'] }));
@@ -460,11 +467,12 @@ test('dispatch-author: marked kimi refused, marked grok passes the gate', () => 
 test('dispatch-foreman: marked brief refused (rail is always kimi); unmarked passes the gate', () => {
   const plan = path.join(tmp, 'plan.md'); fs.writeFileSync(plan, 'plan\n');
   const a = (brief) => [path.join(S, 'dispatch-foreman.sh'), '--brief-file', brief, '--plan-file', plan, '--kimi-bin', path.join(sent, 'kimi')];
-  let r = run('bash', a(marked));
+  const allowKimi = { AUTOPILOT_KIMI_LOCAL_ALLOW: '1' };
+  let r = run('bash', a(marked), allowKimi);
   assert.equal(r.status, 2); assert.match(out(r), BARRED); assert.doesNotMatch(out(r), /SENTINEL/);
-  r = run('bash', a(plain));
+  r = run('bash', a(plain), allowKimi);
   assert.match(out(r), /cn_model_dispatch_barred moonshot unknown-size/);
-  r = run('bash', a(small));
+  r = run('bash', a(small), allowKimi);
   assert.doesNotMatch(out(r), BARRED);
 });
 
@@ -607,11 +615,13 @@ test('(d) AUTOPILOT_TASK_CLASS overrides a Task-Class header', () => {
   assert.equal(gate.check({ ...LOCAL, env: {}, files: [brief], cwd: auto }).cls, 'task-class', 'header alone is still refactor');
 });
 
-test('(e) local qwen still hits transcript, core-size, novel and sensitive', () => {
+test('(e) local qwen still hits transcript, novel and sensitive; core-size does not apply when the URL is loopback', () => {
   const auto = path.join(tmp, 'autopilot');
   const LOCAL = { runner: 'cc-shim', model: 'Qwen3.8-27B-QUASAR-NVFP4', endpoint: 'qwen_local' };
   assert.equal(gate.check({ ...LOCAL, env: OK, files: [marked], cwd: auto }).cls, 'transcript');
-  assert.equal(gate.check({ ...LOCAL, env: { ...OK, AUTOPILOT_TASK_SIZE: 'M' }, cwd: auto }).cls, 'core-size');
+  const big = gate.check({ ...LOCAL, env: { ...OK, AUTOPILOT_TASK_SIZE: 'M', AUTOPILOT_TASK_CLASS: 'simple-script' }, cwd: auto });
+  assert.equal(big.allowed, true, 'implementer core-size on a loopback local endpoint is allowed');
+  assert.equal(big.family, 'alibaba');
   assert.equal(gate.check({ ...LOCAL, env: { ...OK, AUTOPILOT_TASK_NOVEL: '1' }, cwd: auto }).cls, 'novel');
   assert.equal(gate.check({ ...LOCAL, env: { ...OK, AUTOPILOT_TASK_SCOPE: '.env' }, cwd: auto }).cls, 'sensitive');
 });
@@ -803,7 +813,7 @@ test('local served family skips core-dir and core-unset (operator via PM, ledger
   assert.equal(kimiOnLocal.cls, 'core-dir', 'a different barred family on qwen_local keeps core-dir');
   assert.equal(kimiOnLocal.family, 'moonshot');
   const big = gate.check({ ...QWEN, env: { ...base, AUTOPILOT_TASK_SIZE: 'M' }, cwd: hooksRepo });
-  assert.equal(big.cls, 'core-size', 'local served family still blocks core-size');
+  assert.equal(big.allowed, true, 'proven-local served family is not core-size');
   const bare = gitRepo('local-core-unset');
   fs.mkdirSync(path.join(bare, '.claude'), { recursive: true });
   fs.writeFileSync(path.join(bare, '.claude', 'cn-model-gate.json'), JSON.stringify({ core_dirs: [] }));
@@ -815,4 +825,40 @@ test('local served family skips core-dir and core-unset (operator via PM, ledger
     cwd: hooksRepo,
   });
   assert.equal(noClass.cls, 'unknown-task-class', 'missing Task-Class still blocks');
+});
+
+test('local by URL: loopback, gateway host, external host, cloud CN, model auto, endpoint suffix', () => {
+  const auto = path.join(tmp, 'autopilot');
+  const impl = { AUTOPILOT_TASK_SIZE: 'M', AUTOPILOT_TASK_ROLE: 'implementer', AUTOPILOT_TASK_SCOPE: 'docs/a.md', AUTOPILOT_TASK_CLASS: 'simple-script' };
+  const loop = gate.check({
+    runner: 'cc-shim', model: 'Qwen3.8-27B-QUASAR-NVFP4', endpoint: 'qwen_local',
+    env: { ...impl, AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL: 'http://127.0.0.2:9/v1' }, cwd: auto,
+  });
+  assert.equal(loop.allowed, true, '127.0.0.0/8 is loopback even when it is not 127.0.0.1');
+  assert.equal(loop.family, 'alibaba');
+  const gw = gate.check({
+    runner: 'cc-shim', model: 'Qwen3.8-27B-QUASAR-NVFP4', endpoint: 'qwen_local',
+    env: { ...impl, AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL: 'https://fleet-gw.example/v1', AUTOPILOT_LOCAL_GATEWAY_HOSTS: 'fleet-gw.example' },
+    cwd: auto,
+  });
+  assert.equal(gw.allowed, true, 'hostname on local_gateway_hosts is local');
+  const ext = gate.check({
+    runner: 'cc-shim', model: 'Qwen3.8-27B-QUASAR-NVFP4', endpoint: 'qwen_local',
+    env: { ...impl, AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL: 'https://example.com/v1' }, cwd: auto,
+  });
+  assert.equal(ext.allowed, false);
+  assert.equal(ext.cls, 'local_name_external_host');
+  assert.equal(ext.line, 'cn_model_dispatch_barred alibaba local_name_external_host (01M7E2A1, d-1dfcf757)');
+  const cloud = gate.check({ runner: 'cc-shim', model: 'Qwen3.8-Max', endpoint: 'qwen', env: impl, cwd: auto });
+  assert.equal(cloud.allowed, false);
+  assert.equal(cloud.cls, 'core-size', 'an external CN endpoint stays core-size');
+  const autoModel = gate.check({
+    runner: 'cc-shim', model: 'auto', endpoint: 'qwen_local', env: impl, cwd: auto,
+  });
+  assert.equal(autoModel.allowed, true, 'model auto on a proven-local endpoint is the served family');
+  assert.equal(autoModel.family, 'alibaba');
+  const suffixed = gate.check({
+    runner: 'cc-shim', model: 'auto', endpoint: 'Qwen_Local/Qwen3.8-27B-QUASAR-NVFP4', env: impl, cwd: auto,
+  });
+  assert.equal(suffixed.allowed, true, 'case and a model suffix still name the local endpoint');
 });

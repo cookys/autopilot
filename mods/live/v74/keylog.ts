@@ -14,6 +14,8 @@ export type V74KeyLog = {
   by?: number
   len?: number
   element?: string
+  cursorBefore?: number
+  cursorAfter?: number
 }
 
 type Host = {

@@ -54,7 +54,10 @@ test('r5 arrows: the host focus event on card:N is what moves the cursor (ui.scr
   const heads = buttons.filter(b => String(b.props.key).startsWith('card:'))
   expect(heads.length).toBeGreaterThan(1)
   const focus = buttons.filter(b => b.props.autoFocus === true)
-  expect(focus.map(b => b.props.key)).toEqual(['card:0'])
+  // r7: the selected card head is not a Button. autoFocus stays on the current tab so ctrl+x Tab can land,
+  // and a focus event for the card the cursor already names does not write that index back.
+  expect(focus.map(b => b.props.key)).toEqual(['tab:decide'])
+  expect(v74CursorFromFocus('card:0')).toBe(0)
   focus[0].props.onPress()
 })
 

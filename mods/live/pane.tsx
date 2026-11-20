@@ -312,7 +312,10 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
     const on = tb.id === page.id
     // The host drops Button variant. The current tab is its own Text with inverse (SGR 7) so the ╰ row is not one plain string.
     const label = on ? <Text key={'tl' + j} inverse wrap="truncate">{tb.text}</Text> : draw
-    const btn = Button === undefined ? label : <Button key={'tab:' + tb.id + ep} plain {...(V74_TAB_HOTKEYS ? { hotkey: tb.key } : {})} onPress={choose}>{label}</Button>
+    // The selected card head is not a Button (it ate Up/Down and re-fired cursor at its own index).
+    // ctrl+x Tab still lands: the current tab is the visible autoFocus button.
+    const land = on && !typing && (page.id === 'decide' || page.id === 'todo')
+    const btn = Button === undefined ? label : <Button key={'tab:' + tb.id + ep} plain {...(V74_TAB_HOTKEYS ? { hotkey: tb.key } : {})} {...(land ? { autoFocus: true } : {})} onPress={choose}>{label}</Button>
     return <Box key={'tb' + j}>{j === 0 ? null : <Text>{' '}</Text>}{btn}</Box>
   })
   const hidden = Button === undefined || frame.decide?.textMode === true ? [] : tabItems.map((tb, j) => {

@@ -447,8 +447,10 @@ function v74Card(c: DecideCard, i: number, selected: boolean, nav: DecideNav, ct
   // The band frame has no host Pane. Each card head is a Button keyed card:N so the host's spatial up/down
   // (a focused Button consumes arrows; they never become ui.scroll while the frame is shorter than the viewport)
   // lands on the next card and ui.focus reports that key. Only the selected ▸ takes autoFocus.
+  // The selected head is not a Button. A focused Button consumes Down/Up and re-fires onPress
+  // with its own card:N, so the cursor event writes the index the ▸ already has.
   const head = box
-    ? [seg(mark + '  ' + String(i + 1) + '. ', { press: 'card:' + i }), title, seg('：' + c.question)]
+    ? [seg(mark + '  ' + String(i + 1) + '. ', selected ? {} : { press: 'card:' + i }), title, seg('：' + c.question)]
     : [seg(mark + '  ' + String(i + 1) + '. '), title, seg('：' + c.question)]
   out.push(box ? head : truncateSegs(head, cols))
   const bg = c.background ?? t('v74.d.bg_none')

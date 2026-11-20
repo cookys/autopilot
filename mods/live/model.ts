@@ -1843,20 +1843,36 @@ export function shrinkToFitted(segs: readonly Seg[], speed: readonly ForgeSegmen
 
 // v7.4 narrow band (PM): 艦隊, 待決 and tok/s stay. Drop other slots first, then fleet counts. Never cut the 待決 slot.
 const V74_BAND_KEEP = new Set(['verdict', 'fleet', 'decide'])
-export function v74FitBand(segs: readonly Seg[], speed: readonly ForgeSegment[] | null, more: boolean, room: number): Seg[] {
-  const out = segs.map(s => ({ ...s }))
-  const width = (): number => fittedBandWidth(segTextWidth(out), speed, more)
-  const dropLast = (pred: (s: Seg) => boolean): boolean => {
-    for (let i = out.length - 1; i >= 0; i--) {
-      if (!pred(out[i])) continue
-      out.splice(i, 1)
-      return true
-    }
-    return false
+function collapseBandSeps(segs: readonly Seg[]): Seg[] {
+  const out: Seg[] = []
+  for (const s of segs) {
+    const prev = out[out.length - 1]
+    if (s.slot === undefined && prev !== undefined && prev.slot === undefined) continue
+    out.push(s)
   }
-  while (width() > room && dropLast(s => s.slot !== undefined && !V74_BAND_KEEP.has(s.slot))) { /* other slots first */ }
-  while (width() > room && dropLast(s => s.tag === 'fleetRun' || s.tag === 'fleetWait' || s.tag === 'fleetStuck')) { /* counts before the word 艦隊 */ }
+  while (out.length > 0 && out[0].slot === undefined) out.shift()
   return out
+}
+export function v74FitBand(segs: readonly Seg[], speed: readonly ForgeSegment[] | null, more: boolean, room: number): Seg[] {
+  let out = segs.map(s => ({ ...s }))
+  const width = (): number => fittedBandWidth(segTextWidth(out), speed, more)
+  const dropSlot = (id: string): void => { out = out.filter(s => s.slot !== id) }
+  while (width() > room) {
+    const ids = [...new Set(out.map(s => s.slot).filter((id): id is string => id !== undefined && !V74_BAND_KEEP.has(id)))]
+    if (ids.length === 0) break
+    dropSlot(ids[ids.length - 1])
+  }
+  // Counts may go. The fleet word stays, so the segment is never an empty pair of separators.
+  while (width() > room) {
+    let at = -1
+    for (let i = out.length - 1; i >= 0; i--) {
+      const s = out[i]
+      if (s.slot === 'fleet' && s.tag !== 'fleetWord' && s.tag !== undefined) { at = i; break }
+    }
+    if (at < 0) break
+    out.splice(at, 1)
+  }
+  return collapseBandSeps(out)
 }
 
 // `columns` is the room for the indicator, the ⓘ, the speed label and, when `more` is set, the `›` cell (the caller already removed the tab strip and the one-cell gap).

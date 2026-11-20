@@ -49,7 +49,7 @@ import type { ForgeSegment } from './ui'
 import { cardSentenceOf } from './cardtitle'
 import { NO_BATCH, actionable, answerPlan, answerOf, batchSync, cardKey, draftOf, focusRepair, inputsFor, noteKey, optKey, submitSuccessor } from './decidebatch'
 import type { DecideBatch } from './decidebatch'
-import { applyPick, holdSend, reopen, sendNow, tickHold, undoHold } from './decideundo'
+import { applyPick, holdSend, reopen, sendNow, tickHold, undoHold, writeV74Answers } from './decideundo'
 import type { ClaimCard, UndoDeps } from './decideundo'
 import { BAND_MIN_COLS, BAND_PAGE_TABS, FORGE_LABEL_MIN, barStrip, decideTabLines, usageTabFits } from './tabs'
 import { findConsoleConfig, parseConsole } from './console'
@@ -130,6 +130,7 @@ const fleetFeed = makeFleetFeed()
 const pmFeed = makePmFeed()
 const decideFeed = makeDecideFeed()
 let durableOpenCards: DecideCard[] = [] // open-decision.js store, refreshed with the snapshot; merged with the fleet list by card id
+const durableClosedIds = new Set<string>() // ids s wrote to the card store; the fleet list can still name them until the next fetch
 export function v74ArrowFromScroll(page: string, by: number): { kind: 'move'; by: 1 | -1 } | null {
   if ((page !== 'decide' && page !== 'todo') || by === 0) return null
   return { kind: 'move', by: by > 0 ? 1 : -1 }
@@ -156,7 +157,8 @@ export function v74SpeedText(steps: readonly Step[], pet: string | null = null):
   ]
   return parts.map(s => s.text).join('')
 }
-const V74_NARROW = BAND_NARROW_STEPS.map(step => step.filter(id => id !== 'speed')).filter(step => step.length > 0)
+// tok/s and the fleet word stay on the v7.4 row. Dropping the word left `│  │` where 艦隊 had been.
+const V74_NARROW = BAND_NARROW_STEPS.map(step => step.filter(id => id !== 'speed' && id !== 'fleetWord')).filter(step => step.length > 0)
 function v74SpeedParts(steps: readonly Step[], pet: string | null) {
   return speedLabelParts(steps, pet) ?? [
     { role: 'bolt' as const, text: GLYPHS.structure.speed + ' ' },
@@ -169,6 +171,13 @@ export function v74CursorFromFocus(element: unknown): number | null {
   const m = /^card:(\d+)$/.exec(element)
   return m === null ? null : Number(m[1])
 }
+// A focus event whose element is already the cursor's card must not write that index again.
+// The host sends focus card:N and then the cursor event; applying the focus index last puts the ▸ back.
+export function v74FocusCursor(cursor: number, element: unknown): { kind: 'cursor'; at: number } | null {
+  const at = v74CursorFromFocus(element)
+  if (at === null || at === cursor) return null
+  return { kind: 'cursor', at }
+}
 export function v74BareBandSlots(own: string, fleet: { stuck: number; running: number; waiting: number } | null, decideN: number, t: T): Slot[] {
   const fleetSlot = slotFleet(fleet ?? { stuck: 0, running: 0, waiting: 0 }, t)
   return [
@@ -179,7 +188,9 @@ export function v74BareBandSlots(own: string, fleet: { stuck: number; running: n
   ]
 }
 function mergedDecide(): DecideCard[] | null {
-  return mergeDecideCards(decideFeed.cards(), durableOpenCards)
+  const merged = mergeDecideCards(decideFeed.cards(), durableOpenCards)
+  if (merged === null || durableClosedIds.size === 0) return merged
+  return merged.filter(c => !durableClosedIds.has(c.id))
 }
 function liveToDecideCard(d: LiveDecision): DecideCard | null {
   if (d.id === null || d.id === '') return null
@@ -1337,6 +1348,23 @@ function startHoldTimer($: EngineInterface): void {
 async function holdDecide($: EngineInterface): Promise<void> {
   if ((await holdSend(undoDeps($))).length > 0) startHoldTimer($)
 }
+// s on the v7.4 list writes the answer into the card store immediately. The model prompt is not
+// part of this step: a turn that never answers (weekly limit) must not keep the card on the open list.
+async function commitV74Send($: EngineInterface, st: DecideState, feed: readonly DecideCard[], nowMs: number): Promise<void> {
+  const pending = snapshot === null ? [] : snapshot.pending.filter(d => !isStepCard(d))
+  const next = await writeV74Answers({
+    cards: v74Pool(pending, feed),
+    state: st,
+    now: nowMs,
+    run: async (args) => {
+      if (!(await $.fs.exists($.plugin.root + '/' + DECISION_SCRIPTS[0]).catch(() => false))) return
+      const cwd = await $.session.cwd().catch(() => '')
+      await execScript($, DECISION_SCRIPTS[0], cwd === '' ? args : ['close', '--cwd', cwd, ...args.slice(1)])
+    },
+  })
+  for (const id of Object.keys(next.sent)) if (st.sent[id] === undefined) durableClosedIds.add(id)
+  await update($, DECIDE, s => ({ ...s, sent: next.sent }))
+}
 async function undoDecide($: EngineInterface, id: string): Promise<void> {
   await undoHold(undoDeps($), id)
   await stopHoldTimerIfIdle($)
@@ -1562,11 +1590,19 @@ async function armNote($: EngineInterface): Promise<void> {
   void v74Keylog($, { handler: 'ui.focus', component: 'AbovePrompt', element: 'v74-note', page: panePage, cursor: decideLocal.cursor, focusOwner: 'v74-note', noteOpen: true })
   await $.ui.focus({ requestId: ABOVE_PROMPT, key: 'v74-note' }).catch(() => undefined)
 }
+let frameKeyChain: Promise<void> = Promise.resolve()
 export async function frameKey($: EngineInterface, k: KeyAction): Promise<void> {
+  const run = frameKeyChain.then(() => frameKeyBody($, k))
+  frameKeyChain = run.then(() => undefined, () => undefined)
+  await run
+}
+async function frameKeyBody($: EngineInterface, k: KeyAction): Promise<void> {
+  const cursorBefore = decideLocal.cursor
   void v74Keylog($, {
     handler: 'frameKey', component: 'AbovePrompt', key: k.kind, event: k.kind,
     len: k.kind === 'text' ? [...k.ch].length : undefined,
-    page: framePageId(), cursor: decideLocal.cursor, focusOwner: decideLocal.textMode ? 'v74-note' : 'band', noteOpen: decideLocal.textMode,
+    page: framePageId(), cursor: cursorBefore, focusOwner: decideLocal.textMode ? 'v74-note' : 'band', noteOpen: decideLocal.textMode,
+    ...(k.kind === 'cursor' ? { cursorBefore, cursorAfter: cursorBefore } : {}),
   })
   const noteWas = decideLocal.textMode
   try {
@@ -1580,12 +1616,31 @@ export async function frameKey($: EngineInterface, k: KeyAction): Promise<void> 
     if (id === 'decide') {
       const nowMs = await $.clock.now()
       const st = await read($, DECIDE)
-      const ctx = { live: snapshot, console: consoleSnap, size: { cols: decideCols, rows: 24 }, t: tr, nowMs, v74: await v74CtxOf($) }
+      const v74 = await v74CtxOf($, true)
+      // The focus path's cursor event names the card that already has the ▸. Applying it
+      // after a move puts the cursor back. A later cursor event in the queue still runs.
+      if (k.kind === 'cursor' && k.at === decideLocal.cursor) {
+        void v74Keylog($, {
+          handler: 'frameKey', component: 'AbovePrompt', key: 'cursor', event: 'cursor',
+          page: framePageId(), cursor: decideLocal.cursor, cursorBefore, cursorAfter: decideLocal.cursor,
+          focusOwner: decideLocal.textMode ? 'v74-note' : 'band', noteOpen: decideLocal.textMode,
+        })
+        return
+      }
+      const ctx = { live: snapshot, console: consoleSnap, size: { cols: decideCols, rows: 24 }, t: tr, nowMs, v74 }
       const r = decideReduce({ ...st, ...decideLocal }, k, ctx, nowMs)
       decideLocal = { cursor: r.nav.cursor, folded: r.nav.folded, textMode: r.nav.textMode, textBuf: r.nav.textBuf, opt: r.nav.opt, detailOffset: r.nav.detailOffset }
+      if (k.kind === 'cursor') {
+        void v74Keylog($, {
+          handler: 'frameKey', component: 'AbovePrompt', key: 'cursor', event: 'cursor',
+          page: framePageId(), cursor: decideLocal.cursor, cursorBefore, cursorAfter: decideLocal.cursor,
+          focusOwner: decideLocal.textMode ? 'v74-note' : 'band', noteOpen: decideLocal.textMode,
+        })
+      }
       if (r.nav.picks !== st.picks || r.nav.notes !== st.notes) await update($, DECIDE, s => ({ ...s, picks: r.nav.picks, notes: r.nav.notes }))
       await update($, V74_NAV, n => ({ ...n, cursor: r.nav.cursor, picks: r.nav.picks, notes: r.nav.notes, noteMode: r.nav.textMode }))
-      if (r.effect?.kind === 'send') await holdDecide($) // the hold and the claim stay decideundo's: the reducer's own hold is not written
+      if (r.effect?.kind === 'send' && v74.decide !== null) await commitV74Send($, { ...st, ...r.nav }, v74.decide, nowMs)
+      else if (r.effect?.kind === 'send') await holdDecide($) // the hold and the claim stay decideundo's: the reducer's own hold is not written
       else if (r.effect?.kind === 'undo') await undoDecide($, r.effect.id)
       else if (r.effect?.kind === 'fill') await fillPrompt($, r.effect.text)
       if (!r.nav.textMode) noteArmed = false
@@ -1883,10 +1938,9 @@ export function registerLive(on: Parameters<Register>[0]): void {
       const withFleet = [...base.slice(0, atV + 1), fleetSlot, ...(decideSlot === null ? [] : [decideSlot]), ...base.slice(atV + 1)]
       const parts = rows >= 1 ? v74SpeedParts(steps, petText) : null
       // room is the cells left after the strip and the one-cell gap. The › is not subtracted here: fittedBandWidth counts it when `more` is set.
-      const roomFor = (speedTab: boolean) => {
-        const stripW = barStrip(snap, t, null, speedTab ? GLYPHS.structure.speed : null, usageOn, con).width
-        return Math.max(1, columns - stripW - 1)
-      }
+      // Row 2 owns the tab strip. Subtracting it here left row 1 about 40 cells at 100 columns,
+      // and v74FitBand then emptied 艦隊 and 開發 while the separators stayed.
+      const roomFor = (_speedTab: boolean) => Math.max(1, columns - 4)
       // v7.4 keeps tok/s on this row (a dash when nothing was timed). Narrowing may drop other chips, not the speed label.
       let fitted = layoutBandLine(withFleet, roomFor(parts !== null), parts, V74_NARROW, !usageOn)
       if (parts !== null && fitted.speed === null) fitted = { ...fitted, speed: parts }
@@ -1898,7 +1952,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       // No project (or no band slots): the status row still keeps 狀態, 艦隊, 來源, 待決 N, ⓘ and tok/s. Only the own-seat segment says there is no project.
       const withFleet = v74BareBandSlots(snap?.text ?? t('band.waiting'), fleetCounts, mergedDecide()?.length ?? 0, t)
       const parts = rows >= 1 ? v74SpeedParts(steps, consoleOn ? null : petText) : null
-      const roomFor = (speedTab: boolean) => Math.max(1, columns - 1)
+      const roomFor = (_speedTab: boolean) => Math.max(1, columns - 4)
       let fitted = layoutBandLine(withFleet, roomFor(parts !== null), parts, V74_NARROW, false)
       if (parts !== null && fitted.speed === null) fitted = { ...fitted, speed: parts }
       const segs = v74FitBand(fitted.band.segs, fitted.speed, false, roomFor(fitted.speed !== null))
@@ -2224,7 +2278,8 @@ export function registerLive(on: Parameters<Register>[0]): void {
     }
     const at = v74FocusAt(raw)
     if (at === null || decideLocal.textMode || (panePage !== 'decide' && panePage !== 'todo') || bandLegacy || !v74Open) return next(e)
-    void frameKey($, { kind: 'cursor', at })
+    const act = v74FocusCursor(decideLocal.cursor, typeof raw.element === 'string' ? raw.element : raw.key)
+    if (act !== null) void frameKey($, act)
     return {}
   })
 

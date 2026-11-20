@@ -901,7 +901,6 @@
   "v74.b.help.symbol_title": "符號",
   "v74.b.help.symbol_1": "區塊展開（Enter 摺疊）、已摺疊、說明",
   "v74.b.help.symbol_2": "速度 tok/s、殘留要處理、助手建議選項",
-  "v74.b.help.symbol_3": "",
   "v74.b.help.keys_title": "按鍵",
   "v74.b.help.keys_1": " ctrl+x 再按 Tab 把鍵盤交給 pane   Esc 還給輸入框",
   "v74.b.help.keys_2": "1 到 9 只管切頁；捲動；Enter 摺疊",

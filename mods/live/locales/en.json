@@ -901,7 +901,6 @@
   "v74.b.help.symbol_title": "Symbols",
   "v74.b.help.symbol_1": "expanded block, collapsed block, help marker",
   "v74.b.help.symbol_2": "tok/s, residue flag, recommended option",
-  "v74.b.help.symbol_3": "",
   "v74.b.help.keys_title": "Keys",
   "v74.b.help.keys_1": " ctrl+x Tab gives the pane keyboard   Esc returns to input",
   "v74.b.help.keys_2": "1-9 switch pages only; scroll; Enter fold",

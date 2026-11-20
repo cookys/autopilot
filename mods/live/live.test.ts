@@ -2961,12 +2961,12 @@ for (const surface of SURFACES) {
   // S0 (plan r2 §3.2): the `›` chip is gone; a tab is chosen by its digit (Button hotkey) or a click.
   const paneTabs = async ($: any, surface: any) => $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
 
-  test('keyboard: the tab Buttons carry the digits 1-7 as hotkeys and a press on one shows that tab (' + surface + ')', async ($, on) => {
+  test('keyboard: the tab Buttons carry the v7.4 digits 1-7 as hotkeys and a press on one shows that tab (' + surface + ')', async ($, on) => {
     const w = world(on, richWorld())
     await start($, surface)
     const pane = await paneTabs($, surface)
     const hot = Object.fromEntries(((await pane.findAll({ type: 'Button' })) as Drawn[]).filter(b => typeof b.props?.hotkey === 'string').map(b => [b.props?.key, b.props?.hotkey]))
-    expect(hot).toEqual({ now: '1', decide: '2', fleet: '3', spend: '4', dispatch: '5', review: '6', hygiene: '8' })
+    expect(hot).toEqual({ now: '1', decide: '2', dispatch: '3', review: '4', spend: '5', hygiene: '6', fleet: '7' })
     await pane.press({ key: 'review' })
     await pane.unmount()
     expect(await shownTabOf($, surface)).toBe('review')
@@ -3839,7 +3839,7 @@ test('G33a review g1: the heartbeat file is not the gate: a link, a non-file, an
   const path = LIVE + '/codeforge/mod-alive/' + SID_A + '.json'
   const at = (ms: number) => g33Alive({ written_at_ms: NOW_FRESH + ms })
   // poll2: the first tick polls console and seat quota too; all three feeds stay throttled below.
-  const firstTick = ['fleet console --json', 'fleet seats --quota --json', 'fleet tasks --tree --json']
+  const firstTick = ['fleet console --json', 'fleet seats --quota --json', 'fleet tasks --tree --json', 'fleet pm status --json', 'fleet decision list --json']
   g33Put(w, at(4_000), { isLink: true })
   await w.clock.advance(5_000)
   expect(ran).toEqual(firstTick)

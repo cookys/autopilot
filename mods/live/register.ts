@@ -69,7 +69,7 @@ import { FLEET_SUMMARY_V, fleetSummary, fleetView, makeFleetFeed, othersView, ut
 import type { FleetSummary, FleetTask, FleetView } from './fleet'
 import type { BandPageId, BarTabId, ScrollView } from './tabs'
 import { BODY_ROWS, MAIN_CONTENT_ROWS, SHELL_MENUS, SHELL_MIN_ROWS, SHELL_ROWS, type ShellMenuId, type ShellPlan, cardRows, freshCount, isCompact, leftItems, leftTitle, legacyUsageRows, newestSeq, nextShellMenu, parseRoom, progressSegs, roomLines, shellContentRows, shellGeometry, shellPlan } from './shell'
-import { collapsedRowMark, initialBandCollapsed, toggleBand, type BandTarget } from './bandfold'
+import { collapsedRowMark, initialBandCollapsed, toggleBand, toggleFold, type BandTarget } from './bandfold'
 import type { Card } from './shell'
 import type { LeftItem } from './shell'
 import type { FleetLaneSum, RoomRow } from './shell'
@@ -1995,10 +1995,17 @@ export function registerLive(on: Parameters<Register>[0]): void {
           shellMenu = fold.menu
           redraw()
         }
+        const applyFold = () => {
+          const fold = toggleFold({ collapsed: bandCollapsed, menu: shellMenu })
+          bandCollapsed = fold.collapsed
+          shellMenu = fold.menu
+          redraw()
+        }
+        const foldCell = { collapsed: bandCollapsed, onPress: applyFold }
         const menu = shellMenuRow(el, t, {
           selected: shellMenu, pending: pendingCount, room: shellRoom.rows.length, awaiting: (snapshot?.awaiting ?? []).length, columns,
           onSelect: applyBand, speed: forge === null ? null : forgeBar(forge).segs, onSpeed: redraw,
-          ...(bandCollapsed ? { note: t('shell.collapsed', { n: pendingCount, key: 'd' }), onRow: () => applyBand('row'), mark } : bare ? { note: barePos } : {}),
+          ...(bandCollapsed ? { note: t('shell.collapsed', { n: pendingCount, key: 'd' }), onRow: () => applyBand('row'), mark, fold: foldCell } : bare ? { note: barePos } : {}),
         })
         if (bandCollapsed) {
           await logBandGeometry($, rows, columns, 1, false)
@@ -2006,10 +2013,10 @@ export function registerLive(on: Parameters<Register>[0]): void {
         }
         if (bareMain !== null) {
           await logBandGeometry($, rows, columns, bareMain.length + 2)
-          return stackRows(el, ShellBare(el, { main: bareMain, bar: menu, quick }))
+          return stackRows(el, ShellBare(el, { main: bareMain, bar: menu, quick, columns, fold: foldCell }))
         }
         await logBandGeometry($, rows, columns, plan.bodyRows + 4)
-        return stackRows(el, Shell(el, { plan, left, onLeft, main, progress, quick, bar: menu }))
+        return stackRows(el, Shell(el, { plan, left, onLeft, main, progress, quick, bar: menu, columns, fold: foldCell }))
       }
     }
     let content: unknown[] = []

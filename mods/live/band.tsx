@@ -31,6 +31,36 @@ type El = (props: any) => any
 export const BAND_ROWS = 1
 // M5: the cells row 1 of the console band keeps free at its right end for the `[-]` control (three cells and a gap)
 export const BAND_CLOSE_ROOM = 4
+// The fold cell is one padding space plus the glyph, drawn in the column just left of BAND_CLOSE_ROOM.
+export const FOLD_KEY = 'band:fold'
+
+export type FoldCell = { collapsed: boolean; onPress: () => void }
+
+export function foldGlyph(collapsed: boolean): string {
+  return collapsed ? GLYPHS.structure.folded : GLYPHS.structure.open
+}
+
+export function foldLabel(collapsed: boolean): string {
+  return ' ' + foldGlyph(collapsed)
+}
+
+export function foldSpan(): number {
+  return displayWidth(foldLabel(false))
+}
+
+function foldToggle(el: { Text: El; Button?: El }, fold: FoldCell): unknown {
+  const { Text, Button } = el
+  const label = foldLabel(fold.collapsed)
+  const text = <Text key="g">{label}</Text>
+  return Button === undefined ? text : <Button key={FOLD_KEY} plain onPress={fold.onPress}>{text}</Button>
+}
+
+// Body stays left of the fold cell. The cell then starts at columns - BAND_CLOSE_ROOM - foldSpan, in both fold states.
+function foldRow(el: { Box: El; Text: El; Button?: El }, key: string, columns: number, body: unknown, fold: FoldCell): unknown {
+  const { Box } = el
+  const limit = Math.max(1, columns - BAND_CLOSE_ROOM - foldSpan())
+  return <Box key={key}><Box key="foldbody" width={limit} flexShrink={0} overflow="hidden">{body}</Box>{foldToggle(el, fold)}</Box>
+}
 // r4 D: the console sources whose failure the band shows; slots, metrics, answer_log and changes are no_source on purpose in fleet's snapshot
 const BAND_SOURCES = ['tasks', 'peers', 'cards', 'quota_now'] as const
 
@@ -325,6 +355,9 @@ export type ShellDraw = {
   progress: unknown // the progress row's content (one Box), inside the main window
   quick: unknown[]
   bar: unknown // the menu row, always first (ux-v7). The quick row is always last.
+  columns: number
+  // Set when this shell is the expanded band. The fold cell sits on the last row (the row next to the input), same column as the collapsed menu row.
+  fold?: FoldCell
 }
 export function Shell(el: { Box: El; Text: El; Button?: El }, d: ShellDraw): unknown[] {
   const { Box, Text, Button } = el
@@ -378,15 +411,17 @@ export function Shell(el: { Box: El; Text: El; Button?: El }, d: ShellDraw): unk
   }
   rows.push(<Box key="bottom">{segsOf(plan.bottom, 'b')}</Box>)
   rows.push(<Box key="menurow">{d.bar}</Box>)
-  rows.push(<Box key="quick"><Text>{' '}</Text>{d.quick}</Box>)
+  const quickBody = [<Text key="lead">{' '}</Text>, ...d.quick]
+  rows.push(d.fold === undefined ? <Box key="quick">{quickBody}</Box> : foldRow(el, 'quick', d.columns, quickBody, d.fold))
   return rows
 }
 // r5: a band too short for the frames (the card is taller than rows - 4): the card's rows only, then the menu row and the quick row. No left window, no frame, no divider or progress row.
-export function ShellBare(el: { Box: El; Text: El; Button?: El }, d: { main: unknown[]; bar: unknown; quick: unknown[] }): unknown[] {
+export function ShellBare(el: { Box: El; Text: El; Button?: El }, d: { main: unknown[]; bar: unknown; quick: unknown[]; columns: number; fold?: FoldCell }): unknown[] {
   const { Box, Text } = el
   const rows: unknown[] = d.main.map((m, i) => <Box key={'bare' + i}>{m}</Box>)
   rows.push(<Box key="menurow">{d.bar}</Box>)
-  rows.push(<Box key="quickrow"><Text>{' '}</Text>{d.quick}</Box>)
+  const quickBody = [<Text key="lead">{' '}</Text>, ...d.quick]
+  rows.push(d.fold === undefined ? <Box key="quickrow">{quickBody}</Box> : foldRow(el, 'quickrow', d.columns, quickBody, d.fold))
   return rows
 }
 
@@ -395,9 +430,11 @@ export function ShellBare(el: { Box: El; Text: El; Button?: El }, d: { main: unk
 // r5: `note` is a dim summary at the tail (the collapsed band's `待決 N 張 · d 展開`, the bare card's position); `speed` is the forge label (`│ ϟ 83 tok/s ▁▂▃`, tok/s is back on the band), dropped when it does not fit
 // `onRow` is set only while the band is one row: a click on the gaps, the note, the awaiting tail or the trailing blank expands. It is absent when the band is open, so blank space stays a no-op.
 // `mark` colours only the ▲N count (text colour, no background) while a new card arrived under that one row.
-export type MenuRowSpec = { selected: ShellMenuId; pending: number; room: number; awaiting: number; columns: number; onSelect: (id: ShellMenuId) => void; note?: string; speed?: readonly Seg[] | null; onSpeed?: () => void; onRow?: () => void; mark?: boolean }
+export type MenuRowSpec = { selected: ShellMenuId; pending: number; room: number; awaiting: number; columns: number; onSelect: (id: ShellMenuId) => void; note?: string; speed?: readonly Seg[] | null; onSpeed?: () => void; onRow?: () => void; mark?: boolean; fold?: FoldCell }
 export function shellMenuRow(el: { Box: El; Text: El; Button?: El }, t: T, spec: MenuRowSpec): unknown {
   const { Box, Text, Button } = el
+  const foldHold = spec.fold === undefined ? 0 : BAND_CLOSE_ROOM + foldSpan()
+  const budget = spec.columns - foldHold
   const decideParts = (): { lead: string; count: string; tail: string; label: string } => {
     const lead = t('tab.decide') + ' '
     const count = GLYPHS.state.need_you + String(spec.pending)
@@ -424,7 +461,7 @@ export function shellMenuRow(el: { Box: El; Text: El; Button?: El }, t: T, spec:
   let gaps = [1, 3, 5, 5, 5]
   const hostWidth = (): number => displayWidth(gaps.map((g, i) => ' '.repeat(g)).join('')) + items.reduce((n, it) => n + it.width, 0) + (tail === '' ? 0 : 2 + displayWidth(tail)) + noteW
   // gaps[0] is the leading space; the rest sit between items. Shrink from the right until the row fits.
-  while (hostWidth() > spec.columns) {
+  while (hostWidth() > budget) {
     const at = gaps.map((g, i) => (i > 0 && g > 1 ? i : -1)).filter(i => i >= 0).pop()
     if (at === undefined) { if (gaps[0] > 0) gaps[0] -= 1; else break }
     else gaps[at] -= 1
@@ -452,7 +489,7 @@ export function shellMenuRow(el: { Box: El; Text: El; Button?: El }, t: T, spec:
   let used = hostWidth()
   if (sp !== undefined && sp !== null && sp.length > 0) {
     const w = sp.reduce((n, g) => n + displayWidth(g.text), 0)
-    if (hostWidth() + 1 + w <= spec.columns) {
+    if (hostWidth() + 1 + w <= budget) {
       used = hostWidth() + 1 + w
       const texts = sp.map((g, i) => <Text key={'sp' + i} {...drawSeg(g)} wrap="truncate">{g.text}</Text>)
       const press = spec.onRow ?? spec.onSpeed
@@ -460,9 +497,10 @@ export function shellMenuRow(el: { Box: El; Text: El; Button?: El }, t: T, spec:
     }
   }
   // The trailing blank is the rest of the row, measured after the speed label so the label still fits. A 1-cell overflow button is not added.
-  const rest = spec.columns - used
+  const rest = budget - used
   if (rest > 0 && Button !== undefined && spec.onRow !== undefined) kids.push(<Button key="band:row" plain onPress={spec.onRow}>{' '.repeat(rest)}</Button>)
-  return <Box key="shellmenu">{kids}</Box>
+  const body = <Box key="shellmenu">{kids}</Box>
+  return spec.fold === undefined ? body : foldRow(el, 'shellfold', spec.columns, body, spec.fold)
 }
 
 // one plain line in the main window (the pet placeholder, the help line, an empty 待決)

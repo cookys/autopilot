@@ -35,6 +35,17 @@ test('toggleBand: a click on the collapsed row expands; d on the expanded band c
   assert.deepEqual(F.toggleBand(fold(false, 'r'), 'd'), fold(false, 'd'))
 })
 
+test('toggleFold: flips collapsed both ways and keeps menu', () => {
+  const shut = fold(true, 'r')
+  const open = F.toggleFold(shut)
+  assert.deepEqual(open, fold(false, 'r'))
+  assert.notEqual(open, shut)
+  const back = F.toggleFold(open)
+  assert.deepEqual(back, fold(true, 'r'))
+  assert.deepEqual(F.toggleFold(fold(false, 'd')), fold(true, 'd'))
+  assert.deepEqual(F.toggleFold(fold(true, 'u')), fold(false, 'u'))
+})
+
 test('collapsedRowMark: a count that grew while collapsed is marked; expanding (seen catches up) clears it', () => {
   assert.equal(F.collapsedRowMark(1, 1), false)
   assert.equal(F.collapsedRowMark(1, 2), true)

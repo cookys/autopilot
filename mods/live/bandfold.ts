@@ -11,6 +11,11 @@ export type BandFold = { collapsed: boolean; menu: ShellMenuId }
 // 'row' is a click on the collapsed row body (the gaps, the note, the trailing blank). 'blank' is a click on empty space in the expanded band.
 export type BandTarget = ShellMenuId | 'row' | 'blank'
 
+// The fixed fold cell. Flips collapsed and leaves the open menu alone. Always a new object.
+export function toggleFold(state: BandFold): BandFold {
+  return { collapsed: !state.collapsed, menu: state.menu }
+}
+
 // A no-op returns the same state object, so a caller can see that nothing changed.
 export function toggleBand(state: BandFold, target: BandTarget): BandFold {
   if (target === 'blank') return state

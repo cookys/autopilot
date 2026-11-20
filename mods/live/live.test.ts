@@ -81,7 +81,7 @@ import * as ui from './ui'
 import consoleFull from './fixtures/console/console-full.fixture'
 import { FOCUS_ANCHOR_KEY } from './pane'
 import { routeKey } from './pages/keys'
-import { BAND_ROWS } from './band'
+import { BAND_CLOSE_ROOM, BAND_ROWS, FOLD_KEY, foldLabel, foldSpan } from './band'
 import { forgeAliveAt, forgeRowAsk } from './register'
 import { COL_GAP, RECENT_COL_W, SPEED_COL_W } from './speedview'
 import { BAND_MIN_COLS, FORGE_LABEL_MIN, barStrip, usageTabFits } from './tabs'
@@ -8961,6 +8961,78 @@ for (const surface of SURFACES) {
     expect(other.all.length, 'another menu key expands and selects').toBeGreaterThan(1)
     expect(other.all.join('\n')).toContain('圓桌')
   })
+  test('r3 fold toggle: the same bottom-row cell folds and unfolds at 209 and 80 columns (' + surface + ')', async ($, on) => {
+    r5World(on)
+    await start($, surface)
+    const shellRows = (tree: Node): Node[] => ((tree.children || []) as Node[]).flatMap(function rows(c: Node): Node[] {
+      const kids = (c.children || []) as Node[]
+      return c.type === 'Box' && c.props?.flexDirection === 'column' ? kids : c.type === 'Box' && kids.length === 1 && kids[0].type === 'Box' && kids[0].props?.flexDirection === 'column' ? rows(kids[0]) : [c]
+    })
+    const findKey = (n: Node | string, key: string): Node | null => {
+      if (typeof n !== 'object' || n === null) return null
+      if (n.props?.key === key) return n
+      for (const ch of n.children || []) {
+        const hit = findKey(ch as Node, key)
+        if (hit !== null) return hit
+      }
+      return null
+    }
+    const glyphCol = (row: Node): number => {
+      let found = -1
+      const walk = (n: Node | string | unknown[], x: number): number => {
+        if (typeof n === 'string') return x + displayWidth(n)
+        if (Array.isArray(n)) { let c = x; for (const ch of n) c = walk(ch as Node, c); return c }
+        if (n.props?.key === FOLD_KEY) { found = x + displayWidth(foldLabel(true)) - 1; return x }
+        const box = typeof n.props?.width === 'number' ? n.props.width as number : null
+        const kids = (n.children || []) as (Node | string | unknown[])[]
+        if (n.type === 'Text' || (kids.length === 0 && typeof n.props?.label === 'string')) {
+          const text = n.type === 'Text' ? textOf(n) : n.props?.label as string
+          return x + displayWidth(text)
+        }
+        let c = x
+        for (const ch of kids) c = walk(ch, c)
+        return box === null ? c : x + box
+      }
+      walk(row, 0)
+      return found
+    }
+    const measure = async (cols: number, press: string[]) => {
+      const d = await drawShell($, cols, press, 19, { observe: true })
+      const rows = shellRows(d.tree)
+      const hits = rows.map((r, i) => ({ i, btn: findKey(r, FOLD_KEY) })).filter(h => h.btn !== null)
+      expect(hits.length, 'one toggle at ' + cols).toBe(1)
+      const at = hits[0].i
+      const btn = hits[0].btn as Node
+      const label = rowStr(btn)
+      const glyph = [...label].pop() as string
+      return { rowFromBottom: rows.length - 1 - at, col: glyphCol(rows[at]), glyph, label, width: displayWidth(glyph), n: d.all.length }
+    }
+    for (const cols of [209, 80]) {
+      await start($, surface)
+      const shut = await measure(cols, [])
+      expect(shut.n, 'collapsed at ' + cols).toBe(1)
+      expect(shut.label, 'padding and folded glyph at ' + cols).toBe(foldLabel(true))
+      expect(shut.glyph).toBe('▸')
+      expect(shut.glyph).toBe(ui.GLYPHS.structure.folded)
+      expect(shut.rowFromBottom, 'bottom row at ' + cols).toBe(0)
+      expect(shut.col + shut.width <= cols - BAND_CLOSE_ROOM, 'ends before the close room at ' + cols).toBe(true)
+      expect(shut.col, 'glyph sits in the cell just left of the close room at ' + cols).toBe(cols - BAND_CLOSE_ROOM - 1)
+      const open = await measure(cols, [FOLD_KEY])
+      expect(open.n, 'the toggle expands at ' + cols).toBeGreaterThan(1)
+      expect(open.label).toBe(foldLabel(false))
+      expect(open.glyph).toBe('▾')
+      expect(open.glyph).toBe(ui.GLYPHS.structure.open)
+      expect(open.rowFromBottom).toBe(shut.rowFromBottom)
+      expect(open.col).toBe(shut.col)
+      expect(open.col + open.width <= cols - BAND_CLOSE_ROOM, 'expanded cell ends before the close room at ' + cols).toBe(true)
+      const again = await measure(cols, [FOLD_KEY])
+      expect(again.n, 'the same cell collapses at ' + cols).toBe(1)
+      expect(again.glyph).toBe('▸')
+      expect(again.col).toBe(shut.col)
+      expect(again.rowFromBottom).toBe(shut.rowFromBottom)
+    }
+  })
+
   test('r5 B2: a new card while collapsed stays one row and marks ▲N; expanding clears the mark (' + surface + ')', async ($, on) => {
     const w = r5World(on, [PMCARD])
     await start($, surface)

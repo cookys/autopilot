@@ -3644,6 +3644,20 @@ function implSandboxMode(runner) {
   return runner === 'cc-shim' ? 'bwrap' : 'off';
 }
 
+// dispatch-hetero refuses a cc-shim implementer of a listed local endpoint unless
+// --sandbox bwrap is on the argv (scripts/lib/local-sandbox-endpoints.json).
+function implEndpointNeedsSandbox(binding) {
+  if (!binding || typeof binding.name !== 'string') return false;
+  let listed;
+  try {
+    listed = JSON.parse(fs.readFileSync(path.join(__dirname, 'lib', 'local-sandbox-endpoints.json'), 'utf8'));
+  } catch {
+    return false;
+  }
+  const names = listed && Array.isArray(listed.local_sandbox_endpoints) ? listed.local_sandbox_endpoints : [];
+  return names.includes(binding.name);
+}
+
 // The sandbox mode is part of the exam identity through containment_fingerprint: the operator's
 // fingerprint stays an input, the identity carries sha256(canonical{containment_fingerprint, sandbox}).
 // An old unsandboxed record and a new sandboxed one therefore hash to different identity_hash.
@@ -4383,7 +4397,11 @@ function runImplCase(context) {
       const flag = implRunnerBinFlag(options.runner);
       if (flag) argv.push(flag, options.runnerBin);
     }
-    if (options.implSandbox === 'bwrap') {
+    if (options.endpointBinding) {
+      // dispatch-hetero's cn-model gate reads --endpoint. Env-only binding never reaches it.
+      argv.push('--endpoint', options.endpointBinding.name);
+    }
+    if (options.implSandbox === 'bwrap' || implEndpointNeedsSandbox(options.endpointBinding)) {
       // Same flags production write dispatches use. The worktree must sit outside every repo
       // (the exam repo is a repo), so each case gets its own parent under workRoot.
       const worktreeParent = fs.mkdtempSync(path.join(workRoot, `impl-wt-${caseSpec.case_id}-`));
@@ -4409,6 +4427,16 @@ function runImplCase(context) {
       // different one through ambient env.
       env.ANTHROPIC_BASE_URL = options.endpointBinding.base_url;
       env.ANTHROPIC_AUTH_TOKEN = process.env[options.endpointBinding.token_env];
+      // The child env is an allowlist, so dispatch-hetero's resolve-endpoint.sh cannot
+      // see the parent namespace. Pin the same URL, token and transport under the
+      // names load-endpoints-env.sh / resolve-endpoint.sh honour. A set key also
+      // blocks a different URL from ~/.autopilot/endpoints.env.
+      const endpointUc = String(options.endpointBinding.name).toUpperCase();
+      env[`AUTOPILOT_ENDPOINT_${endpointUc}_URL`] = options.endpointBinding.base_url;
+      env[`AUTOPILOT_ENDPOINT_${endpointUc}_TOKEN`] = process.env[options.endpointBinding.token_env];
+      if (options.endpointBinding.transport_security === 'plaintext_private') {
+        env[`AUTOPILOT_ENDPOINT_${endpointUc}_TRANSPORT`] = 'plaintext-private';
+      }
     }
     budget.spent += 1;
     const dispatchStartedAt = process.hrtime.bigint();

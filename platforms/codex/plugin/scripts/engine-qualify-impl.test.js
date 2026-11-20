@@ -85,7 +85,7 @@ if (mode === 'unavailable_structured' || mode === 'unavailable_plain' || mode ==
 const canary = process.env.QUALIFY_CANARY_TOKEN || '';
 // Record the cc-shim env the rail received so the --endpoint binding test can prove the
 // resolver's base_url (and not the ambient env) reached the dispatch.
-try { fs.writeFileSync(${JSON.stringify(path.join(tempRoot, 'fake-env-seen.txt'))}, (process.env.ANTHROPIC_BASE_URL || '') + '\\n' + (process.env.ANTHROPIC_AUTH_TOKEN || '') + '\\n'); } catch (e) {}
+try { fs.writeFileSync(${JSON.stringify(path.join(tempRoot, 'fake-env-seen.txt'))}, (process.env.ANTHROPIC_BASE_URL || '') + '\\n' + (process.env.ANTHROPIC_AUTH_TOKEN || '') + '\\n' + (process.env.AUTOPILOT_ENDPOINT_EXAMLAN_URL || '') + '\\n' + (process.env.AUTOPILOT_ENDPOINT_EXAMLAN_TOKEN || '') + '\\n' + (process.env.AUTOPILOT_ENDPOINT_EXAMLAN_TRANSPORT || '') + '\\n'); } catch (e) {}
 
 function emit(o) {
   if (args.includes('--sandbox')) {
@@ -461,6 +461,8 @@ check(!fs.existsSync(path.join(budStore, 'qualification-evidence.jsonl')), 'allo
   process.env.ANTHROPIC_BASE_URL = 'https://ambient.example/must-not-win';
   process.env.ANTHROPIC_AUTH_TOKEN = 'ambient-token-must-not-win';
   try { fs.unlinkSync(seen); } catch (_e) { /* absent */ }
+  const argvFile = path.join(tempRoot, 'fake-argv.jsonl');
+  const argvBefore = fs.existsSync(argvFile) ? fs.readFileSync(argvFile, 'utf8').split('\n').filter(Boolean).length : 0;
   const storeE = fs.mkdtempSync(path.join(tempRoot, 'store-endpoint-'));
   const rawE = fs.mkdtempSync(path.join(tempRoot, 'raw-endpoint-'));
   const wrapper = path.join(tempRoot, 'disp.sh');
@@ -483,6 +485,15 @@ check(!fs.existsSync(path.join(budStore, 'qualification-evidence.jsonl')), 'allo
   const seenLines = fs.readFileSync(seen, 'utf8').split('\n');
   equal(seenLines[0], 'http://10.7.7.7:8001', 'rail received the RESOLVED base_url, not the ambient ANTHROPIC_BASE_URL');
   equal(seenLines[1], 'exam-lan-bearer', 'rail received the named endpoint bearer, not the ambient token');
+  equal(seenLines[2], 'http://10.7.7.7:8001', 'stub saw AUTOPILOT_ENDPOINT_EXAMLAN_URL equal to the bound base_url');
+  equal(seenLines[3], 'exam-lan-bearer', 'stub saw the namespace token equal to the bound bearer');
+  equal(seenLines[4], 'plaintext-private', 'stub saw the plaintext-private transport override');
+  const endpointArgv = fs.readFileSync(argvFile, 'utf8').split('\n').filter(Boolean).slice(argvBefore).map((l) => JSON.parse(l));
+  check(endpointArgv.length > 0, '--endpoint run dispatched');
+  check(endpointArgv.every((a) => {
+    const i = a.indexOf('--endpoint');
+    return i >= 0 && a[i + 1] === 'examlan';
+  }), '--endpoint run passes --endpoint examlan to the dispatcher');
   const endpointFile = fs.readFileSync(path.join(rawE, 'impl-endpoint.json'), 'utf8');
   const disclosed = JSON.parse(endpointFile);
   equal(disclosed, { name: 'examlan', transport_security: 'plaintext_private' }, 'raw/impl-endpoint.json is name + transport only');
@@ -897,6 +908,8 @@ function runTrunc(mode, seed, truncate) {
   check(grokArgv.length > 0, 'unsandboxed run dispatched');
   check(grokArgv.every((a) => !a.includes('--sandbox') && !a.includes('--worktree-parent')),
     'non-cc-shim runner: the exam passes neither --sandbox nor --worktree-parent');
+  check(grokArgv.every((a) => !a.includes('--endpoint')),
+    'a run without --endpoint passes no --endpoint');
   check(grokArgv.every((a) => a.includes('--no-verify-tip')),
     'qualification exam passes --no-verify-tip');
   check(!('sandbox_blocked_writes' in grokRun.row.quality), 'unsandboxed row has no sandbox_blocked_writes key');

@@ -12,6 +12,8 @@ Empirical basis: [`multi-agent-portability.md`](multi-agent-portability.md) § "
 | plan-review | `scripts/dispatch-plan-review.js` | Durable multi-seat review of one frozen plan. |
 | review | `scripts/dispatch-review.sh` | Read-only verdict on a diff passed as text. |
 | batch | `scripts/dispatch-batch.sh` | Git and artifact rails for a width fan-out (plan, verify, merge-back, reap). |
+
+Before dispatching a parallel batch, run `scripts/check-batch-overlap.js` on the briefs; exit 1 means re-split. `platforms/**` is exempt (every ticket regenerates those mirrors). Contract: the script header.
 | foreman | `scripts/dispatch-foreman.sh` | Non-Claude foreman holds the loop; the verdict stays at depth 0. |
 | author | `scripts/dispatch-author.sh` | Raw-prompt authoring (tests, specs); not a review template. |
 

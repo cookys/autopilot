@@ -1,0 +1,147 @@
+'use strict';
+// Run: node --test scripts/check-batch-overlap.test.js
+
+const { test, after } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { spawnSync } = require('child_process');
+
+const SCRIPT = path.join(__dirname, 'check-batch-overlap.js');
+const ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'batch-overlap-'));
+
+const gitEnv = {
+  ...process.env,
+  GIT_AUTHOR_NAME: 'overlap-test',
+  GIT_AUTHOR_EMAIL: 'overlap-test@example.com',
+  GIT_COMMITTER_NAME: 'overlap-test',
+  GIT_COMMITTER_EMAIL: 'overlap-test@example.com',
+};
+
+function git(args) {
+  const r = spawnSync('git', args, { cwd: ROOT, env: gitEnv, encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+}
+
+function write(rel, body) {
+  const abs = path.join(ROOT, rel);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, body);
+}
+
+git(['init', '-b', 'main']);
+write('src/register.ts', 'export {}\n');
+write('src/a.ts', 'export {}\n');
+write('src/b.ts', 'export {}\n');
+write('src/ui/pane.ts', 'export {}\n');
+write('src/ui/deep/x.ts', 'export {}\n');
+write('platforms/mirror.ts', 'export {}\n');
+write('CHANGELOG.md', '# log\n');
+git(['add', '.']);
+git(['commit', '-m', 'seed']);
+
+after(() => {
+  fs.rmSync(ROOT, { recursive: true, force: true });
+});
+
+function run(args) {
+  return spawnSync(process.execPath, [SCRIPT, '--repo', ROOT, ...args], { encoding: 'utf8' });
+}
+
+function brief(name, scopeLine) {
+  const file = path.join(ROOT, `${name}.md`);
+  const body = scopeLine == null ? `# ${name}\n\nNo scope here.\n` : `# ${name}\n\nScope: ${scopeLine}\n`;
+  fs.writeFileSync(file, body);
+  return file;
+}
+
+test('codeforge-v74-A-B-register', () => {
+  const a = brief('A', 'src/register.ts, src/a.ts');
+  const b = brief('B', 'src/b.ts, src/register.ts');
+  const r = run([a, b]);
+  assert.equal(r.status, 1);
+  const json = JSON.parse(r.stdout);
+  assert.equal(json.schema, 'autopilot.batch-overlap/1');
+  assert.equal(json.tickets, 2);
+  assert.deepEqual(json.overlaps, [{ a: 'A', b: 'B', files: ['src/register.ts'] }]);
+  assert.match(r.stderr, /overlap: ticket A and ticket B both edit src\/register\.ts/);
+});
+
+test('glob vs literal src/ui/** overlaps src/ui/pane.ts', () => {
+  const a = brief('ui-glob', 'src/ui/**');
+  const b = brief('ui-lit', 'src/ui/pane.ts');
+  const r = run([a, b]);
+  assert.equal(r.status, 1);
+  const json = JSON.parse(r.stdout);
+  assert.ok(json.overlaps[0].files.includes('src/ui/pane.ts'));
+});
+
+test('glob src/ui/* does not overlap src/ui/deep/x.ts', () => {
+  const a = brief('star', 'src/ui/*');
+  const b = brief('deep', 'src/ui/deep/x.ts');
+  const r = run([a, b]);
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(JSON.parse(r.stdout).overlaps, []);
+});
+
+test('untracked new file in both scopes overlaps', () => {
+  const manifest = path.join(ROOT, 'manifest.json');
+  fs.writeFileSync(manifest, JSON.stringify({
+    tickets: [
+      { id: 'N1', scope: ['src/new/**'] },
+      { id: 'N2', scope: ['src/new/x.ts'] },
+    ],
+  }));
+  const r = run(['--manifest', manifest]);
+  assert.equal(r.status, 1);
+  const json = JSON.parse(r.stdout);
+  assert.equal(json.overlaps.length, 1);
+  assert.ok(json.overlaps[0].files.includes('src/new/x.ts'));
+});
+
+test('platforms/** in every ticket is exempt and --allow CHANGELOG.md exempts that file', () => {
+  const a = brief('P1', 'platforms/**, CHANGELOG.md');
+  const b = brief('P2', 'platforms/**, CHANGELOG.md');
+  const bare = run([a, b]);
+  assert.equal(bare.status, 1);
+  assert.ok(JSON.parse(bare.stdout).overlaps[0].files.includes('CHANGELOG.md'));
+  assert.ok(!JSON.parse(bare.stdout).overlaps[0].files.some((f) => f.startsWith('platforms/')));
+  const allowed = run(['--allow', 'CHANGELOG.md', a, b]);
+  assert.equal(allowed.status, 0, allowed.stderr);
+  assert.deepEqual(JSON.parse(allowed.stdout).overlaps, []);
+});
+
+test('three tickets, only B and C overlap, exactly one pair', () => {
+  const a = brief('TA', 'src/a.ts');
+  const b = brief('TB', 'src/b.ts, src/register.ts');
+  const c = brief('TC', 'src/register.ts');
+  const r = run([a, b, c]);
+  assert.equal(r.status, 1);
+  const json = JSON.parse(r.stdout);
+  assert.equal(json.tickets, 3);
+  assert.equal(json.overlaps.length, 1);
+  assert.equal(json.overlaps[0].a, 'TB');
+  assert.equal(json.overlaps[0].b, 'TC');
+  assert.deepEqual(json.overlaps[0].files, ['src/register.ts']);
+});
+
+test('a brief without Scope: exits 2 and names the file', () => {
+  const a = brief('noscope', null);
+  const b = brief('ok', 'src/a.ts');
+  const r = run([a, b]);
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, new RegExp(a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
+test('parentheses comment is stripped from scope entries', () => {
+  const a = brief('C1', 'src/a.ts (only A), platforms/** (mirrors via sync-all only)');
+  const b = brief('C2', 'src/b.ts');
+  const r = run([a, b]);
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(JSON.parse(r.stdout).overlaps, []);
+  const c = brief('C3', 'src/a.ts (the shared one)');
+  const hit = run([a, c]);
+  assert.equal(hit.status, 1);
+  assert.deepEqual(JSON.parse(hit.stdout).overlaps[0].files, ['src/a.ts']);
+});

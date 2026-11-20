@@ -6,9 +6,9 @@ Decisions and evidence: [`project/plans/2026-10-12-worktree-placement.md`](../pr
 
 ## The rule
 
-**Every worktree of a repo lives under one root: `<main checkout>/.claude/worktrees/`**, whoever creates it.
+**Worktrees live in an ignored directory under the main checkout: `<main checkout>/.claude/worktrees/` or `<main checkout>/.worktrees/<branch>`.** Subagent and dispatch worktrees use either of those two. Rails still create under `.claude/worktrees/` (stricter, one resolver). Both paths are listed in this repo's `.gitignore`.
 The main checkout is the parent of the repo's `.git` directory (`git rev-parse --git-common-dir`), found the same
-way from the main checkout and from any linked worktree, so every worktree of one repo shares one root and the
+way from the main checkout and from any linked worktree, so every worktree of one repo shares that checkout's git dir and the
 path says which repo it belongs to.
 
 | Who creates it | Name under `.claude/worktrees/` | How |

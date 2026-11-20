@@ -15,6 +15,7 @@ node_modules/
 .claude/next-state.json
 .claude/agents/
 .claude/worktrees/
+.worktrees/
 .context/
 .in_use/
 hooks/hooks.json.capture-backup

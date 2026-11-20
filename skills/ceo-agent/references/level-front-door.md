@@ -65,7 +65,7 @@ team-default branch) is considered **within CEO DOA** for M/L/XL workflows when 
 gates pass. This is tactical and locally reversible (`git reset --hard`). Merging to `main`
 or force-pushing is NOT within DOA. The forcing function in `autopilot:finish-flow` treats
 merge step as an autonomous sub-task; CEO does not pause to ask before merging.
-Deleting an **already-merged** feature branch during finish-flow cleanup (merged-status verified first) is likewise within CEO DOA; the "Delete
+Deleting an **already-merged** feature branch in the same step as the finish-flow merge (`git branch -d`, `git push origin --delete`, `git worktree remove`, `git worktree prune`) is likewise within CEO DOA; the "Delete
 files/branches" escalation row in `SKILL.md` covers unmerged or protected branches.
 
 ### One confirmation per run (opt-in, v2.36.17)

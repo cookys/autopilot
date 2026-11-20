@@ -815,7 +815,7 @@ function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
   if (wide && residue > 0) actions.push([plain(GLYPHS.structure.answer + ' ' + t('page.now.go_residue', { n: residue })), plain('  '), { text: '[8]', press: 'tab:8:hygiene', color: PALETTE.action }]) // X2: narrow panes use the fixed tab 8 Button.
 
   const stripLen = size.cols < STRIP_SPLIT_COLS ? Math.min(2, size.rows) : Math.min(1, size.rows)
-  const avail = Math.max(0, size.rows - 1 - stripLen)
+  const avail = Math.max(0, size.rows - 2 - stripLen)
   const firstActLen = Math.max(1, actions.length)
   const firstRoom = Math.max(0, avail - Math.min(firstActLen, avail))
   if (ctx.shortBody === true || avail <= 4 || firstRoom <= 4) {

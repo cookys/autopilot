@@ -186,7 +186,8 @@ export function fleetView(ctx: PageCtx, view: FleetView = DEFAULT_VIEW): { body:
   // M1: a short body (<= 4 rows) that cannot hold every row ends in `↓ 還有 N 項` instead of dropping rows without a word (the frame drops its own hint in short mode)
   {
     const stripLen = cols < STRIP_SPLIT_COLS ? Math.min(2, ctx.size.rows) : Math.min(1, ctx.size.rows)
-    const avail = Math.max(0, ctx.size.rows - 1 - stripLen)
+    // v7.4: the frame also draws a bottom border row above the strip
+    const avail = Math.max(0, ctx.size.rows - 2 - stripLen)
     const room = Math.max(0, avail - Math.min(Math.max(1, actions.length), avail))
     // V2: tiny panes keep the focus and the most severe fleet fact.
     if (!wide && room <= 2 && f !== undefined) {

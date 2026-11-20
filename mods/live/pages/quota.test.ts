@@ -245,8 +245,8 @@ test('quota: compact mode (80x7, shortBody) suppresses only headings and column 
   const grok = POOLS.find(p => p.pool === 'grok')!
 
   // 80 columns, H=7, one pool whose full verdict is longer than the short one, no explicit actions
-  const out = frameRows(page, ctxOf(80, 7, consoleOf([trinity], { cards: [] }))).map(text)
-  expect(out.length).toBe(7)
+  const out = frameRows(page, ctxOf(80, 8, consoleOf([trinity], { cards: [] }))).map(text)
+  expect(out.length).toBe(8)
   const compactBody = out.slice(1, 5).filter(l => l.trim() !== '')
   expect(compactBody.some(l => l.includes('──'))).toBe(false)
   expect(compactBody.some(l => l.includes('重置') || l.includes('7 天'))).toBe(false)
@@ -258,7 +258,7 @@ test('quota: compact mode (80x7, shortBody) suppresses only headings and column 
 
   // Long full verdict (> 80 cols) wraps across remaining body rows and is never truncated
   const longNote = 'statusline 沒在跑，而且本席上一次回報已經超過三小時，必須把完整原因換行顯示出來不能截斷'
-  const wrappedOut = frameRows(page, ctxOf(80, 7, consoleOf([{ ...trinity, stale_note: longNote }], { cards: [] }))).map(text)
+  const wrappedOut = frameRows(page, ctxOf(80, 8, consoleOf([{ ...trinity, stale_note: longNote }], { cards: [] }))).map(text)
   expect(wrappedOut.every(l => displayWidth(l) <= 80)).toBe(true)
   const wrappedBody = wrappedOut.slice(1, 5)
   expect(wrappedBody.join('').replace(/\s+/g, '')).toContain(('判定紅：180分未更新（>10分；' + longNote + '）').replace(/\s+/g, ''))
@@ -267,24 +267,24 @@ test('quota: compact mode (80x7, shortBody) suppresses only headings and column 
 
   // Expanded seats follow the full verdict only while they fit in the remaining body rows
   const openPage = { ...quotaPage, render: (c: Parameters<typeof renderQuota>[0]) => renderQuota(c, { focus: 0, expanded: true }) }
-  const openBody = frameRows(openPage, ctxOf(80, 7, consoleOf([personal], { seats: SEATS, cards: [] }))).map(text).slice(1, 5)
+  const openBody = frameRows(openPage, ctxOf(80, 8, consoleOf([personal], { seats: SEATS, cards: [] }))).map(text).slice(1, 5)
   expect(openBody[0]).toContain('personal')
   expect(openBody[1]).toBe('personal 判定黃：已達額度上限，判定未知：缺換池資料（capacity）')
   expect(openBody[2]).toBe('席    capacity--claude  7 天 100%  5 時 100%  0 分前')
   expect(openBody[3]).toBe('      hangar--claude  7 天 100%  5 時 100%  1 分前')
-  const scrolledBody = frameRows(openPage, ctxOf(80, 7, consoleOf([personal], { seats: SEATS, cards: [] })), { scroll: 1 }).map(text).slice(1, 5)
+  const scrolledBody = frameRows(openPage, ctxOf(80, 8, consoleOf([personal], { seats: SEATS, cards: [] })), { scroll: 1 }).map(text).slice(1, 5)
   expect(scrolledBody).toEqual(openBody)
-  const staleSeatBody = frameRows(openPage, ctxOf(80, 7, consoleOf([personal], { seats: SEATS.slice(1), cards: [] }))).map(text).slice(1, 5)
+  const staleSeatBody = frameRows(openPage, ctxOf(80, 8, consoleOf([personal], { seats: SEATS.slice(1), cards: [] }))).map(text).slice(1, 5)
   expect(staleSeatBody[3]).toBe('      old--claude  7 天 97%✗  5 時 90%✗  14 分前')
 
   // R5: Focused pool's full verdict is reserved FIRST, then remaining rows go to other pools in danger order
-  const threeBody = frameRows(page, ctxOf(80, 7, consoleOf([codex, personal, trinity], { cards: [] }))).map(text).slice(1, 5)
+  const threeBody = frameRows(page, ctxOf(80, 8, consoleOf([codex, personal, trinity], { cards: [] }))).map(text).slice(1, 5)
   expect(threeBody[0]).toContain('trinity')
   expect(threeBody[1]).toContain('personal')
   expect(threeBody[2]).toContain('codex')
   expect(threeBody[3]).toBe('trinity 判定紅：180 分未更新（>10 分；statusline 沒在跑）')
 
-  const fourBody = frameRows(page, ctxOf(80, 7, consoleOf([codex, grok, personal, trinity], { cards: [] }))).map(text).slice(1, 5)
+  const fourBody = frameRows(page, ctxOf(80, 8, consoleOf([codex, grok, personal, trinity], { cards: [] }))).map(text).slice(1, 5)
   expect(fourBody[0]).toContain('trinity')
   expect(fourBody[1]).toContain('personal')
   // M2 (codeforge B49-B54, S1-full-p4-80x24 row 15): a cut 80-column table says what it hides instead of silently dropping grok and codex
@@ -374,31 +374,31 @@ test('quota shortBody & poolRoom: focused verdict is never cut and renderQuota w
   const cases: { name: string; cols: number; rows: number; room: number; pools: unknown[]; wantVerdict: string }[] = [
     {
       name: '80x7 3 pools + 1-row unknown verdict',
-      cols: 80, rows: 7, room: 4,
+      cols: 80, rows: 8, room: 4,
       pools: [personal, grok, codex],
       wantVerdict: 'personal 判定黃：已達額度上限，判定未知：缺換池資料（capacity）',
     },
     {
       name: '80x7 3 pools + 1-row warning verdict',
-      cols: 80, rows: 7, room: 4,
+      cols: 80, rows: 8, room: 4,
       pools: [grok, lab, codex],
       wantVerdict: 'grok 判定黃：約剩 90% 會浪費',
     },
     {
       name: '80x7 2 pools + 2-row wrapped verdict',
-      cols: 80, rows: 7, room: 4,
+      cols: 80, rows: 8, room: 4,
       pools: [{ ...trinity, stale_note: longNote }, codex],
       wantVerdict: 'trinity 判定紅：180 分未更新（>10 分；' + longNote + '）',
     },
     {
       name: '80x5 1 pool + 1-row verdict',
-      cols: 80, rows: 5, room: 2,
+      cols: 80, rows: 6, room: 2,
       pools: [trinity],
       wantVerdict: 'trinity 判定紅：180 分未更新（>10 分；statusline 沒在跑）',
     },
     {
       name: '80x5 2 pools + 2-row wrapped verdict (room - vLen === 0)',
-      cols: 80, rows: 5, room: 2,
+      cols: 80, rows: 6, room: 2,
       pools: [{ ...trinity, stale_note: longNote }, codex],
       wantVerdict: 'trinity 判定紅：180 分未更新（>10 分；' + longNote + '）',
     },
@@ -423,9 +423,9 @@ test('quota shortBody & poolRoom: focused verdict is never cut and renderQuota w
   expect(text(zeroRoom.body[0])).toContain('personal')
   expect(zeroRoom.body.map(text).join('\n')).toContain('personal 判定黃：已達額度上限，判定未知：缺換池資料（capacity）')
 
-  // poolRoom clamped with Math.max(0, ...) when room > 4 (80x8 -> room 5) and a 5-row wrapped verdict fills room
+  // poolRoom clamped with Math.max(0, ...) when room > 4 (80x9 -> room 5) and a 5-row wrapped verdict fills room
   const fiveRowNote = '甲'.repeat(160)
-  const ctx8 = ctxOf(80, 8, consoleOf([{ ...trinity, stale_note: fiveRowNote }, codex], { cards: [] }))
+  const ctx8 = ctxOf(80, 9, consoleOf([{ ...trinity, stale_note: fiveRowNote }, codex], { cards: [] }))
   const r8 = renderQuota(ctx8)
   expect(rowsWrappedLen(r8.body, 80)).toBe(5)
   const f8 = frameRows(page, ctx8).map(text)

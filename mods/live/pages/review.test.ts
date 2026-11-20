@@ -279,10 +279,11 @@ test('review golden 160x40 and 120x30: frameRows equals H, body and action rows 
   const f160 = frameRows(reviewPage, c160, { pages: PAGES }).map(text)
   expect(f160.length).toBe(40)
   expect(f160[0]).toBe('審查')
-  expect(f160.slice(1, 29).every(r => r === '')).toBe(true)
-  expect(f160.slice(29, 38)).toEqual(GOLD_160_BODY)
-  expect(f160[38]).toBe('[z] 收合替你決定')
-  expect(f160[39]).toContain('6 審查')
+  expect(f160.slice(1, 28).every(r => r === '')).toBe(true)
+  expect(f160.slice(28, 37)).toEqual(GOLD_160_BODY)
+  expect(f160[37]).toBe('[z] 收合替你決定')
+  expect(f160[38]).toMatch(/^╰─/)
+  expect(f160[39]).toContain('4 審查')
 
   const c120 = ctxOf(120, 30, LIVE_WIDE)
   const r120 = reviewPage.render(c120)
@@ -294,10 +295,11 @@ test('review golden 160x40 and 120x30: frameRows equals H, body and action rows 
   const f120 = frameRows(reviewPage, c120, { pages: PAGES }).map(text)
   expect(f120.length).toBe(30)
   expect(f120[0]).toBe('審查')
-  expect(f120.slice(1, 19).every(r => r === '')).toBe(true)
-  expect(f120.slice(19, 28)).toEqual(GOLD_120_BODY)
-  expect(f120[28]).toBe('[z] 收合替你決定')
-  expect(f120[29]).toContain('6 審查')
+  expect(f120.slice(1, 18).every(r => r === '')).toBe(true)
+  expect(f120.slice(18, 27)).toEqual(GOLD_120_BODY)
+  expect(f120[27]).toBe('[z] 收合替你決定')
+  expect(f120[28]).toMatch(/^╰─/)
+  expect(f120[29]).toContain('4 審查')
 })
 
 test('review golden 80x24: default open, z collapse (折疊關) and z re-expand (折疊開) in both directions through real Pane render path, and empty state', () => {
@@ -305,10 +307,11 @@ test('review golden 80x24: default open, z collapse (折疊關) and z re-expand 
   const f80 = frameRows(reviewPage, c80, { pages: PAGES }).map(text)
   expect(f80.length).toBe(24)
   expect(f80[0]).toBe('審查')
-  expect(f80.slice(1, 15).every(r => r === '')).toBe(true)
-  expect(f80.slice(15, 22)).toEqual(GOLD_80_OPEN_BODY)
-  expect(f80[22]).toBe('[z] 收合替你決定')
-  expect(f80[23]).toContain('6')
+  expect(f80.slice(1, 14).every(r => r === '')).toBe(true)
+  expect(f80.slice(14, 21)).toEqual(GOLD_80_OPEN_BODY)
+  expect(f80[21]).toBe('[z] 收合替你決定')
+  expect(f80[22]).toMatch(/^╰─/)
+  expect(f80[23]).toContain('4')
 
   const zKey = routeKey('z', { page: 'review', paneFocus: true, focusedButton: false, textMode: false })
   expect(zKey).toEqual({ kind: 'fold' })
@@ -326,8 +329,8 @@ test('review golden 80x24: default open, z collapse (折疊關) and z re-expand 
   const openDraw = drawReviewPane(80, 24, LIVE_NARROW, { view: pageView, onKey })
   expect(openDraw.rows.length).toBe(24)
   expect(openDraw.rows[0]).toBe('審查')
-  expect(openDraw.rows.slice(1, 15).every(r => r === '')).toBe(true)
-  expect(openDraw.rows.slice(15, 22)).toEqual(GOLD_80_OPEN_BODY)
+  expect(openDraw.rows.slice(1, 14).every(r => r === '')).toBe(true)
+  expect(openDraw.rows.slice(14, 21)).toEqual(GOLD_80_OPEN_BODY)
   expect(openDraw.zBtn).toBeDefined()
   expect(flatFake(openDraw.zBtn as FakeNode)).toBe('收合替你決定')
 
@@ -338,8 +341,8 @@ test('review golden 80x24: default open, z collapse (折疊關) and z re-expand 
   const foldedDraw = drawReviewPane(80, 24, LIVE_NARROW, { view: pageView, onKey })
   expect(foldedDraw.rows.length).toBe(24)
   expect(foldedDraw.rows[0]).toBe('審查')
-  expect(foldedDraw.rows.slice(1, 17).every(r => r === '')).toBe(true)
-  expect(foldedDraw.rows.slice(17, 22)).toEqual(GOLD_80_FOLDED_BODY)
+  expect(foldedDraw.rows.slice(1, 16).every(r => r === '')).toBe(true)
+  expect(foldedDraw.rows.slice(16, 21)).toEqual(GOLD_80_FOLDED_BODY)
   expect(foldedDraw.rows.some(r => r.includes('01M7N33J') || r.includes('01M7N2YJ'))).toBe(false)
   expect(foldedDraw.zBtn).toBeDefined()
   expect(flatFake(foldedDraw.zBtn as FakeNode)).toBe('展開替你決定')
@@ -350,7 +353,7 @@ test('review golden 80x24: default open, z collapse (折疊關) and z re-expand 
   expect(renderReview(c80, pageView.review).actions.map(text)).toEqual(['[z] 收合替你決定'])
   const reopenedDraw = drawReviewPane(80, 24, LIVE_NARROW, { view: pageView, onKey })
   expect(reopenedDraw.rows.length).toBe(24)
-  expect(reopenedDraw.rows.slice(15, 22)).toEqual(GOLD_80_OPEN_BODY)
+  expect(reopenedDraw.rows.slice(14, 21)).toEqual(GOLD_80_OPEN_BODY)
   expect(reopenedDraw.zBtn).toBeDefined()
   expect(flatFake(reopenedDraw.zBtn as FakeNode)).toBe('收合替你決定')
 
@@ -360,10 +363,11 @@ test('review golden 80x24: default open, z collapse (折疊關) and z re-expand 
   const fEmpty = frameRows(reviewPage, cEmpty, { pages: PAGES }).map(text)
   expect(fEmpty.length).toBe(24)
   expect(fEmpty[0]).toBe('審查')
-  expect(fEmpty.slice(1, 21).every(r => r === '')).toBe(true)
-  expect(fEmpty.slice(21, 22)).toEqual(GOLD_80_EMPTY_BODY)
-  expect(fEmpty[22]).toBe('沒有要你處理的事')
-  expect(fEmpty[23]).toContain('6')
+  expect(fEmpty.slice(1, 20).every(r => r === '')).toBe(true)
+  expect(fEmpty.slice(20, 21)).toEqual(GOLD_80_EMPTY_BODY)
+  expect(fEmpty[21]).toBe('沒有要你處理的事')
+  expect(fEmpty[22]).toMatch(/^╰─/)
+  expect(fEmpty[23]).toContain('4')
 })
 
 test('review: fold/unfold round-trip at 160x40 and 120x30 through real Pane hides and restores decision rows; healthy no-decisions wide state shows 沒有要你處理的事', () => {
@@ -468,7 +472,7 @@ test('review §5 & A10: missing or stale sources always draw PALETTE.broken red 
     const framedNoLive = frameRows(reviewPage, ctxOf(80, 24, null, con), { pages: PAGES }).map(text)
     expect(framedNoLive.some(r => r.includes('還沒有審查紀錄'))).toBe(false)
     expect(framedNoLive.some(r => r.includes('沒有要你處理的事'))).toBe(false)
-    expect(framedNoLive[22]).toBe('資料不足，無法判定')
+    expect(framedNoLive[21]).toBe('資料不足，無法判定')
   }
 
   // Every non-ok live state with zero review records and healthy console shows red reason + 資料不足, never calm empty state
@@ -487,7 +491,7 @@ test('review §5 & A10: missing or stale sources always draw PALETTE.broken red 
     const framed = frameRows(reviewPage, ctxOf(80, 24, snap, okConsole()), { pages: PAGES }).map(text)
     expect(framed.some(r => r.includes('還沒有審查紀錄'))).toBe(false)
     expect(framed.some(r => r.includes('沒有要你處理的事'))).toBe(false)
-    expect(framed[22]).toBe('資料不足，無法判定')
+    expect(framed[21]).toBe('資料不足，無法判定')
   }
 
   // Decisions sidecar not wired with healthy console shows red reason + 資料不足, never calm empty state
@@ -498,7 +502,7 @@ test('review §5 & A10: missing or stale sources always draw PALETTE.broken red 
   const framedNotWired = frameRows(reviewPage, notWiredCtx, { pages: PAGES }).map(text)
   expect(framedNotWired.some(r => r.includes('還沒有審查紀錄'))).toBe(false)
   expect(framedNotWired.some(r => r.includes('沒有要你處理的事'))).toBe(false)
-  expect(framedNotWired[22]).toBe('資料不足，無法判定')
+  expect(framedNotWired[21]).toBe('資料不足，無法判定')
 
   // Long stale reason wraps across rows without `…` truncation
   const longWhy = '資料過舊 · 上次發佈 2026-11-18T03:00:00Z 之後有新變化 · 請執行 autopilot status runs --watch 重新同步本席審查資料'
@@ -510,7 +514,7 @@ test('review §5 & A10: missing or stale sources always draw PALETTE.broken red 
   expect(framedStale.length).toBe(24)
   expect(framedStale.join('').replace(/\s+/g, '')).toContain(('本席審查資料不是最新：' + longWhy).replace(/\s+/g, ''))
   expect(framedStale.filter(r => r.includes('…'))).toEqual([])
-  expect(framedStale[22]).toBe('資料不足，無法判定')
+  expect(framedStale[21]).toBe('資料不足，無法判定')
 })
 
 test('review en locale & aligned HEAD: renders cleanly in English across fold/unfold and omits HEAD warning when code.head matches qc.range', () => {
@@ -533,16 +537,16 @@ test('review en locale & aligned HEAD: renders cleanly in English across fold/un
   }
   const enEmpty = frameRows(reviewPage, ctxOf(80, 24, LIVE_EMPTY, okConsole(), tEn), { pages: PAGES }).map(text)
   expect(enEmpty[0]).toBe('Review')
-  expect(enEmpty.slice(1, 20).every(r => r === '')).toBe(true)
-  expect(enEmpty[20]).toContain('no review records yet')
+  expect(enEmpty.slice(1, 19).every(r => r === '')).toBe(true)
+  expect(enEmpty[19]).toContain('no review records yet')
   // N3: continuation rows hang by two cells; remove only that layout indent to compare the whole message.
-  expect(enEmpty[21].startsWith('  ')).toBe(true)
-  expect(enEmpty[20] + enEmpty[21].slice(2)).toBe('○ ' + EN['page.review.empty'])
-  expect(enEmpty[22]).toBe('Nothing needs you')
+  expect(enEmpty[20].startsWith('  ')).toBe(true)
+  expect(enEmpty[19] + enEmpty[20].slice(2)).toBe('○ ' + EN['page.review.empty'])
+  expect(enEmpty[21]).toBe('Nothing needs you')
 
   const enMissing = frameRows(reviewPage, ctxOf(80, 24, null, okConsole(), tEn), { pages: PAGES }).map(text)
-  expect(enMissing[21]).toContain("this seat's review data has no source")
-  expect(enMissing[22]).toBe('Not enough data to judge')
+  expect(enMissing[20]).toContain("this seat's review data has no source")
+  expect(enMissing[21]).toBe('Not enough data to judge')
 })
 
 test('review G11: every [x] hint in page.review.* is a bound hotkey, and Pane mounts a non-empty hotkey="z" Button matching the z hint', () => {
@@ -723,7 +727,7 @@ test('review mounted production: z collapses and re-expands across real plugin r
   const openRows = mountedRowsOf(openTree)
   expect(openRows.length).toBe(24)
   expect(openRows[0]).toBe('審查')
-  expect(openRows.slice(15, 22)).toEqual(GOLD_80_OPEN_BODY)
+  expect(openRows.slice(14, 21)).toEqual(GOLD_80_OPEN_BODY)
   const openBtns = (await openPane.findAll({ type: 'Button' })) as MountedNode[]
   const zBtnOpen = openBtns.find(b => b.props?.hotkey === 'z')
   expect(zBtnOpen).toBeDefined()
@@ -739,7 +743,7 @@ test('review mounted production: z collapses and re-expands across real plugin r
   const foldedPane = await mountPane(80, 24)
   const foldedRows = mountedRowsOf((await foldedPane.drawn()) as MountedNode)
   expect(foldedRows.length).toBe(24)
-  expect(foldedRows.slice(17, 22)).toEqual(GOLD_80_FOLDED_BODY)
+  expect(foldedRows.slice(16, 21)).toEqual(GOLD_80_FOLDED_BODY)
   expect(foldedRows.some(r => r.includes('01M7N33J') || r.includes('01M7N2YJ'))).toBe(false)
   const zBtnFolded = ((await foldedPane.findAll({ type: 'Button' })) as MountedNode[]).find(b => b.props?.hotkey === 'z')
   expect(zBtnFolded).toBeDefined()
@@ -756,7 +760,7 @@ test('review mounted production: z collapses and re-expands across real plugin r
   await tabBack.unmount()
 
   const stillFolded80 = await mountPane(80, 24)
-  expect(mountedRowsOf((await stillFolded80.drawn()) as MountedNode).slice(17, 22)).toEqual(GOLD_80_FOLDED_BODY)
+  expect(mountedRowsOf((await stillFolded80.drawn()) as MountedNode).slice(16, 21)).toEqual(GOLD_80_FOLDED_BODY)
   await stillFolded80.unmount()
 
   const stillFolded160 = await mountPane(160, 40)
@@ -775,7 +779,7 @@ test('review mounted production: z collapses and re-expands across real plugin r
   const reopenedPane = await mountPane(80, 24)
   const reopenedRows = mountedRowsOf((await reopenedPane.drawn()) as MountedNode)
   expect(reopenedRows.length).toBe(24)
-  expect(reopenedRows.slice(15, 22)).toEqual(GOLD_80_OPEN_BODY)
+  expect(reopenedRows.slice(14, 21)).toEqual(GOLD_80_OPEN_BODY)
   const zBtnReopened = ((await reopenedPane.findAll({ type: 'Button' })) as MountedNode[]).find(b => b.props?.hotkey === 'z')
   expect(mountedText(zBtnReopened as MountedNode)).toBe('收合替你決定')
   await reopenedPane.unmount()
@@ -792,7 +796,7 @@ test('review mounted production: z collapses and re-expands across real plugin r
   expect(missingRows.filter(r => r.includes('…'))).toEqual([])
   expect(missingRows.some(r => r.includes('還沒有審查紀錄'))).toBe(false)
   expect(missingRows.some(r => r.includes('沒有要你處理的事'))).toBe(false)
-  expect(missingRows[22]).toBe('資料不足，無法判定')
+  expect(missingRows[21]).toBe('資料不足，無法判定')
   expect(mountedColorsOf(missingTree)).toContain(PALETTE.broken)
   await missingPane.unmount()
 })

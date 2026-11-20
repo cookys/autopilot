@@ -8373,6 +8373,21 @@ for (const surface of SURFACES) {
     expect(w.opens.length).toBe(2)
   })
 
+  test('side pane: /live-pane before the first band draw opens the host Pane once that draw shows the old layout, and never in v7.4 (' + surface + ')', async ($, on) => {
+    const w = shellWorld(on)
+    await start($, surface)
+    await $.command.run({ command: 'live-pane', args: '' })
+    expect(w.opens.length, 'the mode is not known before the first draw').toBe(0)
+    const band = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-early', props: { ...BAND_PROPS, bodyColumns: 160 }, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+    await band.unmount()
+    expect(w.opens.length, 'the first legacy draw opens the asked-for host Pane').toBe(1)
+    await start($, surface)
+    await $.command.run({ command: 'live-pane', args: '' })
+    const v74 = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-early2', props: { ...BAND_PROPS, legacyTabs: false, bodyColumns: 160 }, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+    await v74.unmount()
+    expect(w.opens.length, 'v7.4 draws the frame in the band, no host Pane').toBe(1)
+  })
+
   // design.md section 9: only the 待決 card view has its own quick row (0/7/8/9); every other tab, and 待決 with no card, has a blank quick row (no open-panel button).
   const CARD_KEYS = ['send', 'prev', 'next', 'next-menu']
   // ---- bandlayout: the 待決 card view follows guideline §13 (menu row and quick row on the bottom two rows, the content grows upward, one scroll position per tab), shows every word of the card, and has

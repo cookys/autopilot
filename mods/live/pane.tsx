@@ -198,7 +198,7 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
   const frameRowsN = box ? frame.rows + stripN : frame.rows // what the page renderers are asked for (box: the inner rows + head + hint border + strip)
   const epoch = frame.epoch ?? 0
   const ep = epoch > 0 ? ':' + epoch : ''
-  const ctx = { live: snap, console: frame.console, size: { cols, rows: frameRowsN }, t, nowMs: frame.nowMs, steps: frame.steps, pet: frame.pet, ...(page.id === 'fleet' ? { others: frame.others ?? null } : {}), ...(frame.v74 !== undefined ? { v74: frame.v74 } : {}), ...(page.id === 'decide' && frame.decide !== undefined ? { decide: frame.decide } : {}) }
+  const ctx = { live: snap, console: frame.console, size: { cols, rows: frameRowsN }, t, nowMs: frame.nowMs, steps: frame.steps, pet: frame.pet, ...(box ? { box: true as const } : {}), ...(page.id === 'fleet' ? { others: frame.others ?? null } : {}), ...(frame.v74 !== undefined ? { v74: frame.v74 } : {}), ...(page.id === 'decide' && frame.decide !== undefined ? { decide: frame.decide } : {}) }
   const view = frame.view?.[page.id] ?? (page.id === 'review' ? DEFAULT_REVIEW_VIEW : { focus: 0, expanded: false })
   // the pages that take a view are drawn through their view functions; the registry's render() keeps the default view
   const drawn: Page = page.id === 'fleet' ? { ...page, render: c => fleetPageView(c, view) } : page.id === 'quota' ? { ...page, render: c => renderQuota(c, view) } : page.id === 'review' ? { ...page, render: c => renderReview(c, view) } : page.id === 'spend' ? { ...page, render: c => renderSpend(c, view) } : page

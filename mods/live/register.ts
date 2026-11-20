@@ -1423,13 +1423,16 @@ const framePageId = (): string => panePage
 // v7.4: the page is a full-width framed tree inside the AbovePrompt band, not a host Pane. `v74Open` is its open/closed state (the band's ▴/▾, /live-pane, the ⓘ, a slot, Esc);
 // `bandLegacy` is the last AbovePrompt draw's legacyTabs (the host's old layout keeps the host Pane and its ui.open / ui.close).
 let v74Open = false
-let bandLegacy = false
+// `bandLegacy` is null until the first AbovePrompt draw of this session: the mode is not known yet, so an open asked before it (`/live-pane` at startup) is only recorded
+// (v74Open) and the first draw opens the host Pane when it turns out to be the old layout.
+let bandLegacy: boolean | null = null
+const openHostPane = ($: EngineInterface): Promise<unknown> => $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: true, closeOnEscape: true })
 async function openPane($: EngineInterface): Promise<void> {
-  if (bandLegacy) await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: true, closeOnEscape: true })
+  if (bandLegacy === true) await openHostPane($)
   else $.ui.invalidate('ui.render')
 }
 async function closePane($: EngineInterface): Promise<void> {
-  if (bandLegacy) { try { await $.ui.close({ id: PANE_ID }) } catch (_e) { /* already closed */ } }
+  if (bandLegacy === true) { try { await $.ui.close({ id: PANE_ID }) } catch (_e) { /* already closed */ } }
   else $.ui.invalidate('ui.render')
 }
 let panePlacement: 'dock' | 'inline' | null = null
@@ -1579,7 +1582,7 @@ export async function startLive($: EngineInterface): Promise<void> {
   }
   paneTab = 'now'
   panePage = 'now'
-  bandLegacy = false
+  bandLegacy = null
   markPaneClosed()
   panePlacementEpoch = 0
   pageView = {}
@@ -1667,7 +1670,9 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const legacyTabs = (e.props as { legacyTabs?: boolean }).legacyTabs === true
     // `o4Shell` (tests only) keeps the pre-v7.4 band + host Pane path alive for the O4 shell suites; no setting or host prop sets it.
     const v74 = !legacyTabs && (e.props as { o4Shell?: boolean }).o4Shell !== true
+    const firstDraw = bandLegacy === null
     bandLegacy = !v74
+    if (firstDraw && bandLegacy && v74Open) await openHostPane($) // an open asked before the mode was known
     // the ⓘ opens the panel on the Now tab; pressed again while the panel is open it shows the next tab (7 tabs, the ? legend last, then Now again) (the pane never gets the keyboard
     // while the person holds the ⓘ, so this is the keyboard way to change tab). "Open" is the engine's own record, $.ui.panes() (the pane
     // is listed until it closes, however it was opened). No hotkey: the band's autoFocus puts the keyboard path at Ctrl+x Tab, Enter.

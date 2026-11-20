@@ -28,12 +28,17 @@
 #                                             # A gemini-flash[-tier] alias still resolves against the live
 #                                             # `agy models` inventory. Explicit --model/--effort always win.
 #       [--runner auto|codex|agy|grok|cc-shim|local|pi|cursor|opencode|kimi|claude-native|qoderclicn] # default auto: *gpt*/*codex*→codex,
-#                                              #   local: shorthand for cc-shim + --endpoint qwen_local + --sandbox bwrap.
-#                                              #   --endpoint or --sandbox with any other value is a precondition
-#                                              #   conflict (the same default value is allowed). Result and manifest
-#                                              #   record runner local, resolved_runner cc-shim, endpoint qwen_local.
-#                                              #   Child env sets ENABLE_TOOL_SEARCH=false and does not set
-#                                              #   CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC.
+#                                              #   local: shorthand for cc-shim + --sandbox bwrap + an endpoint that
+#                                              #   is qwen_local by default, or --endpoint when that name is listed
+#                                              #   in scripts/lib/local-sandbox-endpoints.json. An unlisted
+#                                              #   --endpoint is refused (exit 2). A --sandbox other than bwrap
+#                                              #   is a precondition conflict. Result and manifest record runner
+#                                              #   local, resolved_runner cc-shim, and the endpoint actually used
+#                                              #   (qwen_local by default, or the listed --endpoint).
+#                                              #   Child env sets ENABLE_TOOL_SEARCH=false, does not set
+#                                              #   CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, and sets
+#                                              #   ANTHROPIC_CUSTOM_HEADERS with an x-lane line (AUTOPILOT_LANE,
+#                                              #   or autopilot when that variable is unset).
 #                                              #   *grok*/*composer*→grok, no --model→grok, else agy (*qwen*/*qwq* refused; use cc-shim + --endpoint).
 #                                              #   qoderclicn (EXPLICIT only, never auto): Qoder CLI CN.
 #                                              #   Explicit wins (don't rely on name luck).
@@ -218,7 +223,7 @@
 #   { "status": "committed" | "no_op" | "question_suspected" | "dirty"
 #               | "failure" | "precondition_failed" | "verify_failed",
 #     "runner": "codex"|"agy"|"grok"|"cc-shim"|"local"|"pi"|"cursor"|"opencode"|"kimi"|"claude-native"|"qoderclicn", "model": "...",   # engine provenance (model = --model)
-#     "resolved_runner": "cc-shim", "endpoint": "qwen_local",   # only when --runner local
+#     "resolved_runner": "cc-shim", "endpoint": "<qwen_local by default, or the listed --endpoint>",   # only when --runner local
 #     "containment": "...", "contained": true|false,  # teardown-hygiene provenance
 #     "branch": "...", "base": "...", "commit": "...|null",
 #     "files_changed": N, "insertions": N, "deletions": N,
@@ -1263,7 +1268,7 @@ NODE
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_fields=", \"role_kit\": $ROLE_KIT_JSON"
   local sandbox_fields=""
   [ "${SANDBOX:-off}" = "bwrap" ] && sandbox_fields=", \"sandbox\": $(sandbox_json), \"sandbox_blocked_writes\": ${SANDBOX_BLOCKED:-0}, \"sandbox_blocked_samples\": ${SANDBOX_BLOCKED_SAMPLES:-[]}"
-  [ "${LOCAL_RUNNER:-0}" -eq 1 ] && sandbox_fields="$sandbox_fields, \"resolved_runner\": \"cc-shim\", \"endpoint\": \"qwen_local\""
+  [ "${LOCAL_RUNNER:-0}" -eq 1 ] && sandbox_fields="$sandbox_fields, \"resolved_runner\": \"cc-shim\", \"endpoint\": \"$(_flat_json_escape "$ENDPOINT")\""
   local fell_back_fields=""
   fell_back_fields="$(fell_back_json_suffix)"
   local tip_verify_fields=""
@@ -2634,7 +2639,7 @@ write_manifest() {
   local role_kit_manifest_fields=""
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_manifest_fields=", \"role_kit\": $ROLE_KIT_JSON"
   [ "${SANDBOX:-off}" = "bwrap" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"sandbox\": $(sandbox_json)"
-  [ "${LOCAL_RUNNER:-0}" -eq 1 ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"resolved_runner\": \"cc-shim\", \"endpoint\": \"qwen_local\""
+  [ "${LOCAL_RUNNER:-0}" -eq 1 ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"resolved_runner\": \"cc-shim\", \"endpoint\": \"$(_flat_json_escape "$ENDPOINT")\""
   [ -n "${FELL_BACK_JSON:-}" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"fell_back\": $FELL_BACK_JSON"
   [ -n "${ENGINE_CHOICE_JSON:-}" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"engine_choice\": $ENGINE_CHOICE_JSON"
   [ -n "${PACE_CHOICE_JSON:-}" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"pace_choice\": $PACE_CHOICE_JSON"
@@ -3099,17 +3104,27 @@ validate_d2_agy_claims() {
     || die_precondition "D2 capability claim validation failed"
 }
 
-# --runner local is the named shorthand for the local qwen seat. Resolve it
-# before effort and runner checks so they see cc-shim + qwen_local + bwrap.
-# The public name stays local (LOCAL_RUNNER) for the result and the manifest.
+# --runner local is the named shorthand for a listed local seat. Resolve it
+# before effort and runner checks so they see cc-shim + that endpoint + bwrap.
+# The endpoint is qwen_local by default, or --endpoint when that name is listed
+# in scripts/lib/local-sandbox-endpoints.json. The public name stays local
+# (LOCAL_RUNNER) for the result and the manifest.
 if [ "$RUNNER" = "local" ]; then
-  if [ "$ENDPOINT_SUPPLIED" -eq 1 ] && [ "$ENDPOINT" != "qwen_local" ]; then
-    die_precondition "--runner local conflicts with --endpoint ${ENDPOINT} (local sets --endpoint qwen_local; omit --endpoint or pass qwen_local)"
+  if [ "$ENDPOINT_SUPPLIED" -eq 1 ]; then
+    _local_listed_rc=0
+    local_sandbox_endpoint_listed "$ENDPOINT" || _local_listed_rc=$?
+    if [ "$_local_listed_rc" -eq 2 ]; then
+      die_precondition "local implementer sandbox registry unreadable (scripts/lib/local-sandbox-endpoints.json); refusing --runner local"
+    fi
+    if [ "$_local_listed_rc" -ne 0 ]; then
+      die_precondition "--runner local refuses unlisted --endpoint ${ENDPOINT} (not in scripts/lib/local-sandbox-endpoints.json; default is qwen_local)"
+    fi
+  else
+    ENDPOINT="qwen_local"
   fi
   if [ "$SANDBOX_SUPPLIED" -eq 1 ] && [ "$SANDBOX" != "bwrap" ]; then
     die_precondition "--runner local conflicts with --sandbox ${SANDBOX} (local sets --sandbox bwrap; omit --sandbox or pass bwrap)"
   fi
-  ENDPOINT="qwen_local"
   SANDBOX="bwrap"
   LOCAL_RUNNER=1
   RUNNER="cc-shim"
@@ -5560,6 +5575,21 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
     # it first and the validated line is the only value set back. The claude-native branches above
     # keep scrubbing it and never set it (first-party API, not the gateway).
     FLEET_TASK_HEADER="$(node "$SELF_DIR/lib/fleet-task-header.js" --rail dispatch-hetero ${ENDPOINT:+--endpoint "$ENDPOINT"})"
+    # Local seats identify the lane to the fleet gateway. x-lane is the only
+    # line this block adds. An inherited ANTHROPIC_CUSTOM_HEADERS was already
+    # dropped; FLEET_TASK_HEADER is the only prior content, and x-lane is appended
+    # on its own line. The value is not printed.
+    if [ "${LOCAL_RUNNER:-0}" -eq 1 ]; then
+      _local_lane="${AUTOPILOT_LANE:-autopilot}"
+      case "$_local_lane" in
+        *$'\n'*|*$'\r'*) die_precondition "--runner local refuses AUTOPILOT_LANE that contains a newline" ;;
+      esac
+      if [ -n "$FLEET_TASK_HEADER" ]; then
+        FLEET_TASK_HEADER="${FLEET_TASK_HEADER}"$'\n'"x-lane: ${_local_lane}"
+      else
+        FLEET_TASK_HEADER="x-lane: ${_local_lane}"
+      fi
+    fi
     # --disallowedTools TaskCreate,TaskUpdate,TaskGet,TaskList: the CLI intermittently injects a
     # "task tools haven't been used recently" reminder into the conversation; on an Anthropic-compatible
     # endpoint with prefix caching it lands mid-prompt (~11.5K tokens) and breaks the cached prefix.

@@ -2800,6 +2800,8 @@ printf '%s\n' "\$@" > local-argv.txt
     printf 'DISABLE_TRAFFIC=unset\n'
   fi
 } > local-runner-probe.txt
+# Record only the x-lane line. Other header values stay out of this file.
+printf '%s\n' "\${ANTHROPIC_CUSTOM_HEADERS-}" | grep -E '^x-lane: ' > local-lane.txt || true
 printf '%s' '{"type":"result","is_error":false,"result":"ok"}'
 EOF
 chmod +x "$STUB_LOCAL"
@@ -2826,6 +2828,8 @@ assert_contains "$LOCAL_ARGV" "-p " "hetero local claude argv is the cc-shim -p 
 PROBE_TXT="$(git -C "$SBX" show "${PROBE_SHA}:local-runner-probe.txt")"
 assert_contains "$PROBE_TXT" "TOOL_SEARCH=false" "hetero local child sets ENABLE_TOOL_SEARCH=false"
 assert_contains "$PROBE_TXT" "DISABLE_TRAFFIC=unset" "hetero local child does not set CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"
+LANE_TXT="$(git -C "$SBX" show "${PROBE_SHA}:local-lane.txt")"
+assert_eq "x-lane: autopilot" "$LANE_TXT" "hetero local default child x-lane is autopilot"
 LOCAL_MF="$(find "$TEST_TMP/local-runs" -name '*.manifest.json' | head -1)"
 assert_contains "$(cat "$LOCAL_MF")" '"runner": "local"' "hetero local manifest runner is local"
 assert_contains "$(cat "$LOCAL_MF")" '"resolved_runner": "cc-shim"' "hetero local manifest resolved_runner is cc-shim"
@@ -2837,7 +2841,37 @@ OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-local-bin:$PATH" \
   --branch feat/local-conflict --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "hetero --runner local --endpoint other exits 2"
 assert_contains "$OUT" "precondition_failed" "hetero local endpoint conflict is a precondition failure"
-assert_contains "$OUT" "conflicts with --endpoint other" "hetero local endpoint conflict names --endpoint other"
+assert_contains "$OUT" "refuses unlisted --endpoint other" "hetero local unlisted endpoint names --endpoint other"
+# (a) listed --endpoint glm_local is the endpoint recorded, and the child sees x-lane.
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-local-bin:$PATH" \
+  AUTOPILOT_TEST_CN_GATE_OFF=1 AUTOPILOT_ENDPOINT_PREPROBE=off \
+  AUTOPILOT_DISPATCH_RUNS_DIR="$TEST_TMP/local-runs" \
+  AUTOPILOT_LANE=fleet-glm \
+  AUTOPILOT_ENDPOINT_GLM_LOCAL_URL=http://127.0.0.1:9 \
+  AUTOPILOT_ENDPOINT_GLM_LOCAL_TOKEN=fake-test-token \
+  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --endpoint glm_local --model mini \
+  --worktree-parent "$TEST_TMP/local-wts" \
+  --run-id local-glm --branch feat/local-glm --prompt-file "$PROMPT" 2>"$TEST_TMP/local-glm.err")"; EXIT=$?
+[ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (local glm): %s\n%s\n' "$OUT" "$(cat "$TEST_TMP/local-glm.err" 2>/dev/null)" >&2
+assert_eq "0" "$EXIT" "hetero --runner local --endpoint glm_local exit 0"
+assert_contains "$OUT" '"endpoint": "glm_local"' "hetero local glm result endpoint is glm_local"
+GLM_SHA="$(git -C "$SBX" rev-parse feat/local-glm)"
+assert_eq "x-lane: fleet-glm" "$(git -C "$SBX" show "${GLM_SHA}:local-lane.txt")" "hetero local glm child sees x-lane"
+GLM_MF="$TEST_TMP/local-runs/local-glm.manifest.json"
+assert_contains "$(cat "$GLM_MF")" '"endpoint": "glm_local"' "hetero local glm manifest endpoint is glm_local"
+# (c) unlisted glm_cloud is exit 2 and never spawns the child.
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-local-bin:$PATH" \
+  AUTOPILOT_TEST_CN_GATE_OFF=1 AUTOPILOT_ENDPOINT_PREPROBE=off \
+  AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL=http://127.0.0.1:9 \
+  AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token \
+  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --endpoint glm_cloud --model mini \
+  --worktree-parent "$TEST_TMP/local-wts" \
+  --branch feat/local-glm-cloud --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "hetero --runner local --endpoint glm_cloud exits 2"
+assert_contains "$OUT" "refuses unlisted --endpoint glm_cloud" "hetero local glm_cloud names the unlisted endpoint"
+if git -C "$SBX" rev-parse --verify feat/local-glm-cloud >/dev/null 2>&1; then
+  fail "hetero local glm_cloud spawned a worktree"
+fi
 
 # --- --pace-role: pace-aware engine selection & manifest engine_choice ---
 PACE_RUNS_DIR="$TEST_TMP/pace-runs"

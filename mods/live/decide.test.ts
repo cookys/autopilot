@@ -4,7 +4,10 @@
 import { test, expect } from 'claude-code/testing'
 import { makeT } from './i18n'
 import { cardTitleOf } from './cardtitle'
-import { DECIDE_NONE, DECIDE_REPLY_HEAD, NO_DECIDE, NO_DETAIL, NO_SECTIONS, decideFillText, decideLine, decideReply, recommendedIndex } from './model'
+import { DECIDE_NONE, DECIDE_REPLY_HEAD, NO_DECIDE, NO_DETAIL, NO_SECTIONS, bandCardNote, decideFillText, decideLine, decideReply, recommendedIndex } from './model'
+import { sendNow } from './decideundo'
+import { appendSendLog } from './sendlog'
+import { cardMain } from './band'
 import { wrapLines } from './model'
 import type { DecideView, LiveDecision, LiveSnapshot, PaneLine } from './model'
 import { decideBandPlan, decideTabLines, nowLines, stripOf, tabNeeds } from './tabs'
@@ -805,4 +808,150 @@ test('decide card answer-area order is background < blocks < options < advice < 
     expect(indices.every(i => i >= 0)).toBe(true)
     for (let i = 1; i < indices.length; i++) expect(indices[i]).toBeGreaterThan(indices[i - 1])
   }
+})
+
+test('sendNow: post rejection calls onSendFailed with reason and rolls back sent; post resolution does not', async () => {
+  const card = dec('d-send-err', 'Pick one?', { options: [OPT('A'), OPT('B')] })
+  const makeState = () => ({ picks: { 'd-send-err': 0 }, notes: {}, sent: {} as Record<string, number>, hold: {}, fixing: {}, dismissed: {} })
+  // Red on old code: onSendFailed did not exist on SendDeps and post rejection was swallowed silently.
+  let st1 = makeState()
+  const failures1: string[] = []
+  await sendNow({
+    now: async () => 1000,
+    read: async () => st1,
+    update: async fn => { st1 = fn(st1) },
+    pool: () => [card],
+    post: async () => { throw new Error('Prompt not submitted: test') },
+    onSendFailed: r => failures1.push(r),
+  }, new Set(['d-send-err']))
+  await Promise.resolve()
+  await Promise.resolve()
+  expect(failures1.length).toBe(1)
+  expect(failures1[0]).toContain('Prompt not submitted: test')
+  expect(st1.sent['d-send-err']).toBeUndefined()
+
+  // Negative control: post resolves -> no failure callback, sent mark kept.
+  let st2 = makeState()
+  const failures2: string[] = []
+  await sendNow({
+    now: async () => 1000,
+    read: async () => st2,
+    update: async fn => { st2 = fn(st2) },
+    pool: () => [card],
+    post: async () => ({}),
+    onSendFailed: r => failures2.push(r),
+  }, new Set(['d-send-err']))
+  await Promise.resolve()
+  expect(failures2).toEqual([])
+  expect(st2.sent['d-send-err']).toBe(1000)
+})
+
+test('cardMain: step card renders step_done button and step_hint without decide.in_chat; pressing it calls done', () => {
+  const zh = makeT('zh-TW')
+  type Node = { type: string; props: Record<string, unknown>; children: unknown[] }
+  // react-jsx calls the component with one props object; children live on props.children, not as extra arguments
+  const listed = (c: unknown): unknown[] => c == null || c === false ? [] : Array.isArray(c) ? c.flat(8) : [c]
+  const h = (type: string) => (props: Record<string, unknown> | null): Node => {
+    const p = props ?? {}
+    return { type, props: p, children: listed(p.children) }
+  }
+  const el = { Box: h('Box') as never, Text: h('Text') as never, Button: h('Button') as never }
+  const collectText = (n: unknown): string => {
+    if (typeof n === 'string' || typeof n === 'number') return String(n)
+    if (Array.isArray(n)) return n.map(collectText).join('')
+    if (n && typeof n === 'object' && 'children' in n) return collectText((n as Node).children)
+    return ''
+  }
+  const findButtons = (n: unknown): Node[] => {
+    if (Array.isArray(n)) return n.flatMap(findButtons)
+    if (n && typeof n === 'object' && 'type' in n) {
+      const node = n as Node
+      return [...(node.type === 'Button' ? [node] : []), ...findButtons(node.children)]
+    }
+    return []
+  }
+  const dismissed: string[] = []
+  const rendered = cardMain(el, {
+    key: 'd-step1',
+    question: 'Run migration manually',
+    background: null,
+    advice: null,
+    notAuthorized: null,
+    options: [],
+    note: zh('decide.step_hint'),
+    meta: null,
+    locked: false,
+    split: false,
+    grey: false,
+    fix: null,
+    fill: null,
+    done: { label: zh('decide.step_done'), onPress: () => dismissed.push('d-step1') },
+    width: 60,
+    onPress: () => {},
+  }, zh)
+  const allText = collectText(rendered.rows)
+  expect(allText).not.toContain('這題請在對話裡回答')
+  expect(allText).toContain('做完了')
+  expect(allText).toContain('做完後按〔做完了〕')
+  const btns = findButtons(rendered.rows)
+  const doneBtn = btns.find(b => collectText(b.children).includes('做完了'))
+  expect(doneBtn).toBeDefined()
+  ;(doneBtn!.props.onPress as () => void)()
+  expect(dismissed).toEqual(['d-step1'])
+})
+
+test('bandCardNote: step card picks step_hint + doneId; option-less non-step picks in_chat; locked step has no done', () => {
+  const stepCard = dec('d-step-1', 'Run migration manually', { kind: 'step', options: [] })
+  expect(bandCardNote(stepCard, false, null)).toEqual({ note: 'decide.step_hint', doneId: 'd-step-1' })
+
+  const freeCard = dec('d-free-1', 'What branch name?', { options: [] })
+  expect(bandCardNote(freeCard, false, null)).toEqual({ note: 'decide.in_chat', doneId: null })
+
+  expect(bandCardNote(stepCard, true, null)).toEqual({ note: null, doneId: null })
+})
+
+test('sendNow + appendSendLog: rejected prompt.submit writes one post_refused JSONL line; resolving submit writes none', async () => {
+  const files = new Map<string, string>()
+  const fakeFs = {
+    read: async (p: string) => {
+      const v = files.get(p)
+      if (v === undefined) throw new Error('ENOENT')
+      return v
+    },
+    write: async (p: string, content: string) => {
+      files.set(p, content)
+    },
+  }
+  const card = dec('d-send-1', 'Ship it?', { options: [OPT('Yes'), OPT('No')] })
+  let state = { ...NO_DECIDE, picks: { 'd-send-1': 0 } }
+  const runSend = (rejectWith: string | null) => sendNow({
+    now: async () => 1700000000000,
+    read: async () => state,
+    update: async fn => { state = fn(state) },
+    pool: () => [card],
+    post: async () => {
+      if (rejectWith !== null) throw new Error(rejectWith)
+      return {}
+    },
+    onSendFailed: (reason, ids) => {
+      void appendSendLog(fakeFs.read, fakeFs.write, '/tmp/live-test', { ts: 1700000000000, event: 'post_refused', ids, reason })
+    },
+  }, new Set(['d-send-1']))
+
+  await runSend(null)
+  await new Promise(r => setTimeout(r, 0))
+  expect(files.get('/tmp/live-test/decide-send.jsonl')).toBeUndefined()
+
+  state = { ...NO_DECIDE, picks: { 'd-send-1': 0 } }
+  await runSend('Prompt not submitted: test')
+  await new Promise(r => setTimeout(r, 0))
+  const raw = files.get('/tmp/live-test/decide-send.jsonl') ?? ''
+  const lines = raw.trim().split('\n').filter(Boolean)
+  expect(lines.length).toBe(1)
+  expect(JSON.parse(lines[0])).toEqual({
+    ts: 1700000000000,
+    event: 'post_refused',
+    ids: ['d-send-1'],
+    reason: 'Prompt not submitted: test',
+  })
 })

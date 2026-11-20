@@ -2349,3 +2349,13 @@ export const bandIsDecide = (b: BandView): boolean => b.kind === 'decide'
 export const bandIsStalled = (b: BandView): boolean => b.kind === 'stalled'
 export const bandIsWaiting = (b: BandView): boolean => b.kind === 'waiting'
 export const bandIsQuiet = (b: BandView): boolean => b.kind === 'running' || b.kind === 'idle'
+
+export function bandCardNote(cur: LiveDecision | undefined, locked: boolean, fill: unknown | null): { note: string | null; doneId: string | null } {
+  const isStep = cur !== undefined && isStepCard(cur)
+  const optN = cur === undefined || cur.id === null || decideDialog(cur) ? 0 : cur.options.length
+  const note = cur === undefined || locked || fill !== null ? null
+    : isStep ? 'decide.step_hint'
+    : optN === 0 ? (cur.id === null || !decideDialog(cur) ? 'decide.in_chat' : 'decide.in_dialog') : null
+  const doneId = isStep && cur.id !== null && !locked ? cur.id : null
+  return { note, doneId }
+}

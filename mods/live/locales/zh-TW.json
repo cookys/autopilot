@@ -879,5 +879,8 @@
   "page.now.quota_stale_plain": "資料過期（年紀不明）",
   "page.now.quota_waste": "額度浪費",
   "page.quota.col_proj_s": "預",
-  "page.quota.red_summary": "額度紅 {n}（{names}）"
+  "page.quota.red_summary": "額度紅 {n}（{names}）",
+  "decide.send_failed": "送出失敗：{reason}（卡片還在，可再按一次 0）",
+  "decide.step_hint": "做完後按〔做完了〕",
+  "decide.step_done": "做完了"
 }

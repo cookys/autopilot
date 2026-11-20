@@ -174,7 +174,7 @@ red a-press-marks-sent decideundo.ts 's/  return { ...s, picks }/  return { ...s
 red b-undo-keeps-window decideundo.ts 's/{ ...s, hold: dropIds(s.hold, \[id\]) }/s/'
 red c-window-zero decideundo.ts 's/const until = (await d.now()) + DECIDE_UNDO_MS/const until = (await d.now()) + 0/'
 red c-hold-not-dropped decideundo.ts 's/await d.update(s => ({ ...s, hold: dropIds(s.hold, due) }))/await d.update(s => s)/'
-red f-send-awaits-prompt decideundo.ts 's/      void d.post(reply.text).catch(async () => {/      await d.post(reply.text).catch(async () => {/'
+red f-send-awaits-prompt decideundo.ts 's/      void d.post(reply.text).catch(async (err: unknown) => {/      await d.post(reply.text).catch(async (err: unknown) => {/'
 red d-head-changed model.ts 's/\[待決回覆\\u00b7更正\]/[待決回覆-更正]/'
 red d-pick-not-needed-for-send tabs.ts "s/const answered = open.filter(d => !decideHeld(d, dv) \&\& decideLine(d, dv) !== null).length/const answered = 1/"
 

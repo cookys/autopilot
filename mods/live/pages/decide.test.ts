@@ -279,7 +279,7 @@ test('decide M7: pending_no_source names only the missing sources and wraps with
     for (const r of out) expect(displayWidth(text(r))).toBeLessThanOrEqual(cols)
     expect(out.map(text).join('')).toContain('待決在 band 上（d）')
     expect(out.map(text).join('')).not.toContain('無來源')
-    expect(out.map(text).filter(r => r.includes('…'))).toEqual([])
+    expect(out.map(text).filter(r => !r.startsWith('╰─') && r.includes('…'))).toEqual([]) // the page rows only: the v7.4 border row clips its key hints at narrow widths
   }
 
   const ptrOnly = frameRows(decidePage, ctxOf(80, 24, noPointer, noCardsCon)).map(text).join('')

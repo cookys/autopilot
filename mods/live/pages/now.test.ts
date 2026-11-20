@@ -56,7 +56,7 @@ const fail = async () => ({ exitCode: 1, stdout: '' })
 function content(cols: number, rows: number, c: ConsoleSnapshot | null, l: unknown = live()): string[] {
   const out = frameRows(nowPage, ctxOf(cols, rows, c, l)).map(text)
   const A = nowPage.render(ctxOf(cols, rows, c, l)).actions.length
-  return out.slice(1, out.length - 1 - A).map(r => r.trimEnd()).filter(r => r !== '')
+  return out.slice(1, out.length - 2 - A).map(r => r.trimEnd()).filter(r => r !== '')
 }
 const actionsOf = (cols: number, rows: number, c: ConsoleSnapshot | null, l: unknown = live()): string[] => nowPage.render(ctxOf(cols, rows, c, l)).actions.map(text)
 
@@ -116,7 +116,7 @@ test('now: golden at 160x40, 120x30 and 80x24 matches the mockup rows', async ()
   expect(diffRows(flat(content(120, 30, con())), GOLD_120)).toEqual([])
   expect(diffRows(flat(content(80, 24, con())), GOLD_80)).toEqual([])
   expect(content(160, 40, con())[3]).toMatch(/2 時前$/)
-  expect(actionsOf(160, 40, con())).toEqual(['→ 到待決頁  [2]', '→ 殘留 2 項可清  [8]'])
+  expect(actionsOf(160, 40, con())).toEqual(['→ 到待決頁  [2]', '→ 殘留 2 項可清  [6]'])
 })
 
 test('now: negative control, a broken golden row is reported (the comparator is not vacuous)', async () => {
@@ -297,7 +297,7 @@ test('now R2: shortBody (<= 4 rows) combines Button + pending summary first, dro
   expect(shortRendered.body[0][0].press).toBe('tab:2:decide')
   expect(text(shortRendered.body[0]).startsWith('→ 待決 3 張（最舊 1 天）：合併主幹前')).toBe(true)
   expect(text(shortRendered.body[0]).endsWith('…')).toBe(true)
-  const framed6 = frameRows(nowPage, ctxOf(80, 6, c, liveNoRes)).map(text).slice(1, 5)
+  const framed6 = frameRows(nowPage, ctxOf(80, 7, c, liveNoRes)).map(text).slice(1, 5)
   expect(framed6[0]).toContain('→ 待決 3 張（最舊 1 天）：')
   expect(framed6[1]).toBe('✗ 艦隊 離線 1 線（復原線）· 主機 17/18（離線 1）')
   expect(framed6[2]).toBe('✗ 額度 紅 1（trinity） · 資料過期 180 分· ? 未知 1（personal）')
@@ -365,40 +365,41 @@ test('now C1: short 現況 summarises each class once (pending -> fleet -> quota
   expect(stripBtns.filter(b => /^[0-9]$/.test(b.props.hotkey ?? '')).map(b => b.props.hotkey)).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'])
 
   // 2. Class summary rows (zh-TW and en): pending, fleet, quota each appear once; nothing hidden -> no 另有 N 項
-  const zh7 = frameRows(nowPage, ctxOf(80, 7, c1Snap, liveNoRes), { pages: PAGES }).map(text)
-  expect(zh7.length).toBe(7)
+  const zh7 = frameRows(nowPage, ctxOf(80, 8, c1Snap, liveNoRes), { pages: PAGES }).map(text)
+  expect(zh7.length).toBe(8)
   expect(zh7.join('\n')).not.toContain('到待決頁')
   expect(zh7.slice(1, 3)).toEqual(['', ''])
   expect(zh7[3]).toContain('→ 待決 3 張（最舊 45 分）：')
   expect(zh7[4]).toBe('✗ 艦隊 離線 1 線（復原線）· 卡住 1 線（遊戲線）· 主機 17/18（離線 1）')
   expect(zh7[5]).toBe('✗ 額度 紅 2（F 池、trinity） · 資料過期 180 分')
-  expect(zh7[6]).toContain('1 現 2 待')
+  expect(zh7[7]).toContain('1 現況 2 待決')
 
-  const en7 = frameRows(nowPage, { ...(ctxOf(80, 7, c1Snap, liveNoRes) as object), t: makeT('en') } as never, { pages: PAGES }).map(text)
-  expect(en7.length).toBe(7)
+  const en7 = frameRows(nowPage, { ...(ctxOf(80, 8, c1Snap, liveNoRes) as object), t: makeT('en') } as never, { pages: PAGES }).map(text)
+  expect(en7.length).toBe(8)
   expect(en7.join('\n')).not.toContain('Open the pending page')
   expect(en7[3]).toContain('→ Pending 3 (oldest 45m)：')
   expect(displayWidth(en7[4])).toBeLessThanOrEqual(80)
   expect(en7[4]).toBe('✗ Fleet offline 1 lines (復原線) · stuck 1 lines (遊…) · hosts 17/18 (1 offline)')
   expect(en7[5]).toBe('✗ quota red 2 (F 池, trinity) · Data expired 180 min')
   // At 84 cols (untruncated English fleet row is 83 display cells), neither CJK lane name is truncated
-  const en84 = frameRows(nowPage, { ...(ctxOf(84, 7, c1Snap, liveNoRes) as object), t: makeT('en') } as never, { pages: PAGES }).map(text)
-  expect(en84[4]).toBe('✗ Fleet offline 1 lines (復原線) · stuck 1 lines (遊戲線) · hosts 17/18 (1 offline)')
+  const en84 = frameRows(nowPage, { ...(ctxOf(84, 8, c1Snap, liveNoRes) as object), t: makeT('en') } as never, { pages: PAGES }).map(text)
+  expect(en84.join('\n'), 'at 84 columns the untruncated English fleet row stays whole').toContain('✗ Fleet offline 1 lines (復原線) · stuck 1 lines (遊戲線) · hosts 17/18 (1 offline)')
+  expect(en84.some(r => r.startsWith('✗ Fleet offline')), 'the fleet row is a whole row').toBe(true)
 
   // Summary-only offline host (no host item in console.items, summary.hosts 17/18) also surfaces in the fleet summary row
   const summaryOnlySnap = con({ ...c1Snap, items: dupPoolItems as never })
-  const sumZh7 = frameRows(nowPage, ctxOf(80, 7, summaryOnlySnap, liveNoRes), { pages: PAGES }).map(text)
+  const sumZh7 = frameRows(nowPage, ctxOf(80, 8, summaryOnlySnap, liveNoRes), { pages: PAGES }).map(text)
   expect(sumZh7[4]).toBe('✗ 艦隊 離線 1 線（復原線）· 卡住 1 線（遊戲線）· 主機 17/18（離線 1）')
-  const sumEn7 = frameRows(nowPage, { ...(ctxOf(80, 7, summaryOnlySnap, liveNoRes) as object), t: makeT('en') } as never, { pages: PAGES }).map(text)
+  const sumEn7 = frameRows(nowPage, { ...(ctxOf(80, 8, summaryOnlySnap, liveNoRes) as object), t: makeT('en') } as never, { pages: PAGES }).map(text)
   expect(sumEn7[4]).toContain('hosts 17/18 (1 offline)')
 
   // At H=6 (4 body rows: 1 blank + 3 class rows when all items are summarised) and H=3 (1 body row -> 另有 6 項), overflow is never silently dropped
-  const zh6 = frameRows(nowPage, ctxOf(80, 6, c1Snap, liveNoRes), { pages: PAGES }).map(text)
+  const zh6 = frameRows(nowPage, ctxOf(80, 7, c1Snap, liveNoRes), { pages: PAGES }).map(text)
   expect(zh6[1]).toBe('')
   expect(zh6[2]).toContain('→ 待決 3 張')
   expect(zh6[3]).toContain('✗ 艦隊 ')
   expect(zh6[4]).toBe('✗ 額度 紅 2（F 池、trinity） · 資料過期 180 分')
-  expect(frameRows(nowPage, ctxOf(80, 3, c1Snap, liveNoRes), { pages: PAGES }).map(text)[1]).toBe('✗ 艦隊 ✗2 ⊘1 · 額度 ✗2 F 池 · 待決 3 張') // X2b: severity leads; urgent quota and overflow remain visible.
+  expect(frameRows(nowPage, ctxOf(80, 4, c1Snap, liveNoRes), { pages: PAGES }).map(text)[1]).toBe('✗ 艦隊 ✗2 ⊘1 · 額度 ✗2 F 池 · 待決 3 張') // X2b: severity leads; urgent quota and overflow remain visible.
 
   // 3. When unshown items remain (e.g. yellow waste pool + findings exception), row 4 is `另有 N 項`
   const allTiersSnap = con({
@@ -417,13 +418,13 @@ test('now C1: short 現況 summarises each class once (pending -> fleet -> quota
 
   // 4. R14 bottom-anchoring and omitting empty class rows
   const fewerSnap = con({ ...c1Snap, items: [hostItem] as never, lines: [], quota: { pools: [POOLS.find(p => p.pool === 'trinity')!] as never, seats: [] } })
-  const anchored = frameRows(nowPage, ctxOf(80, 7, fewerSnap, liveNoRes), { pages: PAGES }).map(text)
-  expect(anchored.length).toBe(7)
+  const anchored = frameRows(nowPage, ctxOf(80, 8, fewerSnap, liveNoRes), { pages: PAGES }).map(text)
+  expect(anchored.length).toBe(8)
   expect(anchored.slice(1, 3)).toEqual(['', ''])
   expect(anchored[3]).toContain('→ 待決 3 張')
   expect(anchored[4]).toBe('✗ 艦隊 主機 17/18（離線 1）')
   expect(anchored[5]).toBe('✗ 額度 紅 1（trinity） · 資料過期 180 分')
-  expect(anchored[6]).toContain('1 現 2 待')
+  expect(anchored[7]).toContain('1 現況 2 待決')
 
   // 5. Every pool_key appears at most once (including duplicate pool spellings and multiple unpooled seat_blocked items)
   const unpooledDupSnap = con({
@@ -435,7 +436,7 @@ test('now C1: short 現況 summarises each class once (pending -> fleet -> quota
     ] as never,
   })
   for (const checkRows of [
-    frameRows(nowPage, ctxOf(80, 7, unpooledDupSnap, liveNoRes), { pages: PAGES }).map(text),
+    frameRows(nowPage, ctxOf(80, 8, unpooledDupSnap, liveNoRes), { pages: PAGES }).map(text),
     nowPage.render({ ...(ctxOf(80, 20, unpooledDupSnap, liveNoRes) as object), shortBody: true } as never).body.map(text),
     frameRows(nowPage, ctxOf(80, 24, unpooledDupSnap, liveNoRes), { pages: PAGES }).map(text),
   ]) {
@@ -481,7 +482,7 @@ test('now C1 acceptance: at 80x24 inline (4 body rows) with pending + 2 offline 
 
   // 80x6 (4 body rows in an 80x24 inline pane) AND shortBody on 80x24
   for (const rows of [
-    frameRows(nowPage, ctxOf(80, 6, snap, liveNoRes), { pages: PAGES }).map(text).slice(1, 5).filter(r => r !== ''),
+    frameRows(nowPage, ctxOf(80, 7, snap, liveNoRes), { pages: PAGES }).map(text).slice(1, 5).filter(r => r !== ''),
     nowPage.render({ ...(ctxOf(80, 24, snap, liveNoRes) as object), shortBody: true } as never).body.map(text),
   ]) {
     expect(rows.filter(r => r.startsWith('→ 待決 ')).length).toBe(1)
@@ -544,7 +545,7 @@ test('now M7: pending_no_source derives missing reason from pointer file / conso
   const noCardsCon = con({ counts: { ...con().counts, decisions: 0 }, cards: null, sources: { ...con().sources, cards: { at_ms: null, state: 'no_source' } } })
 
   // 1. Both pointer file and console snapshot absent: full reason at 80 cols and wrapped (never truncated) at 40 cols (24-row and shortBody 7-row)
-  for (const [cols, rows] of [[80, 24], [40, 24], [80, 6], [40, 7]] as const) {
+  for (const [cols, rows] of [[80, 24], [40, 24], [80, 7], [40, 8]] as const) {
     const framed = frameRows(nowPage, ctxOf(cols, rows, null, noPointerLive), { pages: PAGES }).map(text)
     expect(framed.length).toBe(rows)
     for (const r of framed) expect(displayWidth(r)).toBeLessThanOrEqual(cols)
@@ -611,11 +612,11 @@ test('now: unknown stale ages, fleet totals and hidden seat spend errors remain 
   expect(short(snap)).not.toContain('資料過期 0 分')
   const knownAges = con({ ...snap, quota: { pools: pools.map((p, i) => ({ ...p, stale_age_min: i === 0 ? null : i * 7 })) as never, seats: [] } })
   expect(short(knownAges)).toContain('資料過期 14 分')
-  expect(nowPage.render(ctxOf(80, 3, snap)).body.map(text).join('\n')).toContain('艦隊 59')
+  expect(nowPage.render(ctxOf(80, 4, snap)).body.map(text).join('\n')).toContain('艦隊 59')
 
   for (const count of [30, 14, 17]) {
     const overflowing = con({ ...snap, lines: [], items: Array.from({ length: count }, (_, i) => ({ ...con().items[0], id: 'e' + i })) })
-    const body = nowPage.render(ctxOf(120, 30, overflowing)).body.map(text)
+    const body = nowPage.render(ctxOf(120, 31, overflowing)).body.map(text)
     const full = nowPage.render(ctxOf(120, 200, overflowing)).body.map(text)
     const category = (r: string) => r.includes('capacity--claude') || /^  . 額度 /.test(r)
     expect(body.some(r => r.startsWith('另有 '))).toBe(true)

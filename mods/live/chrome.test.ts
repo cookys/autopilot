@@ -20,12 +20,12 @@ const walk = (n: any): Node[] => n == null || typeof n !== 'object' ? [] : Array
 const flat = (n: any): string => typeof n === 'string' ? n : Array.isArray(n) ? n.map(flat).join('') : n?.props ? flat(n.props.children) : ''
 const hostWidth = (n: any): number => typeof n === 'string' ? displayWidth(n) : Array.isArray(n) ? n.reduce((w, c) => w + hostWidth(c), 0) : n?.props ? hostWidth(n.props.children) + (n.kind === 'Button' && n.props.hotkey ? 3 : 0) : 0
 
-test('R6: strip at 80, 70 and 60 columns binds 1-8, 9, 0, i with named labels and no action-letter label', () => {
+test('R6: strip at 80, 70 and 60 columns binds 1-8, 9, 0 with named labels and no action-letter label', () => {
   for (const cols of [80, 70, 60]) for (const locale of ['zh-TW', 'en']) {
     const pressed: string[] = []
     const tree = Pane(EL as never, null, 'now', () => {}, makeT(locale), cols, () => {}, new Set(), () => {}, new Set(), null, null, null, null, null, { pages: PAGES, pageId: 'now', onPage: id => pressed.push(id), console: null, nowMs: 0, rows: 24 })
-    const buttons = walk(tree).filter(n => n.kind === 'Button' && n.props.key !== FOCUS_ANCHOR_KEY && /^[0-9i]$/.test(n.props.hotkey ?? ''))
-    expect(buttons.map(b => b.props.hotkey)).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', 'i'])
+    const buttons = walk(tree).filter(n => n.kind === 'Button' && n.props.key !== FOCUS_ANCHOR_KEY && /^[0-9]$/.test(n.props.hotkey ?? ''))
+    expect(buttons.map(b => b.props.hotkey)).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'])
     for (const b of buttons) {
       const label = flat(b).trim()
       expect(label.length).toBeGreaterThan(0)
@@ -116,7 +116,7 @@ test('W1: mounted dock and inline bodyRows reach the last host body row', async 
     expect(framed.length).toBe(want)
     expect(framed[want - 1].props.key).toBe('f' + (want - 1))
     const contents = JSON.stringify(framed[want - 1])
-    expect(contents).toContain('h:i')
+    expect(contents).toContain('"hotkey":"0"') // v7.4: the strip ends on 0 寵物 (no i)
     await pane.unmount()
   }
 })

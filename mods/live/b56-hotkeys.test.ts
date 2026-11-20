@@ -18,7 +18,9 @@ const t = makeT('zh-TW')
 const NOW = 1794200000000
 const SNAP = parseConsole(JSON.stringify(full))
 const DIGITS_ALL = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']
-const DIGIT_PAGE_IDS: PageId[] = ['now', 'decide', 'fleet', 'quota', 'dispatch', 'review', 'spend', 'hygiene', 'pet', 'forge']
+const DIGIT_PAGE_IDS: PageId[] = ['now', 'decide', 'dispatch', 'review', 'spend', 'hygiene', 'fleet', 'todo', 'help', 'pet']
+// the legacy tabStrip draws the seven PaneTab pages; todo / help / pet exist only on the framed strip (v7.4)
+const LEGACY_DIGIT: Record<string, string> = Object.fromEntries(Object.entries(PAGE_DIGIT).filter(([id]) => ['now', 'decide', 'dispatch', 'review', 'spend', 'hygiene', 'fleet'].includes(id)))
 
 type PureNode = { kind: string; props: Record<string, any> }
 const mk = (kind: string) => (props: Record<string, any>): PureNode => ({ kind, props })
@@ -160,9 +162,9 @@ test('b56 legacy tabStrip: epoch 0 -> epoch 1 preserves PAGE_DIGIT hotkeys and r
   const s0 = renderStrip(0)
   const s1 = renderStrip(1)
 
-  expect(Object.fromEntries(s0.digitButtons.map(n => [n.props.key, n.props.hotkey]))).toEqual(PAGE_DIGIT)
+  expect(Object.fromEntries(s0.digitButtons.map(n => [n.props.key, n.props.hotkey]))).toEqual(LEGACY_DIGIT)
   expect(Object.fromEntries(s1.digitButtons.map(n => [n.props.key, n.props.hotkey]))).toEqual(
-    Object.fromEntries(Object.entries(PAGE_DIGIT).map(([id, digit]) => [id + ':1', digit])),
+    Object.fromEntries(Object.entries(LEGACY_DIGIT).map(([id, digit]) => [id + ':1', digit])),
   )
   expect(s0.anchors.map(n => n.props.key)).toEqual([FOCUS_ANCHOR_KEY])
   expect(s1.anchors.map(n => n.props.key)).toEqual([FOCUS_ANCHOR_KEY + ':1'])
@@ -242,7 +244,7 @@ test('b56 digit press: choosing a digit in the second render calls onPage and on
   const strip0 = buildStrip(0, tabsAfterUnmount)
   const strip1 = buildStrip(1, tabsAfterUnmount)
   const strip1Direct = buildStrip(1, tabsDirect)
-  const stripPairs = Object.entries(PAGE_DIGIT) as [PaneTab, string][]
+  const stripPairs = Object.entries(LEGACY_DIGIT) as [PaneTab, string][]
 
   for (const [, digit] of stripPairs) {
     const btn = strip1Direct.find(n => n.props.hotkey === digit)

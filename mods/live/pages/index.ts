@@ -1,35 +1,42 @@
-// mods/live/pages/index.ts — the page registry: the pages of the new pane in key order (now 1, decide 2, fleet 3, quota 4, dispatch 5, review 6, spend 7, hygiene 8, pet 9, forge 0, help i).
-// Each page is an EMPTY SHELL here (title only, body [] and actions []), declared inline below. The page hands replace one entry each
-// (S1 decide, S2 fleet, S3 now, S4 quota): write the page in its own new file (pages/decide.ts ...), import it here, and swap the one shell line.
-// A shell has no `framed` flag and pane.tsx still draws its tab the old way; the hand's page sets `framed: true` and is then drawn through frameRows.
+// mods/live/pages/index.ts — v7.4 page registry: keys 1–9 per contract.ts; pet 0; quota not in the tab row (folded into spend).
 import type { Page } from './frame'
-import { quotaPage } from './quota'
 import { nowPage } from './now'
-import { fleetPage } from './fleet'
 import { decidePage } from './decide'
-import { hygienePage } from './hygiene'
-import { reviewPage } from './review'
 import { dispatchPage } from './dispatch'
+import { reviewPage } from './review'
 import { spendPage } from './spend'
-import { forgePage } from './forge'
-import { legendLines } from '../tabs'
+import { hygienePage } from './hygiene'
+import { fleetPage } from './fleet'
+import { helpPage } from './help'
 import { petPage } from '../pettab'
+import { quotaPage } from './quota'
+import { forgePage } from './forge'
+import { todoPage } from './todo'
 
-// A6 (g2 folds): 1-8, then 9 pet, 0 forge, i help, all drawn through frameRows. 5-8 are shells
-// that keep their old tab's content until batch 2 moves it; help is a shell.
 const pet = (): Page => petPage
 
 export const PAGES: Page[] = [
   nowPage,
   decidePage,
-  fleetPage,
-  quotaPage,
   dispatchPage,
   reviewPage,
   spendPage,
   hygienePage,
+  fleetPage,
+  todoPage,
+  helpPage,
   pet(),
-  forgePage,
-  // K1: help keeps its existing content inside the same frame and navigation.
-  { id: 'help', key: 'i', title: '說明', framed: true, render: ctx => ({ body: legendLines({ t: ctx.t, cols: ctx.size.cols }).map(l => l.segs ?? [{ text: l.text }]), actions: [] }) },
+]
+
+// Pages reachable by digit but not listed on the strip (quota → spend tab; forge legacy).
+export const EXTRA_PAGES: Page[] = [quotaPage, forgePage]
+
+// gen-locales reads this file: anchor v74.b.help.* ids used by pages/help.ts
+void [
+  'frame.help',
+  'v74.b.help.status_title', 'v74.b.help.status_1', 'v74.b.help.status_2',
+  'v74.b.help.symbol_title', 'v74.b.help.symbol_1', 'v74.b.help.symbol_2',
+  'v74.b.help.keys_title', 'v74.b.help.keys_1', 'v74.b.help.keys_2', 'v74.b.help.keys_3',
+  'v74.d.todo_head', 'v74.d.todo_due', 'v74.d.todo_no_due', 'v74.d.todo_back', 'v74.d.todo_no_due_note', 'v74.d.todo_no_source', 'v74.d.todo_none', 'v74.d.todo_for', 'v74.d.todo_move',
+  'v74.b.help.keys_4', 'v74.b.help.keys_5', 'v74.b.help.keys_6',
 ]

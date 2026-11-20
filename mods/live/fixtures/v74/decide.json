@@ -1,0 +1,71 @@
+[
+  {
+    "id": "d-a1b2c3e1",
+    "title": "合併 plan",
+    "question": "要不要把 shared-tui plan 合進 develop？",
+    "background": null,
+    "options": [
+      {
+        "label": "合併",
+        "detail": "",
+        "recommended": true
+      },
+      {
+        "label": "再審一輪",
+        "detail": "",
+        "recommended": false
+      },
+      {
+        "label": "待辦",
+        "detail": "",
+        "recommended": false
+      }
+    ]
+  },
+  {
+    "id": "d-a1b2c3e2",
+    "title": "外掛更新時機",
+    "question": "forge-stats 外掛今晚還是明早更新？",
+    "background": null,
+    "options": [
+      {
+        "label": "今晚",
+        "detail": "",
+        "recommended": false
+      },
+      {
+        "label": "明早",
+        "detail": "",
+        "recommended": true
+      },
+      {
+        "label": "待辦",
+        "detail": "",
+        "recommended": false
+      }
+    ]
+  },
+  {
+    "id": "d-a1b2c3e3",
+    "title": "預覽先拍幾欄",
+    "question": "預覽先拍 80 欄還是 120 欄？",
+    "background": "操作員平常用寬螢幕，外出用筆電只有 80 欄。",
+    "options": [
+      {
+        "label": "80 欄",
+        "detail": "筆電的問題先抓到；寬螢幕晚半天",
+        "recommended": false
+      },
+      {
+        "label": "120 欄",
+        "detail": "平常畫面先過閘門；80 欄晚半天",
+        "recommended": true
+      },
+      {
+        "label": "待辦",
+        "detail": "離開待決，到期日前不再出現",
+        "recommended": false
+      }
+    ]
+  }
+]

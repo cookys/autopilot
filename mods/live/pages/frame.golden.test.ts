@@ -37,9 +37,10 @@ for (const [cols, rows] of SIZES) {
     const page = { ...PAGES[0], render: () => ({ body, actions: acts }) } as never
     const out = frameRows(page, ctxOf(cols, rows, null)).map(text)
     expect(out.length).toBe(rows)
-    expect(out[rows - 4]).toContain('還有')
-    expect(out[rows - 3]).toContain('ACT-1')
-    expect(out[rows - 2]).toContain('ACT-2')
+    expect(out[rows - 5]).toContain('還有')
+    expect(out[rows - 4]).toContain('ACT-1')
+    expect(out[rows - 3]).toContain('ACT-2')
+    expect(out[rows - 2]).toMatch(/^╰─/) // v7.4: the bottom border row sits between the actions and the strip
     const empty = frameRows({ ...PAGES[0], render: () => ({ body: [], actions: [] }) } as never, ctxOf(cols, rows, null)).map(text)
     expect(empty.length).toBe(rows)
     expect(/1\D*2\D*3\D*4/.test(empty[empty.length - 1])).toBe(true) // the strip is row H-1 even when the page has nothing to say

@@ -963,5 +963,77 @@ function runTrunc(mode, seed, truncate) {
   check(!fs.existsSync(argvFile), 'bwrap missing: nothing was dispatched');
 }
 
+// A listed local endpoint (scripts/lib/local-sandbox-endpoints.json) forces the same
+// sandbox the argv already passes, including on a runner whose own mode is off.
+// The identity input is the sandboxed containment (exam_sandbox bound in). An
+// unlisted endpoint on that same runner stays the operator fingerprint.
+{
+  const argvFile = path.join(tempRoot, 'fake-argv.jsonl');
+  const readNew = (before) => fs.readFileSync(argvFile, 'utf8').split('\n').filter(Boolean).slice(before).map((l) => JSON.parse(l));
+  const saved = {};
+  for (const k of ['AUTOPILOT_ENDPOINT_GLM_LOCAL_URL', 'AUTOPILOT_ENDPOINT_GLM_LOCAL_TOKEN', 'AUTOPILOT_ENDPOINT_EXAMLAN_URL', 'AUTOPILOT_ENDPOINT_EXAMLAN_TOKEN', 'AUTOPILOT_ENDPOINT_EXAMLAN_TRANSPORT']) {
+    saved[k] = process.env[k];
+  }
+  const wrapper = path.join(tempRoot, 'disp.sh');
+  process.env.AUTOPILOT_ENDPOINT_GLM_LOCAL_URL = 'https://glm.example/v1';
+  process.env.AUTOPILOT_ENDPOINT_GLM_LOCAL_TOKEN = 'glm-local-bearer';
+  fs.writeFileSync(path.join(tempRoot, 'fake-seed.txt'), 'glm-local-seed');
+  fs.writeFileSync(path.join(tempRoot, 'fake-mode.txt'), 'honest');
+  fs.writeFileSync(path.join(tempRoot, 'fake-blocked.txt'), '1');
+  const beforeListed = fs.existsSync(argvFile) ? fs.readFileSync(argvFile, 'utf8').split('\n').filter(Boolean).length : 0;
+  process.env.AUTOPILOT_QUALIFY_SEED = 'glm-local-seed';
+  let listed;
+  try {
+    listed = runImplQualification({
+      ...baseOptions(fs.mkdtempSync(path.join(tempRoot, 'store-glm-local-'))),
+      dispatchBin: wrapper,
+      endpoint: 'glm_local',
+    });
+  } finally {
+    delete process.env.AUTOPILOT_QUALIFY_SEED;
+  }
+  const listedArgv = readNew(beforeListed);
+  check(listedArgv.length > 0, 'listed endpoint run dispatched');
+  check(listedArgv.every((a) => {
+    const i = a.indexOf('--sandbox');
+    return i >= 0 && a[i + 1] === 'bwrap' && a.includes('--worktree-parent');
+  }), 'listed endpoint passes --sandbox bwrap');
+  equal(listed.evidence.identity.containment_fingerprint, implSandboxedContainment(digest('c')),
+    'listed endpoint records sandbox bwrap in the identity input');
+  check(examIdentityHashOf(listed.evidence.identity) !== examIdentityHashOf({
+    ...listed.evidence.identity,
+    containment_fingerprint: digest('c'),
+  }), 'listed endpoint identity hash is not the unsandboxed hash');
+
+  process.env.AUTOPILOT_ENDPOINT_EXAMLAN_URL = 'https://examlan.example/v1';
+  process.env.AUTOPILOT_ENDPOINT_EXAMLAN_TOKEN = 'examlan-bearer';
+  delete process.env.AUTOPILOT_ENDPOINT_EXAMLAN_TRANSPORT;
+  fs.writeFileSync(path.join(tempRoot, 'fake-seed.txt'), 'examlan-off-seed');
+  fs.writeFileSync(path.join(tempRoot, 'fake-mode.txt'), 'honest');
+  const beforeOff = fs.readFileSync(argvFile, 'utf8').split('\n').filter(Boolean).length;
+  process.env.AUTOPILOT_QUALIFY_SEED = 'examlan-off-seed';
+  let unlisted;
+  try {
+    unlisted = runImplQualification({
+      ...baseOptions(fs.mkdtempSync(path.join(tempRoot, 'store-examlan-off-'))),
+      dispatchBin: wrapper,
+      endpoint: 'examlan',
+    });
+  } finally {
+    delete process.env.AUTOPILOT_QUALIFY_SEED;
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+  const offArgv = readNew(beforeOff);
+  check(offArgv.length > 0, 'unlisted endpoint run dispatched');
+  check(offArgv.every((a) => !a.includes('--sandbox') && !a.includes('--worktree-parent')),
+    'unlisted endpoint on a non-cc-shim runner stays sandbox off');
+  equal(unlisted.evidence.identity.containment_fingerprint, digest('c'),
+    'unlisted endpoint identity stays the operator fingerprint');
+  check(!('sandbox_blocked_writes' in unlisted.row.quality), 'unlisted endpoint row has no sandbox_blocked_writes');
+}
+
 process.stdout.write(`PASS [engine-qualify-impl] ${assertions} assertions\n`);
 fs.rmSync(tempRoot, { recursive: true, force: true });

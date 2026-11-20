@@ -3648,11 +3648,12 @@ function implSandboxMode(runner) {
 // --sandbox bwrap is on the argv (scripts/lib/local-sandbox-endpoints.json).
 function implEndpointNeedsSandbox(binding) {
   if (!binding || typeof binding.name !== 'string') return false;
+  const registry = path.join(__dirname, 'lib', 'local-sandbox-endpoints.json');
   let listed;
   try {
-    listed = JSON.parse(fs.readFileSync(path.join(__dirname, 'lib', 'local-sandbox-endpoints.json'), 'utf8'));
-  } catch {
-    return false;
+    listed = JSON.parse(fs.readFileSync(registry, 'utf8'));
+  } catch (error) {
+    usage(2, `local implementer sandbox registry unreadable (${registry}): ${error.message}`);
   }
   const names = listed && Array.isArray(listed.local_sandbox_endpoints) ? listed.local_sandbox_endpoints : [];
   return names.includes(binding.name);
@@ -3740,11 +3741,11 @@ function runImplQualification(options) {
     );
   }
   const sandboxMode = implSandboxMode(options.runner);
+  options = { ...options, implSandbox: sandboxMode };
   if (sandboxMode === 'bwrap') {
     verifyImplSandbox(options.testBwrapPath || BWRAP_PATH);
     options = {
       ...options,
-      implSandbox: sandboxMode,
       containmentFingerprint: implSandboxedContainment(options.containmentFingerprint),
     };
   }
@@ -3752,6 +3753,18 @@ function runImplQualification(options) {
     options = { ...options, endpointBinding: resolveImplEndpoint(options.endpoint) };
     if (options.endpointBinding.transport_security === 'plaintext_private') {
       process.stderr.write(`engine-qualify: --endpoint '${options.endpoint}' is PLAINTEXT to a private-range address (${options.endpointBinding.base_url}); the row will disclose transport_security=plaintext_private\n`);
+    }
+    // One mode for argv, containment_fingerprint / identity_hash, and the recorded
+    // blocked-write fields. A listed local endpoint sandboxes even when the runner's
+    // own mode is off. Do not wrap the fingerprint twice when the runner already did.
+    // Always consult the registry: an unreadable file is usage(2), not "not listed".
+    if (implEndpointNeedsSandbox(options.endpointBinding) && options.implSandbox !== 'bwrap') {
+      verifyImplSandbox(options.testBwrapPath || BWRAP_PATH);
+      options = {
+        ...options,
+        implSandbox: 'bwrap',
+        containmentFingerprint: implSandboxedContainment(options.containmentFingerprint),
+      };
     }
   }
   const staticAssets = verifyPinnedImplEvaluationAssets();
@@ -4401,7 +4414,7 @@ function runImplCase(context) {
       // dispatch-hetero's cn-model gate reads --endpoint. Env-only binding never reaches it.
       argv.push('--endpoint', options.endpointBinding.name);
     }
-    if (options.implSandbox === 'bwrap' || implEndpointNeedsSandbox(options.endpointBinding)) {
+    if (options.implSandbox === 'bwrap') {
       // Same flags production write dispatches use. The worktree must sit outside every repo
       // (the exam repo is a repo), so each case gets its own parent under workRoot.
       const worktreeParent = fs.mkdtempSync(path.join(workRoot, `impl-wt-${caseSpec.case_id}-`));

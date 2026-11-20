@@ -10,6 +10,7 @@ const VALID_IMPL_RUNNERS = new Set([
   'agy',
   'grok',
   'cc-shim',
+  'local',
   'pi',
   'cursor',
   'opencode',

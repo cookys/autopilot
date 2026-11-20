@@ -1111,4 +1111,61 @@ OUT="$(env -u AUTOPILOT_FLEET_TASK FLEET_BIN="$AU_FLEET_EXIT3" AUTOPILOT_UPSTREA
 assert_eq "0" "$EXIT" "author fail-soft keeps exit 0 when FLEET_BIN exits 3"
 assert_contains "$OUT" '"status": "authored"' "author fail-soft keeps authored JSON"
 
+# --runner local maps onto cc-shim + qwen_local + bwrap, and refuses a conflicting endpoint.
+STUB_LOCAL_AUTHOR="$TEST_TMP/runner-local-author"
+cat > "$STUB_LOCAL_AUTHOR" <<'EOF'
+#!/usr/bin/env bash
+prompt=$(cat || true)
+begin=$(printf '%s\n' "$prompt" | grep -E '^<<<AUTOPILOT-AUTHOR-[0-9a-f]{32}>>>$' | head -n1)
+end=$(printf '%s\n' "$prompt" | grep -E '^<<<AUTOPILOT-END-[0-9a-f]{32}>>>$' | head -n1)
+tool="${ENABLE_TOOL_SEARCH-<unset>}"
+if [ -n "${CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC+x}" ]; then dis=set; else dis=unset; fi
+anc=""
+p=$$
+i=0
+while [ "$i" -lt 6 ]; do
+  p=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')
+  [ -n "$p" ] && [ "$p" != 0 ] || break
+  c=$(ps -o comm= -p "$p" 2>/dev/null | tr -d ' ')
+  anc="$anc $c"
+  i=$((i + 1))
+done
+body="BASE:${ANTHROPIC_BASE_URL}
+TOOL_SEARCH:${tool}
+DISABLE_TRAFFIC:${dis}
+ANC:${anc}
+ARGV:$*"
+if [ -n "$begin" ] && [ -n "$end" ]; then
+  printf '%s\n%s\n%s\n' "$begin" "$body" "$end"
+else
+  printf '%s\n' "$body"
+fi
+exit 0
+EOF
+chmod +x "$STUB_LOCAL_AUTHOR"
+OUT="$(unset ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN; AUTOPILOT_TEST_CN_GATE_OFF=1 \
+  AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL=http://127.0.0.1:9 \
+  AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token \
+  DISPATCH_QUIET=1 "$SCRIPT" --runner local --model mini --prompt-file "$PROMPT" --bin "$STUB_LOCAL_AUTHOR" --context-window off 2>&1)"
+EXIT=$?
+[ "$EXIT" -eq 0 ] || printf 'dispatch-author diagnostic (local): %s\n' "$OUT" >&2
+assert_eq "0" "$EXIT" "author --runner local exits 0"
+assert_contains "$OUT" '"runner": "local"' "author local result runner is local"
+assert_contains "$OUT" '"resolved_runner": "cc-shim"' "author local result resolved_runner is cc-shim"
+assert_contains "$OUT" '"endpoint": "qwen_local"' "author local result endpoint is qwen_local"
+AU_LOCAL_LOG="$(python3 -c "import json,sys; print(json.loads(sys.stdin.read()).get('raw_log', ''))" <<<"$OUT")"
+assert_contains "$(cat "$AU_LOCAL_LOG")" "BASE:http://127.0.0.1:9" "author local reached cc-shim with qwen_local base url"
+assert_contains "$(cat "$AU_LOCAL_LOG")" "TOOL_SEARCH:false" "author local child sets ENABLE_TOOL_SEARCH=false"
+assert_contains "$(cat "$AU_LOCAL_LOG")" "DISABLE_TRAFFIC:unset" "author local child does not set CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"
+assert_contains "$(cat "$AU_LOCAL_LOG")" "bwrap" "author local child runs under bwrap"
+assert_contains "$(cat "$AU_LOCAL_LOG")" "ARGV:-p " "author local argv is the cc-shim -p form"
+OUT="$(unset ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN; AUTOPILOT_TEST_CN_GATE_OFF=1 \
+  AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL=http://127.0.0.1:9 \
+  AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token \
+  DISPATCH_QUIET=1 "$SCRIPT" --runner local --endpoint other --model mini --prompt-file "$PROMPT" --bin "$STUB_LOCAL_AUTHOR" --context-window off 2>&1)"
+EXIT=$?
+assert_eq "2" "$EXIT" "author --runner local --endpoint other exits 2"
+assert_contains "$OUT" "precondition_failed" "author local endpoint conflict is a precondition failure"
+assert_contains "$OUT" "conflicts with --endpoint other" "author local endpoint conflict names --endpoint other"
+
 finalize_test

@@ -914,6 +914,10 @@ per-user quota (usrquota) and silently broke every harness Bash call on the mach
   prune`. Unmarked dirs and unparseable manifests are never deleted. Worktree residue is reclaimed by
   `repo-residue-sweep.js reap --auto --yes` (SessionStart hook); `dispatch-hetero.sh --gc` was removed at 3.0.0.
 
+## `--runner local`
+
+`--runner local` on `dispatch-hetero.sh` and `dispatch-author.sh` is the shorthand for `--runner cc-shim --endpoint qwen_local --sandbox bwrap`. Passing `--endpoint` or `--sandbox` with any other value is a precondition conflict; repeating the same default is allowed. The child gets `ENABLE_TOOL_SEARCH=false` and does not get `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`. The result and the manifest record `runner: local`, `resolved_runner: cc-shim` and `endpoint: qwen_local`, so a usage ledger can tell a local dispatch from a plain cc-shim one. The cn-model gate is unchanged: `qwen_local` still accepts only its allowed mechanical classes. On the implementer ladder, `local` is a valid rung. There is no built-in default ladder; a mechanical ladder that starts at `local` and then `grok-4.7` at low climbs to grok on the next red round and stays there.
+
 ## Implementer ladder (unit class + red repair)
 
 A project may set `implementer_ladder` in `.claude/review-loop-config.md` as a comma list of

@@ -23,15 +23,16 @@ bash_payload() { # <agent_id|""> <command> [background]
 }
 monitor_payload() { printf '{"tool_name":"Monitor","agent_id":"%s","session_id":"fg-test-session","tool_input":{"command":"tail -f x"},"hook_event_name":"PreToolUse"}' "$1"; }
 
-# ── 1. inert outside scope ─────────────────────────────────────────────
+# ── 1. poll_scope=all: subagent polls denied without l4-l6 marker ──────
 clear_marker; reset_state
 run_hook foreman-guard.js "$(bash_payload agent-1 'sleep 60')"
 assert_eq 0 "$__RUN_EXIT" "no marker: exit 0"
-assert_eq "" "$__RUN_STDOUT" "no marker: silent even for a sleep"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "no marker: sleep denied"
+assert_contains "$__RUN_STDOUT" 'run_in_background' "no marker: names run_in_background"
 
 set_marker l3
 run_hook foreman-guard.js "$(bash_payload agent-1 'sleep 60')"
-assert_eq "" "$__RUN_STDOUT" "l3 marker: inert (not an orchestrated session)"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "l3 marker: polling still denied for subagent"
 
 set_marker l4
 run_hook foreman-guard.js "$(bash_payload '' 'sleep 60')"
@@ -187,7 +188,7 @@ done
 node "$REPO_ROOT/scripts/session-mode.js" set --level l4 --repo-root "$REPO" --ttl-hours 0 >/dev/null 2>&1 || true
 sleep 1
 run_hook foreman-guard.js "$(bash_payload agent-1 'sleep 30')"
-assert_eq "" "$__RUN_STDOUT" "expired marker: inert (fail-open)"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "expired marker: poll still denied for subagent"
 
 # ── 7. garbage payload: fail-open ─────────────────────────────────────
 set_marker l4

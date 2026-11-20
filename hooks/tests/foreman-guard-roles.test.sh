@@ -706,13 +706,12 @@ for i in $(seq 1 8); do
 done
 unset AUTOPILOT_FOREMAN_GUARD_BASH_CAP AUTOPILOT_FOREMAN_GUARD_ROLE_CAPS
 
-# ── P4: poll-shaped sleep allowed (poll rules marker-scoped) ──
+# ── P4: poll-shaped sleep denied when poll_scope=all (default) ──
 reset_state
 write_child_transcript agent-sleep "$(engine_content)"
 run_hook foreman-guard.js "$(bash_payload_tx agent-sleep 'sleep 30')"
-assert_eq 0 "$__RUN_EXIT" "P4 sleep poll: exit 0"
-assert_eq "" "$__RUN_STDOUT" "P4 sleep poll: no deny/advisory on call 1"
-assert_eq "" "$__RUN_STDERR" "P4 sleep poll: no stderr"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "P4 sleep poll: denied without marker"
+assert_contains "$__RUN_STDOUT" 'run_in_background' "P4 sleep poll: names run_in_background"
 
 # ── P4: context ceiling marker-scoped ──
 LIVE_DIR_P4="$(mktemp -d /dev/shm/fg-guard-live-p4-XXXXXX 2>/dev/null || mktemp -d "$TEST_TMP/live-p4-XXXXXX")"
@@ -735,13 +734,12 @@ assert_eq "" "$__RUN_STDOUT" "P4 ceiling no-marker: no deny/diagnostic stdout"
 assert_eq "" "$__RUN_STDERR" "P4 ceiling no-marker: no stderr diagnostic"
 unset AUTOPILOT_LIVE_DIR
 
-# ── P4: Monitor + Engine: still empty (not Bash) ──
+# ── P4: Monitor + Engine: denied under poll_scope=all ──
 reset_state
 write_child_transcript agent-mon "$(engine_content)"
 run_hook foreman-guard.js "$(monitor_payload_tx agent-mon)"
-assert_eq 0 "$__RUN_EXIT" "P4 Monitor Engine: exit 0"
-assert_eq "" "$__RUN_STDOUT" "P4 Monitor Engine: empty stdout"
-assert_eq "" "$__RUN_STDERR" "P4 Monitor Engine: empty stderr"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "P4 Monitor Engine: denied"
+assert_contains "$__RUN_STDOUT" 'run_in_background' "P4 Monitor Engine: names run_in_background"
 assert_file_absent "$(state_for agent-mon)" "P4 Monitor Engine: no state file"
 
 # ── P4: first line not Engine: — no state ──

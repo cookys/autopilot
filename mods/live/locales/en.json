@@ -908,7 +908,6 @@
   "v74.b.help.keys_4": " Why cursor + letter: one hotkey at a time",
   "v74.b.help.keys_5": " Digits work when the prompt is empty; letters need ctrl+x tab or a band click",
   "v74.b.help.keys_6": "Tab row and band are clickable; collapse control at the right of the band",
-  "v74.b.help.keys_7": "",
   "v74.c.sec_fleet_src": "Fleet {source}",
   "v74.c.pm_missing": "fleet pm status source missing",
   "v74.c.lines": "lines",

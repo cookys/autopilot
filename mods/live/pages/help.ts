@@ -19,7 +19,7 @@ export function renderHelp(ctx: PageCtx): { body: Row[]; actions: Row[] } {
         'v74.b.help.symbol_1', 'v74.b.help.symbol_2',
       ]),
       ...block(ctx, 'v74.b.help.keys_title', [
-        'v74.b.help.keys_1', 'v74.b.help.keys_2', 'v74.b.help.keys_3', 'v74.b.help.keys_4', 'v74.b.help.keys_5', 'v74.b.help.keys_6', 'v74.b.help.keys_7',
+        'v74.b.help.keys_1', 'v74.b.help.keys_2', 'v74.b.help.keys_3', 'v74.b.help.keys_4', 'v74.b.help.keys_5', 'v74.b.help.keys_6',
       ]),
     ],
     actions: [],

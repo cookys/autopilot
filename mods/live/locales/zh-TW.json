@@ -908,7 +908,6 @@
   "v74.b.help.keys_4": " 為什麼：hotkey 只接受一個鍵，游標加字母一次只按一個鍵",
   "v74.b.help.keys_5": " 數字鍵在輸入框空著時就能直接按；字母鍵要先 ctrl+x tab 或點 band",
   "v74.b.help.keys_6": "分頁列和狀態列可以點；收合在狀態列最右邊",
-  "v74.b.help.keys_7": "",
   "v74.c.sec_fleet_src": "全艦隊 {source}",
   "v74.c.pm_missing": "沒有 fleet pm status 來源",
   "v74.c.lines": "產線",

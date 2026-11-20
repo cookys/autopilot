@@ -318,7 +318,7 @@ test('orchestrator-edit-gate: plain marker behaves exactly like no marker (l5 co
   assert.strictEqual(l5.status, 2, 'control: l5 marker denies the depth-0 edit');
 });
 
-test('foreman-guard: plain marker behaves exactly like no marker (l5 control denies a subagent Monitor)', () => {
+test('foreman-guard: plain marker behaves exactly like no marker (l5 control denies a subagent Bash over the cap)', () => {
   const f = fx();
   const payload = { hook_event_name: 'PreToolUse', agent_id: 'a1', session_id: 'smp-session', tool_name: 'Monitor', tool_input: {}, cwd: f.repo };
   const g = path.join(__dirname, 'foreman-guard.js');
@@ -328,9 +328,24 @@ test('foreman-guard: plain marker behaves exactly like no marker (l5 control den
   assert.strictEqual(plain.status, none.status);
   assert.strictEqual(plain.stdout, none.stdout);
   assert.strictEqual(plain.stderr, none.stderr);
+  // bash-cap is a non-poll rule: it runs only for an l4|l5|l6 marker. A subagent
+  // that is not Engine:-dispatched exits before the counter when the marker is
+  // absent, so call 2 stays allowed there and is denied once the marker is l5.
+  const secondBash = (fix) => {
+    const env = { ...fix.env, AUTOPILOT_FOREMAN_GUARD_BASH_CAP: '1', AUTOPILOT_FOREMAN_GUARD_RESERVE_CALLS: '0' };
+    const bash = { hook_event_name: 'PreToolUse', agent_id: 'cap-a1', session_id: 'smp-session', tool_name: 'Bash', tool_input: { command: 'echo hi' }, cwd: fix.repo };
+    hook(g, bash, env);
+    return hook(g, bash, env);
+  };
+  const bare = fx();
+  const noneBash = secondBash(bare);
   setLevel(f, 'l5');
-  const l5 = hook(g, payload, f.env);
-  assert.notStrictEqual(l5.status === none.status && l5.stdout === none.stdout, true, 'control: an l5 marker changes the verdict');
+  const l5 = secondBash(f);
+  assert.strictEqual(noneBash.status, 0);
+  assert.strictEqual(noneBash.stdout, '');
+  assert.match(l5.stdout, /"permissionDecision":"deny"/);
+  assert.match(l5.stdout, /exceeds the foreman cap/);
+  assert.notStrictEqual(l5.stdout, noneBash.stdout, 'control: an l5 marker changes the verdict');
 });
 
 test('run-approval-gate: plain marker behaves exactly like no marker (l5 control asks)', () => {

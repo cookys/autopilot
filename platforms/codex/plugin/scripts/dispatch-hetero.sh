@@ -27,7 +27,13 @@
 #                                             # cursor/kimi use broker defaults; other runners REQUIRE --model.
 #                                             # A gemini-flash[-tier] alias still resolves against the live
 #                                             # `agy models` inventory. Explicit --model/--effort always win.
-#       [--runner auto|codex|agy|grok|cc-shim|pi|cursor|opencode|kimi|claude-native|qoderclicn] # default auto: *gpt*/*codex*→codex,
+#       [--runner auto|codex|agy|grok|cc-shim|local|pi|cursor|opencode|kimi|claude-native|qoderclicn] # default auto: *gpt*/*codex*→codex,
+#                                              #   local: shorthand for cc-shim + --endpoint qwen_local + --sandbox bwrap.
+#                                              #   --endpoint or --sandbox with any other value is a precondition
+#                                              #   conflict (the same default value is allowed). Result and manifest
+#                                              #   record runner local, resolved_runner cc-shim, endpoint qwen_local.
+#                                              #   Child env sets ENABLE_TOOL_SEARCH=false and does not set
+#                                              #   CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC.
 #                                              #   *grok*/*composer*→grok, no --model→grok, else agy (*qwen*/*qwq* refused; use cc-shim + --endpoint).
 #                                              #   qoderclicn (EXPLICIT only, never auto): Qoder CLI CN.
 #                                              #   Explicit wins (don't rely on name luck).
@@ -211,7 +217,8 @@
 # stdout — keeps the JSON parseable):
 #   { "status": "committed" | "no_op" | "question_suspected" | "dirty"
 #               | "failure" | "precondition_failed" | "verify_failed",
-#     "runner": "codex"|"agy"|"grok"|"cc-shim"|"pi"|"cursor"|"opencode"|"kimi"|"claude-native"|"qoderclicn", "model": "...",   # engine provenance (model = --model)
+#     "runner": "codex"|"agy"|"grok"|"cc-shim"|"local"|"pi"|"cursor"|"opencode"|"kimi"|"claude-native"|"qoderclicn", "model": "...",   # engine provenance (model = --model)
+#     "resolved_runner": "cc-shim", "endpoint": "qwen_local",   # only when --runner local
 #     "containment": "...", "contained": true|false,  # teardown-hygiene provenance
 #     "branch": "...", "base": "...", "commit": "...|null",
 #     "files_changed": N, "insertions": N, "deletions": N,
@@ -433,6 +440,8 @@ PACE_CHOICE_JSON=""
 EFFORT="xhigh"
 EFFORT_EXPLICIT=0
 ENDPOINT=""          # optional named endpoint (cc-shim only) → resolve-endpoint.sh
+ENDPOINT_SUPPLIED=0
+LOCAL_RUNNER=0       # --runner local: public name stays local; the rail is cc-shim
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=lib/repo-identity.sh
 # Fail-open: a missing helper only degrades the manifest to repo_identity null (telemetry sidecar).
@@ -537,6 +546,7 @@ SCAFFOLD_PROMPT_FILE=""       # tier-envelope temp; init early for trap reap
 AGY_ENVELOPE=""       # private native JSON stdout; never exposed as agent_log
 CCSHIM_ENVELOPE=""    # private claude -p --output-format json stdout; result text is what reaches LOG
 SANDBOX="off"          # --sandbox off|bwrap (cc-shim, or the one cloud fallback re-exec)
+SANDBOX_SUPPLIED=0
 SANDBOX_TMP=""         # bwrap: this dispatch's own writable scratch dir (made by the cc-shim arm, removed after the worker)
 # BL-0435: set on the cloud-seat re-exec after a failed endpoint pre-probe. Empty on the first attempt.
 FELL_BACK_JSON="${AUTOPILOT_HETERO_FELL_BACK_JSON:-}"
@@ -1062,6 +1072,7 @@ emit() { # status commit files ins del worktree error
   [ "${IS_KIMI:-0}" -eq 1 ] && runner="kimi"
   [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
   [ "${IS_CNATIVE:-0}" -eq 1 ] && runner="claude-native"
+  [ "${LOCAL_RUNNER:-0}" -eq 1 ] && runner="local"
   local contained_json="false"; [ "${CONTAINED:-0}" -eq 1 ] && contained_json="true"
   # --- observability fields (ADDITIVE; consumers tolerate unknown fields — implementer.js
   # validates required-field presence, not a closed set). usage is parsed from the HARNESS
@@ -1252,6 +1263,7 @@ NODE
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_fields=", \"role_kit\": $ROLE_KIT_JSON"
   local sandbox_fields=""
   [ "${SANDBOX:-off}" = "bwrap" ] && sandbox_fields=", \"sandbox\": $(sandbox_json), \"sandbox_blocked_writes\": ${SANDBOX_BLOCKED:-0}, \"sandbox_blocked_samples\": ${SANDBOX_BLOCKED_SAMPLES:-[]}"
+  [ "${LOCAL_RUNNER:-0}" -eq 1 ] && sandbox_fields="$sandbox_fields, \"resolved_runner\": \"cc-shim\", \"endpoint\": \"qwen_local\""
   local fell_back_fields=""
   fell_back_fields="$(fell_back_json_suffix)"
   local tip_verify_fields=""
@@ -2013,6 +2025,7 @@ current_runner_name() {
   [ "${IS_KIMI:-0}" -eq 1 ] && runner="kimi"
   [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
   [ "${IS_CNATIVE:-0}" -eq 1 ] && runner="claude-native"
+    [ "${LOCAL_RUNNER:-0}" -eq 1 ] && runner="local"
   fi
   printf '%s' "$runner"
 }
@@ -2536,6 +2549,7 @@ die_resource_budget() {
   [ "${IS_KIMI:-0}" -eq 1 ] && runner="kimi"
   [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
   [ "${IS_CNATIVE:-0}" -eq 1 ] && runner="claude-native"
+  [ "${LOCAL_RUNNER:-0}" -eq 1 ] && runner="local"
   printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "resource_budget exhausted", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "resource_budget": { "resource": "leaf_worktrees", "root_run_id": "%s", "count": %s, "limit": %s }, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": "%s", "duplex": null, "usage": null, "num_turns": null }\n' \
     "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" \
     "$(_flat_json_escape "$BASE")" "$(_flat_json_escape "$WORKTREE_ROOT_RUN_ID")" \
@@ -2563,6 +2577,7 @@ write_manifest() {
   [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
   [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
   [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
+  [ "${LOCAL_RUNNER:-0}" -eq 1 ] && runner="local"
   [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
   [ "${IS_CURSOR:-0}" -eq 1 ] && runner="cursor"
   [ "${IS_OPENCODE:-0}" -eq 1 ] && runner="opencode"
@@ -2619,6 +2634,7 @@ write_manifest() {
   local role_kit_manifest_fields=""
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_manifest_fields=", \"role_kit\": $ROLE_KIT_JSON"
   [ "${SANDBOX:-off}" = "bwrap" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"sandbox\": $(sandbox_json)"
+  [ "${LOCAL_RUNNER:-0}" -eq 1 ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"resolved_runner\": \"cc-shim\", \"endpoint\": \"qwen_local\""
   [ -n "${FELL_BACK_JSON:-}" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"fell_back\": $FELL_BACK_JSON"
   [ -n "${ENGINE_CHOICE_JSON:-}" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"engine_choice\": $ENGINE_CHOICE_JSON"
   [ -n "${PACE_CHOICE_JSON:-}" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"pace_choice\": $PACE_CHOICE_JSON"
@@ -2722,9 +2738,9 @@ while [ $# -gt 0 ]; do
       shift ;;
     --effort) EFFORT="${2:-}"; EFFORT_EXPLICIT=1; shift 2 ;;
     --context-window) CONTEXT_WINDOW_GATE="${2:-}"; shift 2 ;;
-    --endpoint) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--endpoint requires a non-empty value"; ENDPOINT="$2"; [ "$ENDPOINT" = "@none" ] && ENDPOINT=""; shift 2 ;;
-    --endpoint=*) ENDPOINT="${1#--endpoint=}"; [ -n "$ENDPOINT" ] || die_precondition "--endpoint requires a non-empty value"; [ "$ENDPOINT" = "@none" ] && ENDPOINT=""; shift ;;
-    --sandbox) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--sandbox requires off|bwrap"; SANDBOX="$2"; shift 2 ;;
+    --endpoint) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--endpoint requires a non-empty value"; ENDPOINT="$2"; [ "$ENDPOINT" = "@none" ] && ENDPOINT=""; ENDPOINT_SUPPLIED=1; shift 2 ;;
+    --endpoint=*) ENDPOINT="${1#--endpoint=}"; [ -n "$ENDPOINT" ] || die_precondition "--endpoint requires a non-empty value"; [ "$ENDPOINT" = "@none" ] && ENDPOINT=""; ENDPOINT_SUPPLIED=1; shift ;;
+    --sandbox) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--sandbox requires off|bwrap"; SANDBOX="$2"; SANDBOX_SUPPLIED=1; shift 2 ;;
     --worktree-parent) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--worktree-parent requires a non-empty directory path"; WORKTREE_PARENT="$2"; shift 2 ;;
     --base) BASE="${2:-}"; BASE_SUPPLIED=1; shift 2 ;;
     --timeout) TIMEOUT="${2:-}"; TIMEOUT_SUPPLIED=1; shift 2 ;;
@@ -2996,7 +3012,7 @@ set_runner_flags() {
         IS_GROK=1
       fi
       ;;
-    *) die_precondition "--runner must be one of auto|codex|agy|grok|cc-shim|pi|cursor|opencode|kimi|claude-native|qoderclicn (got: $RUNNER)" ;;
+    *) die_precondition "--runner must be one of auto|codex|agy|grok|cc-shim|local|pi|cursor|opencode|kimi|claude-native|qoderclicn (got: $RUNNER)" ;;
   esac
   # --runner auto never selects cc-shim from the model name. A listed local
   # endpoint on this write rail is still that seat: re-resolve before the
@@ -3082,6 +3098,22 @@ validate_d2_agy_claims() {
   [ "$rc" -eq 0 ] && [ "$observed" = "$D2_AGY_EXPECTED_IDS" ] \
     || die_precondition "D2 capability claim validation failed"
 }
+
+# --runner local is the named shorthand for the local qwen seat. Resolve it
+# before effort and runner checks so they see cc-shim + qwen_local + bwrap.
+# The public name stays local (LOCAL_RUNNER) for the result and the manifest.
+if [ "$RUNNER" = "local" ]; then
+  if [ "$ENDPOINT_SUPPLIED" -eq 1 ] && [ "$ENDPOINT" != "qwen_local" ]; then
+    die_precondition "--runner local conflicts with --endpoint ${ENDPOINT} (local sets --endpoint qwen_local; omit --endpoint or pass qwen_local)"
+  fi
+  if [ "$SANDBOX_SUPPLIED" -eq 1 ] && [ "$SANDBOX" != "bwrap" ]; then
+    die_precondition "--runner local conflicts with --sandbox ${SANDBOX} (local sets --sandbox bwrap; omit --sandbox or pass bwrap)"
+  fi
+  ENDPOINT="qwen_local"
+  SANDBOX="bwrap"
+  LOCAL_RUNNER=1
+  RUNNER="cc-shim"
+fi
 
 case "$EFFORT" in
   default|low|medium|high|xhigh|max) ;;
@@ -5566,10 +5598,10 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
         _ccshim_env_probe="${ANTHROPIC_BASE_URL:+1}"
         [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ] && [ "$_ccshim_env_probe" = "1" ] || { printf "%s\n" "cc-shim 拒絕啟動：mount 隔離前綴不會保留環境變數，端點環境變數（ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN）將被清空" >&2; exit 2; }
         # ccshim-env-load-end
-        exec env -u ANTHROPIC_API_KEY -u ANTHROPIC_CUSTOM_HEADERS ${8:+ANTHROPIC_CUSTOM_HEADERS="$8"} claude -p ${4:+--session-id "$4"} --model "$2" \
+        exec env -u ANTHROPIC_API_KEY -u ANTHROPIC_CUSTOM_HEADERS ${8:+ANTHROPIC_CUSTOM_HEADERS="$8"} ${10:+ENABLE_TOOL_SEARCH=false} claude -p ${4:+--session-id "$4"} --model "$2" \
         --strict-mcp-config --dangerously-skip-permissions --disallowedTools TaskCreate,TaskUpdate,TaskGet,TaskList \
         ${5:+--effort "$5"} ${7:+--settings "$7"} --output-format json < "$3" >"$6"' \
-        _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE" "${GATE_ARGV[0]-}" "$FLEET_TASK_HEADER" "$CCSHIM_ENV_FILE"
+        _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE" "${GATE_ARGV[0]-}" "$FLEET_TASK_HEADER" "$CCSHIM_ENV_FILE" "$([ "${LOCAL_RUNNER:-0}" -eq 1 ] && printf 1)"
   fi
   # The worker is done (success, failure or timeout): the gate file and the settings file go now.
   if [ -n "${GATE_ARMED_SESSION:-}" ]; then
@@ -6547,6 +6579,7 @@ _hetero_runner_token() {
   [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
   [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
   [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
+  [ "${LOCAL_RUNNER:-0}" -eq 1 ] && runner="local"
   [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
   [ "${IS_CURSOR:-0}" -eq 1 ] && runner="cursor"
   [ "${IS_OPENCODE:-0}" -eq 1 ] && runner="opencode"
@@ -7228,7 +7261,7 @@ dispatch_detached_run() {
     declare -p CAMPAIGN_PROMPT_FILE 2>/dev/null
     declare -p GATE_RULES_FILE 2>/dev/null || true
     declare -p WT_GITFILE_EXPECTED WT_GITFILE_ERROR 2>/dev/null || true
-    declare -p SANDBOX SANDBOX_ARGV SANDBOX_TMP SANDBOX_TMP_PATH SANDBOX_WT_PATH SANDBOX_DENIED SANDBOX_BLOCKED SANDBOX_BLOCKED_SAMPLES SANDBOX_FAIL WORKTREE_PARENT FELL_BACK_JSON FELL_BACK_LOGGED 2>/dev/null || true
+    declare -p SANDBOX SANDBOX_ARGV SANDBOX_TMP SANDBOX_TMP_PATH SANDBOX_WT_PATH SANDBOX_DENIED SANDBOX_BLOCKED SANDBOX_BLOCKED_SAMPLES SANDBOX_FAIL WORKTREE_PARENT FELL_BACK_JSON FELL_BACK_LOGGED LOCAL_RUNNER 2>/dev/null || true
     declare -p ROLE_KIT_DIR ROLE_KIT_ACTIVE ROLE_KIT_TOOLS ROLE_KIT_EXTRA ROLE_KIT_ARGV ROLE_KIT_JSON 2>/dev/null || true
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
     declare -p CAPABILITY_WRITE_GUARD CAPABILITY_WRITE_SUPPRESSED _CAPABILITY_WRITE_NOTE_DONE 2>/dev/null || true

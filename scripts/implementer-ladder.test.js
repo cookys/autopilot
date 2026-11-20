@@ -105,6 +105,23 @@ test('select: single rung is used for both classes', () => {
   assert.equal(m.tuple.engine, LADDER[0].engine);
 });
 
+test('local is a valid rung and two red rounds land on grok', () => {
+  const ladder = [
+    { engine: 'qwen_local', effort: 'low', runner: 'local' },
+    { engine: 'grok-4.7', effort: 'low', runner: 'grok' },
+  ];
+  const start = selectImplementerRung({ ladder, unitClass: 'mechanical', repairRound: 0 });
+  const oneRed = selectImplementerRung({ ladder, unitClass: 'mechanical', repairRound: 1 });
+  const twoRed = selectImplementerRung({ ladder, unitClass: 'mechanical', repairRound: 2 });
+  assert.equal(start.tuple.runner, 'local');
+  assert.equal(oneRed.tuple.runner, 'grok');
+  assert.equal(oneRed.tuple.engine, 'grok-4.7');
+  assert.equal(oneRed.tuple.effort, 'low');
+  assert.equal(twoRed.rung, 1);
+  assert.equal(twoRed.tuple.runner, 'grok');
+  assert.equal(twoRed.tuple.engine, 'grok-4.7');
+});
+
 test('select: absent ladder is identity', () => {
   const none = selectImplementerRung({ ladder: [], unitClass: 'mechanical', repairRound: 0 });
   assert.equal(none.applied, false);

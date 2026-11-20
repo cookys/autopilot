@@ -2785,6 +2785,60 @@ assert_eq "2" "$EXIT" "hetero cc-shim invalid --effort ultra exits 2"
 assert_contains "$OUT" "precondition_failed" "hetero cc-shim invalid effort is a precondition failure"
 assert_file_absent "$HETERO_CC_ARGV" "hetero cc-shim invalid effort never launched claude"
 
+# --runner local is cc-shim + qwen_local + bwrap. The public runner stays local.
+STUB_LOCAL="$TEST_TMP/cc-local"
+cat > "$STUB_LOCAL" <<EOF
+#!/usr/bin/env bash
+cat >/dev/null
+# bwrap keeps everything outside the worktree read-only, so the probe stays in cwd.
+printf '%s\n' "\$@" > local-argv.txt
+{
+  printf 'TOOL_SEARCH=%s\n' "\${ENABLE_TOOL_SEARCH-<unset>}"
+  if [ -n "\${CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC+x}" ]; then
+    printf 'DISABLE_TRAFFIC=set\n'
+  else
+    printf 'DISABLE_TRAFFIC=unset\n'
+  fi
+} > local-runner-probe.txt
+printf '%s' '{"type":"result","is_error":false,"result":"ok"}'
+EOF
+chmod +x "$STUB_LOCAL"
+mkdir -p "$TEST_TMP/hetero-local-bin" "$TEST_TMP/local-wts"
+ln -sf "$STUB_LOCAL" "$TEST_TMP/hetero-local-bin/claude"
+mkdir -p "$TEST_TMP/local-runs"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-local-bin:$PATH" \
+  AUTOPILOT_TEST_CN_GATE_OFF=1 AUTOPILOT_ENDPOINT_PREPROBE=off \
+  AUTOPILOT_DISPATCH_RUNS_DIR="$TEST_TMP/local-runs" \
+  AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL=http://127.0.0.1:9 \
+  AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token \
+  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --model mini \
+  --worktree-parent "$TEST_TMP/local-wts" \
+  --branch feat/local-runner --prompt-file "$PROMPT" 2>"$TEST_TMP/local-runner.err")"; EXIT=$?
+[ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (local): %s\n%s\n' "$OUT" "$(cat "$TEST_TMP/local-runner.err" 2>/dev/null)" >&2
+assert_eq "0" "$EXIT" "hetero --runner local exit 0"
+assert_contains "$OUT" '"runner": "local"' "hetero local result runner is local"
+assert_contains "$OUT" '"resolved_runner": "cc-shim"' "hetero local result resolved_runner is cc-shim"
+assert_contains "$OUT" '"endpoint": "qwen_local"' "hetero local result endpoint is qwen_local"
+assert_contains "$OUT" '"mode":"bwrap"' "hetero local result sandbox is bwrap"
+PROBE_SHA="$(git -C "$SBX" rev-parse feat/local-runner)"
+LOCAL_ARGV="$(git -C "$SBX" show "${PROBE_SHA}:local-argv.txt" | tr '\n' ' ')"
+assert_contains "$LOCAL_ARGV" "-p " "hetero local claude argv is the cc-shim -p form"
+PROBE_TXT="$(git -C "$SBX" show "${PROBE_SHA}:local-runner-probe.txt")"
+assert_contains "$PROBE_TXT" "TOOL_SEARCH=false" "hetero local child sets ENABLE_TOOL_SEARCH=false"
+assert_contains "$PROBE_TXT" "DISABLE_TRAFFIC=unset" "hetero local child does not set CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"
+LOCAL_MF="$(find "$TEST_TMP/local-runs" -name '*.manifest.json' | head -1)"
+assert_contains "$(cat "$LOCAL_MF")" '"runner": "local"' "hetero local manifest runner is local"
+assert_contains "$(cat "$LOCAL_MF")" '"resolved_runner": "cc-shim"' "hetero local manifest resolved_runner is cc-shim"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-local-bin:$PATH" \
+  AUTOPILOT_TEST_CN_GATE_OFF=1 AUTOPILOT_ENDPOINT_PREPROBE=off \
+  AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL=http://127.0.0.1:9 \
+  AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token \
+  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --endpoint other --model mini \
+  --branch feat/local-conflict --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "hetero --runner local --endpoint other exits 2"
+assert_contains "$OUT" "precondition_failed" "hetero local endpoint conflict is a precondition failure"
+assert_contains "$OUT" "conflicts with --endpoint other" "hetero local endpoint conflict names --endpoint other"
+
 # --- --pace-role: pace-aware engine selection & manifest engine_choice ---
 PACE_RUNS_DIR="$TEST_TMP/pace-runs"
 mkdir -p "$PACE_RUNS_DIR"

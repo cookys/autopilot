@@ -52,7 +52,13 @@
 #   bad/bare-alias --model) are precondition_failed.
 #
 # USAGE:
-#   scripts/dispatch-author.sh --runner codex|agy|grok|cc-shim|anthropic-compatible|claude-native|cursor --model <name> --prompt-file <file>
+#   scripts/dispatch-author.sh --runner codex|agy|grok|cc-shim|local|anthropic-compatible|claude-native|cursor --model <name> --prompt-file <file>
+#       # local: shorthand for cc-shim + --endpoint qwen_local + --sandbox bwrap.
+#       #   --endpoint or --sandbox with any other value is a precondition conflict
+#       #   (the same default value is allowed). Result and manifest record runner
+#       #   local, resolved_runner cc-shim, endpoint qwen_local. Child env sets
+#       #   ENABLE_TOOL_SEARCH=false and does not set
+#       #   CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC.
 #       # explicit mode (non-strict roster path)
 #   scripts/dispatch-author.sh --strict-roster --repo-root <consuming-repo> --prompt-file <file>
 #       # active `/l6` contract: strict roster selection only.
@@ -86,7 +92,8 @@
 #
 # OUTPUT: one JSON object on stdout:
 #   {
-#     "runner": "codex|agy|grok|cc-shim|anthropic-compatible|claude-native|cursor",
+#     "runner": "codex|agy|grok|cc-shim|local|anthropic-compatible|claude-native|cursor",
+#     "resolved_runner": "cc-shim", "endpoint": "qwen_local",   # only when --runner local
 #     "model": "...",
 #     "status": "authored|empty_output|precondition_failed|runner_failed|truncated",
 #     "raw_log": "<path>",
@@ -170,6 +177,7 @@ if declare -F runs_tmpdir_ensure >/dev/null 2>&1; then runs_tmpdir_ensure || tru
 CONTEXT_WINDOW_GATE=""   # off|warn|block; empty ⇒ AUTOPILOT_CONTEXT_WINDOW_GATE, else block
 ROLE_KIT_DIR=""   # --role-kit (lib/role-kit.sh)
 RUNNER=""; MODEL=""; PROMPT_FILE=""; EFFORT="xhigh"; EFFORT_EXPLICIT=0; TIMEOUT="5m"; BIN=""; BIN_SUPPLIED=0; ENDPOINT=""
+SANDBOX="off"; SANDBOX_SUPPLIED=0; LOCAL_RUNNER=0; AUTHOR_PUBLIC_RUNNER=""
 FLEET_TASK_ARG=""; AUTHOR_FLEET_TASK_ID=""
 REPO_ROOT=""; STRICT_ROSTER=0; STRICT_CONTRACT=0; CONTRACT_FILE=""; CONTRACT_FILE_SUPPLIED=0
 TIMEOUT_SUPPLIED=0
@@ -196,7 +204,8 @@ while [[ $# -gt 0 ]]; do
     --ledger)      LEDGER="${2:-}"; shift 2 ;;
     --run-id)      RUN_ID="${2:-}"; shift 2 ;;
     --stage)       STAGE="${2:-}"; shift 2 ;;
-    --endpoint)    { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--endpoint requires a non-empty value" >&2; exit 2; }; ENDPOINT="$2"; [ "$ENDPOINT" = "@none" ] && ENDPOINT=""; [ -n "$ENDPOINT" ] && ENDPOINT_SUPPLIED=1; shift 2 ;;
+    --endpoint)    { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--endpoint requires a non-empty value" >&2; exit 2; }; ENDPOINT="$2"; [ "$ENDPOINT" = "@none" ] && ENDPOINT=""; ENDPOINT_SUPPLIED=1; shift 2 ;;
+    --sandbox)     { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--sandbox requires off|bwrap" >&2; exit 2; }; SANDBOX="$2"; SANDBOX_SUPPLIED=1; shift 2 ;;
     --strict-roster) STRICT_ROSTER=1; shift ;;
     --strict-contract) STRICT_CONTRACT=1; shift ;;
     --contract-file) CONTRACT_FILE="${2:-}"; CONTRACT_FILE_SUPPLIED=1; shift 2 ;;
@@ -531,8 +540,12 @@ emit_result() {
   verification_author_json="$(emit_verification_author)"
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && extra_fields="${extra_fields:-}, \"role_kit\": $ROLE_KIT_JSON"
   local _au_json
+  local _pub_runner="${AUTHOR_PUBLIC_RUNNER:-$RUNNER}"
+  if [[ "${LOCAL_RUNNER:-0}" -eq 1 ]]; then
+    extra_fields="${extra_fields}, \"resolved_runner\": \"cc-shim\", \"endpoint\": \"qwen_local\""
+  fi
   _au_json="$(printf '{ "runner": "%s", "model": "%s", "status": "%s", "raw_log": %s, "error": %s, "selection_source": "%s", "selection_path": %s, "verification_author": %s%s }' \
-    "$(json_escape "$RUNNER")" "$(json_escape "$MODEL")" "$(json_escape "$status")" \
+    "$(json_escape "$_pub_runner")" "$(json_escape "$MODEL")" "$(json_escape "$status")" \
     "$raw_log_json" "$error_json" "$(json_escape "$SELECTION_SOURCE")" "$selection_path_json" \
     "$verification_author_json" "$extra_fields")"
   printf '%s\n' "$_au_json"
@@ -557,6 +570,25 @@ emit_result() {
 die_precondition() {
   emit_result "precondition_failed" "null" "$1" "2"
 }
+
+# --runner local maps onto the cc-shim path with qwen_local + bwrap. A supplied
+# endpoint or sandbox equal to that default is allowed; any other value conflicts.
+if [[ "$RUNNER" == "local" ]]; then
+  if [[ "$ENDPOINT_SUPPLIED" -eq 1 && "$ENDPOINT" != "qwen_local" ]]; then
+    die_precondition "--runner local conflicts with --endpoint ${ENDPOINT} (local sets --endpoint qwen_local; omit --endpoint or pass qwen_local)"
+  fi
+  if [[ "$SANDBOX_SUPPLIED" -eq 1 && "$SANDBOX" != "bwrap" ]]; then
+    die_precondition "--runner local conflicts with --sandbox ${SANDBOX} (local sets --sandbox bwrap; omit --sandbox or pass bwrap)"
+  fi
+  ENDPOINT="qwen_local"
+  SANDBOX="bwrap"
+  LOCAL_RUNNER=1
+  RUNNER="cc-shim"
+elif [[ "$SANDBOX_SUPPLIED" -eq 1 ]]; then
+  die_precondition "--sandbox applies only to --runner local (got runner: ${AUTHOR_PUBLIC_RUNNER:-$RUNNER})"
+fi
+AUTHOR_PUBLIC_RUNNER="$RUNNER"
+[[ "$LOCAL_RUNNER" -eq 1 ]] && AUTHOR_PUBLIC_RUNNER="local"
 
 # Bounded, secret-redacted tail of the runner's captured stderr (BL-0136). Prints
 # nothing when there is no stderr file. Redaction reuses hooks/_shared/secret-patterns.
@@ -796,6 +828,7 @@ run_strict_contract_preflight() {
   else
     RUNNER="$contract_runner"
   fi
+  AUTHOR_PUBLIC_RUNNER="$RUNNER"
   if [ "$MODEL_SUPPLIED" -eq 1 ]; then
     [[ "$MODEL" == "$contract_model" ]] || die_precondition "caller --model ($MODEL) disagrees with checker resolved_engine.model ($contract_model)"
   else
@@ -903,6 +936,7 @@ if [[ "$STRICT_ROSTER" -eq 1 ]]; then
   [[ "$verification_author_family" != "$implementer_family" ]] || die_precondition "strict roster requires distinct verification_author_family and implementer_family"
   [[ "$config_path" == "$REVIEW_LOOP_CONFIG" ]] || die_precondition "strict roster requires config_path to equal --repo-root/.claude/review-loop-config.md"
   RUNNER="$verification_author_runner"; status=$?; [[ "$status" -eq 0 ]] || die_precondition "internal failure assigning strict roster runner"
+  AUTHOR_PUBLIC_RUNNER="$RUNNER"
   MODEL="$verification_author_engine"; status=$?; [[ "$status" -eq 0 ]] || die_precondition "internal failure assigning strict roster model"
   EFFORT_EXPLICIT=1
   EFFORT="$verification_author_effort"; status=$?; [[ "$status" -eq 0 ]] || die_precondition "internal failure assigning strict roster effort"
@@ -1201,10 +1235,11 @@ write_author_manifest() {
   local _rk_ident="$REPO_IDENTITY_FIELDS, \"mount_containment\": \"$(worker_mount_manifest_value)\""
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && _rk_ident="$_rk_ident, \"role_kit\": $ROLE_KIT_JSON"
   [ -n "${PACE_CHOICE_JSON:-}" ] && _rk_ident="$_rk_ident, \"pace_choice\": $PACE_CHOICE_JSON"
-  declare -F dispatch_attr_fields >/dev/null 2>&1 && _rk_ident="$_rk_ident$(dispatch_attr_fields "${PROMPT_FILE_ORIG:-$PROMPT_FILE}" "$RUNNER" "${ENDPOINT:-}")"
+  declare -F dispatch_attr_fields >/dev/null 2>&1 && _rk_ident="$_rk_ident$(dispatch_attr_fields "${PROMPT_FILE_ORIG:-$PROMPT_FILE}" "${AUTHOR_PUBLIC_RUNNER:-$RUNNER}" "${ENDPOINT:-}")"
+  [[ "${LOCAL_RUNNER:-0}" -eq 1 ]] && _rk_ident="$_rk_ident, \"resolved_runner\": \"cc-shim\", \"endpoint\": \"qwen_local\""
   {
     printf '{ "schema": 1, "run_id": "%s", "role": "%s", "allow_narrative": null, "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "lane": %s, "diff_file": null, "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, %s, "session_id": %s, "child_session_id": %s, "child_transcript": %s }\n' \
-      "$(json_escape "$AUTHOR_RUN_ID")" "$role_tok" "$RUNNER" "$(json_escape "$MODEL")" \
+      "$(json_escape "$AUTHOR_RUN_ID")" "$role_tok" "$(json_escape "${AUTHOR_PUBLIC_RUNNER:-$RUNNER}")" "$(json_escape "$MODEL")" \
       "$(json_escape "$RAW_LOG")" "$log_format" "$aux_json" "$$" \
       "$AUTHOR_STARTED_AT" "$AUTHOR_STARTED_EPOCH" \
       "$(json_escape "${PROMPT_FILE_ORIG:-$PROMPT_FILE}")" \
@@ -1560,8 +1595,15 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
   # env -u drops it first and the validated line is the only value set back. claude-native keeps no such header.
   _FT_HEADER="$(node "$_AUTHOR_SELF_DIR/lib/fleet-task-header.js" --rail dispatch-author ${ENDPOINT:+--endpoint "$ENDPOINT"})"
   # Prompt is fed with < "$4" inside the exec'd child. Do not redirect this timeout's stdin.
-  timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} -u ANTHROPIC_API_KEY -u CLAUDE_CONFIG_DIR -u ANTHROPIC_CUSTOM_HEADERS ${_FT_HEADER:+ANTHROPIC_CUSTOM_HEADERS="$_FT_HEADER"} HOME="$CCSHIM_CWD" ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" \
-    ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" ${6:+--effort "$6"} ${7:+--settings "$7"} < "$4"' \
+  _LOCAL_ENV=()
+  _LOCAL_WRAP=()
+  if [[ "${LOCAL_RUNNER:-0}" -eq 1 ]]; then
+    command -v bwrap >/dev/null 2>&1 || die_precondition "--runner local sets --sandbox bwrap but bwrap is not on PATH; refusing to run without the sandbox"
+    _LOCAL_ENV=(ENABLE_TOOL_SEARCH=false)
+    _LOCAL_WRAP=(bwrap --ro-bind / / --dev /dev --proc /proc --bind "$CCSHIM_CWD" "$CCSHIM_CWD" --die-with-parent)
+  fi
+  timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} -u ANTHROPIC_API_KEY -u CLAUDE_CONFIG_DIR -u ANTHROPIC_CUSTOM_HEADERS ${_FT_HEADER:+ANTHROPIC_CUSTOM_HEADERS="$_FT_HEADER"} ${_LOCAL_ENV[@]+"${_LOCAL_ENV[@]}"} HOME="$CCSHIM_CWD" ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" \
+    ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} ${_LOCAL_WRAP[@]+"${_LOCAL_WRAP[@]}"} bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" ${6:+--effort "$6"} ${7:+--settings "$7"} < "$4"' \
     _ "$CCSHIM_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "${CHILD_MARKER_SETTINGS:-}" > "$RAW_LOG" 2>"$RUNNER_ERR_FILE" &
   # Backgrounded + forwarded so a TERM/INT/HUP aimed at this script reaches timeout and the claude child (BL-0420); see _acct_forward.
   _ACCT_CHILD=$!

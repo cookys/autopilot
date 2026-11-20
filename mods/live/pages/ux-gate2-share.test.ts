@@ -140,26 +140,6 @@ test('X2: at 80x4 quota severity stays visible with no pending decision, and sea
   expect(() => frameRows(nowPage, ctx(4, con))).not.toThrow()
 })
 
-test('Y1: a cut 艦隊 list counts hidden states and offers working previous/next line Buttons at 80x24', () => {
-  const con = snapshot()
-  con.lines = [...con.lines!, ...Array.from({ length: 20 }, (_, i) => line('正常' + i))]
-  const page = { ...fleetPage, render: (c: PageCtx) => fleetView(c, { focus: 0, expanded: true }) }
-  const out = frameRows(page, ctx(24, con)).map(text)
-  expect(out.length).toBe(24)
-  expect(out.some(r => /↓ 還有 \d+ 項（○\d+）/.test(r))).toBe(true)
-  const compact = frameRows(page, ctx(8, snapshot())).map(text)
-  expect(compact.join('\n')).toContain('↓ 還有 7 項（⊘4 ○3）') // V2: reclaiming one row shows the other offline line.
-  const acts = page.render(ctx(24, con)).actions.flat()
-  expect(acts.some(s => s.text.includes('上一線') && s.press === 'fleet:see:乙')).toBe(true)
-  expect(acts.some(s => s.text.includes('下一線') && s.press === 'fleet:see:甲')).toBe(true)
-  const second = fleetView(ctx(24, con), { focus: 1, expanded: true }).actions.flat()
-  expect(second.some(s => s.text.includes('上一線') && s.press === 'fleet:see:乙')).toBe(true)
-  const last = rowsOf(con.lines!, t).length - 1
-  const focused = rowsOf(con.lines!, t)[last].line.label
-  const moved = frameRows({ ...fleetPage, render: c => fleetView(c, { focus: last, expanded: true }) }, ctx(24, con)).map(text)
-  expect(moved.some(r => r.includes(focused) && r.startsWith('▸'))).toBe(true)
-  for (const row of out) expect(displayWidth(row)).toBeLessThanOrEqual(80)
-})
 
 test('Z2: a positive seat total with no seat records says the detail is missing, and o appears once', () => {
   const con = snapshot()

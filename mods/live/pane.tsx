@@ -157,12 +157,12 @@ export type FramePane = { pages: readonly Page[]; pageId?: PageId; onPage?: (id:
 const COMMON_KEYS: Record<string, KeyAction> = { z: { kind: 'fold' } } // the host takes a digit or a lowercase letter as a hotkey: Space is z here. No j / k: a key needs a visible Button to carry it, and a row is its own Button (Tab walks the rows)
 const CARD_KEYS: Record<string, KeyAction> = { a: { kind: 'pick', index: 0 }, b: { kind: 'pick', index: 1 }, c: { kind: 'pick', index: 2 } }
 const DECIDE_KEYS: Record<string, KeyAction> = { ...CARD_KEYS, d: { kind: 'pick', index: 3 }, e: { kind: 'pick', index: 4 }, m: { kind: 'note' }, n: { kind: 'note' }, u: { kind: 'undo' }, h: { kind: 'prev' }, l: { kind: 'next' }, f: { kind: 'fill' }, s: { kind: 'submit' } }
-// o acts on the focused (▸) row: fleet sees that line, quota shows / hides that pool's seats. decide has no o (a-e pick there); now has no focused row yet, so o is not bound there
+// o acts on the focused (▸) row: quota shows / hides that pool's seats. decide has no o (a-e pick there); now has no focused row yet, so o is not bound there
 const OPEN_KEY: Record<string, KeyAction> = { o: { kind: 'open' } }
 const pageKeys = (id: string): Record<string, KeyAction> =>
-  (id === 'decide' ? { ...COMMON_KEYS, ...DECIDE_KEYS } : id === 'todo' ? { ...COMMON_KEYS, ...CARD_KEYS } : id === 'fleet' || id === 'quota' ? { ...COMMON_KEYS, ...OPEN_KEY } : COMMON_KEYS)
+  (id === 'decide' ? { ...COMMON_KEYS, ...DECIDE_KEYS } : id === 'todo' ? { ...COMMON_KEYS, ...CARD_KEYS } : id === 'fleet' ? {} : id === 'quota' ? { ...COMMON_KEYS, ...OPEN_KEY } : COMMON_KEYS) // v7.4 S8: the 艦隊 page is a plain list with no action rows, so it binds nothing (no fold, no see, no fill)
 // every hotkey a framed page binds (f on fleet / quota is the page's own fill action): a visible `[x]` key hint must be one of these (frame.test.ts)
-export const pageHotkeys = (id: string): string[] => [...Object.keys(pageKeys(id)), ...(id === 'fleet' || id === 'quota' ? ['f'] : [])]
+export const pageHotkeys = (id: string): string[] => [...Object.keys(pageKeys(id)), ...(id === 'quota' ? ['f'] : [])]
 // quota renders under spend tab; spend page id maps to spend tab
 const PAGE_TAB: Record<string, PaneTab> = { now: 'now', decide: 'decide', fleet: 'fleet', quota: 'spend', dispatch: 'dispatch', review: 'review', spend: 'spend', hygiene: 'hygiene', todo: 'decide', help: 'legend' }
 export const framedPage = (frame: FramePane | null, tab: PaneTab): Page | undefined => {

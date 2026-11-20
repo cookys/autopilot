@@ -207,3 +207,71 @@ test('v74 F: every row fits in 80 columns once the frame wraps it (CJK width)', 
     for (const r of frameRows(page, ctx)) expect(displayWidth(text(r))).toBeLessThanOrEqual(80)
   }
 })
+
+// ---- cross-page consistency gates (operator UX gate), rewritten in the v7.4 shape: G3, G10, X3, Y3 ----
+import { nowPage } from './now'
+import { fleetLines } from '../v74/contract'
+import type { PmStatus, PmTask } from '../v74/contract'
+
+const ptask = (over: Partial<PmTask>): PmTask => ({ id: 'T', short_id: 'T', title: 't', state: 'running', owner: 'o', last_progress_at_ms: null, last_progress: null, next_evidence_due_ms: null, waiting_on: null, overdue: false, stuck: false, ...over })
+const pmOf = (): PmStatus => {
+  const c = (stuck: number, overdue: number, running: number, waiting: number) => ({ stuck, overdue, running, waiting, total: stuck + overdue + running + waiting })
+  const proj = (project: string, counts: ReturnType<typeof c>) => ({ project, root_id: null, counts, tasks: [ptask({})] })
+  return { schema: 'fleet.pm.status', schema_version: 1, generated_at_ms: NOW, selector: null, projects: [proj('甲線', c(1, 0, 0, 0)), proj('乙線', c(0, 1, 0, 0)), proj('丙線', c(0, 0, 0, 2)), proj('丁線', c(0, 0, 1, 0)), proj('戊線', c(0, 0, 2, 0))] }
+}
+const headCount = (out: string[], word: string): number => Number((out.find(r => r.includes(word) && /\d/.test(r)) ?? '').match(/(\d+)\s*$|[●✗✓]\s*(\d+)/)?.slice(1).find(Boolean) ?? NaN)
+
+test('v74 F gate G3: 艦隊 shows every run once: 執行中 + 失敗 + 已完成 = the runs in the feed, and each card header equals its listed rows', () => {
+  const many = Array.from({ length: 9 }, (_, i) => run({ run_id: 'run-' + i, runner: 'codex', elapsed_s: 60 * (i + 1), ...(i < 2 ? { ended: true, fresh: false, rc: 1, final_status: 'x' } : i < 5 ? { ended: true, fresh: false, rc: 0, ended_at: new Date(NOW - 5 * MIN).toISOString() } : {}) }))
+  const ctx = ctxOf(liveOf({ rows: many }), null, { v74: { pm: null, pmFetchedMs: null, decide, todo: null, nav }, others })
+  const out = texts(fleetView(ctx).body)
+  const n = (w: string): number => Number((out.find(r => r.includes(w) && /[●✗✓]/.test(r)) ?? '').match(/(\d+)/)?.[1])
+  expect(n('執行中') + n('失敗') + n('已完成')).toBe(9)
+  expect(out.filter(r => /run-\d/.test(r)).length).toBe(9) // none folded, none dropped
+  expect(Number(out[0].match(/(\d+) 張/)?.[1])).toBe(decide.length)
+  expect(out.filter(r => r.includes('◆')).length).toBe(decide.length)
+  // negative control: dropping a run from the feed changes the sum, so the check is not vacuous
+  const fewer = texts(fleetView(ctxOf(liveOf({ rows: many.slice(1) }), null, { v74: { pm: null, pmFetchedMs: null, decide, todo: null, nav }, others })).body)
+  expect(fewer.filter(r => /run-\d/.test(r)).length).toBe(8)
+})
+
+test('v74 F gate G10: one set of names: pool "F 池" on 花費 and 現況, never the raw pool key; run states use the shared glyphs', async () => {
+  seatQuota.reset()
+  const con = consoleOf([pool('pool-f', { limit_hit: true, five_hour_pct: 100, seven_day_pct: 100, stranded_seats: 2 })])
+  const live = liveOf()
+  const spend = texts(renderSpend(ctxOf(live, con)).body).join('\n')
+  const now = texts(nowPage.render({ ...ctxOf(live, con), v74: { pm: pmOf(), pmFetchedMs: NOW, decide: [], todo: null, nav } }).body).join('\n')
+  expect(spend).toContain('F 池')
+  expect(spend).not.toContain('pool-f')
+  expect(now).not.toContain('pool-f')
+  const fleet = texts(fleetView(ctxOf(liveOf({ rows: RUNS }), null, { v74: { pm: null, pmFetchedMs: null, decide: [], todo: null, nav }, others })).body)
+  expect(fleet.find(r => r.includes('line-c'))?.trimStart().startsWith('✗')).toBe(true) // failed = ✗ as on every page
+  expect(fleet.find(r => r.includes('line-b'))?.trimStart().startsWith('✓')).toBe(true)
+  // negative control: the raw key would show if the label map were skipped
+  expect(texts(renderSpend(ctxOf(live, consoleOf([pool('F 池')]))).body).join('\n')).toContain('F 池')
+})
+
+test('v74 F gate X3: 現況 counts the 產線 the same way as the shared fleetLines projection (✗ failed, ⊘ idle, ● ok)', () => {
+  const pm = pmOf()
+  const marks = fleetLines(pm).map(l => l.mark)
+  const want = ['✗' + marks.filter(m => m === 'fail').length, '⊘' + marks.filter(m => m === 'parked').length, '●' + marks.filter(m => m === 'ok').length]
+  const body = texts(nowPage.render({ ...ctxOf(liveOf(), null), v74: { pm, pmFetchedMs: NOW, decide: [], todo: null, nav } }).body)
+  const row = body.find(r => r.includes('產線')) ?? ''
+  expect(row).toContain('產線       5')
+  for (const w of want) expect(row).toContain(w)
+  // negative control: a different projection is not what the page printed
+  expect(row).not.toContain('✗5')
+})
+
+test('v74 F gate Y3: one duration grammar: 220 minutes reads 3 時 40 分 once on 艦隊 (running and done rows), never 220 分', () => {
+  const rows = [run({ run_id: 'long-run', runner: 'codex', elapsed_s: 220 * 60 }), run({ run_id: 'long-done', runner: 'codex', ended: true, fresh: false, rc: 0, ended_at: new Date(NOW - 220 * MIN).toISOString() })]
+  for (const cols of [80, 160]) {
+    const out = texts(fleetView(ctxOf(liveOf({ rows }), null, { v74: { pm: null, pmFetchedMs: null, decide: [], todo: null, nav }, others }, cols)).body)
+    for (const id of ['long-run', 'long-done']) {
+      const row = out.find(r => r.includes(id)) ?? ''
+      expect(row).toContain('3 時 40 分')
+      expect(row).not.toContain('220 分')
+      expect((row.match(/3 時 40 分/g) ?? []).length).toBe(1)
+    }
+  }
+})

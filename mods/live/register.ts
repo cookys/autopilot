@@ -97,13 +97,14 @@ import {
   readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
   paneWidth, DEFAULT_PANE_COLS, slotTab, slotUnfolds, truncateToWidth, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
 } from './model'
-import type { AccountView, ActivityItem, Counts, DecideState, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveDecision, LiveSnapshot, LookTarget, Manifest, PaneLine, PaneTab, Seg, SlotId, QuotaWindow, Sources } from './model'
+import type { AccountView, ActivityItem, Counts, DecideState, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveDecision, LiveSnapshot, LookTarget, Manifest, PaneLine, PaneTab, Seg, Slot, SlotId, QuotaWindow, Sources } from './model'
 
 const TICK_MS = 5000
 const FACTS_PRUNE_MS = 60_000
 const FACTS_TMP_STALE_MS = 5 * 60 * 1000
 const PANE_ID = 'autopilot-live'
-const V74_FRAME_MIN = 6 // the smallest v7.4 page frame (two borders and four rows); under it only the band row draws
+const V74_FRAME_MIN = 6
+const V74_FRAME_MAX = 27 // design S2: 25 body rows + both borders. V74_FRAME_MIN: the smallest v7.4 page frame (two borders and four rows); under it only the band row draws
 const MAX_PATH_FILES = 256
 const MAX_RECEIPT_FILES = 64
 const MAX_CAMPAIGN_ROOTS = 8 // session-mode.js CAMPAIGN_ROOTS_MAX
@@ -136,7 +137,7 @@ function kickV74($: EngineInterface, nowMs: number): void {
 }
 async function v74CtxOf($: EngineInterface): Promise<V74Ctx> {
   const nav = await read($, V74_NAV)
-  return { pm: pmFeed.status(), pmFetchedMs: pmFeed.fetchedMs(), decide: decideFeed.cards(), todo: null, nav }
+  return { pm: pmFeed.status(), pmFetchedMs: pmFeed.fetchedMs(), decide: decideFeed.cards(), todo: null, nav, ages: { now: pmFeed.fetchedMs(), decide: decideFeed.fetchedMs(), fleet: fleetFeed.fetchedMs() } }
 }
 // The summary other plugins read (PM G33a; fleet.ts `FleetSummary`, `v: 1`): written by the feed after each run, success or failure, never while drawing. Each row is counted
 // by the state the Fleet tab draws for it, so the band reader and the tab never disagree.
@@ -1782,11 +1783,14 @@ export function registerLive(on: Parameters<Register>[0]): void {
     // task-only band when no console snapshot has ever been available.
     const fleetCounts = consoleSnap !== null ? consoleFleetCounts(consoleSnap, t) : fleetNow.fetchedMs !== null
       ? { stuck: fleetNow.totals.stuck, running: fleetNow.totals.running, waiting: fleetNow.totals.waiting } : null
-    const fleetSlot = snap !== null && snap.band !== null && !consoleOn ? slotFleet(fleetCounts, t) : null
+    const fleetSlot = snap !== null && snap.band !== null && (!consoleOn || v74) ? slotFleet(fleetCounts, t) : null // v7.4: the band row carries the fleet counts in console mode too (design S1)
     if (fleetSlot !== null && snap !== null && snap.band !== null) {
       const base = snap.band.slots
       const atV = base.findIndex(s => s.id === 'verdict')
-      const withFleet = [...base.slice(0, atV + 1), fleetSlot, ...base.slice(atV + 1)]
+      // v7.4 (design S1): `待決 N` after the fleet counts, N = the cards `fleet decision list` returned; a click opens the 待決 page
+      const decideN = v74 ? decideFeed.cards()?.length ?? 0 : 0
+      const decideSlot: Slot | null = decideN > 0 && !base.some(s => s.id === 'decide') ? { id: 'decide', segs: [{ text: t('v74.b.decide_word'), dim: true, tag: 'chip' }, { text: ' ', tag: 'chip' }, { text: String(decideN), tag: 'chip' }] } : null
+      const withFleet = [...base.slice(0, atV + 1), fleetSlot, ...(decideSlot === null ? [] : [decideSlot]), ...base.slice(atV + 1)]
       const parts = rows >= 1 ? speedLabelParts(steps, petText) : null
       // room is the cells left after the strip and the one-cell gap. The › is not subtracted here: fittedBandWidth counts it when `more` is set.
       const roomFor = (speedTab: boolean) => {
@@ -1843,7 +1847,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge, usageOn, moreTo, con, bandPreset, consoleOn && consoleSnap !== null ? bandQuotaSeg(normalizedPools(consoleSnap), bandNow, t, qSrc) : null, paneOpen || v74, legacyTabs, forgeRow !== null, legacyTabs ? undefined : () => { void togglePane() }, paneOpen)
     // v7.4: the O4 shell and the two-row band never draw. Closed: the one-line BandBar. Open: the page as a full-width framed tree (title in the top border, hint in the bottom border), the tab row, then the BandBar row.
     if (v74) {
-      const height = rows - 2 // the band row and the tab row stay; the frame takes the rest
+      const height = Math.min(rows - 2, V74_FRAME_MAX) // the band row and the tab row stay; the frame takes the rest, never more than the design's 27 rows (inline layout: maxRows can exceed the screen)
       if (!v74Open || height < V74_FRAME_MIN) return stackRows(el, [bar.row1])
       const page = await paneTree($, e as never, false, height)
       await logBandGeometry($, rows, columns, height + 2)

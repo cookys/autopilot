@@ -14,6 +14,7 @@ import { displayWidth, truncateToWidth } from '../model'
 import { GLYPHS } from '../../tux/glyphs.ts'
 import { PALETTE } from '../../tux/palette.ts'
 import { PAGES } from './index'
+import { ageUnit } from './now'
 import { PAGE_KEYS, STRIP_SPLIT_COLS, V74_STRIP_ORDER } from './layout'
 import { V74_KEY } from '../v74/contract'
 import { WRAP_HANG, brokenRow, decisionCount, poolsNeedLook, sourceMissing, staleBadge, unknownPoolCount, wrapRow } from './rows'
@@ -28,7 +29,7 @@ export type PageId = 'now' | 'decide' | 'fleet' | 'quota' | 'dispatch' | 'review
 export interface Page { id: PageId; key: string; title: string; framed?: true; render(ctx: PageCtx): { body: Row[]; actions: Row[]; overflow?: true } }
 // a tab the frame's strip shows next to the pages (the old tabs that still draw the old way): `key` is its digit
 export type ExtraTab = { id: string; key: string; label: string }
-export type FrameOpts = { scroll?: number; unfold?: (ctx: PageCtx) => { body: Row[]; actions: Row[]; overflow?: true }; pages?: readonly Page[]; extra?: readonly ExtraTab[]; active?: string }
+export type FrameOpts = { topAnchor?: true; scroll?: number; unfold?: (ctx: PageCtx) => { body: Row[]; actions: Row[]; overflow?: true }; pages?: readonly Page[]; extra?: readonly ExtraTab[]; active?: string }
 
 // W1: the host already budgets pane borders and chat space. Use every allocated
 // body row in either placement; a second inline cap leaves padding below the strip.
@@ -98,7 +99,7 @@ const V74_BORDER_KEY: Record<string, string> = {
 }
 
 const TINY_FRAME_ROWS = 3
-export const frameHintText = (page: Page, ctx: PageCtx): string => ctx.t(V74_BORDER_KEY[page.id] ?? 'v74.b.border.default')
+export const frameHintText = (page: Page, ctx: PageCtx): string => ctx.t(V74_BORDER_KEY[page.id] ?? 'v74.b.border.default', { ud: GLYPHS.structure.up + GLYPHS.structure.behind })
 export function frameBorderRow(page: Page, ctx: PageCtx): Row {
   return [{ text: GLYPHS.structure.frameBL + GLYPHS.structure.rule + ' ' + frameHintText(page, ctx), dim: true }]
 }
@@ -187,5 +188,30 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
     }
   }
   const gap: Row[] = Array.from({ length: room - shown.length }, blank)
-  return [head, ...gap, ...shown, ...(A === 0 ? [] : acts.slice(-A)), ...foot].map(r => clip(r, ctx.size.cols))
+  const actRows = A === 0 ? [] : acts.slice(-A)
+  // v7.4 box: the content starts on the first body row, the spare rows sit between it and the action rows (design S2/S3/S9)
+  if (opts.topAnchor === true) return [head, ...shown, ...gap, ...actRows, ...foot].map(r => clip(r, ctx.size.cols))
+  return [head, ...gap, ...shown, ...actRows, ...foot].map(r => clip(r, ctx.size.cols))
+}
+
+// v7.4 top border title: the page name, then the dim data source, its schema and the feed age (design S1-S10)
+const V74_SOURCES: Record<string, [string, string]> = {
+  now: ['fleet pm status --json', 'fleet.pm.status v1'],
+  decide: ['fleet decisions list --json', 'fleet.decisions v1'],
+  dispatch: ['autopilot status runs --json', 'autopilot.runs v1'],
+  review: ['autopilot status review --json', 'autopilot.review v1'],
+  spend: ['codeforge usage summary --json', 'usage.summary v1'],
+  quota: ['codeforge usage summary --json', 'usage.summary v1'],
+  hygiene: ['autopilot hygiene --json', 'autopilot.hygiene v1'],
+  fleet: ['fleet tasks --tree --json', 'fleet.tasks v1'],
+  todo: ['fleet todo --json', 'fleet.todo v1'],
+}
+export function v74TitleSegs(page: Page, ctx: PageCtx, name: Seg): Seg[] {
+  const { t, nowMs } = ctx
+  const src = V74_SOURCES[page.id]
+  if (src === undefined) return [name, { text: ' · ' + t('v74.c.help_src'), dim: true }]
+  const published = ctx.live?.published_at
+  const fetched = ctx.v74?.ages?.[page.id] ?? (page.id === 'dispatch' || page.id === 'review' || page.id === 'hygiene' ? (typeof published === 'string' && Number.isFinite(Date.parse(published)) ? Date.parse(published) : null) : null)
+  const info = fetched === null || fetched === undefined ? t('v74.c.header_noage', { source: src[0], schema: src[1] }) : t('v74.c.header', { source: src[0], schema: src[1], age: ageUnit(t, Math.max(0, nowMs - fetched)) })
+  return [name, { text: ' · ' + info, dim: true }]
 }

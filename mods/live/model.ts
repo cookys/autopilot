@@ -1289,7 +1289,7 @@ const short = (sha: string | null): string => (sha === null ? '—' : sha.slice(
 // ================= stage-graph P7: the one-line band (contract ②) and the panel's facts =================
 // Colours are theme keys used as TEXT colour only (owner decision 5): no backgroundColor, no inverse, no raw colour.
 export type ThemeKey = 'claude' | 'warning' | 'error' | 'success' | 'suggestion' | 'inactive' | 'subtle' | 'merged' | 'remember'
-export type SlotId = 'verdict' | 'fleet' | 'position' | 'unit' | 'dispatch' | 'review' | 'decisions' | 'spend' | 'quota' | 'hygiene'
+export type SlotId = 'verdict' | 'fleet' | 'position' | 'unit' | 'dispatch' | 'review' | 'decisions' | 'decide' | 'spend' | 'quota' | 'hygiene'
 // tag: which part the width table may drop or shorten (age, k/N, 族, the bar, the stage text). fleet* tags are the one-line band's own drops (layoutBandLine).
 export type SegTag = 'age' | 'kn' | 'fam' | 'bar' | 'stage' | 'live' | 'stalled' | 'chip' | 'wt' | 'walk' | 'dot' | 'reason' | 'round' | 'qc' | 'amt' | 'pct' | 'bar10' | 'bar5' | 'bar3' | 'qx' | 'fleetWord' | 'fleetRun' | 'fleetWait' | 'fleetStuck'
 export type Seg = { text: string; color?: ThemeKey; bold?: boolean; dim?: boolean; tag?: SegTag; slot?: SlotId; role?: SegRole; here?: boolean; fmt?: FmtKind; fact?: FactId; press?: string; href?: string } // slot: set by layoutBand on the band line (the Button it presses); a separator has none
@@ -1885,7 +1885,7 @@ export function plainBandText(reason: string, columns: number): string {
 export const PANE_TABS = ['now', 'decide', 'dispatch', 'review', 'spend', 'hygiene', 'fleet', 'legend'] as const
 export type PaneTab = (typeof PANE_TABS)[number]
 // a band slot pressed opens the pane on the tab that explains it; position and unit live in Now's 目前位置 section, which the press also unfolds
-const SLOT_TAB: Partial<Record<SlotId, PaneTab>> = { verdict: 'now', fleet: 'fleet', dispatch: 'dispatch', review: 'review', hygiene: 'hygiene' }
+const SLOT_TAB: Partial<Record<SlotId, PaneTab>> = { verdict: 'now', fleet: 'fleet', dispatch: 'dispatch', review: 'review', hygiene: 'hygiene', decide: 'decide' }
 export const slotTab = (id: SlotId): PaneTab => SLOT_TAB[id] ?? (id === 'quota' || id === 'spend' ? 'spend' : id === 'decisions' ? 'decide' : 'now')
 export const slotUnfolds = (id: SlotId): string | null => (id === 'position' || id === 'unit' ? SECTION.where : id === 'quota' ? SECTION.limits : null)
 export const tabLabel = (tab: PaneTab, t: T): string => t('tab.' + tab)

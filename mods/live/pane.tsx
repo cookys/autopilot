@@ -19,8 +19,7 @@ import { commandView } from './commandtab'
 import { consolePage } from './consolepages'
 import type { ConsoleNav, ConsoleTab } from './consoletabs'
 import { keyed, scrollFrame } from './scroll'
-import { actionRows, frameHintText, frameRows, stripRows, STRIP_SPLIT_COLS } from './pages/frame'
-import { nowV74HeaderExtra } from './pages/now'
+import { actionRows, frameHintText, frameRows, stripRows, STRIP_SPLIT_COLS, v74TitleSegs } from './pages/frame'
 import { displayWidth, truncateToWidth } from './model'
 import { fleetView as fleetPageView } from './pages/fleet'
 import { renderQuota } from './pages/quota'
@@ -190,6 +189,7 @@ function fitSegs(segs: Seg[], max: number): Seg[] {
   }
   return out
 }
+// the box title (design S2-S10): `<頁名> · 資料 <source>（schema <schema>）· <age>`; the age is the feed's own fetch time (or the live snapshot's published_at), absent when the feed has none
 function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: FramePane, snap: LiveSnapshot | null, onTab: (t: PaneTab) => void, t: T, fullCols: number) {
   const { Box, Text, Button } = el
   const box = frame.v74Box === true
@@ -204,7 +204,7 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
   const drawn: Page = page.id === 'fleet' ? { ...page, render: c => fleetPageView(c, view) } : page.id === 'quota' ? { ...page, render: c => renderQuota(c, view) } : page.id === 'review' ? { ...page, render: c => renderReview(c, view) } : page.id === 'spend' ? { ...page, render: c => renderSpend(c, view) } : page
   // free rows go to content first: a folded page (fleet lines, a pool's seats, spend details) is drawn open when the open body fits whole in the rows the surface has left, unless folded by key
   const unfold = view.expanded || view.folded === true ? undefined : page.id === 'fleet' ? (c: PageCtx) => fleetPageView(c, { ...view, expanded: true }) : page.id === 'quota' ? (c: PageCtx) => renderQuota(c, { ...view, expanded: true }) : page.id === 'spend' ? (c: PageCtx) => renderSpend(c, { ...view, expanded: true }) : undefined
-  const rows: Row[] = frameRows(drawn, ctx, { pages: frame.pages, ...(unfold === undefined ? {} : { unfold }), ...(frame.scroll === undefined ? {} : { scroll: frame.scroll }) })
+  const rows: Row[] = frameRows(drawn, ctx, { ...(box ? { topAnchor: true as const } : {}), pages: frame.pages, ...(unfold === undefined ? {} : { unfold }), ...(frame.scroll === undefined ? {} : { scroll: frame.scroll }) })
   const stripCount = (cols < STRIP_SPLIT_COLS ? 2 : 1) + 1 // bottom border row + tab strip
   // the action rows are exactly the ones the page returned (the frame pads nothing): only those rows may bind a `[x]` hint, never the body rows above them
   const avail = Math.max(0, frameRowsN - 1 - stripCount)
@@ -280,7 +280,7 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
   const rule = GLYPHS.structure.rule
   const side = GLYPHS.structure.bandSep
   const pad = (n: number) => rule.repeat(Math.max(1, n))
-  const titleSegs = fitSegs([...(rows[0] ?? []), ...(page.id === 'now' ? nowV74HeaderExtra(ctx) : [])], Math.max(0, fullCols - 6))
+  const titleSegs = fitSegs(v74TitleSegs(page, ctx, (rows[0] ?? [])[0] ?? { text: t('tab.' + page.id) }), Math.max(0, fullCols - 6))
   const titleW = titleSegs.reduce((n, x) => n + displayWidth(x.text), 0)
   const top = <Box key="v74-top" height={1} width={fullCols} overflow="hidden"><Text>{GLYPHS.structure.frameTL + rule + ' '}</Text>{titleSegs.map((x, j) => <Text key={'tt' + j} {...drawSeg(x)} wrap="truncate">{x.text}</Text>)}<Text>{' ' + pad(fullCols - 5 - titleW) + GLYPHS.structure.frameTR}</Text></Box>
   const hint = truncateToWidth(frameHintText(page, ctx), Math.max(0, fullCols - 8))
@@ -299,7 +299,14 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
     const btn = Button === undefined ? draw : <Button key={'tab:' + (m?.[2] ?? j) + ep} plain {...(V74_TAB_HOTKEYS && m !== null ? { hotkey: m[1] } : {})} onPress={choose}>{draw}</Button>
     return <Box key={'tb' + j}><Text>{'  '}</Text>{btn}</Box>
   })
-  const tabRow = <Box key="v74-tabs" height={1} width={fullCols} overflow="hidden">{tabs}</Box>
+  // the digits 1-9 switch pages: hidden hotkey Buttons (a zero-size box draws nothing, so no `1: ` prefix), none while a note is typed
+  const hidden = Button === undefined || frame.decide?.textMode === true ? [] : entries.map((sg, j) => {
+    const m = /^tab:(\d):(\w+)$/.exec(sg.press as string)
+    if (m === null) return null
+    const choose = () => (frame.onPage !== undefined ? frame.onPage(m[2] as PageId) : onTab(PAGE_TAB[m[2]]))
+    return <Box key={'hk' + j} width={0} height={0} overflow="hidden"><Button key={'hotkey:' + m[1] + ep} plain hotkey={m[1]} onPress={choose}>{' '}</Button></Box>
+  })
+  const tabRow = <Box key="v74-tabs" height={1} width={fullCols} overflow="hidden">{tabs}{hidden}</Box>
   return <Box {...(epoch > 0 ? { key: 'v74:' + epoch } : {})} flexDirection="column">{top}{inner}{bottom}{tabRow}</Box>
 }
 

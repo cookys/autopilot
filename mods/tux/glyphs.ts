@@ -7,7 +7,7 @@ import { displayWidth } from './width.ts'
 export type PetIcon = { id: 'cat' | 'chick' | 'crab'; emoji: string; fallback: string; verified: string }
 export const GLYPHS = {
   state: { need_you: '▲', failed: '✗', stalled: '⊘', findings: '△', running: '●', done: '✓', pending: '○', waiting: '⋯', stopped: '◌', skipped: '∅', unknown: '?', stale: '~' },
-  structure: { open: '▾', folded: '▸', rule: '─', detail: '└', command: '$', goto: '›', bullet: '◦', empty: '—', tabMark: '━', residue: '⚑', behind: '↓', bandSep: '│', info: 'ⓘ', speed: 'ϟ', round: '↺', decisions: '◆', age: '◷', recommend: '★', fresh: '✦', frameTL: '╭', frameTR: '╮', frameBL: '╰', frameBR: '╯', frameDown: '┬', frameUp: '┴', frameLeftT: '├', frameRightT: '┤', answer: '→' },
+  structure: { open: '▾', folded: '▸', rule: '─', detail: '└', command: '$', goto: '›', bullet: '◦', empty: '—', tabMark: '━', residue: '⚑', behind: '↓', up: '↑', bandSep: '│', info: 'ⓘ', speed: 'ϟ', round: '↺', decisions: '◆', age: '◷', recommend: '★', fresh: '✦', frameTL: '╭', frameTR: '╮', frameBL: '╰', frameBR: '╯', frameDown: '┬', frameUp: '┴', frameLeftT: '├', frameRightT: '┤', answer: '→' },
   chart: { meterOn: '▰', meterOff: '▱', here: '◐' },
   scrollbar: { track: '│', thumb: '█' }, // §12.10: the scrolling window's right-hand column; track and thumb borrow the drawing of bandSep and the top spark step, a second meaning each (SHARED_GLYPHS)
   spark: ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'],

@@ -144,6 +144,12 @@ test('one card opened for a different hit still blocks', (t) => {
 
 test('fleet exemption requires a task and explicit due date in the same sentence', (t) => {
   const f = fixture(t);
+  // The task_id= ref is verified against the fleet; inject a lookup so the test never
+  // shells out to a real fleet, and restore the default lookup afterwards.
+  guard.setFleetTaskLookup((id) => (id === 'task-abc123'
+    ? { next_evidence_due: '2030-02-01T00:00:00Z', hard_deadline: null, state: 'open' }
+    : null));
+  t.after(() => guard.setFleetTaskLookup(null));
   for (const ref of [
     'fleet task create check --due 2027-02-01',
     '`fleet task create check --due 2027-02-01T08:00:00Z`',
@@ -170,6 +176,55 @@ test('fleet exemption requires a task and explicit due date in the same sentence
     'due=2027-02-01', 'fleet task create check --due 2027-02-31',
   ]) assert.equal(f.check(`Please run the check (${ref}).`)?.decision, 'block', ref);
   assert.equal(f.check('Please run the check. fleet task create check --due 2027-02-01.')?.decision, 'block');
+});
+
+test('a quoted task due must be the task real due and not yet past', (t) => {
+  const now = Date.parse('2026-11-19T10:00:00Z');
+  const id = '01M7RBVKTESTFAKE0000000000';
+  const withDue = (ts) => `請你決定要不要合併（task_id=${id} due=${ts}）。`;
+  const lookup = (task) => (tid) => (tid === id ? task : null);
+  t.after(() => guard.setFleetTaskLookup(null));
+
+  // The PM invented a later due. The real evidence due (07:03Z) is already past at
+  // now (10:00Z), so it fails on both "later than fleet" and "overdue".
+  guard.setFleetTaskLookup(lookup({ next_evidence_due: '2026-11-19T07:03:00Z', hard_deadline: null, state: 'open' }));
+  assert.equal(guard.hasDueTask(withDue('2026-11-19T20:00+08:00'), { now }), false, 'invented later due');
+
+  // Quoted due equals the fleet next_evidence_due, which is still in the future -> passes.
+  guard.setFleetTaskLookup(lookup({ next_evidence_due: '2026-11-20T00:00:00Z', hard_deadline: null, state: 'open' }));
+  assert.equal(guard.hasDueTask(withDue('2026-11-20T00:00:00Z'), { now }), true, 'due equal to a future fleet due');
+
+  // Quoted due earlier than the fleet due (both future) -> passes.
+  assert.equal(guard.hasDueTask(withDue('2026-11-19T12:00:00Z'), { now }), true, 'due earlier than the fleet due');
+
+  // Unknown task (the lookup returns null) -> blocked.
+  guard.setFleetTaskLookup(() => null);
+  assert.equal(guard.hasDueTask(withDue('2026-11-20T00:00:00Z'), { now }), false, 'unknown task');
+
+  // The task has no due (both fleet fields null) -> blocked.
+  guard.setFleetTaskLookup(lookup({ next_evidence_due: null, hard_deadline: null, state: 'open' }));
+  assert.equal(guard.hasDueTask(withDue('2026-11-20T00:00:00Z'), { now }), false, 'task with no due');
+});
+
+test('the guard blocks a reply that invents a task due and accepts a real one', (t) => {
+  const f = fixture(t);
+  const id = '01M7RBVKTESTFAKE0000000000';
+  const withDue = (ts) => `請你決定要不要合併（task_id=${id} due=${ts}）。`;
+  t.after(() => guard.setFleetTaskLookup(null));
+
+  // The real evidence due is long past, so any quoted due for this task is invented.
+  guard.setFleetTaskLookup((tid) => (tid === id
+    ? { next_evidence_due: '2020-01-01T00:00:00Z', hard_deadline: null, state: 'open' }
+    : null));
+  const blocked = f.check(withDue('2020-01-02'));
+  assert.equal(blocked?.decision, 'block', 'invented due is blocked');
+  assert.match(blocked.reason, /請你決定要不要合併/);
+
+  // A task whose due is still in the future and matches the quote is honoured.
+  guard.setFleetTaskLookup((tid) => (tid === id
+    ? { next_evidence_due: '2030-01-01T00:00:00Z', hard_deadline: null, state: 'open' }
+    : null));
+  assert.equal(f.check(withDue('2030-01-01')), null, 'real future due is honoured');
 });
 
 test('root-scoped session blocks unbound cards and points to close + reopen with --root-run-id', (t) => {

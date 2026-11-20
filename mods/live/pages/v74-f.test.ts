@@ -15,6 +15,8 @@ import type { PageCtx, Row } from './frame'
 import { hygienePage, hygieneView } from './hygiene'
 import { renderSpend, resetIn, spendPage } from './spend'
 import type { DecideCard } from '../v74/contract'
+import { Pane } from '../pane'
+import { PAGES } from './index'
 
 const t = makeT('zh-TW')
 const NOW = Date.UTC(2026, 10, 18, 4, 0, 0)
@@ -274,4 +276,18 @@ test('v74 F gate Y3: one duration grammar: 220 minutes reads 3 時 40 分 once o
       expect((row.match(/3 時 40 分/g) ?? []).length).toBe(1)
     }
   }
+})
+
+// B2 (a): the pane hands FramePane.others to the framed 艦隊 page; without it the row says 無來源
+test('v74 F S8 wiring: Pane passes frame.others to the 艦隊 page, and omitting it shows the missing row', () => {
+  const mk = (kind: string) => (props: any) => ({ kind, props })
+  const el = { Box: mk('Box'), Text: mk('Text'), Button: mk('Button'), Link: mk('Link') }
+  const t = makeT('zh-TW')
+  const textOf = (n: any): string => n == null || typeof n === 'boolean' ? '' : typeof n === 'string' || typeof n === 'number' ? String(n) : Array.isArray(n) ? n.map(textOf).join('') : textOf(n.props?.children)
+  const draw = (extra: Record<string, unknown>) => textOf(Pane(el, liveOf({ rows: RUNS }), 'fleet', () => {}, t, 120, undefined, undefined, undefined, undefined, null, null, null, null, null,
+    { pages: PAGES, pageId: 'fleet', console: null, nowMs: NOW, rows: 30, ...extra } as any))
+  expect(draw({ others })).toContain('d-a1b2c3d0')
+  const missing = draw({})
+  expect(missing).not.toContain('d-a1b2c3d0')
+  expect(missing).toContain(t('v74.f.others_missing'))
 })

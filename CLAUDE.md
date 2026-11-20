@@ -15,51 +15,58 @@ This repo is yours and you are its long-term maintainer. When you see something 
 
 Work inside your grant stops only at acceptance: a real user has walked the core path on the real build, with one line of evidence (screenshot, command or URL). Green tests, a passing review and a push are intermediate steps. Stop midway only for a tier-2 destructive op, something outside your grant, or a Goal/milestone change; when you stop, say so once with options and a recommendation.
 
+Acceptance also requires the change to be merged, live pinned to that SHA, and evidence of real use. For a gate-type change, perform one reverse probe on live: deliberately violate the gate and confirm it blocks the violation.
+
+## How we work
+- 工作狀態只記在 fleet task。開工、卡住、改期、交件都寫回單上，不用聊天代替。
+- 能開工的全部同時開工。實作交給便宜席（sonnet、codex terra、grok；機械性的單交給 kimi），每條各用一個 worktree。本席只做判斷、審查和整合，不要把工作排成單線。每條做完就立刻審，不要等全部做完。
+- 隨時至少保留兩件可以直接開工的工作。手上這件卡住或做完時，下一件要已經準備好（預檢已通過）。
+- 要 go 的時候，同一時間把下一件準備好，不要空等。內部換版的 go 跟 PM 要，先跑 canary，再全面換。
+- KR 和觀察期只量測，不擋上線。計畫要寫上上線日和 fleet 單號，不能一放好幾週。
+- 卡住時只回報一次，附上建議，回報對象是 PM 或你的 lead。在等別人時，寫上帶型別的 waiting_on（等哪張單、哪張卡、哪個人的哪則訊息）。
+- 同一件事失敗兩次，就換做法或換引擎。
+
+## Worktree and branch hygiene
+- **先確認分支再動手**：每次開始編輯前，以及恢復 session 或切換情境之後，先跑 `git status` 和 `git branch --show-current`，確認自己在對的分支和對的 worktree。
+- **一件工作一條分支一個 worktree**：分支命名用 `feat/<slug>` 或 `fix/<slug>`，從最新的 develop（或本 repo 的主幹）開出來。hetero worktree 放在 `<repo>/.claude/worktrees/`，由 repo 的 hetero rail script 建立、由 `scripts/reap-dispatch-worktrees.sh` 清理。主 checkout 只用來整合，不在上面直接開發。
+- **平行 worktree 不共用相依目錄**：每個 worktree 各有自己的 node_modules、venv、build 輸出，不用 symlink。
+- **commit 要帶 trailer**：每個 commit 都加上 `Fleet-Task: <26 碼單號>`。不在 develop 或 main 上直接 commit 功能改動。
+- **合併方式**：用 `git merge --no-ff` 合進 develop，合併訊息寫上審查結論和 tip 測試綠燈。main 只在 PM 給 go 後合併。共用分支一律禁止 force-push 和改寫歷史。
+- **合併後當場清乾淨**（這屬於 tier 0）：刪掉本地和遠端分支（`git branch -d`、`git push origin --delete`），並 `git worktree remove` 掉對應的 worktree。最後跑一次 `git worktree prune`。
+- **不留孤兒**：
+  - 超過 3 天沒有 commit、又沒有對應活單的分支或 worktree，要嘛開單接著做，要嘛刪掉。
+  - 沒有合併過的工作在刪除前，先推到遠端或打個 tag（`archive/<branch>`），這樣才算 tier 1。
+  - hangar 的 prune-merged-branches 每次合併後都會跑。
+- **不把 stash 當倉庫**：一輪結束時如果還有未提交的工作，就在分支上提交一個 WIP commit，不要留在 stash 裡。
+- **live 只跑 pin 住的 sha 或 tag**，不跑分支的最新 commit。換版走既有的換版流程：每台主機先備份並記下 sha16，寫好回滾指令。
+- **測試不碰正式環境**：worktree 和測試一律用沙箱 HOME 或暫存目錄，不能讀寫 live 的設定、狀態或憑證。
+- **主 checkout 是 live plugin**：主 checkout 由 hangar pin 住；開發在獨立 clone 進行。
+
 For Claude Code sessions working **on** the autopilot plugin itself. Other agents (Codex, OpenCode, Antigravity): [`AGENTS.md`](AGENTS.md); portability: [`references/multi-agent-portability.md`](references/multi-agent-portability.md).
 
 [Original wording](docs/dev/_archive/entry-docs/claude-md-detail.md). Directory rules load when a session reads or edits a file there: `{scripts,skills,references,platforms,mods}/CLAUDE.md`. A path assembled inside a script does not trigger the load, so every rule that causes damage when missed is also kept below.
 
 ## What this repo is
 
-Standalone lifecycle orchestration plugin: 31 skills, 3 methodology agents, 53 hooks (34 default-on,
-19 opt-in). Optional integrations and coexistence rules: [`docs/guide/coexistence.md`](docs/guide/coexistence.md).
+See the [project overview](docs/dev/_archive/entry-docs/claude-md-detail.md#what-this-repo-is).
+
+31 skills, 3 methodology agents, 53 hooks (34 default-on, 19 opt-in).
 
 ## Scripts (prefer over LLM judgment)
 
 **Before hand-coding any mechanical step, check `scripts/` first**: group index below, full name list in `scripts/CLAUDE.md`, descriptions in [`docs/scripts-inventory.md`](docs/scripts-inventory.md).
 
-- A script existing is not evidence it is running: when one is meant to protect something, check that it actually fires; read [`references/evidence-discipline.md`](references/evidence-discipline.md) before recording anything as verified.
 - Every new or modified check (gate, hook, scan) ships a negative control: a deliberately broken case shown red before green ([evidence-discipline §58](references/evidence-discipline.md)).
-- Some scripts do not parse argv at all, and a few of those are installers that act immediately, so `--help` runs them: read the header comment of an unfamiliar script first.
-- A new script is dead code until wired into the reference doc, the SKILL.md table, `docs/scripts-inventory.md` and the name list in `scripts/CLAUDE.md`.
-- A script that parses JSON or could run under agy is Node built-ins only; bash only for pure git glue (table in `scripts/CLAUDE.md`).
 
-**Group index**:
+See the [script guidance](docs/dev/_archive/entry-docs/claude-md-detail.md#script-guidance).
 
-- **Dispatch rails**: `dispatch-hetero.sh` `dispatch-review.sh` `dispatch-author.sh` `dispatch-foreman.sh` `dispatch-consult.sh`
-- **Routing & config resolution**: `resolve-dispatch.sh` `resolve-endpoint.sh` `resolve-qc-gate.sh` `resolve-execution-profile.js`
-- **Worktree, mission & session state**: `reap-dispatch-worktrees.sh` `scaffold-mission.js` `next-pick.js` `stage-advance.js`
-- **Engine capability & qualification**: `engine-scorecard.js` `engine-qualify.sh` `probe-engine-capability.sh`
-- **Diff scanning, verification & review**: `completeness-scan.sh` `secret-scan-diff.js` `check-test-integrity.sh` `verify-red-green.sh` `adjudicate-findings.js`
-- **Sync, drift & release gates**: `sync-all.sh` `sync-version.js` `validate.sh` `preflight-release.sh` `check-hook-inventory.js`
-- **Setup & install**: `dev-setup.sh` `install-hooks.sh` `project-detect.js` `scaffold-config.js`
-- **Skills tooling & shared primitives**: `cost-digest.js` `lib/json-emit.sh` `lib/jsonl-store.js` `lib/config-path.js`
+**Group index**: see [`scripts/CLAUDE.md`](scripts/CLAUDE.md) and [original wording](docs/dev/_archive/entry-docs/claude-md-detail.md).
 
-## Skill evolution rules (full text: `skills/CLAUDE.md`)
+## Skill evolution rules and severity vocabulary
 
-- Boy-scout: any touch of a skill trims it toward contract-card shape ([`references/skill-contract-card.md`](references/skill-contract-card.md)).
-- Scorecard-first: rewriting or deleting a skill needs prior eval ON/OFF evidence.
-- Mechanism vs guidance: making a stated gate block needs no eval; changing its demands does (ship as two commits, never mixed).
+See [`skills/CLAUDE.md`](skills/CLAUDE.md) and the [severity vocabulary](docs/dev/_archive/entry-docs/claude-md-detail.md#severity-vocabulary).
 
-## Severity vocabulary
-
-Unified across all skills and agents:
-
-```
 🔴 Critical / 🟠 Major / 🟡 Minor / 🔵 Suggestion
-```
-
-If you see "Important" anywhere in a severity context, that's a leftover from the old vocabulary — fix it. The dialectic skills (`think-tank`, `think-tank-dialectic`) use a separate **risk** tagging vocabulary (`critical / important / minor`, lowercase) which is intentionally distinct.
 
 ## Versioning
 
@@ -67,35 +74,20 @@ Bump with `scripts/sync-version.js` only. 3.0.0 final is the operator's "3.0.0.0
 
 ## Process rules
 
-- With `superpowers` installed, orchestrators consult `.claude/dispatch-config.md` (defaults: [`project-config-template/dispatch-config.md`](project-config-template/dispatch-config.md)).
 - Mission graphs: node `verification_commands` stay fast and fixed, never `bash hooks/tests/run.sh`; the whole suite runs once, alone, before a campaign merges into `develop`; red means no merge. Editing a sealed graph breaks its pinned digest.
 - The merge gate runs `check-phase-review-receipt.js` against the branch tip being merged, never the last reviewed head; any product-code delta after the reviewed head needs its own review, and at the generation cap only a PM ruling plus a post-head ledger passes ([`skills/dev-flow/references/hetero-loops.md`](skills/dev-flow/references/hetero-loops.md)).
 - No hosted CI (operator): suites and the merge gate run locally; never add a hosted workflow.
 - Never read, print or copy credentials, and give dispatch children a throwaway config dir seeded with only `.credentials.json`, never the real `~/.claude` ([`references/hetero-dispatch.md`](references/hetero-dispatch.md)); destructive ops follow the global Red lines tiers.
 - A SHIP-AS-IS reviewed branch merges to `develop` once suites are green, never batched; `check-unmerged-ship.js` flags it after 1 h.
-- A dispatch brief that relies on rules in a subdirectory must say "read <subdir>/AGENTS.md first".
 - Cloud Kimi/GLM/Qwen/DeepSeek/MiniMax/qoder: no transcript/sensitive/core/novel/review-role (`scripts/lib/cn-model-dispatch-gate.js`). qwen_local review skip is shipped-only until 2026-11-21.
 
 ## Where context lives
 
-| Topic | File |
-|-------|------|
-| Skill execution rules | `skills/<name>/SKILL.md` |
-| Methodology agent prompts | `agents/{reviewer,debugger,planner}.md` |
-| Engine CLI / orchestration layer | `bin/autopilot.js`, `src/engine/`, `src/runners/` |
-| Cross-skill references | `references/{blind-dispatch,model-routing}.md` |
-| Project tracking | `docs/projects/` (active + `_archive/`) |
-| Backlog | `project/backlog/BACKLOG.md` |
-| Plans | `docs/plans/` (`project/projects/INDEX.md`, `references/plan-template.md`) |
-| Architecture decisions | `docs/dev/adr/` |
-| Release notes | `CHANGELOG.md` |
-| Per-session gotchas | `~/.claude/projects/-home-cookys-projects-autopilot/memory/` |
-| Dogfood / coexistence knowledge | `.claude/knowledge/` — read `INDEX.md` first (`references/knowledge-routing.md`) |
-| Directory rules | `{scripts,skills,references,platforms,mods}/CLAUDE.md` |
+See the [context index](docs/dev/_archive/entry-docs/claude-md-detail.md#where-context-lives).
 
 ## Reply preference
 
-Inherit from `~/.claude/CLAUDE.md` (Traditional Chinese, terse decisions like `go`/`A`/`1` accepted). For docs and code, English unless content is user-facing localization.
+See [reply preference](docs/dev/_archive/entry-docs/claude-md-detail.md#reply-preference).
 
 ## Don't
 

@@ -23,7 +23,7 @@ export function parsePmStatus(json: string): PmStatus | null {
   try { o = JSON.parse(json) } catch { return null }
   if (typeof o !== 'object' || o === null) return null
   const r = o as Record<string, unknown>
-  if (r.schema !== 'fleet.pm.status' || r.schema_version !== 1 || 'error' in r || !isInt(r.generated_at_ms) || !Array.isArray(r.projects)) return null
+  if (r.schema !== 'fleet.pm.status' || r.schema_version !== 1 || r.error !== undefined || !isInt(r.generated_at_ms) || !Array.isArray(r.projects)) return null
   const projects: PmProject[] = []
   for (const p of r.projects as unknown[]) {
     if (typeof p !== 'object' || p === null) continue

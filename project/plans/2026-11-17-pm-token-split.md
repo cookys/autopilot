@@ -1,6 +1,8 @@
 # Plan — PM seat token split: scripted PM chores (fleet task 01M7KZZ1ZT3V1KTKNR3E4MFK4B)
 
-Status: frozen (PM ruling 01M7M32A, option A) · logical_plan_id: `pm-token-split-2026-11-17-b` · Size: L (eight phases P0–P6 and Q, plus two integration steps A-int, B-int)
+Status: frozen (PM ruling 01M7M32A, option A); P6 superseded · logical_plan_id: `pm-token-split-2026-11-17-b` · Size: L (eight phases P0–P6 and Q, plus two integration steps A-int, B-int)
+
+2026-11-20 schedule (PM 01M7V31A): P6 superseded: superseded by the fleet inbox ledger (P8, live) and the shipped scripts/pm-switchboard.js + scripts/lib/pm-inbox-adapter.js; switchboard-run.js will not be built.
 
 ## 0. Context / thesis
 
@@ -72,7 +74,7 @@ The PM must spend context on decisions, not bookkeeping: no operator request los
 | `hooks/pm-output-cap.js` (new) | P3 | cap model-visible output at 40 (ledger search 30) lines |
 | `scripts/pm-accept-check.js` (new) | P5 | four-condition verdict |
 | `scripts/pm-act.js` (new) | P4 | one JSON plan → lint all → ledger + dispatch + reply, journaled |
-| `scripts/switchboard-run.js`, `scripts/lib/packet-builder.js`, `scripts/switchboard-export.js`, `skills/switchboard/SKILL.md` (new) | P6 | input allowlist, isolated classifier, deterministic packets, shadow compare |
+| `scripts/switchboard-run.js`, `scripts/lib/packet-builder.js`, `scripts/switchboard-export.js`, `skills/switchboard/SKILL.md` (new) | P6 superseded | input allowlist, isolated classifier, deterministic packets, shadow compare |
 | Integration (one commit each, one owner): `hooks/hooks.json`, `hooks/opt-in-manifest.json`, `hooks/README.md`, root `CLAUDE.md` counts, `scripts/lib/config-keys.json`, `profiles/hook-classes.json` (+ codex mirror, catalog hash), `docs/scripts-inventory.md`, `scripts/CLAUDE.md`, `CHANGELOG.md`, `docs/guide/installation.md`, skill inventory (skills index, `CLAUDE.md` skill count, codex mirror) | A-int, B-int | wiring; parallel phases never edit these files |
 | tests: `hooks/tests/<phase>.test.sh`, `scripts/<script>.test.js` | all | red-then-green |
 
@@ -145,7 +147,9 @@ Acceptance (unguarded stub: a pass-through `pm-output-cap.js`; tests call the ho
 3. Output `ACCEPT` or `REJECT` with one line per failed condition; exit 0/1; bad checklist or args exit 2.
 Acceptance (unguarded stub: always ACCEPT): all hold → ACCEPT; each condition broken alone → REJECT naming it; result "done, all green" with no sha → REJECT; base == head → REJECT; a 64-hex plan_sha256 in the result is ignored; empty `threshold_paths` does not diff the whole repo; empty `required_checks` → exit 2.
 
-### P6 — switchboard runner, shadow mode (Size L)
+### P6 — switchboard runner, shadow mode (Size L) — superseded
+
+> 2026-11-20 schedule (PM 01M7V31A): P6 superseded: superseded by the fleet inbox ledger (P8, live) and the shipped scripts/pm-switchboard.js + scripts/lib/pm-inbox-adapter.js; switchboard-run.js will not be built. The design below is not to be built.
 
 1. Export: `scripts/switchboard-export.js --date D` runs in the PM's own session (the PM reads only its own session transcript, per card d-522f32f4) and writes two content-minimal jsonl files: inbound fleet messages `{message_id, from, kind, task_id?, reply_to?, at, text}` and PM handling events `{at, action:'reply'|'dispatch'|'task_result'|'send'|'turn', ref_message_id?, task_id?}` taken from the PM's `mcp__fleet__*` tool calls and turn starts. The runner never reads the PM's transcript or inbox itself.
 2. Input allowlist (code, before any model). The operator has no fleet address (PM ruling 01M7M32A); operator input is the PM session's UserPromptSubmit plus `decision_answer` messages. So: the export (step 1) takes only fleet channel messages and never a UserPromptSubmit prompt; a row enters only if `from` is a member listed by `fleet directory` and `kind` ∈ {`chat`, `dispatch`, `broadcast`, `wake`}; everything else (`decision_answer`, `decision_close`, unknown kinds, rows without `from`, text starting with `[待決回覆` or `[voice call · unverified]`) is dropped and counted. An empty `fleet directory` result → exit 2, zero model calls.

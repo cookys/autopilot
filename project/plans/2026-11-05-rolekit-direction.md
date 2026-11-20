@@ -1,6 +1,8 @@
 # 方向提案：角色套件（role kit）讓弱模型也做得好
 
-> Status: draft for plan review (frozen rubric, at most two generations). Owner: PM program (operator decides budget and go). Branch: none yet (plan only, no code). Size: L (direction plus spikes plus a gated A/B; nothing ships by default). Frame: autopilot develop `63308bd8f`, read-only investigation "rolekit-probe 2026-11-05" (facts and sources in the Appendix of this plan). Related: `project/plans/2026-10-31-repo-relayout-3-0-0.md`, `project/backlog/consumer-rules-in-claude-md.md` (BL-0388).
+> Status: scheduled (frozen rubric, at most two generations). Owner: PM program (operator decides budget and go). Branch: none yet (plan only, no code). Size: L (direction plus spikes plus a gated A/B; nothing ships by default). Frame: autopilot develop `63308bd8f`, read-only investigation "rolekit-probe 2026-11-05" (facts and sources in the Appendix of this plan). Related: `project/plans/2026-10-31-repo-relayout-3-0-0.md`, `project/backlog/consumer-rules-in-claude-md.md` (BL-0388).
+>
+> 2026-11-20 schedule (PM 01M7V31A): status scheduled; pilot result due 2026-11-23; subscription models only; the real-model part follows the pool-switch path (g37 superseded).
 
 > PM rulings 2026-11-05 (fleet message from the PM session `pm--claude`; the A/B budget cap is the operator's own decision relayed by the PM):
 > 1. Plan review with a frozen rubric, at most two generations.
@@ -9,7 +11,7 @@
 > 4. 3.0.0 follows the relayout plan plus two items: reserve `roles/` (layout-lint top-level allowlist and export whitelist) and the BL-0388 consumer-side fix. See the amendment in `project/plans/2026-10-31-repo-relayout-3-0-0.md` (section "E1").
 > 5. Operator decision d-c76529c3 (2026-11-05, relayed by the PM; original: 「做，撥額度｜補充：一樣 bump 3.0.0.x 不要推進 3.1」): go. A/B uses about 75 USD of quota, subscription billing only. Run the pilot first; the pilot result goes to the PM, who decides whether to run the full matrix. The prereg and the mechanical verdict are stamped before any run. The real-model part starts only after G37 account registration is done. Versions follow the current 3.0.0 bump rule (alpha or patch number, never 3.1); every "3.0.0.x" in this plan means that.
 
-日期 2026-11-05（台北）。作者 autopilot depth-0。狀態：草案，待 plan review 和 operator 確認。不含程式。
+日期 2026-11-05（台北）。作者 autopilot depth-0。狀態：scheduled（2026-11-20 schedule，PM 01M7V31A；pilot 結果 2026-11-23）。不含程式。
 事實細節與出處：本文附錄（來源為 rolekit-probe 2026-11-05 的唯讀調研，附 file:line）。
 
 ## 0. 先講前例（找不到原話，找到一個負面結果）

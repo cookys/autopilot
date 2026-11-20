@@ -1,5 +1,7 @@
 # Plan — G40-data: the agent lane gets its own live quota for every alias
-> Status: design only (no code in this plan's authoring commit). Owner: PM program. Branch: `hands/g40data/1`. Size: S (design); implementation phases below. Frame: builds on G37 (`project/plans/2026-11-03-g37-account-switching.md`) and the codeforge G40 design (codeforge `feature/g40-usage-accounts` @ `98c7a8b`, `doc/plans/2026-11-03-g40-usage-accounts.md`).
+> Status: design only (no code in this plan's authoring commit); P4/P5 parked. Owner: PM program. Branch: `hands/g40data/1`. Size: S (design); implementation phases below. Frame: builds on G37 (`project/plans/2026-11-03-g37-account-switching.md`) and the codeforge G40 design (codeforge `feature/g40-usage-accounts` @ `98c7a8b`, `doc/plans/2026-11-03-g40-usage-accounts.md`).
+>
+> 2026-11-20 schedule (PM 01M7V31A): P4/P5 parked — P5 waits on fleet F4; the 2026-11-10 freeze date lapsed.
 
 > This plan states the current design only. History is in git and in the Review log; the fleet hub design note (`project/plans/context/g40-fleet-hub-quota-store-1949b11.md`, fleet `1949b11`, revision 4) is the companion for the hub side. The two documents agree except for the points listed in the Review log.
 
@@ -257,8 +259,8 @@ Each courier writes only its own row (key includes `writer_courier`, 22.1) and t
 | P2 | M | Claude adapter, first because G37 needs it: wrapper passive capture (5.1) writing the local row of `quota/claude/<alias>.json`, `status` columns, `claude.json` manifest; pick reads the mirror | fixture-driven; N9, N10, N74, N78, N83, N84 red then green: json caller records nothing and exits unchanged |
 | P2b | S | generic reporter (18.2) with a fake hub: statusline adapter writes the mirror directly (18.3), direct `codeforge.quota/1` read removed from `account-quota.js`, pacing and queue, stale-skip, nack handling | N18-N23, N36, N59-N64, N68-N71 red then green |
 | P3 | S | token meta, generic fields; lifetime from the manifest; credential precedence (5.6). Not in the G40 first implementation wave (pick may only take tight or refusal as new inputs): the `invalid` class, `scripts/lib/quota-contract.json` and the N85 writer wait for P3; the validator still accepts shape (c) (N77) | N11, N12, N31, N32, N35, N65, N75, N85 red then green (all excluded from the first wave) |
-| P4 | M | Claude tinyprobe (5.3), blocked on the section 19 experiment | N13-N15, N66, N73, N76 red then green |
-| P5 | L | hub client in the reporter, blocked on fleet F4; the hub change ships with or after F4 and never during a release freeze (fleet freeze until 2026-11-10T16:24Z) | N16, N17, N39-N48, N67 red then green |
+| P4 | M | parked — Claude tinyprobe (5.3), blocked on the section 19 experiment | N13-N15, N66, N73, N76 red then green |
+| P5 | L | parked — waits on fleet F4; the hub change ships with or after F4 and never during a release freeze (the 2026-11-10T16:24Z freeze date lapsed) | N16, N17, N39-N48, N67 red then green |
 | P6 | M/L | C2 transparent transform, only if Q3 is answered yes | byte-identical stdout for json callers, red first with the transform broken |
 | A-agy, A-grok, A-codex, A-minimax, A-qoder, A-qoder-cli-cn, A-opencode, A-glm, A-kimi | each S to M | one provider adapter each (manifest from the matrix row plus the modes it marks `verified`); the `credential_ref` kind `env` checks (20.3 rule 3) already ship in P1 with N28 | each is its own project and starts ONLY after the PM gives a go for that provider; its gate is N24-N30 and N72 run on its own manifest, red then green |
 Dependency map: P1 -> P2 -> P2b; P3 after P1; P4 after P2 + experiment; P5 after P2b + F4; provider adapters after P1 + P2b + the matrix + a per-provider PM go; P6 after P2 + Q3.
@@ -773,7 +775,7 @@ Sources: fleet message 01M6H3S89D3MPBWVWEASJM27M2; fleet message 01M6H3W6FC4ZNJM
 | Limits | per key `(provider, alias)` per courier: 1 write per 10 s, burst 3; per courier: 60 writes per minute and 256 live rows; 7 windows per record. Over a rate limit: visible nack `quota_rate_limited`, always with `retry_after` in seconds; the 257th live row: `quota_rows_full`, never with `retry_after`, cleared only when a row expires or is deleted |
 | Delivery | snapshot on connect, deltas after, each frame carrying `hub_now` (seconds), feeding the mirror; an old hub nacks the new frame `unsupported` |
 | Spelling | the hub uses 20.2: `utilization`, `resets_at`, `observed_at` (seconds) |
-| Schedule | the hub change ships with or after F4, never during a release freeze; freeze until 2026-11-10T16:24Z |
+| Schedule | the hub change ships with or after F4, never during a release freeze; freeze until 2026-11-10T16:24Z (that date lapsed; 2026-11-20 schedule, PM 01M7V31A: P5 stays parked waiting on fleet F4) |
 
 ### 22.2 Mirror view
 

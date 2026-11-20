@@ -46,8 +46,15 @@ const server = net.createServer(socket => {
       index_mode: fs.statSync(path.join(req.worktree, '.git/index')).mode & 0o777 };
     fs.writeFileSync(path.join(root, 'clone-meta'), JSON.stringify(meta));
     const verdict = fs.readFileSync(path.join(root, 'verdict'), 'utf8');
-    const response = {ok: verdict === 'done', verdict, reason: 'fixture ' + verdict, rc: verdict === 'done' ? 0 : 9,
-      diff, log:'fixture broker log\n', redactions: 71234, run_id: 'broker-fixture-' + verdict};
+    let response;
+    if (verdict === 'missing') {
+      response = {ok: true, verdict: null, reason: '', rc: 0, diff, log:'fixture broker log\n', redactions: 1, run_id: 'broker-fixture-missing'};
+    } else if (verdict === 'failed') {
+      response = {ok: true, verdict: 'failed', reason: '', rc: 0, diff, log:'fixture broker log\n', redactions: 1, run_id: 'broker-fixture-failed'};
+    } else {
+      response = {ok: verdict === 'done', verdict, reason: 'fixture ' + verdict, rc: verdict === 'done' ? 0 : 9,
+        diff, log:'fixture broker log\n', redactions: 71234, run_id: 'broker-fixture-' + verdict};
+    }
     socket.end(JSON.stringify(response) + '\n');
   });
 });
@@ -75,6 +82,8 @@ if case_enabled a; then
 const fs=require('fs'),path=require('path'),assert=require('assert/strict'),crypto=require('crypto'),cp=require('child_process');
 const root=process.argv[2], result=JSON.parse(fs.readFileSync(path.join(root,'a.json'),'utf8'));
 assert.equal(result.status,'committed'); assert.equal(result.model,'kimi-code/kimi-for-coding');
+assert.equal(result.error, null);
+assert.equal(result.broker_verdict_unknown, undefined);
 const req=JSON.parse(fs.readFileSync(path.join(root,'requests'),'utf8').trim().split('\n')[0]);
 assert.deepEqual(Object.keys(req).sort(),['model','prompt','timeout_s','worktree']);
 assert.equal(req.model,'kimi-code/kimi-for-coding'); assert.equal(req.timeout_s,60);
@@ -244,5 +253,58 @@ if case_enabled h; then
   assert_eq "$?" 2 '(h) local review refuses'
   assert_contains "$(cat "$TEST_TMP/h-review.json")" kimi_local_stopped '(h) review keeps stop gate'
   assert_file_absent "$TEST_TMP/local-kimi-invocations" '(h) stopped local paths never invoke binary'
+fi
+if case_enabled i; then
+  # Case (g) leaves a 64 KiB prompt in place. Restore the short fixture before the commit cases.
+  printf 'Create broker-created.txt.\n' > "$TEST_TMP/prompt"
+  # Commit landed, broker verdict is JSON null. Must stay committed and name the raw verdict.
+  printf 'missing' > "$TEST_TMP/verdict"
+  run_dispatch i --runner kimi
+  assert_eq "$DISPATCH_RC" 0 '(i) missing verdict with a commit exits 0'
+  node - "$TEST_TMP/i.json" <<'NODE'
+const fs=require('fs'),assert=require('assert/strict');
+const r=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+assert.equal(r.status,'committed');
+assert.equal(r.files_changed,1);
+assert.ok(r.commit);
+assert.equal(r.error,null);
+assert.equal(r.broker_verdict_unknown,'null');
+NODE
+  assert_eq "$?" 0 '(i) committed with broker_verdict_unknown'
+  printf 'done' > "$TEST_TMP/verdict"
+fi
+if case_enabled j; then
+  # Case (g) leaves a 64 KiB prompt in place. Restore the short fixture before the commit cases.
+  printf 'Create broker-created.txt.\n' > "$TEST_TMP/prompt"
+  # Commit landed, explicit verdict "failed", empty reason. Error must name the verdict.
+  printf 'failed' > "$TEST_TMP/verdict"
+  run_dispatch j --runner kimi
+  assert_eq "$DISPATCH_RC" 1 '(j) explicit failed verdict exits 1'
+  node - "$TEST_TMP/j.json" <<'NODE'
+const fs=require('fs'),assert=require('assert/strict');
+const r=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+assert.equal(r.status,'failed');
+assert.equal(r.files_changed,1);
+assert.ok(r.commit);
+assert.match(String(r.error), /verdict=failed/);
+assert.notEqual(r.error, 'broker failed');
+NODE
+  assert_eq "$?" 0 '(j) empty reason names verdict=failed'
+  printf 'done' > "$TEST_TMP/verdict"
+fi
+if case_enabled k; then
+  denied="$TEST_TMP/kimi-sock-denied"
+  mkdir -p "$denied"
+  chmod 000 "$denied"
+  sock="$denied/sock"
+  avail_msg="$(AUTOPILOT_KIMI_BROKER_SOCK="$sock" node "$REPO_ROOT/scripts/lib/cursor-broker-client.js" available kimi 2>&1)"
+  avail_rc=$?
+  AUTOPILOT_KIMI_BROKER_SOCK="$sock" run_dispatch k-denied --runner kimi
+  chmod 755 "$denied" || true
+  assert_eq "$avail_rc" 4 '(k) EACCES socket dir exits 4'
+  assert_contains "$avail_msg" "kimi broker socket not accessible: run under the socket's group (e.g. sg lanegit -c ...)" '(k) distinct access message'
+  assert_eq "$DISPATCH_RC" 2 '(k) dispatch refuses inaccessible broker'
+  assert_contains "$(cat "$TEST_TMP/k-denied.json")" "kimi broker socket not accessible: run under the socket's group (e.g. sg lanegit -c ...)" '(k) precondition is the access message'
+  assert_not_contains "$(cat "$TEST_TMP/k-denied.json")" 'quota exhausted' '(k) access is not reported as quota exhaustion'
 fi
 finalize_test

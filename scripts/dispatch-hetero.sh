@@ -517,6 +517,9 @@ BROKER_TIMEOUT_S=""
 BROKER_RESULT=""
 BROKER_VERDICT=""
 BROKER_REASON=""
+BROKER_VERDICT_KIND=""
+BROKER_VERDICT_UNKNOWN=""
+BROKER_VERDICT_UNKNOWN_SET=0
 BROKER_RUNNER=""
 OPENCODE_VER=""  # opencode --version line, read once at the pre-spend gate (declare -p carries it to the detached child)
 OPENCODE_PROMPT_FILE=""  # opencode combined prompt temp; init early so it is SET for the detach declare -p
@@ -1261,10 +1264,14 @@ NODE
 const fs = require('fs'), crypto = require('crypto');
 const r = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
 const fields = { broker_run_id: r.run_id, broker_diff_sha16: crypto.createHash('sha256').update(r.diff).digest('hex').slice(0, 16) };
-if (r.verdict !== 'done') fields.reason = r.verdict === 'stopped_billing' ? `${process.argv[3]}_stopped_billing` : r.reason;
+const failVerdict = new Set(['rejected', 'stopped_billing', 'timeout', 'agent_failed', 'failed']);
+if (failVerdict.has(r.verdict)) fields.reason = r.verdict === 'stopped_billing' ? `${process.argv[3]}_stopped_billing` : r.reason;
 process.stdout.write(', ' + JSON.stringify(fields).slice(1, -1));
 NODE
     )"
+  fi
+  if [ "${BROKER_VERDICT_UNKNOWN_SET:-0}" -eq 1 ]; then
+    broker_fields="${broker_fields}, \"broker_verdict_unknown\": \"$(_flat_json_escape "${BROKER_VERDICT_UNKNOWN:-}")\""
   fi
   tip_verify_fields="$tip_verify_fields$broker_fields"
   hetero_log_fallback "$1"
@@ -3497,7 +3504,16 @@ elif [ "$IS_OPENCODE" -eq 1 ]; then
   rm -f "$_oc_verr"
 elif [ "$IS_KIMI" -eq 1 ]; then
   if [ "$BIN_FLAG_KIMI" -eq 0 ]; then
-    node "$SELF_DIR/lib/cursor-broker-client.js" available kimi || die_precondition "kimi broker unavailable or quota exhausted"
+    _kimi_avail_err="$(mktemp -t dispatch-hetero-kimi-avail-XXXXXX)"
+    _kimi_avail_rc=0
+    node "$SELF_DIR/lib/cursor-broker-client.js" available kimi >"$_kimi_avail_err" 2>&1 || _kimi_avail_rc=$?
+    _kimi_avail_msg="$(sed -n '1p' "$_kimi_avail_err" 2>/dev/null || true)"
+    rm -f "$_kimi_avail_err"
+    if [ "$_kimi_avail_rc" -eq 4 ]; then
+      [ -n "$_kimi_avail_msg" ] || _kimi_avail_msg="kimi broker socket not accessible: run under the socket's group (e.g. sg lanegit -c ...)"
+      die_precondition "$_kimi_avail_msg"
+    fi
+    [ "$_kimi_avail_rc" -eq 0 ] || die_precondition "kimi broker unavailable or quota exhausted"
     command -v "${AUTOPILOT_KIMI_GROUP_WRAPPER:-sg}" >/dev/null 2>&1 || die_precondition "kimi broker group wrapper not found"
   else
   _kimi_stop="$(node "$SELF_DIR/lib/kimi-local-stop.js" check 2>&1)" || die_precondition "$_kimi_stop"
@@ -5759,8 +5775,30 @@ elif [ "$IS_CURSOR" -eq 1 ] || [ "$IS_KIMI" -eq 1 ]; then
     "$WT" "$PROMPT_FILE" "$MODEL" "$BROKER_TIMEOUT_S" "$DISPATCH_RUN_ID" "$BROKER_RESULT" "$BROKER_RUNNER"
   run_worker "$broker_group_wrapper" lanegit -c "$broker_group_cmd"
   if [ -f "$BROKER_RESULT" ]; then
-    BROKER_VERDICT="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).verdict)' "$BROKER_RESULT")"
-    BROKER_REASON="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).reason)' "$BROKER_RESULT")"
+    # Missing or non-string verdict must not throw the reader (that used to leave
+    # both variables empty, and the receipt then said only "broker failed").
+    _broker_meta="$(node - "$BROKER_RESULT" <<'NODE'
+const fs = require('fs');
+let obj = null;
+try { obj = JSON.parse(fs.readFileSync(process.argv[2], 'utf8')); } catch { obj = null; }
+const has = !!(obj && typeof obj === 'object' && Object.prototype.hasOwnProperty.call(obj, 'verdict'));
+const verdict = has ? obj.verdict : undefined;
+const known = new Set(['done', 'rejected', 'stopped_billing', 'timeout', 'agent_failed', 'failed']);
+let kind = 'missing';
+if (typeof verdict === 'string' && known.has(verdict)) kind = 'known';
+else if (!(verdict === undefined || verdict === null || verdict === '')) kind = 'unknown';
+let raw = '';
+if (typeof verdict === 'string') raw = verdict;
+else if (verdict === null) raw = 'null';
+else if (!(verdict === undefined || verdict === '')) { try { raw = JSON.stringify(verdict); } catch { raw = ''; } }
+const reason = obj && typeof obj.reason === 'string' ? obj.reason : '';
+const b64 = (s) => Buffer.from(s, 'utf8').toString('base64');
+process.stdout.write(kind + '\n' + b64(raw) + '\n' + b64(reason) + '\n');
+NODE
+)" || _broker_meta=""
+    BROKER_VERDICT_KIND="$(printf '%s\n' "$_broker_meta" | sed -n '1p')"
+    BROKER_VERDICT="$(printf '%s\n' "$_broker_meta" | sed -n '2p' | base64 -d 2>/dev/null || true)"
+    BROKER_REASON="$(printf '%s\n' "$_broker_meta" | sed -n '3p' | base64 -d 2>/dev/null || true)"
     [ "$BROKER_VERDICT" != timeout ] || WORKER_TIMED_OUT=1
     if [ "$BROKER_VERDICT" != done ] || [ "${AGENT_EXIT:-1}" -eq 0 ]; then
       node "$SELF_DIR/lib/cursor-broker-client.js" observe "$BROKER_RUNNER" "$BROKER_VERDICT" >/dev/null 2>&1 || true
@@ -6971,11 +7009,35 @@ classify_outcome() {
     OUTCOME_EXIT=1
     OUTCOME_ERR="wall timeout (${__wt_secs}s) exceeded — worker terminated"
   fi
-  if [ -n "${BROKER_RUNNER:-}" ] && { [ "${AGENT_EXIT:-0}" -ne 0 ] || [ "${BROKER_VERDICT:-done}" != done ]; }; then
+  # Do not default an empty verdict to done: that hid a missing verdict on exit 0.
+  if [ -n "${BROKER_RUNNER:-}" ] && { [ "${AGENT_EXIT:-0}" -ne 0 ] || [ "${BROKER_VERDICT:-}" != done ]; }; then
     if [ "${WORKER_TIMED_OUT:-0}" -ne 1 ]; then
-      OUTCOME_STATUS="failed"; OUTCOME_EXIT=1
-      OUTCOME_ERR="${BROKER_REASON:-broker failed}"
-      [ "${BROKER_VERDICT:-}" != stopped_billing ] || OUTCOME_ERR="${BROKER_RUNNER}_stopped_billing"
+      _broker_unknown=0
+      case "${BROKER_VERDICT_KIND:-}" in
+        missing|unknown) _broker_unknown=1 ;;
+      esac
+      if [ -z "${BROKER_VERDICT_KIND:-}" ] && [ -z "${BROKER_VERDICT:-}" ]; then
+        _broker_unknown=1
+      fi
+      _broker_keep_commit=0
+      case "${OUTCOME_STATUS:-}" in
+        committed|failure) _broker_keep_commit=1 ;;
+      esac
+      if [ "$_broker_unknown" -eq 1 ] && [ -n "${OUTCOME_COMMIT:-}" ] && [ "$_broker_keep_commit" -eq 1 ]; then
+        OUTCOME_STATUS="committed"
+        OUTCOME_EXIT=0
+        OUTCOME_ERR=""
+        BROKER_VERDICT_UNKNOWN="${BROKER_VERDICT:-}"
+        BROKER_VERDICT_UNKNOWN_SET=1
+      else
+        OUTCOME_STATUS="failed"; OUTCOME_EXIT=1
+        if [ -n "${BROKER_REASON:-}" ]; then
+          OUTCOME_ERR="$BROKER_REASON"
+        else
+          OUTCOME_ERR="broker verdict=${BROKER_VERDICT:-} exit=${AGENT_EXIT:-0}"
+        fi
+        [ "${BROKER_VERDICT:-}" != stopped_billing ] || OUTCOME_ERR="${BROKER_RUNNER}_stopped_billing"
+      fi
     fi
   fi
   # After engine_unavailable and wall-timeout overrides, so only a run that
@@ -7135,7 +7197,7 @@ dispatch_detached_run() {
   {
   declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN CURSOR_BIN OPENCODE_BIN OPENCODE_VER KIMI_BIN QODER_BIN QODER_CONFIG_DIR KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER ENDPOINT PACE_ROLE ENGINE_CHOICE_JSON PACE_CHOICE_JSON EFFORT CLAUDE_EFFORT_ARG \
       SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_CURSOR IS_OPENCODE IS_KIMI IS_QODER IS_CNATIVE CNATIVE_CONFIG_DIR RUNNER_RESOLVED CURSOR_FAST PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT GITCONFIG_SNAPSHOT_FILE GITCONFIG_DRIFT_KEYS EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
-      BROKER_TIMEOUT_S BROKER_RESULT BROKER_VERDICT BROKER_REASON BROKER_RUNNER BIN_FLAG_KIMI \
+      BROKER_TIMEOUT_S BROKER_RESULT BROKER_VERDICT BROKER_REASON BROKER_VERDICT_KIND BROKER_VERDICT_UNKNOWN BROKER_VERDICT_UNKNOWN_SET BROKER_RUNNER BIN_FLAG_KIMI \
       WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID WORKER_FALLBACK_PGID GROK_PROMPT_FILE EFFORT_SENT CCSHIM_PROMPT_FILE OPENCODE_PROMPT_FILE KIMI_PROMPT_FILE QODER_PROMPT_FILE KIMI_EDIT_ONLY \
       AGY_ENVELOPE AGY_STDERR AGY_PARSED AGY_USAGE_JSON CCSHIM_ENVELOPE \
       PROVIDER_ERROR_RUNNER PROVIDER_ERROR_STATUS PROVIDER_ERROR_FIELD \

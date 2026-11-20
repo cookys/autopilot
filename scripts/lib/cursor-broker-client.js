@@ -4,6 +4,7 @@
 // broker's allowed content fields; ok/rc/redactions are never logged or stored.
 const fs = require('fs');
 const net = require('net');
+const path = require('path');
 
 const EDIT_ONLY = `=== HARNESS DIRECTIVE (overrides any conflicting instruction in the task) ===
 Make ONLY the file edits the task requires, in the current working directory. Do NOT
@@ -62,13 +63,43 @@ function request({ socket, worktree, prompt, model, timeout_s, runner = 'cursor'
       conn.destroy();
       try {
         const raw = JSON.parse(buffer.subarray(0, end).toString('utf8'));
-        if (!raw || typeof raw.ok !== 'boolean' || !['done', 'rejected', 'stopped_billing', 'timeout', 'agent_failed'].includes(raw.verdict)
-          || ['diff', 'log', 'run_id', 'reason'].some(key => typeof raw[key] !== 'string')) throw new Error();
-        const response = Object.fromEntries(['diff', 'log', 'run_id', 'verdict', 'reason'].map(key => [key, raw[key]]));
-        resolve({ response, success: raw.ok && raw.verdict === 'done' });
-      } catch { reject(new Error(`${runner} broker invalid response`)); }
+        resolve(projectReply(raw, runner));
+      } catch (err) {
+        reject(err instanceof Error && /broker invalid response$/.test(err.message) ? err : new Error(`${runner} broker invalid response`));
+      }
     });
   });
+}
+// rejected/stopped_billing/timeout/agent_failed never apply the diff.
+// A missing verdict, or explicit "failed" with ok:true, still applies it so
+// dispatch can commit and then classify the raw verdict.
+const HARD_FAIL = new Set(['rejected', 'stopped_billing', 'timeout', 'agent_failed']);
+function projectReply(raw, runner) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw) || typeof raw.ok !== 'boolean'
+    || ['diff', 'log', 'run_id'].some(key => typeof raw[key] !== 'string')
+    || !(raw.reason == null || typeof raw.reason === 'string')) {
+    throw new Error(`${runner} broker invalid response`);
+  }
+  const verdict = Object.prototype.hasOwnProperty.call(raw, 'verdict') ? raw.verdict : null;
+  const response = {
+    diff: raw.diff, log: raw.log, run_id: raw.run_id, verdict,
+    reason: typeof raw.reason === 'string' ? raw.reason : '',
+  };
+  const hardFail = typeof verdict === 'string' && HARD_FAIL.has(verdict);
+  const missing = verdict == null || verdict === '';
+  const success = raw.ok === true && !hardFail && (verdict === 'done' || missing || verdict === 'failed');
+  return { response, success };
+}
+function socketDenied(runner, env = process.env) {
+  let socket;
+  try { socket = brokerConfig(runner, env).socket; } catch { return false; }
+  const denied = (err) => !!(err && (err.code === 'EACCES' || err.code === 'EPERM'));
+  try { fs.statSync(path.dirname(socket)); } catch (err) { return denied(err); }
+  try {
+    if (!fs.statSync(socket).isSocket()) return false;
+  } catch (err) { return denied(err); }
+  try { fs.accessSync(socket, fs.constants.W_OK); } catch (err) { return denied(err); }
+  return false;
 }
 function brokerAvailable(runner = 'kimi', { env = process.env, now } = {}) {
   try {
@@ -84,6 +115,10 @@ function observeQuota(runner, verdict) {
 async function main(argv) {
   if (argv[0] === 'available') {
     if (argv.length !== 2) throw new Error('broker available requires runner');
+    if (socketDenied(argv[1])) {
+      process.stderr.write(`${argv[1]} broker socket not accessible: run under the socket's group (e.g. sg lanegit -c ...)\n`);
+      return 4;
+    }
     return brokerAvailable(argv[1]) ? 0 : 3;
   }
   if (argv[0] === 'observe') {
@@ -107,7 +142,7 @@ async function main(argv) {
   fs.writeFileSync(args.out, JSON.stringify(response) + '\n', { mode: 0o600 });
   return success ? 0 : 1;
 }
-module.exports = { EDIT_ONLY, MAX_PROMPT_BYTES, brokerConfig, validateModel, brokerAvailable, observeQuota, readPrompt, request, main };
+module.exports = { EDIT_ONLY, MAX_PROMPT_BYTES, brokerConfig, validateModel, brokerAvailable, observeQuota, readPrompt, request, projectReply, socketDenied, main };
 if (require.main === module) main(process.argv.slice(2)).then(rc => { process.exitCode = rc; }).catch(err => {
   process.stderr.write(`${err.message}\n`); process.exitCode = 2;
 });

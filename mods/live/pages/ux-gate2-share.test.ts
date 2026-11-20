@@ -40,9 +40,9 @@ const ctx = (rows: number, con = snapshot(), cols = 80): PageCtx => ({ live, con
 
 // X2b: the real host supplies scroll.bodyRows independently of viewport height
 // (register.ts passes it through frameHeight). The measured inline allocations
-// at terminal 80x20 / 80x16 are 5 / 4 rows: header + 2 / 1 content + border + strip (v7.4).
+// at terminal 80x20 / 80x16 are 4 / 3 rows: header + 2 / 1 content + strip (the key-hint border row yields at <= 4 rows).
 function smallNow(terminalRows: 20 | 16, con = snapshot()): string[] {
-  const hostBodyRows = terminalRows === 20 ? 5 : 4
+  const hostBodyRows = terminalRows === 20 ? 4 : 3
   const mk = (kind: string) => (props: Record<string, any>) => ({ kind, props })
   const el = { Box: mk('Box'), Text: mk('Text'), Button: mk('Button'), Link: mk('Link') }
   const tree = Pane(el as never, live, 'now', () => {}, t, 80, () => {}, new Set(), () => {}, new Set(), { offset: 0, bodyRows: hostBodyRows }, null, null, null, null, {
@@ -59,18 +59,17 @@ function smallNow(terminalRows: 20 | 16, con = snapshot()): string[] {
   walk(tree)
   expect(rows.length, 'the supplied host allocation is preserved').toBe(hostBodyRows)
   for (const row of rows) expect(displayWidth(row)).toBeLessThanOrEqual(80)
-  return rows.slice(1, -2)
+  return rows.slice(1, -1).filter(r => !r.startsWith('╰')) // the key-hint border row is not content
 }
 
-test('X2b: 80x20 uses its two content rows for the most severe class then a severity-count overflow summary, dropping residue first', () => {
+test('X2b: 80x20 (4 host rows = head + 1 content + key-hint border + strip) keeps the most severe class and the severity counts in its one content row, dropping residue first', () => {
   const rows = smallNow(20)
-  expect(rows.length).toBe(2)
+  expect(rows.length).toBe(1)
   expect(rows[0]).toMatch(/^✗ (艦隊|額度)/)
   expect(rows[0]).toContain('艦隊')
-  expect(rows[1]).toMatch(/另有 \d+ 項/)
-  expect(rows[1]).toContain('額度 ✗2 ?3')
-  expect(rows[1]).toContain('待決 3 張')
-  expect(rows.join('\n')).not.toContain('殘留')
+  expect(rows[0]).toContain('額度 ✗2')
+  expect(rows[0]).toContain('待決 3 張')
+  expect(rows[0]).not.toContain('殘留')
 })
 
 test('X2b: 80x16 uses its single content row for severe fleet and quota counts plus overflow, never residue', () => {
@@ -84,17 +83,17 @@ test('X2b: 80x16 uses its single content row for severe fleet and quota counts p
   expect(rows[0]).not.toContain('殘留')
 })
 
-test('X2b: a failed miscellaneous exception precedes less severe fleet and quota classes in two or one content rows', () => {
+test('X2b: a failed miscellaneous exception precedes less severe fleet and quota classes in one content row at 80x20 and 80x16', () => {
   const con = snapshot()
   con.lines = [line('丙', 'stalled')]
   con.counts.summary.hosts = { online: 6, total: 6 }
   con.quota.pools = [{ ...POOLS[3], pool: 'unknown-only' }] as never
   con.items = [{ id: 'exc:misc', kind: 'exception', state: 'failed', title: '發布失敗', text: '發布失敗', since_ms: NOW - MIN, line_id: null, to_console: true, facts: {} }] as never
-  const two = smallNow(20, con)
-  expect(two[0]).toBe('✗ 發布失敗')
-  expect(two[1]).toMatch(/另有 \d+ 項/)
-  expect(two[1]).toContain('額度 ?1')
-  expect(two[1]).toContain('艦隊 ⊘1')
+  const two = smallNow(20, con) // one content row at 4 host rows: the severity summary, which names the failed fleet class and the unknown quota pool
+  expect(two.length).toBe(1)
+  expect(two[0]).toMatch(/^✗ 艦隊 ✗1/)
+  expect(two[0]).toContain('額度 ?1')
+  expect(two[0]).toContain('艦隊 ⊘1')
   const failed = con.items
   const one = smallNow(16, con)[0]
   expect(one).toMatch(/^✗ 艦隊 ✗1/)

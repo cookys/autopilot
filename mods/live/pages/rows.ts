@@ -5,11 +5,14 @@ import type { LiveSnapshot, Seg } from '../model'
 import { PALETTE } from '../../tux/palette.ts'
 import { displayWidth } from '../../tux/width.ts'
 import { STATES, type StateId } from '../ui'
+import { fmtCount } from '../speed'
 
 export type Row = Seg[]
 
 // §5: stale, expired and no_source all use the broken role (red text colour, no background, no inverse); the number stays, the reason is written beside it
 export const staleBadge = (text: string): Seg => ({ text, color: PALETTE.broken })
+// a token count for display (never money): `12k tok`, `1.2M tok`; callers pass the real token field and say 'unknown' themselves when there is none
+export const tokLabel = (n: number, t: (id: string, a?: Record<string, string | number>) => string): string => t('v74.c.tok', { n: n >= 1_000_000 ? fmtCount(n) : n >= 1000 ? String(Math.round(n / 1000)) + 'k' : String(n) })
 export const brokenRow = (text: string): Row => [staleBadge(text)]
 
 // Wrap a row onto further rows at `cols` without dropping or truncating characters, so a broken/no-source reason is never cut with `…` (A10, G6, M7).

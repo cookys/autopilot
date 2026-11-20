@@ -50,7 +50,7 @@ function liveOf(over: { spend?: M.SpendView | null; rows?: M.LivePaneRow[] | nul
     rows: over.rows === undefined ? [] : over.rows, gates: null, sections: M.NO_SECTIONS, review: null, published_at: null, watcher_note: null, session_as_of: null, host_as_of: null,
     detail: {
       ...M.NO_DETAIL, now_ms: NOW, project: 'demo',
-      spend: over.spend === undefined ? { session: '', host_all: '', host_all_n: 380_000, brain: null, cap: null, mode: 'warn', hourly: [1, 2, 2, 3, 5, 6, 7, 8, 6, 4, 3, 2, 1, 1, 2, 3, 4, 5, 6, 7, 6, 5, 3, 2] } : over.spend,
+      spend: over.spend === undefined ? { session: '', host_all: '', host_all_n: 12.4, brain: null, tok: { session: null, host: 380_000 }, cap: null, mode: 'warn', hourly: [1, 2, 2, 3, 5, 6, 7, 8, 6, 4, 3, 2, 1, 1, 2, 3, 4, 5, 6, 7, 6, 5, 3, 2] } : over.spend,
       residue: over.residue === undefined ? null : over.residue,
       load_source: over.load_source === undefined ? null : over.load_source,
     },
@@ -103,11 +103,11 @@ test('v74 F S6 negative control: missing quota feed, console and spend draw red 
 })
 
 test('v74 F S6: resetIn formats the time left', () => {
-  expect(resetIn(NOW + 130 * MIN, NOW)).toBe('2h10m')
-  expect(resetIn(NOW + 120 * MIN, NOW)).toBe('2h')
-  expect(resetIn(NOW + 4 * 86_400_000, NOW)).toBe('4d')
-  expect(resetIn(NOW + 35 * MIN, NOW)).toBe('35m')
-  expect(resetIn(null, NOW)).toBe('—')
+  expect(resetIn(NOW + 130 * MIN, NOW, t)).toBe('2h10m')
+  expect(resetIn(NOW + 120 * MIN, NOW, t)).toBe('2h')
+  expect(resetIn(NOW + 4 * 86_400_000, NOW, t)).toBe('4d')
+  expect(resetIn(NOW + 35 * MIN, NOW, t)).toBe('35m')
+  expect(resetIn(null, NOW, t)).toBe('—')
 })
 
 // ---- S7 殘留 ----
@@ -290,4 +290,23 @@ test('v74 F S8 wiring: Pane passes frame.others to the 艦隊 page, and omitting
   const missing = draw({})
   expect(missing).not.toContain('d-a1b2c3d0')
   expect(missing).toContain(t('v74.f.others_missing'))
+})
+
+test('v74 F S6: the money fields (host_all_n, brain) never draw as tokens; no token field draws the unknown string, no $ anywhere', () => {
+  const money: M.SpendView = { session: '$3.10', host_all: '$12.40', host_all_n: 12.4, brain: 3.1, cap: 20, mode: 'warn' }
+  const all = texts(renderSpend(ctxOf(liveOf({ spend: money }), consoleOf([pool('team')]))).body).join('\n')
+  expect(all).not.toContain('12.4')
+  expect(all).not.toContain('3.1')
+  expect(all).not.toMatch(/\$/)
+  expect(all).toContain('token 數未知')
+  const real = texts(renderSpend(ctxOf(liveOf({ spend: { ...money, tok: { session: 5000, host: 380_000 } } }), consoleOf([pool('team')]))).body).join('\n')
+  expect(real).toContain('380k tok')
+  expect(real).not.toContain('12.4')
+})
+
+test('v74 F S6: the reset countdown units come from the locale (en draws the en strings)', () => {
+  const en = makeT('en')
+  expect(resetIn(NOW + 130 * MIN, NOW, en)).toBe('2h10m')
+  expect(resetIn(NOW + 4 * 86_400_000, NOW, en)).toBe('4d')
+  expect(resetIn(NOW + 35 * MIN, NOW, en)).toBe('35m')
 })

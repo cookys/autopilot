@@ -3,7 +3,7 @@
 // Pure: no I/O here. The feeds (who runs `fleet pm status --json` / `fleet decision list --json`) live in register.ts and fill PageCtx.v74.
 
 // ---- fleet.pm.status v1 (fleet docs/pm-status-json.md, integ/1120-pmsys ae8aab65). Readers ignore unknown fields. ----
-export type PmCounts = { stuck: number; overdue: number; running: number; waiting: number; total: number }
+export type PmCounts = { stuck: number | null; overdue: number | null; running: number | null; waiting: number | null; total: number | null } // null = the producer did not publish that count (unknown, never 0)
 export type PmTask = {
   id: string; short_id: string; title: string; state: string; owner: string
   last_progress_at_ms: number | null; last_progress: string | null; next_evidence_due_ms: number | null
@@ -29,7 +29,7 @@ export function parsePmStatus(json: string): PmStatus | null {
     if (typeof p !== 'object' || p === null) continue
     const q = p as Record<string, unknown>
     const c = (q.counts ?? {}) as Record<string, unknown>
-    const counts: PmCounts = { stuck: intOrNull(c.stuck) ?? 0, overdue: intOrNull(c.overdue) ?? 0, running: intOrNull(c.running) ?? 0, waiting: intOrNull(c.waiting) ?? 0, total: intOrNull(c.total) ?? 0 }
+    const counts: PmCounts = { stuck: intOrNull(c.stuck), overdue: intOrNull(c.overdue), running: intOrNull(c.running), waiting: intOrNull(c.waiting), total: intOrNull(c.total) }
     const tasks: PmTask[] = (Array.isArray(q.tasks) ? q.tasks : []).filter((t): t is Record<string, unknown> => typeof t === 'object' && t !== null && typeof (t as Record<string, unknown>).id === 'string').map(t => ({
       id: str(t.id), short_id: str(t.short_id) || str(t.id), title: str(t.title), state: str(t.state) || '?', owner: str(t.owner),
       last_progress_at_ms: intOrNull(t.last_progress_at_ms), last_progress: strOrNull(t.last_progress), next_evidence_due_ms: intOrNull(t.next_evidence_due_ms),
@@ -42,11 +42,11 @@ export function parsePmStatus(json: string): PmStatus | null {
 
 // The 全艦隊 block of 現況 (S2). fleet.pm.status has no host count, no offline/idle line state and no quota pools:
 // lines = projects; ✗ = a project with stuck > 0 or overdue > 0; ⊘ = only waiting; ● = the rest. Hosts and quota alerts keep their existing sources (console / quota) and are omitted when those are missing.
-export type FleetLineMark = 'fail' | 'parked' | 'ok'
+export type FleetLineMark = 'fail' | 'parked' | 'ok' | 'unknown'
 export type FleetLine = { project: string; mark: FleetLineMark; counts: PmCounts }
 export function fleetLines(s: PmStatus): FleetLine[] {
-  const mark = (c: PmCounts): FleetLineMark => (c.stuck > 0 || c.overdue > 0 ? 'fail' : c.waiting > 0 && c.running === 0 ? 'parked' : 'ok')
-  const rank: Record<FleetLineMark, number> = { fail: 0, parked: 1, ok: 2 }
+  const mark = (c: PmCounts): FleetLineMark => ((c.stuck ?? 0) > 0 || (c.overdue ?? 0) > 0 ? 'fail' : c.stuck === null || c.overdue === null || c.running === null || c.waiting === null ? 'unknown' : c.waiting > 0 && c.running === 0 ? 'parked' : 'ok')
+  const rank: Record<FleetLineMark, number> = { fail: 0, unknown: 1, parked: 2, ok: 3 }
   return s.projects.map(p => ({ project: p.project, mark: mark(p.counts), counts: p.counts })).sort((a, b) => rank[a.mark] - rank[b.mark]) // stable: keeps the fleet order inside a mark
 }
 

@@ -97,6 +97,7 @@ const V74_BORDER_KEY: Record<string, string> = {
   help: 'v74.b.border.help', pet: 'v74.b.border.pet', quota: 'v74.b.border.spend', forge: 'v74.b.border.default',
 }
 
+const TINY_FRAME_ROWS = 3
 export function frameBorderRow(page: Page, ctx: PageCtx): Row {
   const k = V74_BORDER_KEY[page.id] ?? 'v74.b.border.default'
   return [{ text: GLYPHS.structure.frameBL + GLYPHS.structure.rule + ' ' + ctx.t(k), dim: true }]
@@ -150,7 +151,7 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
   if (H <= 0) return []
   const borderRow = frameBorderRow(page, ctx)
   const sRows = stripRows(page, ctx, opts)
-  const foot = [borderRow, ...sRows]
+  const foot = H <= TINY_FRAME_ROWS ? sRows : [borderRow, ...sRows] // at 3 rows (the host's 80x16 inline allocation) the key-hint border row gives its place to content: head + 1 content row + strip, so the most severe class stays visible
   const S = foot.length
   if (H <= S) return foot.slice(-H).map(r => clip(r, ctx.size.cols))
   const avail = H - 1 - S

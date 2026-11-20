@@ -2,7 +2,6 @@
 // No money anywhere (tokens only), no account block. Pure: reads seatQuota.view(), ctx.live and ctx.console only; a missing source is the existing broken row, never an invented one.
 import type { Seg } from '../model'
 import { displayWidth, sparkText } from '../model'
-import { fmtCount } from '../speed'
 import { GLYPHS } from '../../tux/glyphs.ts'
 import { PALETTE } from '../../tux/palette.ts'
 import { meterKey } from '../ui'
@@ -11,7 +10,7 @@ import { SEATS_RED_AFTER_MS, seatQuota } from './now'
 import { ROLE_WARNING, isUnknownPool, normalizedPools, poolKey, poolLabel, rankPools } from './quota-pick'
 import type { QuotaPool } from './quota-pick'
 import { shortVerdict } from './quota'
-import { brokenRow, staleBadge } from './rows'
+import { brokenRow, staleBadge, tokLabel } from './rows'
 import type { Row } from './rows'
 
 // the meter rows are not clickable in v7.4 (every clickable element outside the controls is 0), so the page keeps no focus row; the type stays for the pane's view table
@@ -24,12 +23,12 @@ const padR = (text: string, w: number): string => text + ' '.repeat(Math.max(0, 
 const padL = (text: string, w: number): string => ' '.repeat(Math.max(0, w - displayWidth(text))) + text
 
 // `2h10m`, `4d`, `35m`: the time left to a reset; null (no reset known) is a dash
-export function resetIn(ms: number | null, nowMs: number): string {
+export function resetIn(ms: number | null, nowMs: number, t: PageCtx['t']): string {
   if (ms === null) return DASH
   const min = Math.max(0, Math.floor((ms - nowMs) / 60_000))
-  if (min >= 1440) return Math.floor(min / 1440) + 'd'
-  if (min >= 60) return Math.floor(min / 60) + 'h' + (min % 60 === 0 ? '' : String(min % 60).padStart(2, '0') + 'm')
-  return min + 'm'
+  if (min >= 1440) return t('v74.f.rs_d', { n: Math.floor(min / 1440) })
+  if (min >= 60) return min % 60 === 0 ? t('v74.f.rs_h', { h: Math.floor(min / 60) }) : t('v74.f.rs_hm', { h: Math.floor(min / 60), m: String(min % 60).padStart(2, '0') })
+  return t('v74.f.rs_m', { n: min })
 }
 
 const openRule = (title: string): Row => [{ text: GLYPHS.structure.open + ' ' + title + ' ' + GLYPHS.structure.rule.repeat(2), color: PALETTE.structure }]
@@ -53,8 +52,6 @@ function meterRow(label: string, pct: number | null, reset: string, stale: boole
     ...tail,
   ]
 }
-
-const tokLabel = (n: number): string => (n >= 1_000_000 ? fmtCount(n) : n >= 1000 ? String(Math.round(n / 1000)) + 'k' : String(n)) + ' tok'
 
 function poolRows(ctx: PageCtx): Row[] {
   const { t, console: con, nowMs } = ctx
@@ -93,8 +90,8 @@ export function renderSpend(ctx: PageCtx, _view: SpendViewOpts = DEFAULT_VIEW): 
       const want = row?.pool == null ? null : poolKey(row.pool)
       return pools === null || want === null ? null : (pools.find(p => poolKey(p.pool) === want)?.resets_at_ms ?? null)
     })()
-    body.push(meterRow(t('label.quota_5h'), row?.five_hour_pct ?? win5?.pct ?? null, resetIn(win5?.resetsAtMs ?? null, nowMs), stale, t))
-    body.push(meterRow(t('label.quota_7d'), row?.seven_day_pct ?? win7?.pct ?? null, resetIn(win7?.resetsAtMs ?? poolReset, nowMs), stale, t))
+    body.push(meterRow(t('label.quota_5h'), row?.five_hour_pct ?? win5?.pct ?? null, resetIn(win5?.resetsAtMs ?? null, nowMs, t), stale, t))
+    body.push(meterRow(t('label.quota_7d'), row?.seven_day_pct ?? win7?.pct ?? null, resetIn(win7?.resetsAtMs ?? poolReset, nowMs, t), stale, t))
     if (stale) body.push(brokenRow(' ' + GLYPHS.state.failed + ' ' + t(ageMs !== null && ageMs >= 60_000 ? 'page.spend.q_stale' : 'page.spend.q_stale_plain', { min: Math.floor((ageMs ?? 0) / 60_000) })))
   } else {
     body.push(brokenRow(' ' + GLYPHS.state.failed + ' ' + t(qFeed.failed ? 'page.now.q_failed_none' : 'page.now.q_none')))
@@ -106,8 +103,8 @@ export function renderSpend(ctx: PageCtx, _view: SpendViewOpts = DEFAULT_VIEW): 
   if (live === null) body.push(brokenRow(' ' + GLYPHS.state.failed + ' ' + t('page.now.no_live')))
   else if (sp === null) body.push(brokenRow(' ' + GLYPHS.state.failed + ' ' + t('page.spend.no_spend')))
   else {
-    const n = sp.host_all_n ?? sp.brain
-    const val: Seg = n === null ? { text: DASH, dim: true } : live.state !== 'ok' ? staleBadge(tokLabel(n) + ' ' + GLYPHS.state.failed) : { text: tokLabel(n) }
+    const n = sp.tok?.host ?? sp.tok?.session ?? null // the real token fields; host_all_n / brain are money and never drawn
+    const val: Seg = n === null ? { text: t('v74.f.tok_unknown'), dim: true } : live.state !== 'ok' ? staleBadge(tokLabel(n, t) + ' ' + GLYPHS.state.failed) : { text: tokLabel(n, t) }
     body.push([{ text: ' ' + padR(t('page.spend.today_label'), 8) }, val])
     if (live.state !== 'ok') body.push(brokenRow(' ' + GLYPHS.state.failed + ' ' + t('page.spend.stale_live', { why: (live.header ?? '').trim() || live.state })))
   }

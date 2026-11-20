@@ -1,7 +1,7 @@
 // pages/now.v74.test.ts — ux-v7.4 S2 現況 (sub-task C): pm status fleet block, seat tokens, qc and proxy folds; negative control when pm is null.
 import { test, expect } from 'claude-code/testing'
 import { nowPage, nowV74HeaderExtra } from './now'
-import { parsePmStatus } from '../v74/contract'
+import { fleetLines, parsePmStatus } from '../v74/contract'
 import { makeT } from '../i18n'
 import type { PageCtx } from './frame'
 
@@ -58,7 +58,7 @@ const liveOk = {
     },
     load_source: null,
     residue: null,
-    spend: { session: '', host_all: '', host_all_n: 380_000, brain: 1_200_000, cap: null, mode: '' },
+    spend: { session: '', host_all: '', host_all_n: 12.4, brain: 3.1, tok: { session: 1_200_000, host: 380_000 }, cap: 20, mode: '' },
   },
   metrics: { ctx: '11%' },
 }
@@ -113,4 +113,23 @@ test('v74 header extra: source schema and fetch age when pmFetchedMs set', () =>
 test('v74 header negative: missing fetch time is red marker', () => {
   const extra = nowV74HeaderExtra(v74Ctx(pm, { v74: { pm, pmFetchedMs: null, decide: null, todo: null, nav: { cursor: 0, picks: {}, notes: {}, noteMode: false } } }))
   expect(text(extra)).toContain('現況來源不明')
+})
+test('v74 now: a project with no counts draws as unknown, never as healthy (negative control: counts present stay ok)', () => {
+  const bare = parsePmStatus('{"schema":"fleet.pm.status","schema_version":1,"generated_at_ms":1795149000000,"selector":null,"projects":[{"project":"line-a"}]}')
+  expect(bare?.projects[0].counts.running).toBeNull()
+  expect(fleetLines(bare!)[0].mark).toBe('unknown')
+  const joined = nowPage.render(v74Ctx(bare)).body.map(text).join('\n')
+  expect(joined).toContain('line-a 計數未知')
+  expect(joined).not.toMatch(/產線\s+1\s+.*●1/) // the summary does not count it as a running (ok) line
+  const ok = parsePmStatus('{"schema":"fleet.pm.status","schema_version":1,"generated_at_ms":1795149000000,"selector":null,"projects":[{"project":"line-a","counts":{"stuck":0,"overdue":0,"running":1,"waiting":0,"total":1},"tasks":[]}]}')
+  expect(fleetLines(ok!)[0].mark).toBe('ok')
+})
+
+test('v74 now: money fields never draw as tokens; no token field means the unknown string', () => {
+  const withMoney = { ...liveOk, detail: { ...liveOk.detail, spend: { session: '', host_all: '', host_all_n: 12.4, brain: 3.1, cap: 20, mode: '' } } }
+  const joined = nowPage.render(v74Ctx(pm, { live: withMoney as never })).body.map(text).join('\n')
+  expect(joined).not.toContain('12.4')
+  expect(joined).not.toContain('3.1 tok')
+  expect(joined).not.toMatch(/\$/)
+  expect(joined).toContain('token 數未知')
 })

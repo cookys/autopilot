@@ -27,7 +27,8 @@ function initRepo() {
   fs.mkdirSync(repo, { recursive: true });
   const env = {
     PATH: process.env.PATH,
-    HOME: fs.mkdtempSync(path.join(os.tmpdir(), 'permwatch-home-')),
+    HOME: fs.mkdtempSync(path.join(TMP_ROOT, 'permwatch-home-')),
+    TMPDIR: TMP_ROOT,
     GIT_CONFIG_GLOBAL: path.join(__dirname, 'lib', 'test-gitconfig'),
     GIT_CONFIG_NOSYSTEM: '1',
   };

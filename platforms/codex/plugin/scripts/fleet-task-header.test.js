@@ -62,7 +62,9 @@ test('CLI entry: invalid ULID on allowlisted endpoint writes warn to stderr, no 
   const r = spawnSync(process.execPath, [lib, '--rail', 'r', '--endpoint', 'testep'], {
     encoding: 'utf8',
     env: {
-      ...process.env,
+      PATH: process.env.PATH || '',
+      HOME: TMP,
+      TMPDIR: TMP,
       [GATEWAY_ENV]: 'testep',
       [SOURCE_ENV]: 'bad-id',
     },
@@ -77,7 +79,9 @@ test('CLI entry: valid ULID prints header line', () => {
   const r = spawnSync(process.execPath, [lib, '--rail', 'r', '--endpoint', 'testep'], {
     encoding: 'utf8',
     env: {
-      ...process.env,
+      PATH: process.env.PATH || '',
+      HOME: TMP,
+      TMPDIR: TMP,
       [GATEWAY_ENV]: 'testep',
       [SOURCE_ENV]: ULID,
     },

@@ -4,6 +4,7 @@
  * Tests for scripts/lib/cursor-broker-run.js — stub broker socket only, temp git worktree.
  * Run: node --test scripts/cursor-broker-run.test.js < /dev/null
  */
+require('./lib/test-git-env');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -21,7 +22,17 @@ function initRepo(dir) {
     const r = spawnSync('git', args, {
       cwd: dir,
       encoding: 'utf8',
-      env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' },
+      env: {
+        PATH: process.env.PATH,
+        HOME: TMP,
+        TMPDIR: TMP,
+        GIT_CONFIG_GLOBAL: process.env.GIT_CONFIG_GLOBAL,
+        GIT_CONFIG_NOSYSTEM: '1',
+        GIT_AUTHOR_NAME: 'broker-test',
+        GIT_AUTHOR_EMAIL: 'broker-test@example.com',
+        GIT_COMMITTER_NAME: 'broker-test',
+        GIT_COMMITTER_EMAIL: 'broker-test@example.com',
+      },
       ...opts,
     });
     if (r.status !== 0) throw new Error(`git ${args.join(' ')}: ${r.stderr || r.stdout}`);

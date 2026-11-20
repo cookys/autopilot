@@ -126,7 +126,7 @@ test('CLI: clean config exits 0', () => {
   const file = cfg(CLEAN);
   const r = spawnSync(process.execPath, [path.join(LIBDIR, 'config-audit.js'), '--config', file, '--project-dir', proj], {
     encoding: 'utf8',
-    env: { ...process.env, ...baseEnv(file) },
+    env: { PATH: process.env.PATH || '', TMPDIR: TMP, ...baseEnv(file) },
   });
   assert.equal(r.status, 0);
 });
@@ -136,10 +136,13 @@ test('CLI: findings exit 1; bogus flag exit 2', () => {
   const file = cfg({ context_budgt: { t2: 1 }, config_schema_version: CURRENT_SCHEMA });
   const bad = spawnSync(process.execPath, [path.join(LIBDIR, 'config-audit.js'), '--config', file, '--project-dir', proj], {
     encoding: 'utf8',
-    env: { ...process.env, ...baseEnv(file) },
+    env: { PATH: process.env.PATH || '', TMPDIR: TMP, ...baseEnv(file) },
   });
   assert.equal(bad.status, 1);
   assert.ok(bad.stdout.includes('context_budgt'));
-  const usage = spawnSync(process.execPath, [path.join(LIBDIR, 'config-audit.js'), '--bogus'], { encoding: 'utf8' });
+  const usage = spawnSync(process.execPath, [path.join(LIBDIR, 'config-audit.js'), '--bogus'], {
+    encoding: 'utf8',
+    env: { PATH: process.env.PATH || '', HOME: home, TMPDIR: TMP },
+  });
   assert.equal(usage.status, 2);
 });

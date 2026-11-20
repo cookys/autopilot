@@ -76,11 +76,17 @@ test('isToolAttemptBreach: true only for model tool-call encoding', () => {
 });
 
 test('CLI: name prints agent name', () => {
-  const r = spawnSync(process.execPath, [LIB, 'name'], { encoding: 'utf8' });
+  const r = spawnSync(process.execPath, [LIB, 'name'], {
+    encoding: 'utf8',
+    env: { PATH: process.env.PATH || '', HOME: TMP, TMPDIR: TMP },
+  });
   assert.equal(r.status, 0);
   assert.equal(r.stdout.trim(), AGENT_NAME);
 });
 
 test('CLI: bad usage exits 2', () => {
-  assert.equal(spawnSync(process.execPath, [LIB, 'audit'], { encoding: 'utf8' }).status, 2);
+  assert.equal(spawnSync(process.execPath, [LIB, 'audit'], {
+    encoding: 'utf8',
+    env: { PATH: process.env.PATH || '', HOME: TMP, TMPDIR: TMP },
+  }).status, 2);
 });

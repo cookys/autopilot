@@ -250,11 +250,19 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
         let e = j
         while (e + 1 < r.length && r[e + 1].press === sg.press) e++
         const run = r.slice(j, e + 1)
+        const fromKey = typeof sg.press === 'string' && sg.press.startsWith('key:') ? sg.press.slice(4) : ''
         const hint = typing ? null : /^\[([a-z])\] /.exec(run[0].text)
-        const letter = hint !== null && !used.has(hint[1]) ? hint[1] : null
+        const keyLetter = /^[a-z]$/.test(fromKey) ? fromKey : null
+        const letter = hint !== null && !used.has(hint[1]) ? hint[1] : keyLetter !== null && !used.has(keyLetter) ? keyLetter : null
         if (letter !== null) used.add(letter)
-        const texts = run.map((x, n) => <Text key={'g' + (j + n)} {...drawSeg(x)} wrap="truncate">{n === 0 && letter !== null ? x.text.replace(/^\[[a-z]\] /, '') : x.text}</Text>)
-        nodes.push(<Button key={'p:' + i + ':' + j + ep} plain {...(letter === null ? {} : { hotkey: letter })} onPress={() => (sg.press as string).startsWith('key:') ? frame.onKey?.(keys[(sg.press as string).slice(4)]) : press(sg.press as string)}>{texts}</Button>)
+        const focusMark = sg.press === 'band-focus' && box && !typing
+        const stripLead = (x: string) => letter === null ? x : x.replace(new RegExp('^\\[' + letter + '\\] |^' + letter + ': |^' + letter + ' '), '')
+        const texts = run.map((x, n) => <Text key={'g' + (j + n)} {...drawSeg(x)} wrap="truncate">{n === 0 && letter !== null ? stripLead(x.text) : x.text}</Text>)
+        const onKeyPress = () => {
+          if (typeof sg.press === 'string' && sg.press.startsWith('key:')) frame.onKey?.(keys[sg.press.slice(4)] ?? { kind: 'none' })
+          else if (sg.press !== 'band-focus') press(sg.press as string)
+        }
+        nodes.push(<Button key={'p:' + i + ':' + j + ep} plain {...(letter === null ? {} : { hotkey: letter })} {...(focusMark ? { autoFocus: true } : {})} onPress={onKeyPress}>{texts}</Button>)
         j = e
         continue
       }

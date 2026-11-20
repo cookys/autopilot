@@ -442,7 +442,11 @@ function v74Card(c: DecideCard, i: number, selected: boolean, nav: DecideNav, ct
   const out: Row[] = []
   const mark = selected ? GLYPHS.structure.folded : ' '
   const title = seg(c.title, selected ? { color: PALETTE.here, here: true } : {})
-  out.push(truncateSegs([seg(mark + '  ' + String(i + 1) + '. '), title, seg('：' + c.question)], cols))
+  // The band frame has no host Pane, so the selected card's ▸ is the focus landing (autoFocus). A zero-size hotkey is not a Tab stop.
+  const head = selected && ctx.box === true
+    ? [seg(mark, { press: 'band-focus' }), seg('  ' + String(i + 1) + '. '), title, seg('：' + c.question)]
+    : [seg(mark + '  ' + String(i + 1) + '. '), title, seg('：' + c.question)]
+  out.push(truncateSegs(head, cols))
   out.push(truncateSegs([seg('    '), dimSeg(t('v74.d.bg')), seg('   ' + (c.background ?? t('v74.d.bg_none')))], cols))
   const picked = picks[c.id]
   const held = nav.hold?.[c.id] !== undefined

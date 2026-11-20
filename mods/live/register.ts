@@ -80,8 +80,8 @@ import { decideReduce, NO_NAV, v74Pool } from './pages/decide'
 import type { DecideNav } from './pages/decide'
 import { SEATS_TIMEOUT_MS, seatQuota } from './pages/now'
 import { PAGES, EXTRA_PAGES } from './pages/index'
-import { makeDecideFeed, makePmFeed } from './v74/feeds'
-import type { CardNav, V74Ctx } from './v74/contract'
+import { makeDecideFeed, makePmFeed, mergeDecideCards } from './v74/feeds'
+import type { CardNav, DecideCard, V74Ctx } from './v74/contract'
 import { frameHeight } from './pages/frame'
 import type { PageId } from './pages/frame'
 import { FOLD_AT, rowsOf as fleetRowsOf } from './pages/fleet'
@@ -128,6 +128,30 @@ let panePage: PageId = 'now'
 const fleetFeed = makeFleetFeed()
 const pmFeed = makePmFeed()
 const decideFeed = makeDecideFeed()
+let durableOpenCards: DecideCard[] = [] // open-decision.js store, refreshed with the snapshot; merged with the fleet list by card id
+export function v74ArrowFromScroll(page: string, by: number): { kind: 'move'; by: 1 | -1 } | null {
+  if ((page !== 'decide' && page !== 'todo') || by === 0) return null
+  return { kind: 'move', by: by > 0 ? 1 : -1 }
+}
+export function v74BareBandSlots(own: string, fleet: { stuck: number; running: number; waiting: number } | null, decideN: number, t: T): Slot[] {
+  const fleetSlot = slotFleet(fleet ?? { stuck: 0, running: 0, waiting: 0 }, t)
+  return [
+    { id: 'verdict', segs: [{ text: own.split(' · ')[0], bold: true }] },
+    ...(fleetSlot === null ? [] : [fleetSlot]),
+    { id: 'hygiene', segs: [{ text: t('band.src_unknown'), dim: true, tag: 'chip' }] },
+    { id: 'decide', segs: [{ text: t('v74.b.decide_word'), dim: true, tag: 'chip' }, { text: ' ', tag: 'chip' }, { text: String(decideN), tag: 'chip' }] },
+  ]
+}
+function mergedDecide(): DecideCard[] | null {
+  return mergeDecideCards(decideFeed.cards(), durableOpenCards)
+}
+function liveToDecideCard(d: LiveDecision): DecideCard | null {
+  if (d.id === null || d.id === '') return null
+  return {
+    id: d.id, title: d.title ?? d.id.slice(0, 8), question: d.question, background: d.background,
+    options: d.options.map(o => ({ label: o.label, detail: o.description, recommended: d.recommendation === o.label })),
+  }
+}
 const NO_V74_NAV: CardNav = { cursor: 0, picks: {}, notes: {}, noteMode: false }
 const V74_NAV = atom({ plugin: 'autopilot', key: 'v74_nav' } as const, NO_V74_NAV)
 function kickV74($: EngineInterface, nowMs: number): void {
@@ -135,9 +159,11 @@ function kickV74($: EngineInterface, nowMs: number): void {
   void pmFeed.refresh(run, nowMs).then(r => { if (r) void $.ui.invalidate('ui.render') }).catch(() => {})
   void decideFeed.refresh(run, nowMs).then(r => { if (r) void $.ui.invalidate('ui.render') }).catch(() => {})
 }
-async function v74CtxOf($: EngineInterface): Promise<V74Ctx> {
+async function v74CtxOf($: EngineInterface, withStore = false): Promise<V74Ctx> {
   const nav = await read($, V74_NAV)
-  return { pm: pmFeed.status(), pmFetchedMs: pmFeed.fetchedMs(), decide: decideFeed.cards(), todo: null, nav, ages: { now: pmFeed.fetchedMs(), decide: decideFeed.fetchedMs(), fleet: fleetFeed.fetchedMs() } }
+  // The host Pane's 待決 tab stays the retired pointer. Only the band box merges the card store.
+  const decide = withStore ? mergedDecide() : decideFeed.cards()
+  return { pm: pmFeed.status(), pmFetchedMs: pmFeed.fetchedMs(), decide, todo: null, nav, ages: { now: pmFeed.fetchedMs(), decide: decideFeed.fetchedMs(), fleet: fleetFeed.fetchedMs() } }
 }
 // The summary other plugins read (PM G33a; fleet.ts `FleetSummary`, `v: 1`): written by the feed after each run, success or failure, never while drawing. Each row is counted
 // by the state the Fleet tab draws for it, so the band reader and the tab never disagree.
@@ -637,10 +663,11 @@ async function launchFailure($: EngineInterface, autopilotHome: string, key: str
 }
 
 async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{ snap: LiveSnapshot; counts: Counts | null; acceptance: string | null }> {
+  durableOpenCards = []
   const none = (snap: LiveSnapshot) => ({ snap, counts: null, acceptance: null })
   const STATE_TEXT = stateText(t)
   const home = await $.env.get('HOME')
-  if (!home) return none(plain('no-pointer', STATE_TEXT.noPointer))
+  if (!home) { durableOpenCards = []; return none(plain('no-pointer', STATE_TEXT.noPointer)) }
   const pointerText = await readText($, home + '/.autopilot/live-pointer.json')
   if (pointerText === null) return none(plain('no-pointer', STATE_TEXT.noPointer))
   const parsed = parseJson(pointerText)
@@ -657,6 +684,7 @@ async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{
   const scope = await resolveScope($, autopilotHome, liveBase, sid, nowMs)
   if (scope === null) {
     const wt = await orphanResidueCount($)
+    durableOpenCards = []
     return none(plain('no-project', wt > 0 ? STATE_TEXT.noProjectWt(wt) : STATE_TEXT.noProject))
   }
 
@@ -767,6 +795,7 @@ async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{
   const ctx = ctxShown(ctxText(await readText($, liveBase + '/context/' + fileSid + '.json'), nowMs), manifest, t)
   const commonDir = commonDirOf(identity) ?? await commonDirAt($, await $.session.cwd().catch(() => ''))
   const durable = await readDurableDecisions($, commonDir, scope.key, identity, nowMs)
+  durableOpenCards = durable.open.flatMap(d => { const c = liveToDecideCard(d); return c === null ? [] : [c] })
   const dismissed = (await read($, DECIDE).catch(() => NO_DECIDE)).dismissed ?? {}
   const baseDecisions = jobModel === null || !jobModel.needs_decision ? [] : jobModel.decisions
   const mergedPending = mergeDurableDecisions(baseDecisions, durable, dismissed)
@@ -1257,7 +1286,7 @@ const undoDeps = ($: EngineInterface): UndoDeps => ({
   now: () => $.clock.now(),
   read: () => read($, DECIDE),
   update: fn => update($, DECIDE, fn),
-  pool: st => actionable(v74Pool(snapshot === null ? [] : snapshot.pending.filter(d => !isStepCard(d)), decideFeed.cards()), decideBatch.order.length > 0 ? decideBatch : bandBatch, st), // a reopened card the session already closed is kept in whichever batch is open
+  pool: st => actionable(v74Pool(snapshot === null ? [] : snapshot.pending.filter(d => !isStepCard(d)), mergedDecide()), decideBatch.order.length > 0 ? decideBatch : bandBatch, st), // a reopened card the session already closed is kept in whichever batch is open
   claim: claimCard ?? claimWith($),
   onClaimFailed: (id, reason) => {
     void $.clock.now().then(ts => appendSendLog((p) => $.fs.read(p), (p, t) => $.fs.write(p, t), liveBaseSeen, { ts, event: 'claim_failed', ids: [id], reason })).catch(() => undefined)
@@ -1503,6 +1532,7 @@ export async function frameKey($: EngineInterface, k: KeyAction): Promise<void> 
       const r = decideReduce({ ...st, ...decideLocal }, k, ctx, nowMs)
       decideLocal = { cursor: r.nav.cursor, folded: r.nav.folded, textMode: r.nav.textMode, textBuf: r.nav.textBuf, opt: r.nav.opt, detailOffset: r.nav.detailOffset }
       if (r.nav.picks !== st.picks || r.nav.notes !== st.notes) await update($, DECIDE, s => ({ ...s, picks: r.nav.picks, notes: r.nav.notes }))
+      await update($, V74_NAV, n => ({ ...n, cursor: r.nav.cursor, picks: r.nav.picks, notes: r.nav.notes, noteMode: r.nav.textMode }))
       if (r.effect?.kind === 'send') await holdDecide($) // the hold and the claim stay decideundo's: the reducer's own hold is not written
       else if (r.effect?.kind === 'undo') await undoDecide($, r.effect.id)
       else if (r.effect?.kind === 'fill') await fillPrompt($, r.effect.text)
@@ -1793,7 +1823,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       const base = snap.band.slots
       const atV = base.findIndex(s => s.id === 'verdict')
       // v7.4 (design S1): `待決 N` after the fleet counts, N = the cards `fleet decision list` returned; a click opens the 待決 page
-      const decideN = v74 ? decideFeed.cards()?.length ?? 0 : 0
+      const decideN = v74 ? mergedDecide()?.length ?? 0 : 0
       const decideSlot: Slot | null = decideN > 0 && !base.some(s => s.id === 'decide') ? { id: 'decide', segs: [{ text: t('v74.b.decide_word'), dim: true, tag: 'chip' }, { text: ' ', tag: 'chip' }, { text: String(decideN), tag: 'chip' }] } : null
       const withFleet = [...base.slice(0, atV + 1), fleetSlot, ...(decideSlot === null ? [] : [decideSlot]), ...base.slice(atV + 1)]
       const parts = rows >= 1 ? speedLabelParts(steps, petText) : null
@@ -1811,6 +1841,16 @@ export function registerLive(on: Parameters<Register>[0]): void {
       }
       const drawMore = !usageOn || forgeMore
       const segs = shrinkToFitted(fitted.band.segs, fitted.speed, drawMore, roomFor(fitted.speed !== null))
+      forge = fitted.speed
+      bandPreset = { segs, width: fittedBandWidth(segs.reduce((n, s) => n + displayWidth(s.text), 0), null, false) }
+    } else if (v74) {
+      // No project (or no band slots): the status row still keeps 狀態, 艦隊, 來源, 待決 N, ⓘ and tok/s. Only the own-seat segment says there is no project.
+      const withFleet = v74BareBandSlots(snap?.text ?? t('band.waiting'), fleetCounts, mergedDecide()?.length ?? 0, t)
+      const parts = rows >= 1 ? speedLabelParts(steps, consoleOn ? null : petText) : null
+      const roomFor = (speedTab: boolean) => Math.max(1, columns - 1)
+      let fitted = layoutBandLine(withFleet, roomFor(parts !== null), parts, BAND_NARROW_STEPS, false)
+      if (parts !== null && fitted.speed === null) fitted = layoutBandLine(withFleet, roomFor(false), null, BAND_NARROW_STEPS, true)
+      const segs = shrinkToFitted(fitted.band.segs, fitted.speed, false, roomFor(fitted.speed !== null))
       forge = fitted.speed
       bandPreset = { segs, width: fittedBandWidth(segs.reduce((n, s) => n + displayWidth(s.text), 0), null, false) }
     } else if (rows >= 1) {
@@ -2123,6 +2163,8 @@ export function registerLive(on: Parameters<Register>[0]): void {
 
   // bandlayout: the band's card view scrolls its own window (the wheel and the scroll keys, when the engine sends them to the band), one offset per tab (bandScroll), kept when the tab is left
   on('ui.scroll', { component: 'AbovePrompt' }, ($, e, next) => {
+    const arrow = !bandLegacy && v74Open ? v74ArrowFromScroll(panePage, e.by) : null
+    if (arrow !== null) { void frameKey($, arrow); return {} }
     const model = shellOn && shellMenu === 'd' ? bandModel('decide') : barTab === null ? undefined : bandScroll[barTab]
     return model === undefined ? next(e) : scrollHook(model, e, next, () => { void $.ui.invalidate('ui.render') })
   })
@@ -2158,7 +2200,7 @@ async function paneTree($: EngineInterface, e: { props: any; surface: string }, 
   const petPanel = !legacy && panePage === 'pet'
     ? await ($.state.get as (ref: { plugin: string; key: string }) => Promise<{ value: unknown }>)({ plugin: 'forge-stats', key: 'panel' }).then(g => g.value, () => null)
     : undefined
-  const v74 = legacy ? undefined : await v74CtxOf($)
+  const v74 = legacy ? undefined : await v74CtxOf($, boxRows !== null)
   const tree = Pane(
     $.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { void paneTabPress($, t, legacy) }, tr, e.props.bodyColumns,
     () => { paneTab = nextTab(paneTab); panePage = pageOfTab(paneTab); $.ui.invalidate('ui.render') },

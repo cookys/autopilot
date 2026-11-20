@@ -1894,6 +1894,17 @@
       "note": "Multiplier suites apply to upper-bound timing assertions. run.sh --parallel N and affected-suites --jobs N default it to N for pooled suites and 1 for the serial part; a value already in the environment wins."
     },
     {
+      "name": "AUTOPILOT_GATEWAY_TOKEN_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": ["scripts/dispatch-hetero.sh"],
+      "doc": null,
+      "relates": [],
+      "note": "Directory of per-lane gateway token files for --runner local. Default $HOME/.config/local-llm-gateway/tokens. A non-empty $dir/<lane> file replaces the endpoint key. Tests point this at a temp dir. The token value is never logged."
+    },
+    {
       "name": "AUTOPILOT_GATE_FILE",
       "kind": "env",
       "audience": "internal",

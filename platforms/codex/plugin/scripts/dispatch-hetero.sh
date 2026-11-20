@@ -37,8 +37,15 @@
 #                                              #   (qwen_local by default, or the listed --endpoint).
 #                                              #   Child env sets ENABLE_TOOL_SEARCH=false, does not set
 #                                              #   CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, and sets
-#                                              #   ANTHROPIC_CUSTOM_HEADERS with an x-lane line (AUTOPILOT_LANE,
-#                                              #   or autopilot when that variable is unset).
+#                                              #   ANTHROPIC_CUSTOM_HEADERS to the caller's existing headers
+#                                              #   plus an x-lane line after them (AUTOPILOT_LANE, or autopilot
+#                                              #   when that variable is unset). A lane value that contains CR
+#                                              #   or LF is refused (exit 2). A non-empty file
+#                                              #   $AUTOPILOT_GATEWAY_TOKEN_DIR/<lane> (default
+#                                              #   $HOME/.config/local-llm-gateway/tokens) overrides
+#                                              #   ANTHROPIC_AUTH_TOKEN with its trimmed contents. Result and
+#                                              #   manifest record gateway_token as lane-file or endpoint,
+#                                              #   never the token value.
 #                                              #   *grok*/*composer*→grok, no --model→grok, else agy (*qwen*/*qwq* refused; use cc-shim + --endpoint).
 #                                              #   qoderclicn (EXPLICIT only, never auto): Qoder CLI CN.
 #                                              #   Explicit wins (don't rely on name luck).
@@ -224,6 +231,7 @@
 #               | "failure" | "precondition_failed" | "verify_failed",
 #     "runner": "codex"|"agy"|"grok"|"cc-shim"|"local"|"pi"|"cursor"|"opencode"|"kimi"|"claude-native"|"qoderclicn", "model": "...",   # engine provenance (model = --model)
 #     "resolved_runner": "cc-shim", "endpoint": "<qwen_local by default, or the listed --endpoint>",   # only when --runner local
+#     "gateway_token": "lane-file"|"endpoint",   # only when --runner local; which auth source won, never the secret
 #     "containment": "...", "contained": true|false,  # teardown-hygiene provenance
 #     "branch": "...", "base": "...", "commit": "...|null",
 #     "files_changed": N, "insertions": N, "deletions": N,
@@ -447,6 +455,7 @@ EFFORT_EXPLICIT=0
 ENDPOINT=""          # optional named endpoint (cc-shim only) → resolve-endpoint.sh
 ENDPOINT_SUPPLIED=0
 LOCAL_RUNNER=0       # --runner local: public name stays local; the rail is cc-shim
+GATEWAY_TOKEN_SOURCE="" # local only: lane-file | endpoint. Never the token bytes.
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=lib/repo-identity.sh
 # Fail-open: a missing helper only degrades the manifest to repo_identity null (telemetry sidecar).
@@ -1269,6 +1278,7 @@ NODE
   local sandbox_fields=""
   [ "${SANDBOX:-off}" = "bwrap" ] && sandbox_fields=", \"sandbox\": $(sandbox_json), \"sandbox_blocked_writes\": ${SANDBOX_BLOCKED:-0}, \"sandbox_blocked_samples\": ${SANDBOX_BLOCKED_SAMPLES:-[]}"
   [ "${LOCAL_RUNNER:-0}" -eq 1 ] && sandbox_fields="$sandbox_fields, \"resolved_runner\": \"cc-shim\", \"endpoint\": \"$(_flat_json_escape "$ENDPOINT")\""
+  [ "${LOCAL_RUNNER:-0}" -eq 1 ] && [ -n "${GATEWAY_TOKEN_SOURCE:-}" ] && sandbox_fields="$sandbox_fields, \"gateway_token\": \"$(_flat_json_escape "$GATEWAY_TOKEN_SOURCE")\""
   local fell_back_fields=""
   fell_back_fields="$(fell_back_json_suffix)"
   local tip_verify_fields=""
@@ -2640,6 +2650,7 @@ write_manifest() {
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_manifest_fields=", \"role_kit\": $ROLE_KIT_JSON"
   [ "${SANDBOX:-off}" = "bwrap" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"sandbox\": $(sandbox_json)"
   [ "${LOCAL_RUNNER:-0}" -eq 1 ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"resolved_runner\": \"cc-shim\", \"endpoint\": \"$(_flat_json_escape "$ENDPOINT")\""
+  [ "${LOCAL_RUNNER:-0}" -eq 1 ] && [ -n "${GATEWAY_TOKEN_SOURCE:-}" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"gateway_token\": \"$(_flat_json_escape "$GATEWAY_TOKEN_SOURCE")\""
   [ -n "${FELL_BACK_JSON:-}" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"fell_back\": $FELL_BACK_JSON"
   [ -n "${ENGINE_CHOICE_JSON:-}" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"engine_choice\": $ENGINE_CHOICE_JSON"
   [ -n "${PACE_CHOICE_JSON:-}" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"pace_choice\": $PACE_CHOICE_JSON"
@@ -3458,6 +3469,30 @@ if [ -n "$ENDPOINT" ]; then
   set +x
   export ANTHROPIC_BASE_URL="$_ep_url"
   export ANTHROPIC_AUTH_TOKEN="${!_ep_tokenv-}"
+  # Per-lane gateway token (local seats only). A non-empty file wins over the
+  # endpoint key. The bytes stay in ANTHROPIC_AUTH_TOKEN; manifest/result record
+  # only which source won. set +x so an ambient trace cannot print the value.
+  if [ "${LOCAL_RUNNER:-0}" -eq 1 ]; then
+    GATEWAY_TOKEN_SOURCE="endpoint"
+    _gw_lane="${AUTOPILOT_LANE:-autopilot}"
+    case "$_gw_lane" in
+      *$'\n'*|*$'\r'*) die_precondition "--runner local refuses AUTOPILOT_LANE that contains a newline" ;;
+    esac
+    _gw_dir="${AUTOPILOT_GATEWAY_TOKEN_DIR:-${HOME}/.config/local-llm-gateway/tokens}"
+    _gw_file="${_gw_dir}/${_gw_lane}"
+    if [ -f "$_gw_file" ] && [ -s "$_gw_file" ]; then
+      set +x
+      _gw_raw="$(cat "$_gw_file" 2>/dev/null || true)"
+      _gw_raw="${_gw_raw#"${_gw_raw%%[![:space:]]*}"}"
+      _gw_raw="${_gw_raw%"${_gw_raw##*[![:space:]]}"}"
+      if [ -n "$_gw_raw" ]; then
+        export ANTHROPIC_AUTH_TOKEN="$_gw_raw"
+        GATEWAY_TOKEN_SOURCE="lane-file"
+      fi
+      unset _gw_raw
+    fi
+    unset _gw_lane _gw_dir _gw_file
+  fi
   # The resolver's own stderr was discarded above (2>/dev/null keeps stdout the JSON contract);
   # re-surface the one disclosure that must never be silent at dispatch time. NOT gated on
   # DISPATCH_QUIET: that switch silences operational chatter (timeout heads-up), never a
@@ -5571,24 +5606,39 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
     # S2 gateway join (2026-11-14): cc-shim carries X-Fleet-Task only when --endpoint is in the
     # fleet-gateway allowlist and AUTOPILOT_UPSTREAM_TASK_ID is a ULID. lib/fleet-task-header.js owns
     # both checks (never inline them: an unvalidated value in ANTHROPIC_CUSTOM_HEADERS could
-    # inject headers). An inherited ANTHROPIC_CUSTOM_HEADERS never reaches the child: env -u drops
-    # it first and the validated line is the only value set back. The claude-native branches above
-    # keep scrubbing it and never set it (first-party API, not the gateway).
+    # inject headers). A non-local child drops an inherited ANTHROPIC_CUSTOM_HEADERS:
+    # env -u clears it and the validated fleet line is the only value set back.
+    # A local child keeps the caller's headers and appends x-lane after them.
+    # The claude-native branches above keep scrubbing headers and never set them
+    # (first-party API, not the gateway).
     FLEET_TASK_HEADER="$(node "$SELF_DIR/lib/fleet-task-header.js" --rail dispatch-hetero ${ENDPOINT:+--endpoint "$ENDPOINT"})"
-    # Local seats identify the lane to the fleet gateway. x-lane is the only
-    # line this block adds. An inherited ANTHROPIC_CUSTOM_HEADERS was already
-    # dropped; FLEET_TASK_HEADER is the only prior content, and x-lane is appended
-    # on its own line. The value is not printed.
+    # Local seats identify the lane to the fleet gateway. Caller headers stay,
+    # then the fleet line, then x-lane on its own line. The lane value is not printed.
     if [ "${LOCAL_RUNNER:-0}" -eq 1 ]; then
       _local_lane="${AUTOPILOT_LANE:-autopilot}"
       case "$_local_lane" in
         *$'\n'*|*$'\r'*) die_precondition "--runner local refuses AUTOPILOT_LANE that contains a newline" ;;
       esac
+      _local_prior="${ANTHROPIC_CUSTOM_HEADERS-}"
+      while [ -n "$_local_prior" ]; do
+        case "$_local_prior" in
+          *$'\n'|*$'\r') _local_prior="${_local_prior%?}" ;;
+          *) break ;;
+        esac
+      done
       if [ -n "$FLEET_TASK_HEADER" ]; then
-        FLEET_TASK_HEADER="${FLEET_TASK_HEADER}"$'\n'"x-lane: ${_local_lane}"
+        if [ -n "$_local_prior" ]; then
+          _local_prior="${_local_prior}"$'\n'"${FLEET_TASK_HEADER}"
+        else
+          _local_prior="$FLEET_TASK_HEADER"
+        fi
+      fi
+      if [ -n "$_local_prior" ]; then
+        FLEET_TASK_HEADER="${_local_prior}"$'\n'"x-lane: ${_local_lane}"
       else
         FLEET_TASK_HEADER="x-lane: ${_local_lane}"
       fi
+      unset _local_prior
     fi
     # --disallowedTools TaskCreate,TaskUpdate,TaskGet,TaskList: the CLI intermittently injects a
     # "task tools haven't been used recently" reminder into the conversation; on an Anthropic-compatible
@@ -7291,7 +7341,7 @@ dispatch_detached_run() {
     declare -p CAMPAIGN_PROMPT_FILE 2>/dev/null
     declare -p GATE_RULES_FILE 2>/dev/null || true
     declare -p WT_GITFILE_EXPECTED WT_GITFILE_ERROR 2>/dev/null || true
-    declare -p SANDBOX SANDBOX_ARGV SANDBOX_TMP SANDBOX_TMP_PATH SANDBOX_WT_PATH SANDBOX_DENIED SANDBOX_BLOCKED SANDBOX_BLOCKED_SAMPLES SANDBOX_FAIL WORKTREE_PARENT FELL_BACK_JSON FELL_BACK_LOGGED LOCAL_RUNNER 2>/dev/null || true
+    declare -p SANDBOX SANDBOX_ARGV SANDBOX_TMP SANDBOX_TMP_PATH SANDBOX_WT_PATH SANDBOX_DENIED SANDBOX_BLOCKED SANDBOX_BLOCKED_SAMPLES SANDBOX_FAIL WORKTREE_PARENT FELL_BACK_JSON FELL_BACK_LOGGED LOCAL_RUNNER GATEWAY_TOKEN_SOURCE 2>/dev/null || true
     declare -p ROLE_KIT_DIR ROLE_KIT_ACTIVE ROLE_KIT_TOOLS ROLE_KIT_EXTRA ROLE_KIT_ARGV ROLE_KIT_JSON 2>/dev/null || true
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
     declare -p CAPABILITY_WRITE_GUARD CAPABILITY_WRITE_SUPPRESSED _CAPABILITY_WRITE_NOTE_DONE 2>/dev/null || true

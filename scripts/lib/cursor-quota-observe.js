@@ -4,8 +4,10 @@
 // mirror as Kimi; no response text is kept here. Retry billing stops after 1 h.
 const obs = require('./account-observation');
 const RECHECK_S = 3600;
-function observe({ verdict, liveDir, now, env = process.env } = {}) {
+function observe({ verdict, liveDir, now, env = process.env, billing_confirmed = false } = {}) {
   if (!['done', 'stopped_billing'].includes(verdict)) return { wrote: false };
+  // One keyword hit is not a quota stop. Leave the stored row untouched.
+  if (verdict === 'stopped_billing' && billing_confirmed !== true) return { wrote: false };
   const dir = liveDir || obs.liveDirOrNull({ env });
   if (!dir) return { wrote: false };
   const seconds = Math.floor((now ?? Date.now()) / 1000);

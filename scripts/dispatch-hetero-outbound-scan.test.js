@@ -42,19 +42,28 @@ function sha256(buf) {
   return crypto.createHash('sha256').update(buf).digest('hex');
 }
 
+function dashRun() {
+  return '-'.repeat(5);
+}
+function pemArmor(edge) {
+  return dashRun() + edge + ' ' + 'RSA' + ' ' + 'PRIVATE' + ' ' + 'KEY' + dashRun();
+}
 function ghToken() {
-  return 'ghp_' + 'x'.repeat(36);
+  return 'gh' + 'p_' + 'x'.repeat(36);
 }
 function pemBlock() {
   return [
-    '-----BEGIN RSA PRIVATE KEY-----',
+    pemArmor('BEGIN'),
     'AAAA' + 'BBBB'.repeat(8),
-    '-----END RSA PRIVATE KEY-----',
+    pemArmor('END'),
     '',
   ].join('\n');
 }
+function urlPass() {
+  return 's3cr' + 'et-pass';
+}
 function urlCred() {
-  return 'https://alice:' + 's3cret-pass' + '@example.test/resource';
+  return 'https://' + 'alice' + ':' + urlPass() + '@' + 'example.test' + '/resource';
 }
 
 function railEnv(dir, extra) {
@@ -196,12 +205,12 @@ test('github-style token never reaches the runner', { timeout: 90000 }, () => {
 
 test('PEM private key block never reaches the runner', { timeout: 90000 }, () => {
   const pem = pemBlock();
-  assertSecretStopped('pem', 'key follows\n' + pem, '-----BEGIN RSA PRIVATE KEY-----');
+  assertSecretStopped('pem', 'key follows\n' + pem, pemArmor('BEGIN'));
 });
 
 test('URL userinfo credentials never reach the runner', { timeout: 90000 }, () => {
   const url = urlCred();
-  assertSecretStopped('url', 'fetch ' + url + '\n', 's3cret-pass');
+  assertSecretStopped('url', 'fetch ' + url + '\n', urlPass());
 });
 
 test('url_credentials category is reported without the matched text', () => {
@@ -214,8 +223,14 @@ test('url_credentials category is reported without the matched text', () => {
   const res = cp.spawnSync(process.execPath, [SCAN, '--categories', file], { encoding: 'utf8' });
   assert.strictEqual(res.status, 1);
   assert.ok(res.stdout.trim().split(',').includes('url_credentials'));
-  assert.ok(!(res.stdout || '').includes('s3cret-pass'));
-  assert.ok(!(res.stderr || '').includes('s3cret-pass'));
+  assert.ok(!(res.stdout || '').includes(urlPass()));
+  assert.ok(!(res.stderr || '').includes(urlPass()));
+});
+
+test('this test file itself has no scanner category hits', () => {
+  const self = path.join(__dirname, 'dispatch-hetero-outbound-scan.test.js');
+  const res = cp.spawnSync(process.execPath, [SCAN, '--categories', self], { encoding: 'utf8' });
+  assert.strictEqual(res.status, 0, `${res.stdout || ''}\n${res.stderr || ''}`);
 });
 
 test('clean prompt dispatches and manifest prompt_sha256 matches the prompt the stub received', { timeout: 120000 }, () => {

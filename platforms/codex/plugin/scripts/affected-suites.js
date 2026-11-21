@@ -9,7 +9,7 @@
 //     inside it; whitespace in a path, a path outside --root, a directory, or a path in neither the tree nor HEAD is exit 2;
 //     --allow-missing lets a hypothetical path through the existence check only)
 //   Options: --root <dir> (default: the repo containing this script), --list-all (print every
-//   suite run.sh would run), --help.
+//   suite run.sh would run), --only-glob <glob> (run matching eval suites), --release, --help.
 //
 // --run executes the selection in the foreground, one entry at a time, the same way
 // hooks/tests/run.sh runs that kind of file: a .sh with bash, a .test.js with node --test.
@@ -275,7 +275,6 @@ const ALWAYS_RUN = [
   [`${HOOK_TESTS_DIR}/check-canonical-invariants.test.sh`, 'cross-file invariants over the real tree'],
   [`${HOOK_TESTS_DIR}/p6d-gates-repair-ladder.test.sh`, 'grep -rln repair_lock over all of src/'],
   [`${HOOK_TESTS_DIR}/qualify-scorecard-vocabulary.test.sh`, 'grep -rl a model-id charset over scripts/ and src/'],
-  [`${HOOK_TESTS_DIR}/skill-onoff-stage-graph.test.sh`, 'greps all of scripts/ for the probe ladder field (only probe-unknown.js may print it)'],
   [`${HOOK_TESTS_DIR}/skill-count-metadata.test.sh`, 'counts the skills/ directories against the documented count (a new skill dir changes it)'],
   [`${HOOK_TESTS_DIR}/qualify-recipe-credential-staging.test.sh`, `greps every ${PLANS_EVIDENCE_DIR}/*/administration/*/run.sh for staging variables`],
   ['scripts/check-claude-spawn-sites.test.js', 'walks scripts/ src/ hooks/ bin/ evals/ for any new claude spawn (G37 N8): the changed file IS the spawn, so no reference graph reaches this suite'],
@@ -327,9 +326,18 @@ const SUITE_RES = [
   new RegExp(`^${reEsc(HOOKS_DIR)}/[^/]+\\.test\\.js$`),
   new RegExp(`^${reEsc(SCRIPTS_LIB_DIR)}/[^/]+\\.test\\.js$`),
   new RegExp(`^${reEsc(HOOK_TESTS_DIR)}/[^/]+\\.test\\.sh$`),
+  new RegExp(`^${reEsc(SCRIPTS_LIB_DIR)}/account-fixtures/[^/]+\\.test\\.js$`),
+  /^mods\/tux\/[^/]+\.test\.js$/,
 ];
-function isSuite(p) {
-  return SUITE_RES.some((re) => re.test(p)) || SUITE_IN_SCRIPTS_RE.test(p);
+function isDiscoveredSuite(p) {
+  return SUITE_RES.some((re) => re.test(p)) || SUITE_IN_SCRIPTS_RE.test(p) || /^evals\/.*\.test\.(js|sh)$/.test(p);
+}
+const isEvalSuite = (p) => /^evals\/.*\.test\.(js|sh)$/.test(p);
+const isSkillOnOffSuite = (p) => /skill-onoff/.test(base(p));
+function isSuite(p) { return isDiscoveredSuite(p) && !isSkillOnOffSuite(p) && !isForemanExamSuite(p) && !isEvalSuite(p); }
+const isForemanExamSuite = (p) => /(?:^|\/)foreman-(?:eval-|.*sitting|stub-fidelity|seat-prompt-scan|instruction-gate|harness-conformance).*\.test\./.test(p);
+function globRegex(glob) {
+  return new RegExp(`^${glob.split('**').map((x) => x.split('*').map(reEsc).join('[^/]*')).join('.*')}$`);
 }
 const extOf = (p) => { const m = /\.([A-Za-z0-9]+)$/.exec(p); return m ? m[1] : ''; };
 const isCode = (p) => CODE_EXT.has(extOf(p));
@@ -694,7 +702,10 @@ function fastPick(changed, headTree) {
   const strongSuites = [...parent.keys()].filter((p) => isSuite(p) && present.has(p));
   const forced = forcedSuites(changed, present);
   const alwaysRun = changed.some((p) => !isProse(p)) ? ALWAYS_RUN.map(([f]) => f).filter((f) => present.has(f)) : [];
-  const suites = [...new Set([...strongSuites, ...forced.keys(), ...alwaysRun])].sort();
+  // Eval and foreman mock-exam suites stay off the fast list unless select() itself kept them
+  // (evals/ change, or a foreman path / the suite's own subject). Skill-onoff stays release-only.
+  const gated = full.fullReasons.length ? [] : full.suites.filter((p) => isEvalSuite(p) || isForemanExamSuite(p));
+  const suites = [...new Set([...strongSuites, ...forced.keys(), ...alwaysRun, ...gated])].sort();
   const total = allSuites(headTree).length;
   const fullCount = full.fullReasons.length > 0 ? total : full.suites.length;
   return { suites, alwaysRun, total, fullCount };
@@ -867,7 +878,20 @@ function select(changed, headTree, maxWeak = DEFAULT_MAX_WEAK) {
   // Unbounded textual transitivity floods (a hub script naming 40 hooks drags in every suite).
   const parent = walkParents(changed, graph, maxWeak);
   const present = new Set(headTree.files);
-  const suites = [...parent.keys()].filter((p) => isSuite(p) && present.has(p)).sort();
+  const evalChange = changed.some((p) => p.startsWith('evals/'));
+  const foremanExamChange = changed.some((p) => /^evals\/foreman-/.test(p) || /^scripts\/engine-qualify/.test(p));
+  const ownForemanExamChange = (p) => {
+    const subjectFiles = [p.replace(/\.test\.(?:js|sh)$/, '.js')];
+    if (p.startsWith(`${HOOK_TESTS_DIR}/`)) subjectFiles.push(`${SCRIPTS_DIR}/${base(p).replace(/\.test\.sh$/, '.test.js')}`);
+    return changed.includes(p) || changed.some((c) => subjectFiles.includes(c));
+  };
+  const foremanExamSuites = foremanExamChange
+    ? [...present].filter((p) => isDiscoveredSuite(p) && isForemanExamSuite(p))
+    : [...present].filter((p) => isDiscoveredSuite(p) && isForemanExamSuite(p) && ownForemanExamChange(p));
+  const evalSuites = evalChange
+    ? [...parent.keys()].filter((p) => present.has(p) && isEvalSuite(p) && !isForemanExamSuite(p))
+    : [];
+  const suites = [...new Set([...parent.keys()].filter((p) => isSuite(p) && present.has(p)).concat(evalSuites, foremanExamSuites))].sort();
   const chains = {};
   for (const s of suites) {
     const chain = [];
@@ -878,16 +902,23 @@ function select(changed, headTree, maxWeak = DEFAULT_MAX_WEAK) {
   // referrer is missing from `reached` even when its own walk hits a present suite.
   const reached = new Set(suites.flatMap((s) => chains[s]));
   const unreferenced = [];
+  const hasTuxSuite = [...present].some((p) => /^mods\/tux\/[^/]+\.test\.js$/.test(p));
   const packed = packContentSuites(changed, headTree);
   const packedFiles = new Set([...packed].filter(([f]) => present.has(f)).flatMap(([, ps]) => [...ps]));
   for (const p of changed) {
     if (isProse(p) || MIRROR.test(p)) continue;
+    if (p.startsWith('mods/') && hasTuxSuite) continue; // every mods change selects the tux regression suites below
     if (packedFiles.has(p)) continue; // a pack content suite checks this file
+    if (isSkillOnOffSuite(p)) continue; // release-only; a change here does not widen the merge gate
 
     if (isSuite(p) && !present.has(p)) continue; // deleted suite: nothing left to run
     if (reached.has(p)) continue;
     const alone = walkParents([p], graph, maxWeak);
-    const hits = [...alone.keys()].some((x) => isSuite(x) && present.has(x));
+    // An archived or nightly suite still covers its subject, so the change stays selective
+    // without putting that suite on the merge-gate list.
+    const hits = [...alone.keys()].some((x) => present.has(x) && (
+      isSuite(x) || isEvalSuite(x) || isSkillOnOffSuite(x) || isForemanExamSuite(x)
+    ));
     if (!hits) unreferenced.push(p);
   }
   for (const p of unreferenced) fullReasons.push(`unreferenced change (no suite reaches it): ${p}`);
@@ -900,12 +931,17 @@ function select(changed, headTree, maxWeak = DEFAULT_MAX_WEAK) {
   // narrowing can drop them. Added after the graph walk and never read by `unreferenced`, so they only add.
   const forced = forcedSuites(changed, present);
   for (const [f, why] of forced) if (!chains[f]) chains[f] = [f, ...why];
-  const all = [...new Set([...suites, ...alwaysRun, ...packSuites, ...forced.keys()])].sort();
+  const forcedFiltered = [...forced.keys()].filter((p) => !isSkillOnOffSuite(p) && !isForemanExamSuite(p)
+    && (!isEvalSuite(p) || evalChange)
+    && (!isForemanExamSuite(p) || foremanExamChange || ownForemanExamChange(p)));
+  const tuxSuites = changed.some((p) => p.startsWith('mods/'))
+    ? [...present].filter((p) => /^mods\/tux\/[^/]+\.test\.js$/.test(p)) : [];
+  const all = [...new Set([...suites, ...alwaysRun, ...packSuites, ...forcedFiltered, ...tuxSuites])].sort();
   Object.defineProperty(chains, '__hops', { value: shortestHops(changed, graph), enumerable: false });
   return { suites: all, alwaysRun, chains, fullReasons, unreferenced, graphFiles: graph.refs.size };
 }
 
-function allSuites(tree) { return tree.files.filter(isSuite).sort(); }
+function allSuites(tree, release = false) { return tree.files.filter((p) => isDiscoveredSuite(p) && !isEvalSuite(p) && (release || !isSkillOnOffSuite(p))).sort(); }
 
 // Same invocation run.sh uses for that kind of file: bash for a .sh, node --test for a .test.js.
 // argv's last element is the repo-relative path; runEntry substitutes the absolute path.
@@ -1532,6 +1568,11 @@ function parseArgs(argv) {
     else if (x === '--json') a.json = true;
     else if (x === '--max-weak') a.maxWeak = Number(argv[++i]);
     else if (x === '--list-all') a.listAll = true;
+    else if (x === '--release') a.release = true;
+    else if (x === '--only-glob') {
+      a.onlyGlob = argv[++i];
+      if (!a.onlyGlob) throw new Error('--only-glob needs a glob');
+    }
     else if (x === '--run') a.run = true;
     else if (x === '--budget-seconds') {
       const v = argv[++i];
@@ -1639,7 +1680,7 @@ async function main(argv) {
       if (norm.errors.length) { for (const e of norm.errors) process.stderr.write(`affected-suites: ${e}\n`); return 2; }
       changed = norm.changed;
       baseRef = headRef = null;
-    } else if (a.listAll) {
+    } else if (a.listAll || a.onlyGlob) {
       tree = a.head ? gitTree(root, a.head) : diskTree(root);
       changed = [];
     } else {
@@ -1647,10 +1688,15 @@ async function main(argv) {
       headRef = a.head || 'HEAD';
       baseRef = a.base;
     }
-    if (a.listAll) { process.stdout.write(allSuites(tree).join('\n') + '\n'); return 0; }
+    if (a.listAll) { process.stdout.write(allSuites(tree, a.release).join('\n') + '\n'); return 0; }
     let doc;
     let runAlways;
-    if (!a.useFiles && !a.listAll) {
+    if (a.onlyGlob) {
+      const re = globRegex(a.onlyGlob);
+      const suites = tree.files.filter((p) => isEvalSuite(p) && re.test(p)).sort();
+      doc = { schema: 1, mode: 'selective', base: null, head: null, changed: [], suites, always_run: [], extra_runners: [], full_reasons: [], unreferenced: [], chains: {}, stats: { changed: 0, selected: suites.length, total_suites: suites.length, graph_files: 0 } };
+      runAlways = [];
+    } else if (!a.useFiles && !a.listAll) {
       doc = computeDoc(root, a.base, a.head || null);
       if (a.maxWeak != null) {
         tree = gitTree(root, doc.head);
@@ -1675,6 +1721,12 @@ async function main(argv) {
         chains: full ? {} : r.chains, stats: { changed: changed.length, selected: full ? null : r.suites.length, total_suites: allSuites(tree).length, graph_files: r.graphFiles },
       };
       runAlways = r.alwaysRun;
+    }
+    if (a.release && !a.onlyGlob) {
+      if (!tree) tree = gitTree(root, doc.head);
+      const releaseSuites = tree.files.filter((p) => isDiscoveredSuite(p) && isSkillOnOffSuite(p)).sort();
+      doc.suites = [...new Set([...doc.suites, ...releaseSuites])].sort();
+      doc.stats.selected = doc.suites.length;
     }
     let fastPlan = null;
     if (a.fast) {

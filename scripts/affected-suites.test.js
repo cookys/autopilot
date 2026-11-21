@@ -125,6 +125,56 @@ test('docs-only change selects nothing and is not full', () => {
   } finally { r.cleanup(); }
 });
 
+test('suite scope: eval, skill-onoff, and foreman exams stay out of ordinary merge selection', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'scripts/lib/x.js': 'module.exports = 1;\n',
+    'scripts/skill-onoff-probe.test.js': 'require("./lib/x.js");\n',
+    'scripts/foreman-sitting.test.js': 'require("./lib/x.js");\n',
+    'evals/ordinary.test.js': 'require("../scripts/lib/x.js");\n',
+    'hooks/tests/skill-onoff-probe.test.sh': '#!/usr/bin/env bash\nnode scripts/lib/x.js\n',
+    'scripts/foreman-stub-fidelity.test.js': 'require("./lib/x.js");\n',
+  });
+  try {
+    const out = r.select(r.change({ 'scripts/lib/x.js': 'module.exports = 2;\n' }));
+    assert.ok(!out.suites.includes('evals/ordinary.test.js'));
+    assert.ok(!out.suites.some((s) => s.includes('skill-onoff')));
+    assert.ok(!out.suites.some((s) => s.includes('foreman')));
+    const evalDiff = r.select(r.change({ 'evals/ordinary.test.js': 'require("../scripts/lib/x.js"); // changed\n' }));
+    assert.ok(evalDiff.suites.includes('evals/ordinary.test.js'));
+    const evalRun = r.select(r.change({ 'evals/ordinary.test.js': 'require("../scripts/lib/x.js"); // glob\n' }), ['--only-glob', 'evals/**']);
+    assert.deepStrictEqual(evalRun.suites, ['evals/ordinary.test.js']);
+  } finally { r.cleanup(); }
+});
+
+test('suite scope: foreman eval path selects foreman exams; release selects skill-onoff; orphaned runners are directly selectable', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'evals/foreman-x/case.json': '{}\n',
+    'scripts/foreman-sitting.js': 'module.exports = true;\n',
+    'scripts/foreman-sitting.test.js': 'require("./foreman-sitting.js"); const fixture = "evals/foreman-x/case.json";\n',
+    'hooks/tests/skill-onoff-probe.test.sh': '#!/usr/bin/env bash\necho release\n',
+    'scripts/lib/account-fixtures/shim-install.test.js': 'require("./shim-install.js");\n',
+    'mods/tux/palette.test.js': 'console.log("tux");\n',
+  });
+  try {
+    const foreman = r.select(r.change({ 'evals/foreman-x/case.json': '{"x":1}\n' }));
+    assert.ok(foreman.suites.includes('scripts/foreman-sitting.test.js'));
+    const release = r.select(r.change({ 'docs/note.md': 'release\n' }), ['--release']);
+    assert.ok(release.suites.includes('hooks/tests/skill-onoff-probe.test.sh'));
+    const shim = r.select(r.change({ 'scripts/lib/account-fixtures/shim-install.test.js': 'require("./shim-install.js"); // changed\n' }));
+    assert.ok(shim.suites.includes('scripts/lib/account-fixtures/shim-install.test.js'));
+    const tux = r.select(r.change({ 'mods/tux/palette.test.js': 'console.log("changed");\n' }));
+    assert.ok(tux.suites.includes('mods/tux/palette.test.js'));
+    const tuxScope = r.select(r.change({ 'mods/tux/format.ts': 'export const changed = true;\n' }));
+    assert.ok(tuxScope.suites.includes('mods/tux/palette.test.js'));
+  } finally { r.cleanup(); }
+  const own = makeRepo({ ...LAYOUT, 'scripts/foreman-sitting.js': 'module.exports = 1;\n', 'scripts/foreman-sitting.test.js': 'require("./foreman-sitting.js");\n' });
+  try {
+    assert.ok(own.select(own.change({ 'scripts/foreman-sitting.js': 'module.exports = 2;\n' })).suites.includes('scripts/foreman-sitting.test.js'));
+  } finally { own.cleanup(); }
+});
+
 test('changed code that no suite reaches is reported as unreferenced and forces the full suite', () => {
   const r = makeRepo({ ...LAYOUT, 'scripts/orphan.js': 'x\n' });
   try {
@@ -192,7 +242,6 @@ test('real tree: files scanned by content-grepping suites select those suites (r
   const cases = [
     ['src/hooks/handlers/session-start.js', 'hooks/tests/p6d-gates-repair-ladder.test.sh'],
     ['src/hooks/handlers/intent-capture.js', 'hooks/tests/qualify-scorecard-vocabulary.test.sh'],
-    ['scripts/probe-unknown.js', 'hooks/tests/skill-onoff-stage-graph.test.sh'],
     ['platforms/codex/plugin/mods/x.js', 'hooks/tests/check-hook-inventory.test.sh'],
     ['skills/zz-new/SKILL.md', 'hooks/tests/skill-count-metadata.test.sh'],
     ['docs/plans/evidence/x/administration/y/run.sh', 'hooks/tests/qualify-recipe-credential-staging.test.sh'],
@@ -202,6 +251,8 @@ test('real tree: files scanned by content-grepping suites select those suites (r
     assert.strictEqual(out.mode, 'selective', `${file}: expected a selective result`);
     assert.ok(out.always_run.includes(suite), `${file} must run ${suite}`);
   }
+  const release = JSON.parse(execFileSync('node', [SEL, '--root', REAL_ROOT, '--files', 'scripts/probe-unknown.js', '--allow-missing', '--release', '--json'], { stdio: 'pipe' }).toString());
+  assert.ok(release.suites.includes('hooks/tests/skill-onoff-stage-graph.test.sh'));
 });
 
 test('real tree: every suite run.sh discovers is a known suite path', () => {

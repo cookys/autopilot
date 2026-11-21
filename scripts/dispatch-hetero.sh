@@ -3547,9 +3547,9 @@ fi
 # Restricted cloud operators need a clean brief in a fresh non-repo sandbox; local endpoint names must resolve locally.
 if [ "$SCRATCH" -eq 1 ]; then
   case "$RUNNER" in
-    cc-shim|claude-native) ;;
+    cc-shim) ;;
     kimi) [ "${BIN_FLAG_KIMI:-0}" -eq 1 ] || die_precondition "--scratch requires a runner that honors WORKER_CWD; broker kimi is refused" ;;
-    *) die_precondition "--scratch is supported only by runners that honor WORKER_CWD (cc-shim, claude-native, kimi-bin); runner $RUNNER is refused" ;;
+    *) die_precondition "--scratch is supported only by runners that honor WORKER_CWD (cc-shim, kimi-bin); runner $RUNNER is refused" ;;
   esac
   _scratch_parent="$(node "$SELF_DIR/lib/local-sandbox-parent.js" "${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}")" \
     || die_precondition "--scratch could not create a private parent outside git work trees"
@@ -3560,10 +3560,9 @@ if [ "$SCRATCH" -eq 1 ]; then
   mkdir -m 700 -- "$SCRATCH_WORK_DIR" || die_precondition "--scratch could not create worker directory"
   SCRATCH_HOME="$SCRATCH_DIR/home"
   mkdir -m 700 -- "$SCRATCH_HOME" || die_precondition "--scratch could not create isolated HOME"
-  if [ "$RUNNER" = "cc-shim" ] || [ "$RUNNER" = "claude-native" ]; then
-    SCRATCH_CONFIG_DIR="$(node "$SELF_DIR/lib/seed-claude-config.js" --parent "$SCRATCH_DIR")" \
-      || die_precondition "--scratch could not seed credentials-only Claude config"
-    case "$SCRATCH_CONFIG_DIR" in "$SCRATCH_DIR"/claude-config-*) ;; *) die_precondition "--scratch config seed escaped its private parent" ;; esac
+  if [ "$RUNNER" = "cc-shim" ]; then
+    SCRATCH_CONFIG_DIR="$SCRATCH_DIR/claude-config-empty"
+    mkdir -m 700 -- "$SCRATCH_CONFIG_DIR" || die_precondition "--scratch could not create empty Claude config"
   fi
   SCRATCH_REJECTED_FILE="${AUTOPILOT_DISPATCH_RUNS_DIR:-${MANIFEST_DIR_PATH:-${TMPDIR:-/tmp}}}/scratch-${DISPATCH_RUN_ID}.rejected"
   cp -- "$PROMPT_FILE" "$SCRATCH_WORK_DIR/brief.md" || die_precondition "--scratch could not copy the brief"
@@ -6782,6 +6781,7 @@ function walk(dir, rel = '') {
       : name === '.autopilot-worktree.lock' ? 'worktree_lock'
         : childRel.includes('..') ? 'dotdot_path'
           : st.isSymbolicLink() ? 'symlink'
+            : st.isFile() && st.nlink > 1 ? 'hardlink'
             : (!st.isDirectory() && !st.isFile()) ? 'unsupported_type' : '';
     if (reason) { lines.push(`${childRel}\t${reason}`); continue; }
     if (st.isDirectory()) {
@@ -7957,6 +7957,12 @@ detached_main() {
   [ -n "${AGY_STDERR:-}" ] && rm -f "$AGY_STDERR" 2>/dev/null || true
   [ -n "${AGY_PARSED:-}" ] && rm -f "$AGY_PARSED" 2>/dev/null || true
   [ -n "${CCSHIM_ENVELOPE:-}" ] && rm -f "$CCSHIM_ENVELOPE" 2>/dev/null || true
+  [ -n "${SCRATCH_DIR:-}" ] && rm -rf -- "$SCRATCH_DIR"
+  SCRATCH_DIR=""
+  [ -n "${SCRATCH_CONFIG_DIR:-}" ] && rm -rf -- "$SCRATCH_CONFIG_DIR"
+  SCRATCH_CONFIG_DIR=""
+  [ -n "${SCRATCH_HOME:-}" ] && rm -rf -- "$SCRATCH_HOME"
+  SCRATCH_HOME=""
   exit "$OUTCOME_EXIT"
 }
 
@@ -8044,6 +8050,10 @@ dispatch_detached_run() {
     setsid bash -c 'IN_DETACHED_CHILD=1; source "$1"; rm -f "$1"; detached_main' bash "$state_file" >/dev/null 2>&1 &
   fi
   local child=$!
+  # The detached child owns scratch until it has captured and committed the output.
+  SCRATCH_DIR=""
+  SCRATCH_CONFIG_DIR=""
+  SCRATCH_HOME=""
   # Clear parent claim after child is launched so parent EXIT cleanup cannot fail-mark the WO.
   _CONT_WO_CLAIMED_ROOT=""
   wait "$child"; local wait_rc=$?

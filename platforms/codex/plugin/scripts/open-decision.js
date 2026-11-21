@@ -8,11 +8,12 @@
  *                                       [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>]
  *                                       [--doa-role <role>] [--doa-tier <tier>] [--target <deploy target>] [--source <who/where>]
  *                                       [--title <short card title, <= 20 characters>] [--kind <decide|go|remind|step|look>] [--premise-source <file>] [--premise-inferred] [--attach <path-or-URL>]...
- *                                       [--operator-step <text>]...   (repeatable, or several steps in one value separated by newlines:
+ *                                       [--operator-step <text>]... [--not-duplicate-of <id>]... [--not-duplicate-reason <reason>]   (repeatable overrides for a confirmed distinct issue)
+ *                                       (repeatable operator steps, or several steps in one value separated by newlines:
  *                                         what the operator must do himself after answering; stored as operator_steps)
  *                                       [--root-run-id <id>] [--cwd <dir>] [--json]     (prints the new id; --json: {ok,id,file,scope_key})
- *   node scripts/open-decision.js open  --category <c> --kind step --question <step text> [--repeat-of <id>] [--background <why>] [--blocks <what stalls>] [--attach <path-or-URL>]... [--source <who/where>]
- *                                       [--root-run-id <id>] [--cwd <dir>] [--json]     (operator action step: no --option, --executor or --not-authorized needed)
+ *   node scripts/open-decision.js open  --category <c> --kind step --question <step text> --executor <address> [--repeat-of <id>] [--background <why>] [--blocks <what stalls>] [--attach <path-or-URL>]... [--source <who/where>]
+ *                                       [--root-run-id <id>] [--cwd <dir>] [--json]     (operator action step: no --option or --not-authorized needed)
  *   node scripts/open-decision.js open ... --category <money|identity|presence|goal|public-release|unbackable-loss|authority>   (REQUIRED on every CLI open: the only seven kinds of question that go to the operator; anything else -> exit 7 with a 拒絕開卡 message, nothing written)
  *   node scripts/open-decision.js stats [--since <ISO | Nh|Nd|Nw, default 7d>] [--cwd <dir>] [--json]   (cards opened in the window per category: {schema:"decision-stats/1", since, counts:{money,...,uncategorized}}; patrol's weekly line)
  *   node scripts/open-decision.js open ... --executor <address> [--asker <address>]  (--executor is REQUIRED: who carries out the answer; the PM's own cards name the PM; --asker: who asked)
@@ -37,7 +38,8 @@
  * ({schema, root_run_id, repo_identity, project_key, decisions: [...]}), scope_key = project_key, or project_key--<root>
  * (root through the watcher's safeSegment). Each entry: id, question, background, options [{label, description}] | null,
  * recommendation, why, blocks, not_authorized (why the owner must decide, depth-0 may not), source, opened_at, opened_by_session (+ origin, set only by hooks/ask-decision.js),
- * optional operator_steps (string[], what the operator must do after answering; absent = none).
+ * optional operator_steps (string[], what the operator must do after answering; absent = none), not_duplicate_of (string[], explicitly overridden duplicate ids),
+ * and not_duplicate_reason (the operator's reason for treating those cards as distinct).
  * `open` appends one entry and never overwrites another. `close --id` KEEPS the entry (BL cardtrail): status 'closed', closed_at (ISO UTC), answer
  * (the answer text, null for a withdrawal); idempotent. The file is never removed. "The entry is in the file" does NOT mean "the card is open":
  * every reader asks the status (src/status/scope-key.js cardState; readFile() returns open questions only, { live: true } adds awaiting_operator_action and pending_dispatch, { all: true } also closed). The watcher reads the file into the job page / live pane (src/status/decision-input.js).
@@ -57,7 +59,7 @@
  * If resolve-doa cannot be run, the DOA-independent boundaries (irreversible + the Board rows, `escalate` in every preset) are
  * still accepted with a stderr warning, and the other classes are refused (a gate that cannot verify must not wave them through).
  * --kind <decide|go|remind|step|look> (optional): the card's kind, stored as `kind` on the entry (`decide|go` = decision cards with options/reply under 要你決定;
- * `step` = an operator step under 要你做或看, no options, --executor or --not-authorized needed, --question is the step text, --attach allowed;
+ * `step` = an operator step under 要你做或看, no options or --not-authorized needed, --executor REQUIRED, --question is the step text, --attach allowed;
  * `look` = a persistent 給你看 viewer item under 要你做或看, optional --look-target JSON). Absent = unspecified; entries without it read as before.
  * Any other value -> exit 7, nothing is written.
  * --attach <path-or-URL> (repeatable on `open`): stored on the entry in array `attachments`; rendered on the decision pane as a clickable file or Link.
@@ -84,7 +86,8 @@
  * --option may repeat; at least two are REQUIRED (none or one -> exit 2); a question the owner answers in typed text passes --free-text instead (options null; --free-text with --option -> exit 2).
  * CLI `open` of a decide card (kind absent or `decide`; `go`, `remind`, `step` and `look` are exempt) also requires: --question has exactly one `？` or `?`; --title is itself a question (contains `？` or `?`, or ends with `嗎`) and still within TITLE_MAX; --recommendation is present, does not end with `？` or `?`, and starts with one --option label (a --free-text card only checks that a recommendation, if given, does not end with `？` or `?`).
  * --premise-source <file> and --premise-inferred are open-only. If that file contains `inferred` or `推算` (case-insensitive), or --premise-inferred is set, --question or --background must also contain `推算` or `inferred`. Library openDecision() does not apply these rules.
- * Other fields are optional text for the owner; an empty value is stored as null. Writes take a lock and rename atomically.
+ * Other fields are optional text for the owner; an empty value is stored as null. Writes take a project-level open lock plus a scope lock and rename atomically;
+ * the live-card duplicate check and append share the project lock across every root scope.
  * Card trail (BL cardtrail). Stored fields a reader (patrol, the panel) may rely on: status ('open' | 'awaiting_operator_action' | 'pending_dispatch' | 'closed';
  * absent = open), answer (the answer text), closed_at (ISO UTC, set when status becomes closed), answered_at (set on awaiting_operator_action),
  * pending_dispatch_at (ISO UTC, set when status becomes pending_dispatch: patrol's "answered but not dispatched for 30 minutes" reads status + this),
@@ -150,6 +153,7 @@
  *       13 verified but the stored answer carries no content (via=local off the owner host): only the answer id is proven.
  * Exit: 0 ok (show: at least one live card) | 1 show: none live (show --id: no such card) | 2 usage / close or --dispatched refused (card not in the needed state) / not a git repo / missing or unknown --not-authorized | 3 open refused: the boundary is inside this session's DOA (or unverifiable) | 4 write failure, or a non-PM team session refused by the role gate (nothing written) |
  *       8 close refused: the card's answer could not be claimed on the fleet courier (unreachable after bounded retries, or an unusable reply); the card stays OPEN |
+ *       14 open refused: obvious duplicate live card (nothing written; --not-duplicate-of plus --not-duplicate-reason can document a distinct issue) |
  *       7 open refused: --kind is not decide|go|remind|step|look, or --category is missing / not one of the seven (nothing is written) |
  *       6 open refused: --target is a production target, unlisted, or could not be judged (refuse, never escalate; nothing is written) |
  *       5 open: the card IS written and its id printed, but no live panel will show it (isolated env, no flock, unusable live dir, a watcher without --render); stderr names the reason and what to do.
@@ -220,7 +224,7 @@ function usage(message) {
   process.stderr.write('usage: open-decision.js open --category <money|identity|presence|goal|public-release|unbackable-loss|authority> --question <q> [--background <why>] [--option <label>[::<description>]]... | --free-text [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>] [--irreversible] [--from-request <r-id>] [--doa-role <role>] [--doa-tier <tier>] [--target <deploy target>] [--source <who/where>] [--kind <decide|go|remind|step|look>] [--due <ISO time | +N(m|h|d|w)>] [--premise-source <file>] [--premise-inferred] [--attach <path-or-URL>]... [--root-run-id <id>]\n'
     + '       --category values: money（錢） identity（身分：操作員本人的登入、憑證、金鑰、scope） presence（到場） goal（改目標） public-release（對外） unbackable-loss（無備份的損失） authority（改授權）\n'
     + '       決定卡（沒有 --kind，或 --kind decide；go/remind/step/look 不在此限）：--question 恰好一個問號（？或?）；--title 本身要是問題（含？或?，或以嗎結尾，仍 <= 20）；--recommendation 必填、以某個 --option 標籤開頭、不可以？或?結尾（--free-text 只在有建議時拒絕問號結尾）。--premise-source <檔> 的內容若含 inferred 或推算（不分大小寫），或帶了 --premise-inferred，則 --question 或 --background 也必須含推算或 inferred。這兩支旗標只用於 open。\n'
-    + '       open-decision.js open --category <c> --kind step --question <step text> [--repeat-of <id>] [--background <why>] [--blocks <what stalls>] [--attach <path-or-URL>]... [--source <who/where>] [--root-run-id <id>]\n'
+    + '       open-decision.js open --category <c> --kind step --question <step text> --executor <address> [--repeat-of <id>] [--background <why>] [--blocks <what stalls>] [--attach <path-or-URL>]... [--source <who/where>] [--root-run-id <id>]\n'
     + '       open-decision.js stats [--since <ISO|7d>] [--json]\n       open-decision.js close --id <id> [--root-run-id <id>]\n       open-decision.js close --id <id> --answer <text> [--executor <address>] [--asker <address>] [--awaiting-operator <step>] [--reask-after <4h|30m|1d>]\n       open-decision.js close --id <id> --dispatched <task_id>\n       open-decision.js close --id <id> --dispatched-msg <message_id>\n       open-decision.js done --id <id> [--note <evidence>]\n       open-decision.js verify --id <card_id> --answer-id <id> --text-file <file>\n       open-decision.js show [--root-run-id <id>] [--all] [--json]\n       open-decision.js show --id <id> [--json]\n       open-decision.js list [--all] [--json]\n       open-decision.js backfill --from <file.jsonl> [--apply]\n       open-decision.js due-sweep\n       (decision open REQUIRES --executor <address>; it also takes --asker <address> --title <short title, <= 20 characters> --due <ISO time | +N(m|h|d|w)>; a remind card takes no --option/--free-text; --operator-step <text>, repeatable or newline-separated)\n');
   return 2;
 }
@@ -390,6 +394,65 @@ function projectScopeFiles(cwd, opts) {
   const sf = scopeFile(cwd, null);
   if (!sf) return [];
   return projectScopes(sf, opts).map((s) => s.file);
+}
+
+const DUPLICATE_STOPWORDS = new Set(['the', 'a', 'an', 'is', 'are', 'to', 'of', 'for', 'and', 'or', 'in', 'on', 'at', '請', '是否', '這個', '那個', '以及', '與', '的', '了', '嗎', '呢', '要', '有', '把']);
+const DUPLICATE_JACCARD_THRESHOLD = 0.9;
+function duplicateFields(card) {
+  return [card && card.question, card && card.title, card && card.blocks].filter((v) => typeof v === 'string').join(' ').toLowerCase();
+}
+function duplicateTokens(card) {
+  const tokens = new Set();
+  for (const m of duplicateFields(card).matchAll(/[a-z0-9]+(?:[.-][a-z0-9]+)*|[\u3400-\u9fff]+/g)) {
+    const part = m[0];
+    if (/^[a-z0-9]/.test(part)) {
+      if (!DUPLICATE_STOPWORDS.has(part)) tokens.add(part);
+      continue;
+    }
+    const chars = Array.from(part);
+    if (chars.length === 1) tokens.add(chars[0]);
+    for (let i = 0; i + 1 < chars.length; i += 1) {
+      const bigram = chars[i] + chars[i + 1];
+      if (!DUPLICATE_STOPWORDS.has(bigram)) tokens.add(bigram);
+    }
+  }
+  return tokens;
+}
+function hostTokens(card) {
+  return new Set([...duplicateFields(card).matchAll(/\b(?:\d{1,3}\.){3}\d{1,3}\b|\b(?=[a-z0-9.-]*[a-z])(?=[a-z0-9.-]*-)[a-z0-9]+(?:[.-][a-z0-9]+)+\b|\b(?=[a-z0-9]*[a-z])(?=[a-z0-9]*\d)[a-z][a-z0-9]{4,}\b/g)].map((m) => m[0]));
+}
+// Pure comparison. Callers pass live cards so this function can also be unit-tested without storage.
+function findDuplicateCards(entries, candidate) {
+  if (!candidate || typeof candidate.category !== 'string') return [];
+  const ct = duplicateTokens(candidate);
+  const ch = hostTokens(candidate);
+  const result = [];
+  for (const entry of Array.isArray(entries) ? entries : []) {
+    if (!entry || entry.category !== candidate.category || entry.id === candidate.id || isClosedEntry(entry)) continue;
+    const et = duplicateTokens(entry);
+    const eh = hostTokens(entry);
+    const common = [...ct].filter((t) => et.has(t));
+    const union = new Set([...ct, ...et]);
+    const jaccard = union.size ? common.length / union.size : 0;
+    const sharedHosts = [...ch].filter((h) => eh.has(h));
+    const conflictingHosts = ch.size > 0 && eh.size > 0 && sharedHosts.length === 0;
+    const sharedKeywords = common.filter((t) => !ch.has(t) && !eh.has(t));
+    const sharedAction = sharedKeywords.some((token) => /重開|替換|檢查|更新|韌體|電源|重置|restart|replace|check|update|firmware|power|reset/.test(token));
+    const hostMatch = sharedHosts.length > 0 && sharedAction;
+    if (!conflictingHosts && (hostMatch || jaccard >= DUPLICATE_JACCARD_THRESHOLD)) {
+      result.push({ id: entry.id, title: entry.title || String(entry.question || '').slice(0, 20), score: Number(Math.max(jaccard, hostMatch ? 0.9 : 0).toFixed(3)), reason: hostMatch ? 'shared-host-and-keywords' : 'token-jaccard' });
+    }
+  }
+  return result;
+}
+function liveProjectCards(cwd) {
+  const copies = projectScopeFiles(cwd, { all: true }).flatMap((file) => readFile(file, { all: true }).map((e) => ({ file, e })));
+  return pickCards(copies).map((item) => item.e).filter((entry) => !isClosedEntry(entry));
+}
+function reportRelatedCards(cwd, closedEntry) {
+  for (const match of findDuplicateCards(liveProjectCards(cwd), closedEntry)) {
+    process.stderr.write(`同主題還有 ${match.id}（${match.title || '未命名'}），請一併處理\n`);
+  }
 }
 
 // The card `id` across every scope file: { file, entry } or null, using the same pickCards winner as `show --id`.
@@ -614,8 +677,8 @@ function takeFreeText(argv) {
 // BL cardtrail flags are lifted out like --kind/--target (parse()'s valued Set stays byte-identical to the frozen ask stub).
 // -> { rest, extra: { answer, executor, asker, 'awaiting-operator', 'reask-after', from, dispatched, 'dispatched-msg', title, note, 'operator-step', all, apply } } | { error }
 // operator-step is repeatable and may hold several steps separated by newlines. parse()'s valued Set stays untouched (frozen ask stub).
-const EXTRA_VALUED = ['answer', 'executor', 'asker', 'awaiting-operator', 'reask-after', 'from', 'dispatched', 'dispatched-msg', 'title', 'from-request', 'note', 'look-target', 'category', 'since', 'days', 'premise-source', 'withdraw', 'by', 'closed-key', 'repeat-of'];
-const EXTRA_REPEAT = ['operator-step'];
+const EXTRA_VALUED = ['answer', 'executor', 'asker', 'awaiting-operator', 'reask-after', 'from', 'dispatched', 'dispatched-msg', 'title', 'from-request', 'note', 'look-target', 'category', 'since', 'days', 'premise-source', 'withdraw', 'by', 'closed-key', 'repeat-of', 'not-duplicate-reason'];
+const EXTRA_REPEAT = ['operator-step', 'not-duplicate-of'];
 const EXTRA_SWITCH = ['all', 'apply', 'irreversible', 'premise-inferred', 'panel-done', 'panel-dismiss'];
 // The only seven kinds of question that go to the operator (operator rule 2026-11-15); everything else the PM decides.
 const CATEGORIES = ['money', 'identity', 'presence', 'goal', 'public-release', 'unbackable-loss', 'authority'];
@@ -629,7 +692,7 @@ function takeExtra(argv) {
     if (name && EXTRA_REPEAT.includes(name)) {
       if (i + 1 >= argv.length) return { error: `--${name} needs a value` };
       const parts = String(argv[i + 1]).split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
-      if (parts.length === 0) return { error: `--${name} needs a non-empty step` };
+      if (parts.length === 0) return { error: `--${name} needs a non-empty value` };
       extra[name] = (extra[name] || []).concat(parts);
       i += 1;
     } else if (name && EXTRA_VALUED.includes(name)) {
@@ -908,6 +971,7 @@ function main(argv) {
       if (rr.status === 'absent') return usage(`${args.id} changed state meanwhile; run show --id ${args.id}`);
       const stale = closeStaleCopies(args.cwd, args.id, hit.file, remindPatch);
       if (stale.status === 'error') { process.stderr.write(`open-decision: ${stale.message}\n`); return 4; }
+      reportRelatedCards(args.cwd, { ...hit.entry, ...remindPatch });
       notifyPm('close', { card_id: args.id, question: rr.entry.question, state: 'closed' });
       process.stdout.write(`closed ${args.id} (reminder done)\n`);
       return 0;
@@ -921,6 +985,7 @@ function main(argv) {
       if (r.status === 'absent') return usage(`${args.id} changed state meanwhile; run show --id ${args.id}`);
       const stale = closeStaleCopies(args.cwd, args.id, hit.file, pdPatch);
       if (stale.status === 'error') { process.stderr.write(`open-decision: ${stale.message}\n`); return 4; }
+      reportRelatedCards(args.cwd, { ...hit.entry, ...pdPatch });
       process.stdout.write(`closed ${args.id} (done without dispatch)\n`);
       return 0;
     }
@@ -933,6 +998,7 @@ function main(argv) {
     if (r.status === 'absent') return usage(`${args.id} changed state meanwhile; run show --id ${args.id}`);
     const stale = closeStaleCopies(args.cwd, args.id, hit.file, donePatch);
     if (stale.status === 'error') { process.stderr.write(`open-decision: ${stale.message}\n`); return 4; }
+    reportRelatedCards(args.cwd, { ...hit.entry, ...donePatch });
     process.stdout.write(`closed ${args.id} (operator step done)\n`);
     return 0;
   }
@@ -964,6 +1030,7 @@ function main(argv) {
       if (panelResult.status === 'absent') { process.stdout.write(`not open: ${args.id}\n`); return 0; }
       const panelStale = closeStaleCopies(args.cwd, args.id, foundPanel.file, panelPatch);
       if (panelStale.status === 'error') { process.stderr.write(`open-decision: ${panelStale.message}\n`); return 4; }
+      reportRelatedCards(args.cwd, { ...foundPanel.entry, ...panelPatch });
       process.stdout.write(`closed ${args.id}\n`);
       return 0;
     }
@@ -997,6 +1064,7 @@ function main(argv) {
       if (r.status === 'absent') { process.stdout.write(`not open: ${args.id}\n`); return 0; }
       const stale = closeStaleCopies(args.cwd, args.id, found.file, withdrawPatch);
       if (stale.status === 'error') { process.stderr.write(`open-decision: ${stale.message}\n`); return 4; }
+      reportRelatedCards(args.cwd, { ...found.entry, ...withdrawPatch });
       notifyPm('close', { card_id: args.id, question: r.entry.question, state: 'closed' });
       process.stdout.write(`withdrawn ${args.id}\n`);
       return 0;
@@ -1051,6 +1119,7 @@ function main(argv) {
     if (patch.status === 'closed') {
       const stale = closeStaleCopies(args.cwd, args.id, found.file, patch);
       if (stale.status === 'error') { process.stderr.write(`open-decision: ${stale.message}\n`); return 4; }
+      reportRelatedCards(args.cwd, { ...found.entry, ...patch });
     }
     notifyPm('close', { card_id: args.id, question: r.entry.question, state: patch.status });
     if (answerText !== null && executor && (awaiting || parked)) {
@@ -1083,6 +1152,10 @@ function main(argv) {
   if (!CATEGORIES.includes(args.extra.category)) { process.stderr.write(`open-decision: ${CATEGORY_REFUSAL}（收到 ${args.extra.category === undefined ? '沒有 --category' : `"${args.extra.category}"`}；沒有寫入任何東西）\n`); return 7; }
   const remind = args.kind === 'remind';
   const isStepKind = args.kind === 'step' || args.kind === 'look';
+  const duplicateOverrides = Array.isArray(ex['not-duplicate-of']) ? ex['not-duplicate-of'] : [];
+  if (duplicateOverrides.some((id) => !SAFE_ID.test(id))) return usage('--not-duplicate-of needs a card id');
+  if (duplicateOverrides.length && (typeof ex['not-duplicate-reason'] !== 'string' || !ex['not-duplicate-reason'].trim())) return usage('--not-duplicate-of requires a non-empty --not-duplicate-reason');
+  if (!duplicateOverrides.length && ex['not-duplicate-reason'] !== undefined) return usage('--not-duplicate-reason requires --not-duplicate-of <id>');
   if (remind) {
     if (args.option.length || args['free-text']) return usage('a --kind remind card is a reminder, not a question: no --option and no --free-text (it is answered with `done --id <id>`)');
   } else if (isStepKind) {
@@ -1106,7 +1179,6 @@ function main(argv) {
     try { lookTarget = JSON.parse(ex['look-target']); } catch (_e) { return usage('--look-target must be valid JSON'); }
     if (!lookTarget || typeof lookTarget !== 'object' || Array.isArray(lookTarget)) return usage('--look-target must be a JSON object');
   }
-  if (!isStepKind && ex.executor === undefined) return usage('open needs --executor <address> (namespace/courier/member): the program delivers the operator\'s answer to it; a card the PM handles itself names the PM address');
   if (ex.title !== undefined && (!ex.title.trim() || Array.from(ex.title).length > TITLE_MAX || require('./lib/card-notice.js').CONTROL.test(ex.title))) { process.stderr.write(`open-decision: refused: --title must be non-empty, free of control characters, and at most ${TITLE_MAX} characters (got ${Array.from(ex.title).length}); it is never cut for you; nothing written\n`); return 2; }
   for (const k of ['executor', 'asker']) if (ex[k] !== undefined && !require('./lib/fleet-decision.js').isAddress(ex[k])) return usage(`--${k} "${ex[k]}" is not an address (namespace/courier/member)`);
   const options = !isStepKind && args.option.length ? parseOptions(args.option) : null;
@@ -1139,7 +1211,17 @@ function main(argv) {
     options, recommendation: args.recommendation, why: args.why, blocks: args.blocks, not_authorized: args['not-authorized'], source: args.source, kind: args.kind, category: ex.category, executor: ex.executor, asker: ex.asker, title: ex.title, due_at: dueAt,
     from_request: ex['from-request'], attachments: args.attachments, look_target: lookTarget,
     operator_steps: operatorSteps, repeat_of: repeat === null ? undefined : repeat.entry.id, repeat_n: repeat === null ? undefined : repeat.repeat_n,
+    not_duplicate_of: duplicateOverrides, not_duplicate_reason: ex['not-duplicate-reason'], reject_duplicates: true, require_executor: true,
   });
+  if (r.status === 'duplicate') {
+    const d = r.duplicate;
+    process.stderr.write(`拒絕開卡：已有 ${d.id}（${d.title || String(args.question).slice(0, 20)}），請在那張卡上補充。真的不同請加 --not-duplicate-of ${d.id} --not-duplicate-reason <理由>\n`);
+    return 14;
+  }
+  if (r.status === 'missing_executor') {
+    if (r.specific) process.stderr.write('拒絕開卡：presence 類和 step 卡都必須帶 --executor <address>；PM 自己執行也要填 PM 的地址。沒有寫入任何東西。\n');
+    return usage(r.specific ? 'open needs --executor <address> (namespace/courier/member)' : 'open needs --executor <address> (namespace/courier/member): the program delivers the operator\'s answer to it; a card the PM handles itself names the PM address');
+  }
   if (r.status === 'ok' && args.cwd === undefined) {
     // No --cwd: the card followed the process cwd. A different live session repo will not show it (BL-0337).
     const mis = cardRepoMismatch(process.cwd(), sess.marker);
@@ -1198,7 +1280,7 @@ function roleGate({ not_authorized, origin, kind } = {}) {
 // lock + atomic-rename path as `open`; another entry is never touched. `origin` (e.g. "ask_user_question") marks which hook
 // opened it; the CLI never sets it. `options` = [{label, description}] (>= 2) or null.
 // Returns { status: 'ok'|'error', id, file, scope_key, message, code? }.
-function openDecision({ cwd, root, session, question, background, options, recommendation, why, blocks, not_authorized, source, origin, turn_tracked, kind, category, executor, asker, title, from_request, due_at, attachments, look_target, operator_steps, repeat_of, repeat_n }) {
+function openDecision({ cwd, root, session, question, background, options, recommendation, why, blocks, not_authorized, source, origin, turn_tracked, kind, category, executor, asker, title, from_request, due_at, attachments, look_target, operator_steps, repeat_of, repeat_n, not_duplicate_of, not_duplicate_reason, reject_duplicates, require_executor }) {
   const routed = roleGate({ not_authorized, origin, kind });
   if (routed && routed.code === 4) return { status: 'error', code: 4, message: routed.message };
   const sf = scopeFile(cwd, root);
@@ -1221,6 +1303,8 @@ function openDecision({ cwd, root, session, question, background, options, recom
   }
   if (typeof title === 'string' && title !== '') entry.title = title; // additive: absent = the readers derive one (cardTitle in src/status/decision-input.js)
   if (typeof repeat_of === 'string' && SAFE_ID.test(repeat_of) && Number.isInteger(repeat_n) && repeat_n >= 2) { entry.repeat_of = repeat_of; entry.repeat_n = repeat_n; }
+  if (Array.isArray(not_duplicate_of) && not_duplicate_of.length) entry.not_duplicate_of = [...new Set(not_duplicate_of)];
+  if (typeof not_duplicate_reason === 'string' && not_duplicate_reason.trim()) entry.not_duplicate_reason = not_duplicate_reason.trim();
   if (KINDS.includes(kind)) entry.kind = kind; // additive: absent = unspecified
   if (CATEGORIES.includes(category)) entry.category = category; // additive: set by the CLI `open` (required there); cards from before 2026-11-15 and hook-opened cards have none
   if (typeof due_at === 'string' && Number.isFinite(Date.parse(due_at))) entry.due_at = new Date(Date.parse(due_at)).toISOString(); // additive: absent = no date (dueState 'none')
@@ -1233,9 +1317,21 @@ function openDecision({ cwd, root, session, question, background, options, recom
   if (turn_tracked === true) entry.turn_tracked = true; // the asker's turn file existed at open time (hooks/ask-decision.js): only then is its absence later evidence the session ended
   try {
     fs.mkdirSync(sf.dir, { recursive: true, mode: 0o700 });
-    return withWriteLock({ storeDir: sf.dir, lockFile: `${sf.file}.lock`, name: path.basename(sf.file), timeoutMs: 5000 }, () => {
-      writeEntries(sf, root, [...readFile(sf.file, { all: true }), entry]);
-      return { status: 'ok', id: entry.id, file: sf.file, scope_key: sf.key };
+    return withWriteLock({ storeDir: sf.dir, lockFile: path.join(sf.dir, `${sf.scope.project_key}.open.lock`), name: `${sf.scope.project_key}.open`, timeoutMs: 5000 }, () => {
+      if (reject_duplicates === true) {
+        const acknowledged = new Set(Array.isArray(not_duplicate_of) ? not_duplicate_of : []);
+        const duplicate = findDuplicateCards(liveProjectCards(cwd), entry).find((match) => !acknowledged.has(match.id));
+        if (duplicate) return { status: 'duplicate', duplicate };
+      }
+      const executorRequired = category === 'presence' || kind === 'step' || !['step', 'look'].includes(kind);
+      if (require_executor === true && executorRequired && !text(executor)) {
+        const specific = category === 'presence' || kind === 'step';
+        return { status: 'missing_executor', specific };
+      }
+      return withWriteLock({ storeDir: sf.dir, lockFile: `${sf.file}.lock`, name: path.basename(sf.file), timeoutMs: 5000 }, () => {
+        writeEntries(sf, root, [...readFile(sf.file, { all: true }), entry]);
+        return { status: 'ok', id: entry.id, file: sf.file, scope_key: sf.key };
+      });
     });
   } catch (error) {
     return { status: 'error', message: error.message };
@@ -1699,6 +1795,7 @@ function markDispatched(args, ex) {
   if (r.status === 'absent') return usage(`${args.id} changed state meanwhile; run show --id ${args.id}`);
   const stale = closeStaleCopies(args.cwd, args.id, hit.file, patch);
   if (stale.status === 'error') { process.stderr.write(`open-decision: ${stale.message}\n`); return 4; }
+  reportRelatedCards(args.cwd, { ...hit.entry, ...patch });
   process.stdout.write(isMsg ? `closed ${args.id} (dispatched-msg ${val})\n` : `closed ${args.id} (dispatched ${val})\n`);
   return 0;
 }
@@ -1770,4 +1867,4 @@ function backfill(args, sf, root) {
 }
 
 if (require.main === module) process.exitCode = main(process.argv.slice(2));
-module.exports = { main, checkNotAuthorized, openDecision, closeDecisionById, closePanelAnswer, panelAnswerText, recordDecline, isDeclineAnswer, reaskDue, awaitingTextFor, deliverAnswer, parkAnswer, parkUndelivered, sendParked, receiptLine, redeliver, recordCorrection, patchDecision, findCard, projectScopeFiles, unboundCardsOf, readEntries: readFile, dueSweep, parseDue, SAFE_ROOT, SCHEMA };
+module.exports = { main, checkNotAuthorized, openDecision, closeDecisionById, closePanelAnswer, panelAnswerText, recordDecline, isDeclineAnswer, reaskDue, awaitingTextFor, deliverAnswer, parkAnswer, parkUndelivered, sendParked, receiptLine, redeliver, recordCorrection, patchDecision, findCard, findDuplicateCards, projectScopeFiles, unboundCardsOf, readEntries: readFile, dueSweep, parseDue, SAFE_ROOT, SCHEMA };

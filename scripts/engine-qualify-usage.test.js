@@ -73,7 +73,13 @@ function run(usageSource, extra, wrongIds = [], finishReason = undefined) {
     ...base,
     remoteProviderCmd: `${process.execPath} ${writeAdapter(usageSource, wrongIds, finishReason)}`,
     remoteProvider: 'fake-usage-provider', remoteTimeoutMs: 60_000,
-    store: fs.mkdtempSync(path.join(tempRoot, 'store-')), rawDir, ...extra,
+    store: fs.mkdtempSync(path.join(tempRoot, 'store-')), rawDir,
+    // This suite checks usage plumbing, not pooled qualification thresholds.
+    // Keep ten real broker/provider cases per run to exercise repeated IDs,
+    // usage aggregation, grading, and exchange capture without launching all
+    // sixty adapters in each usage-specific scenario.
+    testTruncateAfterCases: 10,
+    ...extra,
   });
   const lines = fs.readFileSync(path.join(rawDir, 'consult-usage.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
   const exchanges = fs.existsSync(path.join(rawDir, 'consult-exchanges.jsonl'))

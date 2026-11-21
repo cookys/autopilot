@@ -80,7 +80,7 @@ Bump with `scripts/sync-version.js` only. 3.0.0 final is the operator's "3.0.0.0
 - No hosted CI (operator): suites and the merge gate run locally; never add a hosted workflow.
 - Never read, print or copy credentials, and give dispatch children a throwaway config dir seeded with only `.credentials.json`, never the real `~/.claude` ([`references/hetero-dispatch.md`](references/hetero-dispatch.md)); destructive ops follow the global Red lines tiers.
 - A SHIP-AS-IS reviewed branch merges to `develop` once suites are green, never batched; `check-unmerged-ship.js` flags it after 1 h.
-- Cloud Kimi/GLM/Qwen/DeepSeek/MiniMax/qoder: no transcript/sensitive/core/novel/review-role (`scripts/lib/cn-model-dispatch-gate.js`). qwen_local review skip is shipped-only until 2026-11-21.
+- CN gate follows the endpoint operator: restricted cloud needs a clean brief in a fresh non-repo sandbox; private-repo work is refused, and local names must resolve locally.
 
 ## Where context lives
 

@@ -269,7 +269,7 @@ function reviewerFallbackPlan(opts = {}) {
 /**
  * Ordered reviewer fallback rungs from pace-roles.json `fallback.reviewer`.
  * Never returns `codex`; skips rungs whose family matches `implementerFamily`
- * and every rung in the CN dispatch gate's barred families.
+ * and every rung refused by the operator-based cloud dispatch gate.
  */
 function reviewerFallbackChain(opts = {}) {
   return reviewerFallbackPlan(opts).chain;

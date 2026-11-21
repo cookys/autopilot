@@ -45,7 +45,7 @@ for _i in 1 2 3 4 5 6 7 8 9 10; do [ -s "$LEASE_PORT_FILE" ] && break; sleep 0.1
 LEASE_PORT="$(cat "$LEASE_PORT_FILE")"
 export AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL="http://127.0.0.1:${LEASE_PORT}/v1"
 mkdir -p "$AUTOPILOT_SESSION_MODE_DIR" "$TEST_TMP/bin"
-unset AUTOPILOT_QUALIFICATION_OVERRIDE AUTOPILOT_DISPATCH_ROLE AUTOPILOT_TASK_CLASS 2>/dev/null || true
+unset AUTOPILOT_QUALIFICATION_OVERRIDE AUTOPILOT_DISPATCH_ROLE 2>/dev/null || true
 
 GIT="git -c user.email=t@t -c user.name=t -c init.defaultBranch=develop -c commit.gpgsign=false"
 SBX="$TEST_TMP/repo"
@@ -107,7 +107,7 @@ run_local() {
 
 # (a) implementer, no --runner -> manifest runner local, model qwen.
 PROMPT="$TEST_TMP/prompt-a.txt"
-printf 'Size: S\nRole: implementer\nScope: ok.txt\nTask-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
+printf 'edit ok.txt\n' > "$PROMPT"
 run_local a
 [ "$EXIT" -eq 0 ] || printf 'local-default diagnostic (a): %s\n%s\n' "$OUT" "$ERR" >&2
 assert_eq "0" "$EXIT" "a: implementer with no --runner exits 0"
@@ -119,22 +119,21 @@ assert_eq "qwen" "$(node -e 'process.stdout.write(JSON.parse(require("fs").readF
 assert_eq "<null>" "$(json_get "$OUT" local_fallback)" "a: local choice records local_fallback null"
 assert_eq "null" "$(node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).local_fallback; process.stdout.write(v===null?"null":JSON.stringify(v))' "$MF")" "a: manifest local_fallback is null"
 
-# (b) local, no Task-Class line -> dispatched prompt gains it; caller file unchanged.
+# (b) local, short prompt is sent unchanged; no former Task-Class rule is needed.
 PROMPT="$TEST_TMP/prompt-b.txt"
 printf 'edit only this line\n' > "$PROMPT"
 BEFORE="$(sha256sum "$PROMPT" | awk '{print $1}')"
 run_local b --runner local --model qwen
 [ "$EXIT" -eq 0 ] || printf 'local-default diagnostic (b): %s\n%s\n' "$OUT" "$ERR" >&2
-assert_eq "0" "$EXIT" "b: local with no Task-Class exits 0"
+assert_eq "0" "$EXIT" "b: local dispatch without task-class metadata exits 0"
 AFTER="$(sha256sum "$PROMPT" | awk '{print $1}')"
 assert_eq "$BEFORE" "$AFTER" "b: caller prompt file is unchanged"
 SHA_B="$(git -C "$SBX" rev-parse "feat/local-b")"
 DISPATCHED="$(git -C "$SBX" show "${SHA_B}:got-prompt.txt")"
-assert_contains "$DISPATCHED" "Task-Class: simple-script" "b: dispatched prompt carries Task-Class: simple-script"
-assert_contains "$ERR" "dispatched copy adds Task-Class: simple-script" "b: stderr says the copy was added"
+assert_contains "$DISPATCHED" "edit only this line" "b: dispatched prompt contains caller text"
+assert_not_contains "$DISPATCHED" "Task-Class: simple-script" "b: gate adds no task-class metadata"
 
-# (b2) body prose names Task-Class: outside the header window. The gate reads only
-# the first 8 lines, so the dispatched copy still gains the field. Caller file stays.
+# (b2) body prose mentioning the former task-class header passes through unchanged.
 PROMPT="$TEST_TMP/prompt-b2.txt"
 {
   printf 'edit only this line\n'
@@ -148,19 +147,19 @@ PROMPT="$TEST_TMP/prompt-b2.txt"
 BEFORE="$(sha256sum "$PROMPT" | awk '{print $1}')"
 run_local b2 --runner local --model qwen
 [ "$EXIT" -eq 0 ] || printf 'local-default diagnostic (b2): %s\n%s\n' "$OUT" "$ERR" >&2
-assert_eq "0" "$EXIT" "b2: body mention of Task-Class exits 0"
+assert_eq "0" "$EXIT" "b2: body mention of former metadata exits 0"
 AFTER="$(sha256sum "$PROMPT" | awk '{print $1}')"
 assert_eq "$BEFORE" "$AFTER" "b2: caller prompt file is unchanged"
 SHA_B2="$(git -C "$SBX" rev-parse "feat/local-b2")"
 DISPATCHED="$(git -C "$SBX" show "${SHA_B2}:got-prompt.txt")"
-assert_contains "$DISPATCHED" "Task-Class: simple-script" "b2: dispatched prompt carries Task-Class: simple-script"
-assert_contains "$ERR" "dispatched copy adds Task-Class: simple-script" "b2: stderr says the copy was added"
+assert_contains "$DISPATCHED" "please add a Task-Class: header" "b2: dispatched prompt preserves body prose"
+assert_not_contains "$DISPATCHED" "Task-Class: simple-script" "b2: gate adds no task-class metadata"
 
 # (c) local, no --worktree-parent -> worktree is outside the repo root.
 XDG_RUNTIME_DIR="$(mktemp -d /tmp/local-default-xdg.XXXXXX)"
 chmod 700 "$XDG_RUNTIME_DIR"
 PROMPT="$TEST_TMP/prompt-c.txt"
-printf 'Task-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
+printf 'edit ok.txt\n' > "$PROMPT"
 run_local c --runner local --model qwen
 [ "$EXIT" -eq 0 ] || printf 'local-default diagnostic (c): %s\n%s\n' "$OUT" "$ERR" >&2
 assert_eq "0" "$EXIT" "c: local with no --worktree-parent exits 0"
@@ -272,6 +271,7 @@ EXIT=$?
 : > "$LEASE_BUSY_FILE"
 assert_eq "$EXIT" "0" "h: pre-probe busy cloud retry exits 0"
 assert_eq "grok" "$(json_get "$OUT" runner)" "h: pre-probe busy retry uses grok"
+assert_eq "grok-4.7" "$(json_get "$OUT" model)" "h: cloud default model"
 FB_H="$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\n/).reverse().find(l=>l.trim().startsWith("{")));process.stdout.write(JSON.stringify(o.local_fallback))' "$OUT")"
 assert_eq '{"reason":"no_free_slot","detail":"busy_at_run"}' "$FB_H" "h: pre-probe busy fallback detail"
 DELETE_COUNT="$(node -e 'const fs=require("fs");const rows=fs.readFileSync(process.argv[1],"utf8").trim().split(/\n/).filter(Boolean).map(JSON.parse);process.stdout.write(String(rows.filter(r=>r.method==="DELETE"&&r.url==="/v1/local/lease/test-lease-id").length))' "$LEASE_LOG")"
@@ -293,6 +293,7 @@ OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="
 EXIT=$?
 assert_eq "0" "$EXIT" "j: busy-at-run cloud retry exits 0"
 assert_eq "grok" "$(json_get "$OUT" runner)" "j: busy-at-run retry uses grok"
+assert_eq "grok-4.7" "$(json_get "$OUT" model)" "j: cloud default model"
 FB_J="$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\n/).reverse().find(l=>l.trim().startsWith("{")));process.stdout.write(JSON.stringify(o.local_fallback))' "$OUT")"
 assert_eq '{"reason":"no_free_slot","detail":"busy_at_run"}' "$FB_J" "j: busy-at-run fallback detail"
 DELETE_COUNT="$(node -e 'const fs=require("fs");const rows=fs.readFileSync(process.argv[1],"utf8").trim().split(/\n/).filter(Boolean).map(JSON.parse);process.stdout.write(String(rows.filter(r=>r.method==="DELETE"&&r.url==="/v1/local/lease/test-lease-id").length))' "$LEASE_LOG")"

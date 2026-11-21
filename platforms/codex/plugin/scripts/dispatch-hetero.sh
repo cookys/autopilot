@@ -38,10 +38,6 @@
 #                                              #   is a precondition conflict. Result and manifest record runner
 #                                              #   local, resolved_runner cc-shim, and the endpoint actually used
 #                                              #   (qwen_local by default, or the listed --endpoint).
-#                                              #   A local run whose prompt has no Task-Class field in the gate
-#                                              #   header window (first 8 lines, at line start or after |) gets
-#                                              #   that field on a prompt copy only (Task-Class: simple-script);
-#                                              #   the caller's file is not edited. Body prose is not a field.
 #                                              #   A local run with no --worktree-parent uses a 0700 per-user directory
 #                                              #   under $XDG_RUNTIME_DIR if set, else ${TMPDIR:-/tmp}, never inside the repo.
 #                                              #   Child env sets ENABLE_TOOL_SEARCH=false, does not set
@@ -598,7 +594,6 @@ CURSOR_FAST=0          # --cursor-fast opt-in (default non-fast); runner-scoped,
 SCAFFOLD_TIER_ARG="auto"      # --scaffold-tier auto|T0|T1|T2 (explicit may only ADD scaffolding)
 SCAFFOLD_TIER_EFFECTIVE="off" # recorded in the run manifest
 SCAFFOLD_PROMPT_FILE=""       # tier-envelope temp; init early for trap reap
-LOCAL_CLASS_PROMPT_FILE=""    # local Task-Class copy; caller's prompt file is never edited
 AGY_ENVELOPE=""       # private native JSON stdout; never exposed as agent_log
 CCSHIM_ENVELOPE=""    # private claude -p --output-format json stdout; result text is what reaches LOG
 SANDBOX="off"          # --sandbox off|bwrap (cc-shim, or the one cloud fallback re-exec)
@@ -724,6 +719,10 @@ HEARTBEAT_SECS="${DISPATCH_HEARTBEAT_SECS:-20}"
 DETACH_PRECLAIM_GEN=""
 DETACH_PRECLAIM_NONCE=""
 OUTCOME_STATUS=""; OUTCOME_COMMIT=""; OUTCOME_FILES=0; OUTCOME_INS=0; OUTCOME_DEL=0; OUTCOME_WT=""; OUTCOME_ERR=""; OUTCOME_EXIT=1
+TARGET_PRECOMMIT_STATUS="skipped"
+TARGET_PRECOMMIT_HOOK=""
+TARGET_PRECOMMIT_RC=""
+TARGET_PRECOMMIT_TAIL="no new commits"
 OUTCOME_DISPATCHER_CALLED=1
 OUTCOME_MODEL_CALLS=1
 OUTCOME_MUTATION_ATTEMPTS=1
@@ -1401,7 +1400,7 @@ NODE
     broker_fields="${broker_fields}, \"broker_verdict_unknown\": \"$(_flat_json_escape "${BROKER_VERDICT_UNKNOWN:-}")\""
   fi
   release_local_lease
-  tip_verify_fields="$tip_verify_fields$broker_fields, \"local_fallback\": ${LOCAL_FALLBACK_JSON:-null}, \"local_slots\": ${LOCAL_SLOTS_JSON:-null}, \"local_lease\": $(local_lease_json)"
+  tip_verify_fields="$tip_verify_fields$broker_fields, \"local_fallback\": ${LOCAL_FALLBACK_JSON:-null}, \"local_slots\": ${LOCAL_SLOTS_JSON:-null}, \"local_lease\": $(local_lease_json), \"target_precommit\": $(target_precommit_json)"
   hetero_log_fallback "$1"
   local _emit_json
   _emit_json="$(printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "num_turns": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s%s%s%s%s%s%s%s }\n' \
@@ -2450,6 +2449,90 @@ wt_record_gitfile_from_registry() {
 # relative core.hooksPath resolves inside the writable worktree. The rail's wrapper commit never relied on a
 # hook (it already passes --no-verify, and its boundary gates are rail code, not git hooks).
 _wt_git() { git -C "$WT" -c core.fsmonitor=false -c core.hooksPath=/dev/null "$@"; }
+
+target_precommit_setting() { # key env-name default
+  local key="$1" env_name="$2" default="$3" value="${!2-}" config_file="${AUTOPILOT_CONFIG_FILE:-${HOME:-}/.autopilot/config.json}"
+  if [ -n "$value" ]; then printf '%s' "$value"; return 0; fi
+  node - "$config_file" "$key" "$default" <<'NODE'
+const fs = require('fs');
+const [file, key, fallback] = process.argv.slice(2);
+try {
+  const config = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const value = config && config[key];
+  if (typeof value === 'string' || typeof value === 'number') process.stdout.write(String(value));
+  else process.stdout.write(fallback);
+} catch { process.stdout.write(fallback); }
+NODE
+}
+
+target_precommit_json() {
+  TARGET_PRECOMMIT_STATUS="${TARGET_PRECOMMIT_STATUS:-skipped}" \
+  TARGET_PRECOMMIT_HOOK="${TARGET_PRECOMMIT_HOOK:-}" \
+  TARGET_PRECOMMIT_RC="${TARGET_PRECOMMIT_RC:-}" \
+  TARGET_PRECOMMIT_TAIL="${TARGET_PRECOMMIT_TAIL:-}" node -e '
+    const p = process.env;
+    process.stdout.write(JSON.stringify({
+      status: p.TARGET_PRECOMMIT_STATUS,
+      hook: p.TARGET_PRECOMMIT_HOOK || null,
+      rc: /^-?[0-9]+$/.test(p.TARGET_PRECOMMIT_RC || "") ? Number(p.TARGET_PRECOMMIT_RC) : null,
+      tail: p.TARGET_PRECOMMIT_TAIL || ""
+    }));
+  '
+}
+
+run_target_precommit() {
+  local base="$1" tip="$2" setting timeout_s top hooks_path hook hook_rel tmp out rc=0 git_dir index_path cfg_path
+  TARGET_PRECOMMIT_STATUS="skipped"; TARGET_PRECOMMIT_HOOK=""; TARGET_PRECOMMIT_RC=""; TARGET_PRECOMMIT_TAIL="no new commits"
+  [ "${AUTOPILOT_TARGET_PRECOMMIT_TEST_SKIP:-0}" = 1 ] && { TARGET_PRECOMMIT_TAIL="disabled by test negative control"; return 0; }
+  [ -n "$base" ] && [ -n "$tip" ] && [ "$base" != "$tip" ] || return 0
+  setting="$(target_precommit_setting target_precommit AUTOPILOT_TARGET_PRECOMMIT on)"
+  if [ "$setting" = off ]; then TARGET_PRECOMMIT_TAIL="disabled by AUTOPILOT_TARGET_PRECOMMIT/config"; return 0; fi
+  timeout_s="$(target_precommit_setting target_precommit_timeout_s AUTOPILOT_TARGET_PRECOMMIT_TIMEOUT_S 300)"
+  [[ "$timeout_s" =~ ^[1-9][0-9]{0,4}$ ]] || timeout_s=300
+  [ "$timeout_s" -le 86400 ] || timeout_s=300
+  top="$(git rev-parse --show-toplevel 2>/dev/null)" || { TARGET_PRECOMMIT_TAIL="target repository root unavailable"; return 0; }
+  hooks_path="$(git -C "$top" config --local --path core.hooksPath 2>/dev/null || true)"
+  if [ -n "$hooks_path" ]; then
+    case "$hooks_path" in /*) hooks_path="$hooks_path" ;; *) hooks_path="$top/$hooks_path" ;; esac
+    hook="$hooks_path/pre-commit"
+  else
+    hook="$(git -C "$top" rev-parse --path-format=absolute --git-path hooks/pre-commit 2>/dev/null || true)"
+  fi
+  [ -n "$hook" ] && [ -f "$hook" ] && [ -x "$hook" ] || { TARGET_PRECOMMIT_STATUS="absent"; TARGET_PRECOMMIT_TAIL="no executable regular pre-commit hook"; return 0; }
+  hook_rel="$(realpath --relative-to="$top" "$hook" 2>/dev/null || printf '%s' "$hook")"
+  TARGET_PRECOMMIT_HOOK="$hook_rel"
+  if [ "$top" = "$(cd "$SELF_DIR/.." && pwd -P)" ] && [ "$hook" = "$top/.githooks/pre-commit" ]; then
+    TARGET_PRECOMMIT_STATUS="skipped"; TARGET_PRECOMMIT_TAIL="autopilot .githooks/pre-commit gates run at merge"; return 0
+  fi
+  tmp="$(mktemp -d "${TMPDIR:-/tmp}/autopilot-target-precommit-XXXXXX")" || { TARGET_PRECOMMIT_STATUS="fail"; TARGET_PRECOMMIT_RC=1; TARGET_PRECOMMIT_TAIL="could not create temporary worktree directory"; return 0; }
+  rmdir "$tmp" 2>/dev/null || true
+  out="${tmp}.hook-output"; cfg_path="${tmp}.git-config"
+  if ! git -C "$top" worktree add --detach "$tmp" "$base" >"$out" 2>&1; then
+    rc=1
+  elif ! git -C "$tmp" read-tree -m -u "$tip" >>"$out" 2>&1; then
+    rc=1
+  else
+    git_dir="$(git -C "$tmp" rev-parse --absolute-git-dir 2>/dev/null)"
+    index_path="$(git -C "$tmp" rev-parse --path-format=absolute --git-path index 2>/dev/null)"
+    timeout --signal=TERM --kill-after=2 "${timeout_s}s" env GIT_DIR="$git_dir" GIT_WORK_TREE="$tmp" GIT_INDEX_FILE="$index_path" \
+      bash -c 'cd "$1" && exec "$2"' bash "$tmp" "$hook" </dev/null >>"$out" 2>&1 || rc=$?
+  fi
+  if [ "$rc" -eq 0 ]; then TARGET_PRECOMMIT_STATUS="pass"; else
+    if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then TARGET_PRECOMMIT_STATUS="timeout"; else TARGET_PRECOMMIT_STATUS="fail"; fi
+    TARGET_PRECOMMIT_RC="$rc"
+  fi
+  TARGET_PRECOMMIT_TAIL="$(node - "$SELF_DIR/../hooks/_shared/secret-patterns.js" "$out" <<'NODE'
+const fs = require('fs');
+const secrets = require(process.argv[2]);
+const text = secrets.redactOutput(fs.readFileSync(process.argv[3], 'utf8'));
+process.stdout.write(text.split(/\r?\n/).slice(-20).join('\n'));
+NODE
+  )"
+  git -C "$top" worktree remove --force "$tmp" >/dev/null 2>&1 || true
+  git -C "$top" worktree prune >/dev/null 2>&1 || true
+  rm -f -- "$out" "$cfg_path"
+}
+
 # sandbox_json: the `sandbox` object for the result JSON and the manifest.
 sandbox_json() {
   local denied="\"unknown\"" tmp="${SANDBOX_TMP_PATH:-<per-dispatch scratch dir>}"
@@ -2505,8 +2588,8 @@ process.stdout.write([policy, re, rf, rr, ep].map(clean).join("|"));
 ' "$resolved" 2>/dev/null)" || return 1
   IFS='|' read -r policy engine effort runner target_endpoint <<< "$parsed"
   [ "$policy" = "cloud-fallback" ] || return 1
-  # d-1dfcf757: a configured rung in a barred family is dropped for a marked task; the plan below then picks an allowed one.
-  if [ -n "$engine" ] && ! node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --role implementer --runner "$runner" --model "$engine" ${target_endpoint:+--endpoint "$target_endpoint"} --prompt-file "${VISION_PROMPT_FILE:-$PROMPT_FILE}" >/dev/null 2>&1; then
+  # Restricted-operator rungs that fail the current brief/sandbox check are dropped before fallback selection.
+  if [ -n "$engine" ] && ! node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner "$runner" --model "$engine" ${target_endpoint:+--endpoint "$target_endpoint"} --cwd "$(pwd)" --prompt-file "${VISION_PROMPT_FILE:-$PROMPT_FILE}" >/dev/null 2>&1; then
     engine=""; effort=""; runner=""; target_endpoint=""
   fi
   case "$(printf '%s' "${runner:-}" | tr '[:upper:]' '[:lower:]')" in
@@ -2528,7 +2611,7 @@ const plan = sf.implementerFallbackPlan({
   failedEndpoint: process.argv[4],
 });
 const gate = require(process.argv[6]);
-const rung = plan.chain.find((r) => gate.check({ runner: r.runner, model: r.model, endpoint: r.endpoint, role: "implementer", files: [process.argv[5]] }).allowed);
+const rung = plan.chain.find((r) => gate.check({ runner: r.runner, model: r.model, endpoint: r.endpoint, cwd: process.cwd(), files: [process.argv[5]] }).allowed);
 if (!rung) process.exit(1);
 process.stdout.write([rung.model, rung.effort, rung.runner, rung.endpoint || "", JSON.stringify(plan.demoted || [])].join("|"));
 ' "$SELF_DIR/lib/seat-fallback.js" "$cur_runner" "${MODEL:-}" "${ENDPOINT:-}" "${VISION_PROMPT_FILE:-$PROMPT_FILE}" "$SELF_DIR/lib/cn-model-dispatch-gate.js" 2>/dev/null)" || return 1
@@ -2904,7 +2987,7 @@ write_manifest() {
     fi
   fi
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "prompt_sha256": %s, "lane": %s, "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "tip_verify": %s, "tip_verify_source": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, "timeout_seconds": %s, "timeout_source": "%s", "timeout_enforced": %s%s%s%s%s%s, %s, "session_id": %s, "child_session_id": %s }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "prompt_sha256": %s, "lane": %s, "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "tip_verify": %s, "tip_verify_source": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, "timeout_seconds": %s, "timeout_source": "%s", "timeout_enforced": %s%s%s%s%s%s, %s, "session_id": %s, "child_session_id": %s, "local_fallback": %s, "local_slots": %s, "local_lease": %s, "target_precommit": %s }\n' \
       "$(_flat_json_escape "$DISPATCH_RUN_ID")" "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
       "${BASE_SHA:-}" "$(_flat_json_escape "${WT:-}")" "$(_flat_json_escape "${WT:-}/.autopilot-worktree.lock")" "$(_flat_json_escape "${LOG:-}")" \
       "$log_format" "$duplex_json" "$pid_json" "$scope_json" "${MANIFEST_CONTAINMENT:-plain}" \
@@ -2912,7 +2995,8 @@ write_manifest() {
       "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$tip_verify_json" "$tip_verify_source_json" "$parent_json" "$root_json" "$depth_json" \
       "$mf_timeout_secs" "$(_flat_json_escape "$mf_timeout_source")" "$mf_timeout_enforced" "$strict_manifest_fields" "$strike_suppressed_fields" "$capability_suppressed_fields" "$effort_manifest_fields$role_kit_manifest_fields" "$campaign_scope_fields" "$REPO_IDENTITY_FIELDS$(declare -F dispatch_attr_fields >/dev/null 2>&1 && dispatch_attr_fields "${PROMPT_FILE:-}" "$runner" "${ENDPOINT:-}" "${MANIFEST_FINAL_STATUS:+${OUTCOME_COMMIT:-}}")" \
       "$(declare -F manifest_session_id_json >/dev/null 2>&1 && manifest_session_id_json || printf null)" \
-      "$(declare -F manifest_child_session_json >/dev/null 2>&1 && manifest_child_session_json || printf null), \"local_fallback\": ${LOCAL_FALLBACK_JSON:-null}, \"local_slots\": ${LOCAL_SLOTS_JSON:-null}, \"local_lease\": $(local_lease_json)" > "$tmp"
+      "$(declare -F manifest_child_session_json >/dev/null 2>&1 && manifest_child_session_json || printf null)" \
+      "${LOCAL_FALLBACK_JSON:-null}" "${LOCAL_SLOTS_JSON:-null}" "$(local_lease_json)" "$(target_precommit_json)" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
   return 0
 }
@@ -3460,7 +3544,7 @@ if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_S
     : > "$LOCAL_LEASE_HEARTBEAT_FILE"
     local_lease_heartbeat_loop & LOCAL_LEASE_HEARTBEAT_PID=$!
     LOCAL_SLOTS_JSON=null
-    _gate_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --role implementer --runner cc-shim --model qwen --endpoint qwen_local --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" && _gate_rc=0 || _gate_rc=$?
+    _gate_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner cc-shim --model qwen --endpoint qwen_local --cwd "$(pwd)" --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" && _gate_rc=0 || _gate_rc=$?
     if [ "$_gate_rc" -eq 0 ]; then
       RUNNER="local"
       IMPLICIT_LOCAL_DEFAULT=1
@@ -3468,7 +3552,7 @@ if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_S
       LOCAL_FALLBACK_JSON=null
     else
       # A CN-gate refusal of the local seat is a block, not a cloud fallback.
-      die_precondition "${_gate_msg:-cn_model_dispatch_barred local (01M7XHF4)}"
+      die_precondition "${_gate_msg:-cn_model_dispatch_barred alibaba local_name_external_host (01M7E2A1, d-1dfcf757)}"
     fi
   else
     _lease_json="$(printf '%s\n' "$_slot_parsed" | sed -n '2p')"
@@ -3497,19 +3581,6 @@ else
 fi
 export AUTOPILOT_REVIEWED_IMPLEMENTER_ENDPOINT="${ENDPOINT:-}"
 export AUTOPILOT_REVIEWED_IMPLEMENTER_MODEL="${MODEL:-}"
-# The caller's prompt file stays untouched. Insert when the gate's header parser
-# (headerValue: first 8 lines, at line start or after |) sees no Task-Class.
-# A body mention of the words is not a field.
-if [ "$LOCAL_RUNNER" -eq 1 ] && ! node -e '
-  const g = require(process.argv[1]);
-  process.exit(g.headerValue([process.argv[2]], "Task-Class") ? 0 : 1);
-' "$SELF_DIR/lib/cn-model-dispatch-gate.js" "$PROMPT_FILE"; then
-  LOCAL_CLASS_PROMPT_FILE="$(mktemp -t 'dispatch-hetero-local-class-XX''XX''XX')"
-  { printf '%s\n' 'Task-Class: simple-script'; cat "$PROMPT_FILE"; } > "$LOCAL_CLASS_PROMPT_FILE" \
-    || die_precondition "could not copy the prompt to add Task-Class: simple-script"
-  PROMPT_FILE="$LOCAL_CLASS_PROMPT_FILE"
-  echo "dispatch-hetero: prompt has no Task-Class line; dispatched copy adds Task-Class: simple-script" >&2
-fi
 # bwrap refuses a worktree inside a repo. Local fills a 0700 per-user parent outside the checkout.
 if [ "$LOCAL_RUNNER" -eq 1 ] && [ -z "$WORKTREE_PARENT" ] && [ -z "$REUSE_WORKTREE" ]; then
   _local_wt_base="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}"
@@ -3517,9 +3588,9 @@ if [ "$LOCAL_RUNNER" -eq 1 ] && [ -z "$WORKTREE_PARENT" ] && [ -z "$REUSE_WORKTR
     || die_precondition "local runner could not create a worktree parent outside the repo"
   unset _local_wt_base
 fi
-# d-1dfcf757 / 01M7E2A1: Chinese-model dispatch gate (barred family blocked for transcript, sensitive, core, novel or unknown-scope/size/role tasks).
-_tfg_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --role implementer --runner "$RUNNER" --model "$MODEL" ${ENDPOINT:+--endpoint "$ENDPOINT"} --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" \
-  || die_precondition "${_tfg_msg:-cn_model_dispatch_barred unknown unknown (01M7E2A1, d-1dfcf757)}"
+# Restricted cloud operators need a clean brief in a fresh non-repo sandbox; local endpoint names must resolve locally.
+_tfg_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner "$RUNNER" --model "$MODEL" --endpoint "${ENDPOINT:-${ANTHROPIC_BASE_URL:-$RUNNER}}" --cwd "$(pwd)" --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" \
+  || die_precondition "${_tfg_msg:-cn_model_dispatch_barred unknown restricted_operator_unknown_endpoint (01M7E2A1, d-1dfcf757)}"
 unset _tfg_msg
 # Warn-only: a brief that names a ../ path points outside the worktree. Never blocks, never
 # changes the exit code. A ../ counts only at a word start ( ../x, (../x, "../x), not a/../b.
@@ -5289,7 +5360,6 @@ abort_dispatch() {
   reap_container
   cleanup_managed_codex_home
   [ -n "$SCAFFOLD_PROMPT_FILE" ] && rm -f "$SCAFFOLD_PROMPT_FILE"
-  [ -n "${LOCAL_CLASS_PROMPT_FILE:-}" ] && rm -f "$LOCAL_CLASS_PROMPT_FILE"
   [ -n "$GROK_PROMPT_FILE" ] && rm -f "$GROK_PROMPT_FILE"
   [ -n "$CCSHIM_PROMPT_FILE" ] && rm -f "$CCSHIM_PROMPT_FILE"
   _reap_ccshim_env_dir
@@ -6643,8 +6713,9 @@ compute_artifacts() {
 # repo's pre-commit hook here is both redundant and harmful: a hook that builds (e.g.
 # codepower's `vue-tsc -b` on staged .ts/.vue) emits untracked artifacts that leave the
 # tree dirty AND can `exit 1` to ABORT the commit — silently swallowing legitimately-correct
-# edits as a false `dirty`/`no_op`. The edit-only path has no build-artifact cleanup, so it
-# must not trigger the hook at all. (Root cause of the 2026-06-30 agy/cc-shim `status:dirty` runs.)
+# edits as a false `dirty`/`no_op`. The edit-only path leaves capture hook-free; captured
+# commits are checked afterward in a throwaway worktree by `run_target_precommit()`.
+# (Root cause of the 2026-06-30 agy/cc-shim `status:dirty` runs.)
 if ! wt_gitfile_check; then
   # Fail closed: the gitfile was repointed, so no git runs against $WT; classify_outcome reports it.
   HEAD_SHA="$BASE_SHA"; DIRTY=""; FILES=0; INS=0; DEL=0
@@ -7441,6 +7512,7 @@ seat_strike_capture() {
 # removal on clean success) EXACTLY as the pre-R1 inline tree did — the existing hetero tests
 # assert the resulting stdout/exit byte-for-byte, guarding this refactor.
 classify_outcome() {
+  run_target_precommit "$BASE_SHA" "$HEAD_SHA"
   OUTCOME_STATUS=""; OUTCOME_COMMIT=""; OUTCOME_FILES=0; OUTCOME_INS=0; OUTCOME_DEL=0; OUTCOME_WT="$WT"; OUTCOME_ERR=""; OUTCOME_EXIT=1
   OUTCOME_DISPATCHER_CALLED=1
   OUTCOME_MODEL_CALLS=1
@@ -7506,7 +7578,9 @@ classify_outcome() {
         OUTCOME_ERR="engine unavailable ($CLASSIFIED_ERROR): worker exited non-zero (agent exit $AGENT_EXIT); worktree kept"
       fi
     else
-      if ! run_hands_backlog_gate; then
+      if [ "$TARGET_PRECOMMIT_STATUS" = fail ] || [ "$TARGET_PRECOMMIT_STATUS" = timeout ]; then
+        : # authoritative target-hook failure is applied after the remaining outcome overrides below
+      elif ! run_hands_backlog_gate; then
         passive_capture "boundary_rejected"
         OUTCOME_STATUS="boundary_rejected"
         OUTCOME_COMMIT="$HEAD_SHA"; OUTCOME_FILES="$FILES"; OUTCOME_INS="$INS"; OUTCOME_DEL="$DEL"; OUTCOME_WT="$WT"
@@ -7671,6 +7745,12 @@ classify_outcome() {
         [ "${BROKER_VERDICT:-}" != stopped_billing ] || OUTCOME_ERR="${BROKER_RUNNER}_stopped_billing"
       fi
     fi
+  fi
+  if [ "$TARGET_PRECOMMIT_STATUS" = fail ] || [ "$TARGET_PRECOMMIT_STATUS" = timeout ]; then
+    OUTCOME_STATUS="target_precommit_failed"
+    OUTCOME_COMMIT="$HEAD_SHA"; OUTCOME_FILES="$FILES"; OUTCOME_INS="$INS"; OUTCOME_DEL="$DEL"; OUTCOME_WT="$WT"
+    OUTCOME_ERR="target pre-commit hook ${TARGET_PRECOMMIT_HOOK:-unknown} ${TARGET_PRECOMMIT_STATUS} (rc=${TARGET_PRECOMMIT_RC:-unknown}); captured commit kept for review"
+    OUTCOME_EXIT=1
   fi
   # After engine_unavailable and wall-timeout overrides, so only a run that
   # stays question_suspected emits. Still before any terminal stage-transition.
@@ -7838,6 +7918,7 @@ dispatch_detached_run() {
       STRICT_CONTRACT STRICT_CONTRACT_RESULT_FIELDS STRICT_UNIT_ID STRICT_CONTRACT_SHA STRICT_SPEC_SHA STRICT_GO STRICT_ENGINE_ASSURANCE CONSUMING_REPO_ROOT CONTRACT_FILE_SUPPLIED CONTRACT_FILE \
       CAMPAIGN_CONTRACT_SHA256 CAMPAIGN_ID CAMPAIGN_MISSION_MODE CAMPAIGN_STRICT_AUTHORITY CAMPAIGN_PROJECTION_BOUND NO_CAMPAIGN MISSION_ENFORCEMENT_MODE_SEEN \
       OUTCOME_STATUS OUTCOME_COMMIT OUTCOME_FILES OUTCOME_INS OUTCOME_DEL OUTCOME_WT OUTCOME_ERR OUTCOME_EXIT \
+      TARGET_PRECOMMIT_STATUS TARGET_PRECOMMIT_HOOK TARGET_PRECOMMIT_RC TARGET_PRECOMMIT_TAIL \
       OUTCOME_DISPATCHER_CALLED OUTCOME_MODEL_CALLS OUTCOME_MUTATION_ATTEMPTS OUTCOME_GATE_ATTEMPTS OUTCOME_RESOURCES_CREATED OUTCOME_ZERO_DIFF_RECEIPT_DIGEST \
       CLASSIFIED_ERROR \
       ORPHAN_LOG OUTCOME_ORPHAN WT_LOCK_FD LINEAGE_PARENT LINEAGE_ROOT LINEAGE_JOB_ROOT WORKTREE_ROOT_RUN_ID LINEAGE_DEPTH HETERO_FLEET_TASK_ID \
@@ -7869,11 +7950,12 @@ dispatch_detached_run() {
     # Preserve pi supervisor poll/stall bounds across setsid detach.
     declare -p PI_RPC_DIRECTIVE_POLL_SECS PI_RPC_STALL_PROBE_SECS PI_RPC_MAX_SECS PI_RPC_PROVIDER PI_MODELS_JSON 2>/dev/null || true
     declare -p STRIKE_DETECTOR_VERSION 2>/dev/null || true
-    declare -f wt_gitfile_check _wt_git 2>/dev/null || true
+    declare -f wt_gitfile_check _wt_git target_precommit_setting target_precommit_json run_target_precommit 2>/dev/null || true
     declare -f current_runner_name sandbox_preflight sandbox_nested_repo sandbox_setup sandbox_teardown sandbox_count_denied sandbox_count_blocked sandbox_json reap_cnative_config_dir reap_sandbox_config_dir codeforge_collect_claude_dir 2>/dev/null || true
     # token_seat_guard (lib/token-seat.sh) is called inside run_agent's claude branches; without it the
     # detached child dies with "command not found" before the claude worker starts.
     declare -f token_seat_guard 2>/dev/null || true
+    declare -f local_lease_json release_local_lease local_lease_heartbeat_loop 2>/dev/null || true
     declare -f agy_print_timeout agy_assert_disposable_home die_precondition fell_back_json_suffix hetero_log_fallback child_session_env_setup repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_worker_alive _watchdog_signal_worker _hetero_resolve_watch_limits _watchdog_sleep_sample _watchdog_progress_sample _watchdog_fire _arm_worker_watchdog _worker_has_busy_descendant _supervise_commit_quiet _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts capture_structured_provider_error _prefer_structured_classified_error passive_capture \
       _is_engine_unavailable _hetero_runner_token _capability_write_note _capability_write_suppress_now seat_strike_capture classify_outcome _emit_question_waiting_event heartbeat_loop detached_main seal_runner_prompt_bytes write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks resolve_tip_verify_commands run_tip_verify _fp_unverifiable main_checkout_fingerprint main_checkout_parts_digest main_checkout_describe_delta main_checkout_wt_symlink_leaks check_main_checkout_boundary run_hands_content_gate run_hands_backlog_gate run_hands_backlog_reconcile_gate \
       _cont_terminal_on_exit _cont_finalize_or_die \

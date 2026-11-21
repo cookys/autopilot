@@ -54,10 +54,12 @@ function record(c, nowS) {
 }
 
 // observe({rc, text, liveDir, now}) -> { wrote, state, code? }
-function observe({ rc, text, verdict, liveDir, now, env = process.env } = {}) {
+function observe({ rc, text, verdict, liveDir, now, env = process.env, billing_confirmed = false } = {}) {
   const nowS = Math.floor((now === undefined ? Date.now() : now) / 1000);
   const dir = liveDir || obs.liveDirOrNull({ env });
   if (!dir) return { wrote: false, code: 'live_dir_unavailable' };
+  // Unconfirmed billing keyword: do not write a refusal and do not mark token_state ok.
+  if (verdict === 'stopped_billing' && billing_confirmed !== true) return { wrote: false, state: null };
   const c = verdict === undefined ? classify(rc, text, nowS)
     : verdict === 'stopped_billing' ? { state: 'exhausted', reason: 'quota', reset_at: nowS + UNKNOWN_RESET_TTL_S }
       : verdict === 'done' ? { state: 'available' } : null;

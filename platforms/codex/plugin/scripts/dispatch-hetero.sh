@@ -1308,6 +1308,7 @@ const r = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
 const fields = { broker_run_id: r.run_id, broker_diff_sha16: crypto.createHash('sha256').update(r.diff).digest('hex').slice(0, 16) };
 const failVerdict = new Set(['rejected', 'stopped_billing', 'timeout', 'agent_failed', 'failed']);
 if (failVerdict.has(r.verdict)) fields.reason = r.verdict === 'stopped_billing' ? `${process.argv[3]}_stopped_billing` : r.reason;
+if (r.verdict === 'stopped_billing') fields.billing_line = typeof r.billing_line === 'string' ? r.billing_line.slice(0, 160) : '';
 process.stdout.write(', ' + JSON.stringify(fields).slice(1, -1));
 NODE
     )"
@@ -6043,16 +6044,20 @@ if (typeof verdict === 'string') raw = verdict;
 else if (verdict === null) raw = 'null';
 else if (!(verdict === undefined || verdict === '')) { try { raw = JSON.stringify(verdict); } catch { raw = ''; } }
 const reason = obj && typeof obj.reason === 'string' ? obj.reason : '';
+const confirmed = obj && obj.billing_confirmed === true ? 'true' : 'false';
+const billingLine = obj && typeof obj.billing_line === 'string' ? obj.billing_line.slice(0, 160) : '';
 const b64 = (s) => Buffer.from(s, 'utf8').toString('base64');
-process.stdout.write(kind + '\n' + b64(raw) + '\n' + b64(reason) + '\n');
+process.stdout.write(kind + '\n' + b64(raw) + '\n' + b64(reason) + '\n' + confirmed + '\n' + b64(billingLine) + '\n');
 NODE
 )" || _broker_meta=""
     BROKER_VERDICT_KIND="$(printf '%s\n' "$_broker_meta" | sed -n '1p')"
     BROKER_VERDICT="$(printf '%s\n' "$_broker_meta" | sed -n '2p' | base64 -d 2>/dev/null || true)"
     BROKER_REASON="$(printf '%s\n' "$_broker_meta" | sed -n '3p' | base64 -d 2>/dev/null || true)"
+    BROKER_BILLING_CONFIRMED="$(printf '%s\n' "$_broker_meta" | sed -n '4p')"
+    BROKER_BILLING_LINE="$(printf '%s\n' "$_broker_meta" | sed -n '5p' | base64 -d 2>/dev/null || true)"
     [ "$BROKER_VERDICT" != timeout ] || WORKER_TIMED_OUT=1
     if [ "$BROKER_VERDICT" != done ] || [ "${AGENT_EXIT:-1}" -eq 0 ]; then
-      node "$SELF_DIR/lib/cursor-broker-client.js" observe "$BROKER_RUNNER" "$BROKER_VERDICT" >/dev/null 2>&1 || true
+      node "$SELF_DIR/lib/cursor-broker-client.js" observe "$BROKER_RUNNER" "$BROKER_VERDICT" "$BROKER_BILLING_CONFIRMED" "$BROKER_BILLING_LINE" >/dev/null 2>&1 || true
     fi
   fi
 elif [ "$IS_PI" -eq 1 ]; then

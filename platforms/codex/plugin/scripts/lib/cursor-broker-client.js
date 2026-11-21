@@ -81,9 +81,12 @@ function projectReply(raw, runner) {
     throw new Error(`${runner} broker invalid response`);
   }
   const verdict = Object.prototype.hasOwnProperty.call(raw, 'verdict') ? raw.verdict : null;
+  const billing_confirmed = raw.billing_confirmed === true;
+  const billing_line = typeof raw.billing_line === 'string' ? raw.billing_line.slice(0, 160) : '';
   const response = {
     diff: raw.diff, log: raw.log, run_id: raw.run_id, verdict,
     reason: typeof raw.reason === 'string' ? raw.reason : '',
+    billing_confirmed, billing_line,
   };
   const hardFail = typeof verdict === 'string' && HARD_FAIL.has(verdict);
   const missing = verdict == null || verdict === '';
@@ -109,8 +112,12 @@ function brokerAvailable(runner = 'kimi', { env = process.env, now } = {}) {
     return runner === 'kimi' ? !quota.exhaustedKimi({ env, now }) : quota.cursorState({ env, now }) !== 'exhausted';
   } catch { return false; }
 }
-function observeQuota(runner, verdict) {
-  return require(brokerConfig(runner).quotaObserver).observe({ verdict });
+function observeQuota(runner, verdict, fields = {}) {
+  return require(brokerConfig(runner).quotaObserver).observe({
+    verdict,
+    billing_confirmed: fields.billing_confirmed === true,
+    billing_line: typeof fields.billing_line === 'string' ? fields.billing_line.slice(0, 160) : '',
+  });
 }
 async function main(argv) {
   if (argv[0] === 'available') {
@@ -122,8 +129,8 @@ async function main(argv) {
     return brokerAvailable(argv[1]) ? 0 : 3;
   }
   if (argv[0] === 'observe') {
-    if (argv.length !== 3) throw new Error('broker observe requires runner and verdict');
-    observeQuota(argv[1], argv[2]);
+    if (argv.length !== 3 && argv.length !== 5) throw new Error('broker observe requires runner and verdict');
+    observeQuota(argv[1], argv[2], { billing_confirmed: argv[3] === 'true', billing_line: argv[4] || '' });
     return 0;
   }
   const args = {};

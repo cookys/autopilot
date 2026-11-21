@@ -17,7 +17,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { sourceFingerprint, markerFilesOf } = require('../src/status/runs-watch');
+const { sourceFingerprint, readLiveMarkers } = require('../src/status/runs-watch');
 
 const H = 3600 * 1000;
 const NOW = Date.parse('2026-11-21T12:00:00.000Z');
@@ -88,11 +88,11 @@ test('sourceFingerprint: an unparsable expires_at falls back to the mtime rule l
   } finally { t.cleanup(); }
 });
 
-test('markerFilesOf: the same live-only rule, and an unreadable marker is not ours', () => {
+test('readLiveMarkers: the same live-only rule, and an unreadable marker is not ours', () => {
   const t = mk();
   try {
     t.w('live.json', { session_id: 'live', project_key: KEY, expires_at: iso(NOW + H) });
     t.w('unreadable.json', '{not json');
-    assert.deepStrictEqual(markerFilesOf(t.markers, KEY, NOW).map((p) => path.basename(p)), ['live.json']);
+    assert.deepStrictEqual(readLiveMarkers(t.markers, KEY, NOW).paths.map((p) => path.basename(p)), ['live.json']);
   } finally { t.cleanup(); }
 });

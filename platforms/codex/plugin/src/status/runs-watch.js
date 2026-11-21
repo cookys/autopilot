@@ -163,20 +163,29 @@ function markerDirOf(env) {
   return env.AUTOPILOT_SESSION_MODE_DIR || path.join(os.homedir(), '.autopilot', 'session-mode');
 }
 
-// Unexpired = file exists, parses, expires_at > now. Only markers of this project_key count.
-function unexpiredMarkers(env, key, nowMs) {
-  const dir = markerDirOf(env);
-  const out = [];
+// Read each marker once per tick; expired records are rechecked under the writer lock.
+function readLiveMarkers(dir, key, nowMs) {
+  const { unlinkIfStillExpired } = require('../../scripts/session-mode');
+  const result = { records: [], paths: [] };
   let names = [];
-  try { names = fs.readdirSync(dir); } catch (_error) { return out; }
+  try { names = fs.readdirSync(dir); } catch (_error) { return result; }
   for (const name of names) {
     if (!name.endsWith('.json')) continue;
+    const file = path.join(dir, name);
     try {
-      const m = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'));
-      if (m && m.project_key === key && Date.parse(m.expires_at) > nowMs) out.push(m);
-    } catch (_error) { /* unreadable marker: not unexpired */ }
+      const m = JSON.parse(fs.readFileSync(file, 'utf8'));
+      const exp = Date.parse(m && m.expires_at);
+      if (Number.isFinite(exp) && exp <= nowMs) {
+        try { unlinkIfStillExpired(file, nowMs, 0); } catch (_error) { /* best effort */ }
+        continue;
+      }
+      if (!m || m.project_key !== key) continue;
+      if (Number.isFinite(exp)) result.records.push(m);
+      else if (nowMs - fs.statSync(file).mtimeMs > 24 * 3600 * 1000) continue;
+      result.paths.push(file);
+    } catch (_error) { /* unreadable marker */ }
   }
-  return out;
+  return result;
 }
 
 // The Mission roots a session marker links to the campaigns it launched (additive `campaign_roots`, written by
@@ -233,20 +242,8 @@ function openDecisionCount(identity, key) {
   return n;
 }
 
-// Roots whose session left a tasks/attention file of this project updated within `windowS`. The session -> root map
-// reads this project's markers of ANY expiry (an expired marker still says which root its session worked on).
-function recentSessionRoots(env, key, nowMs, windowS) {
-  const rootOf = new Map();
-  try {
-    const dir = markerDirOf(env);
-    for (const name of fs.readdirSync(dir)) {
-      if (!name.endsWith('.json')) continue;
-      try {
-        const m = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'));
-        if (m && m.project_key === key && typeof m.root_run_id === 'string' && m.root_run_id) rootOf.set(name.replace(/\.json$/, ''), m.root_run_id);
-      } catch (_error) { /* unreadable marker: no root */ }
-    }
-  } catch (_error) { return new Set(); }
+// Remember live session-to-root associations while the root remains retained, even after expiry cleanup.
+function recentSessionRoots(env, key, nowMs, windowS, rootOf) {
   const base = liveBaseOf(env);
   const out = new Set();
   for (const sub of ['tasks', 'attention']) {
@@ -427,36 +424,15 @@ function fileEntries(paths, startMs) {
     return { path: p, mtime_ms: m };
   });
 }
-// Only the markers that are still LIVE for this project (see the sourceFingerprint comment): an expired marker cannot
-// change anything the snapshot shows, so it never enters the list the mod re-checks on every poll. Live = expires_at in
-// the future, or no parsable expires_at and an mtime within one marker TTL (24 h). Unreadable or another project's: never.
-function markerFilesOf(dir, key, nowMs) {
-  const out = [];
-  let names = [];
-  try { names = fs.readdirSync(dir); } catch (_error) { return out; }
-  for (const name of names) {
-    if (!name.endsWith('.json')) continue;
-    try {
-      const m = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'));
-      if (!m || m.project_key !== key) continue;
-      const exp = Date.parse(m.expires_at);
-      if (Number.isFinite(exp)) {
-        if (exp <= nowMs) continue; // expired: cannot change the snapshot
-      } else if (nowMs - fs.statSync(path.join(dir, name)).mtimeMs > 24 * 3600 * 1000) continue; // no parsable expires_at: one marker TTL by mtime
-      out.push(path.join(dir, name));
-    } catch (_error) { /* unreadable: not ours */ }
-  }
-  return out;
-}
 // dirs: the two directory mtimes taken BEFORE the tick's collect; null when the identity is unknown (nothing can be said about change then)
-function sourceFingerprint({ env, key, identity, rows, dirs, startMs }) {
+function sourceFingerprint({ env, key, identity, rows, dirs, startMs, liveMarkers }) {
   if (!identity) return null;
   const manifestDir = manifestDirOf(env);
   const markerDir = markerDirOf(env);
   const manifests = [...new Set(rows.map((r) => r && r.manifest).filter((p) => typeof p === 'string' && p))];
   return [
     { role: 'manifest', dir: manifestDir, dir_mtime_ms: dirs.manifest, suffix: '.manifest.json', match_field: 'repo_identity', match_value: identity, files: fileEntries(manifests, startMs) },
-    { role: 'marker', dir: markerDir, dir_mtime_ms: dirs.marker, suffix: '.json', match_field: 'project_key', match_value: key, files: fileEntries(markerFilesOf(markerDir, key, startMs), startMs) },
+    { role: 'marker', dir: markerDir, dir_mtime_ms: dirs.marker, suffix: '.json', match_field: 'project_key', match_value: key, files: fileEntries((liveMarkers || readLiveMarkers(markerDir, key, startMs)).paths, startMs) },
   ];
 }
 
@@ -527,7 +503,7 @@ function createWatcher({
     lastSources: null, lastSignature: null, lastPublishMs: null, lastRuns: null, lastObservedAt: null, lastPaths: null,
     roots: new Set(), lastCounts: new Map(), lastCost: { sessions: {}, host_today_usd: null, host_today_as_of: null, host_today_brain_usd: null, brain_cap_usd: brainSpend.read().brain_cap_usd },
     idleSince: null, lastPathsWhy: null, // lastPathsWhy: the last logged reason `git worktree list` failed (log again only when it changes)
-    rootActiveAt: new Map(), droppedRoots: new Set(), // root retention (ROOT_RETENTION_S)
+    rootActiveAt: new Map(), droppedRoots: new Set(), sessionRoots: new Map(), // root retention (ROOT_RETENTION_S)
     // --render: last-seen signature per root, roots awaiting a publish, the debounce deadline, cached task receipts
     render: { seen: new Map(), dirty: new Set(), dueAt: null, task: new Map(), dates: new Map() },
   };
@@ -637,7 +613,7 @@ function createWatcher({
 
   // WATCH-A inputs of one scope (planned / decision / compare / marker stage / sources manifest): src/status/watch-inputs.js
   function watchInputs(root, nowMs, wo) {
-    return readWatchInputs({ env, key, identity, root, nowMs, liveBase: live, autopilotHome, markers: unexpiredMarkers(env, key, nowMs), progressReceipt: wo ? wo.value : null });
+    return readWatchInputs({ env, key, identity, root, nowMs, liveBase: live, autopilotHome, markers: tickMarkers.records, progressReceipt: wo ? wo.value : null });
   }
 
   function renderSignature(k, rows, nowMs) {
@@ -772,7 +748,10 @@ function createWatcher({
         if (scopeFileHasLive(path.join(common, 'autopilot', 'decisions', `${key}--${safeSegment(root)}.json`))) active.add(root); // a kept closed card does not make its root active
       }
     }
-    for (const root of recentSessionRoots(env, key, nowMs, windowS)) active.add(root);
+    for (const m of allMarkers) {
+      if (typeof m.session_id === 'string' && typeof m.root_run_id === 'string' && m.root_run_id) state.sessionRoots.set(m.session_id.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64), m.root_run_id);
+    }
+    for (const root of recentSessionRoots(env, key, nowMs, windowS, state.sessionRoots)) active.add(root);
     return active;
   }
 
@@ -831,6 +810,7 @@ function createWatcher({
 
   // One observation. Publishes on change; otherwise a 60 s heartbeat that moves only published_at.
   // Returns { exit: 'idle_exit' } when the idle-exit condition holds (the caller does the final publish).
+  let tickMarkers = { records: [], paths: [] };
   function tick() {
     const nowMs = now();
     let rows;
@@ -852,8 +832,9 @@ function createWatcher({
       log('code changed, exiting');
       return { published: false, exit: 'code_changed' };
     }
-    state.lastSources = sourceFingerprint({ env, key, identity, rows, dirs: dirsBefore, startMs: nowMs }); // this tick's view (published on change or heartbeat, and by the final publish)
-    const allMarkers = unexpiredMarkers(env, key, nowMs);
+    tickMarkers = readLiveMarkers(markerDirOf(env), key, nowMs);
+    state.lastSources = sourceFingerprint({ env, key, identity, rows, dirs: dirsBefore, startMs: nowMs, liveMarkers: tickMarkers }); // this tick's view (published on change or heartbeat, and by the final publish)
+    const allMarkers = tickMarkers.records;
     const markers = allMarkers.filter(isOrchestratorMarker);
     const cost = { ...costs.summary(nowMs, markers.map((m) => m.session_id).filter(Boolean)), ...brainSpend.read() };
     const candidates = new Set(state.roots);
@@ -884,6 +865,7 @@ function createWatcher({
       } else roots.add(root);
     }
     if (dropped.length) {
+      for (const [sid, root] of state.sessionRoots) if (dropped.includes(root)) state.sessionRoots.delete(sid);
       state.roots = new Set([...state.roots].filter((r) => !dropped.includes(r)));
       for (const root of dropped) { removeRootFiles(root); state.render.seen.delete(root); state.render.dirty.delete(root); state.render.task.delete(root); }
     }
@@ -1348,5 +1330,5 @@ function runWriter({ key, interval, idleExit, enrichCap, collect, render, cwd, e
 
 module.exports = {
   taskPollDue, TASK_SETTLED_POLL_MS, rotateWatcherLog, WATCHER_LOG_MAX_BYTES, SCHEMA, VALID_FOR_S, HEARTBEAT_S, LOCK_BUSY_RC, DEFAULT_IDLE_EXIT_S, createWatcher, readEnvelope, runWatchCli,
-  runWriter, makeOrphanCheck, lockPathOf, onPath, recentSessionFiles, openDecisionCount, isWatcherFor, flockAvailable, flockProbe, startWatcherDetached, watchLaunchArgv, worktreePaths, stableRepoRoot, computeCounts, unexpiredMarkers, isOrchestratorMarker, createCostReader, sourceFingerprint, markerFilesOf,
+  runWriter, makeOrphanCheck, lockPathOf, onPath, recentSessionFiles, openDecisionCount, isWatcherFor, flockAvailable, flockProbe, startWatcherDetached, watchLaunchArgv, worktreePaths, stableRepoRoot, computeCounts, readLiveMarkers, isOrchestratorMarker, createCostReader, sourceFingerprint,
 };

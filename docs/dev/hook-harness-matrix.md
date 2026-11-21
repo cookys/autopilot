@@ -42,6 +42,8 @@ In `hooks/harness-support-evidence.json`, a `fired` row (a probe run saw the eve
 | `scheduled-wakeup-guard` | PreToolUse, UserPromptSubmit<br>未驗證 | — | — | — |
 | `secret-output-redact` | PostToolUse<br>未驗證 | — | — | — |
 | `session-handoff` | SessionEnd<br>未驗證 | — | — | — |
+| `session-mode-end` | SessionEnd<br>未驗證 | — | — | — |
+| `session-mode-refresh` | UserPromptSubmit<br>未驗證 | — | — | — |
 | `session-start` | SessionStart<br>未驗證 | — | — | — |
 | `session-tasks` | PostToolUse, TaskCompleted, TaskCreated<br>未驗證 | — | — | — |
 | `state-checkpoint` | PostCompact, PreCompact<br>未驗證 | — | — | — |

@@ -44,6 +44,8 @@
     { "stem": "secret-output-redact", "class": "invariant_effect" },
     { "stem": "pii-read-guard", "class": "invariant_effect" },
     { "stem": "session-handoff", "class": "invariant_effect" },
+    { "stem": "session-mode-end", "class": "invariant_effect" },
+    { "stem": "session-mode-refresh", "class": "invariant_effect" },
     { "stem": "session-start", "class": "host_only" },
     { "stem": "session-summary", "class": "invariant_effect" },
     { "stem": "session-tasks", "class": "invariant_effect" },

@@ -57,7 +57,13 @@
  *   MORE than 24h in the past (or, missing/unparsable expires_at, mtime older than 7 days)
  *   are removed — at most 500 per write, .json only, never the marker being written. The
  *   live mod re-stat'ed every marker listed in an envelope on every poll, so the dead ones
- *   had to stop accumulating.
+ *   had to stop accumulating. Every removal (write-time, `sweep`, reader-side) goes through
+ *   the locked re-verification unlinkIfStillExpired. Lifecycle (plan §5.A): SessionEnd's
+ *   hooks/session-mode-end.js calls endSession() — plain markers are deleted, unexpired
+ *   l3–l6 without campaigns are clamped to now + 20 min (RESUME_GRACE_MS; the first prompt
+ *   after a /clear re-arms the full TTL via hooks/session-mode-refresh.js), unexpired l5/l6
+ *   with campaign_roots are kept, expired ones are deleted before any retention check;
+ *   `sweep [--max N] [--grace-ms M]` is the bounded CLI cleanup (readers pass grace-ms 0).
  *
  * Usage:
  *   node scripts/session-mode.js set --level l3|l4|l5|l6 [--entry-level l3|l4|l5|l6]
@@ -73,6 +79,9 @@
  *   node scripts/session-mode.js retire --session <id> --integration-receipt <file>
  *     [--integration-ref <ref>] [--lineage <adoption-key>] [--repo-root <dir>]
  *   node scripts/session-mode.js status
+ *   node scripts/session-mode.js sweep [--max N] [--grace-ms M]
+ *     (bounded cleanup of the marker dir: prints {removed, remaining}; --max 0 = no cap;
+ *      --grace-ms 0 = past-expiry is dead now, reader-side)
  *
  * retire (v2.36.48): retire ANOTHER session's managed marker for this repo once its
  * deliverable is integrated. The marker-to-campaign bridge in dispatch-hetero.sh checks
@@ -753,43 +762,210 @@ function writeMarkerFile(file, marker) {
 // Best-effort cleanup when a marker is written (the set path and its kin): the session-mode dir historically
 // accumulated forever (a real host held 2,615 files, oldest from months ago, never cleaned), and the live mod
 // re-stat'ed every marker it listed in an envelope on every poll, so the dead ones burned CPU for no reason.
-// Remove the siblings whose `expires_at` is MORE than 24 h in the past, or, when it is missing or unparsable,
-// whose mtime is older than 7 days. Rules: at most 500 removals per write (the rest wait for the next write);
-// never the marker being written; never a name that does not end in `.json` (locks, tmp files, foreign files);
-// every error is ignored (a failed unlink is simply retried by the next write). Removal is fs.unlinkSync on a
-// path built from this directory's own readdir — nothing else is ever opened for deletion.
+// Remove the siblings whose `expires_at` is MORE than `graceMs` in the past (default: 24 h — the write-time
+// behaviour, unchanged), or, when it is missing or unparsable, whose mtime is older than 7 days. The mtime
+// fallback is the DEFAULT-grace rule only: at any other grace (reader-side, e.g. graceMs 0) a marker without a
+// parsable expires_at is dead immediately, because every reader (readSessionRecord, runs-watch, dispatch)
+// already sees it as nonexistent. Rules: at most `max` removals per call (default 500; max 0 = no cap) — the
+// whole directory is always scanned, so the returned `remaining` (dead files the cap held back) is exact;
+// never the protected file; never a name that does not end in `.json` (locks, tmp files, foreign files).
+// EVERY removal goes through unlinkIfStillExpired below (the locked re-verification): the old read-then-unlink
+// path is retired — a writeMarkerFile / ensurePlainMarker rename that lands on the same sid while we wait is
+// re-read fresh under the lock and kept. Every error is ignored (a failed unlink is retried by the next sweep).
 const SWEEP_MAX_REMOVALS = 500;
-const SWEEP_EXPIRED_AFTER_MS = 24 * 3600 * 1000; // expires_at must be more than this far in the past
-const SWEEP_MTIME_AFTER_MS = 7 * 24 * 3600 * 1000; // the fallback age when expires_at is missing or unparsable
-function sweepExpiredMarkers(dir, protectFile, now = Date.now()) {
-  let names = [];
-  try { names = fs.readdirSync(dir); } catch (_error) { return; }
-  let removed = 0;
-  for (const name of names) {
-    if (removed >= SWEEP_MAX_REMOVALS) break;
-    if (!name.endsWith('.json')) continue;
-    const p = path.join(dir, name);
-    if (protectFile !== null && path.resolve(p) === path.resolve(protectFile)) continue;
-    try {
-      let parsable = null;
-      try {
-        const m = JSON.parse(fs.readFileSync(p, 'utf8'));
-        parsable = m && typeof m === 'object' ? Date.parse(m.expires_at) : NaN;
-      } catch (_error) { /* unreadable: parsable stays null */ }
-      const dead = parsable === null || Number.isNaN(parsable)
-        ? now - fs.statSync(p).mtimeMs > SWEEP_MTIME_AFTER_MS // no parsable expires_at: the mtime rule decides
-        : now - parsable > SWEEP_EXPIRED_AFTER_MS; // parsable: the expires_at rule alone decides
-      if (dead) { fs.unlinkSync(p); removed += 1; }
-    } catch (_error) { /* one file failed: the next write tries again */ }
+const SWEEP_EXPIRED_AFTER_MS = 24 * 3600 * 1000; // default grace: expires_at must be this far in the past
+const SWEEP_MTIME_AFTER_MS = 7 * 24 * 3600 * 1000; // the fallback age when expires_at is missing or unparsable (default grace only)
+const RESUME_GRACE_MS = 20 * 60 * 1000; // endSession's clamp: an l3–l6 marker without campaigns keeps this much resume time
+
+// The one "is this file dead" rule for a given grace. parsable null/NaN = no parsable expires_at: at the default
+// grace the mtime rule decides (legacy write-time behaviour, unchanged); at any other grace it is dead (reader-side).
+function sweepDead({ parsable, mtimeMs, now, graceMs }) {
+  if (parsable === null || Number.isNaN(parsable)) {
+    return graceMs === SWEEP_EXPIRED_AFTER_MS
+      ? (Number.isFinite(mtimeMs) && now - mtimeMs > SWEEP_MTIME_AFTER_MS)
+      : true;
+  }
+  return now - parsable > graceMs;
+}
+
+// Read one candidate (outside any lock): its parsable expires_at and, only when unparsable (the mtime rule
+// needs it, exactly like the legacy path), its mtime. Unreadable: parsable null, mtimeMs null when stat failed too.
+function sweepProbe(file) {
+  let parsable = null;
+  try {
+    const m = JSON.parse(fs.readFileSync(file, 'utf8'));
+    parsable = m && typeof m === 'object' ? Date.parse(m.expires_at) : NaN;
+  } catch (_error) { /* unreadable: parsable stays null */ }
+  let mtimeMs = null;
+  if (parsable === null || Number.isNaN(parsable)) {
+    try { mtimeMs = fs.statSync(file).mtimeMs; } catch (_error) { /* gone already */ }
+  }
+  return { parsable, mtimeMs };
+}
+
+// The one deletion path for every reader-side and CLI sweep (plan §5.A): take the per-marker write lock,
+// re-read and re-verify the file is STILL dead under this grace, and only then unlink — so it never races a
+// writeMarkerFile / ensurePlainMarker rename on the same sid (the recheck is what test "expired marker recheck
+// preserves concurrent replacement" pins). -> true when a file was unlinked. Never throws: a lock timeout, a
+// file that vanished, or a failed unlink simply means the next sweep tries again.
+function unlinkIfStillExpired(file, now = Date.now(), graceMs = SWEEP_EXPIRED_AFTER_MS) {
+  try {
+    return withWriteLock({ storeDir: path.dirname(file), lockFile: `${file}.lock`, name: 'session-mode marker', timeoutMs: 2000 }, () => {
+      if (!sweepDead({ ...sweepProbe(file), now, graceMs })) return false;
+      fs.unlinkSync(file);
+      return true;
+    });
+  } catch (_error) {
+    return false;
   }
 }
 
+// -> { removed, remaining }: removed = unlinked this call; remaining = files that still satisfy this call's
+// graceMs but were held back by the max cap (never live markers, the protected file, or the directory total).
+function sweepExpiredMarkers(dir, protectFile, now = Date.now(), { max = SWEEP_MAX_REMOVALS, graceMs = SWEEP_EXPIRED_AFTER_MS } = {}) {
+  const cap = max > 0 ? max : null; // max 0 = no cap (an explicit value, not a refusal)
+  let names = [];
+  try { names = fs.readdirSync(dir); } catch (_error) { return { removed: 0, remaining: 0 }; }
+  let removed = 0;
+  let dead = 0;
+  for (const name of names) {
+    if (!name.endsWith('.json')) continue;
+    const p = path.join(dir, name);
+    if (protectFile !== null && path.resolve(p) === path.resolve(protectFile)) continue;
+    if (!sweepDead({ ...sweepProbe(p), now, graceMs })) continue;
+    dead += 1;
+    if (cap !== null && removed >= cap) continue; // the rest wait for the next sweep (or a reader)
+    if (unlinkIfStillExpired(p, now, graceMs)) removed += 1;
+  }
+  return { removed, remaining: dead - removed };
+}
+
+// SessionEnd lifecycle (plan §5.A): the marker DIES with the session. Judged under the per-marker write lock
+// (same lock as bindCampaignRoot / ensurePlainMarker) on a fresh read, in this order:
+//   absent         no file for the sid (a second SessionEnd, or residue a kill -9 left for the sweep)
+//   refused_parent the sid equals AUTOPILOT_PARENT_SESSION_ID: a child runner never deletes the session that
+//                  launched it (3b rule 2, checked before any directory, lock or file is touched, like ensure)
+//   mismatch       the file's session_id field names another session: not ours to destroy (left untouched)
+//   removed        unlinked. Either the marker was already EXPIRED — expiry is judged BEFORE any retention
+//                  rule, because an expired marker is "nonexistent" to every reader, so retention cannot save
+//                  it (test 6a) — or it was a PLAIN marker (level null / absent: SessionStart's ensurePlainMarker
+//                  rebuilds it on resume, so the file itself carries no state). An unreadable file of our own
+//                  name is removed too: every reader already fails open on it, and the session that owns the
+//                  name is ending (no live state can be lost).
+//   kept_campaign  an unexpired marker with non-empty campaign_roots: the marker is the ONLY link from the
+//                  session to the background campaign (src/status/runs-watch.js), so the file stays; it dies at
+//                  expiry through any cleanup path (reader-side grace-0 unlink, the sweep, a later endSession).
+//                  In practice the level is l5/l6 (only bind-campaign-root writes it, and only at l5/l6); the
+//                  retention is level-agnostic so a malformed l3/l4 with roots is kept, not severed.
+//   clamped        an unexpired l3–l6 marker without campaigns: the file is KEPT, but expires_at is rewritten
+//                  in place to min(expires_at, now + RESUME_GRACE_MS) (20 minutes; no schema change) — an
+//                  immediate resume or /clear still finds level, stage and root_run_id; an unresumed marker is
+//                  collected 20 minutes later. (SessionStart's ensurePlainMarker then re-arms the full 24 h TTL.)
+// Every judgment is re-verified under the lock against the file's own session_id. -> one of the six strings.
+// Never throws.
+function endSession(sessionId, { parentSessionId = process.env.AUTOPILOT_PARENT_SESSION_ID, now = Date.now(), dir = markerDir() } = {}) {
+  const sid = normalizeSessionId(sessionId);
+  if (!sid) return 'absent';
+  const parent = normalizeSessionId(typeof parentSessionId === 'string' ? parentSessionId.trim() : '');
+  if (parent && parent === sid) return 'refused_parent';
+  let dirOk = true;
+  try { fs.statSync(dir); } catch (_error) { dirOk = false; }
+  if (!dirOk) return 'absent';
+  const file = path.join(dir, `${sid}.json`);
+  let result = 'absent';
+  try {
+    withWriteLock({ storeDir: dir, lockFile: `${file}.lock`, name: 'session-mode marker', timeoutMs: PHASE_LOCK_TIMEOUT_MS }, () => {
+      let m = null;
+      try {
+        m = JSON.parse(fs.readFileSync(file, 'utf8'));
+      } catch (error) {
+        if (error.code !== 'ENOENT') { // unreadable marker of our own name: removed, see the header above
+          try { fs.unlinkSync(file); } catch (_unlinkError) { /* gone or held: the sweep retries */ }
+          result = 'removed';
+        }
+        return;
+      }
+      if (!m || typeof m !== 'object' || Array.isArray(m)) {
+        try { fs.unlinkSync(file); } catch (_unlinkError) { /* ditto */ }
+        result = 'removed';
+        return;
+      }
+      if (m.session_id !== sid) { result = 'mismatch'; return; }
+      const exp = Date.parse(m.expires_at);
+      if (!Number.isFinite(exp) || exp <= now) { // expiry BEFORE retention: an expired marker is "nonexistent"
+        try { fs.unlinkSync(file); } catch (_unlinkError) { /* ditto */ }
+        result = 'removed';
+        return;
+      }
+      if (Array.isArray(m.campaign_roots) && m.campaign_roots.length > 0) { result = 'kept_campaign'; return; }
+      if (typeof m.level === 'string' && LEVELS.has(m.level)) {
+        const clamped = Math.min(exp, now + RESUME_GRACE_MS);
+        if (clamped !== exp) { // in-place rewrite, every other field byte-identical; no write-time sweep (hot path)
+          const tmp = `${file}.tmp-${process.pid}`;
+          fs.writeFileSync(tmp, `${JSON.stringify({ ...m, expires_at: new Date(clamped).toISOString() }, null, 2)}\n`);
+          fs.renameSync(tmp, file);
+        }
+        result = 'clamped';
+        return;
+      }
+      try { fs.unlinkSync(file); } catch (_unlinkError) { /* ditto */ } // plain marker (level null / absent)
+      result = 'removed';
+    });
+  } catch (_error) {
+    result = 'absent'; // lock timeout or dir trouble: fail open, nothing touched
+  }
+  return result;
+}
+
+// First-prompt refresh (plan §5.A): /clear fires SessionEnd (the l3–l6 marker is clamped to now + RESUME_GRACE_MS)
+// but does NOT reliably re-fire SessionStart (unverified), so the first UserPromptSubmit does the resume refresh:
+// re-extend a still-unexpired clamped l3–l6 marker to prompt time + 24 h, in place, under the same per-marker
+// lock, keeping every other field (level, stage, root_run_id, …). Rules, all re-verified against the file's own
+// session_id: an EXPIRED marker is never revived (the prompt had to arrive before the clamp's 20-minute expiry);
+// a plain marker is not touched (SessionStart's ensurePlainMarker owns plain markers); a marker whose expiry is
+// still beyond the resume grace is not touched (a running session's own TTL keeps its own algorithm — §8).
+// -> 'absent' | 'mismatch' | 'unreadable' | 'expired' | 'refreshed' | 'untouched'. Never throws.
+function refreshClampedMarkerOnUserPromptSubmit(sessionId, { now = Date.now(), dir = markerDir() } = {}) {
+  const sid = normalizeSessionId(sessionId);
+  if (!sid) return 'absent';
+  let dirOk = true;
+  try { fs.statSync(dir); } catch (_error) { dirOk = false; }
+  if (!dirOk) return 'absent';
+  const file = path.join(dir, `${sid}.json`);
+  let result = 'absent';
+  try {
+    withWriteLock({ storeDir: dir, lockFile: `${file}.lock`, name: 'session-mode marker', timeoutMs: 2000 }, () => {
+      let m;
+      try { m = JSON.parse(fs.readFileSync(file, 'utf8')); }
+      catch (error) { result = error.code === 'ENOENT' ? 'absent' : 'unreadable'; return; }
+      if (!m || typeof m !== 'object' || Array.isArray(m)) { result = 'unreadable'; return; }
+      if (m.session_id !== sid) { result = 'mismatch'; return; }
+      const exp = Date.parse(m.expires_at);
+      if (!Number.isFinite(exp) || exp <= now) { result = 'expired'; return; } // never revived
+      if (typeof m.level !== 'string' || !LEVELS.has(m.level)) { result = 'untouched'; return; }
+      if (exp > now + RESUME_GRACE_MS) { result = 'untouched'; return; }
+      const tmp = `${file}.tmp-${process.pid}`;
+      fs.writeFileSync(tmp, `${JSON.stringify({ ...m, expires_at: new Date(now + DEFAULT_TTL_HOURS * 3600 * 1000).toISOString() }, null, 2)}\n`);
+      fs.renameSync(tmp, file);
+      result = 'refreshed';
+    });
+  } catch (_error) {
+    result = 'untouched'; // lock timeout: fail open, nothing touched
+  }
+  return result;
+}
+
 // SessionStart ensure (hooks/runs-watch-autostart.js). Rule: create a plain marker for `sessionId` ONLY when no
-// unexpired marker of any kind exists for it; NEVER overwrite one (compact / resume / startup with a live l3-l6
-// or plain marker leave the bytes alone). An EXPIRED marker (parseable, expires_at in the past) is replaced;
-// an unreadable or malformed one is left untouched (not ours to destroy; fail-open). Takes the same
+// unexpired marker of any kind exists for it; NEVER replace one (compact / resume / startup with a live l3-l6
+// or plain marker keep every field). One in-place change IS allowed (plan §5.A): a live l3-l6 marker whose
+// expires_at is inside the next 24 h gets its expires_at refreshed to now + 24 h (level, stage, root_run_id and
+// every other field stay byte-identical) — this is what re-arms the full TTL after a clamped endSession
+// (resume within the 20-minute grace) or a /clear (before the first prompt's refresh). Plain markers are NOT
+// refreshed (their own write path owns their TTL). An EXPIRED marker (parseable, expires_at in the past) is
+// replaced; an unreadable or malformed one is left untouched (not ours to destroy; fail-open). Takes the same
 // <marker>.lock as the `set --size` init so a concurrent writer cannot interleave.
-// -> 'created' | 'replaced_expired' | 'kept' | 'kept_unreadable' | 'skipped' (no usable session id) | 'refused_parent' (3b: the id is the parent's).
+// -> 'created' | 'replaced_expired' | 'kept' (a live marker was kept; an l3-l6 one may have had its expiry
+// refreshed in place) | 'kept_unreadable' | 'skipped' (no usable session id) | 'refused_parent' (3b: the id is the parent's).
 // parentSessionId: the launching session's id, recorded only when sessionId equals childSessionId
 // (AUTOPILOT_CHILD_SESSION_ID, the id the rail minted; dispatch-tree 3d). Only the SessionStart path reads AUTOPILOT_PARENT_SESSION_ID
 // (exported by the rails onto the claude command line); `session-mode set` never does, so an explicit set cannot
@@ -811,15 +987,29 @@ function ensurePlainMarker({ sessionId, repoRoot, scope, now = Date.now(), dir =
   fs.mkdirSync(dir, { recursive: true });
   withWriteLock({ storeDir: dir, lockFile: `${file}.lock`, name: 'session-mode marker', timeoutMs: 2000 }, () => {
     let state = 'absent';
+    let liveMarker = null;
+    let liveExp = NaN;
     try {
       const m = JSON.parse(fs.readFileSync(file, 'utf8'));
       const valid = m && typeof m === 'object' && !Array.isArray(m) && (m.level === null || LEVELS.has(m.level));
       const exp = valid ? Date.parse(m.expires_at) : NaN;
       state = !valid || !Number.isFinite(exp) ? 'unreadable' : (exp <= now ? 'expired' : 'live');
+      if (state === 'live') { liveMarker = m; liveExp = exp; }
     } catch (error) {
       state = error.code === 'ENOENT' ? 'absent' : 'unreadable';
     }
-    if (state === 'live') { result = 'kept'; return; }
+    if (state === 'live') {
+      // plan §5.A refresh: a live l3-l6 marker expiring before now + 24 h is re-armed in place. Direct atomic
+      // write (no write-time sweep — this is the per-prompt-hot SessionStart path and must not grow with the
+      // directory's residue). Plain markers keep their bytes.
+      if (liveMarker && liveMarker.level !== null && LEVELS.has(liveMarker.level) && liveExp < now + DEFAULT_TTL_HOURS * 3600 * 1000) {
+        const tmp = `${file}.tmp-${process.pid}`;
+        fs.writeFileSync(tmp, `${JSON.stringify({ ...liveMarker, expires_at: new Date(now + DEFAULT_TTL_HOURS * 3600 * 1000).toISOString() }, null, 2)}\n`);
+        fs.renameSync(tmp, file);
+      }
+      result = 'kept';
+      return;
+    }
     if (state === 'unreadable') { result = 'kept_unreadable'; return; }
     const rootRunId = resolveJobRoot({ now });
     writeMarkerFile(file, buildPlainMarker({ sessionId: sid, repoRoot, scope, now, rootRunId, parentSessionId: parent }));
@@ -1863,6 +2053,31 @@ function cmdRetire(args) {
   return 0;
 }
 
+// `sweep` (plan §5.A): bounded cleanup of the marker directory, callable by readers, the watcher and the
+// dispatch rails (reader-side cleanups pass --grace-ms 0). Prints one line of JSON {removed, remaining} and
+// exits 0. --max N: at most N removals this call (default 500 = SWEEP_MAX_REMOVALS; 0 = NO cap, an explicit
+// value, not a refusal). --grace-ms M: expires_at must be more than M ms in the past (default 86400000 = 24 h;
+// 0 = reader-side "past expiry is dead NOW", including expired campaign markers and unparsable expires_at —
+// the 24 h TTL of LIVE markers is untouched; only the deletion grace for already-expired files shrinks). The
+// caller's own marker is protected when the environment names an explicit session id.
+function cmdSweep(args) {
+  const max = args.max === undefined ? SWEEP_MAX_REMOVALS : Number(args.max);
+  const graceMs = args['grace-ms'] === undefined ? SWEEP_EXPIRED_AFTER_MS : Number(args['grace-ms']);
+  if (!Number.isInteger(max) || max < 0) {
+    process.stderr.write('session-mode: sweep: --max needs an integer >= 0 (0 = no cap)\n');
+    return 2;
+  }
+  if (!Number.isInteger(graceMs) || graceMs < 0) {
+    process.stderr.write('session-mode: sweep: --grace-ms needs an integer >= 0 milliseconds\n');
+    return 2;
+  }
+  const dir = markerDir();
+  const protect = hasExplicitSessionId() ? path.join(dir, `${getSessionId()}.json`) : null;
+  const { removed, remaining } = sweepExpiredMarkers(dir, protect, Date.now(), { max, graceMs });
+  process.stdout.write(`${JSON.stringify({ removed, remaining })}\n`);
+  return 0;
+}
+
 function cmdStatus() {
   const m = readSessionRecord();
   // A plain-session record is not an orchestrator mode: active:false, level "none" (the file keeps null).
@@ -1909,6 +2124,7 @@ function main() {
     case 'retire': return cmdRetire(args);
     case 'bind-campaign-root': return cmdBindCampaignRoot(args);
     case 'ensure-child': return cmdEnsureChild();
+    case 'sweep': return cmdSweep(args);
     case 'status': return cmdStatus();
     case 'root': return cmdRoot();
     case 'write-target': return cmdWriteTarget(args);
@@ -1919,7 +2135,8 @@ function main() {
         '[--fallback none|solo|precondition_failed] [--repo-root <dir>] [--ttl-hours N] [--root-run-id <id>] | ' +
         'set --size XS|S|M|L|XL [--urgent] [--bug] [--base-ref <sha>] [--fleet-task <id>] [--refresh] (create-or-merge; size only moves up) | ' +
         'set --new-task [--size XS|S|M|L|XL] [--urgent] [--bug] [--base-ref <sha>] [--fleet-task <id>] [--refresh] (restart the stage walk for a second task) | ' +
-        'clear | retire --session <id> --integration-receipt <file> [--integration-ref <ref>] | bind-campaign-root --root <id> (--repo-identity <id> | --repo-root <dir>) | ensure-child (SessionStart payload on stdin) | write-target [--rail] | status | root\n',
+        'clear | retire --session <id> --integration-receipt <file> [--integration-ref <ref>] | bind-campaign-root --root <id> (--repo-identity <id> | --repo-root <dir>) | ensure-child (SessionStart payload on stdin) | ' +
+        'sweep [--max N] [--grace-ms M] (bounded marker-dir cleanup; prints {removed, remaining}; --max 0 = no cap; --grace-ms 0 = expired-now is dead) | write-target [--rail] | status | root\n',
       );
       return 2;
   }
@@ -1934,6 +2151,10 @@ module.exports = {
   isAutonomousSession,
   readSessionRoot,
   ensurePlainMarker,
+  endSession,
+  refreshClampedMarkerOnUserPromptSubmit,
+  sweepExpiredMarkers,
+  unlinkIfStillExpired,
   resolveJobRoot,
   getSessionId,
   resolveMarkerWriteTarget,
@@ -1954,6 +2175,9 @@ module.exports = {
   writeMarkerFile,
   defaultBaseRef,
   PHASE_LOCK_TIMEOUT_MS,
+  SWEEP_MAX_REMOVALS,
+  SWEEP_EXPIRED_AFTER_MS,
+  RESUME_GRACE_MS,
   derivePlanReceiptFromGit,
   isReceiptBlobValid,
 };

@@ -6419,6 +6419,17 @@
       "summary": "Environment override of run_approval.mode; an unrecognised value means off."
     },
     {
+      "name": "AUTOPILOT_SESSION_END_CLEANUP",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": "on",
+      "readers": ["hooks/session-mode-end.js"],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Set to \"0\" to disable session-end marker cleanup."
+    },
+    {
       "name": "AUTOPILOT_RUNS_WATCH_AUTOSTART",
       "kind": "env",
       "audience": "user",

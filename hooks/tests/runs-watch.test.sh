@@ -359,9 +359,9 @@ eq "manifest marker" "$(jq_file "$LIVE/runs/$KEY_A.json" '(j.sources||[]).map(x=
 eq "$RUNS $AHOME/session-mode" "$(jq_file "$LIVE/runs/$KEY_A.json" '(j.sources||[]).map(x=>x.dir).join(" ")')" "...over the manifest dir and the marker dir"
 eq "repo_identity project_key" "$(jq_file "$LIVE/runs/$KEY_A.json" '(j.sources||[]).map(x=>x.match_field).join(" ")')" "...each narrowed by the field that says whose it is"
 eq "true" "$(jq_file "$LIVE/runs/$KEY_A.json" '(j.sources||[]).every(x=>typeof x.dir_mtime_ms==="number" && Array.isArray(x.files))')" "...with a numeric directory mtime and a file list"
-# the lists name exactly this project's files: the other project's manifest and marker next to them are left out (a flipped match turns these red)
+# The manifest list names this project; expired markers are excluded from the marker list.
 eq "r1-run.manifest.json r2-run.manifest.json" "$(jq_file "$LIVE/runs/$KEY_A.json" '(j.sources.find(x=>x.role==="manifest").files).map(x=>x.path.split("/").pop()).sort().join(" ")')" "...the manifest group lists this project's manifests only"
-eq "s-ours.json" "$(jq_file "$LIVE/runs/$KEY_A.json" '(j.sources.find(x=>x.role==="marker").files).map(x=>x.path.split("/").pop()).sort().join(" ")')" "...the marker group lists this project's markers only"
+eq "" "$(jq_file "$LIVE/runs/$KEY_A.json" '(j.sources.find(x=>x.role==="marker").files).map(x=>x.path.split("/").pop()).sort().join(" ")')" "...the marker group excludes expired markers"
 rm -f "$AHOME/session-mode/s-ours.json" "$AHOME/session-mode/s-theirs.json" "$RUNS/theirs-run.manifest.json"
 flock -n "$LIVE/runs/$KEY_A.lock" true; eq "0" "$?" "lock is free after an idle exit"
 

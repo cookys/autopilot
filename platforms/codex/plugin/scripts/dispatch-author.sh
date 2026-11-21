@@ -766,12 +766,30 @@ check_session_mode_gate() {
   [ -d "$marker_dir" ] || return 0
   [ -n "$consumed_repo" ] || return 0
   normalized_repo="$(cd "$consumed_repo" && pwd -P 2>/dev/null || echo "$consumed_repo")"
-  for marker in "$marker_dir"/*.json; do
-    [ -f "$marker" ] || continue
-    if level="$(node -e 'const fs = require("fs"); const path = require("path"); const file = process.argv[1]; const root = path.resolve(process.argv[2] || ""); const now = Date.now(); try { const data = JSON.parse(fs.readFileSync(file, "utf8")); if (!data || typeof data !== "object") process.exit(1); if (data.level !== "l5" && data.level !== "l6") process.exit(1); if (!data.expires_at) process.exit(1); const exp = Date.parse(data.expires_at); if (!Number.isFinite(exp) || exp <= now) process.exit(1); if (path.resolve(String(data.repo_root || "")) !== root) process.exit(1); process.stdout.write(String(data.level || "")); process.exit(0); } catch (e) { process.exit(1); }' "$marker" "$normalized_repo")"; then
-      die_precondition "active session-mode=$level blocks non-strict dispatch (repo=$consumed_repo). To run a non-strict dispatch in this session, prefix that one command with: AUTOPILOT_SESSION_MODE_DIR=\$(mktemp -d)"
-    fi
-  done
+  level="$(node - "$_AUTHOR_SELF_DIR/session-mode.js" "$marker_dir" "$normalized_repo" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const [modulePath, dir, root] = process.argv.slice(2);
+const { unlinkIfStillExpired } = require(modulePath);
+let removed = 0, level = '';
+try {
+  for (const name of fs.readdirSync(dir).filter(n => n.endsWith('.json')).sort()) {
+    const file = path.join(dir, name);
+    try {
+      const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+      const exp = Date.parse(data.expires_at);
+      if (Number.isFinite(exp) && exp <= Date.now()) {
+        if (removed < 5000 && unlinkIfStillExpired(file, Date.now(), 0)) removed++;
+      } else if (!level && Number.isFinite(exp) && (data.level === 'l5' || data.level === 'l6') && path.resolve(String(data.repo_root || '')) === root) level = data.level;
+    } catch (_) { /* malformed marker is ignored by this fail-open gate */ }
+  }
+} catch (_) { /* unreadable directory is fail-open */ }
+process.stdout.write(level);
+NODE
+)" || level=''
+  if [ -n "$level" ]; then
+    die_precondition "active session-mode=$level blocks non-strict dispatch (repo=$consumed_repo). To run a non-strict dispatch in this session, prefix that one command with: AUTOPILOT_SESSION_MODE_DIR=\$(mktemp -d)"
+  fi
 }
 
 # run_review_loop_resolver — sets REVIEW_LOOP_JSON / REVIEW_LOOP_JSON_RC from the resolver.

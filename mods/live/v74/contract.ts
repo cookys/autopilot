@@ -65,4 +65,4 @@ export const PET_KEY = '0' // the pet keeps its own tab (operator rule, PM 01M78
 export const PICK_KEYS = ['a', 'b', 'c'] as const
 
 // ---- what every v7.4 page receives (PageCtx.v74); a null field means the source is missing (draw the broken marker, never invent rows) ----
-export type V74Ctx = { pm: PmStatus | null; pmFetchedMs: number | null; decide: DecideCard[] | null; todo: TodoCard[] | null; nav: CardNav }
+export type V74Ctx = { pm: PmStatus | null; pmFetchedMs: number | null; decide: DecideCard[] | null; todo: TodoCard[] | null; nav: CardNav; ages?: Record<string, number | null> }

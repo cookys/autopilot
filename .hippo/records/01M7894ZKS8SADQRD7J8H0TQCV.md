@@ -11,4 +11,4 @@ created: 2026-10-21T00:00:00.000Z
 - **Trigger**: 3.0.0 之後；the owner decides whether to build P1-P3 of the concurrency plan.
 - **Source**: PEER llm-playground claude-4 2026-10-21
 - **Pointer**: project/backlog/cross-harness-token-discipline.md
-- **Context**: Item 4: owner chose P0 only (d-02c60498); p0spike 8eee6eac0 settled the seven hook facts; P1-P3 not started.
+- **Context**: Item 4: owner chose P0 only (d-02c60498); p0spike 8eee6eac0 settled the seven hook facts; P1-P3 not started. Owner: autopilot lane · Review: 3.0.0 發版當天（PM 01M7XQRV 裁 5B）

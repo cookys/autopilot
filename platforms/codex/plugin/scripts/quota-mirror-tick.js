@@ -25,6 +25,10 @@
 // has no attempt for that alias in the last 5.5 h. The same label is not repeated unless activity
 // happened after that line (an audit attempt with ts after the line's observed_at, or rolling_5h
 // resets_at after it). The line is <live_dir>/quota/idle-alias.jsonl.
+// A pass that exits 0 writes <live_dir>/quota/tick-last.json atomically (temp file plus rename),
+// including when every producer wrote nothing and when every producer skipped (nothing_applicable).
+// A pass whose non-skipped producers all failed (exit 1) leaves any existing heartbeat unchanged.
+// A pass that throws writes no heartbeat.
 // One summary line per step. Child stdout is discarded. Child stderr is read only to attach
 // one reason on failure: the last non-empty line, chars outside [A-Za-z0-9_ .:=()/-] removed,
 // capped at 120. A credential a child printed cannot pass that filter as a token blob.
@@ -260,6 +264,29 @@ function appendIdleAliases(opts) {
   return { appended };
 }
 
+function writeTickHeartbeat(results) {
+  const liveDir = resolveLiveDir({ env: process.env, warn: () => {} }).base;
+  const dir = path.join(liveDir, 'quota');
+  const made = ensurePrivateDir(dir);
+  if (!made.ok) throw new Error(made.reason || 'quota dir');
+  const body = `${JSON.stringify({
+    schema: 'autopilot.quota-mirror-tick/1',
+    ts: Math.floor(Date.now() / 1000),
+    ok: results.filter((result) => result.ok).length,
+    total: results.length,
+    skipped: results.filter((result) => result.skip).map((result) => result.id),
+  })}\n`;
+  const dest = path.join(dir, 'tick-last.json');
+  const tmp = path.join(dir, `.tick-last.${process.pid}.tmp`);
+  fs.writeFileSync(tmp, body, { mode: 0o600 });
+  try {
+    fs.renameSync(tmp, dest);
+  } catch (error) {
+    try { fs.unlinkSync(tmp); } catch (_) { /* the rename error is the one that matters */ }
+    throw error;
+  }
+}
+
 function run(opts) {
   const o = opts || {};
   const steps = Array.isArray(o.steps) ? STEPS.filter((id) => o.steps.includes(id)) : STEPS;
@@ -280,9 +307,10 @@ function run(opts) {
   if (!allSkip) process.stdout.write(`quota-mirror-tick: ${ok}/${producers} ok\n`);
   if (allSkip) process.stdout.write('quota-mirror-tick: nothing_applicable\n');
   try { appendIdleAliases({ env: process.env, nowMs: o.nowMs }); } catch (_) { /* idle never changes the producer exit */ }
-  if (allSkip) return 0;
-  if (results.length > 0 && ok === 0) return 1;
-  return 0;
+  const exitCode = allSkip || ok > 0 || results.length === 0 ? 0 : 1;
+  // A failed pass must not look fresh to --inventory. all-skip is exit 0.
+  if (exitCode === 0) writeTickHeartbeat(results);
+  return exitCode;
 }
 
 function parseArgs(argv) {

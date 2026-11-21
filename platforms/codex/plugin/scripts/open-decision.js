@@ -11,7 +11,7 @@
  *                                       [--operator-step <text>]...   (repeatable, or several steps in one value separated by newlines:
  *                                         what the operator must do himself after answering; stored as operator_steps)
  *                                       [--root-run-id <id>] [--cwd <dir>] [--json]     (prints the new id; --json: {ok,id,file,scope_key})
- *   node scripts/open-decision.js open  --category <c> --kind step --question <step text> [--background <why>] [--blocks <what stalls>] [--attach <path-or-URL>]... [--source <who/where>]
+ *   node scripts/open-decision.js open  --category <c> --kind step --question <step text> [--repeat-of <id>] [--background <why>] [--blocks <what stalls>] [--attach <path-or-URL>]... [--source <who/where>]
  *                                       [--root-run-id <id>] [--cwd <dir>] [--json]     (operator action step: no --option, --executor or --not-authorized needed)
  *   node scripts/open-decision.js open ... --category <money|identity|presence|goal|public-release|unbackable-loss|authority>   (REQUIRED on every CLI open: the only seven kinds of question that go to the operator; anything else -> exit 7 with a 拒絕開卡 message, nothing written)
  *   node scripts/open-decision.js stats [--since <ISO | Nh|Nd|Nw, default 7d>] [--cwd <dir>] [--json]   (cards opened in the window per category: {schema:"decision-stats/1", since, counts:{money,...,uncategorized}}; patrol's weekly line)
@@ -19,7 +19,8 @@
  *   node scripts/open-decision.js open ... [--due <ISO time | +N(m|h|d|w), e.g. +4h, +1d>] [--kind decide|go|remind]   (dated card / reminder: see "Dated cards" below)
  *   node scripts/open-decision.js due-sweep [--cwd <dir>]   (prints `DUE <id> <title>` once per card that became due since the last sweep; exit 0)
  *   node scripts/open-decision.js redeliver [--id <id>] [--cwd <dir>]   (resend the panel answer of every pending_dispatch card the program parked, see "Panel answer delivery")
- *   node scripts/open-decision.js close --id <id> [--root-run-id <id>] [--cwd <dir>]   (answered or withdrawn; the card is KEPT, status closed)
+ *   node scripts/open-decision.js close --id <id> --withdraw <reason> [--by <actor>] [--root-run-id <id>] [--cwd <dir>]   (withdrawn; the card is KEPT, status closed)
+ *   node scripts/open-decision.js close --id <id> --panel-done|--panel-dismiss --closed-key <key-or-button>
  *   node scripts/open-decision.js close --id <id> --answer <text> [--executor <address>] [--asker <address>] [--awaiting-operator <step>] [--reask-after <4h|30m|1d>]
  *                                       (with an executor: prints the dispatch JSON and parks the card in pending_dispatch; nothing is sent.
  *                                        a card opened with operator_steps, answered with anything but a decline, goes to awaiting_operator_action
@@ -219,7 +220,7 @@ function usage(message) {
   process.stderr.write('usage: open-decision.js open --category <money|identity|presence|goal|public-release|unbackable-loss|authority> --question <q> [--background <why>] [--option <label>[::<description>]]... | --free-text [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>] [--irreversible] [--from-request <r-id>] [--doa-role <role>] [--doa-tier <tier>] [--target <deploy target>] [--source <who/where>] [--kind <decide|go|remind|step|look>] [--due <ISO time | +N(m|h|d|w)>] [--premise-source <file>] [--premise-inferred] [--attach <path-or-URL>]... [--root-run-id <id>]\n'
     + '       --category values: money（錢） identity（身分：操作員本人的登入、憑證、金鑰、scope） presence（到場） goal（改目標） public-release（對外） unbackable-loss（無備份的損失） authority（改授權）\n'
     + '       決定卡（沒有 --kind，或 --kind decide；go/remind/step/look 不在此限）：--question 恰好一個問號（？或?）；--title 本身要是問題（含？或?，或以嗎結尾，仍 <= 20）；--recommendation 必填、以某個 --option 標籤開頭、不可以？或?結尾（--free-text 只在有建議時拒絕問號結尾）。--premise-source <檔> 的內容若含 inferred 或推算（不分大小寫），或帶了 --premise-inferred，則 --question 或 --background 也必須含推算或 inferred。這兩支旗標只用於 open。\n'
-    + '       open-decision.js open --category <c> --kind step --question <step text> [--background <why>] [--blocks <what stalls>] [--attach <path-or-URL>]... [--source <who/where>] [--root-run-id <id>]\n'
+    + '       open-decision.js open --category <c> --kind step --question <step text> [--repeat-of <id>] [--background <why>] [--blocks <what stalls>] [--attach <path-or-URL>]... [--source <who/where>] [--root-run-id <id>]\n'
     + '       open-decision.js stats [--since <ISO|7d>] [--json]\n       open-decision.js close --id <id> [--root-run-id <id>]\n       open-decision.js close --id <id> --answer <text> [--executor <address>] [--asker <address>] [--awaiting-operator <step>] [--reask-after <4h|30m|1d>]\n       open-decision.js close --id <id> --dispatched <task_id>\n       open-decision.js close --id <id> --dispatched-msg <message_id>\n       open-decision.js done --id <id> [--note <evidence>]\n       open-decision.js verify --id <card_id> --answer-id <id> --text-file <file>\n       open-decision.js show [--root-run-id <id>] [--all] [--json]\n       open-decision.js show --id <id> [--json]\n       open-decision.js list [--all] [--json]\n       open-decision.js backfill --from <file.jsonl> [--apply]\n       open-decision.js due-sweep\n       (decision open REQUIRES --executor <address>; it also takes --asker <address> --title <short title, <= 20 characters> --due <ISO time | +N(m|h|d|w)>; a remind card takes no --option/--free-text; --operator-step <text>, repeatable or newline-separated)\n');
   return 2;
 }
@@ -407,6 +408,44 @@ function findBest(cwd, id) {
   return findCard(cwd, id, { all: true });
 }
 
+const repeatBaseQuestion = (question) => String(question || '').trim().replace(/（第\s*\d+\s*次）$/, '').trim();
+function taipeiDateTime(value) {
+  const ms = Date.parse(value || '');
+  if (!Number.isFinite(ms)) return '未知時間';
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(ms));
+  const get = (name) => parts.find((p) => p.type === name)?.value || '00';
+  return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}`;
+}
+const withRepeatSuffix = (question, n) => `${repeatBaseQuestion(question)}（第 ${n} 次）`;
+function repeatNumber(cwd, entry, seen = new Set()) {
+  if (!entry || seen.has(entry.id)) return 1;
+  seen.add(entry.id);
+  if (Number.isInteger(entry.repeat_n) && entry.repeat_n >= 2) return entry.repeat_n;
+  if (typeof entry.repeat_of !== 'string') return 1;
+  const prior = findBest(cwd, entry.repeat_of);
+  return prior ? repeatNumber(cwd, prior.entry, seen) + 1 : 1;
+}
+function repeatDetails(cwd, entry) {
+  const closedMs = Date.parse(entry.closed_at || '');
+  const date = Number.isFinite(closedMs) ? new Date(closedMs) : new Date(0);
+  const hhmm = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Taipei', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(date);
+  return { entry, repeat_n: repeatNumber(cwd, entry) + 1, hhmm };
+}
+function repeatContext(entry, details = null) {
+  const d = details || { hhmm: new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Taipei', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(Date.parse(entry.closed_at || ''))) };
+  return `上一張 ${entry.id} 在 ${d.hhmm} 台北時間 被關掉（closed_via ${entry.closed_via || '未記錄'}），沒有完成的紀錄。`;
+}
+function findRecentRepeat(cwd, question, executor, nowMs) {
+  if (typeof executor !== 'string' || !executor) return null;
+  const wanted = repeatBaseQuestion(question);
+  const cutoff = nowMs - 14 * 24 * 60 * 60 * 1000;
+  return projectScopeFiles(cwd, { all: true }).flatMap((file) => readFile(file, { all: true }))
+    .filter((e) => isClosedEntry(e) && (e.answer === null || e.answer === undefined)
+      && e.executor === executor && repeatBaseQuestion(e.question) === wanted && Number.isFinite(Date.parse(e.closed_at || ''))
+      && Date.parse(e.closed_at) >= cutoff && Date.parse(e.closed_at) <= nowMs)
+    .sort((a, b) => Date.parse(b.closed_at) - Date.parse(a.closed_at))[0] || null;
+}
+
 // After closing the winning record in `winnerFile`, close any stale non-closed copies of `id` in other scope files
 // with the same closing fields (`closed_at`, `closed_via`, etc.) so per-file readers and `show --all` never disagree.
 function closeStaleCopies(cwd, id, winnerFile, patch) {
@@ -575,9 +614,9 @@ function takeFreeText(argv) {
 // BL cardtrail flags are lifted out like --kind/--target (parse()'s valued Set stays byte-identical to the frozen ask stub).
 // -> { rest, extra: { answer, executor, asker, 'awaiting-operator', 'reask-after', from, dispatched, 'dispatched-msg', title, note, 'operator-step', all, apply } } | { error }
 // operator-step is repeatable and may hold several steps separated by newlines. parse()'s valued Set stays untouched (frozen ask stub).
-const EXTRA_VALUED = ['answer', 'executor', 'asker', 'awaiting-operator', 'reask-after', 'from', 'dispatched', 'dispatched-msg', 'title', 'from-request', 'note', 'look-target', 'category', 'since', 'premise-source'];
+const EXTRA_VALUED = ['answer', 'executor', 'asker', 'awaiting-operator', 'reask-after', 'from', 'dispatched', 'dispatched-msg', 'title', 'from-request', 'note', 'look-target', 'category', 'since', 'days', 'premise-source', 'withdraw', 'by', 'closed-key', 'repeat-of'];
 const EXTRA_REPEAT = ['operator-step'];
-const EXTRA_SWITCH = ['all', 'apply', 'irreversible', 'premise-inferred'];
+const EXTRA_SWITCH = ['all', 'apply', 'irreversible', 'premise-inferred', 'panel-done', 'panel-dismiss'];
 // The only seven kinds of question that go to the operator (operator rule 2026-11-15); everything else the PM decides.
 const CATEGORIES = ['money', 'identity', 'presence', 'goal', 'public-release', 'unbackable-loss', 'authority'];
 const CATEGORY_REFUSAL = '拒絕開卡：--category 必須是 money（錢）、identity（身分：操作員本人的登入、憑證、金鑰、scope）、presence（到場）、goal（改目標）、public-release（對外）、unbackable-loss（無備份的損失）、authority（改授權：改 grant、authority table、DOA 或某條 lane 的權限）其中之一。這件 PM 自己決定；不確定就先找 hetero 評估。';
@@ -766,7 +805,7 @@ function main(argv) {
   if (args.extra['look-target'] !== undefined && cmd !== 'open') return usage('--look-target is only an open argument');
   if (cmd !== 'open' && (args.extra['premise-source'] !== undefined || args.extra['premise-inferred'])) return usage('--premise-source 與 --premise-inferred 只用於 open');
   if (cmd === 'verify' && args._.length === 1) return verifyAnswer(args);
-  if (!['open', 'close', 'done', 'show', 'list', 'backfill', 'redeliver', 'due-sweep', 'stats'].includes(cmd) || args._.length > 1) return usage(cmd ? `bad command: ${args._.join(' ')}` : 'missing command');
+  if (!['open', 'close', 'done', 'show', 'list', 'dismissed', 'backfill', 'redeliver', 'due-sweep', 'stats'].includes(cmd) || args._.length > 1) return usage(cmd ? `bad command: ${args._.join(' ')}` : 'missing command');
   const sess = sessionRoot();
   const root = args['root-run-id'] !== undefined ? args['root-run-id'] : (process.env.AUTOPILOT_ROOT_RUN_ID || sess.root);
   if (root && (!SAFE_ROOT.test(root) || root === '.' || root === '..')) return usage('--root-run-id must match [A-Za-z0-9._-]+');
@@ -795,6 +834,29 @@ function main(argv) {
     if (entries.length === 0) { if (!args.json) process.stdout.write(all ? 'no decision\n' : 'no open decision\n'); return 1; }
     process.stdout.write(args.json ? `${JSON.stringify({ schema: SCHEMA, decisions: entries }, null, 2)}\n` : showText(entries, { all, nowMs }));
     return 0;
+  }
+  if (cmd === 'dismissed') {
+    if (args.id !== undefined) return usage('dismissed takes no --id');
+    const bad = Object.keys(ex).find((k) => !['since', 'days'].includes(k));
+    if (bad) return usage(`--${bad} is not a dismissed argument`);
+    if (ex.since !== undefined && ex.days !== undefined) return usage('dismissed takes either --since or --days, not both');
+    let sinceMs;
+    if (ex.days !== undefined) {
+      if (!/^\d+$/.test(String(ex.days)) || Number(ex.days) < 1 || Number(ex.days) > 36500) return usage('--days needs a positive whole number');
+      sinceMs = Date.now() - Number(ex.days) * 24 * 60 * 60 * 1000;
+    } else if (ex.since !== undefined) {
+      sinceMs = Date.parse(ex.since);
+      if (!Number.isFinite(sinceMs)) return usage('--since needs an ISO date or timestamp');
+    } else sinceMs = Date.now() - 14 * 24 * 60 * 60 * 1000;
+    const cards = pickCards(projectScopeFiles(args.cwd, { all: true }).flatMap((file) => readFile(file, { all: true }).map((e) => ({ file, e })))).map((w) => w.e)
+      .filter((e) => isClosedEntry(e) && (e.answer === null || e.answer === undefined || (typeof e.answer === 'string' && !e.answer.trim()))
+        && e.closed_via !== 'withdrawn' && e.closed_via !== 'panel_done' && Number.isFinite(Date.parse(e.closed_at || '')) && Date.parse(e.closed_at) >= sinceMs)
+      .sort((a, b) => Date.parse(b.closed_at) - Date.parse(a.closed_at));
+    const rows = cards.map((e) => ({ id: e.id, kind: e.kind || 'unknown', closed_at: taipeiDateTime(e.closed_at), closed_via: e.closed_via || '未記錄', question: Array.from(e.question).slice(0, 60).join('') }));
+    if (args.json) process.stdout.write(`${JSON.stringify({ schema: 'decision-dismissed/1', since: new Date(sinceMs).toISOString(), cards: rows }, null, 2)}\n`);
+    else if (rows.length === 0) { process.stdout.write('no dismissed cards\n'); return 1; }
+    else for (const r of rows) process.stdout.write(`${r.id} ${r.kind} ${r.closed_at} ${r.closed_via} ${r.question}\n`);
+    return rows.length === 0 ? 1 : 0;
   }
   if (cmd === 'stats') {
     const badT = stray(['answer', 'executor', 'asker', 'awaiting-operator', 'from', 'apply', 'dispatched', 'dispatched-msg', 'all', 'title', 'irreversible', 'from-request', 'note', 'category']);
@@ -886,9 +948,32 @@ function main(argv) {
     const bad = stray(['all', 'apply', 'from', 'irreversible', 'from-request', 'note']);
     if (bad) return usage(`--${bad} is not a close argument`);
     if (ex.dispatched !== undefined || ex['dispatched-msg'] !== undefined) return markDispatched(args, ex);
+    const panelAction = ex['panel-done'] === true ? 'panel_done' : ex['panel-dismiss'] === true ? 'panel_dismiss' : null;
+    if (ex['panel-done'] === true && ex['panel-dismiss'] === true) return usage('--panel-done and --panel-dismiss are mutually exclusive');
+    if (panelAction !== null) {
+      if (typeof ex['closed-key'] !== 'string' || !ex['closed-key'].trim()) return usage('panel close needs --closed-key <key-or-button>');
+      if (ex.answer !== undefined || args.option.length || args.closeFreeText !== undefined || ex.withdraw !== undefined || ex.executor !== undefined || ex.asker !== undefined) return usage('panel close cannot be combined with answer or withdrawal arguments');
+      const foundPanel = findCard(args.cwd, args.id, { live: true });
+      if (!foundPanel || !isOpenEntry(foundPanel.entry)) { process.stdout.write(`not open: ${args.id}\n`); return 0; }
+      if (isAwaitingEntry(foundPanel.entry) || isPendingDispatchEntry(foundPanel.entry)) return usage(`${args.id} is not an open panel card`);
+      if (panelAction === 'panel_done' && !['step', 'look'].includes(foundPanel.entry.kind)) return usage('--panel-done is only valid for step/look cards');
+      if (panelAction === 'panel_dismiss' && !['step', 'look'].includes(foundPanel.entry.kind)) return usage('--panel-dismiss is only valid for step/look cards');
+      const panelPatch = { status: 'closed', closed_at: new Date().toISOString(), closed_via: panelAction, closed_key: ex['closed-key'].trim(), answer: panelAction === 'panel_done' ? '做完了' : null, reask_at: undefined };
+      const panelResult = patchDecision(foundPanel.file, args.id, panelPatch);
+      if (panelResult.status === 'error') { process.stderr.write(`open-decision: ${panelResult.message}\n`); return 4; }
+      if (panelResult.status === 'absent') { process.stdout.write(`not open: ${args.id}\n`); return 0; }
+      const panelStale = closeStaleCopies(args.cwd, args.id, foundPanel.file, panelPatch);
+      if (panelStale.status === 'error') { process.stderr.write(`open-decision: ${panelStale.message}\n`); return 4; }
+      process.stdout.write(`closed ${args.id}\n`);
+      return 0;
+    }
     const viaOption = args.option.length > 0 || args.closeFreeText !== undefined;
     if (args.option.length > 1) return usage('close takes one --option <label>, optionally with --free-text <note>, or one --free-text <text>');
     if (ex['operator-step'] !== undefined) return usage('--operator-step belongs to `open`, not close');
+    if (ex.withdraw !== undefined && (typeof ex.withdraw !== 'string' || !ex.withdraw.trim())) return usage('close --withdraw needs a non-blank reason');
+    if (ex.withdraw !== undefined && ex.by !== undefined && !String(ex.by).trim()) return usage('--by must be non-blank');
+    if (ex.withdraw !== undefined && (ex.answer !== undefined || viaOption || ex.executor !== undefined || ex.asker !== undefined || ex['awaiting-operator'] !== undefined || ex['reask-after'] !== undefined || ex.by !== undefined && !String(ex.by).trim())) return usage('--withdraw <reason> cannot be combined with answer options, and --by must be non-blank');
+    if (ex.withdraw === undefined && ex.by !== undefined) return usage('--by is only valid with --withdraw <reason>');
     if (ex.answer !== undefined && (viaOption || !ex.answer.trim())) return usage('close --answer <text> is the whole answer: not with --option/--free-text, and not empty');
     if (ex.answer === undefined && !viaOption && (ex['awaiting-operator'] !== undefined || ex.executor !== undefined || ex.asker !== undefined || ex['reask-after'] !== undefined)) return usage('--executor/--asker/--awaiting-operator/--reask-after belong to `close --answer <text>`');
     if (ex['awaiting-operator'] !== undefined && !ex['awaiting-operator'].trim()) return usage('--awaiting-operator needs the step the operator must do');
@@ -898,8 +983,24 @@ function main(argv) {
     const found = findCard(args.cwd, args.id, { live: true });
     if (found && isAwaitingEntry(found.entry)) return usage(`${args.id} is awaiting_operator_action: the operator's step ends it (\`done --id ${args.id}\`), not close`);
     if (found && isPendingDispatchEntry(found.entry)) return refusePendingDispatch(args.id);
+    if (ex.answer === undefined && !viaOption && ex.withdraw === undefined) return usage(`no answer supplied; use \`close --id ${args.id} --withdraw <reason> --by <actor>\``);
+    if (!found && ex.withdraw === undefined && ex.answer === undefined && !viaOption) { process.stdout.write(`not open: ${args.id}\n`); return 0; }
     let noteDropped = false;
     const answerText = ex.answer !== undefined ? ex.answer : (args.option.length ? args.option[0] : (args.closeFreeText !== undefined ? args.closeFreeText : null));
+    if (ex.withdraw !== undefined) {
+      if (!found || !isOpenEntry(found.entry)) { process.stdout.write(`not open: ${args.id}\n`); return 0; }
+      const actor = (ex.by || sessionForNotice() || '').trim();
+      if (!actor) return usage('withdrawal needs --by <actor> or a session actor');
+      const withdrawPatch = { status: 'closed', closed_at: new Date().toISOString(), answer: null, closed_via: 'withdrawn', withdraw_reason: ex.withdraw.trim(), withdrawn_by: actor, reask_at: undefined };
+      const r = patchDecision(found.file, args.id, withdrawPatch);
+      if (r.status === 'error') { process.stderr.write(`open-decision: ${r.message}\n`); return 4; }
+      if (r.status === 'absent') { process.stdout.write(`not open: ${args.id}\n`); return 0; }
+      const stale = closeStaleCopies(args.cwd, args.id, found.file, withdrawPatch);
+      if (stale.status === 'error') { process.stderr.write(`open-decision: ${stale.message}\n`); return 4; }
+      notifyPm('close', { card_id: args.id, question: r.entry.question, state: 'closed' });
+      process.stdout.write(`withdrawn ${args.id}\n`);
+      return 0;
+    }
     if (answerText !== null && isDeclineAnswer(answerText)) {
       if (!found || !isOpenEntry(found.entry)) { process.stdout.write(`not open: ${args.id}\n`); return 0; }
       const r = recordDecline(found.file, args.id, answerText, reaskParsed.ms);
@@ -963,6 +1064,21 @@ function main(argv) {
 
   // open
   if (typeof args.question !== 'string' || !args.question.trim()) return usage('open needs a non-empty --question');
+  if (ex['repeat-of'] !== undefined && !SAFE_ID.test(ex['repeat-of'])) return usage('--repeat-of needs a card id');
+  let repeat = null;
+  if (ex['repeat-of'] !== undefined) {
+    const prior = findBest(args.cwd, ex['repeat-of']);
+    if (!prior || !isClosedEntry(prior.entry) || (prior.entry.answer !== null && prior.entry.answer !== undefined) || !Number.isFinite(Date.parse(prior.entry.closed_at || ''))) return usage(`--repeat-of ${ex['repeat-of']} needs an existing closed card with no answer`);
+    repeat = repeatDetails(args.cwd, prior.entry);
+  } else {
+    const automatic = findRecentRepeat(args.cwd, args.question, ex.executor, Date.now());
+    if (automatic !== null) {
+      repeat = repeatDetails(args.cwd, automatic);
+      process.stderr.write(`repeat-of ${automatic.id} (第 ${repeat.repeat_n} 次)\n`);
+    }
+  }
+  const questionText = repeat === null ? args.question : withRepeatSuffix(args.question, repeat.repeat_n);
+  const backgroundText = repeat === null ? args.background : [repeatContext(repeat.entry, repeat), text(args.background)].filter(Boolean).join('\n');
   if (args.kind !== undefined && !KINDS.includes(args.kind)) { process.stderr.write(`open-decision: refused: --kind must be one of ${KINDS.join(' | ')} (got "${args.kind}"); nothing written\n`); return 7; }
   if (!CATEGORIES.includes(args.extra.category)) { process.stderr.write(`open-decision: ${CATEGORY_REFUSAL}（收到 ${args.extra.category === undefined ? '沒有 --category' : `"${args.extra.category}"`}；沒有寫入任何東西）\n`); return 7; }
   const remind = args.kind === 'remind';
@@ -1019,10 +1135,10 @@ function main(argv) {
   const shapeErr = decideCardShapeError(args, ex, options);
   if (shapeErr) return usage(shapeErr); // DECIDE_CARD_SHAPE
   const r = openDecision({
-    cwd: args.cwd || process.cwd(), root: root || null, session: sess.session, question: args.question, background: args.background,
+    cwd: args.cwd || process.cwd(), root: root || null, session: sess.session, question: questionText, background: backgroundText,
     options, recommendation: args.recommendation, why: args.why, blocks: args.blocks, not_authorized: args['not-authorized'], source: args.source, kind: args.kind, category: ex.category, executor: ex.executor, asker: ex.asker, title: ex.title, due_at: dueAt,
     from_request: ex['from-request'], attachments: args.attachments, look_target: lookTarget,
-    operator_steps: operatorSteps,
+    operator_steps: operatorSteps, repeat_of: repeat === null ? undefined : repeat.entry.id, repeat_n: repeat === null ? undefined : repeat.repeat_n,
   });
   if (r.status === 'ok' && args.cwd === undefined) {
     // No --cwd: the card followed the process cwd. A different live session repo will not show it (BL-0337).
@@ -1082,7 +1198,7 @@ function roleGate({ not_authorized, origin, kind } = {}) {
 // lock + atomic-rename path as `open`; another entry is never touched. `origin` (e.g. "ask_user_question") marks which hook
 // opened it; the CLI never sets it. `options` = [{label, description}] (>= 2) or null.
 // Returns { status: 'ok'|'error', id, file, scope_key, message, code? }.
-function openDecision({ cwd, root, session, question, background, options, recommendation, why, blocks, not_authorized, source, origin, turn_tracked, kind, category, executor, asker, title, from_request, due_at, attachments, look_target, operator_steps }) {
+function openDecision({ cwd, root, session, question, background, options, recommendation, why, blocks, not_authorized, source, origin, turn_tracked, kind, category, executor, asker, title, from_request, due_at, attachments, look_target, operator_steps, repeat_of, repeat_n }) {
   const routed = roleGate({ not_authorized, origin, kind });
   if (routed && routed.code === 4) return { status: 'error', code: 4, message: routed.message };
   const sf = scopeFile(cwd, root);
@@ -1104,6 +1220,7 @@ function openDecision({ cwd, root, session, question, background, options, recom
     if (steps.length) entry.operator_steps = steps;
   }
   if (typeof title === 'string' && title !== '') entry.title = title; // additive: absent = the readers derive one (cardTitle in src/status/decision-input.js)
+  if (typeof repeat_of === 'string' && SAFE_ID.test(repeat_of) && Number.isInteger(repeat_n) && repeat_n >= 2) { entry.repeat_of = repeat_of; entry.repeat_n = repeat_n; }
   if (KINDS.includes(kind)) entry.kind = kind; // additive: absent = unspecified
   if (CATEGORIES.includes(category)) entry.category = category; // additive: set by the CLI `open` (required there); cards from before 2026-11-15 and hook-opened cards have none
   if (typeof due_at === 'string' && Number.isFinite(Date.parse(due_at))) entry.due_at = new Date(Date.parse(due_at)).toISOString(); // additive: absent = no date (dueState 'none')
@@ -1182,7 +1299,9 @@ function patchDecision(file, id, patch, { isOurs, any } = {}) {
       const entries = readFile(file, { all: true });
       const hit = entries.find((e) => e.id === id && (any || isOpenEntry(e)));
       if (!hit || (isOurs && !isOurs(hit))) return { status: 'absent' };
-      const next = { ...hit, ...(typeof patch === 'function' ? patch(hit) : patch) }; // a function patch sees the stored entry under the lock (appending to an array field)
+      const delta = typeof patch === 'function' ? patch(hit) : patch; // a function patch sees the stored entry under the lock (appending to an array field)
+      if (delta && delta.__no_write === true) return { status: 'matched', entry: hit };
+      const next = { ...hit, ...delta };
       if (!isOpenEntry(next)) delete next.reask_at;
       const v = JSON.parse(fs.readFileSync(file, 'utf8'));
       writeEntries({ file, scope: { repo_identity: v.repo_identity, project_key: v.project_key } }, v.root_run_id, entries.map((e) => (e === hit ? next : e)));
@@ -1199,12 +1318,21 @@ function recordCorrection(file, id, correction) {
   return patchDecision(file, id, (hit) => ({ answer_corrections: [...(Array.isArray(hit.answer_corrections) ? hit.answer_corrections : []), correction] }), { any: true });
 }
 
-// Close the entry `id` of the scope `file`: patchDecision with status closed + closed_at (+ `answer` when given). Library callers (hooks)
-// keep this signature; the entry is kept now, not removed. Returns { status: 'closed'|'absent'|'error', message }; never throws.
-// This stays a plain close. Auto-await and decline live in the answer paths (CLI close --answer, parkAnswer/sendParked, closePanelAnswer), never here:
-// ask-decision and permission-block withdraw their own cards through this function.
-function closeDecisionById(file, id, isOurs, answer) {
-  const r = patchDecision(file, id, { status: 'closed', closed_at: new Date().toISOString(), answer: typeof answer === 'string' ? answer : null, reask_at: undefined }, { isOurs });
+// Close the entry `id` of the scope `file`. A card without a nonblank answer can only be closed by an explicit withdrawal.
+// Returns { status: 'closed'|'absent'|'error', message }; never throws.
+function closeDecisionById(file, id, isOurs, answerOrWithdrawal) {
+  const answer = typeof answerOrWithdrawal === 'string' ? answerOrWithdrawal.trim() : '';
+  const withdrawal = answerOrWithdrawal && typeof answerOrWithdrawal === 'object' ? answerOrWithdrawal : null;
+  if (isOurs || !fs.existsSync(file)) {
+    const probe = patchDecision(file, id, () => ({ __no_write: true }), { isOurs, any: true });
+    if (probe.status === 'absent' || probe.status === 'error') return probe;
+  }
+  if (!answer && !(withdrawal && withdrawal.withdrawn === true && typeof withdrawal.reason === 'string' && withdrawal.reason.trim() && typeof withdrawal.by === 'string' && withdrawal.by.trim())) {
+    return { status: 'error', message: 'closing without an answer requires an explicit withdrawal with reason and actor' };
+  }
+  const patch = { status: 'closed', closed_at: new Date().toISOString(), answer: answer || null, reask_at: undefined };
+  if (!answer) Object.assign(patch, { closed_via: 'withdrawn', withdraw_reason: withdrawal.reason.trim(), withdrawn_by: withdrawal.by.trim() });
+  const r = patchDecision(file, id, patch, { isOurs });
   return r.status === 'updated' ? { status: 'closed' } : r;
 }
 
@@ -1244,13 +1372,23 @@ function panelAnswerText(line, question) {
   return rest || null;
 }
 
-// The no-executor panel answer. Decline stays open. operator_steps and a non-decline go to awaiting_operator_action.
-// Anything else is the old closeDecisionById (answer stays null on that path, same as before this field existed).
+// The panel answer. Decline stays open. operator_steps and a non-decline go to awaiting_operator_action.
+// A nonempty answer without operator steps closes with that answer; missing text leaves the card open.
 // -> { status: 'closed'|'reask'|'awaiting'|'absent'|'error', reask_at?, message? }
 function closePanelAnswer(file, id, line) {
   const hit = readFile(file, { all: true }).find((e) => e.id === id);
-  if (!hit || !isOpenEntry(hit)) return closeDecisionById(file, id);
+  if (!hit) {
+    const probe = patchDecision(file, id, () => ({ __no_write: true }), { any: true });
+    if (probe.status === 'error') return probe;
+    return { status: 'absent' };
+  }
+  if (!isOpenEntry(hit)) return { status: 'error', message: `no open card ${id}` };
   const answerText = panelAnswerText(line, hit.question);
+  if (answerText === null || !answerText.trim()) {
+    const probe = patchDecision(file, id, () => ({ __no_write: true }), { any: true });
+    if (probe.status === 'error') return probe;
+    return { status: 'error', message: `card ${id} has no answer text; left open` };
+  }
   if (answerText !== null && isDeclineAnswer(answerText)) {
     const d = recordDecline(file, id, answerText, REASK_DEFAULT_MS);
     return d.status === 'reask' ? { status: 'reask', reask_at: d.reask_at } : d;
@@ -1262,7 +1400,8 @@ function closePanelAnswer(file, id, line) {
     });
     return r.status === 'updated' ? { status: 'awaiting' } : r;
   }
-  return closeDecisionById(file, id);
+  const r = patchDecision(file, id, { status: 'closed', closed_at: new Date().toISOString(), answer: answerText.trim(), reask_at: undefined });
+  return r.status === 'updated' ? { status: 'closed' } : r;
 }
 
 // The dispatch a caller must send for `close --answer` with an executor (PM ruling 01M6RV0Y02 — overridden for panel answers by PM 01M6ZXJYTQ, 2026-11-09, see deliverAnswer: this `close --answer` packet is still not sent by this script). Plain data, printed as one JSON.

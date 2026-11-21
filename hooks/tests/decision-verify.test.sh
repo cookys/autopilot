@@ -113,8 +113,9 @@ reset ok; C="$(open_card_x)"; DECOY=1 NO_DECISION=1 close "$C" --option A; asser
 # ENOENT stays unsupported (covered below); timeout-like failure above is probe_error
 # exit 0 without an answer_id is an error, not a claim
 reset noid; C="$(open_card)"; close "$C" --option A; assert_eq "$RC" 8 "claim exit 0 without answer_id: exit 8"; is_open "$C"; assert_eq "$?" 0 "no answer_id: card stays open"
-# no answer given: plain close, no claim
-reset ok; C="$(open_card)"; close "$C"; assert_eq "$RC" 0 "plain close: exit 0"; assert_eq "$(count 'decision claim')" 0 "plain close: no claim"
+# no answer given: plain close is refused without a claim; an explicit withdrawal closes it
+reset ok; C="$(open_card)"; close "$C"; assert_eq "$RC" 2 "plain close without an answer: refused"; assert_eq "$(count 'decision claim')" 0 "plain close: no claim"; is_open "$C"; assert_eq "$?" 0 "refused plain close leaves the card open"
+close "$C" --withdraw "test cleanup" --by test; assert_eq "$RC" 0 "explicit withdrawal cleanup: exit 0"; is_open "$C"; assert_eq "$?" 1 "withdrawal cleanup closes the card"
 # usage
 close "x-1" --option A --option B; assert_eq "$RC" 2 "two --option: usage"
 

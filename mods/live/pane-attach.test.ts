@@ -735,6 +735,14 @@ test('pane-attach 3 pure: step cards and look cards land in 要你做或看 whil
     expect(stepsSlice.some(l => l.field !== undefined), loc + ': step/look cards never render Input fields').toBe(false)
     expect(pressIdsOf(stepsSlice)).toEqual(['dismiss:d-step-1', 'look:d-look-1', 'dismiss:d-look-1'])
 
+    const confirming = decideTabLines(snapOf([stepCard, lookCard]), ctxOf(t, 76, viewOf({ dismissConfirmId: 'd-look-1' })))
+    const confirmBody = confirming.filter(l => l.bar !== true)
+    const confirmText = textsOf(confirmBody).join('\n')
+    expect(confirmText).toContain('做完了嗎？')
+    expect(pressIdsOf(confirmBody)).toContain('dismiss:done:d-look-1')
+    expect(pressIdsOf(confirmBody)).toContain('dismiss:cancel:d-look-1')
+    expect(pressIdsOf(confirmBody)).not.toContain('dismiss:d-look-1')
+
     // Send bar counts ONLY the 2 decision cards, never the step/look cards
     expect(bars.length).toBe(1)
     expect(bars[0].text).toContain(t('decide.submit', { n: 0, total: 2 }))

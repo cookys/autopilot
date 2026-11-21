@@ -1245,8 +1245,8 @@ export function buildSections(src: Sources, foreman: ForemanView | null): PaneSe
 // either may be null. The file is project-scoped, so a project_key that is not the wanted one is an absent file.
 export const REVIEW_SCHEMA = 'autopilot.review/1'
 export type ReviewSeat = { id: string; family: string | null; status: string | null; verdict?: string | null }
-export type PlanReviewView = { logical_plan_id: string | null; generation: number; max_generations: number | null; terminal: boolean; verdict: string | null; seats: ReviewSeat[]; updated_at: string | null }
-export type CodeReviewView = { phase: string | null; generation: number | null; base: string | null; head: string | null; seats: ReviewSeat[]; converged: boolean; at: string | null }
+export type PlanReviewView = { branch?: string | null; logical_plan_id: string | null; generation: number; max_generations: number | null; terminal: boolean; verdict: string | null; seats: ReviewSeat[]; updated_at: string | null }
+export type CodeReviewView = { branch?: string | null; phase: string | null; generation: number | null; base: string | null; head: string | null; seats: ReviewSeat[]; converged: boolean; at: string | null }
 export type ReviewView = { plan: PlanReviewView | null; code: CodeReviewView | null }
 
 function reviewSeats(v: unknown, withVerdict: boolean): ReviewSeat[] {
@@ -1262,11 +1262,11 @@ export function readReview(text: string | null, projectKey: string): ReviewView 
   const p = isObject(v.plan) ? v.plan : null
   const c = isObject(v.code) ? v.code : null
   const plan: PlanReviewView | null = p === null || !Number.isInteger(p.generation) ? null : {
-    logical_plan_id: str(p.logical_plan_id), generation: p.generation as number, max_generations: Number.isInteger(p.max_generations) ? (p.max_generations as number) : null,
+    ...(str(p.branch) === null ? {} : { branch: str(p.branch) }), logical_plan_id: str(p.logical_plan_id), generation: p.generation as number, max_generations: Number.isInteger(p.max_generations) ? (p.max_generations as number) : null,
     terminal: p.terminal === true, verdict: str(p.verdict), seats: reviewSeats(p.seats, false), updated_at: str(p.updated_at),
   }
   const code: CodeReviewView | null = c === null ? null : {
-    phase: str(c.phase), generation: Number.isInteger(c.generation) ? (c.generation as number) : null, base: str(c.base), head: str(c.head),
+    ...(str(c.branch) === null ? {} : { branch: str(c.branch) }), phase: str(c.phase), generation: Number.isInteger(c.generation) ? (c.generation as number) : null, base: str(c.base), head: str(c.head),
     seats: reviewSeats(c.seats, true), converged: c.converged === true, at: str(c.at),
   }
   return plan === null && code === null ? null : { plan, code }
@@ -1289,7 +1289,7 @@ const short = (sha: string | null): string => (sha === null ? '—' : sha.slice(
 // ================= stage-graph P7: the one-line band (contract ②) and the panel's facts =================
 // Colours are theme keys used as TEXT colour only (owner decision 5): no backgroundColor, no inverse, no raw colour.
 export type ThemeKey = 'claude' | 'warning' | 'error' | 'success' | 'suggestion' | 'inactive' | 'subtle' | 'merged' | 'remember'
-export type SlotId = 'verdict' | 'fleet' | 'position' | 'unit' | 'dispatch' | 'review' | 'decisions' | 'spend' | 'quota' | 'hygiene'
+export type SlotId = 'verdict' | 'fleet' | 'position' | 'unit' | 'dispatch' | 'review' | 'decisions' | 'decide' | 'spend' | 'quota' | 'hygiene'
 // tag: which part the width table may drop or shorten (age, k/N, 族, the bar, the stage text). fleet* tags are the one-line band's own drops (layoutBandLine).
 export type SegTag = 'age' | 'kn' | 'fam' | 'bar' | 'stage' | 'live' | 'stalled' | 'chip' | 'wt' | 'walk' | 'dot' | 'reason' | 'round' | 'qc' | 'amt' | 'pct' | 'bar10' | 'bar5' | 'bar3' | 'qx' | 'fleetWord' | 'fleetRun' | 'fleetWait' | 'fleetStuck'
 export type Seg = { text: string; color?: ThemeKey; bold?: boolean; dim?: boolean; tag?: SegTag; slot?: SlotId; role?: SegRole; here?: boolean; fmt?: FmtKind; fact?: FactId; press?: string; href?: string } // slot: set by layoutBand on the band line (the Button it presses); a separator has none
@@ -1343,7 +1343,7 @@ export function readMarker(m: Json | null): MarkerView | null {
 export const RESIDUE_SCHEMA = 'autopilot.residue/1'
 // Residue auto-reap R4 (docs/plans/evidence/2026-10-09-residue-auto-reap/contract.md): the band's `wt N` and the Hygiene tab show
 // needs_human_*, the residue a person must act on. Fields absent from an older fact read as 0 / null / [].
-export type NeedsHumanEntry = { kind: string; target: string; class: string; age_days: number | null; bytes: number | null; reason: string | null; command: string | null }
+export type NeedsHumanEntry = { branch?: string | null; kind: string; target: string; class: string; age_days: number | null; bytes: number | null; reason: string | null; command: string | null }
 export type ResidueView = {
   reapable: number; by_class: Record<string, number>; at: string | null
   needs_human_count: number; needs_human_bytes: number | null; needs_human: NeedsHumanEntry[]
@@ -1360,7 +1360,7 @@ function readNeedsHuman(list: unknown): NeedsHumanEntry[] {
     const target = str(e.path) ?? str(e.branch) ?? str(e.ref)
     if (target === null) continue
     rows.push({
-      kind: str(e.kind) ?? '—', target, class: str(e.class) ?? '—',
+      ...(str(e.branch) === null ? {} : { branch: str(e.branch) }), kind: str(e.kind) ?? '—', target, class: str(e.class) ?? '—',
       age_days: typeof e.age_days === 'number' && Number.isFinite(e.age_days) ? e.age_days : null,
       bytes: isCount(e.bytes) ? e.bytes : null, reason: str(e.reason), command: str(e.command),
     })
@@ -1841,6 +1841,40 @@ export function shrinkToFitted(segs: readonly Seg[], speed: readonly ForgeSegmen
   return out
 }
 
+// v7.4 narrow band (PM): 艦隊, 待決 and tok/s stay. Drop other slots first, then fleet counts. Never cut the 待決 slot.
+const V74_BAND_KEEP = new Set(['verdict', 'fleet', 'decide'])
+function collapseBandSeps(segs: readonly Seg[]): Seg[] {
+  const out: Seg[] = []
+  for (const s of segs) {
+    const prev = out[out.length - 1]
+    if (s.slot === undefined && prev !== undefined && prev.slot === undefined) continue
+    out.push(s)
+  }
+  while (out.length > 0 && out[0].slot === undefined) out.shift()
+  return out
+}
+export function v74FitBand(segs: readonly Seg[], speed: readonly ForgeSegment[] | null, more: boolean, room: number): Seg[] {
+  let out = segs.map(s => ({ ...s }))
+  const width = (): number => fittedBandWidth(segTextWidth(out), speed, more)
+  const dropSlot = (id: string): void => { out = out.filter(s => s.slot !== id) }
+  while (width() > room) {
+    const ids = [...new Set(out.map(s => s.slot).filter((id): id is string => id !== undefined && !V74_BAND_KEEP.has(id)))]
+    if (ids.length === 0) break
+    dropSlot(ids[ids.length - 1])
+  }
+  // Counts may go. The fleet word stays, so the segment is never an empty pair of separators.
+  while (width() > room) {
+    let at = -1
+    for (let i = out.length - 1; i >= 0; i--) {
+      const s = out[i]
+      if (s.slot === 'fleet' && s.tag !== 'fleetWord' && s.tag !== undefined) { at = i; break }
+    }
+    if (at < 0) break
+    out.splice(at, 1)
+  }
+  return collapseBandSeps(out)
+}
+
 // `columns` is the room for the indicator, the ⓘ, the speed label and, when `more` is set, the `›` cell (the caller already removed the tab strip and the one-cell gap).
 // The width table is shown at least 120 columns. A candidate whose verdict word was shortened is refused and the next step is tried.
 // The stuck count is not a step, so it is still on the line when every step has been applied.
@@ -1885,7 +1919,7 @@ export function plainBandText(reason: string, columns: number): string {
 export const PANE_TABS = ['now', 'decide', 'dispatch', 'review', 'spend', 'hygiene', 'fleet', 'legend'] as const
 export type PaneTab = (typeof PANE_TABS)[number]
 // a band slot pressed opens the pane on the tab that explains it; position and unit live in Now's 目前位置 section, which the press also unfolds
-const SLOT_TAB: Partial<Record<SlotId, PaneTab>> = { verdict: 'now', fleet: 'fleet', dispatch: 'dispatch', review: 'review', hygiene: 'hygiene' }
+const SLOT_TAB: Partial<Record<SlotId, PaneTab>> = { verdict: 'now', fleet: 'fleet', dispatch: 'dispatch', review: 'review', hygiene: 'hygiene', decide: 'decide' }
 export const slotTab = (id: SlotId): PaneTab => SLOT_TAB[id] ?? (id === 'quota' || id === 'spend' ? 'spend' : id === 'decisions' ? 'decide' : 'now')
 export const slotUnfolds = (id: SlotId): string | null => (id === 'position' || id === 'unit' ? SECTION.where : id === 'quota' ? SECTION.limits : null)
 export const tabLabel = (tab: PaneTab, t: T): string => t('tab.' + tab)
@@ -1899,7 +1933,7 @@ export type PaneCtx = { t: T; cols: number; expanded?: ReadonlySet<string>; fold
 // in the locale tables and do not change with the language. ----
 // `hold`: cards the owner pressed send on that still sit in the undo window (id -> the clock time the window ends); nothing is claimed or sent until then.
 // `fixing`: sent cards the owner reopened with 改答案 (id -> the clock time it was reopened); their next send is a correction line, not a first answer.
-export type DecideState = { picks: Record<string, number>; notes: Record<string, string>; sent: Record<string, number>; clean?: Record<string, U.CleanResult>; hold?: Record<string, number>; fixing?: Record<string, number>; dismissed?: Record<string, number> }
+export type DecideState = { picks: Record<string, number>; notes: Record<string, string>; sent: Record<string, number>; clean?: Record<string, U.CleanResult>; hold?: Record<string, number>; fixing?: Record<string, number>; dismissed?: Record<string, number>; dismissConfirmId?: string }
 // the undo window between pressing send and the send (operator, 2026-11-08): the card stays on the pane and shows 撤回 with the seconds left
 export const DECIDE_UNDO_MS = 10_000
 export const NO_DECIDE: DecideState = { picks: {}, notes: {}, sent: {} }

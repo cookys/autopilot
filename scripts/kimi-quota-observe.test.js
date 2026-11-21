@@ -67,11 +67,11 @@ test('pace-select never returns an exhausted kimi (negative control: available b
   try {
     q.observe({ verdict: 'done', liveDir: live, now: clock });
     assert.equal(pick().engine, 'kimi', 'clear quota and a broker socket admit the measured seat');
-    q.observe({ verdict: 'stopped_billing', liveDir: live, now: clock });
+    q.observe({ verdict: 'stopped_billing', billing_confirmed: true, liveDir: live, now: clock });
     assert.notEqual(pick().engine, 'kimi', 'billing stop excludes the same seat');
     clock += (q.UNKNOWN_RESET_TTL_S + 1) * 1000;
     assert.equal(pick().engine, 'kimi', 'expired exhaustion admits a recheck');
-    q.observe({ verdict: 'stopped_billing', liveDir: live, now: clock });
+    q.observe({ verdict: 'stopped_billing', billing_confirmed: true, liveDir: live, now: clock });
     assert.notEqual(pick().engine, 'kimi');
     q.observe({ verdict: 'done', text: 'old quota error', liveDir: live, now: clock });
     assert.equal(pick().engine, 'kimi', 'structured done clears old quota text');
@@ -80,5 +80,41 @@ test('pace-select never returns an exhausted kimi (negative control: available b
     assert.equal(connections, 0, 'availability never connects to the stub broker');
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
+
+const FP_LINE = '# Self-bootstrapping: installs the pinned toolchain + rustfmt on demand, so a';
+
+test('unconfirmed stopped_billing writes no refusal and does not mark token_state ok', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kimi-quota-fp-'));
+  fs.chmodSync(dir, 0o700);
+  q.observe({ rc: 1, text: '429 retry-after: 30', liveDir: dir, now: NOW });
+  const before = JSON.stringify(rowOf(dir));
+  const r = q.observe({ verdict: 'stopped_billing', billing_confirmed: false, billing_line: FP_LINE, liveDir: dir, now: NOW + 1000 });
+  assert.equal(r.wrote, false);
+  assert.equal(JSON.stringify(rowOf(dir)), before);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('confirmed stopped_billing writes the 60 minute refusal', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kimi-quota-bill-'));
+  fs.chmodSync(dir, 0o700);
+  const r = q.observe({ verdict: 'stopped_billing', billing_confirmed: true, billing_line: 'masked', liveDir: dir, now: NOW });
+  assert.equal(r.wrote, true);
+  const rec = obs.readView(dir, 'kimi', 'default', {}).view.rows[0].record;
+  assert.deepEqual(rec.refusal, { observed_at: nowS, retry_at: nowS + q.UNKNOWN_RESET_TTL_S, reason: 'quota' });
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('old broker stopped_billing without the two fields writes no refusal', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kimi-quota-old-'));
+  fs.chmodSync(dir, 0o700);
+  const r = q.observe({ verdict: 'stopped_billing', liveDir: dir, now: NOW });
+  assert.equal(r.wrote, false);
+  assert.equal(fs.existsSync(path.join(dir, 'quota')), false);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+function rowOf(dir) {
+  return obs.readView(dir, 'kimi', 'default', {}).view.rows[0].record;
+}
 
 test.after(() => { fs.rmSync(live, { recursive: true, force: true }); });

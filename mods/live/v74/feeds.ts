@@ -11,6 +11,19 @@ export type DecideFeed = { cards: () => DecideCard[] | null; fetchedMs: () => nu
 
 const firstLine = (s: string): string => s.split('\n').map(l => l.trim()).find(l => l !== '') ?? ''
 
+// fleet decision list and the open-decision.js store name the same card by id. The list wins on a clash; a working list with no cards stays [] (not "no source").
+export function mergeDecideCards(list: readonly DecideCard[] | null, store: readonly DecideCard[]): DecideCard[] | null {
+  if (list === null && store.length === 0) return null
+  const seen = new Set<string>()
+  const out: DecideCard[] = []
+  for (const c of [...(list ?? []), ...store]) {
+    if (c.id === '' || seen.has(c.id)) continue
+    seen.add(c.id)
+    out.push(c)
+  }
+  return out
+}
+
 export function parseDecideList(json: string): DecideCard[] | null {
   let o: unknown
   try { o = JSON.parse(json) } catch { return null }

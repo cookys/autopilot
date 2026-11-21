@@ -55,6 +55,7 @@ const server = net.createServer(socket => {
     } else {
       response = {ok: verdict === 'done', verdict, reason: 'fixture ' + verdict, rc: verdict === 'done' ? 0 : 9,
         diff, log:'fixture broker log\n', redactions: 71234, run_id: 'broker-fixture-' + verdict};
+      if (verdict === 'stopped_billing') { response.billing_confirmed = true; response.billing_line = 'masked-fixture'; }
     }
     socket.end(JSON.stringify(response) + '\n');
   });
@@ -99,7 +100,7 @@ const git=(...args)=>cp.execFileSync('git',['-C',path.join(root,'repo'),...args]
 assert.equal(git('show','broker-a:broker-created.txt'),'hello');
 assert.match(git('log','-1','--format=%s','broker-a'),/dispatch-hetero\(kimi\)/);
 const response=JSON.parse(fs.readFileSync(result.agent_log+'.kimi-broker.json'));
-assert.deepEqual(Object.keys(response).sort(),['diff','log','reason','run_id','verdict']);
+assert.deepEqual(Object.keys(response).sort(),['billing_confirmed','billing_line','diff','log','reason','run_id','verdict']);
 assert.match(fs.readFileSync(path.join(root,'group-calls'),'utf8'),/group/);
 console.log('PASS (a) request, shared standalone clone, patch commit, broker metadata, cleanup');
 NODE
@@ -194,7 +195,7 @@ fs.writeFileSync(process.env.AUTOPILOT_KIMI_BROKER_SOCK,'fixture');check(false);
 process.env.AUTOPILOT_KIMI_BROKER_SOCK=original;check(true);
 process.env.AUTOPILOT_KIMI_BROKER_MODEL_PATTERN='[';check(false);
 delete process.env.AUTOPILOT_KIMI_BROKER_MODEL_PATTERN;check(true);
-q.observe({verdict:'stopped_billing'});check(false);
+q.observe({verdict:'stopped_billing', billing_confirmed:true});check(false);
 q.observe({verdict:'done',text:'old rate limit text'});check(true);
 assert.equal(fs.existsSync(path.join(root,'local-kimi-invocations')),false);
 console.log('PASS (e) broker pace/topology follow socket/quota; local jury/readiness/capability remain stopped');

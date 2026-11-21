@@ -31,7 +31,7 @@ od() { OUT="$(node "$OD" "$@" --cwd "$R" --root-run-id rt 2>"$TEST_TMP/err")"; R
 # open refuses a card without --executor (PM 01M6ZXJYTQ), so opencard names one; a card with NO executor can only come from the library (hooks/ask-decision.js), libcard
 libcard() { OUT="$(node -e 'const r=require(process.argv[1]).openDecision({cwd:process.argv[2],root:"rt",session:null,question:process.argv[3],options:null,not_authorized:"irreversible"});process.stdout.write(r.id)' "$OD" "$R" "$1" 2>"$TEST_TMP/err")"; RC=$?; ERR="$(cat "$TEST_TMP/err")"; }
 opencard() { OUT="$(node "$OD" open --category goal --executor "$EXEC" --cwd "$R" --root-run-id rt --title '要改嗎' --question "$1" --free-text --not-authorized irreversible "${@:2}" 2>"$TEST_TMP/err")"; RC=$?; ERR="$(cat "$TEST_TMP/err")"; }
-field() { node -e 'const fs=require("fs");const v=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const e=v.decisions.find(d=>d.id===process.argv[2]);const x=e?e[process.argv[3]]:undefined;process.stdout.write(x===undefined?"<undef>":String(x))' "$(ls "$D"/*.json | head -1)" "$1" "$2"; }
+field() { node -e 'const fs=require("fs"),p=require("path");const e=fs.readdirSync(process.argv[1]).filter(n=>n.endsWith(".json")).flatMap(n=>{try{return JSON.parse(fs.readFileSync(p.join(process.argv[1],n),"utf8")).decisions||[]}catch{return []}}).find(d=>d.id===process.argv[2]);const x=e?e[process.argv[3]]:undefined;process.stdout.write(x===undefined?"<undef>":String(x))' "$D" "$1" "$2"; }
 
 # 1. open stores executor + asker; close --answer --executor prints JSON, sends nothing, parks the card
 opencard "Q1?" --executor "$EXEC" --asker "$ASK"; assert_eq "$RC" 0 "open with --executor/--asker: exit 0"; C1="$OUT"
@@ -75,7 +75,7 @@ libcard "Q3?"; C3="$OUT"
 od close --id "$C3" --answer "x" --executor "$EXEC"; assert_eq "$RC" 0 "executor given at close: exit 0"
 assert_eq "$(pj dispatch.to)" "$EXEC" "close --executor: dispatch JSON"; assert_eq "$(pj fyi)" "null" "no asker -> fyi null"; assert_eq "$(field "$C3" status)" "pending_dispatch" "executor given at close: pending_dispatch"
 od close --id "$C3" --dispatched t3 >/dev/null; od close --id "$C3" --dispatched t4; assert_eq "$RC" 2 "second --dispatched refused"
-for st in open; do opencard "Q-D?"; CD="$OUT"; od close --id "$CD" --dispatched t9; assert_eq "$RC" 2 "--dispatched on an $st card: refused"; assert_eq "$(field "$CD" status)" "open" "still open"; od close --id "$CD" >/dev/null; done
+for st in open; do opencard "Q-D?"; CD="$OUT"; od close --id "$CD" --dispatched t9; assert_eq "$RC" 2 "--dispatched on an $st card: refused"; assert_eq "$(field "$CD" status)" "open" "still open"; od close --id "$CD" --withdraw "test cleanup" --by test >/dev/null; done
 
 # 4. awaiting_operator_action
 opencard "Q5?" --executor "$EXEC"; C5="$OUT"
@@ -103,7 +103,72 @@ od close --id "$C6" --executor "$EXEC"; assert_eq "$RC" 2 "--executor without --
 od close --id "$C6" --answer a --executor "x y"; assert_eq "$RC" 2 "--executor not an address: usage exit 2"
 od close --id "$C6" --dispatched t --answer a; assert_eq "$RC" 2 "--dispatched with --answer: usage exit 2"
 od close --id "$C6" --dispatched "bad id!"; assert_eq "$RC" 2 "--dispatched needs a task id token"
-od close --id "$C6"; assert_eq "$RC" 0 "plain close (withdrawal) still works"; assert_eq "$(field "$C6" status)" "closed" "withdrawal kept as closed"; assert_eq "$(field "$C6" answer)" "null" "withdrawal has answer null"
+od close --id "$C6"; assert_eq "$RC" 2 "bare close is refused"; assert_eq "$(field "$C6" status)" "open" "bare close leaves card open"; assert_contains "$ERR" "--withdraw <reason> --by <actor>" "bare close prints complete withdrawal example"
+od close --id "$C6" --withdraw "PM 撤回：重開成新卡" --by "ns/cc/pm"; assert_eq "$RC" 0 "explicit withdrawal succeeds"; assert_eq "$(field "$C6" status)" "closed" "withdrawal kept as closed"; assert_eq "$(field "$C6" answer)" "null" "withdrawal has no answer"; assert_eq "$(field "$C6" closed_via)" "withdrawn" "withdrawal marker stored"; assert_eq "$(field "$C6" withdraw_reason)" "PM 撤回：重開成新卡" "withdrawal reason stored"; assert_eq "$(field "$C6" withdrawn_by)" "ns/cc/pm" "withdrawal actor stored"
+
+opencard "panel dismiss?" --kind step; PD="$OUT"
+od close --id "$PD" --panel-dismiss --closed-key Escape; assert_eq "$RC" 0 "panel dismiss closes with provenance"
+assert_eq "$(field "$PD" closed_via)" "panel_dismiss" "panel dismiss provenance stored"; assert_eq "$(field "$PD" closed_key)" "Escape" "panel dismiss key stored"; assert_neq "$(field "$PD" closed_at)" "<undef>" "panel dismiss timestamp stored"
+opencard "panel done?" --kind step; PN="$OUT"
+od close --id "$PN" --panel-done --closed-key "做完了"; assert_eq "$RC" 0 "panel done closes with provenance"
+assert_eq "$(field "$PN" closed_via)" "panel_done" "panel done provenance stored"; assert_eq "$(field "$PN" closed_key)" "做完了" "panel done key stored"; assert_eq "$(field "$PN" answer)" "做完了" "panel done answer stored"
+
+opencard "Repeat fixture" --kind step; RP="$OUT"
+od close --id "$RP" --panel-dismiss --closed-key Escape
+opencard "Repeat fixture" --kind step --repeat-of "$RP"; RP2="$OUT"
+assert_eq "$(field "$RP2" question)" "Repeat fixture（第 2 次）" "explicit repeat gets the second-time suffix"
+assert_eq "$(field "$RP2" repeat_of)" "$RP" "explicit repeat source is stored"
+assert_eq "$(field "$RP2" repeat_n)" "2" "explicit repeat number is stored"
+assert_contains "$(field "$RP2" background)" "上一張 $RP 在 " "repeat background names the previous card"
+assert_contains "$(field "$RP2" background)" "被關掉（closed_via panel_dismiss），沒有完成的紀錄。" "repeat background records the closure reason"
+RPBG="$(field "$RP2" background)"
+if [[ ! "$RPBG" =~ ^上一張\ $RP\ 在\ [0-9]{2}:[0-9]{2}\ 台北時間\ 被關掉 ]]; then fail "repeat background uses Taipei wall time"; fi
+od close --id "$RP2" --panel-dismiss --closed-key Escape
+opencard "Repeat fixture" --kind step --repeat-of "$RP2"; RP3="$OUT"
+assert_eq "$(field "$RP3" question)" "Repeat fixture（第 3 次）" "repeat chain increments from the source chain"
+od close --id "$RP3" --panel-dismiss --closed-key Escape
+opencard "Automatic repeat" --kind step; RA="$OUT"
+od close --id "$RA" --panel-dismiss --closed-key Escape
+opencard "Automatic repeat" --kind step; RA2="$OUT"
+assert_contains "$ERR" "repeat-of $RA (第 2 次)" "automatic repeat is reported on stderr"
+assert_eq "$(field "$OUT" question)" "Automatic repeat（第 2 次）" "matching recent unanswered card repeats automatically"
+od close --id "$RA2" --panel-dismiss --closed-key Escape
+
+node - "$D" <<'NODE'
+const fs = require('node:fs');
+const path = require('node:path');
+const dir = process.argv[2];
+const names = fs.readdirSync(dir).filter(n => n.endsWith('.json'));
+const currentPath = path.join(dir, names[0]);
+const current = JSON.parse(fs.readFileSync(currentPath, 'utf8'));
+const now = Date.now();
+const fixture = (id, question, more = {}) => ({ id, kind: 'step', question, status: 'closed', answer: null, closed_at: new Date(now - 60_000).toISOString(), opened_at: new Date(now - 120_000).toISOString(), ...more });
+current.decisions.push(fixture('d-54d32366', 'operator dismissed step A'));
+fs.writeFileSync(currentPath, JSON.stringify(current));
+const unboundPath = path.join(dir, current.project_key + '.json');
+const unbound = { ...current, root_run_id: null, decisions: [fixture('d-ad2eb514', 'operator dismissed step B')] };
+fs.writeFileSync(unboundPath, JSON.stringify(unbound));
+const otherPath = path.join(dir, current.project_key + '--dismissed-other.json');
+const other = { ...current, root_run_id: 'dismissed-other', decisions: [fixture('d-fc670141', 'Q'.repeat(70)), fixture('d-exclude001', 'withdrawn', { closed_via: 'withdrawn' }), fixture('d-exclude002', 'completed', { closed_via: 'panel_done', answer: '做完了' }), fixture('d-exclude003', 'old', { closed_at: new Date(now - 20 * 86400000).toISOString() })] };
+fs.writeFileSync(otherPath, JSON.stringify(other));
+NODE
+od dismissed; assert_eq "$RC" 0 "dismissed lists unrecorded unanswered closures"
+assert_contains "$OUT" "d-54d32366 step" "dismissed includes the current scope fixture"
+assert_contains "$OUT" "d-ad2eb514 step" "dismissed includes the unbound scope fixture"
+assert_contains "$OUT" "d-fc670141 step" "dismissed includes another root scope fixture"
+assert_not_contains "$OUT" "d-exclude001" "dismissed excludes withdrawals"
+assert_not_contains "$OUT" "d-exclude002" "dismissed excludes panel completions"
+assert_not_contains "$OUT" "d-exclude003" "dismissed applies the default 14-day window"
+DISMISSED_LINE="$(printf '%s\n' "$OUT" | node -e 'let s="";process.stdin.setEncoding("utf8");process.stdin.on("data",x=>s+=x);process.stdin.on("end",()=>process.stdout.write(s.split(/\r?\n/).find(x=>x.startsWith("d-54d32366 "))||""))')"
+if [[ ! "$DISMISSED_LINE" =~ ^d-54d32366\ step\ [0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}\ 未記錄\ operator ]]; then fail "dismissed prints Taipei time and 未記錄 on each row"; fi
+assert_eq "$(printf '%s\n' "$OUT" | node -e 'let s="";process.stdin.on("data",x=>s+=x);process.stdin.on("end",()=>{console.log(s.split(/\r?\n/).filter(x=>/^d-(54d32366|ad2eb514|fc670141) /.test(x)).length)})')" "3" "dismissed prints one line for each regression fixture"
+od dismissed --days 1 --json; assert_eq "$RC" 0 "dismissed supports --days and JSON"
+assert_contains "$OUT" '"schema": "decision-dismissed/1"' "dismissed JSON has its schema"
+assert_contains "$OUT" '"id": "d-fc670141"' "dismissed JSON includes every scope"
+assert_contains "$OUT" '"question": "QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ"' "dismissed truncates questions to 60 characters"
+od dismissed --since 2999-01-01T00:00:00Z; assert_eq "$RC" 1 "dismissed with future since has no rows"
+assert_eq "$(field d-54d32366 status)" "closed" "dismissed is read-only"
+
 
 # 6. backfill: dry run by default, status per line
 cat > "$TEST_TMP/bf.jsonl" <<JSON
@@ -180,7 +245,7 @@ assert_eq "$(field "$CO" status)" "open" "(c) open card stays open"
 od done --id "$CO" --note "try bypass"; assert_eq "$RC" 2 "(c) done --note on open card: still refused (exit 2)"
 assert_contains "$ERR" "$CO is open, not awaiting_operator_action" "(c) done --note on open card still prints the open message"
 assert_eq "$(field "$CO" status)" "open" "(c) open card stays open even with --note"
-od close --id "$CO" >/dev/null
+od close --id "$CO" --withdraw "test cleanup: close open card" --by "test/operator" >/dev/null
 # (d) awaiting_operator_action done unchanged (--note optional; if given, stored as done_note)
 opencard "Q-AW1?" --executor "$EXEC"; CAW1="$OUT"
 od close --id "$CAW1" --answer "op step 1" --awaiting-operator "run step 1" >/dev/null
@@ -203,4 +268,8 @@ node "$M/scripts/open-decision.js" close --id "$CM" --answer "z" --executor "$EX
 assert_neq "$(field "$CM" status)" "pending_dispatch" "NC2 the sabotaged close --executor does NOT leave pending_dispatch (so the real assertion would fail on it)"
 assert_eq "$(field "$CM" status)" "closed" "NC2 the sabotaged copy closed it directly"
 assert_eq "$(cat "$STUBLOG")" "" "fleet was never called in this whole test"
+LIB_REPO="$TEST_TMP/helper-repo"; mkdir -p "$LIB_REPO"; $GIT -C "$LIB_REPO" init -q; $GIT -C "$LIB_REPO" commit -q --allow-empty -m base
+LIB_NO_ANSWER_ID="$(node -e 'const{openDecision}=require(process.argv[1]);const r=openDecision({cwd:process.argv[2],root:"rt",session:null,question:"helper requires a real answer or withdrawal",options:null,not_authorized:"irreversible"});process.stdout.write(r.id)' "$OD" "$LIB_REPO")"
+LIB_NO_ANSWER_FILE="$(node -e 'const{findCard}=require(process.argv[1]);process.stdout.write(findCard(process.argv[2],process.argv[3],{all:true}).file)' "$OD" "$LIB_REPO" "$LIB_NO_ANSWER_ID")"
+LIB_RESULT="$(node -e 'const od=require(process.argv[1]);const r=od.closeDecisionById(process.argv[2],process.argv[3]);process.stdout.write(JSON.stringify(r))' "$OD" "$LIB_NO_ANSWER_FILE" "$LIB_NO_ANSWER_ID")"; assert_contains "$LIB_RESULT" '"status":"error"' "closeDecisionById refuses missing answer and withdrawal"; assert_eq "$(node -e 'const{findCard}=require(process.argv[1]);process.stdout.write(findCard(process.argv[2],process.argv[3],{all:true}).entry.status)' "$OD" "$LIB_REPO" "$LIB_NO_ANSWER_ID")" "open" "refused helper close leaves card open"
 finalize_test

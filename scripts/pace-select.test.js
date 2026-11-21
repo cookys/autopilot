@@ -2383,7 +2383,7 @@ test('behind-pace (4): kimi behind, prompt passes gate, broker available -> kimi
     );
 
     const kimiQuota = require('./lib/kimi-quota-observe');
-    kimiQuota.observe({ verdict: 'stopped_billing', liveDir: testLiveDir, now: TAIPEI_1500_DATE.getTime() });
+    kimiQuota.observe({ verdict: 'stopped_billing', billing_confirmed: true, liveDir: testLiveDir, now: TAIPEI_1500_DATE.getTime() });
     assert.equal(
       selectEngine({
         pace,

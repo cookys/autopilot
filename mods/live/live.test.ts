@@ -2689,7 +2689,7 @@ function expectThemeOnly(tree: Drawn, _allowTabBackground = false) {
   for (const n of walkAll(tree)) {
     const p = n.props || {}
     expect(p.backgroundColor).toBeUndefined()
-    expect(p.inverse).toBeUndefined()
+    if (!(p.inverse === true && String((n as { props?: { key?: unknown } }).props?.key ?? '').startsWith('tl'))) expect(p.inverse).toBeUndefined()
     if (p.color !== undefined) expect(THEME).toContain(p.color as string)
   }
 }
@@ -3748,12 +3748,12 @@ test('gate3 item 4: console mode, pane CLOSED: band row 2 has the new page names
 const pmBandRows = async ($: any, w: any, o: { panesOpen: boolean; columns: number; maxRows: number; press: string[] }) => {
   for (const key of o.press) {
     w.panes = [] // the tab row is on the band only while the pane is closed (A4): the press happens then, the pane may open afterwards
-    const p = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', requestId: 'rq-pm-press', props: { ...BAND_PROPS, legacyTabs: false, maxRows: o.maxRows, bodyColumns: o.columns }, viewport: { columns: o.columns + 5, rows: 50, isFullscreen: true } })
+    const p = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', requestId: 'rq-pm-press', props: { ...BAND_PROPS, legacyTabs: false, o4Shell: true, maxRows: o.maxRows, bodyColumns: o.columns }, viewport: { columns: o.columns + 5, rows: 50, isFullscreen: true } })
     await p.press({ key })
     await p.unmount()
   }
   w.panes = o.panesOpen ? ['autopilot-live'] : []
-  const ui = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', requestId: 'rq-pm-draw', props: { ...BAND_PROPS, legacyTabs: false, maxRows: o.maxRows, bodyColumns: o.columns }, viewport: { columns: o.columns + 5, rows: 50, isFullscreen: true } })
+  const ui = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', requestId: 'rq-pm-draw', props: { ...BAND_PROPS, legacyTabs: false, o4Shell: true, maxRows: o.maxRows, bodyColumns: o.columns }, viewport: { columns: o.columns + 5, rows: 50, isFullscreen: true } })
   const tree = (await ui.drawn()) as Node
   await ui.unmount()
   const flat = ((tree.children || []) as Node[]).flatMap(function rows(c: Node): Node[] { const kids = (c.children || []) as Node[]; return c.type === 'Box' && c.props?.flexDirection === 'column' ? kids : c.type === 'Box' && kids.length === 1 && kids[0].type === 'Box' && kids[0].props?.flexDirection === 'column' ? rows(kids[0]) : [c] }).map(n => walkTexts(n).map(textOf).join(''))
@@ -6777,7 +6777,7 @@ for (const surface of SURFACES) {
   test('r5 E: the O4 shell draws the tok/s label (a Button keyed speed) on its menu row, the bottom band, once a request is timed (' + surface + ')', async ($, on) => {
     const w = worldEn(on, richWorld())
     forgeMod(w, [])
-    const d = await draw($, on, TWO, [], { legacyTabs: false, maxRows: 12, bodyColumns: 160 })
+    const d = await draw($, on, TWO, [], { legacyTabs: false, o4Shell: true, maxRows: 12, bodyColumns: 160 })
     expect(d.speed, 'the label is a Button keyed speed').toBeDefined()
     expect(d.speedText ?? '', 'tok/s').toMatch(/ϟ \d+ tok\/s/)
     expect(d.text, 'drawn with the menu row').toContain('tok/s')
@@ -7619,7 +7619,7 @@ for (const surface of SURFACES) {
     Object.assign(files, extra)
     return world(on, files, nowMs)
   }
-  const mountShell = ($: any, columns: number, maxRows = 12, extra: Record<string, unknown> = {}) => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-shell', props: { ...BAND_PROPS, legacyTabs: false, maxRows, bodyColumns: columns, ...extra }, viewport: { columns: columns + 5, rows: 50, isFullscreen: true } })
+  const mountShell = ($: any, columns: number, maxRows = 12, extra: Record<string, unknown> = {}) => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-shell', props: { ...BAND_PROPS, legacyTabs: false, o4Shell: true, maxRows, bodyColumns: columns, ...extra }, viewport: { columns: columns + 5, rows: 50, isFullscreen: true } })
   // The band starts as one row. A layout test wants the open shell, so this presses the collapsed row once (band:row, or the note when the row is already full).
   // `observe: true` skips that press: the default, the toggle and the geometry log are measured as drawn. The flag is not a component prop.
   const rowTarget = (buttons: Node[]): string | null => {
@@ -8116,7 +8116,7 @@ for (const surface of SURFACES) {
     const frame = [d.tree.children?.[1], d.tree.children?.[9]].map(n => JSON.stringify(n))
     for (const f of frame) {
       expect(f).not.toContain('backgroundColor')
-      expect(f).not.toContain('inverse')
+      expect(f.replace(/"key":"tl\d+"[\s\S]{0,80}?"inverse":true/g, '')).not.toContain('inverse')
       expect(f).not.toContain('"bold":true')
     }
     const colours = new Set(Object.values(ui.PALETTE))
@@ -8371,6 +8371,21 @@ for (const surface of SURFACES) {
     await again.press({ key: 'info' })
     await again.unmount()
     expect(w.opens.length).toBe(2)
+  })
+
+  test('side pane: /live-pane before the first band draw opens the host Pane once that draw shows the old layout, and never in v7.4 (' + surface + ')', async ($, on) => {
+    const w = shellWorld(on)
+    await start($, surface)
+    await $.command.run({ command: 'live-pane', args: '' })
+    expect(w.opens.length, 'the mode is not known before the first draw').toBe(0)
+    const band = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-early', props: { ...BAND_PROPS, bodyColumns: 160 }, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+    await band.unmount()
+    expect(w.opens.length, 'the first legacy draw opens the asked-for host Pane').toBe(1)
+    await start($, surface)
+    await $.command.run({ command: 'live-pane', args: '' })
+    const v74 = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-early2', props: { ...BAND_PROPS, legacyTabs: false, bodyColumns: 160 }, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+    await v74.unmount()
+    expect(w.opens.length, 'v7.4 draws the frame in the band, no host Pane').toBe(1)
   })
 
   // design.md section 9: only the 待決 card view has its own quick row (0/7/8/9); every other tab, and 待決 with no card, has a blank quick row (no open-panel button).
@@ -8777,11 +8792,11 @@ for (const surface of SURFACES) {
     w.panes = ['autopilot-live']
     const opens = w.opens.length
     for (const cols of [155, 75]) {
-      const folded = await drawShell($, cols, [], 18, { legacyTabs: false, observe: true })
+      const folded = await drawShell($, cols, [], 18, { legacyTabs: false, o4Shell: true, observe: true })
       expect(folded.all.length, 'starts as one row at ' + cols).toBe(1)
       expect(folded.all[0], 'menu at ' + cols).toContain('待決')
       expect(folded.all.some(r => r.includes('╭')), 'no frame while folded at ' + cols).toBe(false)
-      const d = await drawShell($, cols, ['band:note'], 18, { legacyTabs: false, observe: true })
+      const d = await drawShell($, cols, ['band:note'], 18, { legacyTabs: false, o4Shell: true, observe: true })
       expect(d.rows.length, 'rows at ' + cols).toBeGreaterThanOrEqual(12)
       expect(d.rows[0], 'menu at ' + cols).toContain('待決')
       expect(d.rows.some(r => r.includes('╭')), 'frame at ' + cols).toBe(true)
@@ -8792,11 +8807,11 @@ for (const surface of SURFACES) {
       expect(d.hot['menu:u']).toBe('u')
       expect(d.hot['menu:p']).toBe('p')
       expect(d.hot['menu:h']).toBe('h')
-      await drawShell($, cols, ['tab:decide'], 18, { legacyTabs: false, observe: true }) // back to one row before the next width
+      await drawShell($, cols, ['tab:decide'], 18, { legacyTabs: false, o4Shell: true, observe: true }) // back to one row before the next width
     }
-    await drawShell($, 155, ['menu:r', 'menu:u', 'menu:p', 'menu:h', 'tab:decide', 'next-menu'], 18, { legacyTabs: false })
+    await drawShell($, 155, ['menu:r', 'menu:u', 'menu:p', 'menu:h', 'tab:decide', 'next-menu'], 18, { legacyTabs: false, o4Shell: true })
     expect(w.opens.length, 'd/r/u/p/h and 9 do not open a pane page').toBe(opens)
-    const room = await drawShell($, 155, [], 18, { legacyTabs: false })
+    const room = await drawShell($, 155, [], 18, { legacyTabs: false, o4Shell: true })
     expect(room.rows[1], '9 moved off 待決').not.toContain('第 1 張')
   })
 
@@ -8804,7 +8819,7 @@ for (const surface of SURFACES) {
   test('O4 shell: under 6 rows with the legacy tabs off is one hint line (' + surface + ')', async ($, on) => {
     shellWorld(on)
     await start($, surface)
-    const d = await drawShell($, 155, [], 5, { legacyTabs: false })
+    const d = await drawShell($, 155, [], 5, { legacyTabs: false, o4Shell: true })
     const drawn = d.rows.filter(r => r.trim() !== '')
     expect(drawn.length).toBe(1)
     expect(drawn[0]).toContain('視窗高度不足')
@@ -9068,7 +9083,7 @@ for (const surface of SURFACES) {
   test('O4 r4 A: under 6 rows the band is ONE hint line with the real row count (' + surface + ')', async ($, on) => {
     await r4World($, on, false)
     for (const maxRows of [5, 2]) {
-      const d = await drawShell($, 155, [], maxRows, { legacyTabs: false })
+      const d = await drawShell($, 155, [], maxRows, { legacyTabs: false, o4Shell: true })
       expect(d.all.length, 'one row at ' + maxRows).toBe(1)
       expect(d.all[0].trim()).toBe('待決 1 張 · 視窗高度不足（目前 ' + maxRows + ' 列，需要 6 列）')
     }
@@ -9077,22 +9092,22 @@ for (const surface of SURFACES) {
     const w = await r4World($, on, false)
     const logOf = () => (w.bodies[LIVE + '/band-geometry.log'] ?? '').split('\n').filter(l => l !== '')
     const n0 = logOf().length
-    await drawShell($, 155, [], 19, { legacyTabs: false, observe: true })
+    await drawShell($, 155, [], 19, { legacyTabs: false, o4Shell: true, observe: true })
     const n1 = logOf().length
     expect(n1 - n0, 'a first draw writes one line').toBe(1)
     const first = JSON.parse(logOf()[logOf().length - 1])
     expect(first.shellRows, 'the first draw is the one row').toBe(1)
     expect(first.expanded).toBe(false)
-    await drawShell($, 155, [], 19, { legacyTabs: false, observe: true })
+    await drawShell($, 155, [], 19, { legacyTabs: false, o4Shell: true, observe: true })
     expect(logOf().length, 'the same geometry writes none').toBe(n1)
-    await drawShell($, 205, [], 17, { legacyTabs: false, observe: true })
+    await drawShell($, 205, [], 17, { legacyTabs: false, o4Shell: true, observe: true })
     expect(logOf().length, 'a change writes one more').toBe(n1 + 1)
     const mid = JSON.parse(logOf()[logOf().length - 1])
     expect(mid.maxRows).toBe(17)
     expect(mid.bodyColumns).toBe(205)
     expect(mid.shellRows).toBe(1)
     expect(mid.expanded).toBe(false)
-    await drawShell($, 205, ['band:row'], 17, { legacyTabs: false, observe: true })
+    await drawShell($, 205, ['band:row'], 17, { legacyTabs: false, o4Shell: true, observe: true })
     const lines = logOf()
     expect(lines.length, 'opening the row writes one more').toBe(n1 + 2)
     const last = JSON.parse(lines[lines.length - 1])

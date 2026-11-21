@@ -10,16 +10,17 @@
  * `while ! grep …; do sleep 10; done`, and lived 13–33 hours, at ≈$2,200 API-equivalent
  * in 36 hours. Nothing had stopped them because nothing was IN the loop.
  *
- * SCOPE (payload must carry `agent_id` — SPIKE-1, CC 2.1.208: subagent identity —
- *     depth-0 never has it — else the hook is always inert — exit 0, no output):
- *   - Marker path: session-mode marker ACTIVE with level l4|l5|l6
- *     (scripts/session-mode.js readMarker). Cap, poll, reserve, Monitor deny, and
- *     context-ceiling apply here only.
- *   - No-marker advisory path: marker absent/expired/corrupt, or present at a
- *     non-foreman level (e.g. l3). For a Bash call from an autopilot-dispatched
- *     subagent (child first-user message line 1 starts with "Engine:"), increment
- *     bash_calls and occasionally emit additionalContext. Never deny on this path.
- *     Other subagents (Explore, Plan, …) stay inert and create no state.
+ * SCOPE (Bash cap and the other non-poll rules still require `agent_id`):
+ *   - Poll / Monitor (when poll_scope=all, default): every session, including
+ *     depth-0 (no `agent_id`), at any marker level. A hit before
+ *     poll_enforce_from is allowed with a stderr warning; at or after that
+ *     instant it is denied. Each hit appends events.jsonl and poll-hits.jsonl
+ *     (no command text).
+ *   - Poll / Monitor (poll_scope=foreman): l4|l5|l6 marker subagents only;
+ *     depth-0 stays inert. The same warn-until date applies when a rule hits.
+ *   - Marker path (l4|l5|l6): Bash cap, reserve, context-ceiling on top of poll rules.
+ *   - No-marker advisory: Engine:-first Bash increments bash_calls and may advise;
+ *     never capped. Other subagents stay inert except poll rules when poll_scope=all.
  *
  * RULES (a deny names the rule and the sanctioned alternative):
  *   - Bash cap: per (session, agent_id) call counter; call N > bash_cap (default 40)
@@ -48,8 +49,19 @@
  * stripped); quoted strings are kept because `bash -c` executes them.
  *
  * MODES: ~/.autopilot/config.json {"foreman_guard": {"mode": "block"|"warn"|"off",
- * "bash_cap": 40, "advisory_every": 40}} or AUTOPILOT_FOREMAN_GUARD_MODE /
- * AUTOPILOT_FOREMAN_GUARD_BASH_CAP / AUTOPILOT_FOREMAN_GUARD_ADVISORY_EVERY.
+ * "bash_cap": 40, "advisory_every": 40, "poll_scope": "all"|"foreman",
+ * "poll_enforce_from": "<ISO date-time>"}} or
+ * AUTOPILOT_FOREMAN_GUARD_MODE / AUTOPILOT_FOREMAN_GUARD_BASH_CAP /
+ * AUTOPILOT_FOREMAN_GUARD_ADVISORY_EVERY / AUTOPILOT_FOREMAN_GUARD_POLL_SCOPE /
+ * AUTOPILOT_FOREMAN_GUARD_POLL_ENFORCE_FROM.
+ * poll_scope=all (default): polling rules apply to every session, including depth-0.
+ * poll_scope=foreman: polling rules only inside an l4/l5/l6 marker session.
+ * poll_enforce_from (default 2026-11-24T00:00:00+08:00): before that instant a polling
+ * hit is allowed; at or after it the hit is denied. An unparsable value enforces now.
+ * Events: ${XDG_RUNTIME_DIR:-tmpdir}/autopilot/foreman-guard/events.jsonl — one JSON line
+ * per deny or advisory ({ts,session_id,agent_id,rule,mode,level}; no command text).
+ * Poll hits also append ~/.autopilot/foreman-guard/poll-hits.jsonl
+ * ({ts,session_id,agent_id,rule,mode}; mode warn|deny; no command text).
  * warn ⇒ stderr line, allow. Fail-open: any internal error ⇒ exit 0 silently.
  * State: ~/.autopilot/foreman-guard/<session>-<agent>.json (host-stable, not TMPDIR).
  */
@@ -69,6 +81,12 @@ const { execFileSync } = require('child_process');
 
 const DEFAULT_BASH_CAP = 40;
 const DEFAULT_ADVISORY_EVERY = 40;
+const DEFAULT_POLL_SCOPE = 'all';
+const DEFAULT_POLL_ENFORCE_FROM = '2026-11-24T00:00:00+08:00';
+const POLL_SCOPES = new Set(['all', 'foreman']);
+const POLL_WAIT_DIRECTIVE =
+  'Wait with run_in_background: true and the harness completion notification '
+  + '(or `fleet watch` / the fleet `watch` tool); do not re-check.';
 const DEFAULT_WORKER_REVIEWER_CAP = 120;
 const GC_STAMP_NAME = 'gc.stamp';
 const GC_INTERVAL_MS = 60 * 60 * 1000;
@@ -247,6 +265,8 @@ function loadConfig() {
     bashCap: DEFAULT_BASH_CAP,
     reserveCalls: DEFAULT_RESERVE_CALLS,
     advisoryEvery: DEFAULT_ADVISORY_EVERY,
+    pollScope: DEFAULT_POLL_SCOPE,
+    pollEnforceFrom: DEFAULT_POLL_ENFORCE_FROM,
   };
   let fileRoleCaps = null;
   try {
@@ -259,6 +279,12 @@ function loadConfig() {
         if (Number.isInteger(fg.bash_cap) && fg.bash_cap > 0) cfg.bashCap = fg.bash_cap;
         if (Number.isInteger(fg.reserve_calls) && fg.reserve_calls >= 0) cfg.reserveCalls = fg.reserve_calls;
         if (Number.isInteger(fg.advisory_every) && fg.advisory_every > 0) cfg.advisoryEvery = fg.advisory_every;
+        if (typeof fg.poll_scope === 'string' && POLL_SCOPES.has(fg.poll_scope)) {
+          cfg.pollScope = fg.poll_scope;
+        }
+        if (typeof fg.poll_enforce_from === 'string' && fg.poll_enforce_from.trim()) {
+          cfg.pollEnforceFrom = fg.poll_enforce_from.trim();
+        }
         if (fg.role_caps && typeof fg.role_caps === 'object') fileRoleCaps = fg.role_caps;
       }
     }
@@ -271,6 +297,14 @@ function loadConfig() {
   if (envReserve !== null) cfg.reserveCalls = envReserve;
   const envAdvisory = overlayPosInt(process.env.AUTOPILOT_FOREMAN_GUARD_ADVISORY_EVERY);
   if (envAdvisory !== null) cfg.advisoryEvery = envAdvisory;
+  const envPollScope = process.env.AUTOPILOT_FOREMAN_GUARD_POLL_SCOPE;
+  if (typeof envPollScope === 'string' && POLL_SCOPES.has(envPollScope)) {
+    cfg.pollScope = envPollScope;
+  }
+  const envPollEnforce = process.env.AUTOPILOT_FOREMAN_GUARD_POLL_ENFORCE_FROM;
+  if (typeof envPollEnforce === 'string' && envPollEnforce.trim()) {
+    cfg.pollEnforceFrom = envPollEnforce.trim();
+  }
   cfg.roleCaps = {
     foreman: cfg.bashCap,
     worker: DEFAULT_WORKER_REVIEWER_CAP,
@@ -454,6 +488,141 @@ function checkContextCeiling(payload) {
 function stateDir() {
   return process.env.AUTOPILOT_FOREMAN_GUARD_DIR || path.join(os.homedir(), '.autopilot', 'foreman-guard');
 }
+
+function eventsLogFile() {
+  const base = process.env.XDG_RUNTIME_DIR || os.tmpdir();
+  return path.join(base, 'autopilot', 'foreman-guard', 'events.jsonl');
+}
+
+function pollHitsFile() {
+  return path.join(os.homedir(), '.autopilot', 'foreman-guard', 'poll-hits.jsonl');
+}
+
+function appendPollHit(payload, rule, hitMode) {
+  try {
+    const file = pollHitsFile();
+    const sessionId = payload.session_id || process.env.AUTOPILOT_SESSION_ID
+      || process.env.CLAUDE_CODE_SESSION_ID || process.env.CLAUDE_SESSION_ID || 'session';
+    const row = {
+      ts: new Date().toISOString(),
+      session_id: sessionId,
+      agent_id: payload.agent_id ? payload.agent_id : null,
+      rule,
+      mode: hitMode,
+    };
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.appendFileSync(file, `${JSON.stringify(row)}\n`);
+  } catch { /* fail-open */ }
+}
+
+// true when a polling hit must be denied. Unparsable poll_enforce_from enforces now.
+function pollBlocks(cfg) {
+  if (cfg.mode === 'warn') return false;
+  const t = Date.parse(String(cfg.pollEnforceFrom || ''));
+  if (!Number.isFinite(t)) return true;
+  return Date.now() >= t;
+}
+
+function pollAllowLine(cfg, reason) {
+  const t = Date.parse(String(cfg.pollEnforceFrom || ''));
+  const calendarActive = Number.isFinite(t) && Date.now() >= t;
+  if (cfg.mode === 'warn' && calendarActive) return `${reason} [mode=warn: allowed]`;
+  return `warn (blocking from ${cfg.pollEnforceFrom}): ${reason}`;
+}
+
+function isPollRuleId(rule) {
+  if (rule === 'monitor') return true;
+  return POLL_RULES.some((r) => r.id === rule);
+}
+
+function appendGuardEvent(fields) {
+  try {
+    const file = eventsLogFile();
+    const row = {
+      ts: new Date().toISOString(),
+      session_id: fields.session_id,
+      agent_id: fields.agent_id,
+      rule: fields.rule,
+      mode: fields.mode,
+      level: fields.level == null ? null : fields.level,
+    };
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.appendFileSync(file, `${JSON.stringify(row)}\n`);
+  } catch { /* fail-open */ }
+}
+
+// Stable ids for events.jsonl (internal decide() rules may use hyphens).
+function guardEventRule(rule) {
+  if (rule === 'bash-cap') return 'bash_cap';
+  if (rule === 'context-ceiling') return 'context_ceiling';
+  return rule;
+}
+
+function recordGuardEvent(payload, cfg, marker, eventRule, eventMode) {
+  const sessionId = payload.session_id || process.env.AUTOPILOT_SESSION_ID
+    || process.env.CLAUDE_CODE_SESSION_ID || process.env.CLAUDE_SESSION_ID || 'session';
+  const level = marker && marker.level ? marker.level : null;
+  appendGuardEvent({
+    session_id: sessionId,
+    agent_id: payload.agent_id,
+    rule: eventRule,
+    mode: eventMode,
+    level,
+  });
+}
+
+function isForemanMarker(marker) {
+  return !!(marker && FOREMAN_LEVELS.has(marker.level));
+}
+
+function matchPollRule(cmd, background) {
+  if (background) return null;
+  const text = executableText(cmd);
+  for (const r of POLL_RULES) {
+    if (r.re.test(text)) return r;
+  }
+  return null;
+}
+
+function pollRuleReason(rule, spentSuffix) {
+  const suffix = spentSuffix ? ` ${spentSuffix}` : '';
+  return `foreman-guard: ${rule.why} (rule ${rule.id}, ironlaw #6). ${POLL_WAIT_DIRECTIVE}${suffix}`;
+}
+
+function monitorDenyReason() {
+  return `foreman-guard: Monitor is depth-0 only (ironlaw #6). ${POLL_WAIT_DIRECTIVE}`;
+}
+
+function checkPollTool(payload) {
+  const tool = payload.tool_name || '';
+  if (tool === 'Monitor') {
+    return { deny: true, rule: 'monitor', reason: monitorDenyReason() };
+  }
+  if (tool !== 'Bash') return null;
+  const input = payload.tool_input || {};
+  const cmd = typeof input.command === 'string' ? input.command : '';
+  const background = isAffirmative(input.run_in_background);
+  const rule = matchPollRule(cmd, background);
+  if (!rule) return null;
+  return { deny: true, rule: rule.id, reason: pollRuleReason(rule, '') };
+}
+
+function finishPollVerdict(payload, cfg, marker, verdict) {
+  if (!verdict || !verdict.deny) return false;
+  const block = pollBlocks(cfg);
+  const rule = guardEventRule(verdict.rule);
+  appendPollHit(payload, rule, block ? 'deny' : 'warn');
+  recordGuardEvent(payload, cfg, marker, rule, block ? 'deny' : 'advise');
+  if (!block) {
+    const warnLine = pollAllowLine(cfg, verdict.reason);
+    process.stderr.write(`${warnLine}\n`);
+    emitAllowContext(warnLine);
+    process.exit(0);
+  }
+  emit('deny', verdict.reason);
+  process.exit(0);
+  return true;
+}
 function safe(s) { return String(s || 'unknown').replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 96); }
 function stateFile(sessionId, agentId) {
   return path.join(stateDir(), `${safe(sessionId)}-${safe(agentId)}.json`);
@@ -551,8 +720,7 @@ function decide(payload, cfg, st, ceiling = {}, role = 'foreman', briefCap = nul
   const tool = payload.tool_name || '';
   const input = payload.tool_input || {};
   if (tool === 'Monitor') {
-    return { deny: true, rule: 'monitor', reason:
-      'foreman-guard: Monitor is depth-0 only (ironlaw #6). A foreman waits with run_in_background + a paired dead-man `sleep <deadline>; echo WAKE`, then ENDS ITS TURN.' };
+    return { deny: true, rule: 'monitor', reason: monitorDenyReason() };
   }
   if (tool !== 'Bash') return { deny: false, diagnostic: ceiling.diagnostic };
   let cap = cfg.roleCaps && Number.isInteger(cfg.roleCaps[role]) ? cfg.roleCaps[role] : cfg.bashCap;
@@ -581,9 +749,13 @@ function decide(payload, cfg, st, ceiling = {}, role = 'foreman', briefCap = nul
     const text = executableText(cmd);
     for (const r of POLL_RULES) {
       if (r.re.test(text)) {
-        return { deny: true, rule: r.id, count: n, reason:
-          `foreman-guard: ${r.why} (rule ${r.id}, ironlaw #6). Wait with run_in_background: true (one notification) + a background dead-man timer, then END THE TURN; never read a leaf's .output into context — consume only its schema verdict. (Bash call ${n}/${cap} spent.)`,
-          diagnostic: ceiling.diagnostic };
+        return {
+          deny: true,
+          rule: r.id,
+          count: n,
+          reason: pollRuleReason(r, `(Bash call ${n}/${cap} spent.)`),
+          diagnostic: ceiling.diagnostic,
+        };
       }
     }
   }
@@ -617,9 +789,22 @@ function decide(payload, cfg, st, ceiling = {}, role = 'foreman', briefCap = nul
     try { raw = fs.readFileSync(0, 'utf8'); } catch { raw = ''; }
     let payload = {};
     try { payload = raw.trim() ? JSON.parse(raw) : {}; } catch { process.exit(0); }
-    if (!payload || !payload.agent_id) process.exit(0); // depth-0 or unknown actor: inert
     const marker = readMarker();
-    if (!marker || !FOREMAN_LEVELS.has(marker.level)) {
+    // poll_scope=all covers depth-0 (no agent_id). Bash cap and the other
+    // non-poll rules stay subagent-only. poll_scope=foreman leaves depth-0 inert.
+    if (!payload || !payload.agent_id) {
+      if (cfg.pollScope === 'all') {
+        const pollVerdict = checkPollTool(payload || {});
+        if (pollVerdict) finishPollVerdict(payload || {}, cfg, marker, pollVerdict);
+      }
+      process.exit(0);
+    }
+    const foremanSession = isForemanMarker(marker);
+    if (!foremanSession) {
+      if (cfg.pollScope === 'all') {
+        const pollVerdict = checkPollTool(payload);
+        finishPollVerdict(payload, cfg, marker, pollVerdict);
+      }
       const content = readFirstUserMessageContent(payload);
       if (!isAutopilotDispatched(content)) process.exit(0);
       if ((payload.tool_name || '') !== 'Bash') process.exit(0);
@@ -636,6 +821,7 @@ function decide(payload, cfg, st, ceiling = {}, role = 'foreman', briefCap = nul
       try { maybeGcStateDir(); } catch { /* fail-open */ }
       const every = cfg.advisoryEvery > 0 ? cfg.advisoryEvery : DEFAULT_ADVISORY_EVERY;
       if (n > 0 && n % every === 0) {
+        recordGuardEvent(payload, cfg, marker, 'no_marker_advice', 'advise');
         emitAllowContext(
           `foreman-guard: Bash call ${n}. Consider committing your work and writing a handoff.`,
         );
@@ -670,10 +856,26 @@ function decide(payload, cfg, st, ceiling = {}, role = 'foreman', briefCap = nul
       advisory.push(d.diagnostic);
     }
     if (d.reserveDirective) advisory.push(d.reserveDirective);
+    if (d.deny && isPollRuleId(d.rule)) {
+      finishPollVerdict(payload, cfg, marker, d);
+    }
     if (!d.deny) {
+      if (d.diagnostic) {
+        recordGuardEvent(payload, cfg, marker, 'context_ceiling', 'advise');
+      }
+      if (d.reserveDirective) {
+        recordGuardEvent(payload, cfg, marker, 'reserve_advice', 'advise');
+      }
       if (advisory.length) emitAllowContext(advisory.join('\n'));
       process.exit(0);
     }
+    recordGuardEvent(
+      payload,
+      cfg,
+      marker,
+      guardEventRule(d.rule),
+      cfg.mode === 'warn' ? 'advise' : 'deny',
+    );
     if (cfg.mode === 'warn') {
       const warnLine = `${d.reason} [mode=warn: allowed]`;
       process.stderr.write(`${warnLine}\n`);

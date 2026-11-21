@@ -45,6 +45,7 @@ const server = net.createServer(socket => {
     const verdict = fs.readFileSync(path.join(root, 'verdict'), 'utf8');
     const response = {ok: verdict === 'done', verdict, reason: 'fixture ' + verdict, rc: verdict === 'done' ? 0 : 9,
       diff, log:'fixture broker log\n', redactions: 71234, run_id: 'broker-fixture-' + verdict};
+    if (verdict === 'stopped_billing') { response.billing_confirmed = true; response.billing_line = 'masked-fixture'; }
     socket.end(JSON.stringify(response) + '\n');
   });
 });
@@ -86,7 +87,7 @@ const git=(...args)=>cp.execFileSync('git',['-C',path.join(root,'repo'),...args]
 assert.equal(git('show','broker-a:broker-created.txt'),'hello');
 assert.match(git('log','-1','--format=%s','broker-a'),/dispatch-hetero\(cursor\)/);
 const response=JSON.parse(fs.readFileSync(result.agent_log+'.cursor-broker.json'));
-assert.deepEqual(Object.keys(response).sort(),['diff','log','reason','run_id','verdict']);
+assert.deepEqual(Object.keys(response).sort(),['billing_confirmed','billing_line','diff','log','reason','run_id','verdict']);
 assert.match(fs.readFileSync(path.join(root,'group-calls'),'utf8'),/group/);
 console.log('PASS (a) request, shared standalone clone, patch commit, broker metadata, cleanup');
 NODE
@@ -132,7 +133,7 @@ const select=role=>pace.selectEngine({pace:data,role,checkEndpoint:()=>true,env:
 q.observe({verdict:'done'});
 assert.equal(q.cursorState(),'available'); assert.equal(select('implementer').engine,'cursor');
 assert.notEqual(select('reviewer').engine,'cursor'); assert.notEqual(select('author').engine,'cursor');
-q.observe({verdict:'stopped_billing'});
+q.observe({verdict:'stopped_billing', billing_confirmed:true});
 assert.equal(q.cursorState(),'exhausted'); assert.notEqual(select('implementer').engine,'cursor');
 assert.equal(q.cursorState({now:Date.now()+q.RECHECK_S*1000+2000}),'available');
 q.observe({verdict:'done'});

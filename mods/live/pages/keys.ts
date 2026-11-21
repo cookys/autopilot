@@ -8,7 +8,7 @@ export type KeyAction =
   | { kind: 'page'; to: string } | { kind: 'close' } | { kind: 'pass' } | { kind: 'button' } | { kind: 'submit' }
   | { kind: 'pick'; index: number } | { kind: 'text'; ch: string } | { kind: 'text_save' } | { kind: 'text_cancel' }
   | { kind: 'note' } | { kind: 'undo' } | { kind: 'prev' } | { kind: 'next' } | { kind: 'fill' }
-  | { kind: 'move'; by: 1 | -1 } | { kind: 'fold' } | { kind: 'open' } | { kind: 'none' }
+  | { kind: 'move'; by: 1 | -1 } | { kind: 'cursor'; at: number } | { kind: 'fold' } | { kind: 'open' } | { kind: 'none' }
 
 const pageForDigit = (key: string): string | undefined => {
   if (key === PET_KEY) return 'pet'

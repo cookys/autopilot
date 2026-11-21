@@ -102,9 +102,11 @@
 #       [--skill-mode off|prompt|native|auto]  # skill transport mode (default: off)
 #       [--skill <name>]                       # repeatable skill name (0+)
 #       [--base develop]                       # default
-#       [--timeout 9m]                         # soft deadline (default 9m). Progress inside the
-#                                              #   idle window extends past it (one "extend:" line
-#                                              #   per idle window). It does not kill by itself.
+#       [--timeout 9m]                         # wall deadline (default 9m). It kills the worker
+#                                              #   unless --idle-timeout was also passed and progress
+#                                              #   (output bytes or process-tree CPU) is still inside
+#                                              #   that idle window — then one "extend:" line per idle
+#                                              #   window and the run continues until idle or --hard-timeout.
 #       [--idle-timeout 5m]                    # no output-byte or process-tree CPU growth for
 #                                              #   this long kills the worker group (default 5m).
 #                                              #   AUTOPILOT_HETERO_SAMPLE_S is the sample period
@@ -369,6 +371,7 @@ MODEL_IS_DEFAULT=1
 BASE="develop"
 TIMEOUT="9m"
 IDLE_TIMEOUT="5m"
+IDLE_TIMEOUT_SUPPLIED=0
 HARD_TIMEOUT=""
 HARD_TIMEOUT_SUPPLIED=0
 WATCHDOG_IDLE_S=""
@@ -2750,7 +2753,7 @@ while [ $# -gt 0 ]; do
     --worktree-parent) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--worktree-parent requires a non-empty directory path"; WORKTREE_PARENT="$2"; shift 2 ;;
     --base) BASE="${2:-}"; BASE_SUPPLIED=1; shift 2 ;;
     --timeout) TIMEOUT="${2:-}"; TIMEOUT_SUPPLIED=1; shift 2 ;;
-    --idle-timeout) { [ $# -ge 2 ] && [ -n "$2" ]; } || die_precondition "--idle-timeout requires a duration"; IDLE_TIMEOUT="$2"; shift 2 ;;
+    --idle-timeout) { [ $# -ge 2 ] && [ -n "$2" ]; } || die_precondition "--idle-timeout requires a duration"; IDLE_TIMEOUT="$2"; IDLE_TIMEOUT_SUPPLIED=1; shift 2 ;;
     --hard-timeout) { [ $# -ge 2 ] && [ -n "$2" ]; } || die_precondition "--hard-timeout requires a duration"; HARD_TIMEOUT="$2"; HARD_TIMEOUT_SUPPLIED=1; shift 2 ;;
     --gate-rules) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--gate-rules requires a non-empty file path"; GATE_RULES_FILE="$2"; shift 2 ;;
     --role-kit) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--role-kit requires a non-empty directory path"; ROLE_KIT_DIR="$2"; shift 2 ;;
@@ -5295,11 +5298,18 @@ _arm_worker_watchdog() {
         _watchdog_fire "$tok" idle "$elapsed" "$ago"
         exit 0
       fi
-      if [ "$elapsed" -ge "$soft" ] && [ -n "$last_sig" ] && [ "$ago" -lt "$idle" ]; then
-        if [ $((now - last_extend)) -ge "$idle" ]; then
-          printf 'dispatch-hetero: extend: progress seen (%s), past --timeout\n' "$last_sig" >> "$log" 2>/dev/null || true
-          prev_b="$(stat -c %s "$log" 2>/dev/null || echo "$prev_b")"
-          last_extend="$now"
+      # --timeout is a wall kill. --idle-timeout opts into extending past it
+      # while output bytes or process-tree CPU are still moving.
+      if [ "$elapsed" -ge "$soft" ]; then
+        if [ "${IDLE_TIMEOUT_SUPPLIED:-0}" -eq 1 ] && [ -n "$last_sig" ] && [ "$ago" -lt "$idle" ]; then
+          if [ $((now - last_extend)) -ge "$idle" ]; then
+            printf 'dispatch-hetero: extend: progress seen (%s), past --timeout\n' "$last_sig" >> "$log" 2>/dev/null || true
+            prev_b="$(stat -c %s "$log" 2>/dev/null || echo "$prev_b")"
+            last_extend="$now"
+          fi
+        else
+          _watchdog_fire "$tok" wall "$elapsed" "$ago"
+          exit 0
         fi
       fi
     done
@@ -7096,8 +7106,10 @@ classify_outcome() {
     OUTCOME_EXIT=1
     if [ "${WORKER_TIMEOUT_KIND:-}" = "hard" ]; then
       OUTCOME_ERR="hard timeout (${WATCHDOG_HARD_S:-0}s) exceeded — worker terminated"
-    else
+    elif [ "${WORKER_TIMEOUT_KIND:-}" = "idle" ]; then
       OUTCOME_ERR="idle timeout (${WATCHDOG_IDLE_S:-0}s with no output or CPU) — worker terminated"
+    else
+      OUTCOME_ERR="wall timeout (${WATCHDOG_SOFT_S:-0}s) exceeded — worker terminated"
     fi
   fi
   if [ -n "${BROKER_RUNNER:-}" ] && { [ "${AGENT_EXIT:-0}" -ne 0 ] || [ "${BROKER_VERDICT:-done}" != done ]; }; then
@@ -7278,7 +7290,7 @@ dispatch_detached_run() {
       STRICT_SCOPE_ALLOW_PATHS STRICT_SCOPE_DENY_PATHS STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS STRICT_SCOPE_MAX_FILES STRICT_SCOPE_MAX_DIFF_LINES STRICT_OUTPUT_PATHS STRICT_REQUIRED_CHANGE_PATHS STRICT_POSTCHECK_OK STRICT_POSTCHECK_STATUS STRICT_POSTCHECK_ERROR \
       DISPATCH_RUN_ID DISPATCH_STARTED_EPOCH MANIFEST_DIR_PATH MANIFEST_FILE MANIFEST_CONTAINMENT \
       MANIFEST_SCOPE_UNIT MANIFEST_MOUNT_CONTAINMENT WORKER_MOUNT_MODE WORKER_MOUNT_PREFIX MANIFEST_PID_RECORDED MANIFEST_ENDED_AT MANIFEST_ENDED_EPOCH MANIFEST_FINAL_STATUS \
-      TIMEOUT_SOURCE TIMEOUT_SUPPLIED WORKER_TIMED_OUT IDLE_TIMEOUT HARD_TIMEOUT HARD_TIMEOUT_SUPPLIED WATCHDOG_IDLE_S WATCHDOG_HARD_S WATCHDOG_SAMPLE_S WATCHDOG_SOFT_S WORKER_TIMEOUT_KIND KILLED_ELAPSED_S KILLED_LAST_PROGRESS_S COMMIT_QUIET_SECS COMMIT_QUIET_ENDED REPO_IDENTITY_FIELDS _REPO_IDENTITY_FIELDS_KEY CHILD_SESSION_ID 2>/dev/null
+      TIMEOUT_SOURCE TIMEOUT_SUPPLIED WORKER_TIMED_OUT IDLE_TIMEOUT IDLE_TIMEOUT_SUPPLIED HARD_TIMEOUT HARD_TIMEOUT_SUPPLIED WATCHDOG_IDLE_S WATCHDOG_HARD_S WATCHDOG_SAMPLE_S WATCHDOG_SOFT_S WORKER_TIMEOUT_KIND KILLED_ELAPSED_S KILLED_LAST_PROGRESS_S COMMIT_QUIET_SECS COMMIT_QUIET_ENDED REPO_IDENTITY_FIELDS _REPO_IDENTITY_FIELDS_KEY CHILD_SESSION_ID 2>/dev/null
     declare -p NO_VERIFY_TIP VERIFY_TIMEOUT TIP_VERIFY_SKIP TIP_VERIFY_SOURCE TIP_VERIFY_CMDS_JSON TIP_VERIFY_RESULT_JSON VERIFY_CMDS 2>/dev/null || true
     # Hands boundary gates (item (E)): the pre-hands main-checkout fingerprint MUST cross the
     # detach boundary as the parent measured it, and the push-blocking env with it.

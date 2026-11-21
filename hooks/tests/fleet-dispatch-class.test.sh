@@ -105,7 +105,7 @@ run_hook fleet-dispatch-class.js "$(build_dispatch_payload "$LINE16_TASK")"
 assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "line16-role-ignored-denied"
 
 # 2. Explicit valid class -> allow untouched (exit 0, no stdout), even without Role:
-for valid_cls in plan-review code-review implement chat; do
+for valid_cls in plan-review code-review implement chat review summary inventory test-gen subagent author; do
   PAYLOAD="$(build_dispatch_payload "No role header here." "$valid_cls")"
   run_hook fleet-dispatch-class.js "$PAYLOAD"
   assert_eq 0 "$__RUN_EXIT" "explicit-${valid_cls}: exit 0"
@@ -134,8 +134,8 @@ for bad_role in "Role: wizard" "Role: wizard (plan)"; do
   assert_contains "$REASON_UNKNOWN" "class" "unknown-role reason names class"
 done
 
-# 5. Invalid explicit class -> denied with one-line zh-TW reason listing all four values
-for bad_cls in "deploy" ""; do
+# 5. Invalid explicit class -> denied with one-line zh-TW reason listing all valid values
+for bad_cls in "deploy" "" "foo"; do
   PAYLOAD="$(build_dispatch_payload $'Role: implementer\nDo work.' "$bad_cls")"
   run_hook fleet-dispatch-class.js "$PAYLOAD"
   assert_eq 0 "$__RUN_EXIT" "invalid-class (${bad_cls}): exit 0"

@@ -3,6 +3,11 @@
   "version": 1,
   "entries": [
     {
+      "file": "hooks/depth0-delegate-gate.js",
+      "match": "session scratchpad（$TMPDIR/claude-*/<sid>/）",
+      "reason": "Hint message names the session scratchpad path; it allocates nothing."
+    },
+    {
       "file": "hooks/_shared/fleet-seat.js",
       "match": "base.startsWith('/tmp/')",
       "reason": "Comparison rejects a shared temp-root path; it allocates nothing."

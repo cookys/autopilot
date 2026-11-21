@@ -53,6 +53,9 @@ case "$cmd" in
     if [ "$(cat "$ROLLOUT_STUB/last")" = "n/a" ]; then
       printf 'Fri 2026-11-21 00:00:00 UTC\n' > "$ROLLOUT_STUB/last"
     fi
+    if [ -f "$ROLLOUT_STUB/enable_rc" ]; then
+      exit "$(cat "$ROLLOUT_STUB/enable_rc")"
+    fi
     exit 0
     ;;
   disable)
@@ -78,7 +81,15 @@ EOF
 #!/usr/bin/env bash
 exit 0
 EOF
-  chmod 755 "$BIN/systemctl" "$BIN/node" "$BIN/codeforge"
+  cat > "$BIN/journalctl" <<'EOF'
+#!/usr/bin/env bash
+set -u
+if [ -f "$ROLLOUT_STUB/journal" ]; then
+  cat "$ROLLOUT_STUB/journal"
+fi
+exit 0
+EOF
+  chmod 755 "$BIN/systemctl" "$BIN/node" "$BIN/codeforge" "$BIN/journalctl"
 
   export HOME="$HOME_D"
   export XDG_CONFIG_HOME="$HOME_D/.config"
@@ -219,6 +230,18 @@ run_script --inventory
 [ "$RC" = "3" ] || fail "stale exit $RC out=$OUT"
 assert_verdict stale "inventory stale"
 
+# --- nothing_applicable tick is its own verdict, not stale ---
+new_sandbox
+seed_fresh
+install_unit_file
+enable_timer
+touch -d '8 hours ago' "$(live)/codeforge/usage/quota/main.json"
+touch -d '8 hours ago' "$(live)/quota/claude/alias/main.json"
+printf '%s\n' 'quota-mirror-tick: usage-probe skip token_missing' 'quota-mirror-tick: nothing_applicable' > "$STUB/journal"
+run_script --inventory
+[ "$RC" = "3" ] || fail "nothing_applicable exit $RC out=$OUT"
+assert_verdict nothing_applicable "inventory nothing_applicable"
+
 # --- apply twice ---
 new_sandbox
 seed_fresh
@@ -348,6 +371,30 @@ run_script_stdin --apply --dry-run
 [ "$RC" = "0" ] || fail "home scripts dry-run exit $RC err=$ERR out=$OUT"
 printf '%s\n' "$OUT" | grep -q "$HOME_D/projects/autopilot/scripts/install-quota-mirror.js" || fail "home installer not used: $OUT"
 ok "stdin HOME projects scripts"
+
+# systemctl enable failure names the step and exits 4. Sandbox stub only.
+new_sandbox
+seed_fresh
+install_unit_file
+enable_timer
+printf '1\n' > "$STUB/enable_rc"
+run_script --apply
+[ "$RC" = "4" ] || fail "enable fail exit $RC err=$ERR out=$OUT"
+printf '%s\n' "$ERR" | grep -qx 'rollout-quota-mirror: systemctl enable failed' || fail "enable fail did not name the step: out=$OUT err=$ERR"
+ok "systemctl enable failure exits 4"
+
+# stdin invocation prints a copyable bash -s rollback line.
+new_sandbox
+seed_fresh
+install_unit_file
+enable_timer
+export AUTOPILOT_PLUGIN_ROOT="$ROOT"
+run_script_stdin --apply --dry-run
+unset AUTOPILOT_PLUGIN_ROOT
+[ "$RC" = "0" ] || fail "stdin dry-run rollback exit $RC err=$ERR out=$OUT"
+printf '%s\n' "$OUT" | grep -F "rollback: bash -s -- --rollback" >/dev/null || fail "stdin rollback form: $OUT"
+printf '%s\n' "$OUT" | grep -F "< $ROOT/scripts/rollout-quota-mirror.sh" >/dev/null || fail "stdin rollback repo path: $OUT"
+ok "stdin rollback uses bash -s"
 
 # No node anywhere: inventory verdict unchanged (node_path null); --apply exits 3.
 new_sandbox

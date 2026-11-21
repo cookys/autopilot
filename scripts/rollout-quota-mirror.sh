@@ -19,9 +19,13 @@
 # $AUTOPILOT_PLUGIN_ROOT/scripts, else $HOME/projects/autopilot/scripts, when
 # that directory exists. Inventory still runs when neither exists; --apply and
 # --rollback then exit 3 because the installer is missing.
-# verdict is the first match: no_timer, timer_disabled, no_snapshot, stale, ok.
+# verdict is the first match: no_timer, timer_disabled, no_snapshot,
+# nothing_applicable, stale, ok.
 # A statusline snapshot older than 21600 s (account-quota.js 6 h) is stale.
 # A fleet.quota mirror file older than 1800 s (timer is 10 min) is stale.
+# When that age check would say stale, and the last quota-mirror.service journal
+# line that starts with "quota-mirror-tick: " is
+# "quota-mirror-tick: nothing_applicable", the verdict is nothing_applicable.
 # No snapshot file contents are printed.
 # Exit 0 when verdict is ok and codeforge is on PATH.
 # Exit 3 when verdict is not ok, or codeforge is missing. For codeforge missing
@@ -39,7 +43,13 @@
 # --rollback <epoch> restores those backups, or uninstalls when none exist,
 # then daemon-reload and restart (restored) or disable --now (uninstalled).
 #
-# Exit 2 on usage. Exit 1 when a step fails.
+# Exit 2 on usage. Exit 1 when a step fails. Exit 4 when --apply's
+# systemctl --user daemon-reload or enable --now fails (for example no user
+# bus). That path prints one line naming the failed step.
+# When the script is read from stdin, the rollback line is
+#   rollback: bash -s -- --rollback <epoch> < <repo>/scripts/rollout-quota-mirror.sh
+# using the repo path already resolved for the installer. A path invocation keeps
+#   rollback: <script> --rollback <epoch>
 set -euo pipefail
 
 resolve_script_dir() {
@@ -104,6 +114,28 @@ else
   REPO_ROOT=""
   INSTALLER=""
 fi
+RUN_FROM_STDIN=0
+if [ -z "${BASH_SOURCE[0]:-}" ] || [ ! -f "${BASH_SOURCE[0]}" ]; then
+  RUN_FROM_STDIN=1
+fi
+
+print_rollback() {
+  local epoch="$1"
+  if [ "$RUN_FROM_STDIN" = "1" ]; then
+    printf 'rollback: bash -s -- --rollback %s < %s/scripts/rollout-quota-mirror.sh\n' "$epoch" "$REPO_ROOT"
+  else
+    printf 'rollback: %s --rollback %s\n' "$SCRIPT_DIR/rollout-quota-mirror.sh" "$epoch"
+  fi
+}
+
+systemctl_apply() {
+  local step="$1"
+  shift
+  if ! systemctl --user "$@"; then
+    printf 'rollout-quota-mirror: systemctl %s failed\n' "$step" >&2
+    return 4
+  fi
+}
 NODE_BIN="$(resolve_node || true)"
 UNITS=(quota-mirror.service quota-mirror.timer)
 SNAPSHOT_STALE_S=21600
@@ -176,9 +208,16 @@ last_tick() {
   esac
 }
 
+# Last "quota-mirror-tick: " line from the user journal of quota-mirror.service.
+last_tick_marker() {
+  local text
+  text="$(journalctl --user -u quota-mirror.service -n 80 --no-pager -o cat 2>/dev/null || true)"
+  printf '%s\n' "$text" | awk '/^quota-mirror-tick: /{line=$0} END{print line}'
+}
+
 # Prints verdict on stdout.
 verdict_of() {
-  local snap_dir_exists="$1" snap_age="$2" quota_age="$3"
+  local snap_dir_exists="$1" snap_age="$2" quota_age="$3" marker
   if ! timer_installed; then
     printf 'no_timer'
     return
@@ -191,11 +230,12 @@ verdict_of() {
     printf 'no_snapshot'
     return
   fi
-  if [ "$snap_age" -gt "$SNAPSHOT_STALE_S" ]; then
-    printf 'stale'
-    return
-  fi
-  if [ -z "$quota_age" ] || [ "$quota_age" -gt "$QUOTA_OUT_STALE_S" ]; then
+  if [ "$snap_age" -gt "$SNAPSHOT_STALE_S" ] || [ -z "$quota_age" ] || [ "$quota_age" -gt "$QUOTA_OUT_STALE_S" ]; then
+    marker="$(last_tick_marker)"
+    if [ "$marker" = "quota-mirror-tick: nothing_applicable" ]; then
+      printf 'nothing_applicable'
+      return
+    fi
     printf 'stale'
     return
   fi
@@ -331,7 +371,7 @@ do_apply() {
       done
     fi
     printf 'would run: systemctl --user daemon-reload && systemctl --user enable --now quota-mirror.timer\n'
-    printf 'rollback: %s --rollback %s\n' "$SCRIPT_DIR/rollout-quota-mirror.sh" "$epoch"
+    print_rollback "$epoch"
     emit_inventory
     return
   fi
@@ -358,9 +398,9 @@ do_apply() {
       print_sha_line unchanged "$name" "$dir/$name"
     done
   fi
-  systemctl --user daemon-reload
-  systemctl --user enable --now quota-mirror.timer
-  printf 'rollback: %s --rollback %s\n' "$SCRIPT_DIR/rollout-quota-mirror.sh" "$epoch"
+  systemctl_apply daemon-reload daemon-reload
+  systemctl_apply enable enable --now quota-mirror.timer
+  print_rollback "$epoch"
   emit_inventory
 }
 

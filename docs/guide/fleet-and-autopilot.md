@@ -25,7 +25,7 @@
 
 ## 派工被擋下時
 
-PM console 席位派工時,`hooks/dispatch-model-guard.js` 對帶 `Engine:` 標頭的 subagent brief 做 Fleet-Task 硬阻擋;read-only brief(`Explore` / `Plan` / `web-fetch` / `claude-code-guide`)與 haiku 席位不查。三種擋下與修法(hook 原文):
+PM console 席位派工時,`hooks/dispatch-model-guard.js` 對帶 `Engine:` 標頭的 subagent brief 做 Fleet-Task 硬阻擋;read-only brief(`Explore` / `Plan` / `web-fetch` / `claude-code-guide`)不查。三種擋下與修法(hook 原文):
 
 | 擋下原因 | hook 原文 | 修法 |
 |----------|-----------|------|

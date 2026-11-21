@@ -118,11 +118,11 @@ test('PM Fleet-Task exemptions and work dispatches', () => {
     for (const [type, model, allowed] of [
       ['web-fetch', 'sonnet', true],
       ['claude-code-guide', 'sonnet', true],
-      ['general-purpose', 'Claude-Haiku-4', true],
+      ['general-purpose', 'Claude-Haiku-4', false],
       ['general-purpose', 'sonnet', false],
       ['autopilot:reviewer', 'sonnet', false],
     ]) {
-      const payload = { tool_name: 'Agent', cwd: fx.pmRepo, tool_input: { subagent_type: type, model, prompt: 'Engine: sonnet\nDo work.' } };
+      const payload = { tool_name: 'Agent', cwd: fx.pmRepo, tool_input: { subagent_type: type, model, prompt: `Engine: ${model}\nDo work.` } };
       const res = runGuard(path.join(__dirname, 'dispatch-model-guard.js'), payload, { ...fx, envExtra: { AUTOPILOT_MECHANICAL_REROUTE: 'off' } });
       assert.equal(res.status, 0, type);
       if (allowed) assert.ok(!res.stdout.includes('Fleet-Task:'), `${type}: expected no Fleet-Task denial`);
@@ -321,7 +321,7 @@ test('negative control: unguarded pm-console and work-order-plan stubs fail beha
     fs.mkdirSync(path.join(sandbox, 'scripts', 'lib'), { recursive: true });
     fs.copyFileSync(GUARD_PATH, path.join(sandbox, 'hooks', 'fleet-send-work-order-guard.js'));
     fs.copyFileSync(path.join(__dirname, '_shared', 'opt-in.js'), path.join(sandbox, 'hooks', '_shared', 'opt-in.js'));
-    fs.copyFileSync(path.join(__dirname, '..', 'lib', 'gate-hint.js'), path.join(sandbox, 'hooks', 'lib', 'gate-hint.js'));
+    fs.copyFileSync(path.join(__dirname, 'lib', 'gate-hint.js'), path.join(sandbox, 'hooks', 'lib', 'gate-hint.js'));
     fs.copyFileSync(path.join(__dirname, '..', 'scripts', 'lib', 'config-path.js'), path.join(sandbox, 'scripts', 'lib', 'config-path.js'));
 
     // Stub 1: pm-console.js returning true -> child repo is wrongly denied

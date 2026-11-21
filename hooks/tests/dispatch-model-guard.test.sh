@@ -577,6 +577,19 @@ exit 1
 EOF
 chmod +x "$FLEET_STUB_OPEN" "$FLEET_STUB_DONE" "$FLEET_STUB_NF" "$FLEET_STUB_COURIER_NF"
 
+# Haiku work dispatches must bind an open task; read-only Explore stays exempt.
+PAYLOAD_HAIKU='{"tool_name":"Agent","tool_input":{"model":"haiku","subagent_type":"general-purpose","prompt":"Engine: haiku\nFleet-Task: '"$PM_TASK_ID"'\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$PM_REPO"'"}'
+FLEET_BIN="$FLEET_STUB_NF" run_hook dispatch-model-guard.js "$PAYLOAD_HAIKU"
+assert_contains "$__RUN_STDOUT" '查無此單' "pm-fleet-haiku-not-found denies"
+FLEET_BIN="$FLEET_STUB_DONE" run_hook dispatch-model-guard.js "$PAYLOAD_HAIKU"
+assert_contains "$__RUN_STDOUT" '已結束' "pm-fleet-haiku-done denies"
+PAYLOAD_HAIKU_MISSING='{"tool_name":"Agent","tool_input":{"model":"haiku","subagent_type":"general-purpose","prompt":"Engine: haiku\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$PM_REPO"'"}'
+FLEET_BIN="$FLEET_STUB_OPEN" run_hook dispatch-model-guard.js "$PAYLOAD_HAIKU_MISSING"
+assert_contains "$__RUN_STDOUT" '缺少 Fleet-Task:' "pm-fleet-haiku-missing denies"
+PAYLOAD_HAIKU_EXPLORE='{"tool_name":"Agent","tool_input":{"model":"haiku","subagent_type":"Explore","prompt":"Engine: haiku\nRead files."},"hook_event_name":"PreToolUse","cwd":"'"$PM_REPO"'"}'
+FLEET_BIN="$FLEET_STUB_OPEN" run_hook dispatch-model-guard.js "$PAYLOAD_HAIKU_EXPLORE"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "pm-fleet-haiku-explore exempt"
+
 # 1. missing id -> deny (zh-TW with fleet task show + Fleet-Task + first 10 lines)
 PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"sonnet","subagent_type":"general-purpose","prompt":"Engine: sonnet\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$PM_REPO"'"}'
 FLEET_BIN="$FLEET_STUB_OPEN" run_hook dispatch-model-guard.js "$PAYLOAD"

@@ -113,14 +113,14 @@ test('r6 dirty digit: the hotkey Button the host presses still switches to page 
   expect(d.prompt()).toBe('dirty prompt')
 })
 
-test('r6 narrow: 艦隊, 待決 and tok/s stay when the row is about 100 columns', () => {
+test('r6 narrow: 產線, 待決 and tok/s stay when the row is about 100 columns', () => {
   const slots = v74BareBandSlots('▲ 要你決定', { stuck: 1, running: 2, waiting: 3 }, 4, t)
   const speed = [{ role: 'bolt' as const, text: 'ϟ ' }, { role: 'value' as const, text: '—' }, { role: 'unit' as const, text: ' tok/s' }]
   const fitted = layoutBandLine(slots, 100, speed, [['pet'], ['fleetWait'], ['fleetRun', 'fleetWord'], ['trend']], false)
   const keptSpeed = fitted.speed ?? speed
   const segs = v74FitBand(fitted.band.segs, keptSpeed, false, 60)
   const line = segs.map(s => s.text).join('') + keptSpeed.map(s => s.text).join('')
-  expect(line).toContain('艦隊')
+  expect(line).toContain('產線')
   expect(line).toContain('待決')
   expect(line).toContain('tok/s')
   expect(v74SpeedText([])).toContain('tok/s')

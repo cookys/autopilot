@@ -1505,7 +1505,7 @@ export function slotFleet(c: { stuck: number; running: number; waiting: number; 
   const wait = chip(GS.waiting, c.waiting, PALETTE.idle, 'fleetWait')
   // r8 #12: design S1/S2 read `⊘ stalled  ● running  ✗ failed`, then the idle counts; the older order (✗ first) stays for the pane and the legacy band
   const chips = ui.chipsJoin(v74Order ? [stuck, run, ...failed, ...normal, wait] : [...failed, stuck, ...normal, run, wait], 'next')
-  return { id: 'fleet', segs: [sp(t('shell.fleet'), { dim: true, tag: 'fleetWord' }), ui.gapSeg(ui.CHIP_LEAD, 'fleetWord'), ...chips] }
+  return { id: 'fleet', segs: [sp(t(v74Order ? 'shell.fleet_lines' : 'shell.fleet'), { dim: true, tag: 'fleetWord' }), ui.gapSeg(ui.CHIP_LEAD, 'fleetWord'), ...chips] }
 }
 
 // The stage walk as `✓─✓─◐─○─○` (done `✓` done, current `◐` here, later `○` idle, links structure; the same marks as the pane's walk); null = nothing to draw

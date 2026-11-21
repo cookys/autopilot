@@ -1,6 +1,8 @@
 // pages/now.v74.test.ts — ux-v7.4 S2 現況 (sub-task C): pm status fleet block, seat tokens, qc and proxy folds; negative control when pm is null.
 import { test, expect } from 'claude-code/testing'
-import { nowPage, nowV74HeaderExtra } from './now'
+import { nowPage, nowV74HeaderExtra, v74PmCounts } from './now'
+import { slotFleet } from '../model'
+import { v74LineCounts } from '../register'
 import { fleetLines, parsePmStatus } from '../v74/contract'
 import { makeT } from '../i18n'
 import type { PageCtx } from './frame'
@@ -132,4 +134,23 @@ test('v74 now: money fields never draw as tokens; no token field means the unkno
   expect(joined).not.toContain('3.1 tok')
   expect(joined).not.toMatch(/\$/)
   expect(joined).toContain('token 數未知')
+})
+
+// r10 #3 (Critical): the band and the 現況 page must give the same 產線 numbers from the same pm status
+test('r10 #3: the band fleet chips and the 現況 產線 summary carry the same counts, under the same word', () => {
+  const c = v74PmCounts(pm!)
+  const page = nowPage.render(v74Ctx(pm)).body.map(text).find(r => r.includes(t('v74.c.lines') + ' '))
+  expect(page, 'the 產線 summary row').toBeDefined()
+  const bandSlot = slotFleet(v74LineCounts(pm!), t, true)!
+  const band = bandSlot.segs.map(x => x.text).join('')
+  expect(band.startsWith(t('v74.c.lines')), 'the band names its subject with the same word').toBe(true)
+  const digits = (s: string): string[] => (s.match(/[✗⊘●⋯][ ]?\d+/g) ?? []).map(x => x.replace(/\s/g, ''))
+  const num = (g: string, from: string): number | null => { const m = new RegExp(g + '\\s?(\\d+)').exec(from); return m === null ? null : Number(m[1]) }
+  expect(num('✗', band) ?? 0).toBe(c.fail)
+  expect(num('⊘', band) ?? 0).toBe(c.idle)
+  expect(num('●', band) ?? 0).toBe(c.ok)
+  expect(num('✗', page!) ?? 0).toBe(c.fail)
+  expect(num('⊘', page!) ?? 0).toBe(c.idle)
+  expect(num('●', page!) ?? 0).toBe(c.ok)
+  expect(digits(band).length).toBeGreaterThan(0)
 })

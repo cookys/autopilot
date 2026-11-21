@@ -433,6 +433,7 @@
   "shell.room": "Roundtable",
   "shell.usage": "Usage",
   "shell.fleet": "Fleet",
+  "shell.fleet_lines": "Lines",
   "shell.memory": "Memory",
   "shell.stale": "data {n} min old",
   "shell.usage_none": "no usage data",

@@ -664,7 +664,7 @@ const v74OpenRule = (title: string, wide: boolean): Row => {
   return [{ text: head + fill, color: PALETTE.structure }]
 }
 
-const v74PmCounts = (pm: PmStatus): { total: number; fail: number; idle: number; ok: number; unknown: number } => {
+export const v74PmCounts = (pm: PmStatus): { total: number; fail: number; idle: number; ok: number; unknown: number } => {
   const lines = fleetLines(pm)
   let fail = 0
   let idle = 0

@@ -78,10 +78,10 @@ import { routeKey } from './pages/keys'
 import type { KeyAction } from './pages/keys'
 import { decideReduce, NO_NAV, v74Pool } from './pages/decide'
 import type { DecideNav } from './pages/decide'
-import { SEATS_TIMEOUT_MS, seatQuota } from './pages/now'
+import { SEATS_TIMEOUT_MS, seatQuota, v74PmCounts } from './pages/now'
 import { PAGES, EXTRA_PAGES } from './pages/index'
 import { makeDecideFeed, makePmFeed, mergeDecideCards } from './v74/feeds'
-import type { CardNav, DecideCard, V74Ctx } from './v74/contract'
+import type { CardNav, DecideCard, PmStatus, V74Ctx } from './v74/contract'
 import { v74Keylog } from './v74/keylog'
 import { frameHeight } from './pages/frame'
 import type { PageId } from './pages/frame'
@@ -194,6 +194,11 @@ export function v74TabStep(page: string, element: unknown, origin: unknown): { k
   const d = to - from
   const by = Math.abs(d) === 1 ? d : -Math.sign(d)
   return { kind: 'move', by: by > 0 ? 1 : -1 }
+}
+// the 現況 page's 產線 counts (✗ fail, ⊘ parked, ⋯ unknown, ● running) as the band's chips: failed, stuck(⊘), waiting(⋯), running
+export function v74LineCounts(pm: PmStatus): { failed: number; stuck: number; running: number; waiting: number; normal: number } {
+  const c = v74PmCounts(pm)
+  return { failed: c.fail, stuck: c.idle, running: c.ok, waiting: c.unknown, normal: 0 }
 }
 export function v74BareBandSlots(own: string, fleet: { stuck: number; running: number; waiting: number } | null, decideN: number, t: T): Slot[] {
   const fleetSlot = slotFleet(fleet ?? { stuck: 0, running: 0, waiting: 0 }, t, true)
@@ -1986,7 +1991,9 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const fleetNow = await read($, FLEET)
     // X3: a bus snapshot owns every pane/band count. Preserve the existing
     // task-only band when no console snapshot has ever been available.
-    const fleetCounts = consoleSnap !== null ? consoleFleetCounts(consoleSnap, t) : fleetNow.fetchedMs !== null
+    // r10 #3: in the v7.4 band the 產線 counts are the 現況 page's own (v74PmCounts over fleet pm status), so the band and the page never disagree; before that feed answers, the older sources stay
+    const pmNow = v74 ? pmFeed.status() : null
+    const fleetCounts = pmNow !== null ? v74LineCounts(pmNow) : consoleSnap !== null ? consoleFleetCounts(consoleSnap, t) : fleetNow.fetchedMs !== null
       ? { stuck: fleetNow.totals.stuck, running: fleetNow.totals.running, waiting: fleetNow.totals.waiting } : null
     const fleetSlot = snap !== null && snap.band !== null && (!consoleOn || v74) ? slotFleet(fleetCounts, t, v74) : null // v7.4: the band row carries the fleet counts in console mode too (design S1)
     if (fleetSlot !== null && snap !== null && snap.band !== null) {

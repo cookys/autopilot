@@ -433,6 +433,7 @@
   "shell.room": "圓桌",
   "shell.usage": "用量",
   "shell.fleet": "艦隊",
+  "shell.fleet_lines": "產線",
   "shell.memory": "記憶",
   "shell.stale": "資料 {n} 分鐘前",
   "shell.usage_none": "沒有用量資料",

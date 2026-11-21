@@ -47,6 +47,7 @@ const INVENTORY = [
   ['depth0-delegate-gate.js', 'secret-print block', 'emitDeny(secretReason'],
   ['depth0-delegate-gate.js', 'detach without waiter', 'emitDeny(`bash-launch-guard (${detach.rule}'],
   ['depth0-delegate-gate.js', 'pkill/pgrep self-match', 'emitDeny(`bash-launch-guard (${pk.rule}'],
+  ['depth0-delegate-gate.js', 'busy loop', 'emitDeny(\'bash-launch-guard (busy-loop)'],
   ['depth0-delegate-gate.js', 'bare ls', 'emitDeny(`bash-launch-guard (${ls.rule}'],
   ['depth0-delegate-gate.js', 'recursive rm on $VAR target', 'emitDeny(`bash-launch-guard (${rv.rule}'],
   ['depth0-delegate-gate.js', 'subagent rm outside scratchpad', 'emitDeny(`bash-launch-guard (${sr.rule}'],

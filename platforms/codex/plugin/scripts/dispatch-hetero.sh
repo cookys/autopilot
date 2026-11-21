@@ -4124,6 +4124,12 @@ if [ -n "$ENDPOINT" ]; then
   _ep_tokenv="$(printf '%s' "$_ep_json" | sed -n 's/.*"token_env":"\([^"]*\)".*/\1/p')"
   # fail closed if extraction yielded nothing — never silently fall through to ambient env (R6)
   { [ -n "$_ep_url" ] && [ -n "$_ep_tokenv" ]; } || die_precondition "--endpoint '$ENDPOINT' resolved an empty base_url/token_env"
+  case "$_ep_url" in
+    */v1|*/v1/)
+      _ep_error="--endpoint '$ENDPOINT' base_url ends with /v1 ($_ep_url); the claude CLI appends /v1/messages itself, so this would call /v1/v1/messages and fail as unrecognized_model. Set AUTOPILOT_ENDPOINT_${ENDPOINT^^}_URL without the trailing /v1."
+      printf '%s\n' "$_ep_error" >&2
+      die_precondition "$_ep_error" ;;
+  esac
   set +x
   export ANTHROPIC_BASE_URL="$_ep_url"
   export ANTHROPIC_AUTH_TOKEN="${!_ep_tokenv-}"

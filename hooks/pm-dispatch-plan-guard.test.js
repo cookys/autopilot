@@ -241,7 +241,7 @@ test('pm-dispatch-plan-guard: enforces Size and Plan rules in PM program console
       runGuard(GUARD_PATH, {
         tool_name: 'mcp__fleet__send',
         cwd: fx.pmRepo,
-        tool_input: { to: 'ns/courier/lane', content: '請跑 tests', fyi: true },
+        tool_input: { to: 'ns/courier/lane', content: 'Tests passed.', fyi: true },
       }, { ...fx, envExtra: envOn }),
       'mcp__fleet__send fyi=true untouched',
     );
@@ -272,7 +272,7 @@ test('negative control: unguarded pm-console and work-order-plan stubs fail beha
     assert.notEqual(resChild.stdout, '', 'unguarded pm-console stub wrongly blocks child repo');
 
     // Stub 2: work-order-plan.js returning {size:null,plan:null} -> valid Plan dispatch wrongly denied
-    fs.copyFileSync(path.join(__dirname, '_shared', 'pm-console.js'), path.join(sandbox, 'hooks', '_shared', 'pm-console.js'));
+    fs.writeFileSync(path.join(sandbox, 'hooks', '_shared', 'pm-console.js'), 'module.exports = { isPmConsole: () => true };\n');
     fs.writeFileSync(
       path.join(sandbox, 'scripts', 'lib', 'work-order-plan.js'),
       'module.exports = { parse: () => ({ size: null, plan: null }), isMPlus: () => false };\n',
@@ -287,4 +287,25 @@ test('negative control: unguarded pm-console and work-order-plan stubs fail beha
     fs.rmSync(sandbox, { recursive: true, force: true });
     fx.cleanup();
   }
+});
+
+test('pm-console fleet address identifies the PM and gates Agent briefs', () => {
+  const fx = mkPmFixture();
+  try {
+    fs.writeFileSync(path.join(fx.nonProgramRepo, '.claude', 'console.json'), JSON.stringify({ schema: 'autopilot.console/1' }));
+    const probe = (address, cwd = fx.nonProgramRepo) => spawnSync(process.execPath, ['-e', 'process.stdout.write(String(require(process.argv[1]).isPmConsole(process.argv[2])))', path.join(__dirname, '_shared/pm-console.js'), cwd], {
+      encoding: 'utf8', env: { ...process.env, HOME: fx.home, FLEET_ADDRESS: address, AUTOPILOT_FLEET_ADDRESS: '', CLAUDE_CODE_SESSION_ID: '' },
+    });
+    assert.equal(probe('x/y/pm--claude').stdout, 'true');
+    assert.equal(probe('x/y/autopilot--claude').stdout, 'false');
+    const missing = probe('', fx.childRepoDir);
+    assert.equal(missing.stdout, 'false');
+    assert.equal(missing.stderr, 'pm-console: cannot determine PM seat (no console.json mode, no fleet address)\n');
+    assert.equal(probe('', fx.pmRepo).stdout, 'true');
+    const payload = { tool_name: 'Agent', cwd: fx.nonProgramRepo, tool_input: { model: 'sonnet', prompt: 'Engine: sonnet\nDo work.' } };
+    for (const [address, denied] of [['x/y/pm--claude', true], ['x/y/autopilot--claude', false]]) {
+      const res = runGuard(path.join(__dirname, 'dispatch-model-guard.js'), payload, { ...fx, envExtra: { FLEET_ADDRESS: address, AUTOPILOT_FLEET_ADDRESS: '', CLAUDE_CODE_SESSION_ID: '', AUTOPILOT_MECHANICAL_REROUTE: 'off' } });
+      assert.equal(res.stdout.includes('Fleet-Task:'), denied, address);
+    }
+  } finally { fx.cleanup(); }
 });

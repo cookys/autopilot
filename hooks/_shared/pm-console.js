@@ -1,19 +1,9 @@
 'use strict';
-/**
- * pm-console.js — shared PM session gate (§2.5 of 2026-11-17-pm-token-split).
- *
- * Walk up from the hook cwd to the FIRST repo root (`.git` regular file
- * gitfile, or `.git` directory containing a `HEAD` file), read that repo's `.claude/console.json`, and require
- * schema === "autopilot.console/1" AND mode === "program" (the same rule as
- * mods/live/console.ts). A child repo inside the PM workspace stops at its own
- * `.git` and never borrows the parent workspace's console.json.
- *
- * Fail-closed: missing directory, missing `.git`, missing/corrupt console.json,
- * foreign schema, or any other mode returns false.
- */
+/** PM seat gate: a program console or the session's PM fleet address. */
 
 const fs = require('fs');
 const path = require('path');
+const { resolveFleetSeat } = require('./fleet-seat.js');
 
 const CONSOLE_SCHEMA = 'autopilot.console/1';
 const CONSOLE_MODE = 'program';
@@ -58,26 +48,30 @@ function resolveStartDir(cwdOrInput) {
 }
 
 function isPmConsole(cwdOrInput) {
+  let modeKnown = false;
   try {
     const startDir = resolveStartDir(cwdOrInput);
-    if (!startDir) return false;
-    let dir = path.resolve(startDir);
-    for (;;) {
+    let dir = startDir ? path.resolve(startDir) : null;
+    while (dir) {
       if (hasGitMarker(dir)) {
         try {
           const text = fs.readFileSync(path.join(dir, '.claude', 'console.json'), 'utf8');
-          return consoleModeOf(text);
-        } catch {
-          return false;
-        }
+          if (consoleModeOf(text)) return true;
+          const raw = JSON.parse(text);
+          modeKnown = Boolean(raw && typeof raw.mode === 'string' && raw.mode.trim());
+        } catch { /* no usable mode */ }
+        break;
       }
       const parent = path.dirname(dir);
-      if (parent === dir) return false;
+      if (parent === dir) break;
       dir = parent;
     }
-  } catch {
-    return false;
-  }
+  } catch { /* no usable mode */ }
+  let seat = '';
+  try { seat = resolveFleetSeat(cwdOrInput); } catch { /* no usable address */ }
+  if (seat) return seat === 'pm';
+  if (!modeKnown) process.stderr.write('pm-console: cannot determine PM seat (no console.json mode, no fleet address)\n');
+  return false;
 }
 
 module.exports = {

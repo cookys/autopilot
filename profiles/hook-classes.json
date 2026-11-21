@@ -9,6 +9,7 @@
     { "stem": "audit-log", "class": "invariant_effect" },
     { "stem": "awaiting-owner", "class": "invariant_effect" },
     { "stem": "batch-format", "class": "invariant_effect" },
+    { "stem": "bg-quiet-sweep", "class": "guidance" },
     { "stem": "branch-protection", "class": "invariant_effect" },
     { "stem": "check-console", "class": "invariant_effect" },
     { "stem": "claude-home-read-guard", "class": "invariant_effect" },

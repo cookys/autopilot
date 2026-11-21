@@ -3,6 +3,7 @@
 . "$(dirname "$0")/lib.sh"
 export CLAUDE_CONFIG_DIR="$TEST_TMP/claude-config"; seed_fake_claude_credentials "$CLAUDE_CONFIG_DIR"
 . "$(dirname "$0")/lib/dispatch-review-fixtures.sh"
+export AUTOPILOT_TEST_CN_GATE_OFF=1
 
 # 5. agy native JSON path: response feeds the existing framing parser while usage
 # comes only from the closed harness envelope.
@@ -189,12 +190,8 @@ for PARITY_RUNNER in $SCHEMA_RUNNERS; do
     cc-shim) PARITY_EXTRA=(--endpoint PARITYEP) ;;
     anthropic-compatible) PARITY_EXTRA=(--endpoint PARITYEP --context-window off); PARITY_PATH="$PARITY_FAKE_NODE:$PATH" ;;
   esac
-  # Review-role is a floor in cn-model-dispatch-gate.js that AUTOPILOT_TASK_ROLE=implementer
-  # cannot lower (PM 01M7JPSR / 01M7K8QX), so CN-family runners (kimi, qoderclicn) stop at the
-  # cn-model gate before review_seat_tier or the --bin stub. Tier-parity and capability-flag
-  # assertions still run for every runner; dispatch-output assertions branch on the cn-model gate.
+  # This loop asserts runner tier behavior; operator gating has separate focused tests.
   PARITY_OUT="$(PATH="$PARITY_PATH" AUTOPILOT_BLIND_DISCOVERY=1 DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 \
-    AUTOPILOT_TASK_SIZE=S AUTOPILOT_TASK_ROLE=implementer AUTOPILOT_TASK_SCOPE=docs/guide/installation.md \
     "$SCRIPT" --runner "$PARITY_RUNNER" --model haiku --diff-file "$DIFF" --bin "$PARITY_STUB" "${PARITY_EXTRA[@]}" 2>&1)"; PARITY_EXIT=$?
   JS_TIER="$(node -e '
 const { reviewSeatTier } = require(process.argv[1]);
@@ -230,7 +227,7 @@ process.stdout.write(String(isBlindDiscoveryCapableRunner(process.argv[2])));
     *cn_model_dispatch_barred*)
       assert_eq "2" "$PARITY_EXIT" "$PARITY_RUNNER: cn-barred review seat is a precondition failure (exit 2)"
       assert_contains "$PARITY_OUT" "cn_model_dispatch_barred" "$PARITY_RUNNER: cn-barred review seat names the cn-model gate"
-      assert_contains "$PARITY_OUT" "review-role" "$PARITY_RUNNER: cn-barred review seat names review-role"
+      assert_contains "$PARITY_OUT" "restricted_operator_" "$PARITY_RUNNER: refusal names the operator gate class"
       assert_not_contains "$PARITY_OUT" "rc=99" "$PARITY_RUNNER: cn-barred review seat never reaches the stub"
       ;;
     *)

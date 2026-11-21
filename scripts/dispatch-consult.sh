@@ -281,8 +281,8 @@ if [ -z "$CONSULT_ENGINE" ] || [ -z "$CONSULT_RUNNER" ] || [ -z "$CONSULT_EFFORT
   emit "qualification_failed" "$CONSULT_ENGINE" "$CONSULT_RUNNER" "$CONSULT_EFFORT" "$CONSULT_ENDPOINT" "" "consult seat unresolved" 3
 fi
 
-# d-1dfcf757 / 01M7E2A1: Chinese-model dispatch gate (barred family blocked for transcript, sensitive, core, novel or unknown-scope/size/role tasks).
-if ! _tfg_msg="$(node "$SCRIPT_DIR/lib/cn-model-dispatch-gate.js" check --role consult --runner "$CONSULT_RUNNER" --model "$CONSULT_ENGINE" ${CONSULT_ENDPOINT:+--endpoint "$CONSULT_ENDPOINT"} ${QUESTION_FILE:+--prompt-file "$QUESTION_FILE"} 2>&1 >/dev/null)"; then
+# d-1dfcf757 / 01M7E2A1: operator-based cloud gate checks endpoint, workdir and brief before spawn.
+if ! _tfg_msg="$(node "$SCRIPT_DIR/lib/cn-model-dispatch-gate.js" check --runner "$CONSULT_RUNNER" --model "$CONSULT_ENGINE" --endpoint "${CONSULT_ENDPOINT:-$CONSULT_RUNNER}" ${QUESTION_FILE:+--prompt-file "$QUESTION_FILE"} --cwd "$(pwd)" 2>&1 >/dev/null)"; then
   echo "dispatch-consult: $_tfg_msg" >&2
   ladder_receipt "rail-failed"
   emit "qualification_failed" "$CONSULT_ENGINE" "$CONSULT_RUNNER" "$CONSULT_EFFORT" "$CONSULT_ENDPOINT" "" "$_tfg_msg" 3
@@ -372,7 +372,7 @@ if (j && typeof j === "object" && j.engine && j.effort && j.runner) process.stdo
 ' "$RESOLVED_JSON" 2>/dev/null)"
       if [ -n "$_rung" ]; then
         IFS='|' read -r _g_engine _g_effort _g_runner <<< "$_rung"
-        node "$SCRIPT_DIR/lib/cn-model-dispatch-gate.js" check --role consult --runner "$_g_runner" --model "$_g_engine" ${QUESTION_FILE:+--prompt-file "$QUESTION_FILE"} >/dev/null 2>&1 || _rung=""   # d-1dfcf757: barred rung is not a fallback
+        node "$SCRIPT_DIR/lib/cn-model-dispatch-gate.js" check --runner "$_g_runner" --model "$_g_engine" --endpoint "$_g_runner" --cwd "$(pwd)" ${QUESTION_FILE:+--prompt-file "$QUESTION_FILE"} >/dev/null 2>&1 || _rung=""   # operator gate: refused rung is not a fallback
       fi
       if [ "$_on_unavail" = "cloud-fallback" ] && [ -n "$_rung" ]; then
         IFS='|' read -r _fb_engine _fb_effort _fb_runner <<< "$_rung"

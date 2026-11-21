@@ -451,11 +451,11 @@ family_guard_same() {
   return 1
 }
 
-# Reviewer retreat must not land on a barred Chinese-model family (review-role, any size).
-# Exit 0 when the gate allows this rung. AUTOPILOT_TEST_CN_GATE_OFF=1 allows every family.
+# Reviewer retreat must not land on a restricted cloud operator for private repository work.
+# Exit 0 when the operator/workdir/brief gate allows this rung.
 cn_gate_reviewer_ok() {
   local _runner="$1" _model="$2" _endpoint="${3:-}" _msg
-  _msg="$(node "$_REVIEW_SELF_DIR/lib/cn-model-dispatch-gate.js" check --role reviewer --runner "$_runner" --model "$_model" ${_endpoint:+--endpoint "$_endpoint"} ${DIFF_FILE:+--diff-file "$DIFF_FILE"} ${SPEC_FILE:+--prompt-file "$SPEC_FILE"} 2>&1 >/dev/null)" || {
+  _msg="$(node "$_REVIEW_SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner "$_runner" --model "$_model" --endpoint "${_endpoint:-$_runner}" ${SPEC_FILE:+--prompt-file "$SPEC_FILE"} --cwd "$(pwd)" 2>&1 >/dev/null)" || {
     echo "family-guard: skipping rung ${_model}@${_runner}${_endpoint:+#${_endpoint}} (${_msg:-cn_model_dispatch_barred})" >&2
     return 1
   }
@@ -552,7 +552,6 @@ for (const x of a) process.stdout.write(String(x).replace(/\n/g, " ") + "\n");
   [ -z "${IMPLEMENTER_FAMILY:-}" ] || _pace_args+=(--exclude-family "$IMPLEMENTER_FAMILY")
   [ -z "${MODEL:-}" ] || _pace_args+=(--exclude-model "$MODEL")
   [ -z "${SPEC_FILE:-}" ] || _pace_args+=(--prompt-file "$SPEC_FILE")
-  [ -z "${DIFF_FILE:-}" ] || _pace_args+=(--diff-file "$DIFF_FILE")
   _pace_pick="$(node "$_REVIEW_SELF_DIR/pace-select.js" "${_pace_args[@]}")" || return 1
   if [ -n "$_pace_pick" ]; then
     { IFS= read -r _FG_RUNNER; IFS= read -r _FG_ENGINE; IFS= read -r _FG_ENDPOINT; IFS= read -r _ps_full; IFS= read -r _FG_PACE_CHOICE_JSON; } <<< "$_pace_pick"
@@ -630,7 +629,6 @@ _ps_args=(--dispatch --role reviewer)
 [ -z "${MODEL:-}" ] || _ps_args+=(--named-model "$MODEL")
 [ -z "${ENDPOINT:-}" ] || _ps_args+=(--named-endpoint "$ENDPOINT")
 [ -z "${SPEC_FILE:-}" ] || _ps_args+=(--prompt-file "$SPEC_FILE")
-[ -z "${DIFF_FILE:-}" ] || _ps_args+=(--diff-file "$DIFF_FILE")
 if [ -z "${RUNNER:-}${MODEL:-}${ENDPOINT:-}" ]; then
   family_guard_bind
   [ -z "${IMPLEMENTER_FAMILY:-}" ] || _ps_args+=(--exclude-family "$IMPLEMENTER_FAMILY")
@@ -645,10 +643,16 @@ fi
 [[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode)"
 case "$RUNNER" in cc-shim|claude-native) declare -F child_session_mint >/dev/null 2>&1 && child_session_mint review-seat ;; esac
 case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, qoderclicn, kimi, cursor, or opencode (got: $RUNNER)" ;; esac
-# d-1dfcf757 / 01M7E2A1: Chinese-model dispatch gate (review-role at every size, plus transcript, sensitive, core, novel, unknown size/role/scope).
-_tfg_msg="$(node "$_REVIEW_SELF_DIR/lib/cn-model-dispatch-gate.js" check --role reviewer --runner "$RUNNER" --model "$MODEL" ${DIFF_FILE:+--diff-file "$DIFF_FILE"} ${ENDPOINT:+--endpoint "$ENDPOINT"} ${SPEC_FILE:+--prompt-file "$SPEC_FILE"} 2>&1 >/dev/null)" \
-  || die_precondition "${_tfg_msg:-cn_model_dispatch_barred unknown unknown (01M7E2A1, d-1dfcf757)}"
-unset _tfg_msg
+# d-1dfcf757 / 01M7E2A1: restricted operators require a fresh sandbox and clean brief; local names must resolve locally.
+_tfg_endpoint="${ENDPOINT:-$RUNNER}"
+# cc-shim can use the raw Anthropic-compatible URL when --endpoint is omitted.
+# Give the gate that resolved URL identity so fleet-local GLM calls are classified by host.
+if [[ "$RUNNER" = "cc-shim" && -z "$ENDPOINT" && -n "${ANTHROPIC_BASE_URL:-}" ]]; then
+  _tfg_endpoint="$ANTHROPIC_BASE_URL"
+fi
+_tfg_msg="$(node "$_REVIEW_SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner "$RUNNER" --model "$MODEL" --endpoint "$_tfg_endpoint" ${SPEC_FILE:+--prompt-file "$SPEC_FILE"} --cwd "$(pwd)" 2>&1 >/dev/null)" \
+  || die_precondition "${_tfg_msg:-cn_model_dispatch_barred unknown restricted_operator_unknown_endpoint (01M7E2A1, d-1dfcf757)}"
+unset _tfg_msg _tfg_endpoint
 # --role-kit: refused on every runner but claude-native, validated now (before any spawn, and before the
 # detach supervisor below re-runs this argv inline).
 . "$_REVIEW_SELF_DIR/lib/role-kit.sh"   # defaults only: no kit leaves ROLE_KIT_TOOLS empty and ROLE_KIT_EXTRA unset-equivalent
@@ -960,7 +964,7 @@ timeout_to_ms() {
 # byte-identical. resolve-endpoint.sh emits only the token's env NAME; the value is read
 # via ${!name} (cc-shim, set +x) or by the JS from --token-env — never printed here. ---
 EP_URL=""; EP_TOKEN_ENV=""
-ANTHROPIC_BASE_URL=""; ANTHROPIC_TOKEN_ENV=""; TIMEOUT_MS=""
+ANTHROPIC_BASE_URL="${ANTHROPIC_BASE_URL:-}"; ANTHROPIC_TOKEN_ENV=""; TIMEOUT_MS=""
 if [[ -n "$ENDPOINT" ]]; then
   case "$RUNNER" in
     anthropic-compatible|cc-shim) ;;

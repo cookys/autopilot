@@ -82,8 +82,7 @@ USAGE:
       [--base-url <url>]    # default ANTHROPIC_COMPATIBLE_BASE_URL,
                             # AUTOPILOT_MINIMAX_BASE_URL, or https://api.minimax.io/anthropic
       [--endpoint <name>]   # optional named endpoint for fleet gateway allowlist check
-      [--spec-file <file>]  # optional task spec file checked by the Chinese-model gate
-      [--role <role>]       # rail-implied role for the Chinese-model gate (--raw only; non-raw is always reviewer)
+      [--spec-file <file>]  # optional task spec file included in outbound checks
 
 AUTH (env only — never accepted as a CLI argument):
   MINIMAX_API_KEY for minimax.io; ANTHROPIC_COMPATIBLE_AUTH_TOKEN for other
@@ -108,7 +107,6 @@ function parseArgs(argv) {
     baseUrl: '',
     tokenEnv: '',
     endpoint: '',
-    role: '',
     raw: false,
     help: false,
   };
@@ -142,9 +140,6 @@ function parseArgs(argv) {
         break;
       case '--endpoint':
         out.endpoint = argv[++i] || '';
-        break;
-      case '--role':
-        out.role = argv[++i] || '';
         break;
       case '--token-env': {
         // Require a non-empty value: a dangling `--token-env` (no arg) must NOT silently
@@ -631,17 +626,13 @@ async function main() {
     failPrecondition('--model is required');
   }
 
-  // Before any credential file is read. Non-raw calls are always code reviews, so role is forced
-  // to 'reviewer' (--role is ignored). --raw calls (e.g. dispatch-author.sh) honour --role when
-  // passed, else env/header only so an allowed XS/S implementer authoring task is not forced into
-  // reviewer. A missing role still fails closed inside the gate.
+  // Gate the actual outbound brief before credentials are read or a runner is spawned.
   const cn = cnGate.check({
     runner: RUNNER,
     model,
     endpoint: args.endpoint || process.env[FLEET_TASK_ENDPOINT_ENV] || '',
-    role: rawMode ? args.role : 'reviewer',
     files: [args.promptFile, args.specFile].filter(Boolean),
-    diffFiles: args.diffFile ? [args.diffFile] : [],
+    cwd: process.cwd(),
   });
   if (!cn.allowed) failPrecondition(cn.line);
 

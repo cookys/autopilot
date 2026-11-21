@@ -99,11 +99,9 @@ function assertAnthropicFallbackModel(model, env = process.env) {
     runner: runnerName,
     model: m,
     endpoint: '',
-    role: 'author',
     env: {
       ...(env || process.env),
       AUTOPILOT_TEST_CN_GATE_OFF: '0',
-      AUTOPILOT_TASK_READS_TRANSCRIPT: '1',
     },
     cwd: REPO_ROOT,
   });

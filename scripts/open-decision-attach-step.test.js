@@ -299,6 +299,28 @@ test('findDuplicateCards requires category match and ignores closed cards', () =
   const incidentOriginal = { id: 'd-ca6233d5', category: 'presence', status: 'open', question: '檢查 cookys-openclaw 的 openclaw host，確認 hub 是否需要重開', title: '檢查 hub', blocks: '如果沒有檢查 cookys-openclaw，openclaw 的 hub 可能不能重開' };
   const incidentSecond = { id: 'd-bf31ba56', category: 'presence', question: '檢查 cookys-openclaw openclaw host，是否重開 hub？', title: '檢查 host', blocks: '需要檢查 cookys-openclaw 的 hub' };
   assert.equal(findDuplicateCards([incidentOriginal], incidentSecond)[0].id, 'd-ca6233d5');
+
+  const distinctPairs = [
+    [
+      { id: 'd-reopen', category: 'presence', question: '重開 cookys-openclaw hub？' },
+      { id: 'd-token', category: 'presence', question: '替換 cookys-openclaw token？' },
+    ],
+    [
+      { id: 'd-check', category: 'presence', question: '檢查 cookys-openclaw hub？' },
+      { id: 'd-firmware', category: 'presence', question: '更新 cookys-openclaw hub 韌體？' },
+    ],
+    [
+      { id: 'd-cookys', category: 'presence', question: '重開 cookys-openclaw hub？' },
+      { id: 'd-aimax', category: 'presence', question: '重開 aimax395 hub？' },
+    ],
+    [
+      { id: 'd-power', category: 'presence', question: '按下電源鍵' },
+      { id: 'd-reset', category: 'presence', question: '按下重置鍵' },
+    ],
+  ];
+  for (const [existing, next] of distinctPairs) {
+    assert.deepEqual(findDuplicateCards([existing], next), [], `${existing.question} vs ${next.question}`);
+  }
 });
 
 test('open --kind look stores look_target for persistent show items and round-trips until dismissed', () => {

@@ -83,7 +83,7 @@ shape --kind go --question '記一筆' --option 'A::a' --option 'B::b'
 assert_eq "$RC" 0 "--kind go is exempt from the decide-card shape rules"
 shape --kind remind --question '提醒一件事'
 assert_eq "$RC" 0 "--kind remind is exempt from the decide-card shape rules"
-node "$OD" open --kind step --category goal --cwd "$R" --question "去做這一步" >/dev/null 2>"$TEST_TMP/err"; assert_eq "$?" 0 "--kind step is exempt from the decide-card shape rules"
+node "$OD" open --kind step --category goal --executor ns/cc/exec--claude --cwd "$R" --question "去做這一步" >/dev/null 2>"$TEST_TMP/err"; assert_eq "$?" 0 "--kind step is exempt from the decide-card shape rules"
 node "$OD" show --premise-source "$TEST_TMP/premise-inferred.txt" --cwd "$R" >/dev/null 2>"$TEST_TMP/err"; assert_eq "$?" 2 "--premise-source outside open: exit 2"; assert_contains "$(cat "$TEST_TMP/err")" "open-decision: --premise-source 與 --premise-inferred 只用於 open" "--premise-source outside open: names the command"
 shape --free-text --title '要改嗎' --question '理由是什麼？' --recommendation '要不要改？'
 assert_eq "$RC" 2 "free-text recommendation that is a question: exit 2"; assert_contains "$ERR" "問句" "free-text recommendation: question-mark rule"
@@ -93,7 +93,7 @@ MUT="$TEST_TMP/shape-mut"; rm -rf "$MUT"; mkdir -p "$MUT/scripts"; ln -s "$REPO_
 for f in "$REPO_ROOT/scripts"/*; do ln -s "$f" "$MUT/scripts/$(basename "$f")"; done
 rm "$MUT/scripts/open-decision.js"
 sed_mutant "$OD" "$MUT/scripts/open-decision.js" '/DECIDE_CARD_SHAPE/d' || fail "premise mutant did not apply"
-OUT="$(node "$MUT/scripts/open-decision.js" open --category goal --executor ns/cc/exec--claude --cwd "$R" --root-run-id root-t --not-authorized irreversible --title "$TITLE2180" --question "$Q2180" --background "$BG2180" --option "$OA2180" --option "$OB2180" --recommendation "$REC2180" --premise-source "$TEST_TMP/premise-inferred.txt" 2>"$TEST_TMP/err")"; RC=$?
+OUT="$(node "$MUT/scripts/open-decision.js" open --category identity --executor ns/cc/exec--claude --cwd "$R" --root-run-id root-t --not-authorized irreversible --title "$TITLE2180" --question "$Q2180" --background "$BG2180" --option "$OA2180" --option "$OB2180" --recommendation "$REC2180" --premise-source "$TEST_TMP/premise-inferred.txt" 2>"$TEST_TMP/err")"; RC=$?
 assert_eq "$RC" 0 "mutant (decide-card shape check removed): the inferred 2180 card opens, so the refusal above would be red"
 assert_contains "$OUT" "d-" "mutant: inferred card id printed"
 finalize_test

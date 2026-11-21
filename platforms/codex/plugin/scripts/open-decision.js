@@ -397,6 +397,7 @@ function projectScopeFiles(cwd, opts) {
 }
 
 const DUPLICATE_STOPWORDS = new Set(['the', 'a', 'an', 'is', 'are', 'to', 'of', 'for', 'and', 'or', 'in', 'on', 'at', '請', '是否', '這個', '那個', '以及', '與', '的', '了', '嗎', '呢', '要', '有', '把']);
+const DUPLICATE_JACCARD_THRESHOLD = 0.9;
 function duplicateFields(card) {
   return [card && card.question, card && card.title, card && card.blocks].filter((v) => typeof v === 'string').join(' ').toLowerCase();
 }
@@ -434,10 +435,12 @@ function findDuplicateCards(entries, candidate) {
     const union = new Set([...ct, ...et]);
     const jaccard = union.size ? common.length / union.size : 0;
     const sharedHosts = [...ch].filter((h) => eh.has(h));
+    const conflictingHosts = ch.size > 0 && eh.size > 0 && sharedHosts.length === 0;
     const sharedKeywords = common.filter((t) => !ch.has(t) && !eh.has(t));
-    const hostMatch = sharedHosts.length > 0 && sharedKeywords.length > 0;
-    if (hostMatch || jaccard >= 0.5) {
-      result.push({ id: entry.id, title: entry.title || String(entry.question || '').slice(0, 20), score: Number(Math.max(jaccard, hostMatch ? 0.5 : 0).toFixed(3)), reason: hostMatch ? 'shared-host-and-keywords' : 'token-jaccard' });
+    const sharedAction = sharedKeywords.some((token) => /重開|替換|檢查|更新|韌體|電源|重置|restart|replace|check|update|firmware|power|reset/.test(token));
+    const hostMatch = sharedHosts.length > 0 && sharedAction;
+    if (!conflictingHosts && (hostMatch || jaccard >= DUPLICATE_JACCARD_THRESHOLD)) {
+      result.push({ id: entry.id, title: entry.title || String(entry.question || '').slice(0, 20), score: Number(Math.max(jaccard, hostMatch ? 0.9 : 0).toFixed(3)), reason: hostMatch ? 'shared-host-and-keywords' : 'token-jaccard' });
     }
   }
   return result;

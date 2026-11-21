@@ -61,11 +61,58 @@ function endpointInfo(env) {
     env: { ...process.env, ...env }, encoding: 'utf8', timeout: 15000,
   });
   const line = String(r.stdout || '').split('\n').find((l) => l.startsWith('{'));
-  if (!line) return { ready: false, baseUrl: '' };
+  if (!line) return { ready: false, baseUrl: '', tokenEnv: '' };
   try {
     const o = JSON.parse(line);
-    return { ready: !!(o && o.ready === true), baseUrl: o && typeof o.base_url === 'string' ? o.base_url : '' };
-  } catch { return { ready: false, baseUrl: '' }; }
+    return { ready: !!(o && o.ready === true), baseUrl: o && typeof o.base_url === 'string' ? o.base_url : '', tokenEnv: o && typeof o.token_env === 'string' ? o.token_env : '' };
+  } catch { return { ready: false, baseUrl: '', tokenEnv: '' }; }
+}
+
+function leaseUrl(baseUrl) {
+  try { const u = new URL(baseUrl); return `${u.protocol}//${u.host}/v1/local/lease`; } catch { return ''; }
+}
+
+function leaseRequest(urlStr, method, token, body, timeoutMs = HTTP_TIMEOUT_MS) {
+  return new Promise((resolve) => {
+    let u;
+    try { u = new URL(urlStr); } catch { resolve({ error: 'unreachable' }); return; }
+    if (!['http:', 'https:'].includes(u.protocol)) { resolve({ error: 'unreachable' }); return; }
+    const lib = u.protocol === 'https:' ? require('https') : require('http');
+    let done = false;
+    const finish = (r) => { if (done) return; done = true; clearTimeout(timer); resolve(r); };
+    const req = lib.request({ protocol: u.protocol, hostname: u.hostname, port: u.port || (u.protocol === 'https:' ? 443 : 80), path: u.pathname + u.search, method,
+      headers: { authorization: `Bearer ${token}`, accept: 'application/json', ...(body ? { 'content-type': 'application/json' } : {}) } }, (res) => {
+      const chunks = []; res.on('data', (c) => chunks.push(c));
+      res.on('end', () => finish({ status: res.statusCode, body: Buffer.concat(chunks).toString('utf8') }));
+      res.on('error', () => finish({ error: 'unreachable' }));
+    });
+    const timer = setTimeout(() => { req.destroy(); finish({ error: 'timeout' }); }, timeoutMs);
+    req.on('error', () => finish({ error: 'unreachable' }));
+    req.end(body || undefined);
+  });
+}
+
+async function acquireLocalLease(opts = {}) {
+  const env = opts.env || process.env;
+  const cfg = opts.cfg || readConfig(env);
+  const info = opts.endpoint || endpointInfo(env);
+  const base = leaseUrl(info.baseUrl);
+  const token = info.tokenEnv && env[info.tokenEnv] ? String(env[info.tokenEnv]) : '';
+  const fail = (detail, status = null) => ({ choose: false, reason: 'no_free_slot', detail, local_slots: null,
+    local_lease: { id: null, granted: false, status, heartbeats: 0, released: false, detail } });
+  if (!info.ready || !base || !token) return fail('lease_query_failed:unreachable');
+  const parsedTtl = Number.parseInt(env.AUTOPILOT_LOCAL_LEASE_TTL_S || '180', 10);
+  const ttl = Number.isInteger(parsedTtl) && parsedTtl > 0 ? parsedTtl : 180;
+  const body = { model: 'qwen', est_context_tokens: 8192, ttl_s: ttl };
+  const fleetTask = env.AUTOPILOT_FLEET_TASK || env.HETERO_FLEET_TASK_ID;
+  if (fleetTask) body.fleet_task = fleetTask;
+  const res = await leaseRequest(base, 'POST', token, JSON.stringify(body));
+  if (res.error) return fail(`lease_query_failed:${res.error}`);
+  if (res.status === 429 || res.status === 409) return fail(res.status === 429 ? 'lease_429' : 'lease_409', res.status);
+  if (res.status !== 201) return fail(`lease_query_failed:http_${Number.isInteger(res.status) ? res.status : 'unknown'}`, res.status || null);
+  let doc; try { doc = JSON.parse(res.body); } catch { return fail('lease_query_failed:malformed', res.status); }
+  if (!doc || typeof doc.lease_id !== 'string' || !doc.lease_id.trim()) return fail('lease_query_failed:malformed', res.status);
+  return { choose: true, local_slots: null, local_lease: { id: doc.lease_id, granted: true, status: res.status, heartbeats: 0, released: false, detail: null }, lease_url: base, lease_token_env: info.tokenEnv };
 }
 
 function queryFailed(source, why) {
@@ -307,14 +354,22 @@ async function decide(opts = {}) {
   if (bytes > limit) {
     return { choose: false, reason: 'context_too_large', detail: String(bytes), local_slots: null };
   }
-  const slot = await acquireLocalSlot({ env, cfg, endpoint: info });
-  const view = slotView(slot);
-  if (slot.local) return { choose: true, local_slots: view };
-  const fb = slot.fallback || { reason: 'no_free_slot', detail: 'slot_query_failed:malformed' };
-  return { choose: false, reason: fb.reason, detail: fb.detail, local_slots: view };
+  return acquireLocalLease({ env, cfg, endpoint: info });
 }
 
 async function main() {
+  const op = process.argv.indexOf('--lease-operation');
+  if (op >= 0) {
+    const operation = process.argv[op + 1];
+    const urlArg = process.argv.indexOf('--lease-url');
+    const idArg = process.argv.indexOf('--lease-id');
+    const baseUrl = `${String(urlArg >= 0 ? process.argv[urlArg + 1] : '').replace(/\/$/, '')}/${encodeURIComponent(idArg >= 0 ? process.argv[idArg + 1] : '')}`;
+    const tokenEnvArg = process.argv.indexOf('--token-env');
+    const token = tokenEnvArg >= 0 ? String(process.env[process.argv[tokenEnvArg + 1]] || '') : '';
+    const releasing = operation === 'release';
+    const result = await leaseRequest(releasing ? baseUrl : `${baseUrl}/heartbeat`, releasing ? 'DELETE' : 'POST', token, null);
+    process.exit(!result.error && (releasing ? result.status === 204 : result.status === 200) ? 0 : 1);
+  }
   const i = process.argv.indexOf('--prompt-file');
   const promptFile = i >= 0 ? process.argv[i + 1] : '';
   const cwdIdx = process.argv.indexOf('--cwd');
@@ -324,4 +379,4 @@ async function main() {
 
 if (require.main === module) main();
 
-module.exports = { decide, contextBytes, acquireLocalSlot, DEFAULT_BYTES };
+module.exports = { decide, contextBytes, acquireLocalSlot, acquireLocalLease, leaseRequest, DEFAULT_BYTES };

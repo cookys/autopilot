@@ -3345,6 +3345,17 @@
       "summary": "JSON local_fallback object a busy re-dispatch child prints. Set only by dispatch-hetero.sh itself."
     },
     {
+      "name": "AUTOPILOT_LOCAL_LEASE_TTL_S",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": 180,
+      "readers": ["scripts/lib/local-impl-slot.js", "scripts/dispatch-hetero.sh"],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Lease lifetime requested from the local gateway; the dispatcher heartbeats every TTL/3 seconds. Intended for gateway tuning and tests."
+    },
+    {
       "name": "AUTOPILOT_LOCAL_SLOTS_CMD",
       "kind": "env",
       "audience": "user",

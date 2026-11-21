@@ -11,10 +11,37 @@ export AUTOPILOT_PACE_FILE="$TEST_TMP/missing-pace.json"
 export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session-mode"
 export AUTOPILOT_TEST_CN_GATE_OFF=1
 export AUTOPILOT_ENDPOINT_PREPROBE=off
-export AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL=http://127.0.0.1:9
 export AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token
 export AUTOPILOT_LOCAL_SLOTS_CMD='printf %s '"'"'{"free":1,"draining":false}'"'"''
 export DISPATCH_DETACH=0 AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1
+LEASE_STATUS_FILE="$TEST_TMP/lease-status"
+LEASE_LOG="$TEST_TMP/lease-requests.jsonl"
+printf '201\n' > "$LEASE_STATUS_FILE"
+LEASE_PORT_FILE="$TEST_TMP/lease.port"
+node - "$LEASE_STATUS_FILE" "$LEASE_LOG" "$LEASE_PORT_FILE" <<'NODE' &
+const http = require('http'), fs = require('fs');
+const [statusFile, logFile, portFile] = process.argv.slice(2);
+const server = http.createServer((req, res) => {
+  const chunks=[]; req.on('data', c=>chunks.push(c)); req.on('end', ()=>{
+    fs.appendFileSync(logFile, JSON.stringify({method:req.method,url:req.url})+'\n');
+    if (req.method === 'POST' && req.url === '/v1/local/lease') {
+      const status = Number(fs.readFileSync(statusFile,'utf8').trim());
+      if (status !== 201) { res.writeHead(status); res.end('{}'); return; }
+      res.writeHead(201, {'content-type':'application/json'}); res.end(JSON.stringify({lease_id:'test-lease-id',ttl_s:180})); return;
+    }
+    if (req.method === 'POST' && req.url.endsWith('/heartbeat')) { res.writeHead(200); res.end('{}'); return; }
+    if (req.method === 'POST' && req.url === '/v1/messages/count_tokens') { res.writeHead(200, {'content-type':'application/json'}); res.end(JSON.stringify({input_tokens:1})); return; }
+    if (req.method === 'POST' && req.url === '/v1/messages') { res.writeHead(200, {'content-type':'application/json'}); res.end(JSON.stringify({id:'stub-message',type:'message',role:'assistant',content:[{type:'text',text:'ok'}],model:'qwen',stop_reason:'end_turn',usage:{input_tokens:1,output_tokens:1}})); return; }
+    if (req.method === 'DELETE') { res.writeHead(204); res.end(); return; }
+    res.writeHead(404); res.end();
+  });
+});
+server.listen(0,'127.0.0.1',()=>fs.writeFileSync(portFile,String(server.address().port)));
+NODE
+LEASE_SERVER_PID=$!
+for _i in 1 2 3 4 5 6 7 8 9 10; do [ -s "$LEASE_PORT_FILE" ] && break; sleep 0.1; done
+LEASE_PORT="$(cat "$LEASE_PORT_FILE")"
+export AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL="http://127.0.0.1:${LEASE_PORT}/v1"
 mkdir -p "$AUTOPILOT_SESSION_MODE_DIR" "$TEST_TMP/bin"
 unset AUTOPILOT_QUALIFICATION_OVERRIDE AUTOPILOT_DISPATCH_ROLE AUTOPILOT_TASK_CLASS 2>/dev/null || true
 
@@ -30,6 +57,7 @@ cat > "$STUB_CLAUDE" <<'EOF'
 cat > got-prompt.txt
 pwd > worktree-pwd.txt
 printf '%s\n' "$@" > local-argv.txt
+[ -z "${LEASE_WORKER_SLEEP:-}" ] || sleep "$LEASE_WORKER_SLEEP"
 printf '%s' '{"type":"result","is_error":false,"result":"ok"}'
 EOF
 chmod +x "$STUB_CLAUDE"
@@ -182,137 +210,46 @@ assert_contains "$(cat "$GROK_ARGV")" "grok-4.7" "e: grok stub received grok-4.7
 FB_E="$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\n/).reverse().find(l=>l.trim().startsWith("{"))); process.stdout.write(JSON.stringify(o.local_fallback))' "$OUT")"
 assert_eq '{"reason":"no_free_slot","detail":"endpoint_not_ready"}' "$FB_E" "e: missing endpoint records endpoint_not_ready"
 
-# (f) slots command reports draining -> cloud default, reason draining.
+# (f) successful implicit local run holds a lease and releases it after the worker.
 PROMPT="$TEST_TMP/prompt-f.txt"
-printf 'edit impl-defaults-fixture.txt\n' > "$PROMPT"
-: > "$GROK_ARGV"
-RUNS="$TEST_TMP/runs-f"
-mkdir -p "$RUNS"
-OUT="$(cd "$SBX" && env AUTOPILOT_LOCAL_SLOTS_CMD='printf %s '"'"'{"free":2,"draining":true}'"'"'' AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
-  "$SCRIPT" --no-verify-tip --context-window off --grok-bin "$STUB_GROK" \
-  --branch feat/local-f --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/f.err")"
-EXIT=$?
-assert_eq "0" "$EXIT" "f: draining exits 0"
-assert_eq "grok" "$(json_get "$OUT" runner)" "f: draining stays on grok"
-FB_F="$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\n/).reverse().find(l=>l.trim().startsWith("{"))); process.stdout.write(JSON.stringify(o.local_fallback))' "$OUT")"
-assert_eq '{"reason":"draining","detail":"draining"}' "$FB_F" "f: draining reason"
-
-# (g) context over local_context_bytes -> context_too_large. Slot command would have said free.
-PROMPT="$TEST_TMP/prompt-g.txt"
-printf 'Scope: big.bin\nedit\n' > "$PROMPT"
-dd if=/dev/zero of="$SBX/big.bin" bs=1000 count=500 status=none
-CFG="$TEST_TMP/ctx-config.json"
-printf '%s\n' '{"local_context_bytes":100}' > "$CFG"
-: > "$GROK_ARGV"
-RUNS="$TEST_TMP/runs-g"
-mkdir -p "$RUNS"
-OUT="$(cd "$SBX" && env AUTOPILOT_CONFIG_FILE="$CFG" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
-  "$SCRIPT" --no-verify-tip --context-window off --grok-bin "$STUB_GROK" \
-  --branch feat/local-g --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/g.err")"
-EXIT=$?
-assert_eq "0" "$EXIT" "g: oversized context exits 0 ($(tail -c 300 "$TEST_TMP/g.err"))"
-assert_eq "grok" "$(json_get "$OUT" runner)" "g: oversized context stays on grok"
-FB_G="$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\n/).reverse().find(l=>l.trim().startsWith("{"))); process.stdout.write(o.local_fallback.reason)' "$OUT")"
-assert_eq "context_too_large" "$FB_G" "g: context_too_large"
-
-# (h) slot command says free, then the call sees endpoint_busy: one cloud re-dispatch.
-BUSY_PORT_FILE="$TEST_TMP/busy.port"
-python3 - <<PY &
-import os
-from http.server import BaseHTTPRequestHandler, HTTPServer
-class H(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(503)
-        self.end_headers()
-    def log_message(self, *a):
-        pass
-srv = HTTPServer(("127.0.0.1", 0), H)
-open("$BUSY_PORT_FILE", "w").write(str(srv.server_address[1]))
-srv.serve_forever()
-PY
-BUSY_PID=$!
-for _i in 1 2 3 4 5 6 7 8 9 10; do
-  [ -s "$BUSY_PORT_FILE" ] && break
-  sleep 0.1
-done
-BUSY_PORT="$(cat "$BUSY_PORT_FILE")"
-PROMPT="$TEST_TMP/prompt-h.txt"
 printf 'Task-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
-: > "$GROK_ARGV"
-RUNS="$TEST_TMP/runs-h"
-mkdir -p "$RUNS"
-OUT="$(cd "$SBX" && env -u AUTOPILOT_ENDPOINT_PREPROBE \
-  AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL="http://127.0.0.1:${BUSY_PORT}/v1" \
-  AUTOPILOT_LOCAL_SLOTS_CMD='printf %s '"'"'{"free":1,"draining":false}'"'"'' \
-  AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
-  "$SCRIPT" --no-verify-tip --context-window off --grok-bin "$STUB_GROK" \
-  --branch feat/local-h --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/h.err")"
+RUNS="$TEST_TMP/runs-f"; mkdir -p "$RUNS"; : > "$LEASE_LOG"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" AUTOPILOT_LOCAL_LEASE_TTL_S=3 LEASE_WORKER_SLEEP=7 \
+  "$SCRIPT" --no-verify-tip --context-window off --branch feat/local-f --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/f.err")"
 EXIT=$?
-kill "$BUSY_PID" 2>/dev/null || true
-wait "$BUSY_PID" 2>/dev/null || true
-[ "$EXIT" -eq 0 ] || printf 'local-default diagnostic (h): %s\n%s\n' "$OUT" "$(cat "$TEST_TMP/h.err")" >&2
-assert_eq "0" "$EXIT" "h: busy_at_run re-dispatch exits 0"
-assert_eq "grok" "$(json_get "$OUT" runner)" "h: busy_at_run lands on grok"
-assert_eq "grok-4.7" "$(json_get "$OUT" model)" "h: cloud default model"
-FB_H="$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\n/).reverse().find(l=>l.trim().startsWith("{"))); process.stdout.write(JSON.stringify(o.local_fallback))' "$OUT")"
-assert_eq '{"reason":"no_free_slot","detail":"busy_at_run"}' "$FB_H" "h: busy_at_run detail"
+[ "$EXIT" -eq 0 ] || printf "lease-f diagnostic: %s\n%s\n" "$OUT" "$(cat "$TEST_TMP/f.err")" >&2
+assert_eq "$EXIT" "0" "f: lease-backed implicit local run exits 0"
+MF="$(find "$RUNS" -name '*.manifest.json' | head -1)"
+assert_eq "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1])).local_lease.id||"")' "$MF")" "test-lease-id" "f: manifest records lease id"
+assert_eq "$(node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1])).local_lease.released))' "$MF")" "true" "f: manifest records release"
+assert_eq "$(node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1])).local_lease.heartbeats>=2))' "$MF")" "true" "f: heartbeat renews during worker run"
+assert_contains "$(cat "$LEASE_LOG")" '"method":"DELETE"' "f: gateway received DELETE"
 
-# (i) a failed slot command falls back to the cloud default.
-PROMPT="$TEST_TMP/prompt-i.txt"
-printf 'edit impl-defaults-fixture.txt\n' > "$PROMPT"
-: > "$GROK_ARGV"
-RUNS="$TEST_TMP/runs-i"
-mkdir -p "$RUNS"
-OUT="$(cd "$SBX" && env AUTOPILOT_LOCAL_SLOTS_CMD='echo nope; exit 1' AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
-  "$SCRIPT" --no-verify-tip --context-window off --grok-bin "$STUB_GROK" \
-  --branch feat/local-i --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/i.err")"
-EXIT=$?
-assert_eq "0" "$EXIT" "i: bad slot command exits 0"
-assert_eq "grok" "$(json_get "$OUT" runner)" "i: bad slot command uses grok"
-FB_I="$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\n/).reverse().find(l=>l.trim().startsWith("{"))); process.stdout.write(JSON.stringify(o.local_fallback))' "$OUT")"
-assert_eq '{"reason":"no_free_slot","detail":"slot_query_failed:unreachable"}' "$FB_I" "i: slot_query_failed fallback"
-assert_contains "$(cat "$GROK_ARGV")" "grok-4.7" "i: grok was started"
+# (g) capacity denial falls back to cloud with the lease status detail.
+PROMPT="$TEST_TMP/prompt-g.txt"; printf 'edit impl-defaults-fixture.txt\n' > "$PROMPT"
+printf '429\n' > "$LEASE_STATUS_FILE"; : > "$GROK_ARGV"; : > "$LEASE_LOG"; RUNS="$TEST_TMP/runs-g"; mkdir -p "$RUNS"
+OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" "$SCRIPT" --no-verify-tip --context-window off --grok-bin "$STUB_GROK" --branch feat/local-g --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/g.err")"; EXIT=$?
+assert_eq "$EXIT" "0" "g: lease 429 cloud fallback exits 0"
+assert_eq "$(json_get "$OUT" runner)" "grok" "g: lease 429 selects grok"
+assert_contains "$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\n/).reverse().find(l=>l.trim().startsWith("{")));process.stdout.write(JSON.stringify(o.local_fallback))' "$OUT")" 'lease_429' "g: fallback detail is lease_429"
+assert_not_contains "$(cat "$LEASE_LOG")" '"method":"DELETE"' "g: denied lease is not released"
 
-# (j) runtime endpoint_busy after a worktree exists reuses that worktree on the cloud retry.
-BUSY_CLAUDE="$TEST_TMP/bin/claude"
-cat > "$BUSY_CLAUDE" <<'EOF'
+# (g2) conflict denial has the documented fallback detail.
+printf '409\n' > "$LEASE_STATUS_FILE"; RUNS="$TEST_TMP/runs-g2"; mkdir -p "$RUNS"
+OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" "$SCRIPT" --no-verify-tip --context-window off --grok-bin "$STUB_GROK" --branch feat/local-g2 --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/g2.err")"; EXIT=$?
+assert_eq "$EXIT" "0" "g2: lease 409 cloud fallback exits 0"
+assert_contains "$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\n/).reverse().find(l=>l.trim().startsWith("{")));process.stdout.write(JSON.stringify(o.local_fallback))' "$OUT")" 'lease_409' "g2: fallback detail is lease_409"
+
+# (h) explicit runner never asks the lease service.
+PROMPT="$TEST_TMP/prompt-h.txt"; printf 'edit impl-defaults-fixture.txt\n' > "$PROMPT"
+printf '201\n' > "$LEASE_STATUS_FILE"; : > "$LEASE_LOG"
+cat > "$TEST_TMP/bin/codex" <<'EOF'
 #!/usr/bin/env bash
-printf '%s\n' '{"type":"result","is_error":true,"terminal_reason":"api_error","result":"API Error: 503 Service Unavailable"}'
-exit 1
+printf '%s\n' '{"type":"result","is_error":false,"result":"ok"}'
 EOF
-chmod +x "$BUSY_CLAUDE"
-PROMPT="$TEST_TMP/prompt-j.txt"
-printf 'Task-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
-: > "$GROK_ARGV"
-RUNS="$TEST_TMP/runs-j"
-mkdir -p "$RUNS"
-OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_ENDPOINT_PREPROBE=off \
-  AUTOPILOT_LOCAL_SLOTS_CMD='printf %s '"'"'{"free":1,"draining":false}'"'"'' \
-  AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
-  "$SCRIPT" --no-verify-tip --context-window off --grok-bin "$STUB_GROK" \
-  --branch feat/local-j --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/j.err")"
-EXIT=$?
-[ "$EXIT" -eq 0 ] || printf 'local-default diagnostic (j): %s\n%s\n' "$OUT" "$(cat "$TEST_TMP/j.err")" >&2
-assert_eq "0" "$EXIT" "j: runtime busy_at_run exits 0"
-assert_eq "grok" "$(json_get "$OUT" runner)" "j: lands on grok"
-FB_J="$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\n/).reverse().find(l=>l.trim().startsWith("{"))); process.stdout.write(JSON.stringify(o.local_fallback))' "$OUT")"
-assert_eq '{"reason":"no_free_slot","detail":"busy_at_run"}' "$FB_J" "j: busy_at_run detail"
-WT_SAME="$(node -e '
-const lines = String(process.argv[1]).split(/\n/).map(l=>l.trim()).filter(l=>l.startsWith("{")).map(l=>JSON.parse(l));
-const local = lines.find(o=>o.status==="engine_unavailable");
-const cloud = lines[lines.length-1];
-process.stdout.write(local && local.worktree && cloud && cloud.worktree_reused===true ? "yes" : "no");
-' "$OUT")"
-assert_eq "yes" "$WT_SAME" "j: cloud retry reused the prepared worktree"
-
-# Restore the successful local stub for any later case.
-cat > "$STUB_CLAUDE" <<'EOF'
-#!/usr/bin/env bash
-cat > got-prompt.txt
-pwd > worktree-pwd.txt
-printf '%s\n' "$@" > local-argv.txt
-printf '%s' '{"type":"result","is_error":false,"result":"ok"}'
-EOF
-chmod +x "$STUB_CLAUDE"
+chmod +x "$TEST_TMP/bin/codex"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$TEST_TMP/runs-h" "$SCRIPT" --no-verify-tip --context-window off --runner codex --codex-bin "$TEST_TMP/bin/codex" --branch feat/local-h --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/h.err")"; EXIT=$?
+assert_neq "$EXIT" "97" "h: explicit codex path is stubbed"
+assert_not_contains "$(cat "$LEASE_LOG")" '"method":"POST","url":"/v1/local/lease"' "h: explicit runner sends no grant"
 
 finalize_test

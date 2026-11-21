@@ -23,6 +23,7 @@ const { portableRawLogInPlace } = require('./lib/raw-log-path');
 const codexFallback = require('./lib/qc-panel-codex-fallback');
 const { resolvePmGate } = require('./lib/fleet-task-ref');
 const findingClass = require('./lib/finding-class');
+const repairRecheck = require('./lib/repair-recheck');
 
 function assertSafeSeatId(id) {
   if (!isSafeSeatId(id)) {
@@ -129,6 +130,28 @@ function recordLedgerPointer(ledgerDir, repoRoot) {
   } catch (_e) { /* fail-open */ }
 }
 
+// Fixed default ledger when --ledger is omitted (PM ruling, usage/duration + repair recheck work):
+// ${AUTOPILOT_STATE_DIR:-$HOME/.autopilot}/review-ledgers/<repo-basename>/<branch-slug>/ so every review of a
+// branch lands in one place a later `recheck` or the events feed can find without anyone remembering a path.
+function ledgerDefaultDir(flags) {
+  const repoRoot = flags['repo-root'] ? path.resolve(flags['repo-root']) : process.cwd();
+  const git = (args) => {
+    const res = spawnSync('git', args, { encoding: 'utf8', cwd: repoRoot });
+    return res.status === 0 ? res.stdout.trim() : '';
+  };
+  const common = git(['rev-parse', '--path-format=absolute', '--git-common-dir']);
+  const top = git(['rev-parse', '--show-toplevel']);
+  const repoDir = common && path.basename(common) === '.git' ? path.dirname(common) : (top || repoRoot);
+  const branch = typeof flags.branch === 'string' && flags.branch ? flags.branch : (git(['rev-parse', '--abbrev-ref', 'HEAD']) || 'HEAD');
+  const slug = (value) => String(value).replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^\.+/, '_') || '_';
+  const stateDir = process.env.AUTOPILOT_STATE_DIR || path.join(process.env.HOME || '', '.autopilot');
+  return path.join(stateDir, 'review-ledgers', slug(path.basename(repoDir)), slug(branch));
+}
+
+function resolveLedgerDir(flags) {
+  return path.resolve(typeof flags.ledger === 'string' && flags.ledger ? flags.ledger : ledgerDefaultDir(flags));
+}
+
 function withChainLock(chainPath, fn) {
   const release = acquireChainLock(chainPath);
   try {
@@ -210,6 +233,13 @@ Subcommands:
               closes open verified findings after the fact through review-<phase>/resolutions-addendum.json
               (pinned in the receipt as resolutions_addendum). Verified against the chain and git, else exit 1.
   opt-out     Record opt-out receipt for review loop
+  recheck     Generation-cap repair recheck: after the diff is repaired, ONE cheap seat of a family other than the
+              implementer's answers fixed | not_fixed per unresolved Critical/Major finding of --generation, against the
+              hunks of reviewed head..repaired head that touch that finding's file:line. It cannot raise findings.
+              Writes review-<phase>/recheck-g<N>.json (all fixed: SHIP-AS-IS / generation_cap_repair_recheck_passed;
+              any not_fixed: FIX-THEN-SHIP listing ONLY those, generation_cap_requires_depth_0_adjudication).
+              --phase <id> --generation <n> [--ledger <dir>] [--branch <b>] [--repaired-head <rev>] [--seats <specs>]
+              [--repo-root <path>] [--timeout <d>]. The chain and receipt are not modified. Exit 0 passed or failed, 5 otherwise.
   fix-round   Admit an implementer fix report against a review JSON (fixture or ledger).
               Rejects a report that omits class_scan for a class the review gave.
               From generation 2, a class that also appeared in the previous round is
@@ -219,7 +249,7 @@ Subcommands:
 
 Common flags:
   --repo-root <path>    Path to target git repository
-  --ledger <dir>        Path to ledger directory
+  --ledger <dir>        Path to ledger directory (default: \${AUTOPILOT_STATE_DIR:-$HOME/.autopilot}/review-ledgers/<repo>/<branch-slug>/)
   --phase <id>          Phase identifier
   --help, -h            Show this help message
 
@@ -636,14 +666,22 @@ function runGitDiff(base, head, repoRoot, excludes = []) {
 // failure is recorded exactly as before. Every other seat is untouched. The attempt is recorded
 // on the seat artifact as `format_retry` and on stderr.
 const FORMAT_RETRY_LIMIT = 1;
-async function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, implementerFamily) {
+async function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, implementerFamily, rawAnswer = false) {
   // A restricted cloud operator cannot receive this repository review payload.
-  const tfg = require('./lib/cn-model-dispatch-gate').check({ runner: seat.runner, model: seat.engine, endpoint: seat.endpoint || seat.runner, files: [specFile], cwd: repoRoot });
+  // d-1dfcf757 also gates the diff transcript for marked tasks.
+  const tfg = require('./lib/cn-model-dispatch-gate').check({ runner: seat.runner, model: seat.engine, endpoint: seat.endpoint || seat.runner, role: 'reviewer', files: [specFile], diffFiles: [path.join(ledgerPhaseGDir, 'diff.txt')], cwd: repoRoot });
   if (!tfg.allowed) {
     console.error(`INFO: seat ${seat.id} skipped: ${tfg.line}`);
-    return { seat, status: 'no_verdict', exitCode: null, stderr: tfg.line, rawOutput: { status: 'no_verdict', error: tfg.line } };
+    return { seat, status: 'no_verdict', exitCode: null, stderr: tfg.line, rawOutput: { status: 'no_verdict', error: tfg.line }, attempts: [], usage: null, duration_ms: 0 };
   }
-  let result = await runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, '', implementerFamily);
+  const attemptLog = [];
+  const logAttempt = (r) => attemptLog.push({
+    attempt: attemptLog.length + 1,
+    usage: repairRecheck.normalizeUsage(r.rawOutput && r.rawOutput.usage),
+    duration_ms: Number.isFinite(r.duration_ms) ? r.duration_ms : 0,
+  });
+  let result = await runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, '', implementerFamily, rawAnswer);
+  logAttempt(result);
   const isFormatReject = (r) => r.status === 'no_verdict'
     && r.rawOutput && r.rawOutput.format_reject === true
     && typeof r.rawOutput.error === 'string' && r.rawOutput.error.length > 0;
@@ -654,7 +692,8 @@ async function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeou
     const reason = typeof result.rawOutput.reject_reason === 'string' && result.rawOutput.reject_reason ? result.rawOutput.reject_reason : result.rawOutput.error;
     console.error(`INFO: seat ${seat.id} answer rejected for format (${reason}); re-asking this seat once (format retry ${attempts}/${FORMAT_RETRY_LIMIT})`);
     history.push({ attempt: attempts, reason, raw_log: result.rawOutput.raw_log || null, usage: result.rawOutput.usage === undefined ? null : result.rawOutput.usage });
-    result = await runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, reason, implementerFamily);
+    result = await runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, reason, implementerFamily, rawAnswer);
+    logAttempt(result);
     if (result.rawOutput && typeof result.rawOutput === 'object') {
       result.rawOutput.format_retry = {
         attempts,
@@ -666,10 +705,20 @@ async function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeou
     }
     console.error(`INFO: seat ${seat.id} format retry ${attempts}/${FORMAT_RETRY_LIMIT} outcome: ${result.status === 'reviewed' ? 'reviewed' : 'still rejected'}`);
   }
+  result.attempts = attemptLog;
+  result.usage = repairRecheck.sumUsage(attemptLog.map((a) => a.usage));
+  result.duration_ms = repairRecheck.sumDuration(attemptLog);
   return result;
 }
 
-function runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, retryNote, implementerFamily) {
+async function runSeatDispatchOnce(...args) {
+  const startedMs = Date.now();
+  const result = await runSeatDispatchOnceRaw(...args);
+  result.duration_ms = Date.now() - startedMs;
+  return result;
+}
+
+function runSeatDispatchOnceRaw(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, retryNote, implementerFamily, rawAnswer = false) {
   return new Promise((resolve) => {
     let dispatchScript = process.env.AUTOPILOT_DISPATCH_REVIEW_SCRIPT;
     if (!dispatchScript) {
@@ -685,6 +734,7 @@ function runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout,
       '--diff-file', diffFile,
       '--timeout', timeout || '20m',
     ];
+    if (rawAnswer) args.push('--raw-answer');
     if (seat.endpoint) {
       args.push('--endpoint', seat.endpoint);
     }
@@ -735,7 +785,8 @@ function runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout,
       }
 
       const validVerdict = parsed && (parsed.verdict === 'SHIP-AS-IS' || parsed.verdict === 'FIX-THEN-SHIP' || parsed.verdict === null || parsed.verdict === 'no_verdict');
-      const validShape = parsed && typeof parsed === 'object' && typeof parsed.status === 'string' && validVerdict;
+      const validShape = parsed && typeof parsed === 'object' && typeof parsed.status === 'string'
+        && (rawAnswer ? typeof parsed.answer === 'string' : validVerdict);
 
       if (exitCode !== 0 || !validShape) {
         const errorMsg = exitCode !== 0
@@ -922,12 +973,12 @@ async function handleCollect(flags) {
   }
 
   const repoRoot = flags['repo-root'] ? path.resolve(flags['repo-root']) : '';
-  const ledgerDir = flags.ledger ? path.resolve(flags.ledger) : '';
+  const ledgerDir = resolveLedgerDir(flags);
   const packetCtx = resolvePacketFlags(flags);
   const phase = packetCtx ? packetCtx.phase : flags.phase;
 
   if (!ledgerDir || !phase) {
-    console.error('ERROR: --ledger <dir> and --phase <id> are required');
+    console.error('ERROR: --phase <id> is required');
     process.exit(2);
   }
 
@@ -1329,6 +1380,7 @@ async function handleCollect(flags) {
   const implementerFamilyArg = [...new Set(
     familyGate.familiesOfImplementer(implementerEngine).families.filter((f) => f && f !== 'unknown'),
   )].join(',');
+  const generationStartedMs = Date.now();
   const seatPromises = seats.map((seat) => runSeatDispatch(seat, repoRoot, gDir, specFile, timeout, implementerFamilyArg));
   const seatResults = await Promise.all(seatPromises);
 
@@ -1662,6 +1714,9 @@ async function handleCollect(flags) {
     status: res.status === 'reviewed' ? 'reviewed' : 'no_verdict',
     engine: res.seat.engine,
     family: res.seat.family || familyOfEngine(res.seat.engine),
+    usage: res.usage === undefined ? null : res.usage,
+    duration_ms: Number.isFinite(res.duration_ms) ? res.duration_ms : 0,
+    attempts: Array.isArray(res.attempts) ? res.attempts : [],
     ...(res.substitution ? {
       original_seat: res.substitution.original_seat,
       substitute: res.substitution.substitute,
@@ -1684,6 +1739,8 @@ async function handleCollect(flags) {
     reviewed_seats_count: reviewedSeatsCount,
     total_seats_count: totalSeatsCount,
     status: genStatus,
+    usage: repairRecheck.sumUsage(seatRecords.map((r) => r.usage)),
+    duration_ms: Date.now() - generationStartedMs,
     diff_sha256: diffSha256,
     full_range_sha256: fullRangeSha256,
     findings_sha256: findingsSha256,
@@ -1740,7 +1797,7 @@ async function handleCollect(flags) {
 
 async function handleFinalize(flags) {
   const repoRoot = flags['repo-root'] ? path.resolve(flags['repo-root']) : '';
-  const ledgerDir = flags.ledger ? path.resolve(flags.ledger) : '';
+  const ledgerDir = resolveLedgerDir(flags);
   const packetCtx = resolvePacketFlags(flags);
   const phase = packetCtx ? packetCtx.phase : flags.phase;
   const generationRaw = flags.generation;
@@ -1748,7 +1805,7 @@ async function handleFinalize(flags) {
   const branch = flags.branch || '';
 
   if (!ledgerDir || !phase || !generationRaw || !dispositionsFile) {
-    console.error('ERROR: --ledger <dir>, --phase <id>, --generation <n>, and --dispositions <file> are required for finalize');
+    console.error('ERROR: --phase <id>, --generation <n>, and --dispositions <file> are required for finalize');
     process.exit(2);
   }
 
@@ -2460,11 +2517,11 @@ function addendumRelPath(phase) {
 // verdict and open_findings are recomputed from the same on-disk evidence, the other receipt fields
 // are carried over unchanged.
 async function handleRefinalize(flags) {
-  const ledgerDir = flags.ledger ? path.resolve(flags.ledger) : '';
+  const ledgerDir = resolveLedgerDir(flags);
   const phase = flags.phase;
   const generation = parseInt(flags.generation, 10);
   if (!ledgerDir || !phase || isNaN(generation) || generation < 1) {
-    console.error('ERROR: --ledger <dir>, --phase <id>, and --generation <n> are required for refinalize');
+    console.error('ERROR: --phase <id> and --generation <n> are required for refinalize');
     process.exit(2);
   }
   const reviewPhaseDir = path.join(ledgerDir, `review-${phase}`);
@@ -2652,12 +2709,12 @@ async function handleRefinalize(flags) {
 
 async function handleOptOut(flags) {
   const repoRoot = flags['repo-root'] ? path.resolve(flags['repo-root']) : '';
-  const ledgerDir = flags.ledger ? path.resolve(flags.ledger) : '';
+  const ledgerDir = resolveLedgerDir(flags);
   const phase = flags.phase;
   const knob = flags.knob;
 
   if (!ledgerDir || !phase || !knob) {
-    console.error('ERROR: --ledger <dir>, --phase <id>, and --knob <knob> are required for opt-out');
+    console.error('ERROR: --phase <id> and --knob <knob> are required for opt-out');
     process.exit(2);
   }
 
@@ -2740,13 +2797,13 @@ function loadJsonFile(filePath, label) {
 // fix-round: the implementer redispatch step. Review JSON and the fix report are
 // files (a real engine is never invoked). A missing class_scan is returned, not merged.
 function handleFixRound(flags) {
-  const ledgerDir = flags.ledger ? path.resolve(flags.ledger) : '';
+  const ledgerDir = resolveLedgerDir(flags);
   const phase = flags.phase;
   const generation = Number(flags.generation);
   const reviewPath = flags.review ? path.resolve(flags.review) : '';
   const reportPath = flags.report ? path.resolve(flags.report) : '';
   if (!ledgerDir || !phase || !generation || !reviewPath || !reportPath) {
-    console.error('ERROR: fix-round needs --ledger, --phase, --generation, --review, and --report');
+    console.error('ERROR: fix-round needs --phase, --generation, --review, and --report');
     process.exit(2);
   }
   const review = loadJsonFile(reviewPath, 'review JSON');
@@ -2809,6 +2866,164 @@ function handleFixRound(flags) {
   process.exit(0);
 }
 
+// ---- recheck: generation-cap repair recheck (PM ruling; shared logic in lib/repair-recheck.js) ----
+const RECHECK_HUNK_MARGIN = 10;
+const RECHECK_ITEM_CHARS = 6000;
+
+function findingSites(finding) {
+  const text = [finding.text, ...(Array.isArray(finding.class_sites) ? finding.class_sites : [])].join('\n');
+  const sites = [];
+  for (const m of text.matchAll(/([A-Za-z0-9_./-]+\.[A-Za-z0-9]+):(\d+)/g)) sites.push({ file: m[1], line: Number(m[2]) });
+  return sites;
+}
+
+function diffHunksNear(repoRoot, fromRev, toRev, site) {
+  const res = spawnSync('git', ['diff', '-U3', `${fromRev}..${toRev}`, '--', site.file], { encoding: 'utf8', cwd: repoRoot, maxBuffer: 64 * 1024 * 1024 });
+  if (res.status !== 0 || !res.stdout) return '';
+  const header = [];
+  const hunks = [];
+  let current = null;
+  for (const line of res.stdout.split('\n')) {
+    const h = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(line);
+    if (h) {
+      current = { oldStart: Number(h[1]), oldLen: h[2] === undefined ? 1 : Number(h[2]), newStart: Number(h[3]), newLen: h[4] === undefined ? 1 : Number(h[4]), lines: [line] };
+      hunks.push(current);
+    } else if (current) current.lines.push(line);
+    else header.push(line);
+  }
+  const near = (start, len) => site.line >= start - RECHECK_HUNK_MARGIN && site.line <= start + Math.max(len, 1) + RECHECK_HUNK_MARGIN;
+  const picked = hunks.filter((hk) => near(hk.oldStart, hk.oldLen) || near(hk.newStart, hk.newLen));
+  if (picked.length === 0) return '';
+  return `${header.join('\n')}\n${picked.map((hk) => hk.lines.join('\n')).join('\n')}`;
+}
+
+async function handleRecheck(flags) {
+  const generation = parseInt(flags.generation, 10);
+  const phase = flags.phase;
+  if (!phase || !Number.isInteger(generation) || generation < 1) {
+    console.error('ERROR: recheck needs --phase <id> and --generation <n>');
+    process.exit(2);
+  }
+  const repoRoot = flags['repo-root'] ? path.resolve(flags['repo-root']) : process.cwd();
+  const ledgerDir = resolveLedgerDir(flags);
+  const reviewPhaseDir = path.join(ledgerDir, `review-${phase}`);
+  let chain;
+  try {
+    chain = JSON.parse(fs.readFileSync(path.join(reviewPhaseDir, 'chain.json'), 'utf8'));
+  } catch (e) {
+    console.error(`ERROR: cannot read chain.json under ${reviewPhaseDir}: ${e.message}`);
+    process.exit(1);
+  }
+  const entry = Array.isArray(chain) ? chain.find((c) => c && c.generation === generation) : null;
+  if (!entry || !entry.head || entry.status === 'aborted') {
+    console.error(`ERROR: generation ${generation} has no collected (non-aborted) chain entry`);
+    process.exit(1);
+  }
+  const gDir = path.join(reviewPhaseDir, `g${generation}`);
+  let findings;
+  try {
+    findings = JSON.parse(fs.readFileSync(path.join(gDir, 'findings.json'), 'utf8')).findings || [];
+  } catch (e) {
+    console.error(`ERROR: cannot read g${generation}/findings.json: ${e.message}`);
+    process.exit(1);
+  }
+  let dispositions = null;
+  try {
+    const d = JSON.parse(fs.readFileSync(path.join(gDir, 'dispositions.json'), 'utf8'));
+    dispositions = new Map((Array.isArray(d.findings) ? d.findings : []).map((x) => [x.id, x.disposition]));
+  } catch (_e) { /* collected, not yet finalized: every Critical/Major is a candidate */ }
+  const blockersRaw = findings.filter((f) => (f.severity === 'Critical' || f.severity === 'Major')
+    && (dispositions === null || dispositions.get(f.id) === 'verified'));
+  if (blockersRaw.length === 0) {
+    console.error('ERROR: no unresolved Critical or Major finding in this generation; nothing to recheck');
+    process.exit(1);
+  }
+  let repairedHead;
+  try {
+    repairedHead = runGitRevParse(flags['repaired-head'] || flags.branch || 'HEAD', repoRoot);
+  } catch (e) {
+    console.error(`ERROR: cannot resolve the repaired head: ${e.message}`);
+    process.exit(1);
+  }
+  if (repairedHead === entry.head) {
+    console.error('ERROR: repaired_head_unchanged: the repaired head equals the reviewed head; nothing was repaired');
+    process.exit(3);
+  }
+  const items = blockersRaw.map((f) => {
+    const hunks = findingSites(f).map((site) => diffHunksNear(repoRoot, entry.head, repairedHead, site)).filter(Boolean);
+    const repaired = hunks.length ? hunks.join('\n') : '';
+    return {
+      id: f.id,
+      original: String(f.text || '').slice(0, RECHECK_ITEM_CHARS),
+      repair: '',
+      repaired: repaired.slice(0, RECHECK_ITEM_CHARS),
+    };
+  });
+
+  const seats = resolveSeats(typeof flags.seats === 'string' ? flags.seats : '', repoRoot);
+  const implementerEngines = familyGate.recordedImplementerEngines(chain);
+  const implementerFamilies = [...new Set(implementerEngines.flatMap((e) => familyGate.familiesOfImplementer(e).families))].filter((f) => f && f !== 'unknown');
+  const familyOf = (seat) => seat.family || familyOfEngine(seat.engine);
+
+  const recheckDir = path.join(reviewPhaseDir, `recheck-g${generation}`);
+  fs.mkdirSync(recheckDir, { recursive: true });
+  const timeout = flags.timeout || '20m';
+  const nonce = crypto.randomBytes(12).toString('hex');
+  const ask = async (seat, prompt) => {
+    const specFile = path.join(recheckDir, `question-${seat.id}.md`);
+    writeFileSyncAtomic(specFile, `${prompt}\n`);
+    writeFileSyncAtomic(path.join(recheckDir, 'diff.txt'), `${items.map((i) => i.repaired).join('\n')}\n`);
+    const res = await runSeatDispatch(seat, repoRoot, recheckDir, specFile, timeout, implementerFamilies.join(','), true);
+    const raw = res.rawOutput && typeof res.rawOutput === 'object' ? res.rawOutput : {};
+    const ok = res.status === 'reviewed' && typeof raw.answer === 'string';
+    return {
+      ok,
+      text: ok ? raw.answer : '',
+      usage: res.usage,
+      duration_ms: res.duration_ms,
+      error: ok ? '' : (raw.error || raw.reject_reason || res.stderr || 'no verdict'),
+    };
+  };
+  const missingEvidence = items.filter((item) => !item.repaired).map((item) => ({ id: item.id, status: 'not_fixed', reason: 'no_repair_hunk' }));
+  const evidencedItems = items.filter((item) => item.repaired);
+  const run = evidencedItems.length === 0
+    ? {
+      status: 'failed', blocker_count: items.length, seat: null, excluded_seats: [], attempts: [],
+      results: missingEvidence, not_fixed_ids: missingEvidence.map((item) => item.id),
+      error: null, usage: null, duration_ms: 0,
+    }
+    : await repairRecheck.runRecheck({
+      kind: 'code', blockers: evidencedItems, seats, implementerFamilies, familyOf, ask, nonce,
+    });
+  if (missingEvidence.length && evidencedItems.length) {
+    run.blocker_count = items.length;
+    run.results = [...run.results, ...missingEvidence];
+    run.not_fixed_ids = [...run.not_fixed_ids, ...missingEvidence.map((item) => item.id)];
+    if (run.status === 'passed') run.status = 'failed';
+  }
+  const passed = run.status === 'passed';
+  const listed = run.status === 'failed' ? blockersRaw.filter((f) => run.not_fixed_ids.includes(f.id)) : blockersRaw;
+  const out = {
+    schema_version: 1,
+    artifact_type: 'code_review_recheck',
+    phase,
+    generation,
+    reviewed_head: entry.head,
+    repaired_head: repairedHead,
+    verdict: passed ? 'SHIP-AS-IS' : 'FIX-THEN-SHIP',
+    policy_reason: passed ? repairRecheck.POLICY_PASSED
+      : (run.status === 'failed' ? repairRecheck.POLICY_ADJUDICATION : `recheck_${run.status}`),
+    terminal: passed,
+    findings: passed ? [] : listed,
+    recheck: repairRecheck.recheckBlock(run),
+    usage: run.usage,
+    duration_ms: run.duration_ms,
+  };
+  writeFileSyncAtomic(path.join(reviewPhaseDir, `recheck-g${generation}.json`), `${JSON.stringify(out, null, 2)}\n`);
+  console.log(JSON.stringify(out, null, 2));
+  process.exit(passed || run.status === 'failed' ? 0 : 5);
+}
+
 async function main() {
   const argv = process.argv.slice(2);
   const { positional, flags } = parseArgv(argv);
@@ -2830,6 +3045,8 @@ async function main() {
     await handleOptOut(flags);
   } else if (subcommand === 'fix-round') {
     handleFixRound(flags);
+  } else if (subcommand === 'recheck') {
+    await handleRecheck(flags);
   } else {
     console.error(`Subcommand '${subcommand}' is not yet implemented.`);
     console.error('Usage: node scripts/hetero-review-loop.js <subcommand> [flags]');

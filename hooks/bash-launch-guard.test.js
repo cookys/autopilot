@@ -551,6 +551,40 @@ test('rule2 also applies at subagent depth (agent_id present): deny, and warn un
   assert.match(run('pkill -f foo', { extra: { agent_id: 'a1' }, env: { AUTOPILOT_BASH_GUARD_PKILL_MODE: 'warn' } }).ctx, /pkill-self-match/);
 });
 
+// ---- Rule 10: zsh-only syntax is rejected before Claude Code's parser prompt ----
+for (const cmd of ['echo ${(L)e}', 'echo ${(j:,:)arr}', 'echo ${(s:/:)p}', 'ls *(.)', 'ls **/*(.om[1])', 'ls *(N)', 'cat =(ls)']) {
+  test(`rule10 denies zsh-only syntax: ${cmd}`, () => {
+    const r = run(cmd);
+    assert.strictEqual(r.deny, true);
+    assert.match(r.reason, /POSIX\/Bash/);
+    assert.match(r.reason, /bash -c '\.\.\.'/);
+  });
+}
+for (const cmd of [
+  "cat <<'EOF'\nls *(.)\nEOF",
+  'cat <<EOF\n${(L)e}\nEOF',
+  "git commit -m \"$(cat <<'EOF'\nfix: deny ${(L)e} and *(.)\nEOF\n)\"",
+  'echo ok # ${(L)e}',
+]) {
+  test(`rule10 allows zsh syntax in heredoc data or comments: ${JSON.stringify(cmd)}`, () => {
+    assert.strictEqual(run(cmd).deny, false);
+  });
+}
+test('rule10 still denies zsh syntax after a heredoc', () => {
+  assert.strictEqual(run("cat <<'EOF'\nx\nEOF\necho ${(L)e}").deny, true);
+});
+test('rule10 knob warns or silences as configured', () => {
+  assert.strictEqual(run('echo ${(L)e}', { env: { AUTOPILOT_BASH_GUARD_ZSH_SYNTAX_MODE: 'warn' } }).deny, false);
+  assert.match(run('echo ${(L)e}', { env: { AUTOPILOT_BASH_GUARD_ZSH_SYNTAX_MODE: 'warn' } }).ctx, /zsh-syntax/);
+  assert.strictEqual(run('echo ${(L)e}', { env: { AUTOPILOT_BASH_GUARD_ZSH_SYNTAX_MODE: 'off' } }).deny, false);
+  assert.doesNotMatch(run('echo ${(L)e}', { env: { AUTOPILOT_BASH_GUARD_ZSH_SYNTAX_MODE: 'off' } }).ctx, /zsh-syntax/);
+});
+for (const cmd of ['echo ${e}', 'bash -c \'x=${(L)e}\'', "echo '${(L)e}'", 'echo ${e:-x}', 'echo ${#e}', 'echo ${e%%.*}', 'echo $(cmd)', 'diff <(a) <(b)', 'echo $((1+2))', 'echo ${a[@]}', 'f() { :; }', '( cd x )']) {
+  test(`rule10 allows bash syntax and quoted data: ${cmd}`, () => {
+    assert.strictEqual(run(cmd).deny, false);
+  });
+}
+
 // The message offers only what literally works for this (shape, rail) pair.
 test('message: `&` + ledger rail offers run_in_background, `& wait` and the ledger waiter', () => {
   const r = run('nohup scripts/dispatch-review.sh x &');

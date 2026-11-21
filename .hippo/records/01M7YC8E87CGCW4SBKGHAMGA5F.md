@@ -1,0 +1,11 @@
+---
+id: 01M7YC8E87CGCW4SBKGHAMGA5F
+kind: issue
+created: 2026-11-21T06:21:20.519Z
+---
+- **Since**: 2026-11-21
+- **Problem**: 手動用 sed 修改背景執行中的 bash 腳本，可能讀到改到一半的內容而發生語法錯誤，卻以 exit 0 結束且沒有結論。建議先寫入新檔，再用 mv 替換。
+- **Impact**: 派工或套件可能靜默失敗。
+- **Trigger**: 修改背景執行中的腳本時
+- **Source**: autopilot lane, 2026-11-21
+- **Pointer**: none

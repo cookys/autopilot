@@ -347,12 +347,12 @@ const CARDS = [
   { id: 'c', name: 'preview width', answer: null, sent: false },
   { id: 'd', name: 'room default', answer: null, sent: false },
 ]
-test('v7: card list: ◐ the current card, ◆ an answered one, ○ an open one; the answer is right-aligned; every row is exactly the column wide', () => {
+test('v7: card list: ◐ the current card, → an answered one, ○ an open one; the answer is right-aligned; every row is exactly the column wide', () => {
   const rows = S.cardRows(CARDS, 2, 26)
   assert.equal(rows.length, 4)
   for (const r of rows) assert.equal(width(r.segs), 26)
   assert.deepEqual(rows.map(r => r.key), ['card:a', 'card:b', 'card:c', 'card:d'])
-  assert.ok(segText(rows[0].segs).startsWith('◆ merge plan'))
+  assert.ok(segText(rows[0].segs).startsWith('→ merge plan'))
   assert.ok(segText(rows[0].segs).trimEnd().endsWith(' merge'))
   assert.ok(segText(rows[2].segs).startsWith('◐ preview width'))
   assert.ok(segText(rows[3].segs).startsWith('○ room default'))
@@ -370,7 +370,7 @@ test('v7: card list: a long name wraps in the column (never cut, no …), the ma
   assert.ok(rs.length > 1, 'wrapped to more than one row')
   for (const r of rs) { assert.equal(width(r.segs), 26); assert.ok(!segText(r.segs).includes('…')) }
   assert.ok(segText(rs[0].segs).startsWith('◐ ') && segText(rs[0].segs).trimEnd().endsWith(' ok'))
-  for (const r of rs.slice(1)) assert.ok(segText(r.segs).startsWith('  ') && !/[◐◆○]/.test(segText(r.segs)), 'continuation: no mark, hangs under the name')
+  for (const r of rs.slice(1)) assert.ok(segText(r.segs).startsWith('  ') && !/[◐→○]/.test(segText(r.segs)), 'continuation: no mark, hangs under the name')
   assert.equal(rs.map(r => segText(r.segs).slice(2).replace(/ ok\s*$/, '').trim()).join(' '), name, 'the rows put back the whole name')
   const many = Array.from({ length: 12 }, (_, i) => ({ id: 'k' + i, name: 'card ' + i, answer: null, sent: false }))
   for (const cur of [0, 5, 11]) {
@@ -398,7 +398,7 @@ test('v7: progress: one cell per card (sent done, picked action, open idle), the
   const segs = S.progressSegs({ cards: CARDS, last: { name: 'merge plan', answer: 'merge' }, wide: false, width: 70, t })
   const text = segText(segs)
   assert.ok(text.startsWith('▰▰▱▱ 2/4'), text)
-  assert.ok(text.includes('◆ shell.prev merge plan → merge'), text)
+  assert.ok(text.includes('→ shell.prev merge plan → merge'), text)
   const cells = segs.filter(s => s.text === '▰' || s.text === '▱')
   assert.equal(cells.length, 4)
   assert.deepEqual(cells.map(c => c.color), [ui.PALETTE.action, ui.PALETTE.done, ui.PALETTE.idle, ui.PALETTE.idle])

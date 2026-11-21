@@ -201,6 +201,23 @@ const HOST_OFFLINE_RE = /主機.*離線|離線.*主機|\bhosts?\b.*\boffline\b|\
 const isOfflineHostExc = (i: ConsoleItem): boolean =>
   i.kind === 'exception' && i.to_console === true && !i.id.startsWith('quota:') && i.line_id === null
   && (/^exc:host[_:-]?offline\b/i.test(i.id) || HOST_OFFLINE_RE.test(i.title) || HOST_OFFLINE_RE.test(i.text))
+// r8-3 #5: pools with the same verdict text share one row that names them all (`✗ 額度 a、b、c 沒有額度資料`), so five identical errors do not push the lines down
+export function mergedPoolRows(ctx: PageCtx, con: ConsoleSnapshot, wide: boolean): Row[] {
+  const pools = normalizedPools(con)
+  if (pools === null) return []
+  const groups = new Map<string, { v: Verdict; names: string[] }>()
+  for (const v of rankPools(pools, ctx.nowMs, ctx.t).filter(x => x.role === 'broken' || isUnknownPool(x) || x.role === ROLE_WARNING)) {
+    const key = v.role + '|' + v.text
+    const g = groups.get(key)
+    if (g === undefined) groups.set(key, { v, names: [poolLabel(v.pool)] })
+    else g.names.push(poolLabel(v.pool))
+  }
+  return [...groups.values()].map(({ v, names }) => {
+    const red = v.role === 'broken'
+    const icon = red ? GLYPHS.state.failed : isUnknownPool(v) ? GLYPHS.state.unknown : GLYPHS.state.need_you
+    return [dim(wide ? '  ' : ''), { text: icon + ' ' + ctx.t('page.now.quota') + ' ' + names.join('、') + ' ' + v.text, color: red ? PALETTE.broken : PALETTE.attention }]
+  })
+}
 function exceptionRows(ctx: PageCtx, con: ConsoleSnapshot, wide: boolean): Row[] {
   const { t, nowMs, size } = ctx
   const pools = normalizedPools(con)
@@ -647,7 +664,7 @@ const v74OpenRule = (title: string, wide: boolean): Row => {
   return [{ text: head + fill, color: PALETTE.structure }]
 }
 
-const v74PmCounts = (pm: PmStatus): { total: number; fail: number; idle: number; ok: number; unknown: number } => {
+export const v74PmCounts = (pm: PmStatus): { total: number; fail: number; idle: number; ok: number; unknown: number } => {
   const lines = fleetLines(pm)
   let fail = 0
   let idle = 0
@@ -701,8 +718,17 @@ function v74FleetSection(ctx: PageCtx, wide: boolean): Row[] {
     }
   }
   const rows: Row[] = [head, summary]
-  for (const line of fleetLines(pm)) {
-    if (line.mark === 'ok') continue
+  // r8 #13: failures first, then the quota exception (it is a ✗ too), then the parked and unknown lines
+  const parked: Row[] = []
+  let quotaDone = false
+  const quotaFirst = (): void => {
+    if (con === null || quotaDone) return
+    quotaDone = true
+    for (const r of mergedPoolRows(ctx, con, wide)) rows.push(r)
+  }
+  const lines = fleetLines(pm).filter(l => l.mark !== 'ok')
+  for (const line of [...lines.filter(l => l.mark === 'fail'), ...lines.filter(l => l.mark !== 'fail')]) {
+    if (line.mark !== 'fail' && parked.length === 0) quotaFirst()
     const g = line.mark === 'fail' ? GLYPHS.state.failed : line.mark === 'unknown' ? GLYPHS.structure.empty : GLYPHS.state.stalled
     const n = (v: number | null): number | string => v ?? GLYPHS.structure.empty
     const body = line.mark === 'fail'
@@ -710,18 +736,14 @@ function v74FleetSection(ctx: PageCtx, wide: boolean): Row[] {
       : line.mark === 'unknown'
         ? t('v74.c.line_unknown', { project: line.project })
         : t('v74.c.line_parked', { project: line.project, waiting: n(line.counts.waiting) })
-    rows.push(truncateSegs([
+    const row = truncateSegs([
       dim(wide ? ' ' : ''),
       { text: g + ' ' + body, ...(line.mark === 'fail' ? { color: PALETTE.broken } : {}) },
-    ], size.cols))
+    ], size.cols)
+    if (line.mark !== 'fail') parked.push(row)
+    rows.push(row)
   }
-  if (con !== null) {
-    for (const pr of poolRows(ctx, con, wide)) rows.push(pr)
-    const quotaExc = exceptionRows(ctx, con, wide).filter(r => rowText(r).includes(t('page.now.quota')))
-    for (const r of quotaExc) {
-      if (!rows.some(x => rowText(x) === rowText(r))) rows.push(r)
-    }
-  }
+  quotaFirst()
   return rows
 }
 
@@ -778,7 +800,7 @@ function v74ProxySection(ctx: PageCtx, wide: boolean): Row[] {
     const ageMs = r.at != null && Number.isFinite(Date.parse(r.at)) ? nowMs - Date.parse(r.at) : null
     const age = ageMs === null ? '' : '  · ' + t('page.now.ago', { age: ageUnit(t, ageMs) })
     const summary = r.decision.split('\n').find(l => l.trim() !== '')?.trim() ?? r.decision
-    rows.push(truncateSegs([dim(wide ? '  ' : ' '), plain(GLYPHS.structure.decisions + ' ' + summary + age)], size.cols))
+    rows.push(truncateSegs([dim(wide ? '  ' : ' '), plain(GLYPHS.state.done + ' ' + summary + age)], size.cols))
   }
   return rows
 }

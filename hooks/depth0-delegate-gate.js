@@ -81,6 +81,9 @@
  *            loop. Write briefs and other text files with the Write tool, not a heredoc inside bash -c." Knob:
  *            depth0_delegate_gate.rm_wrapped or env AUTOPILOT_BASH_GUARD_RM_WRAPPED_MODE = off|warn|deny (default deny;
  *            garbage ⇒ deny). Runs at every depth, subagents included.
+ *   2h. DENY zsh-only parameter flags `${(...)}`, glob qualifiers such as `*(.)`, and temp-file process substitution `=(...)`.
+ *            Single-quoted text is ignored. Knob: depth0_delegate_gate.zsh_syntax or AUTOPILOT_BASH_GUARD_ZSH_SYNTAX_MODE =
+ *            off|warn|deny (default deny; garbage ⇒ deny). Rewrite in POSIX/Bash syntax or use bash -c with a single-quoted command.
  *   3. WARN  (only when the shell is zsh; never a deny, by owner ruling) a word starting with `=`
  *            or an unquoted glob that matches nothing — zsh aborts the whole line.
  * Gate mode `off` silences all rules. Per-rule blocks apply in both gate `warn` and `block` modes.
@@ -100,9 +103,9 @@ const path = require('path');
 const { resolveLiveDir, sanitizeSessionId, readLive, modelFamily } = require('../scripts/lib/live-state-dir.js');
 // Executable-text lexer + foreground-wait rules are shared with foreman-guard.js.
 const { executableText, detectForegroundWait } = require('../scripts/lib/bash-wait-rules.js');
-// Bash-launch hazards (BL-0019): detach-without-wake, pkill -f self-match, bare ls, recursive rm guards, zsh `=`/glob.
+// Bash-launch hazards (BL-0019): detach-without-wake, pkill -f self-match, bare ls, recursive rm guards, zsh syntax.
 const {
-  detectDetachNoWake, detectPkillSelfMatch, detectZshExpansion,
+  detectDetachNoWake, detectPkillSelfMatch, detectZshExpansion, detectZshSyntax,
   detectBareLs, detectRecursiveRmVar, detectSubagentRmOutsideScratch, detectRmSharedDir,
   detectSecretPrint, detectWrappedRm,
 } = require('../scripts/lib/bash-launch-rules.js');
@@ -130,6 +133,7 @@ function loadConfig() {
     subagentRmMode: 'deny',
     sharedRmMode: 'warn',
     rmWrappedMode: 'deny',
+    zshSyntaxMode: 'deny',
     secretMode: 'block',
     threshold: DEFAULT_THRESHOLD,
     guardedModels: DEFAULT_GUARDED,
@@ -148,6 +152,7 @@ function loadConfig() {
         if (['off', 'warn', 'deny'].includes(g.subagent_rm)) cfg.subagentRmMode = g.subagent_rm;
         if (['off', 'warn', 'deny'].includes(g.shared_rm)) cfg.sharedRmMode = g.shared_rm;
         if (['off', 'warn', 'deny'].includes(g.rm_wrapped)) cfg.rmWrappedMode = g.rm_wrapped;
+        if (['off', 'warn', 'deny'].includes(g.zsh_syntax)) cfg.zshSyntaxMode = g.zsh_syntax;
         if (['block', 'warn', 'off'].includes(g.secret_print)) cfg.secretMode = g.secret_print;
         if (Number.isInteger(g.threshold) && g.threshold > 0) cfg.threshold = g.threshold;
         if (Number.isInteger(g.wait_advice_every) && g.wait_advice_every > 0) cfg.waitAdviceEvery = g.wait_advice_every;
@@ -175,6 +180,8 @@ function loadConfig() {
   if (envSh !== undefined && envSh !== '') cfg.sharedRmMode = ['off', 'warn', 'deny'].includes(envSh) ? envSh : 'warn';
   const envRw = process.env.AUTOPILOT_BASH_GUARD_RM_WRAPPED_MODE;
   if (envRw !== undefined && envRw !== '') cfg.rmWrappedMode = ['off', 'warn', 'deny'].includes(envRw) ? envRw : 'deny';
+  const envZsh = process.env.AUTOPILOT_BASH_GUARD_ZSH_SYNTAX_MODE;
+  if (envZsh !== undefined && envZsh !== '') cfg.zshSyntaxMode = ['off', 'warn', 'deny'].includes(envZsh) ? envZsh : 'deny';
   const envEvery = process.env.AUTOPILOT_DEPTH0_WAIT_ADVICE_EVERY;
   const envSecret = process.env.AUTOPILOT_BASH_GUARD_SECRET_MODE;
   if (envSecret !== undefined && envSecret !== '') cfg.secretMode = ['block', 'warn', 'off'].includes(envSecret) ? envSecret : 'block';
@@ -330,6 +337,12 @@ function classify(tool, input) {
         process.exit(0);
       }
       if (rw) launchWarns.push(`bash-launch-guard (${rw.rule}): ${rw.why}`);
+      const zs = cfg.zshSyntaxMode === 'off' ? null : detectZshSyntax(cmd);
+      if (zs && cfg.zshSyntaxMode === 'deny') {
+        emitDeny(`bash-launch-guard (${zs.rule}): ${zs.why}. Rewrite the command in POSIX/Bash syntax, or wrap it in bash -c '...'.`);
+        process.exit(0);
+      }
+      if (zs) launchWarns.push(`bash-launch-guard (${zs.rule}): ${zs.why}. Rewrite the command in POSIX/Bash syntax, or wrap it in bash -c '...'.`);
       const shellName = path.basename(process.env.AUTOPILOT_BASH_GUARD_SHELL || process.env.SHELL || '');
       if (shellName === 'zsh') {
         const z = detectZshExpansion(cmd, typeof payload.cwd === 'string' ? payload.cwd : process.cwd());

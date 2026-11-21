@@ -56,16 +56,63 @@ function contextBytes(promptFile, cwd) {
   return n;
 }
 
-function endpointInfo(env) {
-  const r = spawnSync('bash', [path.join(__dirname, '..', 'resolve-endpoint.sh'), 'qwen_local'], {
+function endpointInfo(env, endpoint = 'qwen_local') {
+  const r = spawnSync('bash', [path.join(__dirname, '..', 'resolve-endpoint.sh'), endpoint], {
     env: { ...process.env, ...env }, encoding: 'utf8', timeout: 15000,
   });
   const line = String(r.stdout || '').split('\n').find((l) => l.startsWith('{'));
-  if (!line) return { ready: false, baseUrl: '' };
+  if (!line) return { ready: false, baseUrl: '', tokenEnv: '' };
   try {
     const o = JSON.parse(line);
-    return { ready: !!(o && o.ready === true), baseUrl: o && typeof o.base_url === 'string' ? o.base_url : '' };
-  } catch { return { ready: false, baseUrl: '' }; }
+    return { ready: !!(o && o.ready === true), baseUrl: o && typeof o.base_url === 'string' ? o.base_url : '', tokenEnv: o && typeof o.token_env === 'string' ? o.token_env : '' };
+  } catch { return { ready: false, baseUrl: '', tokenEnv: '' }; }
+}
+
+function leaseUrl(baseUrl) {
+  try { const u = new URL(baseUrl); return `${u.protocol}//${u.host}/v1/local/lease`; } catch { return ''; }
+}
+
+function leaseRequest(urlStr, method, token, body, timeoutMs = HTTP_TIMEOUT_MS) {
+  return new Promise((resolve) => {
+    let u;
+    try { u = new URL(urlStr); } catch { resolve({ error: 'unreachable' }); return; }
+    if (!['http:', 'https:'].includes(u.protocol)) { resolve({ error: 'unreachable' }); return; }
+    const lib = u.protocol === 'https:' ? require('https') : require('http');
+    let done = false;
+    const finish = (r) => { if (done) return; done = true; clearTimeout(timer); resolve(r); };
+    const req = lib.request({ protocol: u.protocol, hostname: u.hostname, port: u.port || (u.protocol === 'https:' ? 443 : 80), path: u.pathname + u.search, method,
+      headers: { authorization: `Bearer ${token}`, accept: 'application/json', ...(body ? { 'content-type': 'application/json' } : {}) } }, (res) => {
+      const chunks = []; res.on('data', (c) => chunks.push(c));
+      res.on('end', () => finish({ status: res.statusCode, body: Buffer.concat(chunks).toString('utf8') }));
+      res.on('error', () => finish({ error: 'unreachable' }));
+    });
+    const timer = setTimeout(() => { req.destroy(); finish({ error: 'timeout' }); }, timeoutMs);
+    req.on('error', () => finish({ error: 'unreachable' }));
+    req.end(body || undefined);
+  });
+}
+
+async function acquireLocalLease(opts = {}) {
+  const env = opts.env || process.env;
+  const cfg = opts.cfg || readConfig(env);
+  const info = opts.endpoint || endpointInfo(env);
+  const base = leaseUrl(info.baseUrl);
+  const token = info.tokenEnv && env[info.tokenEnv] ? String(env[info.tokenEnv]) : '';
+  const fail = (detail, status = null) => ({ choose: false, reason: 'no_free_slot', detail, local_slots: null,
+    local_lease: { id: null, granted: false, status, heartbeats: 0, released: false, detail } });
+  if (!info.ready || !base || !token) return fail('lease_query_failed:unreachable');
+  const parsedTtl = Number.parseInt(env.AUTOPILOT_LOCAL_LEASE_TTL_S || '180', 10);
+  const ttl = Number.isInteger(parsedTtl) && parsedTtl > 0 ? parsedTtl : 180;
+  const body = { model: opts.family || 'qwen', ...(opts.backend ? { backend: opts.backend } : {}), est_context_tokens: 8192, ttl_s: ttl };
+  const fleetTask = env.AUTOPILOT_FLEET_TASK || env.HETERO_FLEET_TASK_ID;
+  if (fleetTask) body.fleet_task = fleetTask;
+  const res = await leaseRequest(base, 'POST', token, JSON.stringify(body));
+  if (res.error) return fail(`lease_query_failed:${res.error}`);
+  if (res.status === 429 || res.status === 409) return fail(res.status === 429 ? 'lease_429' : 'lease_409', res.status);
+  if (res.status !== 201) return fail(`lease_query_failed:http_${Number.isInteger(res.status) ? res.status : 'unknown'}`, res.status || null);
+  let doc; try { doc = JSON.parse(res.body); } catch { return fail('lease_query_failed:malformed', res.status); }
+  if (!doc || typeof doc.lease_id !== 'string' || !doc.lease_id.trim()) return fail('lease_query_failed:malformed', res.status);
+  return { choose: true, local_slots: null, local_lease: { id: doc.lease_id, granted: true, status: res.status, heartbeats: 0, released: false, detail: null }, lease_url: base, lease_token_env: info.tokenEnv };
 }
 
 function queryFailed(source, why) {
@@ -80,24 +127,24 @@ function queryFailed(source, why) {
   };
 }
 
-function namesQwen(ep) {
+function namesFamily(ep, family) {
   if (!ep || typeof ep !== 'object') return false;
   const models = ep.models;
   if (models && typeof models === 'object' && !Array.isArray(models)) {
     for (const k of Object.keys(models)) {
-      if (/qwen/i.test(k)) return true;
+      if (new RegExp(family, 'i').test(k)) return true;
     }
   }
   if (Array.isArray(models)) {
     for (const m of models) {
-      if (typeof m === 'string' && /qwen/i.test(m)) return true;
+      if (typeof m === 'string' && new RegExp(family, 'i').test(m)) return true;
       if (m && typeof m === 'object') {
         const id = m.id || m.name || m.alias;
-        if (typeof id === 'string' && /qwen/i.test(id)) return true;
+        if (typeof id === 'string' && new RegExp(family, 'i').test(id)) return true;
       }
     }
   }
-  if (typeof ep.id === 'string' && /qwen/i.test(ep.id)) return true;
+  if (typeof ep.id === 'string' && new RegExp(family, 'i').test(ep.id)) return true;
   return false;
 }
 
@@ -115,41 +162,29 @@ function freeOf(ep) {
 function interpretGateway(o, source) {
   const endpoints = Array.isArray(o.endpoints) ? o.endpoints : null;
   if (!endpoints) return null;
-  const named = endpoints.filter(namesQwen);
-  const ups = [];
-  for (const ep of named) {
-    if (ep.state !== 'up') continue;
-    const free = freeOf(ep);
-    if (free === null) continue;
-    ups.push({ id: typeof ep.id === 'string' ? ep.id : null, free });
-  }
-  if (ups.length) {
-    ups.sort((a, b) => b.free - a.free);
-    const best = ups[0];
-    if (best.free > 0) {
-      return {
-        local: true, backend: best.id, free: best.free, fallback: null, source, detail: 'free',
-      };
+  const familyResult = (family) => {
+    const named = endpoints.filter((ep) => namesFamily(ep, family));
+    const ups = [];
+    for (const ep of named) {
+      if (ep.state !== 'up') continue;
+      const free = freeOf(ep);
+      if (free !== null) ups.push({ id: typeof ep.id === 'string' ? ep.id : null, free });
     }
-    return {
-      local: false,
-      backend: best.id,
-      free: 0,
-      fallback: { reason: 'no_free_slot', detail: 'all_full' },
-      source,
-      detail: 'all_full',
-    };
+    ups.sort((a, b) => b.free - a.free);
+    if (ups.length && ups[0].free > 0) return { local: true, family, endpoint: `${family}_local`, backend: ups[0].id, free: ups[0].free, fallback: null, source, detail: 'free' };
+    if (ups.length) return { local: false, family, backend: ups[0].id, free: 0, fallback: { reason: 'no_free_slot', detail: 'all_full' }, source, detail: 'all_full' };
+    if (named.length && named.every((ep) => ep.state === 'draining')) return { local: false, family, backend: null, free: null, fallback: { reason: 'draining', detail: 'draining' }, source, detail: 'draining' };
+    return null;
+  };
+  const qwen = familyResult('qwen');
+  if (qwen && qwen.local) return qwen;
+  const glm = familyResult('glm');
+  if (glm && glm.local) {
+    if (qwen && qwen.fallback) glm.local_fallback_from = { family: 'qwen', reason: qwen.fallback.reason };
+    return glm;
   }
-  if (named.length && named.every((ep) => ep.state === 'draining')) {
-    return {
-      local: false,
-      backend: null,
-      free: null,
-      fallback: { reason: 'draining', detail: 'draining' },
-      source,
-      detail: 'draining',
-    };
-  }
+  if (qwen && qwen.fallback) return qwen;
+  if (glm && glm.fallback) return glm;
   return queryFailed(source, 'no_backend');
 }
 
@@ -297,9 +332,6 @@ async function decide(opts = {}) {
   const cwd = opts.cwd || process.cwd();
   const promptFile = opts.promptFile;
   const info = endpointInfo(env);
-  if (!info.ready) {
-    return { choose: false, reason: 'no_free_slot', detail: 'endpoint_not_ready', local_slots: null };
-  }
   const cfg = readConfig(env);
   const limit = Number.isFinite(Number(cfg.local_context_bytes)) && Number(cfg.local_context_bytes) > 0
     ? Number(cfg.local_context_bytes) : DEFAULT_BYTES;
@@ -307,14 +339,34 @@ async function decide(opts = {}) {
   if (bytes > limit) {
     return { choose: false, reason: 'context_too_large', detail: String(bytes), local_slots: null };
   }
+  const cmd = Object.prototype.hasOwnProperty.call(env, 'AUTOPILOT_LOCAL_SLOTS_CMD') ? String(env.AUTOPILOT_LOCAL_SLOTS_CMD).trim() : String(cfg.local_slots_cmd || '').trim();
+  const explicitSlotsUrl = Object.prototype.hasOwnProperty.call(env, 'AUTOPILOT_LOCAL_SLOTS_URL') || String(cfg.local_slots_url || '').trim();
+  if (!cmd && !explicitSlotsUrl) {
+    if (!info.ready) return { choose: false, reason: 'no_free_slot', detail: 'endpoint_not_ready', local_slots: null };
+    return acquireLocalLease({ env, cfg, endpoint: info, family: 'qwen' });
+  }
   const slot = await acquireLocalSlot({ env, cfg, endpoint: info });
-  const view = slotView(slot);
-  if (slot.local) return { choose: true, local_slots: view };
-  const fb = slot.fallback || { reason: 'no_free_slot', detail: 'slot_query_failed:malformed' };
-  return { choose: false, reason: fb.reason, detail: fb.detail, local_slots: view };
+  if (!slot.local) return { choose: false, reason: slot.fallback.reason, detail: slot.fallback.detail, local_slots: slotView(slot), family: slot.family || null };
+  const leaseInfo = slot.family === 'glm' ? endpointInfo(env, 'glm_local') : info;
+  if (!leaseInfo.ready) return { choose: false, reason: 'no_free_slot', detail: 'endpoint_not_ready', family: slot.family, endpoint: slot.endpoint, local_slots: slotView(slot) };
+  const lease = await acquireLocalLease({ env, cfg, endpoint: leaseInfo, family: slot.family, backend: slot.backend });
+  return { ...lease, family: slot.family, endpoint: slot.endpoint, backend: slot.backend, free: slot.free,
+    local_fallback_from: slot.local_fallback_from || null, local_slots: slotView(slot) };
 }
 
 async function main() {
+  const op = process.argv.indexOf('--lease-operation');
+  if (op >= 0) {
+    const operation = process.argv[op + 1];
+    const urlArg = process.argv.indexOf('--lease-url');
+    const idArg = process.argv.indexOf('--lease-id');
+    const baseUrl = `${String(urlArg >= 0 ? process.argv[urlArg + 1] : '').replace(/\/$/, '')}/${encodeURIComponent(idArg >= 0 ? process.argv[idArg + 1] : '')}`;
+    const tokenEnvArg = process.argv.indexOf('--token-env');
+    const token = tokenEnvArg >= 0 ? String(process.env[process.argv[tokenEnvArg + 1]] || '') : '';
+    const releasing = operation === 'release';
+    const result = await leaseRequest(releasing ? baseUrl : `${baseUrl}/heartbeat`, releasing ? 'DELETE' : 'POST', token, null);
+    process.exit(!result.error && (releasing ? result.status === 204 : result.status === 200) ? 0 : 1);
+  }
   const i = process.argv.indexOf('--prompt-file');
   const promptFile = i >= 0 ? process.argv[i + 1] : '';
   const cwdIdx = process.argv.indexOf('--cwd');
@@ -324,4 +376,4 @@ async function main() {
 
 if (require.main === module) main();
 
-module.exports = { decide, contextBytes, acquireLocalSlot, DEFAULT_BYTES };
+module.exports = { decide, contextBytes, acquireLocalSlot, acquireLocalLease, leaseRequest, DEFAULT_BYTES };

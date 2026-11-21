@@ -15,7 +15,7 @@ import { GLYPHS } from '../../tux/glyphs.ts'
 import { PALETTE } from '../../tux/palette.ts'
 import { PAGES } from './index'
 import { ageUnit } from './now'
-import { PAGE_KEYS, STRIP_SPLIT_COLS, V74_STRIP_ORDER } from './layout'
+import { PAGE_KEYS, STRIP_SPLIT_COLS, V74_STRIP_ORDER, actionRows } from './layout'
 import { V74_KEY } from '../v74/contract'
 import { WRAP_HANG, brokenRow, decisionCount, poolsNeedLook, sourceMissing, staleBadge, unknownPoolCount, wrapRow } from './rows'
 import type { Row } from './rows'
@@ -36,7 +36,7 @@ export type FrameOpts = { topAnchor?: true; scroll?: number; unfold?: (ctx: Page
 export const FRAME_MAX_ROWS = 24
 export const frameHeight = (available: number, _placement: 'dock' | 'inline' = 'inline'): number => Math.max(0, available)
 
-export const actionRows = (rows: number): number => (rows >= 32 ? 6 : 4)
+export { actionRows }
 // N3: the hanging indent of a body row the frame has to wrap (the cells under the left status-glyph column stay blank); rows.ts owns the number so a page can measure the same way
 export { WRAP_HANG }
 
@@ -95,16 +95,24 @@ const HOST_PREFIX = 1
 const V74_BORDER_KEY: Record<string, string> = {
   now: 'v74.b.border.now', decide: 'v74.b.border.decide', dispatch: 'v74.b.border.dispatch', review: 'v74.b.border.review',
   spend: 'v74.b.border.spend', hygiene: 'v74.b.border.hygiene', fleet: 'v74.b.border.fleet', todo: 'v74.b.border.todo',
-  help: 'v74.b.border.help', pet: 'v74.b.border.pet', quota: 'v74.b.border.spend', forge: 'v74.b.border.default',
+  help: 'v74.b.border.help', pet: 'v74.b.border.pet', quota: 'v74.b.border.quota', forge: 'v74.b.border.default',
 }
 
 const TINY_FRAME_ROWS = 3
-export const frameHintText = (page: Page, ctx: PageCtx): string => ctx.t(V74_BORDER_KEY[page.id] ?? 'v74.b.border.default', { ud: GLYPHS.structure.up + GLYPHS.structure.behind })
-export const frameHintShort = (page: Page, ctx: PageCtx): string => {
-  const full = frameHintText(page, ctx)
-  const cut = full.split(' · ')[0]
-  return cut === '' ? full : cut
+// design-narrow: the short form of the hint keeps every key class (move, pick, send, Esc) and drops only the words and the ctrl+x tab clause
+const V74_SHORT_KEY: Record<string, string> = {
+  decide: 'v74.b.short.decide', todo: 'v74.b.short.todo', pet: 'v74.b.short.pet',
+  now: 'v74.b.short.scroll', dispatch: 'v74.b.short.scroll', review: 'v74.b.short.scroll', spend: 'v74.b.short.scroll', hygiene: 'v74.b.short.scroll',
+  fleet: 'v74.b.short.scroll', help: 'v74.b.short.scroll', quota: 'v74.b.short.scroll', forge: 'v74.b.short.scroll',
 }
+// the keyboard state is words, not colour: `ctrl+x tab` until a key reached the pane, `keys in pane` after
+const keysWord = (ctx: PageCtx): string => (ctx.v74?.keysHeld === true ? ctx.t('v74.b.keys_held') : ctx.t('v74.b.keys_take'))
+// r8 #10: a card page with no cards (no source, or an empty list) has nothing to pick or send: its hint is the scroll hint, not `a/b/c · s`
+const cardless = (page: Page, ctx: PageCtx): boolean => (page.id === 'decide' || page.id === 'todo') && ctx.v74 !== undefined && (ctx.v74[page.id] ?? []).length === 0
+// r11 #4: while the send preview is up, Esc means one thing (cancel the preview), so the border says so and nothing else
+const armed = (page: Page, ctx: PageCtx): boolean => page.id === 'decide' && ctx.decide?.armed === true && !cardless(page, ctx)
+export const frameHintText = (page: Page, ctx: PageCtx): string => armed(page, ctx) ? ctx.t('v74.b.border.armed') : ctx.t(cardless(page, ctx) ? 'v74.b.border.cardless' : V74_BORDER_KEY[page.id] ?? 'v74.b.border.default', { ud: GLYPHS.structure.up + GLYPHS.structure.behind, keys: keysWord(ctx) })
+export const frameHintShort = (page: Page, ctx: PageCtx): string => armed(page, ctx) ? ctx.t('v74.b.short.armed') : ctx.t(cardless(page, ctx) ? 'v74.b.short.scroll' : V74_SHORT_KEY[page.id] ?? 'v74.b.short.scroll', { ud: GLYPHS.structure.up + GLYPHS.structure.behind })
 export function frameBorderRow(page: Page, ctx: PageCtx): Row {
   return [{ text: GLYPHS.structure.frameBL + GLYPHS.structure.rule + ' ' + frameHintText(page, ctx), dim: true }]
 }
@@ -112,16 +120,19 @@ export function frameBorderRow(page: Page, ctx: PageCtx): Row {
 // PM 01M7XB0B: one bottom border. Hints on the left, page tabs on the right, the current page marked.
 // Short width: shorten the hint first, then tabs become digits (the current page keeps its name). Never a second row.
 export type BorderTab = { key: string; id: string; text: string }
+const RULE_MIN = 8 // dashes the bottom border keeps between the hint and the tabs before the names are given up
+export const TAB_GAP = 2 // blanks between two tabs of the bottom border (design)
 export function frameBottomFit(cols: number, hintFull: string, hintShort: string, tabs: readonly BorderTab[], active: string): { hint: string; tabs: BorderTab[] } {
   const digits = tabs.map(x => ({ ...x, text: x.id === active ? x.key + ' ' + x.text.replace(/^\d+\s+/, '') : x.key }))
   const fullTabs = tabs.map(x => ({ ...x, text: x.text }))
-  const chrome = 2 + 2 + 1 + 1 // ╰─, two spaces, the gap before the tabs, ╯
-  const tabW = (list: readonly BorderTab[]): number => list.reduce((n, x, i) => n + (i === 0 ? 0 : 1) + displayWidth(x.text), 0)
-  const fits = (hint: string, list: readonly BorderTab[]): boolean => chrome + displayWidth(hint) + 1 + tabW(list) <= cols
-  // Short width: shorten the hint first. Only after the shortest hint still does not fit do the tabs become digits.
-  for (const hint of [hintFull, hintShort, '']) {
-    if (fits(hint, fullTabs)) return { hint, tabs: fullTabs }
-  }
+  // design (narrow sheet): `╰─  <hint>  ────  1 現況  2 待決 … 9 說明  ─╯`: two blanks around the hint, at least two dashes, two blanks between tabs and at both ends of them
+  const chrome = 2 + 2 + 2 + 2 + 2 + 2 + 2 // ╰─, blanks, blanks, two dashes, blanks, blanks, ─╯
+  const tabW = (list: readonly BorderTab[]): number => list.reduce((n, x, i) => n + (i === 0 ? 0 : TAB_GAP) + displayWidth(x.text), 0)
+  const fits = (hint: string, list: readonly BorderTab[]): boolean => chrome + displayWidth(hint) + tabW(list) <= cols
+  // r10 #1: when the full hint and every name do not fit, the shortest hint stays and the tabs become digits (the current page keeps its name); the hint goes only when even that does not fit.
+  if (fits(hintFull, fullTabs)) return { hint: hintFull, tabs: fullTabs }
+  // the shortest hint keeps every name only while the border still shows a readable rule (RULE_MIN dashes); on a tighter border the names give way, not the hint
+  if (chrome + displayWidth(hintShort) + tabW(fullTabs) + RULE_MIN <= cols) return { hint: hintShort, tabs: fullTabs }
   for (const hint of [hintShort, '']) {
     if (fits(hint, digits)) return { hint, tabs: digits }
   }
@@ -254,7 +265,11 @@ export function v74TitleSegs(page: Page, ctx: PageCtx, name: Seg): Seg[] {
   const src = V74_SOURCES[page.id]
   if (src === undefined) return [name, { text: ' · ' + t('v74.c.help_src'), dim: true }]
   const published = ctx.live?.published_at
-  const fetched = ctx.v74?.ages?.[page.id] ?? (page.id === 'dispatch' || page.id === 'review' || page.id === 'hygiene' ? (typeof published === 'string' && Number.isFinite(Date.parse(published)) ? Date.parse(published) : null) : null)
+  // r10b #5: every page's title ends in the data age; spend and quota read the console snapshot's own time, and a source that failed says so instead of staying silent
+  const consoleAt = ctx.console !== null && ctx.console !== undefined && ctx.console.generated_at_ms > 0 ? ctx.console.generated_at_ms : null
+  const fetched = ctx.v74?.ages?.[page.id] ?? (page.id === 'dispatch' || page.id === 'review' || page.id === 'hygiene' ? (typeof published === 'string' && Number.isFinite(Date.parse(published)) ? Date.parse(published) : null) : page.id === 'spend' || page.id === 'quota' ? consoleAt : null)
+  const failed = (page.id === 'todo' && ctx.v74 !== undefined && ctx.v74.todo === null) || (page.id === 'decide' && ctx.v74 !== undefined && ctx.v74.decide === null) || ((page.id === 'spend' || page.id === 'quota') && ctx.console === null)
+  if (failed) return [name, { text: ' · ' + t('v74.c.header_failed', { source: src[0], schema: src[1] }), dim: true }]
   const info = fetched === null || fetched === undefined ? t('v74.c.header_noage', { source: src[0], schema: src[1] }) : t('v74.c.header', { source: src[0], schema: src[1], age: ageUnit(t, Math.max(0, nowMs - fetched)) })
   return [name, { text: ' · ' + info, dim: true }]
 }

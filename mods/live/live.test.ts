@@ -4043,7 +4043,7 @@ test('P7 model: slot texts and theme keys', () => {
   expect(slotReview(null, qc('unknown'))).toBeNull()
   // decisions
   const dv = (over: Record<string, unknown>) => ({ rows: [], count: 0, irreversible: 0, writers: [], undocumented: 0, identity: null, root: null, ladder: null, ...over }) as never
-  expect(text(slotDecisions(dv({ count: 2, undocumented: 1, ladder: { rung: 'U3', at: 'x' } })))).toBe('◆ 2  ? 1  U3')
+  expect(text(slotDecisions(dv({ count: 2, undocumented: 1, ladder: { rung: 'U3', at: 'x' } })))).toBe('✓ 2  ? 1  U3')
   expect(text(slotDecisions(dv({ undocumented: 4 })))).toBe('? 4')
   expect(slotDecisions(dv({}))).toBeNull()
   expect(slotDecisions(null)).toBeNull()
@@ -7795,7 +7795,7 @@ for (const surface of SURFACES) {
     expect(left.some(r => r.includes('◐ P5') && r.includes('完整顯示')), 'the card under the cursor shows its draft answer').toBe(true)
     expect(left.some(r => r.includes('○ U6'))).toBe(true)
     expect(d.rows[9]).toContain('▰▱▱ 1/3')
-    expect(d.rows[9]).toContain('◆ 上一張 P5')
+    expect(d.rows[9]).toContain('→ 上一張 P5')
     expect(d.rows[9]).toContain('→ 完整顯示')
     expect(d.rows[9]).toContain('待送 1 張')
     expect(d.rows[11]).toContain('送出 1 張')
@@ -7931,7 +7931,7 @@ for (const surface of SURFACES) {
     const at = async (cols: number) => {
       const d = await drawShell($, cols, [], 40)
       const q = d.rows.findIndex(r => r.includes('│ P5 殘留'))
-      const o = d.rows.findIndex(r => r.includes('完整顯示') && !r.includes('◆'))
+      const o = d.rows.findIndex(r => r.includes('完整顯示') && !r.includes('→'))
       const last = d.rows[d.rows.length - 1]
       return { ok: q > 1 && o > q, qc: colOf(d.rows[q], '│ P5 殘留'), oc: colOf(d.rows[o], '完整顯示'), quick: ['送出', '上一張', '下一張', '下一個選單'].map(w => colOf(last, w)), prog: colOf(d.rows.find(r => r.includes('0/3 ')) ?? '', '0/3'), left: colOf(d.rows[2], '◐') }
     }
@@ -8269,7 +8269,7 @@ for (const surface of SURFACES) {
       for (const r of d.rows) expect(displayWidth(r), 'row width at ' + cols).toBeLessThanOrEqual(cols)
     }
     const again = await drawShell($, 160, [], 40) // the options are no Buttons, so no press can move the pick; the state shows it is still OK
-    expect(again.rows.some(r => r.includes('◆') && r.includes('OK')), 'the pick is still OK').toBe(true)
+    expect(again.rows.some(r => r.includes('→') && r.includes('OK')), 'the pick is still OK').toBe(true)
     const fixed = await drawShell($, 160, ['fix'], 40)
     expect(NO_OPT(fixed.buttons).length, '改答案 opens the card again').toBeGreaterThan(2)
   })

@@ -79,7 +79,8 @@ test('v74 F S6: 5h and 7d bars with relative resets, pools table, today tokens a
   expect(out.some(r => r.includes('✗') && r.includes('180 分未更新'))).toBe(true) // the stale pool says how long
   expect(out.some(r => r.includes('今天') && r.includes('380k tok'))).toBe(true)
   const last = out.findIndex(r => r.includes('近 24 小時'))
-  expect(out[last + 1]).toMatch(/[▁▂▃▄▅▆▇█]{24}/)
+  expect(out[last + 1], 'r11 #11: the chart states its unit and source').toMatch(/USD.*spend-history/)
+  expect(out.slice(last + 1).some(r => /[▁▂▃▄▅▆▇█]{24}/.test(r))).toBe(true)
   const all = out.join('\n')
   expect(all).not.toMatch(/\$\s*[\d—]/) // no money
   expect(all).not.toContain('帳號') // no account block

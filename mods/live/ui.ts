@@ -1099,6 +1099,9 @@ export const barValue = (cells: number): Frag => frag([sg(GLYPHS.chart.meterOn.r
 // pane.tsx and band.tsx only draw the segments (drawSeg).
 
 // the props a drawn Text gets from one segment: pane.tsx / band.tsx spread this, so they carry no colour decision of their own (§6.1)
+// r11: the chosen decision answer (bold, the success colour; the recommended star keeps the attention colour) and the frame border while the pane holds the keyboard. The lint keeps bold and colour keys in this file.
+export const pickedTone = (): Partial<Seg> => ({ color: PALETTE.done, bold: true })
+export const heldBorder = (): { color: ThemeKey | undefined; bold: boolean | undefined; dimColor: boolean | undefined } => drawSeg({ text: '', color: PALETTE.here, bold: true })
 export function drawSeg(s: Seg): { color: ThemeKey | undefined; bold: boolean | undefined; dimColor: boolean | undefined } {
   // Y6: runtime inputs can escape TypeScript; only the semantic palette reaches Text.
   const color = s.color !== undefined && Object.values(PALETTE).includes(s.color) ? s.color : undefined

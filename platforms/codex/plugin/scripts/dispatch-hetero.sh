@@ -6104,13 +6104,15 @@ NODE
 # endpoint_busy (HTTP 429 or 503: the throttling proxy in front of the server shedding load) and
 # endpoint_unreachable (connection refused/reset, DNS, connect/read timeout, any other 5xx).
 # Prints the class, or nothing when this is not an endpoint run or the log names neither.
-# auth_failed / quota_exhausted keep their meaning (escalate). Pure function of THIS run's log and
+# auth_failed / quota_exhausted keep their meaning (escalate). model_unsupported is a caller
+# model pick (not an auth or quota escalation — it is absent from _is_engine_unavailable) and
+# must not be rewritten into an endpoint class. Pure function of THIS run's log and
 # structured status: no state is read or written, so one bad dispatch never marks the endpoint down
 # for the next one. Cloud runners (no --endpoint) never reach the patterns, so their
 # rate_limited/overloaded classification is byte-identical.
 _endpoint_error_class() {
   [ -n "${ENDPOINT:-}" ] || return 0
-  case "${CLASSIFIED_ERROR:-}" in auth_failed|quota_exhausted) return 0 ;; esac
+  case "${CLASSIFIED_ERROR:-}" in auth_failed|quota_exhausted|model_unsupported) return 0 ;; esac
   # Structured sources only (never the worker's own output): the cc-shim envelope's result text
   # when it is an api_error result, and lines the claude CLI itself prints starting "API Error".
   local _txt=""
@@ -6777,6 +6779,8 @@ passive_capture() {
 }
 
 # True when classify-error named a known engine-unavailability signal (not network/unknown).
+# model_unsupported is intentionally absent: the login is fine and the caller picked a model
+# this account cannot use. It stays on the ordinary failure/question_suspected status.
 _is_engine_unavailable() {
   case "${1:-}" in
     quota_exhausted|rate_limited|auth_failed|overloaded|endpoint_busy|endpoint_unreachable) return 0 ;;
@@ -7131,6 +7135,10 @@ classify_outcome() {
         OUTCOME_ERR="engine unavailable ($CLASSIFIED_ERROR): worker exited non-zero (agent exit $AGENT_EXIT); worktree kept"
       fi
     fi
+  fi
+  # Caller error, not an auth/quota escalation: name the model and a usable alternative.
+  if [ "${CLASSIFIED_ERROR:-}" = "model_unsupported" ]; then
+    OUTCOME_ERR="codex model ${MODEL:-unknown} is not available for this account; pick another model (e.g. --model gpt-6-luna)"
   fi
   if [ "${WORKER_TIMED_OUT:-0}" -eq 1 ]; then
     local __wt_secs

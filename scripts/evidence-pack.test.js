@@ -8,7 +8,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { execFileSync } = require('node:child_process');
 
-const { buildPack, showPack, parseNotes } = require('./evidence-pack');
+const { buildPack, showPack, parseNotes, loadHighRiskGlobs, matchHighRiskPaths } = require('./evidence-pack');
 
 function git(cwd, args) {
   return execFileSync(
@@ -130,5 +130,26 @@ test('parseNotes: non-zero rc sets tests_green false', () => {
     assert.deepEqual(parsed.risk, { level: 'high', note: 'Test failed.' });
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('matchHighRiskPaths: table of dispatch/pin/lock paths and non-matches', () => {
+  const globs = loadHighRiskGlobs();
+  const shouldMatch = [
+    'scripts/dispatch-review.sh',
+    'scripts/dispatch-author.sh',
+    'scripts/dispatch-plan-review.js',
+    'scripts/resolve-dispatch.sh',
+    'scripts/lib/runner-pins.js',
+    'scripts/lib/broker-run-pace.js',
+    'scripts/lib/cn-model-dispatch-gate.js',
+    'hooks/dispatch-model-guard.js',
+  ];
+  for (const p of shouldMatch) {
+    assert.deepEqual(matchHighRiskPaths([p], globs), [p], `expected ${p} to match high-risk globs`);
+  }
+  const shouldNotMatch = ['README.md', 'docs/x.md'];
+  for (const p of shouldNotMatch) {
+    assert.deepEqual(matchHighRiskPaths([p], globs), [], `expected ${p} not to match high-risk globs`);
   }
 });

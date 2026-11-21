@@ -8519,7 +8519,7 @@ if detach_on && [ -n "$LEDGER" ] && [ -n "$RUN_ID" ] && [ -n "$STAGE" ] && [ "${
 fi
 
 # ---- inline path (DISPATCH_DETACH=0 OR no ledger coords): byte-identical to pre-R1 behavior ----
-_ep_dir="${AUTOPILOT_DISPATCH_RUNS_DIR:-${TMPDIR:-/tmp}}"
+_ep_dir="${AUTOPILOT_DISPATCH_RUNS_DIR:-${MANIFEST_DIR_PATH:-${SCRATCH_DIR:-${WORKTREE_PARENT:-${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}}}}}"
 mkdir -p "$_ep_dir" 2>/dev/null || true
 EVIDENCE_PACK_FILE="$_ep_dir/${DISPATCH_RUN_ID:-$$}.evidence-pack.json"
 export AUTOPILOT_EVIDENCE_NOTES="$_ep_dir/${DISPATCH_RUN_ID:-$$}.evidence-notes.md"

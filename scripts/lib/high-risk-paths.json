@@ -1,6 +1,10 @@
 [
-  "scripts/dispatch-hetero.sh",
-  "scripts/lib/dispatch-*",
+  "scripts/dispatch-*",
+  "scripts/resolve-dispatch*",
+  "scripts/lib/*dispatch*",
+  "scripts/lib/*pin*",
+  "scripts/lib/*lock*",
+  "scripts/lib/*pace*",
   "scripts/lib/local-impl-slot.js",
   "scripts/pace-select.js",
   "scripts/land-branch.js",
@@ -8,6 +12,8 @@
   "scripts/*canary*",
   "scripts/*lease*",
   "scripts/*lock*",
+  "scripts/*release*",
+  "hooks/dispatch-*",
   "hooks/hooks.json",
   "platforms/codex/hooks/hooks.json"
 ]

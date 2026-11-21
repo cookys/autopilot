@@ -196,6 +196,28 @@ test('a seat memory path under .claude/projects is allowed', () => {
   }), null);
 });
 
+test('a clause that forbids reading ~/.claude is allowed', () => {
+  assert.equal(guard.decide({
+    tool_name: 'mcp__fleet__dispatch',
+    tool_input: { task: '不需要讀 ~/.claude；用你自己 context 的版本' },
+  }), null);
+});
+
+test('an English do-not-read line covering ~/.claude is allowed', () => {
+  assert.equal(guard.decide({
+    tool_name: 'mcp__fleet__send',
+    tool_input: { to: 'ns/h/peer', content: 'Do not read ~/.claude, ~/.codex, ~/.autopilot' },
+  }), null);
+});
+
+test('a negated other home then a bare ~/.claude read is denied', () => {
+  const out = guard.decide({
+    tool_name: 'mcp__fleet__send',
+    tool_input: { to: 'ns/h/peer', content: '不要讀 ~/.codex。請讀 ~/.claude/settings.json' },
+  });
+  assert.equal(out && out.hookSpecificOutput.permissionDecision, 'deny');
+});
+
 test('text with no .claude path is allowed', () => {
   assert.equal(guard.decide({
     tool_name: 'mcp__fleet__task_comment',

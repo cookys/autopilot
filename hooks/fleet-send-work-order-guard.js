@@ -8,9 +8,12 @@
  * and includes `task_id:` from that message body when the line is present. An id that
  * is not in the transcript is allowed.
  *
- * mcp__fleet__send, mcp__fleet__dispatch and mcp__fleet__task_comment: a real
- * ~/.claude path (`~/`, `$HOME/`, `/home/<user>/`, `/Users/<user>/`) is denied.
- * Only a path under `.claude/projects/` is allowed. Reading the real ~/.claude
+ * mcp__fleet__send, mcp__fleet__dispatch and mcp__fleet__task_comment: each real
+ * ~/.claude path (`~/`, `$HOME/`, `/home/<user>/`, `/Users/<user>/`) is judged alone.
+ * A path under `.claude/projects/` is allowed. Any other occurrence is allowed only
+ * when its clause (split on 。；; newline and a sentence-ending `.`), within 12
+ * characters before the path, contains a negator (不讀 / do not read / never / …).
+ * One occurrence without that negator denies the message. Reading the real ~/.claude
  * needs the operator's card.
  *
  * mcp__fleet__reply (same rule, default-on): a reply that is a work order is denied unless it carries task context
@@ -55,6 +58,7 @@ const HEADER_TASK_ID_RE = /^task_id:\s*[0-9A-HJKMNP-TV-Z]{26}\s*$/m;
 const BODY_TASK_ID_RE = /(?:^|\n)task_id:\s*([0-9A-HJKMNP-TV-Z]{26})\s*(?:\n|$)/;
 const COURIER_REPLY_REASON = 'reply 不能回 courier 的 wake 訊息，請改用 task_comment（task_id 見該訊息的 task_id 行）';
 const CLAUDE_HOME_RE = /(?:~\/|\$HOME\/|\/home\/[^/\s]+\/|\/Users\/[^/\s]+\/)\.claude(?!\/projects(?:\/|$))/;
+const CLAUDE_NEGATOR_RE = /不需要讀|不必讀|不要讀|不用讀|不能讀|禁止讀|別讀|勿讀|不碰|不讀|never read|do not read|don't read|must not read|do not touch|never/i;
 const CLAUDE_PATH_DENY = '這則訊息要對方讀真實的 ~/.claude。讀取真實 ~/.claude 需要操作員本人的卡。請改請該席用自己被允許的讀取方式提供資料，或拿掉這一步。';
 const ULID_IN_TEXT_RE = /\b[0-9A-HJKMNP-TV-Z]{26}\b/;
 const DISPATCH_OPT_IN = 'pm-dispatch-plan-guard';
@@ -137,9 +141,10 @@ function fleetChannel(transcriptPath, messageId) {
   if (typeof transcriptPath !== 'string' || !transcriptPath || typeof messageId !== 'string' || !messageId) return null;
   let raw;
   try { raw = fs.readFileSync(transcriptPath, 'utf8'); } catch { return null; }
+  if (!raw.includes(messageId)) return null;
   let found = null;
   for (const line of raw.split('\n')) {
-    if (!line.trim()) continue;
+    if (!line.includes(messageId)) continue;
     let rec;
     try { rec = JSON.parse(line); } catch { continue; }
     const content = rec && rec.message && rec.message.content;
@@ -172,13 +177,37 @@ function courierReplyDeny(input) {
   return preToolDeny(reason);
 }
 
+function clauseStart(text, index) {
+  const prefix = text.slice(0, index);
+  const boundary = /[。；;\n]|\.(?=\s|$)/g;
+  let start = 0;
+  let m;
+  while ((m = boundary.exec(prefix))) start = m.index + m[0].length;
+  return start;
+}
+
+function pathOccurrenceNegated(text, index) {
+  const clause = text.slice(clauseStart(text, index), index);
+  const negator = new RegExp(CLAUDE_NEGATOR_RE.source, 'ig');
+  let m;
+  while ((m = negator.exec(clause))) {
+    if (clause.length - (m.index + m[0].length) <= 12) return true;
+  }
+  return false;
+}
+
 function claudePathDeny(input) {
   const name = input && input.tool_name;
   if (name !== 'mcp__fleet__send' && name !== 'mcp__fleet__dispatch' && name !== 'mcp__fleet__task_comment') return null;
   const toolInput = input.tool_input && typeof input.tool_input === 'object' ? input.tool_input : {};
   const text = name === 'mcp__fleet__dispatch' ? toolInput.task : name === 'mcp__fleet__task_comment' ? toolInput.text : toolInput.content;
-  if (typeof text !== 'string' || !CLAUDE_HOME_RE.test(text)) return null;
-  return preToolDeny(CLAUDE_PATH_DENY);
+  if (typeof text !== 'string') return null;
+  const re = new RegExp(CLAUDE_HOME_RE.source, 'g');
+  let m;
+  while ((m = re.exec(text))) {
+    if (!pathOccurrenceNegated(text, m.index)) return preToolDeny(CLAUDE_PATH_DENY);
+  }
+  return null;
 }
 
 function decide(input, env = envBag()) {

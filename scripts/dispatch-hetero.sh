@@ -6285,6 +6285,19 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
 # Extracted verbatim into a function so BOTH the inline path and the detached child dispatch
 # the SAME engine invocation with ZERO behavioral difference.
 run_agent() {
+EVIDENCE_NOTES_PATH=""
+if [ -n "${WT:-}" ] && [ -d "$WT" ]; then
+  EVIDENCE_NOTES_PATH="$(_wt_git rev-parse --git-path evidence-notes.md 2>/dev/null || true)"
+  if [ -n "$EVIDENCE_NOTES_PATH" ] && [ "${EVIDENCE_NOTES_PATH#/}" = "$EVIDENCE_NOTES_PATH" ]; then
+    EVIDENCE_NOTES_PATH="$WT/$EVIDENCE_NOTES_PATH"
+  fi
+fi
+if [ -n "${EVIDENCE_NOTES_PATH:-}" ] && [ -r "${PROMPT_FILE:-}" ]; then
+  _ep_prompt_tmp="$(mktemp -t dispatch-hetero-ep-prompt-XXXXXX)"
+  cat "$PROMPT_FILE" > "$_ep_prompt_tmp"
+  printf '\nEvidence notes: write %s (not committed) with:\n## Tests\n<command> rc=<n>\n## Risk\nlow|medium|high\n<one-line reason>\n' "$EVIDENCE_NOTES_PATH" >> "$_ep_prompt_tmp"
+  PROMPT_FILE="$_ep_prompt_tmp"
+fi
 if [ "$IS_CODEX" -eq 1 ]; then
   EFFORT_SENT="$EFFORT"
   prepare_managed_codex_home
@@ -7076,9 +7089,23 @@ DIRTY="$(_wt_git status --porcelain --ignore-submodules=dirty)"
   INS="$(printf '%s' "$SHORTSTAT" | grep -o '[0-9]\+ insertion' | grep -o '[0-9]\+' || echo 0)"
   DEL="$(printf '%s' "$SHORTSTAT" | grep -o '[0-9]\+ deletion' | grep -o '[0-9]\+' || echo 0)"
   if [ -n "${EVIDENCE_PACK_FILE:-}" ] && [ -r "$SELF_DIR/evidence-pack.js" ]; then
-    _ep_args=(build --repo "$WT" --base "$DIFF_BASE_SHA" --head "$HEAD_SHA" --run-id "${DISPATCH_RUN_ID:-unknown}" --branch "$BRANCH" --out "$EVIDENCE_PACK_FILE")
+    _ep_runner="agy"
+    [ "${IS_CODEX:-0}" -eq 1 ] && _ep_runner="codex"
+    [ "${IS_GROK:-0}" -eq 1 ] && _ep_runner="grok"
+    [ "${IS_CCSHIM:-0}" -eq 1 ] && _ep_runner="cc-shim"
+    [ "${IS_PI:-0}" -eq 1 ] && _ep_runner="pi"
+    [ "${IS_CURSOR:-0}" -eq 1 ] && _ep_runner="cursor"
+    [ "${IS_OPENCODE:-0}" -eq 1 ] && _ep_runner="opencode"
+    [ "${IS_KIMI:-0}" -eq 1 ] && _ep_runner="kimi"
+    [ "${IS_QODER:-0}" -eq 1 ] && _ep_runner="qoderclicn"
+    [ "${IS_CNATIVE:-0}" -eq 1 ] && _ep_runner="claude-native"
+    _ep_args=(build --repo "$WT" --base "$DIFF_BASE_SHA" --head "$HEAD_SHA" --run-id "${DISPATCH_RUN_ID:-unknown}" --branch "$BRANCH" --out "$EVIDENCE_PACK_FILE" --runner "$_ep_runner")
     [ -n "${HETERO_FLEET_TASK_ID:-}" ] && _ep_args+=(--fleet-task "$HETERO_FLEET_TASK_ID")
-    [ -n "${AUTOPILOT_EVIDENCE_NOTES:-}" ] && _ep_args+=(--notes "$AUTOPILOT_EVIDENCE_NOTES")
+    _ep_notes="${AUTOPILOT_EVIDENCE_NOTES:-}"
+    if [ -z "$_ep_notes" ] && [ -n "${EVIDENCE_NOTES_PATH:-}" ] && [ -s "$EVIDENCE_NOTES_PATH" ]; then
+      _ep_notes="$EVIDENCE_NOTES_PATH"
+    fi
+    [ -n "$_ep_notes" ] && _ep_args+=(--notes "$_ep_notes")
     if node "$SELF_DIR/evidence-pack.js" "${_ep_args[@]}" >/dev/null 2>&1; then
       EVIDENCE_PACK_WRITTEN="$EVIDENCE_PACK_FILE"
     fi

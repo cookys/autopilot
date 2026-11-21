@@ -26,12 +26,19 @@ case " $* " in
     exit 2 ;;
 esac
 if [ "${1:-}" = "--version" ]; then echo "grok-cli 0.2.111 (test stub)"; exit 0; fi
+if [ -n "${STUB_PROMPT_CAPTURE:-}" ]; then
+  cat > "$STUB_PROMPT_CAPTURE"
+fi
 printf 'evidence fixture\n' >> ev-fixture.txt
-if [ -n "${AUTOPILOT_EVIDENCE_NOTES:-}" ]; then
-  mkdir -p "$(dirname "$AUTOPILOT_EVIDENCE_NOTES")"
-  cat > "$AUTOPILOT_EVIDENCE_NOTES" <<'NOTES'
+git add ev-fixture.txt
+git commit -q -m "stub: edit ev-fixture.txt"
+if [ "${STUB_WRITE_NOTES:-1}" = "1" ]; then
+  NOTES_PATH="$(git rev-parse --git-path evidence-notes.md)"
+  mkdir -p "$(dirname "$NOTES_PATH")"
+  cat > "$NOTES_PATH" <<'NOTES'
 ## Tests
-0 node scripts/evidence-pack.test.js
+node scripts/evidence-pack.test.js rc=0
+bash hooks/tests/dispatch-hetero-evidence-pack.test.sh rc=0
 
 ## Risk
 low
@@ -46,7 +53,9 @@ printf 'Fleet-Task: 01ARZ3NDEKTSV4RRFFQ69G5FAV\nSize: S\nRole: implementer\nedit
 RUNS="$TEST_TMP/runs"
 mkdir -p "$RUNS"
 
+CAPTURED_PROMPT="$TEST_TMP/captured-prompt.txt"
 OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
+  STUB_PROMPT_CAPTURE="$CAPTURED_PROMPT" STUB_WRITE_NOTES=1 \
   "$SCRIPT" --runner grok --grok-bin "$STUB_GROK" --no-verify-tip --context-window off \
   --branch "feat/ev-pack-stub" --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/err")"
 EXIT=$?
@@ -61,9 +70,50 @@ EP_PATH="$(node -e '
 ' "$OUT")"
 assert_file_exists "$EP_PATH" "result JSON has evidence_pack pointing to existing file"
 
-COMMIT_BODY="$($GIT -C "$SBX" log -1 --format=%B feat/ev-pack-stub)"
-assert_contains "$COMMIT_BODY" "## Tests" "commit body contains ## Tests"
-assert_contains "$COMMIT_BODY" "## Risk" "commit body contains ## Risk"
+EP_CHECK="$(node -e '
+  const fs = require("fs");
+  const p = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  const out = [
+    String(p.tests_green),
+    String(p.risk && p.risk.level),
+    String(p.mergeable),
+    String(p.claude_usage && p.claude_usage.claude_tokens)
+  ].join("|");
+  process.stdout.write(out);
+' "$EP_PATH")"
+assert_eq "true|low|true|0" "$EP_CHECK" "pack has tests_green=true, risk.level=low, mergeable=true, claude_tokens=0"
+
+COMMITTED_FILES="$($GIT -C "$SBX" show --name-only --format= feat/ev-pack-stub)"
+assert_not_contains "$COMMITTED_FILES" "evidence-notes.md" "notes file is not in the commit"
+
+CAPTURED_CONTENT="$(cat "$CAPTURED_PROMPT")"
+assert_contains "$CAPTURED_CONTENT" "evidence-notes.md" "prompt received by fake runner contains notes path"
+
+# Case 2: fake runner writes no notes -> mergeable=false with tests_not_green and risk_missing
+OUT2="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
+  STUB_WRITE_NOTES=0 \
+  "$SCRIPT" --runner grok --grok-bin "$STUB_GROK" --no-verify-tip --context-window off \
+  --branch "feat/ev-pack-no-notes" --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/err2")"
+EXIT2=$?
+assert_eq "0" "$EXIT2" "dispatch-hetero with no notes exits 0"
+
+EP_PATH2="$(node -e '
+  const lines = String(process.argv[1] || "").split(/\r?\n/).reverse();
+  const raw = lines.find((l) => l.trim().startsWith("{"));
+  const o = raw ? JSON.parse(raw) : {};
+  process.stdout.write(o.evidence_pack || "");
+' "$OUT2")"
+assert_file_exists "$EP_PATH2" "case 2 result JSON has evidence_pack"
+
+EP_CHECK2="$(node -e '
+  const fs = require("fs");
+  const p = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  const blockers = Array.isArray(p.merge_blockers) ? p.merge_blockers.join(",") : "";
+  process.stdout.write(String(p.mergeable) + "|" + blockers);
+' "$EP_PATH2")"
+assert_contains "$EP_CHECK2" "false|" "case 2 mergeable is false"
+assert_contains "$EP_CHECK2" "tests_not_green" "case 2 has tests_not_green blocker"
+assert_contains "$EP_CHECK2" "risk_missing" "case 2 has risk_missing blocker"
 
 finalize_test
 echo "PASS: $TEST_NAME"

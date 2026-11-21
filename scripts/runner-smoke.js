@@ -340,6 +340,15 @@ function extractRunFailureDetails(run) {
   return details;
 }
 
+// Last non-empty line of the CLI's combined output, redacted and cut to 200 chars.
+// Only called for quota_exhausted / runner_failed so normal replies never reach a receipt.
+function cliLastLine(run) {
+  const combined = `${run && run.stdout ? run.stdout : ''}\n${run && run.stderr ? run.stderr : ''}`;
+  const lines = combined.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const last = lines.length ? lines[lines.length - 1] : '';
+  return redactText(last).text.slice(0, 200);
+}
+
 function parseLastJsonObject(stdout) {
   const lines = String(stdout || '').split(/\r?\n/);
   for (let i = lines.length - 1; i >= 0; i -= 1) {
@@ -453,14 +462,9 @@ function runDispatchAuthorSmoke(item, paths, opts) {
   if (!pass) {
     Object.assign(outcome, extractRunFailureDetails(run));
     if (railClassification === 'quota_exhausted' || railClassification === 'runner_failed') {
-      if (parsed && typeof parsed.cli_last_line === 'string') {
-        outcome.cli_last_line = parsed.cli_last_line;
-      } else {
-        const combined = `${run && run.stdout ? run.stdout : ''}\n${run && run.stderr ? run.stderr : ''}`;
-        const lines = combined.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-        const last = lines.length ? lines[lines.length - 1] : '';
-        outcome.cli_last_line = redactText(last).text.slice(0, 200);
-      }
+      outcome.cli_last_line = (parsed && typeof parsed.cli_last_line === 'string')
+        ? parsed.cli_last_line
+        : cliLastLine(run);
     }
   }
   return outcome;
@@ -535,6 +539,7 @@ function runOpencodeContainedSmoke(item, actualVersion, paths, opts) {
       rail_classification: 'runner_failed',
       pass: false,
       ...extractRunFailureDetails(run),
+      cli_last_line: cliLastLine(run),
     };
   }
 
@@ -566,16 +571,6 @@ function runOpencodeContainedSmoke(item, actualVersion, paths, opts) {
   };
   if (!pass) {
     Object.assign(outcome, extractRunFailureDetails(run));
-    if (railClassification === 'quota_exhausted' || railClassification === 'runner_failed') {
-      if (parsed && typeof parsed.cli_last_line === 'string') {
-        outcome.cli_last_line = parsed.cli_last_line;
-      } else {
-        const combined = `${run && run.stdout ? run.stdout : ''}\n${run && run.stderr ? run.stderr : ''}`;
-        const lines = combined.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-        const last = lines.length ? lines[lines.length - 1] : '';
-        outcome.cli_last_line = redactText(last).text.slice(0, 200);
-      }
-    }
   }
   return outcome;
 }
@@ -811,6 +806,9 @@ function main() {
         }
         if (typeof outcome.stdout_tail === 'string') {
           row.stdout_tail = outcome.stdout_tail;
+        }
+        if (typeof outcome.cli_last_line === 'string') {
+          row.cli_last_line = outcome.cli_last_line;
         }
         if (typeof outcome.spawn_error === 'string' && outcome.spawn_error !== '') {
           row.spawn_error = outcome.spawn_error;

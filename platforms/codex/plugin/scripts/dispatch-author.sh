@@ -103,7 +103,7 @@
 #     "runner": "codex|agy|grok|cc-shim|local|anthropic-compatible|claude-native|cursor",
 #     "resolved_runner": "cc-shim", "endpoint": "qwen_local",   # only when --runner local
 #     "model": "...",
-#     "status": "authored|empty_output|precondition_failed|runner_failed|truncated",
+#     "status": "authored|empty_output|precondition_failed|runner_failed|containment_breach|truncated|quota_exhausted",
 #     "raw_log": "<path>",
 #     "error": "...",
 #     "selection_source": "explicit_cli|strict_roster",
@@ -120,7 +120,7 @@
 #
 #   On strict-contract containment violations (repo-state changed), status becomes
 #   containment_breach with exit code 4.
-# EXIT: 0 = authored (non-empty raw output), 1 = empty_output, 2 = precondition_failed, 3 = runner_failed, 4 = containment_breach, 5 = truncated
+# EXIT: 0 = authored (non-empty raw output), 1 = empty_output, 2 = precondition_failed, 3 = runner_failed, 4 = containment_breach, 5 = truncated, 6 = quota_exhausted
 #   (non-codex: missing/incomplete AUTHOR/END frame or tool-narration inside the frame;
 #   error is one of frame_missing / frame_format / end_missing / tool_narration;
 #   frame_format = both derived markers present but not on separate lines, result adds frame_derived). Codex transport is
@@ -736,7 +736,7 @@ runner_transport_status() {
 
 die_runner_failed() {
   local -r runner_exit_code="$1"
-  local excerpt status msg
+  local excerpt status msg final_status final_exit extra_json cli_last_line_json
   excerpt="$(runner_stderr_excerpt)"
   status="$(runner_transport_status "$runner_exit_code")"
   AUTHOR_TRANSPORT_STATUS="$status"
@@ -750,8 +750,48 @@ die_runner_failed() {
     printf 'dispatch-author: runner stderr (%s/%s, rc=%s): %s\n' "$RUNNER" "$MODEL" "$runner_exit_code" \
       "$(printf '%s' "$excerpt" | LC_ALL=C tail -c 2000 | LC_ALL=C sed -E '1s/^[\x80-\xBF]+//')" >&2 || true
   fi
+  local err_file="${RUNNER_ERR_FILE:-}"
+  if [[ "${CODEX_TRANSPORT:-0}" -eq 1 && -n "${CODEX_STDERR:-}" ]]; then err_file="$CODEX_STDERR"; fi
+  local is_quota=0
+  if [[ "$status" = "quota" ]]; then
+    is_quota=1
+  elif node -e '
+    const fs = require("fs");
+    const re = /weekly limit|out of usage|usage limit|quota exceeded|quota exhausted/i;
+    for (const p of process.argv.slice(1)) {
+      if (!p) continue;
+      try {
+        if (fs.existsSync(p) && re.test(fs.readFileSync(p, "utf8"))) process.exit(0);
+      } catch (_) {}
+    }
+    process.exit(1);
+  ' "$RAW_LOG" "$err_file" 2>/dev/null; then
+    is_quota=1
+  fi
+  if [[ "$is_quota" -eq 1 ]]; then
+    final_status="quota_exhausted"
+    final_exit=6
+  else
+    final_status="runner_failed"
+    final_exit=3
+  fi
+  cli_last_line_json="$(node -e '
+    const fs = require("fs"), path = require("path");
+    let redact = (t) => String(t).replace(/\b[a-z]{2}-[A-Za-z0-9_-]{8,}\b/g, "[REDACTED]").replace(/\b[A-Za-z0-9+\/_-]{24,}\b/g, "[REDACTED]");
+    try { redact = require(path.join(process.argv[1], "..", "hooks", "_shared", "secret-patterns")).redact; } catch (_e) {}
+    const chunks = [];
+    for (const p of process.argv.slice(2)) {
+      if (!p) continue;
+      try { if (fs.existsSync(p)) chunks.push(fs.readFileSync(p, "utf8")); } catch (_) {}
+    }
+    const lines = chunks.join("\n").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const last = lines.length ? lines[lines.length - 1] : "";
+    const red = redact(last).slice(0, 200);
+    process.stdout.write(JSON.stringify(red));
+  ' "$_AUTHOR_SELF_DIR" "$RAW_LOG" "$err_file" 2>/dev/null || echo '""')"
   rm -f "${RUNNER_ERR_FILE:-}" 2>/dev/null || true
-  emit_result "runner_failed" "$RAW_LOG" "$msg" 3 ", \"transport_status\": \"$status\""
+  extra_json=", \"transport_status\": \"$status\", \"cli_last_line\": $cli_last_line_json"
+  emit_result "$final_status" "$RAW_LOG" "$msg" "$final_exit" "$extra_json"
 }
 
 check_session_mode_gate() {

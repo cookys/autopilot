@@ -108,9 +108,9 @@ test('r7 send: s writes the card store even when the model never answers', async
     cards: cards.map(cardToLive),
     state: nav,
     now: 5,
-    run: async (args) => { runs.push(args) },
+    run: async (args) => { runs.push(args); return true },
     post: () => { posted = true; return new Promise(() => undefined) },
-  })
+  }).then(r => r.state)
   expect(runs.some(a => a[0] === 'close' && a.includes(cards[0].id) && a.includes('--option'))).toBe(true)
   expect(next.sent[cards[0].id]).toBe(5)
   expect(decideReduce(next, { kind: 'submit' }, ctx, 6).effect).toBeNull()
@@ -135,4 +135,27 @@ test('v74TabStep: the plugin own autoFocus, the current tab, a card and other pa
   expect(v74TabStep('decide', 'card:2', { kind: 'person' })).toBeNull()
   expect(v74TabStep('review', 'tab:spend', { kind: 'person' })).toBeNull()
   expect(v74TabStep('decide', undefined, { kind: 'person' })).toBeNull()
+})
+
+// r7 review (autopilot 01M7XXB4): a failed close keeps the card open, unsent and out of the reply.
+test('r7 send: a close that fails (exit != 0, timeout, no script) leaves the card unsent and posts nothing for it', async () => {
+  const nav = decideReduce({ ...NO_NAV, picks: { [cards[0].id]: 0 } }, { kind: 'submit' }, ctx, 5).nav
+  let posted: string | null = null
+  const r = await writeV74Answers({
+    cards: cards.map(cardToLive), state: nav, now: 5,
+    run: async () => false,
+    post: async (t) => { posted = t },
+  })
+  expect(r.failed).toEqual([cards[0].id])
+  expect(r.state.sent[cards[0].id]).toBeUndefined()
+  expect(posted).toBeNull()
+  const thrown = await writeV74Answers({ cards: cards.map(cardToLive), state: nav, now: 5, run: async () => { throw new Error('timeout') } })
+  expect(thrown.failed).toEqual([cards[0].id])
+  expect(thrown.state.sent[cards[0].id]).toBeUndefined()
+})
+test('r7 send: a card with no option and an empty note is never closed', async () => {
+  const nav = decideReduce({ ...NO_NAV, notes: { [cards[0].id]: '' } }, { kind: 'submit' }, ctx, 5).nav
+  const runs: string[][] = []
+  await writeV74Answers({ cards: cards.map(cardToLive), state: nav, now: 5, run: async (a) => { runs.push(a); return true } })
+  expect(runs.some(a => a.includes('--free-text') && a[a.indexOf('--free-text') + 1] === '')).toBe(false)
 })

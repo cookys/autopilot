@@ -1163,11 +1163,12 @@ export const CLAIM_SCRIPTS = ['scripts/decision-claim.js'] as const
 export const DECISION_SCRIPTS = ['scripts/open-decision.js'] as const
 type CleanRun = (argv: string[]) => Promise<{ exitCode: number; stdout: string }>
 // the one exec path for the whitelisted script lists: argv is node + a whitelisted script (ui-lint.test.js pins this); the only place `$.process` is used
-async function execScript($: EngineInterface, script: (typeof CLEAN_SCRIPTS)[number] | (typeof CLAIM_SCRIPTS)[number] | (typeof DECISION_SCRIPTS)[number], args: string[], run?: CleanRun, timeoutMs = 120_000): Promise<string> {
+async function execScript($: EngineInterface, script: (typeof CLEAN_SCRIPTS)[number] | (typeof CLAIM_SCRIPTS)[number] | (typeof DECISION_SCRIPTS)[number], args: string[], run?: CleanRun, timeoutMs = 120_000, exit?: (code: number) => void): Promise<string> {
   const allowed: readonly string[] = [...CLEAN_SCRIPTS, ...CLAIM_SCRIPTS, ...DECISION_SCRIPTS]
   if (!allowed.includes(script)) throw new Error('script not allowed')
   const argv = ['node', $.plugin.root + '/' + script, ...args]
   const r = run === undefined ? await $.process.run(argv, { timeoutMs }) : await run(argv)
+  exit?.(r.exitCode)
   return r.stdout
 }
 
@@ -1369,17 +1370,20 @@ async function holdDecide($: EngineInterface): Promise<void> {
 // part of this step: a turn that never answers (weekly limit) must not keep the card on the open list.
 async function commitV74Send($: EngineInterface, st: DecideState, feed: readonly DecideCard[], nowMs: number): Promise<void> {
   const pending = snapshot === null ? [] : snapshot.pending.filter(d => !isStepCard(d))
-  const next = await writeV74Answers({
+  const { state: next, failed } = await writeV74Answers({
     cards: v74Pool(pending, feed),
     state: st,
     now: nowMs,
     post: text => sendDecide($, new Set(), text),
     run: async (args) => {
-      if (!(await $.fs.exists($.plugin.root + '/' + DECISION_SCRIPTS[0]).catch(() => false))) return
+      if (!(await $.fs.exists($.plugin.root + '/' + DECISION_SCRIPTS[0]).catch(() => false))) return false
       const cwd = await $.session.cwd().catch(() => '')
-      await execScript($, DECISION_SCRIPTS[0], cwd === '' ? args : ['close', '--cwd', cwd, ...args.slice(1)])
+      let code = -1
+      await execScript($, DECISION_SCRIPTS[0], cwd === '' ? args : ['close', '--cwd', cwd, ...args.slice(1)], undefined, 120_000, c => { code = c })
+      return code === 0
     },
   })
+  if (failed.length > 0) $.ui.toast(t('decide.send_failed', { reason: failed.join(' ') }))
   for (const id of Object.keys(next.sent)) if (st.sent[id] === undefined) durableClosedIds.add(id)
   await update($, DECIDE, s => ({ ...s, sent: next.sent }))
 }

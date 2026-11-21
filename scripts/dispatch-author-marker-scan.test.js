@@ -57,8 +57,20 @@ function extractFunction(scriptPath, fnName) {
   assert.notEqual(start, -1, `Could not find ${fnName}() in ${scriptPath}`);
   const lines = src.slice(start).split('\n');
   const body = [];
+  let heredocTag = null;
   for (const line of lines) {
     body.push(line);
+    if (heredocTag !== null) {
+      if (line === heredocTag) {
+        heredocTag = null;
+      }
+      continue;
+    }
+    const heredocMatch = line.match(/<<-?\s*['"]?([A-Za-z_][A-Za-z0-9_]*)['"]?/);
+    if (heredocMatch) {
+      heredocTag = heredocMatch[1];
+      continue;
+    }
     if (line === '}') break;
   }
   return body.join('\n');
@@ -121,8 +133,7 @@ exec ${JSON.stringify(process.execPath)} ${requireArg}"$@"
   };
 }
 
-function runGate(scriptPath, markerDir, wrapper, extraEnv = {}) {
-  const fnBody = extractFunction(scriptPath, 'check_session_mode_gate');
+function runGateBody(fnBody, markerDir, wrapper, extraEnv = {}) {
   const bashScript = `
 set -uo pipefail
 REPO_ROOT=${JSON.stringify(REPO_ROOT)}
@@ -143,6 +154,10 @@ check_session_mode_gate
     },
     encoding: 'utf8',
   });
+}
+
+function runGate(scriptPath, markerDir, wrapper, extraEnv = {}) {
+  return runGateBody(extractFunction(scriptPath, 'check_session_mode_gate'), markerDir, wrapper, extraEnv);
 }
 
 test('dispatch-author.sh check_session_mode_gate: 5000 expired markers cleared in 1 node process, 2nd run reads 0', () => {
@@ -232,4 +247,83 @@ test('dispatch-hetero.sh check_session_mode_gate: first-offender-wins with live 
   const res2 = runGate(DISPATCH_HETERO_SH, dir2, wrapper2);
   assert.notEqual(res2.status, 0, 'gate must fail closed on invalid marker');
   assert.match(res2.stderr, /invalid authoritative session-mode marker/, 'first offender (a-invalid.json) must be reported');
+});
+
+test('17-1 per-marker node -e loop (negative control)', () => {
+  const dir = createMarkerDir([[5, 3600000, null, false]]);
+  const wrapper = createNodeWrapper();
+  const brokenGate = `
+check_session_mode_gate() {
+  local marker_dir="\${AUTOPILOT_SESSION_MODE_DIR}"
+  for marker in "$marker_dir"/*.json; do
+    [ -e "$marker" ] || continue
+    node -e "JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'))" "$marker"
+  done
+}
+`;
+  const res = runGateBody(brokenGate, dir, wrapper);
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(wrapper.getNodeCount(), 5, 'broken per-marker loop spawns 1 node per marker');
+  assert.throws(
+    () => assert.equal(wrapper.getNodeCount(), 1),
+    /AssertionError/,
+    'process-count assertion must fail on per-marker node -e loop'
+  );
+});
+
+test('17-2 reader-side unlink removes expired marker (negative control)', () => {
+  const dir = createMarkerDir(EXPIRED_GROUPS);
+  assert.equal(fs.readdirSync(dir).length, 5000);
+  const wrapper = createNodeWrapper();
+  const brokenGate = `
+check_session_mode_gate() {
+  local marker_dir="\${AUTOPILOT_SESSION_MODE_DIR}"
+  node -e "const fs = require('fs'); for (const f of process.argv.slice(1)) JSON.parse(fs.readFileSync(f, 'utf8'));" "$marker_dir"/*.json
+}
+`;
+  const res = runGateBody(brokenGate, dir, wrapper);
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(wrapper.getNodeCount(), 1, 'broken variant without unlink still spawns 1 node process');
+  assert.equal(fs.readdirSync(dir).length, 5000, 'without unlink, all 5000 expired markers remain');
+  assert.throws(
+    () => assert.equal(fs.readdirSync(dir).length, 0),
+    /AssertionError/,
+    'residual marker assertion must fail when unlink is missing'
+  );
+});
+
+test('17-3 repo-wide gate rejects another session l5 marker (negative control)', () => {
+  const dir = createMarkerDir([], [
+    [
+      'other-session.json',
+      {
+        session_id: 'other-session-id',
+        level: 'l5',
+        repo_root: REPO_ROOT,
+        started_at: new Date(now - 60000).toISOString(),
+        expires_at: new Date(now + 3600000).toISOString(),
+      },
+    ],
+  ]);
+  const wrapper = createNodeWrapper();
+  const brokenGate = `
+check_session_mode_gate() {
+  local marker_dir="\${AUTOPILOT_SESSION_MODE_DIR}"
+  node -e "
+    const fs = require('fs');
+    const own = process.env.AUTOPILOT_SESSION_ID;
+    for (const f of process.argv.slice(1)) {
+      const d = JSON.parse(fs.readFileSync(f, 'utf8'));
+      if (d.session_id === own && (d.level === 'l5' || d.level === 'l6')) process.exit(2);
+    }
+  " "$marker_dir"/*.json
+}
+`;
+  const res = runGateBody(brokenGate, dir, wrapper);
+  assert.equal(res.status, 0, 'broken session-scoped gate fails to block another session live l5 marker');
+  assert.throws(
+    () => assert.notEqual(res.status, 0),
+    /AssertionError/,
+    'gate-blocks assertion must fail when gate only checks its own session_id'
+  );
 });

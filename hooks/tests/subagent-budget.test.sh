@@ -609,12 +609,15 @@ AUTOPILOT_SUBAGENT_BUDGET_PER_TICKET_USD=100 AUTOPILOT_SUBAGENT_BUDGET_MODE=warn
 TICKET_CROSS="01M7ZKZ8D4511JJ451P71J73R4"
 mk st_a "[{\"id\":\"ta1\",\"brief\":[\"Lane: tlane\",\"Fleet-Task: $TICKET_CROSS\"],\"turns\":5}]"
 AUTOPILOT_SUBAGENT_BUDGET_MODE=warn expect_allow st_a "Engine: sonnet\nLane: tlane\nFleet-Task: $TICKET_CROSS\nClaude-Budget: 100\ngo" "" "(c) session A records spend to ledger"
+printf '{"hook_event_name":"SubagentStop","session_id":"st_a","transcript_path":"%s/st_a.jsonl"}\n' "$PROJ" | node "$HOOKS_DIR/$HOOK" >/dev/null
+ONCE_BUDGET=$(node -e 'console.log((Number(process.argv[1]) * 1.5).toFixed(4))' "$TICKET_USD")
+AUTOPILOT_SUBAGENT_BUDGET_PER_TICKET_USD="$ONCE_BUDGET" AUTOPILOT_SUBAGENT_BUDGET_MODE=warn expect_allow st_once "Engine: sonnet\nLane: tlane\nFleet-Task: $TICKET_CROSS\ngo" "" "PreToolUse then SubagentStop books spend once"
 AUTOPILOT_SUBAGENT_BUDGET_PER_TICKET_USD="$OVER_BUDGET" AUTOPILOT_SUBAGENT_BUDGET_MODE=warn expect_deny st_b "Engine: sonnet\nLane: tlane\nFleet-Task: $TICKET_CROSS\ngo" "" "(c) session B blocked by session A spend on same ticket"
 assert_contains "$__RUN_STDOUT" "Claude 預算已用盡" "(c) session B deny reason in Traditional Chinese"
 # (c2) Dispatch then session ends (SubagentStop books final dispatch) -> new session sees the spend
 TICKET_LAST="01M7ZKZ8D4511JJ451P71J73R5"
 mk st_last "[{\"id\":\"tl1\",\"brief\":[\"Lane: tlane\",\"Fleet-Task: $TICKET_LAST\"],\"turns\":5}]"
-printf '{"hook_event_name":"SubagentStop","session_id":"st_last","transcript_path":"%s/st_last.jsonl"}\n' "$PROJ" | node "$HOOK" >/dev/null
+printf '{"hook_event_name":"SubagentStop","session_id":"st_last","transcript_path":"%s/st_last.jsonl"}\n' "$PROJ" | node "$HOOKS_DIR/$HOOK" >/dev/null
 AUTOPILOT_SUBAGENT_BUDGET_PER_TICKET_USD="$OVER_BUDGET" AUTOPILOT_SUBAGENT_BUDGET_MODE=warn expect_deny st_next "Engine: sonnet\nLane: tlane\nFleet-Task: $TICKET_LAST\ngo" "" "dispatch then session ends -> new session sees the spend"
 assert_contains "$__RUN_STDOUT" "Claude 預算已用盡" "SubagentStop-booked spend blocks new session"
 # (d) Ticketless brief unaffected

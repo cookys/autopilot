@@ -541,7 +541,8 @@ export type CardView = {
   grey: boolean // an answered card (sent, or closed elsewhere): the question and the options are dim theme text, the card stays in its place
   fix: { label: string; onPress: () => void } | null // the pane's 改答案 on a card sent from here
   fill: { label: string; onPress: () => void } | null // the button that puts the reply line in the prompt box (`$.prompt.fill`): an option card's 附註／其他回答, a typed card's 打字回答; null where the surface has no prompt box or the card is a dialog's
-  done?: { label: string; onPress: () => void } | null // step card's 做完了 button (calls dismissCard)
+  done?: { label: string; onPress: () => void } | { label: string; onPress: () => void }[] | null // step card action or the two confirmation choices
+  confirmation?: string | null
   tight?: boolean // r5: a band with too few rows: no padding rows under the background, and 建議 and its reason on one row
   compact?: boolean // r4: a window of 4 content rows or fewer: the title row, then the options, then the rest of the card (scrolled)
   width: number // the main window's inner width less the pad
@@ -569,7 +570,8 @@ export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t:
   const line = (k: string, text: string, dimmed = false, lead = '') => rows.push(<Box key={k}><Text>{' ' + lead}</Text><Text {...dim(dimmed)} wrap="truncate">{text}</Text></Box>)
   const fillBtn = v.fill === null ? null : BarButton(el, 'fill', v.fill.label, v.fill.onPress)
   const fixBtn = v.fix === null ? null : BarButton(el, 'fix', v.fix.label, v.fix.onPress)
-  const doneBtn = v.done === undefined || v.done === null ? null : BarButton(el, 'done', v.done.label, v.done.onPress)
+  const doneItems = v.done === undefined || v.done === null ? [] : Array.isArray(v.done) ? v.done : [v.done]
+  const doneBtns = doneItems.map((b, i) => BarButton(el, 'done' + i, b.label, b.onPress))
   // r5: the question is paragraphs, not one wrapped run: a step list `(1) ... (2) ...` or `1. 2.` puts every step on its own row, its continuation hanging under its text
   paraRows(v.question, w, w).forEach((p, i) => line('q' + i, ' '.repeat(p.indent) + p.row, v.grey))
   // the state line of a sent or closed card (and its 改答案 Button) sits right under the question, so a window that shows only the top of a tall card still shows it
@@ -663,8 +665,9 @@ export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t:
     }
   }
   if (v.notAuthorized !== null) block('na', keys[2], v.notAuthorized, false)
+  if (v.confirmation !== undefined && v.confirmation !== null) line('confirmation', v.confirmation)
   if (fillBtn !== null) optTo.push(<Box key="fill"><Text>{' '}</Text>{fillBtn}</Box>)
-  if (doneBtn !== null) optTo.push(<Box key="done"><Text>{' '}</Text>{doneBtn}</Box>)
+  doneBtns.forEach((btn, i) => optTo.push(<Box key={'done' + i}><Text>{' '}</Text>{btn}</Box>))
   if (v.meta === null && v.note !== null) line('note', v.note, true)
   if (v.compact === true && !v.split && optTo2 > optFrom) {
     // the first row of the question stays on top, the options come next, and everything else (the rest of the question, the state line, the background, the advice) follows and scrolls

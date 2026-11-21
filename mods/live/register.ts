@@ -1145,7 +1145,9 @@ async function decidePress($: EngineInterface, id: string): Promise<void> {
     } else if (id === 'submit') await holdDecide($)
     else if (id.startsWith('undo:')) await undoDecide($, id.slice(5))
     else if (id.startsWith('fix:')) await reopen(undoDeps($), id.slice(4))
-    else if (id.startsWith(DISMISS_PRESS)) await dismissCard($, id.slice(DISMISS_PRESS.length))
+    else if (id.startsWith(DISMISS_PRESS + 'done:')) await dismissCard($, id.slice((DISMISS_PRESS + 'done:').length), true, '做完了')
+    else if (id.startsWith(DISMISS_PRESS + 'cancel:')) await cancelDismissConfirmation($, id.slice((DISMISS_PRESS + 'cancel:').length))
+    else if (id.startsWith(DISMISS_PRESS)) await requestDismissConfirmation($, id.slice(DISMISS_PRESS.length))
     else if (id.startsWith('clean:')) await cleanPress($, id)
   } catch (_e) {
     // a press never takes the session down
@@ -1238,14 +1240,28 @@ export async function recordShowLook($: EngineInterface, req: ShowRequest): Prom
   await refresh($)
 }
 
-async function dismissCard($: EngineInterface, id: string): Promise<void> {
+async function requestDismissConfirmation($: EngineInterface, id: string): Promise<void> {
   if (id === '' || !/^[A-Za-z0-9._-]+$/.test(id)) return
+  await update($, DECIDE, s => ({ ...s, dismissConfirmId: id }))
+  await refresh($)
+}
+async function cancelDismissConfirmation($: EngineInterface, id: string): Promise<void> {
+  await update($, DECIDE, s => s.dismissConfirmId === id ? { ...s, dismissConfirmId: undefined } : s)
+  await refresh($)
+}
+async function dismissCard($: EngineInterface, id: string, done: boolean, key: string): Promise<void> {
+  if (id === '' || !/^[A-Za-z0-9._-]+$/.test(id) || key.trim() === '') return
+  const script = $.plugin.root + '/' + DECISION_SCRIPTS[0]
+  if (!(await $.fs.exists(script).catch(() => false))) return
+  const cwd = await $.session.cwd().catch(() => '')
+  if (cwd === '') return
+  let exitCode = -1
+  try {
+    await execScript($, DECISION_SCRIPTS[0], ['close', '--cwd', cwd, '--id', id, done ? '--panel-done' : '--panel-dismiss', '--closed-key', key], undefined, 120_000, code => { exitCode = code })
+  } catch (_e) { return }
+  if (exitCode !== 0) return
   const nowMs = await $.clock.now()
-  await update($, DECIDE, s => ({ ...s, dismissed: { ...(s.dismissed ?? {}), [id]: nowMs } }))
-  if (await $.fs.exists($.plugin.root + '/' + DECISION_SCRIPTS[0]).catch(() => false)) {
-    const cwd = await $.session.cwd().catch(() => '')
-    if (cwd !== '') await execScript($, DECISION_SCRIPTS[0], ['close', '--cwd', cwd, '--id', id]).catch(() => '')
-  }
+  await update($, DECIDE, s => ({ ...s, dismissed: { ...(s.dismissed ?? {}), [id]: nowMs }, dismissConfirmId: undefined }))
   await refresh($)
 }
 let cleaning = false
@@ -1710,7 +1726,8 @@ async function fillPrompt($: EngineInterface, text: string): Promise<void> {
 // A press inside a framed page: `fleet:fold`, `fleet:see:<line_id>` (open the list so the line is on screen; nothing is sent), `fill:quota:<pool>` (the pool's switch suggestion into the prompt) and any other `fill:<text>`.
 async function framePress($: EngineInterface, id: string): Promise<void> {
   try {
-    if (/^decide:detail:\d+$/.test(id)) { decideLocal = { ...decideLocal, detailOffset: Number(id.slice('decide:detail:'.length)) } }
+    if (id.startsWith(DISMISS_PRESS)) { await decidePress($, id); return }
+    else if (/^decide:detail:\d+$/.test(id)) { decideLocal = { ...decideLocal, detailOffset: Number(id.slice('decide:detail:'.length)) } }
     else if (id === 'fleet:fold') { await frameKey($, { kind: 'fold' }); return } // use the same focus clamp as the fold key, including when a tall dock auto-unfolded the body
     else if (id === 'quota:open') { const expanded = !(pageView.quota?.expanded ?? false); pageView.quota = { ...(pageView.quota ?? { focus: 0, expanded: false }), expanded, folded: !expanded } }
     else if (id.startsWith('fleet:see:')) {
@@ -2147,17 +2164,18 @@ export function registerLive(on: Parameters<Register>[0]): void {
           }
           const { note: noteKey, doneId: stepId } = bandCardNote(cur, curLocked, fill)
           const note = noteKey === null ? null : t(noteKey)
-          const done = stepId === null ? null : {
-            label: t('decide.step_done'),
-            onPress: () => { void dismissCard($, stepId).then(redraw) },
-          }
+          const confirming = stepId !== null && st.dismissConfirmId === stepId
+          const done = stepId === null ? null : confirming ? [
+            { label: '做完了', onPress: () => { void dismissCard($, stepId, true, '做完了').then(redraw) } },
+            { label: '還沒', onPress: () => { void cancelDismissConfirmation($, stepId).then(redraw) } },
+          ] : [{ label: t('decide.step_done'), onPress: () => { void requestDismissConfirmation($, stepId).then(redraw) } }]
           // the pane's state words (tabs.ts decideCards): held, sent, and for a card closed elsewhere the batch's `answered elsewhere` line; a correcting card (fixing) is open again and says nothing here
           const heldNow = cur !== undefined && decideHeld(cur, st)
           const meta = cur === undefined ? (bandBatch.ans[curKey] ?? null) : heldNow ? t('decide.held') : sentOf(cur) ? t('decide.sent') : null
           const fixable = cur !== undefined && cur.id !== null && !heldNow && sentOf(cur) && !decideDialog(cur)
           const fixId = cur?.id ?? null
           const view = (split: boolean, tight = false, width = mainCols - 1, noFill = false) => cardMain(el, {
-            key: curKey, question: cur === undefined ? bandBatch.q[curKey] : cur.question, background: cur === undefined ? null : cur.background, note, fill: noFill ? null : fill, done, meta, tight, locked: curLocked, grey: cur === undefined || sentOf(cur), split,
+            key: curKey, question: cur === undefined ? bandBatch.q[curKey] : cur.question, background: cur === undefined ? null : cur.background, note, fill: noFill ? null : fill, done, confirmation: confirming ? '做完了嗎？' : null, meta, tight, locked: curLocked, grey: cur === undefined || sentOf(cur), split,
             fix: fixable && fixId !== null ? { label: t('decide.fix'), onPress: () => { void decidePress($, 'fix:' + fixId).then(redraw) } } : null,
             advice: cur === undefined || (cur.recommendation === null && cur.why === null) ? null : { label: cur.recommendation ?? '', why: cur.why },
             notAuthorized: cur === undefined ? null : cur.not_authorized,

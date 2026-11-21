@@ -20,6 +20,7 @@
  *   node scripts/open-decision.js due-sweep [--cwd <dir>]   (prints `DUE <id> <title>` once per card that became due since the last sweep; exit 0)
  *   node scripts/open-decision.js redeliver [--id <id>] [--cwd <dir>]   (resend the panel answer of every pending_dispatch card the program parked, see "Panel answer delivery")
  *   node scripts/open-decision.js close --id <id> --withdraw <reason> [--by <actor>] [--root-run-id <id>] [--cwd <dir>]   (withdrawn; the card is KEPT, status closed)
+ *   node scripts/open-decision.js close --id <id> --panel-done|--panel-dismiss --closed-key <key-or-button>
  *   node scripts/open-decision.js close --id <id> --answer <text> [--executor <address>] [--asker <address>] [--awaiting-operator <step>] [--reask-after <4h|30m|1d>]
  *                                       (with an executor: prints the dispatch JSON and parks the card in pending_dispatch; nothing is sent.
  *                                        a card opened with operator_steps, answered with anything but a decline, goes to awaiting_operator_action
@@ -575,9 +576,9 @@ function takeFreeText(argv) {
 // BL cardtrail flags are lifted out like --kind/--target (parse()'s valued Set stays byte-identical to the frozen ask stub).
 // -> { rest, extra: { answer, executor, asker, 'awaiting-operator', 'reask-after', from, dispatched, 'dispatched-msg', title, note, 'operator-step', all, apply } } | { error }
 // operator-step is repeatable and may hold several steps separated by newlines. parse()'s valued Set stays untouched (frozen ask stub).
-const EXTRA_VALUED = ['answer', 'executor', 'asker', 'awaiting-operator', 'reask-after', 'from', 'dispatched', 'dispatched-msg', 'title', 'from-request', 'note', 'look-target', 'category', 'since', 'premise-source', 'withdraw', 'by'];
+const EXTRA_VALUED = ['answer', 'executor', 'asker', 'awaiting-operator', 'reask-after', 'from', 'dispatched', 'dispatched-msg', 'title', 'from-request', 'note', 'look-target', 'category', 'since', 'premise-source', 'withdraw', 'by', 'closed-key'];
 const EXTRA_REPEAT = ['operator-step'];
-const EXTRA_SWITCH = ['all', 'apply', 'irreversible', 'premise-inferred'];
+const EXTRA_SWITCH = ['all', 'apply', 'irreversible', 'premise-inferred', 'panel-done', 'panel-dismiss'];
 // The only seven kinds of question that go to the operator (operator rule 2026-11-15); everything else the PM decides.
 const CATEGORIES = ['money', 'identity', 'presence', 'goal', 'public-release', 'unbackable-loss', 'authority'];
 const CATEGORY_REFUSAL = '拒絕開卡：--category 必須是 money（錢）、identity（身分：操作員本人的登入、憑證、金鑰、scope）、presence（到場）、goal（改目標）、public-release（對外）、unbackable-loss（無備份的損失）、authority（改授權：改 grant、authority table、DOA 或某條 lane 的權限）其中之一。這件 PM 自己決定；不確定就先找 hetero 評估。';
@@ -886,6 +887,25 @@ function main(argv) {
     const bad = stray(['all', 'apply', 'from', 'irreversible', 'from-request', 'note']);
     if (bad) return usage(`--${bad} is not a close argument`);
     if (ex.dispatched !== undefined || ex['dispatched-msg'] !== undefined) return markDispatched(args, ex);
+    const panelAction = ex['panel-done'] === true ? 'panel_done' : ex['panel-dismiss'] === true ? 'panel_dismiss' : null;
+    if (ex['panel-done'] === true && ex['panel-dismiss'] === true) return usage('--panel-done and --panel-dismiss are mutually exclusive');
+    if (panelAction !== null) {
+      if (typeof ex['closed-key'] !== 'string' || !ex['closed-key'].trim()) return usage('panel close needs --closed-key <key-or-button>');
+      if (ex.answer !== undefined || args.option.length || args.closeFreeText !== undefined || ex.withdraw !== undefined || ex.executor !== undefined || ex.asker !== undefined) return usage('panel close cannot be combined with answer or withdrawal arguments');
+      const foundPanel = findCard(args.cwd, args.id, { live: true });
+      if (!foundPanel || !isOpenEntry(foundPanel.entry)) { process.stdout.write(`not open: ${args.id}\n`); return 0; }
+      if (isAwaitingEntry(foundPanel.entry) || isPendingDispatchEntry(foundPanel.entry)) return usage(`${args.id} is not an open panel card`);
+      if (panelAction === 'panel_done' && !['step', 'look'].includes(foundPanel.entry.kind)) return usage('--panel-done is only valid for step/look cards');
+      if (panelAction === 'panel_dismiss' && !['step', 'look'].includes(foundPanel.entry.kind)) return usage('--panel-dismiss is only valid for step/look cards');
+      const panelPatch = { status: 'closed', closed_at: new Date().toISOString(), closed_via: panelAction, closed_key: ex['closed-key'].trim(), answer: panelAction === 'panel_done' ? '做完了' : null, reask_at: undefined };
+      const panelResult = patchDecision(foundPanel.file, args.id, panelPatch);
+      if (panelResult.status === 'error') { process.stderr.write(`open-decision: ${panelResult.message}\n`); return 4; }
+      if (panelResult.status === 'absent') { process.stdout.write(`not open: ${args.id}\n`); return 0; }
+      const panelStale = closeStaleCopies(args.cwd, args.id, foundPanel.file, panelPatch);
+      if (panelStale.status === 'error') { process.stderr.write(`open-decision: ${panelStale.message}\n`); return 4; }
+      process.stdout.write(`closed ${args.id}\n`);
+      return 0;
+    }
     const viaOption = args.option.length > 0 || args.closeFreeText !== undefined;
     if (args.option.length > 1) return usage('close takes one --option <label>, optionally with --free-text <note>, or one --free-text <text>');
     if (ex['operator-step'] !== undefined) return usage('--operator-step belongs to `open`, not close');

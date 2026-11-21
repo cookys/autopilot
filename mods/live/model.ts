@@ -1933,7 +1933,7 @@ export type PaneCtx = { t: T; cols: number; expanded?: ReadonlySet<string>; fold
 // in the locale tables and do not change with the language. ----
 // `hold`: cards the owner pressed send on that still sit in the undo window (id -> the clock time the window ends); nothing is claimed or sent until then.
 // `fixing`: sent cards the owner reopened with 改答案 (id -> the clock time it was reopened); their next send is a correction line, not a first answer.
-export type DecideState = { picks: Record<string, number>; notes: Record<string, string>; sent: Record<string, number>; clean?: Record<string, U.CleanResult>; hold?: Record<string, number>; fixing?: Record<string, number>; dismissed?: Record<string, number> }
+export type DecideState = { picks: Record<string, number>; notes: Record<string, string>; sent: Record<string, number>; clean?: Record<string, U.CleanResult>; hold?: Record<string, number>; fixing?: Record<string, number>; dismissed?: Record<string, number>; dismissConfirmId?: string }
 // the undo window between pressing send and the send (operator, 2026-11-08): the card stays on the pane and shows 撤回 with the seconds left
 export const DECIDE_UNDO_MS = 10_000
 export const NO_DECIDE: DecideState = { picks: {}, notes: {}, sent: {} }

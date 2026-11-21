@@ -106,6 +106,13 @@ od close --id "$C6" --dispatched "bad id!"; assert_eq "$RC" 2 "--dispatched need
 od close --id "$C6"; assert_eq "$RC" 2 "bare close is refused"; assert_eq "$(field "$C6" status)" "open" "bare close leaves card open"; assert_contains "$ERR" "--withdraw <reason> --by <actor>" "bare close prints complete withdrawal example"
 od close --id "$C6" --withdraw "PM 撤回：重開成新卡" --by "ns/cc/pm"; assert_eq "$RC" 0 "explicit withdrawal succeeds"; assert_eq "$(field "$C6" status)" "closed" "withdrawal kept as closed"; assert_eq "$(field "$C6" answer)" "null" "withdrawal has no answer"; assert_eq "$(field "$C6" closed_via)" "withdrawn" "withdrawal marker stored"; assert_eq "$(field "$C6" withdraw_reason)" "PM 撤回：重開成新卡" "withdrawal reason stored"; assert_eq "$(field "$C6" withdrawn_by)" "ns/cc/pm" "withdrawal actor stored"
 
+opencard "panel dismiss?" --kind step; PD="$OUT"
+od close --id "$PD" --panel-dismiss --closed-key Escape; assert_eq "$RC" 0 "panel dismiss closes with provenance"
+assert_eq "$(field "$PD" closed_via)" "panel_dismiss" "panel dismiss provenance stored"; assert_eq "$(field "$PD" closed_key)" "Escape" "panel dismiss key stored"; assert_neq "$(field "$PD" closed_at)" "<undef>" "panel dismiss timestamp stored"
+opencard "panel done?" --kind step; PN="$OUT"
+od close --id "$PN" --panel-done --closed-key "做完了"; assert_eq "$RC" 0 "panel done closes with provenance"
+assert_eq "$(field "$PN" closed_via)" "panel_done" "panel done provenance stored"; assert_eq "$(field "$PN" closed_key)" "做完了" "panel done key stored"; assert_eq "$(field "$PN" answer)" "做完了" "panel done answer stored"
+
 
 # 6. backfill: dry run by default, status per line
 cat > "$TEST_TMP/bf.jsonl" <<JSON

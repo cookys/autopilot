@@ -75,7 +75,7 @@ marker 沒有 seat 欄位；seat 身分是 fleet 的事（見 3(b)）。
 1. 失敗根因是缺生命週期，補上就夠；不用換儲存。
 2. (b) 要動 fleet 側且會讓 hook 依賴外部服務，違反「hook 失敗要 fail-open」與本 repo 授權範圍；而且 fleet 沒有 level／stage，不能當正本。我們不需要兩個正本。
 3. fs watch 未證實，不拿它當設計前提。mod 側已經是每 tick 一次 `readObject(own sid)`，成本與目錄大小無關（`register.ts:520`）；不另外為它加新機制。
-4. 活著的檔案數就等於活著的 session 數，掃描型讀者（watcher）的 N 自然有界，不需要額外索引檔（索引檔是第二個正本，會漂移）。
+4. 掃描型讀者（watcher、`dispatch-author.sh`）本來就只認未過期的 marker，過期檔對它們沒有用處。所以「讀完就刪」：它們讀到過期且無 campaign 的 marker 就以寬限 0 刪掉（見 5.A 的 `graceMs`）。每個殘留檔最多被這兩類讀者各解析一次就消失，穩態成本正比於「未過期 marker 數」（活 session 加 24 小時 TTL 內崩潰的），與歷史殘留量無關；不需要額外索引檔（索引檔是第二個正本，會漂移）。這裡「有界」的精確意思：首次接觸殘留檔付一次 O(N) 讀取並同時清除；之後每次 tick／dispatch 的讀取數 ≤ 未過期 marker 數 + 常數。
 
 保留的輪詢：mod 5 秒 tick 與 watcher 10 秒 tick 不是為了 marker 而存在，不動。要消掉的是「每 tick 的成本隨殘留檔數成長」。
 
@@ -91,19 +91,19 @@ marker 沒有 seat 欄位；seat 身分是 fleet 的事（見 3(b)）。
 - `scripts/session-mode.js`：
   - 新增 `endSession(sessionId, opts)`：持 marker 鎖（沿用 `withWriteLock`，`:668` 同寫法）；檔不存在回傳 `absent`；檔內 `session_id` 與檔名不符回傳 `mismatch`；`sessionId === AUTOPILOT_PARENT_SESSION_ID` 回傳 `refused_parent`（子行程絕不刪父的 marker，與 `:849` 的規則一致）；level 是 l5／l6 且 `campaign_roots` 非空回傳 `kept_campaign`（marker 是 session 與背景 campaign 的唯一連結，見 `src/status/runs-watch.js:183` 註解）；其餘 `unlink` 並回傳 `removed`。
   - 新增 `sweep` 子命令：`node scripts/session-mode.js sweep [--max N]`，呼叫既有 `sweepExpiredMarkers`（`:764`），回傳 JSON `{removed, remaining}`。預設 `--max 500`。
-  - `sweepExpiredMarkers` 的 `SWEEP_MAX_REMOVALS`（`:761`）改成參數，預設不變。
+  - `sweepExpiredMarkers`（`:764`）的簽名擴成 `(dir, protectFile, now, { max = SWEEP_MAX_REMOVALS, graceMs = SWEEP_EXPIRED_AFTER_MS } = {})`，預設行為不變（寫入時的清掃照舊 500 個、24 小時寬限）。`graceMs: 0` 時，`expires_at` 已過的 marker 立即視為死檔，但 level 為 l5／l6 且 `campaign_roots` 非空者一律保留（理由同 `endSession`）。新增 `sweep` 子命令與 watcher、`dispatch-author.sh` 讀取時的清除都走這個參數；marker 的 24 小時 TTL（`expires_at` 的算法）不動，只是已過期檔的刪除寬限在「讀者端」縮短，因為 hook 與 watcher 對過期 marker 的語意本來就是「不存在」（`ensurePlainMarker` 同樣直接取代過期檔，`:790` 註解）。
 - `hooks/hooks.json`：SessionEnd 加一筆；`hooks/hook-classes.*`（現有 hook 分類檔，實作者用 `git grep -n foreman-guard -- hooks` 找到登錄處）登錄為 default-on，旋鈕 `AUTOPILOT_SESSION_END_CLEANUP=0` 關閉；`hooks/README.md` 加一列；`docs/dev/hook-harness-matrix.md` 加一列（標「未驗證」，不得改寫成已驗證）。
 - 鏡像：`platforms/codex/plugin/scripts/session-mode.js` 以 `scripts/sync-all` 同步（03cda3928 同樣改了兩份）；codex 無 SessionEnd，所以 codex 只靠清掃。
 
 ### B. watcher 讀取成本（`src/status/runs-watch.js`）
 
-- 啟動時與每小時呼叫一次 `sweepExpiredMarkers(markerDirOf(env), null, now, { max: 5000 })`，之後再列目錄。
-- `unexpiredMarkers`（`:167`）與 `markerFilesOf`（`:433`）合併成一個函式（兩者的 parse 與過期判斷重複），並在 `readFileSync` 前用檔名過濾 `.json`。不加索引檔。
+- 啟動時與每小時呼叫一次 `sweepExpiredMarkers(markerDirOf(env), null, now, { max: 5000, graceMs: 0 })`，之後再列目錄。
+- `unexpiredMarkers`（`:167`）與 `markerFilesOf`（`:433`）合併成一個函式（兩者的 parse 與過期判斷重複），並在 `readFileSync` 前用檔名過濾 `.json`；該函式讀到「過期且無 campaign」的 marker 時當場 `unlinkSync`（忽略錯誤），所以兩次清掃之間新增的殘留也是每檔只解析一次。不加索引檔。
 - 鏡像 `platforms/codex/plugin/src/status/runs-watch.js` 同步。
 
 ### C. shell 腳本（`scripts/dispatch-author.sh:758–772`）
 
-- 把「每個 marker 起一個 `node -e`」改成一個 node 行程，一次判斷全部 marker 並輸出命中的 level；語意不變（同一 repo、未過期、level 為 l3–l6 才擋）。
+- 把「每個 marker 起一個 `node -e`」改成一個 node 行程，一次判斷全部 marker 並輸出命中的 level；語意不變（同一 repo、未過期、level 為 l3–l6 才擋；仍是整個 repo 範圍的閘，不能改成只看自己的 sid）。同一個行程讀到過期且無 campaign 的 marker 就用 `graceMs: 0` 規則刪除（單次最多 5,000 個），所以第一次 dispatch 付一次 O(N)，之後讀取數 ≤ 未過期 marker 數。
 - 實作者先 `git grep -n 'markerDir\|session-mode' -- 'scripts/*.sh'` 確認 `dispatch-hetero.sh`、`dispatch-foreman.sh` 有沒有同型迴圈；有就同一塊處理，沒有就寫「已查無」。
 
 ### D. live mod（`mods/live/register.ts`）
@@ -149,9 +149,9 @@ marker 沒有 seat 欄位；seat 身分是 fleet 的事（見 3(b)）。
 13. 斷言（hook 熱路徑）：包住 `fs.readdirSync`、`fs.statSync`、`fs.readFileSync` 計數；呼叫 `readSessionRecord(sid)`、`readMarker()`、`readSessionRoot(sid)` 各一次，`readdirSync` 次數 = 0，`readFileSync` 次數 ≤ 2（marker 本身，加 turn 檔），`statSync` 次數 = 0。
 14. 斷言（時間上限，寬鬆）：同一組呼叫在 5,000 檔和 5 檔兩種情況下耗時比 < 3 倍，且 5,000 檔情況 < 50 ms。
 15. 斷言（清掃收斂）：`sweep --max 500` 連跑 10 次後目錄只剩 1 個檔（自己的），每次 `removed ≤ 500`，第 10 次 `remaining = 1`。
-16. 斷言（watcher）：在 `scripts/runs-watch-sources.test.js` 旁新增 `runs-watch with 5000 expired markers`：啟動清掃後第一個 tick 的 `readFileSync` 次數 ≤ 活 marker 數 + 常數 5；清掃前（舊碼）為 5,000+（紅），清掃後（新碼）綠。
-17. 斷言（shell）：新檔 `scripts/dispatch-author-marker-scan.test.js`：5,000 殘留檔時，`dispatch-author.sh` 的 marker 檢查只起 1 個 node 行程（以 PATH 內的 `node` 包裝計數，計數 = 1）；舊碼為 5,000（紅）。
-18. 負控制：把清掃上限改回 500 且不加啟動清掃，測試 16 必須紅。
+16. 斷言（watcher）：在 `scripts/runs-watch-sources.test.js` 旁新增 `runs-watch with 5000 expired markers`。殘留檔分兩組各 2,500：過期超過 25 小時、以及只過期 1 小時（還在舊的 24 小時寬限內），外加 3 個活 marker。第一個 tick：啟動清掃後 `readFileSync` 次數 ≤ 5,003 + 常數（每檔最多一次），且結束後目錄只剩 3 個檔。第二個 tick：`readdirSync` 次數 = 1、`readFileSync` 次數 ≤ 3 + 常數 5、`JSON.parse` 次數 ≤ 3 + 5。舊碼第二個 tick 仍讀 5,000+（紅）。
+17. 斷言（shell）：新檔 `scripts/dispatch-author-marker-scan.test.js`，殘留檔同上（5,000，其中 2,500 只過期 1 小時，沒有活 marker）。第一次 `dispatch-author.sh` 的 marker 檢查只起 1 個 node 行程（以 PATH 內的 `node` 包裝計數，計數 = 1），結束後殘留檔 = 0；第二次同樣只起 1 個、`readFileSync` ≤ 常數 5。舊碼第一次起 5,000 個行程（紅）。再加一例：另有 1 個同 repo 的活 l5 marker 時，檢查仍擋（回傳 level），證明整個 repo 範圍的閘語意沒變。
+18. 負控制：（a）把 `graceMs: 0` 的讀取端清除拿掉，測試 16 的第二個 tick 斷言必須紅；（b）把清掃上限改回 500 且不加啟動清掃，測試 16 的第一個 tick 必須紅。
 
 `mods/live/live.test.ts` 新增：
 
@@ -165,7 +165,7 @@ marker 沒有 seat 欄位；seat 身分是 fleet 的事（見 3(b)）。
 - 不加 fs watch、不加 `$.store`（兩者都未證實；要用先另開單證明）。
 - 不加索引檔、事件帳本或其他第二份正本（ADR-0001：靠重新推導驗證，不加信任機制）。
 - 不改 marker 的欄位 schema，不動 `readSessionRoot` 的「turn 檔證明還活著」判斷。
-- 不降低 24 小時 TTL，也不改 fail-open 語意。
+- 不降低 marker 的 24 小時 TTL（`expires_at` 算法不動），也不改 fail-open 語意；只縮短讀者端對「已過期、無 campaign」檔的刪除寬限（見 5.A）。
 - 不改 mod 的 5 秒 tick 與 watcher 的 10 秒 tick。
 - 不動 hangar（只轉給 hangar lane 退役它那份每日清理）。
 - 不 bump 版號、不做 hosted CI。

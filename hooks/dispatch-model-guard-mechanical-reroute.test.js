@@ -137,7 +137,7 @@ fs.writeFileSync(
   stubBin,
   `#!/usr/bin/env node
 const fs = require('fs');
-if (process.env.STUB_COUNTER) fs.appendFileSync(process.env.STUB_COUNTER, '1\\n');
+if (process.env.STUB_COUNTER && process.argv[2] === 'whoami') fs.appendFileSync(process.env.STUB_COUNTER, '1\\n');
 if (process.env.STUB_EXIT) process.exit(Number(process.env.STUB_EXIT));
 if (process.argv[2] === 'whoami' && process.argv[3] === '--session') {
   process.stdout.write((process.env.STUB_ADDR || '') + '\\n');
@@ -148,7 +148,7 @@ process.exit(1);
   { mode: 0o755 }
 );
 
-const fleetCall = (sessionId, prompt = 'Engine: sonnet\nRole: stats\nx') => ({
+const fleetCall = (sessionId, prompt = 'Engine: sonnet\nRole: stats\nFleet-Task: 01M7ZDSR7X7C6GVSB6T3Q6YC3G\nx') => ({
   ...call(prompt),
   session_id: sessionId,
 });
@@ -161,7 +161,7 @@ assert.strictEqual(decision(fleetPm), undefined);
 assert.strictEqual(logLines().length, beforeFleetPm + 1);
 const fleetPmRow = JSON.parse(logLines().pop());
 assert.strictEqual(fleetPmRow.seat, 'pm');
-assert.strictEqual(fleetPmRow.seat_source, 'fleet');
+assert.strictEqual(fleetPmRow.seat_source, 'console');
 
 // 10b. *-lead--claude -> seat lead
 const beforeFleetLead = logLines().length;

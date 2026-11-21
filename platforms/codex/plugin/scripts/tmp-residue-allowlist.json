@@ -3,6 +3,11 @@
   "version": 1,
   "entries": [
     {
+      "file": "hooks/_shared/fleet-seat.js",
+      "match": "base.startsWith('/tmp/')",
+      "reason": "Comparison rejects a shared temp-root path; it allocates nothing."
+    },
+    {
       "file": "hooks/dispatch-model-guard.js",
       "match": "base.startsWith('/tmp/')",
       "reason": "Comparison rejects a shared temp-root path; it allocates nothing."

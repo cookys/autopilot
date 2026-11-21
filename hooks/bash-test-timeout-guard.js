@@ -80,24 +80,60 @@ function splitShellSegments(cmd) {
   return segments;
 }
 
-const TIMEOUT_PREFIX_RE = /^(?:[A-Za-z_][A-Za-z0-9_]*=(?:'[^']*'|"[^"]*"|\S*)\s+)*timeout\s+(?:-\S+\s+)*\d+[sm]?\b/;
+const ENV_ASSIGN_RE = /^(?:[A-Za-z_][A-Za-z0-9_]*=(?:'[^']*'|"[^"]*"|\S*)\s+)*/;
+const TIMEOUT_PREFIX_RE = /^(?:[A-Za-z_][A-Za-z0-9_]*=(?:'[^']*'|"[^"]*"|\S*)\s+)*(?:timeout|gtimeout)\s+(?:(?:--(?:signal|kill-after)(?:=\S+|\s+\S+)|-[ks]\s+\S+|-\S+)\s+)*\d+(?:\.\d+)?[smhd]?\b/;
 
-const TEST_OR_CHECK_PATTERNS = [
-  /\bnode\s+(?:--\S+\s+)*\S+\.test\.js\b/,
-  /\bnode\s+--test\b/,
-  /\b(?:bash|sh)\s+(?:\S+\.test\.sh|\S*hooks\/tests\/\S+\.sh)\b/,
-  /\bhooks\/tests\/\S+\.sh\b/,
-  /\bscripts\/affected-suites\.js\b/,
-  /\bscripts\/check-\S+\.(?:js|sh)\b/,
-  /\bpytest\b/,
-  /\bpython3?\s+-m\s+pytest\b/,
-  /\bnpm\s+(?:test|t)\b/,
-  /\bnpx\s+vitest\b/,
-  /\bjest\b/,
-];
+function stripQuotes(str) {
+  return str.replace(/'[^']*'|"[^"]*"/g, '""');
+}
+
+function getCommandTokens(seg) {
+  let rest = seg.replace(ENV_ASSIGN_RE, '');
+  if (TIMEOUT_PREFIX_RE.test(seg)) {
+    rest = seg.replace(TIMEOUT_PREFIX_RE, '').trim();
+  }
+  const unquoted = stripQuotes(rest).trim();
+  if (!unquoted) return [];
+  return unquoted.split(/\s+/);
+}
 
 function isTestOrCheckSegment(seg) {
-  return TEST_OR_CHECK_PATTERNS.some((re) => re.test(seg));
+  const tokens = getCommandTokens(seg);
+  if (tokens.length === 0) return false;
+  const cmd = tokens[0];
+  const arg1 = tokens[1] || '';
+  const arg2 = tokens[2] || '';
+
+  if (cmd === 'node') {
+    const nonFlagArgs = tokens.slice(1).filter((t) => !t.startsWith('-'));
+    if (tokens.includes('--test')) return true;
+    return nonFlagArgs.some(
+      (a) =>
+        /\.test\.[cm]?js$/.test(a) ||
+        /(?:^|\/)scripts\/affected-suites\.js$/.test(a) ||
+        /(?:^|\/)scripts\/check-\S+\.js$/.test(a)
+    );
+  }
+
+  if (cmd === 'bash' || cmd === 'sh') {
+    const nonFlagArgs = tokens.slice(1).filter((t) => !t.startsWith('-'));
+    return nonFlagArgs.some(
+      (a) =>
+        /\.test\.sh$/.test(a) ||
+        /(?:^|\/)hooks\/tests\/\S+\.sh$/.test(a) ||
+        /(?:^|\/)scripts\/check-\S+\.sh$/.test(a)
+    );
+  }
+
+  if (/(?:^|\/)hooks\/tests\/\S+\.sh$/.test(cmd)) return true;
+  if (cmd === 'pytest' || cmd === 'jest' || cmd === 'vitest') return true;
+  if ((cmd === 'python' || cmd === 'python3') && arg1 === '-m' && arg2 === 'pytest') return true;
+  if (cmd === 'npm' && (arg1 === 'test' || arg1 === 't' || (arg1 === 'run' && /^test/.test(arg2)))) return true;
+  if ((cmd === 'pnpm' || cmd === 'yarn') && (arg1 === 'test' || (arg1 === 'run' && /^test/.test(arg2)))) return true;
+  if (cmd === 'npx' && (arg1 === 'jest' || arg1 === 'vitest')) return true;
+  if ((cmd === 'cargo' || cmd === 'go') && arg1 === 'test') return true;
+
+  return false;
 }
 
 function hasTimeoutPrefix(seg) {

@@ -73,6 +73,32 @@ test('allows non-test commands', () => {
   assert.equal(res.status, 0);
 });
 
+test('allows non-test commands mentioning test runners in args or quotes (false-positive regression)', () => {
+  const ok = [
+    'grep -rn jest src',
+    'cat scripts/check-test-cli-timeout.js',
+    'git log --grep pytest',
+    'git commit -m "add npm test coverage"',
+    'echo jest',
+    'timeout 1h node x.test.js',
+  ];
+  for (const cmd of ok) {
+    const res = runHook(cmd, { AUTOPILOT_BASH_TEST_TIMEOUT_NOW: '2026-11-26T00:00:00+08:00' });
+    assert.equal(res.status, 0, `expected exit 0 for: ${cmd}`);
+  }
+});
+
+test('blocks bare test runner invocations at cutoff', () => {
+  const bad = [
+    'node a.test.js',
+    'FOO=1 bash hooks/tests/x.test.sh',
+  ];
+  for (const cmd of bad) {
+    const res = runHook(cmd, { AUTOPILOT_BASH_TEST_TIMEOUT_NOW: '2026-11-26T00:00:00+08:00' });
+    assert.equal(res.status, 2, `expected exit 2 for: ${cmd}`);
+  }
+});
+
 test('AUTOPILOT_BASH_TEST_TIMEOUT=0 disables the guard', () => {
   const res = runHook('node hooks/foo.test.js', { AUTOPILOT_BASH_TEST_TIMEOUT: '0' });
   assert.equal(res.status, 0);

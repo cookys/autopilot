@@ -3032,7 +3032,7 @@ write_manifest() {
       "$(_flat_json_escape "$DISPATCH_RUN_ID")" "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
       "${BASE_SHA:-}" "$(_flat_json_escape "${WT:-}")" "$(_flat_json_escape "${WT:-}/.autopilot-worktree.lock")" "$(_flat_json_escape "${LOG:-}")" \
       "$log_format" "$duplex_json" "$pid_json" "$scope_json" "${MANIFEST_CONTAINMENT:-plain}" \
-      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${DISPATCH_STARTED_EPOCH:-null}" "$(_flat_json_escape "${PROMPT_FILE:-}")" "$prompt_sha_json" "${DISPATCH_LANE_JSON:-null}" "${SCAFFOLD_TIER_EFFECTIVE:-off}" \
+      "$DISPATCH_STARTED_AT" "${DISPATCH_STARTED_EPOCH:-null}" "$(_flat_json_escape "${PROMPT_FILE:-}")" "$prompt_sha_json" "${DISPATCH_LANE_JSON:-null}" "${SCAFFOLD_TIER_EFFECTIVE:-off}" \
       "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$tip_verify_json" "$tip_verify_source_json" "$parent_json" "$root_json" "$depth_json" \
       "$mf_timeout_secs" "$(_flat_json_escape "$mf_timeout_source")" "$mf_timeout_enforced" "$strict_manifest_fields" "$strike_suppressed_fields" "$capability_suppressed_fields" "$effort_manifest_fields$role_kit_manifest_fields" "$campaign_scope_fields" "$REPO_IDENTITY_FIELDS$(declare -F dispatch_attr_fields >/dev/null 2>&1 && dispatch_attr_fields "${PROMPT_FILE:-}" "$runner" "${ENDPOINT:-}" "${MANIFEST_FINAL_STATUS:+${OUTCOME_COMMIT:-}}")" \
       "$(declare -F manifest_session_id_json >/dev/null 2>&1 && manifest_session_id_json || printf null)" \
@@ -3053,6 +3053,10 @@ manifest_finalize() {
   MANIFEST_FINAL_STATUS="${1:-}"
   MANIFEST_ENDED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   MANIFEST_ENDED_EPOCH="$(date +%s)"
+  if [ -n "${DISPATCH_STARTED_EPOCH:-}" ] && [ "$MANIFEST_ENDED_EPOCH" -le "$DISPATCH_STARTED_EPOCH" ]; then
+    MANIFEST_ENDED_EPOCH="$((DISPATCH_STARTED_EPOCH + 1))"
+    MANIFEST_ENDED_AT="$(date -u -d "@$MANIFEST_ENDED_EPOCH" +%Y-%m-%dT%H:%M:%SZ)"
+  fi
   write_manifest
 }
 
@@ -3214,7 +3218,10 @@ fi
 # Run identity for the observability manifest: reuse the ledger --run-id when supplied
 # (one id across ledger + manifest + final JSON), else generate a unique one. Set BEFORE
 # preconditions so even a precondition_failed JSON carries a correlatable run_id.
-DISPATCH_STARTED_EPOCH="$(date +%s)"
+_dispatch_start_stamp="$(date -u '+%s %Y-%m-%dT%H:%M:%SZ')"
+DISPATCH_STARTED_EPOCH="${_dispatch_start_stamp%% *}"
+DISPATCH_STARTED_AT="${_dispatch_start_stamp#* }"
+unset _dispatch_start_stamp
 if [ -n "$RUN_ID" ]; then
   DISPATCH_RUN_ID="$RUN_ID"
 else

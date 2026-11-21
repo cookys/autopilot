@@ -1720,7 +1720,10 @@ PARSE_INPUT="$RAW_LOG"
 # previous object. Correlate via raw_log, and derive
 # usage post-hoc with: dispatch-status.js --log <raw_log> --usage-only.
 REVIEW_MANIFEST_FILE=""
-REVIEW_STARTED_EPOCH="$(date +%s)"
+_review_start_stamp="$(date -u '+%s %Y-%m-%dT%H:%M:%SZ')"
+REVIEW_STARTED_EPOCH="${_review_start_stamp%% *}"
+REVIEW_STARTED_AT="${_review_start_stamp#* }"
+unset _review_start_stamp
 if [ -n "$RUN_ID" ]; then
   REVIEW_RUN_ID="$RUN_ID"
 else
@@ -1827,7 +1830,7 @@ write_review_manifest() {
     printf '{ "schema": 1, "run_id": "%s", "role": "reviewer", "allow_narrative": %s, "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "lane": %s, "diff_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, %s, "session_id": %s, "child_session_id": %s, "child_transcript": %s }\n' \
       "$(json_escape "$REVIEW_RUN_ID")" "$( if [[ -n "$ALLOW_NARRATIVE" ]]; then json_escape "$ALLOW_NARRATIVE"; else printf null; fi )" "$RUNNER" "$(json_escape "$MODEL")" \
       "$(json_escape "$live_log")" "$log_format" "$aux_json" "$$" \
-      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$REVIEW_STARTED_EPOCH" \
+      "$REVIEW_STARTED_AT" "$REVIEW_STARTED_EPOCH" \
       "$(json_escape "$PROMPT_FILE")" "$(declare -F dispatch_lane_json >/dev/null 2>&1 && dispatch_lane_json || printf null)" "$(json_escape "$DIFF_FILE")" \
       "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$parent_json" "$root_json" "$depth_json" "$_rk_ident" \
       "$(declare -F manifest_session_id_json >/dev/null 2>&1 && manifest_session_id_json || printf null)" \
@@ -1840,6 +1843,10 @@ review_manifest_finalize() {
   [ -n "${REVIEW_MANIFEST_FILE:-}" ] || return 0
   REVIEW_MANIFEST_ENDED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   REVIEW_MANIFEST_ENDED_EPOCH="$(date +%s)"
+  if [ -n "${REVIEW_STARTED_EPOCH:-}" ] && [ "$REVIEW_MANIFEST_ENDED_EPOCH" -le "$REVIEW_STARTED_EPOCH" ]; then
+    REVIEW_MANIFEST_ENDED_EPOCH="$((REVIEW_STARTED_EPOCH + 1))"
+    REVIEW_MANIFEST_ENDED="$(date -u -d "@$REVIEW_MANIFEST_ENDED_EPOCH" +%Y-%m-%dT%H:%M:%SZ)"
+  fi
   write_review_manifest
 }
 write_review_manifest

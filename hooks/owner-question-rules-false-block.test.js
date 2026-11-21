@@ -153,4 +153,24 @@ describe('owner-question-rules false-block regressions', () => {
       });
     }
   });
+
+  describe('4. paragraphHasTaskId requires a real fleet task with a due', () => {
+    const DUE_ID = '01M7ZV2YKAV1CEYW987P2FW3JE';
+    const NODUE_ID = '01M7ZV2YKAV1CEYW987P2FW3JF';
+
+    it('passes when question is in one bullet and due task id is in the next line of the same paragraph; blocks for no-due id', (t) => {
+      rules.setFleetTaskLookup((id) => {
+        if (id === DUE_ID) return { next_evidence_due: '2099-01-01T00:00:00Z', hard_deadline: '-', state: 'open' };
+        if (id === NODUE_ID) return { next_evidence_due: '-', hard_deadline: '-', state: 'open' };
+        return null;
+      });
+      t.after(() => rules.setFleetTaskLookup(null));
+
+      const withDue = `- 請你確認這項設定是否可行？\n  追在單 ${DUE_ID}`;
+      assert.deepEqual(rules.unresolvedHits(withDue), []);
+
+      const withNoDue = `- 請你確認這項設定是否可行？\n  追在單 ${NODUE_ID}`;
+      assert.equal(rules.unresolvedHits(withNoDue).length, 1);
+    });
+  });
 });

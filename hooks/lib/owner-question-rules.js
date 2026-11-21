@@ -374,7 +374,7 @@ function hasLiveCard(sentence, cwd, excludedIds = null) {
 
 const BARE_CARD_CLASS = 'bare_card_id';
 const ESCAPE_CLASSES = new Set([...Object.keys(HIT_PATTERNS), BARE_CARD_CLASS]);
-const TITLE_LABEL = /(?:標題|章節|題目|主題|title|heading|section)\s*[：:][ \t]*$/i;
+const TITLE_LABEL = /(?:標題|章節|題目|主題|title|heading|section)\s*[：:][ \t]*[^\n]*$/i;
 
 function parseEscape(line) {
   const m = line.match(/^OWNER-GUARD-FALSE-POSITIVE \[([a-z_,-]+)\] (.+) :: (\S.{0,239})$/);
@@ -389,8 +389,6 @@ function escapeRecords(text) {
   if (lines.length > MAX_ESCAPES) return [];
   return lines.map(parseEscape).filter(Boolean);
 }
-
-const TASK_ID_TEST = /(?<!task_id=)\b[0-9A-HJKMNP-TV-Z]{26}\b/;
 
 function splitParagraphs(stripped) {
   const blocks = stripped.split(/\r?\n[ \t]*\r?\n+/);
@@ -415,7 +413,7 @@ function paragraphHasTaskId(text, sentence) {
   const normS = sentence.replace(/\s+/g, ' ').trim();
   if (!normS) return false;
   for (const p of splitParagraphs(stripCode(text))) {
-    if (TASK_ID_TEST.test(p) && p.replace(/\s+/g, ' ').includes(normS)) return true;
+    if (p.replace(/\s+/g, ' ').includes(normS) && namesTaskWithDue(p)) return true;
   }
   return false;
 }

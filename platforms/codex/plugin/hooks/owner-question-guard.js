@@ -85,7 +85,8 @@ function decide(input, opts = {}) {
   }
   if (!text) return null;
   if (!guardOn) return lang ? { decision: 'block', reason: lang.reason } : null;
-  const reason = rules.reasonForTurn(input, text, prev);
+  const history = rules.assistantTextsThisTurn(raw, true).slice(-201, -1);
+  const reason = rules.reasonForTurn({ ...input, topicedCardIds: rules.topicedCardIds(history) }, text, prev);
   if (!reason) return null;
   return { decision: 'block', reason };
 }

@@ -75,6 +75,20 @@ function fixture(t) {
   return { cwd, modes, configFile, env, transcript_path, check, card };
 }
 
+test('prior assistant card topics resolve later bare ids', (t) => {
+  const f = fixture(t);
+  const assistant = (text) => ({ type: 'assistant', message: { content: [{ type: 'text', text }] } });
+  const user = { type: 'user', message: { content: '繼續' } };
+  const prior = [assistant('已開卡 d-c2bfda0e（PM 席誤擋）。'), user];
+  assert.equal(f.check('d-c2bfda0e 已關。', {}, prior), null);
+  assert.match(f.check('d-c2bfda0e 已關。').reason, /d-c2bfda0e/);
+  assert.match(f.check('d-c2bfda0e 已關。', {}, [assistant('d-c2bfda0e 已開。'), user]).reason, /d-c2bfda0e/);
+  const other = f.check('d-c2bfda0e 和 d-11111111 已關。', {}, prior).reason;
+  assert.match(other, /d-11111111/);
+  assert.doesNotMatch(other, /d-c2bfda0e/);
+  assert.equal(f.check('已回覆，見卡 d-c2bfda0e（PM 席誤擋）。'), null);
+});
+
 function withReplyLang(t, value) {
   const had = Object.hasOwn(process.env, 'AUTOPILOT_REPLY_LANGUAGE');
   const prev = process.env.AUTOPILOT_REPLY_LANGUAGE;

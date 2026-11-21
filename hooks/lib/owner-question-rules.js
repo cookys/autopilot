@@ -506,6 +506,17 @@ function unresolvedBareIds(text) {
   return out;
 }
 
+function topicedCardIds(texts) {
+  const ids = new Set();
+  for (const text of texts) {
+    const bare = new Set(unresolvedBareIds(text));
+    for (const [id] of String(text).matchAll(/\bd-[0-9a-f]{8}\b/gi)) {
+      if (!bare.has(id.toLowerCase())) ids.add(id.toLowerCase());
+    }
+  }
+  return ids;
+}
+
 function bareCardReason(ids) {
   return `這些卡片編號旁邊沒有白話主題，操作員看不出每張卡是什麼：${ids.join('、')}。`
     + '編號後面緊接（主題）或 (主題)，主題至少兩個非空白字；或編號前面緊接「主題」，或「標題：」「章節：」「題目：」「主題：」這類標籤。'
@@ -546,7 +557,7 @@ function oneLine(s) {
   return String(s).replace(/[\r\n]+/g, ' ').replace(/"/g, "'");
 }
 
-function assistantTextsThisTurn(transcript) {
+function assistantTextsThisTurn(transcript, wholeTranscript = false) {
   const lines = String(transcript).split('\n');
   const texts = [];
   for (let i = lines.length - 1; i >= 0; i -= 1) {
@@ -557,7 +568,7 @@ function assistantTextsThisTurn(transcript) {
     const content = e && e.message && e.message.content;
     if (role === 'user') {
       const onlyToolResult = Array.isArray(content) && content.length && content.every((b) => b && b.type === 'tool_result');
-      if (!onlyToolResult) break;
+      if (!onlyToolResult && !wholeTranscript) break;
       continue;
     }
     if (role !== 'assistant') continue;
@@ -588,7 +599,7 @@ function collectProblems(text, input = {}) {
   const hits = unresolvedHits(text, cwd, unboundIds);
   const mentioned = unboundIds ? new Set([...stripCode(text).matchAll(CARD_ID)].map(([id]) => id.toLowerCase())) : null;
   const namedUnbound = mentioned ? rs.unbound.filter((u) => mentioned.has(u.id.toLowerCase())) : [];
-  const bare = bareCardLintOff() ? [] : unresolvedBareIds(text);
+  const bare = bareCardLintOff() ? [] : unresolvedBareIds(text).filter((id) => !input.topicedCardIds?.has(id));
   const problems = [];
   if (input.includeLanguage !== false && replyLanguageActive()) {
     const lang = languageCheck(text);
@@ -710,6 +721,7 @@ module.exports = {
   hasDueTask,
   setFleetTaskLookup,
   unresolvedBareIds,
+  topicedCardIds,
   lastAssistantText,
   assistantTextsThisTurn,
   stripForLanguage,

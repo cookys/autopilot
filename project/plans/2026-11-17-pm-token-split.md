@@ -1,5 +1,6 @@
 # Plan — PM seat token split: scripted PM chores (fleet task 01M7KZZ1ZT3V1KTKNR3E4MFK4B)
 
+> 稽核（2026-11-21，PM 01M7XQRV）：仍要做。Delivery B：P4 pm-act、P5 intake check、Q 品質量測、B-int；前置：Delivery A 已 pin；建議執行者 hydrogen/grok。證據：bd6ef9298（A 已併）；19cf78421 P6 SUPERSEDED（pm-switchboard.js）；未見 pm-act 檔。
 Status: frozen (PM ruling 01M7M32A, option A); P6 superseded · logical_plan_id: `pm-token-split-2026-11-17-b` · Size: L (eight phases P0–P6 and Q, plus two integration steps A-int, B-int)
 
 2026-11-20 schedule (PM 01M7V31A): P6 superseded: superseded by the fleet inbox ledger (P8, live) and the shipped scripts/pm-switchboard.js + scripts/lib/pm-inbox-adapter.js; switchboard-run.js will not be built.

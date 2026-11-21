@@ -1,5 +1,6 @@
 # Foreman cost discipline — enforce the ironlaws that only existed as prose
 
+> 稽核（2026-11-21，PM 01M7XQRV）：已完成。已實作，計畫檔頭狀態過時（建議改標已出貨或歸檔）。證據：72dfa052；1b332f83e（v2.35.15）。
 **Date**: 2026-09-04 · **Target**: v2.35.15 · **Size**: L (hooks defaults + new hook + skill prose + docs)
 **狀態**: ✅ Shipped in v2.35.15 — merged as `72dfa052`
 **Trigger**: <host> quota digest 2026-09-04 (`<host>:~/projects/QUOTA-DIGEST-2026-09-04.md`, relayed over

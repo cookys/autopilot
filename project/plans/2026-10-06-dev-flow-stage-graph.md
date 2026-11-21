@@ -1,6 +1,7 @@
 # Plan — dev-flow stage graph: one named graph, T-shirt sizes, a marker the band can read
 
 > Status: R2 FROZEN (G2 terminal, depth-0 adjudicated) · Owner: cookys · Branch: Train A on develop, Train B on `release/3.0.0` (§4) · Frame: guidance + mechanism, authorized-breaking (3.0.0)
+> 稽核（2026-11-21，PM 01M7XQRV）：仍要做。Train A 已進 develop；Train B 在 release/3.0.0，2026-11-21 查證尚未併回 develop，隨 3.0.0 重排一起處理（PM 裁 3A）。證據：git merge-base --is-ancestor origin/release/3.0.0 origin/develop 為否；stage-graph eval v10 SHIP。
 > Blocks the mods P1W TUI band (`2026-10-03-mods-visible-dispatch.md` R5.10/R5.11) and therefore the next release.
 
 ## 0. Context / thesis

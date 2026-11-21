@@ -1,6 +1,7 @@
 # Plan — ctx-reset W2: the sweep lane that actually resets idle large-context sessions
 
 > Status: draft r2.1 · Owner: autopilot lane · Branch: `docs/ctxreset-w2` · Frame: PM order 2026-11-12, fleet 01M76Z4WVCFP5PT1BTV2QTJK8V · Implementer after review: grok or agy (never codex) · Rubric and plan-review manifest: written by the controller before review (see Review log)
+> 稽核（2026-11-21，PM 01M7XQRV）：仍要做。W2 sweep 實作；前置：D0 事實表與 5 個開放問題答覆；建議執行者 grok 或 agy。證據：BL-0466（BACKLOG L2008-2023）；ddd68b851 計畫合併；W1 d32f422c3。
 
 ## 0. Context / thesis
 

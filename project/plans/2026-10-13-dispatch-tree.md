@@ -1,5 +1,6 @@
 # Dispatch tree — follow every piece of work from the session, without guessing a parent
 
+> 稽核（2026-11-21，PM 01M7XQRV）：仍要做。step 5 與 R 尚未做，BACKLOG 無追蹤列，需補列；前置：無；建議執行者 hydrogen/grok。證據：de31da06c、700dce7db 為前段。
 Status: **frozen** (2026-10-13) after two plan-review generations (G2 blockers ruled by the coordinator; receipts in [`evidence/2026-10-13-dispatch-tree/plan-review/`](../../docs/plans/evidence/2026-10-13-dispatch-tree/plan-review/README.md); `lane/w-dispatch-rail` merged as `544b654b`). Plan only; no product code changed.
 D0 ran 2026-10-15 ([`d0-summary.md`](../../docs/plans/evidence/2026-10-13-dispatch-tree/d0-summary.md)): 3a, 3b, 3c may start; **5 is blocked** (row h bad: the stamp rewrite makes the rail command compound, so the allow rule no longer covers it); **R is blocked** (row d2 bad: the codex runner does not export `AUTOPILOT_PARENT_SESSION_ID`; kimi, agy, opencode not_run), so per §4 the plan is revised and plan-reviewed again before R.
 3b merged as `92002f7f` (2026-10-15): every rail, codex included, exports `AUTOPILOT_PARENT_SESSION_ID`; D0 row d2 re-run 2026-10-15: codex path **pass** (`d0-summary.md` re-run section); R still waits on kimi, agy, opencode (not_run) and step 5 on row h. Follow-ups BL-0174 to BL-0176.

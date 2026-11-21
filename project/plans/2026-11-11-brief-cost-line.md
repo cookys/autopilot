@@ -1,6 +1,7 @@
 # Plan — Agent brief Cost line for fable and opus
 
 > Status: active. Owner: autopilot depth-0. PM 01M755V431. Date: 2026-11-11 (Taipei). Size: S. No version bump. The harness commits; this session does not.
+> 稽核（2026-11-21，PM 01M7XQRV）：已完成。已實作，計畫檔頭狀態過時（建議改標已出貨或歸檔）。證據：66fc4f426；hooks/lib/brief-header-template.js costLineFor；project-config-template/dispatch-guard-config.md:38。
 
 Goal: when a Claude Agent subagent is dispatched on fable or opus, its own brief states the cost, so the expensive model only does the hardest judgment and delegates reading, search, and summarising to haiku or sonnet subagents.
 

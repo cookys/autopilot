@@ -1,5 +1,6 @@
 # Named-endpoint transport policy: plaintext-private opt-in + exam/routing parity
 
+> 稽核（2026-11-21，PM 01M7XQRV）：已完成。已實作，計畫檔頭狀態過時（建議改標已出貨或歸檔）。證據：a4d5d8f9；7c5b0b9a1（v2.35.11）。
 **Date**: 2026-09-03 · **Target**: v2.35.11 · **Size**: L (3+ modules, config-format extension)
 **狀態**: ✅ Shipped in v2.35.11 — merged as `a4d5d8f9`
 **Trigger**: `qwen3.8-flash-next` (local SGLang on <host>, `http://<private-ip>:8001`)

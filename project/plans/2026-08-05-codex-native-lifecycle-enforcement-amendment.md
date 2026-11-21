@@ -9,6 +9,7 @@ amends: codex-native-lifecycle-enforcement-2026-08-05
 
 # User-directed requirements amendment — Codex-native lifecycle enforcement
 
+> 稽核（2026-11-21，PM 01M7XQRV）：已完成到 D3，D4 不做。D1–D3 已出貨並歸檔，D4 結論 NO_SHIP（PM 裁 1A）。證據：archive 2026/08/2026-08-05-codex-native-lifecycle-enforcement README；1ae1edac5。
 ## 0. Provenance and immutable source boundary
 
 This is a separate user-directed requirements amendment and QC erratum. It does not rewrite or

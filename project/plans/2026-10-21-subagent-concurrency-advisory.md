@@ -1,6 +1,7 @@
 # Plan — subagent concurrency advisory (BL-0271 item 4)
 
 > Status: frozen (awaiting owner go/no-go). Origin: BL-0271 item 4. Owner reply to pending card d-26439c63: do not build yet; systematic inventory, then a plan, then hetero loop review, then decide.
+> 稽核（2026-11-21，PM 01M7XQRV）：P0 已完成，P1–P3 延到 3.0.0 之後由 owner 決定（PM 裁 5B）。追蹤：BL-0271，負責人 autopilot lane，再檢視日為 3.0.0 發版當天。證據：d-26439c63；d-02c60498；8eee6eac0。
 
 ## 0. Context / thesis
 

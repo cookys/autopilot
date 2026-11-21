@@ -1,6 +1,7 @@
 # Plan - operator console A3: autopilot writers use hippo
 
 > Status: plan-reviewed, frozen; scheduled. Owner: operator (decisions), autopilot session
+> 稽核（2026-11-21，PM 01M7XQRV）：仍要做。A3.7 切換；前置：hippo P1.3/P1.4/P1.5 交付；建議執行者 autopilot lane。證據：A3.1 與 A3.4 step1 已併（38180c5c3）。上線日：標頭「A3.7 go-live 2026-11-23, blocked on hippo P1.3/P1.4/P1.5 delivery」（L3）。
 > (author) · Branch: `plan/oc-a3-hippo-writers` · Size: L (seven phases) ·
 > Parent: fleet repo `docs/plans/2026-11-01-operator-console.md` (approved 2026-11-01), deliverable D3, phase A3 ·
 > Frame: hippo owns records and queries; autopilot owns the flow, decides what to write and calls the `hippo` CLI

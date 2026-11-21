@@ -1,5 +1,6 @@
 # Cursor Agent as a read-only transport fallback for reviewer-class seats
 
+> 稽核（2026-11-21，PM 01M7XQRV）：P1–P4 已完成，P5、P6 不做。cursor 已改走 broker 路徑（PM 裁 2A）。證據：62297210f；archive 2026/09/2026-09-02-cursor-transport-fallback README。
 > **Status**: Phases 1-4 shipped; **Phase 5 is BLOCKED and Phase 6's admission is
 > therefore not added** — see §6. The mechanism is generic and complete; the cursor seat is not
 > admitted and must not be described as available. Authorized by operator 2026-09-02 (routed from

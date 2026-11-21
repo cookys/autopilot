@@ -893,6 +893,7 @@
   "v74.d.sum_pick": "picked {k} {label}",
   "v74.d.sum_held": "sending",
   "v74.d.unpicked": "{n} not picked yet",
+  "v74.d.more": "{n} more · {ud} change card",
   "v74.d.result": "sent {n} · {left} still open",
   "v74.d.no_source": "decision source missing (fleet decision list)",
   "v74.d.todo_head": "todo {k}/{n}",

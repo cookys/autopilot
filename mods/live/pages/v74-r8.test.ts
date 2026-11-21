@@ -128,3 +128,36 @@ test('r8 #10: an empty 待辦 says how to recover, and its border hint offers no
   expect(frameHintShort(todoPage, ctxOf({ todo: [] }))).not.toContain('a/b/c')
   expect(frameHintShort(todoPage, ctxOf({ todo: [{ ...decide[0], due: null } as never] }))).toContain('a/b/c')
 })
+
+// ---- r8-1 gate fixes: the open card is the cursor's, and the shrink order keeps the blank row between options ----
+const four: DecideCard[] = [0, 1, 2, 3].map(n => ({ ...decide[n % decide.length], id: 'd-r8-' + n, title: 'T' + (n + 1), question: 'Q' + (n + 1) + '？' }))
+const nav4 = (cursor: number) => ({ cursor, picks: {}, notes: {}, noteMode: false })
+
+test('r8-1: the open card follows the cursor, ▸ and the head count with it, the others stay one row in order', () => {
+  for (const at of [0, 1, 2, 3]) {
+    const lines = decidePage.render(ctxOf({ decide: four, nav: nav4(at) }, 40)).body.map(text)
+    expect(lines[0]).toContain('目前第 ' + (at + 1) + ' 張')
+    expect(lines.filter(l => l.startsWith('▸'))).toEqual([expect.stringContaining('▸  ' + (at + 1) + '. T' + (at + 1))])
+    const order = lines.map(l => /^(?:▸ | {3})\s?(\d)\. T/.exec(l)?.[1]).filter(x => x !== undefined)
+    expect(order.join('')).toBe('1234')
+    expect(lines.filter(l => l.startsWith('    背景')).length).toBe(1)
+  }
+})
+
+test('r8-1: through the frame ctx (ctx.decide carries the cursor) the open card is that card', () => {
+  const ctx = { ...(ctxOf({ decide: four }, 40) as object), decide: { ...NO_NAV, cursor: 3 } } as never
+  expect(decidePage.render(ctx).body.map(text).some(l => l.startsWith('▸  4. T4'))).toBe(true)
+})
+
+test('r8-1: in a short frame the other cards collapse before the blank row between options or any description goes', () => {
+  const withDetail = four.map(c => ({ ...c, options: c.options.map(o => ({ ...o, detail: o.detail === '' ? '說明' : o.detail })) }))
+  const lines = decidePage.render(ctxOf({ decide: withDetail, nav: nav4(0) }, 17)).body.map(text)
+  const a = lines.findIndex(l => /^ {4}a: /.test(l))
+  const b = lines.findIndex(l => /^ {4}b: /.test(l))
+  expect(a).toBeGreaterThan(0)
+  expect(b).toBeGreaterThan(a + 1)
+  expect(lines.slice(a + 1, b).some(l => l.trim() === '')).toBe(true) // the blank row between a: and b:
+  expect(lines.slice(a, b).some(l => l.includes('說明'))).toBe(true) // the description is still there
+  expect(lines.some(l => l.includes('另有 3 張'))).toBe(true)
+  expect(lines.length).toBeLessThanOrEqual(17 - 1 - 2 - 1)
+})

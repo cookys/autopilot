@@ -2324,7 +2324,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       void frameKey($, { kind: 'text_cancel' })
       return {}
     }
-    if (v74Open) { const was = v74KeysHeld; v74KeysHeld = bandElement(named); if (was !== v74KeysHeld) void $.ui.invalidate('ui.render') }
+    if (v74Open) v74KeysHeld = bandElement(named) // no invalidate here: a re-render in a focus event remounts the tab Buttons and the host's focus lands on a card Button, which writes the cursor back (r8-1 gate, step 22)
     const step = decideLocal.textMode || bandLegacy || !v74Open ? null : v74TabStep(panePage, named, (raw as { origin?: unknown }).origin)
     if (step !== null) { void frameKey($, step); return {} } // the ring stays on the current tab
     const at = v74FocusAt(raw)

@@ -507,49 +507,56 @@ function boxSummary(c: DecideCard, i: number, nav: DecideNav, ctx: PageCtx): Row
   const room = ctx.size.cols - displayWidth(lead) - displayWidth(tailText)
   return [seg(lead, { press: 'card:' + i }), seg(displayWidth(q) <= room ? q : truncateToWidth(q, Math.max(4, room))), ...(tailText === '' ? [] : [dimSeg(tailText)])]
 }
-// density 0 = the design (blank lines, descriptions under their option); 1 = no blank lines; 2 = descriptions run on after the option
-function boxOpen(c: DecideCard, i: number, nav: DecideNav, ctx: PageCtx, density: 0 | 1 | 2): Row[] {
+// The open card in the order the design draws it. `Fit` says what the frame can still afford; renderBoxV74 takes things away in this order when the frame is short:
+// the loose blank lines (after the head, after the background, before the note), then the other cards' summaries collapse to one row per side, then the blank lines between
+// options, and the option descriptions go last (r8 gate: `a:` and `b:` keep the blank row between them as long as anything does).
+type Fit = { loose: boolean; collapse: boolean; between: boolean; desc: boolean }
+const FIT_STEPS: Fit[] = [
+  { loose: true, collapse: false, between: true, desc: true },
+  { loose: false, collapse: false, between: true, desc: true },
+  { loose: false, collapse: true, between: true, desc: true },
+  { loose: false, collapse: true, between: false, desc: true },
+  { loose: false, collapse: true, between: false, desc: false },
+]
+function boxOpen(c: DecideCard, i: number, nav: DecideNav, ctx: PageCtx, fit: Fit): Row[] {
   const { t } = ctx
   const width = Math.min(80, ctx.size.cols)
-  const gap = density === 0 ? [[seg('')]] : []
+  const gap = fit.loose ? [[seg('')]] : []
   const picked = nav.picks[c.id]
   const held = nav.hold?.[c.id] !== undefined
   const sent = nav.sent[c.id] !== undefined && nav.fixing?.[c.id] === undefined
   const out: Row[] = [wrapRow([seg(GLYPHS.structure.folded + '  ' + String(i + 1) + '. '), seg(c.title, { color: PALETTE.here, here: true }), seg('：' + c.question)], ctx.size.cols, 5)[0], ...gap]
   out.push(...labelledBox(t('v74.d.bg'), c.background ?? t('v74.d.bg_none'), width), ...gap)
   c.options.forEach((o, k) => {
+    if (k > 0 && fit.between) out.push([seg('')])
     const mark = picked === k ? ' ' + GLYPHS.structure.decisions : ''
     const tone = picked === k ? { color: PALETTE.here } : o.recommended ? { color: PALETTE.attention } : {}
     const label = (k < THREE ? PICK_KEYS[k] + ': ' : DOT + ' ') + o.label
     const rec = o.recommended ? [seg('  ' + GLYPHS.structure.recommend + ' ' + t('v74.d.rec'), { color: PALETTE.attention })] : []
-    const head: Row = [seg('    '), seg(label + mark, tone), ...rec]
-    if (o.detail === '') { out.push(head); return }
-    if (density === 2) out.push(truncateSegs([...head, dimSeg('  ' + o.detail)], ctx.size.cols))
-    else out.push(head, ...wrapRow([seg('       '), dimSeg(o.detail)], width, 7))
-    if (density === 0) out.push([seg('')])
+    out.push([seg('    '), seg(label + mark, tone), ...rec])
+    if (o.detail !== '' && fit.desc) out.push(...wrapRow([seg('       '), dimSeg(o.detail)], width, 7))
   })
   if (held) out.push([seg('    '), dimSeg(t('v74.d.held', { k: picked === undefined ? '-' : String(PICK_KEYS[picked] ?? picked + 1) }))])
   else if (sent) out.push([seg('    '), dimSeg(t('v74.d.sent'))])
   const note = nav.notes[c.id] ?? ''
   const noteText = nav.textMode ? nav.textBuf + CARET : note === '' ? t('v74.d.note_empty') : note
-  if (density === 0 && c.options.every(o => o.detail === '')) out.push([seg('')])
-  out.push([seg('    m ' + t('v74.d.note')), seg(noteText)])
+  out.push(...gap, [seg('    m ' + t('v74.d.note')), seg(noteText)])
   return out
+}
+// The card at the cursor is the open one, at its own place in the list; every other card keeps its order as one summary row. `collapse` folds the cards before it and the cards after it into
+// one row each (`另有 N 張 · ↑↓ 換張`).
+function boxBody(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: number, fit: Fit, head: Row): Row[] {
+  const more = (n: number): Row[] => (n === 0 ? [] : [[seg('   ' + ctx.t('v74.d.more', { n, ud: GLYPHS.structure.up + GLYPHS.structure.behind }))]])
+  if (fit.collapse) return [head, ...more(cursor), ...boxOpen(cards[cursor], cursor, nav, ctx, fit), ...more(cards.length - cursor - 1)]
+  return [head, ...cards.flatMap((c, i) => (i === cursor ? boxOpen(c, i, nav, ctx, fit) : [boxSummary(c, i, nav, ctx)]))]
 }
 function renderBoxV74(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: number, actions: Row[]): { body: Row[]; actions: Row[] } {
   const { t } = ctx
   const cols = ctx.size.cols
   const head = ruleTo(GLYPHS.structure.open + ' ' + t('v74.d.head', { n: cards.length, k: cursor + 1 }), cols)
   const room = Math.max(1, ctx.size.rows - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - 1 - actions.length) // the head row of the frame, the strip and the key-hint border are not the page's
-  const build = (density: 0 | 1 | 2): Row[] => [head, ...cards.flatMap((c, i) => (i === cursor ? boxOpen(c, i, nav, ctx, density) : [boxSummary(c, i, nav, ctx)]))]
-  let body = build(0)
-  for (const d of [1, 2] as const) if (body.length > room) body = build(d)
-  if (body.length > room) { // still too tall: the summaries above the open card give way first (the frame cuts the tail after that)
-    const open = build(2)
-    let drop = 0
-    while (open.length - drop > room && drop < cursor) drop++
-    body = [head, ...open.slice(1 + drop)]
-  }
+  let body = boxBody(ctx, cards, nav, cursor, FIT_STEPS[0], head)
+  for (const fit of FIT_STEPS.slice(1)) if (body.length > room) body = boxBody(ctx, cards, nav, cursor, fit, head)
   return { body, actions }
 }
 

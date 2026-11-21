@@ -893,6 +893,7 @@
   "v74.d.sum_pick": "已選 {k} {label}",
   "v74.d.sum_held": "送出中",
   "v74.d.unpicked": "尚有 {n} 張未選",
+  "v74.d.more": "另有 {n} 張 · {ud} 換張",
   "v74.d.result": "已送出 {n} 張 · 尚有 {left} 張待決",
   "v74.d.no_source": "沒有待決來源（fleet decision list）",
   "v74.d.todo_head": "待辦 {k}／{n}",

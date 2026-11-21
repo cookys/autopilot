@@ -4,7 +4,8 @@ import decideFx from './fixtures/v74/decide.fixture'
 import { decidePage, decideReduce, NO_NAV, previewItems, previewStale } from './pages/decide'
 import type { DecideNav } from './pages/decide'
 import { makeT } from './i18n'
-import { v75Hint } from './v75'
+import { v75DetailOffset, v75Hint } from './v75'
+import { paneRank } from './pane'
 import { V75_PANE_MIN_ROWS, v75BandRows, v75EscStep, v75FocusNext, v75Plan, v75ReopenAfterReload, v75ScrollRoute } from './v75'
 import type { V75BandIn } from './v75'
 import etaFx from './fixtures/v74/pool-eta.fixture'
@@ -229,4 +230,16 @@ test('v75 x: cancels the send preview in the Pane (routeKey) and says so in the 
   expect(h(true, true)).toContain('x 取消預覽')
   expect(h(false, false)).toContain('進 Pane')
   expect(makeT('en')('v75.hint.armed')).toBe('y confirm send · x cancel preview')
+})
+
+test('v75 pane scroll: PgDn / PgUp move the card detail by a page and never below 0; j / k are card moves in the Pane and the band', () => {
+  expect(v75DetailOffset(0, 42)).toBe(8)
+  expect(v75DetailOffset(8, 42)).toBe(16)
+  expect(v75DetailOffset(8, -42)).toBe(0)
+  expect(v75DetailOffset(0, -42)).toBe(0)
+  const st = { page: 'decide', paneFocus: true, focusedButton: false, textMode: false }
+  expect(routeKey('j', st)).toEqual({ kind: 'move', by: 1 })
+  expect(routeKey('k', st)).toEqual({ kind: 'move', by: -1 })
+  expect(paneRank).toBeInstanceOf(Map) // the ring-walk direction table (filled while the framed page draws)
+  expect(v75ReopenAfterReload({ wanted: true, hostOpen: false, paneOn: false, open: false })).toBe(true)
 })

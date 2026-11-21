@@ -73,10 +73,10 @@ import { collapsedRowMark, initialBandCollapsed, toggleBand, toggleFold, type Ba
 import type { Card } from './shell'
 import type { LeftItem } from './shell'
 import type { FleetLaneSum, RoomRow } from './shell'
-import { focusAnchorKey, Pane, noteInputKey, resetNoteInputs } from './pane'
+import { focusAnchorKey, Pane, noteInputKey, paneRank, resetNoteInputs } from './pane'
 import { routeKey } from './pages/keys'
 import { V75Band } from './band75'
-import { V75_PANE_MIN_ROWS, v75BandRows, v75FocusNext, v75ReopenAfterReload, v75Plan, v75ScrollRoute } from './v75'
+import { V75_PANE_MIN_ROWS, v75BandRows, v75DetailOffset, v75FocusNext, v75ReopenAfterReload, v75Plan, v75ScrollRoute } from './v75'
 import type { V75Focus } from './v75'
 import type { KeyAction } from './pages/keys'
 import { decideReduce, NO_NAV, previewItems, previewStale, v74Pool } from './pages/decide'
@@ -1590,15 +1590,17 @@ async function logBandGeometry($: EngineInterface, maxRows: number, bodyColumns:
 }
 
 // every focus move the host reports (ctrl+x tab stops, clicks, our own focus calls), next to band-geometry.log: requestId (the site), element, origin, component. The last 200 lines. D (ctrl+x tab dwell): which element is each stop.
-let focusLines: string[] | null = null
-async function logFocusStop($: EngineInterface, ev: { requestId?: unknown; component?: unknown; element?: unknown; origin?: unknown }): Promise<void> {
+const appendLogs = new Map<string, string[]>()
+async function appendLog($: EngineInterface, name: string, row: Record<string, unknown>): Promise<void> {
   if (liveBaseSeen === null) return
-  const path = liveBaseSeen + '/band-focus.log'
-  if (focusLines === null) focusLines = ((await readText($, path)) ?? '').split('\n').filter(l => l !== '')
-  focusLines.push(JSON.stringify({ ts: await $.clock.now(), requestId: ev.requestId, component: ev.component, element: ev.element, origin: ev.origin }))
-  if (focusLines.length > 200) focusLines.splice(0, focusLines.length - 200)
-  await $.fs.write(path, focusLines.join('\n') + '\n').catch(() => undefined)
+  const path = liveBaseSeen + '/' + name
+  let lines = appendLogs.get(name)
+  if (lines === undefined) { lines = ((await readText($, path)) ?? '').split('\n').filter(l => l !== ''); appendLogs.set(name, lines) }
+  lines.push(JSON.stringify({ ts: await $.clock.now(), ...row }))
+  if (lines.length > 200) lines.splice(0, lines.length - 200)
+  await $.fs.write(path, lines.join('\n') + '\n').catch(() => undefined)
 }
+const logFocusStop = ($: EngineInterface, ev: { requestId?: unknown; component?: unknown; element?: unknown; origin?: unknown }): Promise<void> => appendLog($, 'band-focus.log', { requestId: ev.requestId, component: ev.component, element: ev.element, origin: ev.origin })
 
 // the forge tab: the widest label asked of the mod below, the narrowest worth asking for, the cells the indicator keeps at least, the rows the full forge view needs
 const FORGE_LABEL_MAX = 30
@@ -1709,6 +1711,7 @@ async function closePane($: EngineInterface): Promise<void> {
 // ---- v7.5: the band (below the chat) and the host Pane (beside it) show ONE pending-card state: the DECIDE atom (picks, notes, sent, hold) + decideLocal (cursor, preview armed/snap/stale, note mode) + panePage.
 // Every key from either place goes through frameKey -> decideReduce, the only writer; the band and the Pane only read (v75.ts, band75.tsx, pages/decide.ts). `v75Focus` is where the keyboard is: prompt, band or Pane.
 let v75Focus: V75Focus = 'prompt'
+let v75RingRank: number | null = null // screen-order rank of the Pane's last ring stop (the arrow = a ring step)
 let v75PaneOn = false // the host Pane opened for v7.5 is open now
 let v75NotPlaced = false // the host answered isPlaced=false: no Pane, the band falls back to the v7.4 box
 let v75Locked: number | null = null // band height held while the Pane is open (0 -> 1 card never moves the layout)
@@ -2251,8 +2254,11 @@ export function registerLive(on: Parameters<Register>[0]): void {
       if (!v75ReloadChecked) {
         v75ReloadChecked = true
         const wanted = await read($, PANE_WANTED).catch(() => false)
-        const hostOpen = await $.ui.panes().then(ps => ps.some(p => p.id === PANE_ID)).catch(() => false)
-        if (v75ReopenAfterReload({ wanted, hostOpen, paneOn: v75PaneOn, open: v74Open })) { v75OpenQuiet = true; markPaneOpen() }
+        const panes = await $.ui.panes().catch(() => [] as { id: string; isShown: boolean; isFocused: boolean; isPlaced: boolean }[])
+        const hostOpen = panes.some(p => p.id === PANE_ID && p.isPlaced === true) // a pane the host lists but has not placed is not open
+        const reopen = v75ReopenAfterReload({ wanted, hostOpen, paneOn: v75PaneOn, open: v74Open })
+        void appendLog($, 'band-reload.log', { step: 'first-render', wanted, panes: panes.map(p => ({ id: p.id, isShown: p.isShown, isFocused: p.isFocused, isPlaced: p.isPlaced })), reopen })
+        if (reopen) { v75OpenQuiet = true; markPaneOpen() }
       }
       const v75c = await v74CtxOf($)
       const v75cards = v75c.decide ?? []
@@ -2261,6 +2267,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
         // open the host Pane; refused (isPlaced=false) -> the v7.4 box band, and the keyboard stays in the band
         const quiet = v75OpenQuiet; v75OpenQuiet = false
         const placed = await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: !quiet }).catch(() => ({ isPlaced: false }) as { isPlaced: boolean })
+        if (quiet) void appendLog($, 'band-reload.log', { step: 'open', result: placed })
         if (placed.isPlaced === true) { v75PaneOn = true; v75Focus = quiet ? 'prompt' : 'pane'; v75Locked = v75cards.length > 0 ? 5 : 1; v75LockCount = v75cards.length }
         else { v75NotPlaced = true; v75Focus = 'band'; plan = v75Plan({ maxRows: rows, pending: v75cards.length, paneWanted: v74Open, notPlaced: true, locked: null }) }
       } else if (v75PaneOn && !plan.pane) {
@@ -2567,6 +2574,14 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const named = typeof raw.element === 'string' ? raw.element : typeof raw.key === 'string' ? raw.key : undefined
     void v74Keylog($, { handler: 'ui.focus', component: raw.component, element: named, origin: ((raw as { origin?: { kind?: unknown } }).origin?.kind as string | undefined), page: panePage, cursor: decideLocal.cursor, focusOwner: decideLocal.textMode ? 'v74-note' : 'band', noteOpen: decideLocal.textMode })
     void logFocusStop($, { requestId: (raw as { requestId?: unknown }).requestId, component: raw.component, element: named, origin: (raw as { origin?: { kind?: unknown } }).origin?.kind })
+    if (v75PaneOn && raw.component === 'Pane' && panePage === 'decide' && !decideLocal.textMode && (raw as { origin?: { kind?: unknown } }).origin?.kind === 'person' && named !== undefined) {
+      // the arrow in the Pane walks the host ring over every Button (an option row is one) and sends no ui.scroll: read the walk's direction in screen order as the card arrow
+      const rank = paneRank.get(named)
+      const prev = v75RingRank
+      v75RingRank = rank ?? null
+      const by = rank !== undefined && prev !== null ? Math.sign(rank - prev) : 0
+      if (by !== 0) { void frameKey($, { kind: 'move', by: by as 1 | -1 }); return {} }
+    }
     const v75Was = v75Focus
     v75Focus = v75FocusNext(v75Focus, { kind: 'focus', component: raw.component, named })
     // v7.5 §7.3: one Esc, one layer. A cancelled note or preview hands the keyboard back to the band, so the next Esc is the next layer
@@ -2638,16 +2653,25 @@ export function registerLive(on: Parameters<Register>[0]): void {
   on('ui.close', ($, e, next) => {
     if ((e as { id?: string }).id === PANE_ID && v75PaneOn) {
       v75PaneOn = false; v75Locked = null; v75NotPlaced = false
-      markPaneClosed(); void setPaneWanted($, false)
+      markPaneClosed()
+      const why = (e as { origin?: { kind?: string } }).origin?.kind
+      void appendLog($, 'band-reload.log', { step: 'ui.close', origin: why })
+      if (why === 'person') void setPaneWanted($, false) // the owner's own close; a plugin close clears it on its own path, an unload (reload) must keep it
       v75Focus = v75FocusNext(v75Focus, { kind: 'pane-gone' })
       void renderLater($)
     }
     return next(e)
   })
   on('ui.scroll', { component: 'Pane', requestId: PANE_ID }, ($, e, next) => {
+    void appendLog($, 'band-scroll.log', { component: 'Pane', by: (e as { by?: number }).by, page: panePage, paneOn: v75PaneOn, route: v75ScrollRoute({ component: 'Pane', by: (e as { by?: number }).by }, { paneOpen: v75PaneOn, note: decideLocal.textMode }) })
     if (v75PaneOn && v75ScrollRoute({ component: 'Pane', by: (e as { by?: number }).by }, { paneOpen: true, note: decideLocal.textMode }) === 'cursor') {
       const arrow = v74HostScroll({ by: (e as { by?: number }).by }, panePage, v74Open, bandLegacy, decideLocal.textMode)
       if (arrow !== null && panePage === 'decide') { void frameKey($, arrow); return {} }
+    }
+    if (v75PaneOn && panePage === 'decide' && v75ScrollRoute({ component: 'Pane', by: (e as { by?: number }).by }, { paneOpen: true, note: decideLocal.textMode }) === 'pane') {
+      decideLocal = { ...decideLocal, detailOffset: v75DetailOffset(decideLocal.detailOffset ?? 0, (e as { by: number }).by) } // PgUp / PgDn scroll the open card's detail
+      void $.ui.invalidate('ui.render')
+      return {}
     }
     return scrollHook(decideScroll, e, next, () => { void $.ui.invalidate('ui.render') })
   })

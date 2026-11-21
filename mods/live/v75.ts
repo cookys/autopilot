@@ -47,6 +47,10 @@ export function v75FocusNext(was: V75Focus, ev: V75FocusEvent): V75Focus {
 // after /reload-plugins the host closes the plugin's Pane and the module's variables are gone; $.state keeps "the owner wants the Pane open". Reopen (no focus) only when it was wanted, the host has none and this module has not opened one.
 export const v75ReopenAfterReload = (i: { wanted: boolean; hostOpen: boolean; paneOn: boolean; open: boolean }): boolean => i.wanted && !i.hostOpen && !i.paneOn && !i.open
 
+// PgUp / PgDn in the Pane scroll the open card's detail by this many rows
+export const V75_DETAIL_STEP = 8
+export const v75DetailOffset = (off: number, by: number): number => Math.max(0, off + (by > 0 ? V75_DETAIL_STEP : -V75_DETAIL_STEP))
+
 // §7.3: one Esc, one layer: the note, then the preview, then the keyboard goes back to the input box.
 export type V75EscStep = 'cancel_note' | 'cancel_preview' | 'to_prompt'
 export const v75EscStep = (s: { note: boolean; armed: boolean }): V75EscStep => (s.note ? 'cancel_note' : s.armed ? 'cancel_preview' : 'to_prompt')

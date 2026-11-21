@@ -156,10 +156,12 @@ function stripView<Id extends string>(el: { Box: El; Text: El; Button?: El }, st
 // A page of the registry (pages/index.ts) drawn through frameRows: exactly `rows` rows, the strip entries are Buttons with the digit as hotkey.
 export type PageView = { focus: number; expanded: boolean; folded?: boolean }
 // view: focus index + expanded flag per page id (fleet, quota, spend); decide: the 待決 page's nav; onPress gets a Seg `press` that is not a tab switch (fleet:see:, fleet:fold, fill:...); onKey gets a page-local key (the host has no raw key hook: the keys are hidden hotkey Buttons); epoch rotates Button keys after a dock <-> inline move (B56)
+// the screen-order rank of every Button the framed page drew (`card:N`, `p:row:col`): the ring's step direction is read from it (register.ts, ui.focus)
+export const paneRank = new Map<string, number>()
 export type FramePane = { poolEta?: PoolEta | null; room?: readonly { seq: number; from: string; kind: string; text: string }[]; pages: readonly Page[]; pageId?: PageId; onPage?: (id: PageId) => void; console: ConsoleSnapshot | null; nowMs: number; rows: number; scroll?: number; view?: Record<string, PageView>; decide?: DecideNav; v74?: V74Ctx; v74Box?: true; onPress?: (id: string) => void; onKey?: (k: KeyAction) => void; onText?: (v: string) => void; epoch?: number; steps?: readonly Step[]; pet?: unknown; others?: OthersView | null }
-const COMMON_KEYS: Record<string, KeyAction> = { z: { kind: 'fold' } } // the host takes a digit or a lowercase letter as a hotkey: Space is z here. No j / k: a key needs a visible Button to carry it, and a row is its own Button (Tab walks the rows)
+const COMMON_KEYS: Record<string, KeyAction> = { z: { kind: 'fold' } } // the host takes a digit or a lowercase letter as a hotkey: Space is z here. j / k (next / previous card) are carried by the `[j] [k]` hint Buttons of the 待決 action row
 const CARD_KEYS: Record<string, KeyAction> = { a: { kind: 'pick', index: 0 }, b: { kind: 'pick', index: 1 }, c: { kind: 'pick', index: 2 } }
-const DECIDE_KEYS: Record<string, KeyAction> = { ...CARD_KEYS, d: { kind: 'pick', index: 3 }, e: { kind: 'pick', index: 4 }, m: { kind: 'note' }, n: { kind: 'note' }, u: { kind: 'undo' }, h: { kind: 'prev' }, l: { kind: 'next' }, f: { kind: 'fill' }, s: { kind: 'submit' } }
+const DECIDE_KEYS: Record<string, KeyAction> = { ...CARD_KEYS, d: { kind: 'pick', index: 3 }, e: { kind: 'pick', index: 4 }, j: { kind: 'move', by: 1 }, k: { kind: 'move', by: -1 }, m: { kind: 'note' }, n: { kind: 'note' }, u: { kind: 'undo' }, h: { kind: 'prev' }, l: { kind: 'next' }, f: { kind: 'fill' }, s: { kind: 'submit' } }
 // o acts on the focused (▸) row: quota shows / hides that pool's seats. decide has no o (a-e pick there); now has no focused row yet, so o is not bound there
 const OPEN_KEY: Record<string, KeyAction> = { o: { kind: 'open' } }
 const pageKeys = (id: string): Record<string, KeyAction> =>
@@ -265,6 +267,7 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
           else if (typeof sg.press === 'string' && sg.press.startsWith('key:')) frame.onKey?.(keys[sg.press.slice(4)] ?? (sg.press === 'key:y' ? { kind: 'confirm' } : { kind: 'none' }))
           else press(sg.press as string)
         }
+        paneRank.set(cardAt !== null ? 'card:' + cardAt : 'p:' + i + ':' + j + ep, i * 1000 + j)
         nodes.push(<Button key={(cardAt !== null ? 'card:' + cardAt : 'p:' + i + ':' + j + ep)} plain {...(letter === null ? {} : { hotkey: letter })} {...(focusMark ? { autoFocus: true } : {})} onPress={onKeyPress}>{texts}</Button>)
         j = e
         continue

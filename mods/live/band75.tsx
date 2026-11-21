@@ -30,6 +30,8 @@ export function V75Band(el: { Box: El; Text: El; Button?: El; Input?: El }, rows
   const hot = (id: string, hotkey: string, run: () => void) => <Box key={'hk:' + id} width={0} height={0} overflow="hidden"><Button key={'v75:' + id + ep} plain hotkey={hotkey} onPress={run}>{hotkey}</Button></Box>
   const hidden: unknown[] = [
     ...LETTERS.slice(0, nOpts).map((l, k) => hot(l, l, () => acts.onKey({ kind: 'pick', index: k }))),
+    hot('j', 'j', () => acts.onKey({ kind: 'move', by: 1 })), // next / previous card: the fallback when the arrows do not reach the page
+    hot('k', 'k', () => acts.onKey({ kind: 'move', by: -1 })),
     hot('n', 'n', () => acts.onKey({ kind: 'note' })),
     hot('s', 's', () => acts.onKey({ kind: 'submit' })),
     ...(i.armed ? [hot('y', 'y', () => acts.onKey({ kind: 'confirm' })), hot('x', 'x', () => acts.onKey({ kind: 'disarm' }))] : []), // x cancels the preview (a hotkey is one digit or one lowercase letter, d.ts:1391: the band cannot take Esc)

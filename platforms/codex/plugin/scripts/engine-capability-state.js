@@ -2072,6 +2072,17 @@ function classifyErrorContent(content) {
     return 'overloaded';
   }
 
+  // model_unsupported: the account login works; this model id is not offered on it.
+  // Checked before auth_failed: the Codex line names "ChatGPT account" and the worker
+  // log often also contains an auth-shaped word, and the caller must not be told to re-login.
+  if (
+    text.includes('model is not supported when using codex') ||
+    text.includes('model_not_supported') ||
+    text.includes('unsupported model')
+  ) {
+    return 'model_unsupported';
+  }
+
   // auth_failed: bad API key / auth error
   if (
     text.includes('api key') ||

@@ -178,6 +178,23 @@ export function v74FocusCursor(cursor: number, element: unknown): { kind: 'curso
   if (at === null || at === cursor) return null
   return { kind: 'cursor', at }
 }
+// r7-1 keylog: with the selected head no longer a Button, the band's focus ring sits on the current
+// tab (tab:decide) and the arrows walk it along the strip (tab:dispatch, tab:review, ...) without a
+// ui.scroll. On the 待決/待辦 pages a person's move to another tab is the arrow: the ring stays and the
+// cursor moves. Tab order is the strip's (V74_PAGE_ORDER); a jump of more than one is the wrap.
+const V74_PAGE_ORDER = ['now', 'decide', 'dispatch', 'review', 'spend', 'hygiene', 'fleet', 'todo', 'help']
+export function v74TabStep(page: string, element: unknown, origin: unknown): { kind: 'move'; by: 1 | -1 } | null {
+  if ((page !== 'decide' && page !== 'todo') || typeof element !== 'string') return null
+  if ((origin as { kind?: unknown } | undefined)?.kind !== 'person') return null
+  const m = /^tab:(\w+)(?::\d+)?$/.exec(element)
+  if (m === null || m[1] === page) return null
+  const from = V74_PAGE_ORDER.indexOf(page)
+  const to = V74_PAGE_ORDER.indexOf(m[1])
+  if (from < 0 || to < 0) return null
+  const d = to - from
+  const by = Math.abs(d) === 1 ? d : -Math.sign(d)
+  return { kind: 'move', by: by > 0 ? 1 : -1 }
+}
 export function v74BareBandSlots(own: string, fleet: { stuck: number; running: number; waiting: number } | null, decideN: number, t: T): Slot[] {
   const fleetSlot = slotFleet(fleet ?? { stuck: 0, running: 0, waiting: 0 }, t)
   return [
@@ -1356,6 +1373,7 @@ async function commitV74Send($: EngineInterface, st: DecideState, feed: readonly
     cards: v74Pool(pending, feed),
     state: st,
     now: nowMs,
+    post: text => sendDecide($, new Set(), text),
     run: async (args) => {
       if (!(await $.fs.exists($.plugin.root + '/' + DECISION_SCRIPTS[0]).catch(() => false))) return
       const cwd = await $.session.cwd().catch(() => '')
@@ -1380,10 +1398,14 @@ async function holdTick($: EngineInterface): Promise<void> {
   } finally { ticking = false }
 }
 // The one prompt.submit of the mod (ui-lint allowlist): the window of `only` ended, so its answers go out (decideundo.ts sendNow). The prompt starts a turn once the session is idle: it is not awaited.
-async function sendDecide($: EngineInterface, only: ReadonlySet<string>): Promise<void> {
+async function sendDecide($: EngineInterface, only: ReadonlySet<string>, preset?: string): Promise<void> {
+  const post = (text: string) => $.prompt.submit({ text })
+  // v7.4 s: the cards are already written to the store and marked sent (commitV74Send); this posts the
+  // [待決回覆] line and does not wait for the turn. A refused post keeps the store write.
+  if (preset !== undefined) { void post(preset).catch((err: unknown) => $.ui.toast(t('decide.send_failed', { reason: (err instanceof Error ? err.message : String(err ?? '-')).replace(/[\r\n]+/g, ' ').slice(0, 120) }))); return }
   const ids = await sendNow({
     ...undoDeps($),
-    post: text => $.prompt.submit({ text }),
+    post,
     onSendFailed: (reason, failedIds) => {
       const oneLine = reason.replace(/[\r\n]+/g, ' ').trim()
       const truncated = oneLine.length > 120 ? oneLine.slice(0, 119) + '…' : oneLine
@@ -2276,6 +2298,8 @@ export function registerLive(on: Parameters<Register>[0]): void {
       void frameKey($, { kind: 'text_cancel' })
       return {}
     }
+    const step = decideLocal.textMode || bandLegacy || !v74Open ? null : v74TabStep(panePage, named, (raw as { origin?: unknown }).origin)
+    if (step !== null) { void frameKey($, step); return {} } // the ring stays on the current tab
     const at = v74FocusAt(raw)
     if (at === null || decideLocal.textMode || (panePage !== 'decide' && panePage !== 'todo') || bandLegacy || !v74Open) return next(e)
     const act = v74FocusCursor(decideLocal.cursor, typeof raw.element === 'string' ? raw.element : raw.key)

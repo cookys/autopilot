@@ -5,7 +5,7 @@ import { PAGES } from './pages/index'
 import { NO_NAV, decideReduce, cardToLive } from './pages/decide'
 import { makeT } from './i18n'
 import { BAND_NARROW_STEPS, layoutBandLine, slotFleet, v74FitBand } from './model'
-import { v74FocusCursor } from './register'
+import { v74FocusCursor, v74TabStep } from './register'
 import { writeV74Answers } from './decideundo'
 import type { DecideCard } from './v74/contract'
 import decideFx from './fixtures/v74/decide.fixture'
@@ -117,4 +117,22 @@ test('r7 send: s writes the card store even when the model never answers', async
   expect(posted).toBe(true)
   await new Promise(r => setTimeout(r, 0))
   expect(next.sent[cards[0].id]).toBe(5)
+})
+
+// r7-2: the arrows walk the band's ring along the tab strip; on 待決/待辦 that walk is the card move.
+test('v74TabStep: a person moving the ring to the next or previous tab is a card move, the wrap included', () => {
+  const person = { kind: 'person' }
+  expect(v74TabStep('decide', 'tab:dispatch', person)).toEqual({ kind: 'move', by: 1 })
+  expect(v74TabStep('decide', 'tab:now', person)).toEqual({ kind: 'move', by: -1 })
+  expect(v74TabStep('decide', 'tab:dispatch:3', person)).toEqual({ kind: 'move', by: 1 })
+  expect(v74TabStep('todo', 'tab:fleet', person)).toEqual({ kind: 'move', by: -1 })
+  expect(v74TabStep('todo', 'tab:now', person)).toEqual({ kind: 'move', by: 1 }) // a wrap from the last stops
+  expect(v74TabStep('decide', 'tab:help', person)).toEqual({ kind: 'move', by: -1 }) // a wrap from the first stops
+})
+test('v74TabStep: the plugin own autoFocus, the current tab, a card and other pages pass', () => {
+  expect(v74TabStep('decide', 'tab:dispatch', { kind: 'plugin', name: 'x' })).toBeNull()
+  expect(v74TabStep('decide', 'tab:decide', { kind: 'person' })).toBeNull()
+  expect(v74TabStep('decide', 'card:2', { kind: 'person' })).toBeNull()
+  expect(v74TabStep('review', 'tab:spend', { kind: 'person' })).toBeNull()
+  expect(v74TabStep('decide', undefined, { kind: 'person' })).toBeNull()
 })

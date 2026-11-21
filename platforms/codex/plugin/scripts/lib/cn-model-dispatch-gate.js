@@ -66,7 +66,9 @@
 //   [local-restricted-repo] (shipped-only local_restricted_repos; game repos revival* and pinball*, operator
 //   2026-11-15 rule: small mechanical tested work only): a repo matching an entry passes only with Task-Class in
 //   its task_classes, Size in its sizes, and no Scope/New-Files path matching its deny_paths (assets, Content,
-//   raw and player data); else this class, after [task-class]. twgameproject* stays in local_deny_repos.
+//   raw and player data); else this class, after [task-class]. Trial scope (PM ruling): when role is implementer
+//   and the repo matches such an entry, [unknown-task-class], [task-class] and the entry's task_classes are
+//   skipped (Size, deny_paths, transcript, sensitive and review-role still apply); other roles and repos unchanged. twgameproject* stays in local_deny_repos.
 //   Two further checks then apply, and only then: [local-deny-repo] the repo directory name matches local_deny_repos; [unknown-task-class]
 //   Task-Class is missing; [task-class] it is not in local_task_classes (format-convert, log-summary,
 //   simple-script, test-scaffold). A different barred family on that endpoint (a kimi model on qwen_local)
@@ -240,12 +242,16 @@ function shippedRestrictedRepos() {
   return Array.isArray(raw) ? raw : [];
 }
 
-function restrictedRepoBlocks(repoName, f) {
+function inRestrictedTrial(repoName) {
+  return shippedRestrictedRepos().some((e) => e && typeof e === 'object' && Array.isArray(e.repos) && matchesAny(repoName, e.repos.map(String)));
+}
+
+function restrictedRepoBlocks(repoName, f, skipClass = false) {
   const lower = (a) => (Array.isArray(a) ? a.map((x) => String(x).toLowerCase()) : []);
   const upper = (a) => (Array.isArray(a) ? a.map((x) => String(x).toUpperCase()) : []);
   return shippedRestrictedRepos().some((e) => {
     if (!e || typeof e !== 'object' || !Array.isArray(e.repos) || !matchesAny(repoName, e.repos.map(String))) return false;
-    if (!lower(e.task_classes).includes(f.taskClass)) return true;
+    if (!skipClass && !lower(e.task_classes).includes(f.taskClass)) return true;
     if (!upper(e.sizes).includes(f.size)) return true;
     const deny = Array.isArray(e.deny_paths) ? e.deny_paths.map(String) : [];
     return [...f.scope, ...f.newFiles].some((p) => matchesAny(p, deny));
@@ -575,9 +581,13 @@ function check(opts = {}) {
   if (!f.scope.length) return block('unknown-scope');
   if (localServed) {
     if (matchesAny(path.basename(root), cfg.local_deny_repos)) return block('local-deny-repo');
-    if (!f.taskClass) return block('unknown-task-class');
-    if (!cfg.local_task_classes.includes(f.taskClass)) return block('task-class');
-    if (restrictedRepoBlocks(path.basename(root), f)) return block('local-restricted-repo');
+    // Trial scope (PM ruling): an implementer in a local_restricted_repos repo needs no Task-Class.
+    const trial = f.role === 'implementer' && inRestrictedTrial(path.basename(root));
+    if (!trial) {
+      if (!f.taskClass) return block('unknown-task-class');
+      if (!cfg.local_task_classes.includes(f.taskClass)) return block('task-class');
+    }
+    if (restrictedRepoBlocks(path.basename(root), f, trial)) return block('local-restricted-repo');
   }
   return { allowed: true, family };
 }

@@ -903,8 +903,8 @@ test('local_restricted_repos: revival and pinball take only small mechanical wor
   const blocked = (e, cwd) => gate.check({ ...GAME_LOCAL, env: e, cwd }).cls;
   assert.equal(gate.check({ ...GAME_LOCAL, env: GAME_OK, cwd: rev }).allowed, true, 'revival test-scaffold XS ordinary path');
   assert.equal(gate.check({ ...GAME_LOCAL, env: { ...GAME_OK, AUTOPILOT_TASK_CLASS: 'simple-script', AUTOPILOT_TASK_SIZE: 'S' }, cwd: pin }).allowed, true, 'pinball simple-script S');
-  assert.equal(blocked({ ...GAME_OK, AUTOPILOT_TASK_CLASS: 'format-convert' }, rev), 'local-restricted-repo', 'class outside the restricted list');
-  assert.equal(blocked({ ...GAME_OK, AUTOPILOT_TASK_CLASS: 'feature' }, rev), 'task-class', 'feature is no local class at all');
+  assert.equal(blocked({ ...GAME_OK, AUTOPILOT_TASK_ROLE: 'tester', AUTOPILOT_TASK_CLASS: 'format-convert' }, rev), 'local-restricted-repo', 'a non-implementer keeps the restricted class list');
+  assert.equal(blocked({ ...GAME_OK, AUTOPILOT_TASK_ROLE: 'tester', AUTOPILOT_TASK_CLASS: 'feature' }, rev), 'task-class', 'a non-implementer keeps the Task-Class whitelist');
   assert.equal(blocked({ ...GAME_OK, AUTOPILOT_TASK_SIZE: 'M' }, rev), 'local-restricted-repo', 'size M');
   assert.equal(blocked({ ...GAME_OK, AUTOPILOT_TASK_SIZE: '' }, rev), 'unknown-size', 'missing size is refused');
   for (const bad of ['Content/Maps/a.txt', 'Source/x/hero.uasset', 'Maps/l.umap', 'raw/dump.csv', 'data/raw/x.csv', 'save/player1/s.json', 'x/Fab/pack.json']) {
@@ -919,4 +919,26 @@ test('local_restricted_repos: revival and pinball take only small mechanical wor
   }
   const art = excRepo('autopilot-restricted-control');
   assert.equal(gate.check({ ...GAME_LOCAL, env: { ...GAME_OK, AUTOPILOT_TASK_SIZE: 'M', AUTOPILOT_TASK_SCOPE: 'Content/a.txt' }, cwd: art }).allowed, true, 'an unlisted repo is not restricted');
+});
+
+// Trial scope (PM ruling): an implementer in a local_restricted_repos repo needs no Task-Class.
+// Size and deny_paths, transcript, sensitive and review-role still apply; other repos and roles are unchanged.
+test('local_restricted_repos trial: implementer needs no Task-Class in revival*/pinball*, nowhere else', () => {
+  const rev = excRepo('revival-world-city-war');
+  const pin = excRepo('pinball-table');
+  const tw = excRepo('twgameproject-main');
+  const other = excRepo('autopilot-trial-control');
+  const { AUTOPILOT_TASK_CLASS: _c, ...noClass } = GAME_OK;
+  const chk = (e, cwd, extra) => gate.check({ ...GAME_LOCAL, env: e, cwd, ...extra });
+  assert.equal(chk(noClass, rev).allowed, true, 'revival implementer without Task-Class');
+  assert.equal(chk(noClass, pin).allowed, true, 'pinball implementer without Task-Class');
+  assert.equal(chk({ ...GAME_OK, AUTOPILOT_TASK_CLASS: 'feature' }, rev).allowed, true, 'revival implementer with a non-listed class');
+  assert.equal(chk({ ...noClass, AUTOPILOT_TASK_READS_TRANSCRIPT: '1' }, rev).cls, 'transcript');
+  assert.equal(chk({ ...noClass, AUTOPILOT_TASK_SCOPE: 'tools/a.py, .env' }, rev).cls, 'sensitive');
+  assert.equal(chk({ ...noClass, AUTOPILOT_TASK_ROLE: 'reviewer' }, rev, { now: EXC_AFTER }).cls, 'review-role');
+  assert.equal(chk({ ...noClass, AUTOPILOT_TASK_SIZE: 'M' }, rev).cls, 'local-restricted-repo', 'size still bounded');
+  assert.equal(chk({ ...noClass, AUTOPILOT_TASK_SCOPE: 'Content/a.txt' }, rev).cls, 'local-restricted-repo', 'deny_paths still bound');
+  assert.equal(chk({ ...noClass, AUTOPILOT_TASK_ROLE: 'tester' }, rev).cls, 'unknown-task-class', 'another role still needs a class');
+  assert.equal(chk(noClass, other).cls, 'unknown-task-class', 'a repo outside the trial still needs a class');
+  assert.equal(chk(noClass, tw).cls, 'local-deny-repo', 'twgameproject stays denied');
 });

@@ -1,0 +1,13 @@
+[
+  "scripts/dispatch-hetero.sh",
+  "scripts/lib/dispatch-*",
+  "scripts/lib/local-impl-slot.js",
+  "scripts/pace-select.js",
+  "scripts/land-branch.js",
+  "scripts/*pin*",
+  "scripts/*canary*",
+  "scripts/*lease*",
+  "scripts/*lock*",
+  "hooks/hooks.json",
+  "platforms/codex/hooks/hooks.json"
+]

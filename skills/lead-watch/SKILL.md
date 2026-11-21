@@ -14,7 +14,7 @@ Scope: applies to a session that dispatched or coordinates other members. A stuc
 
 | Condition (mechanical) | Verdict |
 |---|---|
-| A running hand has gone more than 30 minutes since the lead last checked it (PM rule) | check now |
+| A running hand's process or rail ended (task notification, `fleet watch` event) with no report, or its evidence time passed | check now |
 | A dispatched item passed its evidence time with no report | overdue: go and find out |
 | A member finished an item, its next item is ready and inside the go, and it is idle | **stall**, same as an overdue report |
 | A member's live pane or log shows a permission prompt or a wait with no progress | blocked: treat as an alert |
@@ -42,4 +42,4 @@ The lead keeps three things: judgment, checking the key facts, and irreversible 
 
 - Every dispatch lists N, N+1 and N+2 with each one's entry condition and an evidence time, so the chain runs without a round trip.
 - When an item ends the member starts the next ready item inside the go at once and reports both in one line.
-- Check-ins are scheduled at the evidence time, at the latest 30 minutes apart while a hand runs.
+- Check-ins are event-driven: a task notification, a `fleet watch` condition (`pid` / `until_file` / `until`) or the evidence time passing. There is no fixed polling interval (fleet plan pm-inbox-issue-model S4, retiring the 30-minute poll).

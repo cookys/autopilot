@@ -259,6 +259,74 @@ assert_eq "$(node -e 'process.stdout.write(String(JSON.parse(require("fs").readF
 assert_eq "$(node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1])).local_lease.heartbeats>=2))' "$MF")" "true" "f: heartbeat renews during worker run"
 assert_contains "$(cat "$LEASE_LOG")" '"method":"DELETE"' "f: gateway received DELETE"
 
+# (f1) command substitution returns promptly after the worker, without waiting for heartbeat sleep.
+PROMPT="$TEST_TMP/prompt-f1.txt"
+printf 'Task-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
+RUNS="$TEST_TMP/runs-f1"; mkdir -p "$RUNS"; : > "$LEASE_LOG"
+export TMPDIR="$TEST_TMP"
+SLEEP_PID_CAPTURE="$TEST_TMP/f1-heartbeat-sleep-pid"
+(
+  for _i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    for _lease_sleep_file in "$TMPDIR"/autopilot-local-lease-heartbeat-sleep-*; do
+      [ -f "$_lease_sleep_file" ] || continue
+      [ -s "$_lease_sleep_file" ] && { cat "$_lease_sleep_file" > "$SLEEP_PID_CAPTURE"; exit 0; }
+    done
+    sleep 0.05
+  done
+) &
+SLEEP_PID_WATCHER=$!
+START_NS="$(date +%s%N)"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
+  AUTOPILOT_LOCAL_LEASE_TTL_S=18 LEASE_WORKER_SLEEP=1 \
+  "$SCRIPT" --no-verify-tip --context-window off --branch feat/local-f1 --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/f1.err")"
+EXIT=$?
+ELAPSED_MS=$((($(date +%s%N) - START_NS) / 1000000))
+assert_eq "0" "$EXIT" "f1: granted lease command substitution succeeds"
+[ "$ELAPSED_MS" -lt 4000 ] && _f1_fast=true || _f1_fast=false
+assert_eq "true" "$_f1_fast" "f1: command substitution returns promptly after worker (${ELAPSED_MS}ms)"
+wait "$SLEEP_PID_WATCHER" 2>/dev/null || true
+F1_SLEEP_PID="$(cat "$SLEEP_PID_CAPTURE" 2>/dev/null || true)"
+[ -n "$F1_SLEEP_PID" ] && _f1_sleep_captured=true || _f1_sleep_captured=false
+assert_eq "true" "$_f1_sleep_captured" "f1: captured heartbeat sleep pid before release"
+if [ -n "$F1_SLEEP_PID" ] && kill -0 "$F1_SLEEP_PID" 2>/dev/null; then _f1_sleep_alive=true; else _f1_sleep_alive=false; fi
+assert_eq "false" "$_f1_sleep_alive" "f1: heartbeat sleep pid is no longer alive after dispatch"
+
+# (f1b) a stale sleep-file pid with a non-sleep comm is left alone by release.
+PROMPT="$TEST_TMP/prompt-f1b.txt"
+printf 'Task-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
+RUNS="$TEST_TMP/runs-f1b"; mkdir -p "$RUNS"; : > "$LEASE_LOG"
+tail -f /dev/null >/dev/null 2>&1 &
+F1B_STANDIN_PID=$!
+F1B_SLEEP_PID_CAPTURE="$TEST_TMP/f1b-heartbeat-sleep-pid"
+(
+  for _i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    for _lease_sleep_file in "$TMPDIR"/autopilot-local-lease-heartbeat-sleep-*; do
+      [ -f "$_lease_sleep_file" ] || continue
+      if [ -s "$_lease_sleep_file" ]; then
+        cat "$_lease_sleep_file" > "$F1B_SLEEP_PID_CAPTURE"
+        printf '%s\n' "$F1B_STANDIN_PID" > "$_lease_sleep_file"
+        exit 0
+      fi
+    done
+    sleep 0.05
+  done
+) &
+F1B_SLEEP_PID_WATCHER=$!
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
+  AUTOPILOT_LOCAL_LEASE_TTL_S=18 LEASE_WORKER_SLEEP=1 \
+  "$SCRIPT" --no-verify-tip --context-window off --branch feat/local-f1b --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/f1b.err")"
+EXIT=$?
+wait "$F1B_SLEEP_PID_WATCHER" 2>/dev/null || true
+assert_eq "0" "$EXIT" "f1b: non-sleep pid lease dispatch succeeds"
+F1B_ORIGINAL_SLEEP_PID="$(cat "$F1B_SLEEP_PID_CAPTURE" 2>/dev/null || true)"
+[ -n "$F1B_ORIGINAL_SLEEP_PID" ] && _f1b_sleep_captured=true || _f1b_sleep_captured=false
+assert_eq "true" "$_f1b_sleep_captured" "f1b: captured the active sleep pid before replacing file"
+if kill -0 "$F1B_STANDIN_PID" 2>/dev/null; then _f1b_standin_alive=true; else _f1b_standin_alive=false; fi
+assert_eq "true" "$_f1b_standin_alive" "f1b: release leaves a non-sleep pid alive"
+[ -z "$F1B_ORIGINAL_SLEEP_PID" ] || kill "$F1B_ORIGINAL_SLEEP_PID" 2>/dev/null || true
+kill "$F1B_STANDIN_PID" 2>/dev/null || true
+wait "$F1B_STANDIN_PID" 2>/dev/null || true
+
 # (f2) a hard-timeout worker is killed, but its granted lease is still released once.
 PROMPT="$TEST_TMP/prompt-f2.txt"
 printf 'Task-Class: simple-script\nedit ok.txt\n' > "$PROMPT"

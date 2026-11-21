@@ -3385,7 +3385,7 @@
       "readers": ["scripts/lib/local-impl-slot.js"],
       "doc": "docs/guide/settings-reference.md",
       "relates": ["local_slots_cmd"],
-      "summary": "Overrides config local_slots_cmd, even when empty. The command prints {\"free\":<int>,\"draining\":<bool>} or the gateway slots JSON and is killed after 3 seconds."
+      "summary": "Legacy override for config local_slots_cmd; implicit local dispatch no longer reads this setting because it acquires a gateway lease."
     },
     {
       "name": "AUTOPILOT_LOCAL_SLOTS_URL",
@@ -7672,7 +7672,7 @@
       "readers": ["scripts/lib/local-impl-slot.js"],
       "doc": "docs/guide/settings-reference.md",
       "relates": ["AUTOPILOT_LOCAL_SLOTS_CMD"],
-      "summary": "Command that replaces the gateway slot query. Prints {\"free\":<int>,\"draining\":<bool>} or the gateway slots JSON. Empty means HTTP GET the slot endpoint. Timeout is 3 seconds.",
+      "summary": "Legacy slot probe command. Implicit local dispatch no longer reads this setting because it acquires a gateway lease.",
       "type": "string"
     },
     {

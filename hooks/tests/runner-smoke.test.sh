@@ -919,4 +919,76 @@ process.stdout.write("ok");
 ' "$NOISE_RECEIPTS/2026-11-27.json")"
 assert_eq "$NOISE_CHECK" "ok" "receipt skips codeforge-collect noise on stderr and keeps weekly limit reached on stdout"
 
+# --- 9. quota_exhausted classification and cli_last_line redaction ---
+QUOTA_BIN="$TEST_TMP/quota-bin"
+mkdir -p "$QUOTA_BIN"
+cat > "$QUOTA_BIN/claude" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then
+  echo "2.1.104 (Claude Code)"
+  exit 0
+fi
+if [ -n "${FAKE_CLAUDE_OUT:-}" ]; then
+  printf '%s\n' "$FAKE_CLAUDE_OUT"
+fi
+if [ -n "${FAKE_CLAUDE_ERR:-}" ]; then
+  printf '%s\n' "$FAKE_CLAUDE_ERR" >&2
+fi
+exit "${FAKE_CLAUDE_EXIT:-1}"
+EOF
+chmod +x "$QUOTA_BIN/claude"
+
+FIXTURE_CLAUDE_PINS="$TEST_TMP/claude-pins.json"
+node -e '
+const fs = require("fs");
+const doc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+doc.runners = { claude: doc.runners.claude };
+fs.writeFileSync(process.argv[2], JSON.stringify(doc, null, 2));
+' "$PINS_JSON" "$FIXTURE_CLAUDE_PINS"
+
+QUOTA_RECEIPTS="$TEST_TMP/quota-receipts"
+QUOTA_MSG="You'\''ve hit your weekly limit · resets 3am · out of usage credits"
+QUOTA_OUT="$(AUTOPILOT_RUNNER_VETTED_FILE="$TEST_TMP/quota-vetted.json" PATH="$QUOTA_BIN:$PATH" FAKE_CLAUDE_OUT="$QUOTA_MSG" FAKE_CLAUDE_EXIT=1 node "$SMOKE_JS" --pins "$FIXTURE_CLAUDE_PINS" --only claude --receipt-dir "$QUOTA_RECEIPTS" --date 2026-11-28 < /dev/null 2>&1)"; QUOTA_RC=$?
+assert_eq "$QUOTA_RC" "1" "quota-exhausted claude smoke exits 1"
+QUOTA_CHECK="$(node -e '
+const fs = require("fs");
+const doc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const row = doc.runners.find((r) => r.runner === "claude");
+if (!row) process.exit(1);
+if (row.rail_classification !== "quota_exhausted") process.exit(2);
+if (row.rail_exit !== 6) process.exit(3);
+if (row.cli_last_line !== process.argv[2]) process.exit(4);
+process.stdout.write("ok");
+' "$QUOTA_RECEIPTS/2026-11-28.json" "$QUOTA_MSG")"
+assert_eq "$QUOTA_CHECK" "ok" "weekly limit stdout classifies as quota_exhausted (exit 6) with cli_last_line"
+
+SEGFAULT_RECEIPTS="$TEST_TMP/segfault-receipts"
+SEGFAULT_OUT="$(AUTOPILOT_RUNNER_VETTED_FILE="$TEST_TMP/segfault-vetted.json" PATH="$QUOTA_BIN:$PATH" FAKE_CLAUDE_ERR="segfault" FAKE_CLAUDE_EXIT=1 node "$SMOKE_JS" --pins "$FIXTURE_CLAUDE_PINS" --only claude --receipt-dir "$SEGFAULT_RECEIPTS" --date 2026-11-29 < /dev/null 2>&1)"; SEGFAULT_RC=$?
+assert_eq "$SEGFAULT_RC" "1" "segfault claude smoke exits 1"
+SEGFAULT_CHECK="$(node -e '
+const fs = require("fs");
+const doc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const row = doc.runners.find((r) => r.runner === "claude");
+if (!row) process.exit(1);
+if (row.rail_classification !== "runner_failed") process.exit(2);
+if (row.rail_exit !== 3) process.exit(3);
+if (row.cli_last_line !== "segfault") process.exit(4);
+process.stdout.write("ok");
+' "$SEGFAULT_RECEIPTS/2026-11-29.json")"
+assert_eq "$SEGFAULT_CHECK" "ok" "segfault still classifies as runner_failed (exit 3) with cli_last_line"
+
+SECRET_RECEIPTS="$TEST_TMP/secret-receipts"
+FAKE_KEY="$(node -e 'process.stdout.write("s"+"k-"+"abcdefghijklmnopqrst")')"
+SECRET_OUT="$(AUTOPILOT_RUNNER_VETTED_FILE="$TEST_TMP/secret-vetted.json" PATH="$QUOTA_BIN:$PATH" FAKE_CLAUDE_OUT="error with key $FAKE_KEY" FAKE_CLAUDE_EXIT=1 node "$SMOKE_JS" --pins "$FIXTURE_CLAUDE_PINS" --only claude --receipt-dir "$SECRET_RECEIPTS" --date 2026-11-30 < /dev/null 2>&1)"; SECRET_RC=$?
+assert_eq "$SECRET_RC" "1" "secret-containing failure exits 1"
+SECRET_CHECK="$(node -e '
+const fs = require("fs");
+const doc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const row = doc.runners.find((r) => r.runner === "claude");
+if (!row || typeof row.cli_last_line !== "string") process.exit(1);
+if (row.cli_last_line.includes(process.argv[2])) process.exit(2);
+process.stdout.write("ok");
+' "$SECRET_RECEIPTS/2026-11-30.json" "$FAKE_KEY")"
+assert_eq "$SECRET_CHECK" "ok" "cli_last_line masks API-key-shaped token"
+
 finalize_test

@@ -137,6 +137,13 @@ assert_eq "$(json_field "$OUT" recheck.status)" "no_seat" "(d) no eligible seat"
 assert_eq "$(json_field "$OUT" verdict)" "CONDITIONAL" "(d) fails closed (not READY)"
 assert_eq "$(json_field "$OUT" recheck.attempts)" "[]" "(d) the same-family seat was never asked"
 
+# ---- (d2) one seat only: transport failure cannot retreat to another eligible seat ----
+OUT="$(run_recheck "$MAN_MIXED" anthropic "{\"file\":\"$WORK/ans-fixed.json\",\"classification\":\"unavailable\"}" d2 recheck_seat1)"; RC=$?
+assert_exit_code "$RC" "5" "(d2) failed sole seat exits 5"
+assert_eq "$(json_field "$OUT" recheck.status)" "unavailable" "(d2) unavailable seat fails closed"
+assert_eq "$(json_field "$OUT" verdict)" "CONDITIONAL" "(d2) unavailable seat goes to PM adjudication"
+assert_eq "$(json_field "$OUT" recheck.attempts.length)" "1" "(d2) no second seat dispatch"
+
 # ---- (f) usage and duration: reported tokens, null (never 0) when the runner reports none ----
 OUT="$(run_recheck "$MAN_MIXED" anthropic "{\"file\":\"$WORK/ans-fixed.json\",\"usage\":{\"input_tokens\":1200,\"output_tokens\":300}}" f1 recheck_seat1)"
 assert_eq "$(json_field "$OUT" usage)" '{"input_tokens":1200,"output_tokens":300,"total_tokens":1500}' "(f) reported usage is summed with a total"
@@ -220,8 +227,12 @@ CODE="$WORK/code"; STATE="$WORK/state"; mkdir -p "$CODE/scripts" "$STATE"
 CBASE="$(git -C "$CODE" rev-parse main)"
 cat >"$CODE/scripts/dispatch-review.sh" <<'STUB'
 #!/usr/bin/env bash
-# stub: STUB_ANSWER_FILE (recheck answers) wins, else STUB_SEAT_RESPONSE; STUB_USAGE adds a usage object.
 if [ -n "$STUB_ANSWER_FILE" ]; then
+  if [ "${STUB_TRANSPORT_FAIL:-0}" = "1" ]; then exit 1; fi
+  if [[ " $* " == *"--raw-answer"* ]]; then
+    node -e 'const fs=require("fs");console.log(JSON.stringify({status:"reviewed",answer:fs.readFileSync(process.argv[1],"utf8"),usage:process.env.STUB_USAGE?JSON.parse(process.env.STUB_USAGE):null}))' "$STUB_ANSWER_FILE"
+    exit 0
+  fi
   node -e 'const fs=require("fs");const o={status:"reviewed",verdict:"SHIP-AS-IS",findings:fs.readFileSync(process.argv[1],"utf8"),no_finding_proof:null,usage:process.env.STUB_USAGE?JSON.parse(process.env.STUB_USAGE):null};console.log(JSON.stringify(o))' "$STUB_ANSWER_FILE"
   exit 0
 fi
@@ -229,6 +240,8 @@ echo "$STUB_SEAT_RESPONSE"
 STUB
 chmod +x "$CODE/scripts/dispatch-review.sh"
 export AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$CODE/scripts/dispatch-review.sh"
+export DISPATCH_QUIET=1 AUTOPILOT_DISPATCH_MANIFEST=0 AUTOPILOT_CONTEXT_WINDOW_GATE=off
+export AUTOPILOT_TEST_CN_GATE_OFF=1
 CODE_LOOP="$REPO_ROOT/scripts/hetero-review-loop.js"
 export AUTOPILOT_STATE_DIR="$STATE"
 export STUB_SEAT_RESPONSE='{"status":"reviewed","verdict":"FIX-THEN-SHIP","findings":"Major: src.txt:3 BAD line breaks the parser\nthe value is wrong","no_finding_proof":null,"usage":{"input_tokens":50,"output_tokens":7}}'
@@ -264,7 +277,7 @@ code_answer fixed "$WORK/code-fixed.json"; code_answer notfixed "$WORK/code-notf
 FID="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1])).findings[0].id)' "$LD/review-p1/g1/findings.json")"
 CHAIN_SHA="$(sha256sum "$LD/review-p1/chain.json" | cut -d' ' -f1)"
 code_recheck() { # <answer-file> <seats>
-  STUB_ANSWER_FILE="$1" STUB_USAGE='{"input_tokens":10,"output_tokens":2}' env -u AUTOPILOT_TOKEN_SEAT -u AUTOPILOT_SESSION_ID \
+  STUB_ANSWER_FILE="$1" STUB_USAGE='{"input_tokens":10,"output_tokens":2}' STUB_TRANSPORT_FAIL="${3:-0}" env -u AUTOPILOT_TOKEN_SEAT -u AUTOPILOT_SESSION_ID \
     node "$CODE_LOOP" recheck --repo-root "$CODE" --phase p1 --generation 1 --branch work --seats "$2" </dev/null 2>"$WORK/recheck.err"
 }
 OUT="$(code_recheck "$WORK/code-fixed.json" "claude-haiku-5/low@claude,gpt-m1/high@codex")"; RC=$?
@@ -288,6 +301,45 @@ assert_eq "$(json_field "$OUT" recheck.status)" "invalid" "(g)(c) extra key -> i
 OUT="$(code_recheck "$WORK/code-fixed.json" "claude-haiku-5/low@claude,claude-opus-5/high@claude")"; RC=$?
 assert_exit_code "$RC" "5" "(g)(d) only the implementer's family: exits 5"
 assert_eq "$(json_field "$OUT" recheck.status)" "no_seat" "(g)(d) fails closed to PM adjudication"
+
+# ---- (g)(h) transport failure uses one seat, then fails closed to PM ----
+OUT="$(code_recheck "$WORK/code-fixed.json" "gpt-m1/high@codex,gpt-m2/high@codex" 1)"; RC=$?
+assert_exit_code "$RC" "5" "(g)(h) unavailable sole seat exits 5"
+assert_eq "$(json_field "$OUT" recheck.status)" "unavailable" "(g)(h) transport failure adjudicates"
+assert_eq "$(json_field "$OUT" recheck.attempts.length)" "1" "(g)(h) does not dispatch a second seat"
+
+# ---- (g)(i) a blocker without a nearby repair hunk is never asked or frozen ----
+cp "$LD/review-p1/g1/findings.json" "$WORK/findings-no-hunk.json"
+node -e 'const fs=require("fs");const p=process.argv[1];const x=JSON.parse(fs.readFileSync(p));x.findings=[{...x.findings[0],id:"missing-hunk",text:"Major: absent.txt:40 unrelated issue"}];fs.writeFileSync(p,JSON.stringify(x));' "$WORK/findings-no-hunk.json"
+cp "$WORK/findings-no-hunk.json" "$LD/review-p1/g1/findings.json"
+rm -f "$LD/review-p1/g1/dispositions.json"
+node -e 'const fs=require("fs");const p=process.argv[1];const x=JSON.parse(fs.readFileSync(p));fs.writeFileSync(process.argv[2],JSON.stringify({results:x.findings.map(f=>({id:f.id,status:"fixed",reason:"line 3 no longer carries the bad value"}))}));' "$LD/review-p1/g1/findings.json" "$WORK/code-fixed-two.json"
+OUT="$(code_recheck "$WORK/code-fixed-two.json" "gpt-m1/high@codex" 0)"; RC=$?
+assert_exit_code "$RC" "0" "(g)(i) missing-hunk blocker is sent for adjudication"
+assert_eq "$(json_field "$OUT" verdict)" "FIX-THEN-SHIP" "(g)(i) no evidence cannot freeze"
+assert_eq "$(json_field "$OUT" recheck.results.0.reason)" "no_repair_hunk" "(g)(i) reason names missing repair evidence"
+assert_eq "$(json_field "$OUT" findings.0.id)" "missing-hunk" "(g)(i) correct blocker remains for PM"
+assert_eq "$(json_field "$OUT" recheck.attempts)" "[]" "(g)(i) no recheck seat is asked"
 unset AUTOPILOT_DISPATCH_REVIEW_SCRIPT AUTOPILOT_STATE_DIR STUB_SEAT_RESPONSE
+
+# The real dispatcher returns pure JSON in raw-answer mode instead of applying its
+# ordinary verdict/findings-format parser. The strict recheck validator owns schema checks.
+RAW_FIXTURE_TMP="$TEST_TMP/raw-review"; mkdir -p "$RAW_FIXTURE_TMP"
+RAW_DIFF="$RAW_FIXTURE_TMP/diff"; printf '+fixture\n' >"$RAW_DIFF"
+RAW_STUB="$RAW_FIXTURE_TMP/codex"
+cat >"$RAW_STUB" <<'STUB'
+#!/usr/bin/env bash
+prompt="$(cat)"
+marker="$(printf '%s' "$prompt" | sed -n 's/^<<<AUTOPILOT-REVIEW-\(.*\)>>>$/\1/p')"
+printf '%s\n' '{"results":[{"id":"fixture-blocker","status":"fixed","reason":"repair is present"}]}'
+STUB
+chmod +x "$RAW_STUB"
+RAW_BINDIR="$RAW_FIXTURE_TMP/bin"; mkdir -p "$RAW_BINDIR"
+cp "$RAW_STUB" "$RAW_BINDIR/codex"; printf 'host\n' >"$RAW_BINDIR/codex-code-mode-host"
+RAW_OUT="$(AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 "$REPO_ROOT/scripts/dispatch-review.sh" \
+  --runner codex --model gpt-5.5 --diff-file "$RAW_DIFF" --bin "$RAW_BINDIR/codex" --raw-answer 2>&1)"; RC=$?
+assert_exit_code "$RC" "0" "raw recheck JSON traverses the real dispatch-review path"
+assert_eq "$(json_field "$RAW_OUT" answer)" '{"results":[{"id":"fixture-blocker","status":"fixed","reason":"repair is present"}]}' \
+  "pure JSON is returned intact for recheck validation"
 
 finalize_test

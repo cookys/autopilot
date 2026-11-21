@@ -654,7 +654,7 @@ function runGitDiff(base, head, repoRoot, excludes = []) {
 // failure is recorded exactly as before. Every other seat is untouched. The attempt is recorded
 // on the seat artifact as `format_retry` and on stderr.
 const FORMAT_RETRY_LIMIT = 1;
-async function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, implementerFamily) {
+async function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, implementerFamily, rawAnswer = false) {
   // d-1dfcf757: a seat in a family barred from transcript content is skipped (no spawn) for a marked task.
   const tfg = require('./lib/cn-model-dispatch-gate').check({ runner: seat.runner, model: seat.engine, endpoint: seat.endpoint, role: 'reviewer', files: [specFile], diffFiles: [path.join(ledgerPhaseGDir, 'diff.txt')], cwd: repoRoot });
   if (!tfg.allowed) {
@@ -667,7 +667,7 @@ async function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeou
     usage: repairRecheck.normalizeUsage(r.rawOutput && r.rawOutput.usage),
     duration_ms: Number.isFinite(r.duration_ms) ? r.duration_ms : 0,
   });
-  let result = await runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, '', implementerFamily);
+  let result = await runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, '', implementerFamily, rawAnswer);
   logAttempt(result);
   const isFormatReject = (r) => r.status === 'no_verdict'
     && r.rawOutput && r.rawOutput.format_reject === true
@@ -679,7 +679,7 @@ async function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeou
     const reason = typeof result.rawOutput.reject_reason === 'string' && result.rawOutput.reject_reason ? result.rawOutput.reject_reason : result.rawOutput.error;
     console.error(`INFO: seat ${seat.id} answer rejected for format (${reason}); re-asking this seat once (format retry ${attempts}/${FORMAT_RETRY_LIMIT})`);
     history.push({ attempt: attempts, reason, raw_log: result.rawOutput.raw_log || null, usage: result.rawOutput.usage === undefined ? null : result.rawOutput.usage });
-    result = await runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, reason, implementerFamily);
+    result = await runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, reason, implementerFamily, rawAnswer);
     logAttempt(result);
     if (result.rawOutput && typeof result.rawOutput === 'object') {
       result.rawOutput.format_retry = {
@@ -705,7 +705,7 @@ async function runSeatDispatchOnce(...args) {
   return result;
 }
 
-function runSeatDispatchOnceRaw(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, retryNote, implementerFamily) {
+function runSeatDispatchOnceRaw(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, retryNote, implementerFamily, rawAnswer = false) {
   return new Promise((resolve) => {
     let dispatchScript = process.env.AUTOPILOT_DISPATCH_REVIEW_SCRIPT;
     if (!dispatchScript) {
@@ -721,6 +721,7 @@ function runSeatDispatchOnceRaw(seat, repoRoot, ledgerPhaseGDir, specFile, timeo
       '--diff-file', diffFile,
       '--timeout', timeout || '20m',
     ];
+    if (rawAnswer) args.push('--raw-answer');
     if (seat.endpoint) {
       args.push('--endpoint', seat.endpoint);
     }
@@ -771,7 +772,8 @@ function runSeatDispatchOnceRaw(seat, repoRoot, ledgerPhaseGDir, specFile, timeo
       }
 
       const validVerdict = parsed && (parsed.verdict === 'SHIP-AS-IS' || parsed.verdict === 'FIX-THEN-SHIP' || parsed.verdict === null || parsed.verdict === 'no_verdict');
-      const validShape = parsed && typeof parsed === 'object' && typeof parsed.status === 'string' && validVerdict;
+      const validShape = parsed && typeof parsed === 'object' && typeof parsed.status === 'string'
+        && (rawAnswer ? typeof parsed.answer === 'string' : validVerdict);
 
       if (exitCode !== 0 || !validShape) {
         const errorMsg = exitCode !== 0
@@ -2936,7 +2938,7 @@ async function handleRecheck(flags) {
   }
   const items = blockersRaw.map((f) => {
     const hunks = findingSites(f).map((site) => diffHunksNear(repoRoot, entry.head, repairedHead, site)).filter(Boolean);
-    const repaired = hunks.length ? hunks.join('\n') : '(the repair delta touches none of the lines this finding names)';
+    const repaired = hunks.length ? hunks.join('\n') : '';
     return {
       id: f.id,
       original: String(f.text || '').slice(0, RECHECK_ITEM_CHARS),
@@ -2958,20 +2960,34 @@ async function handleRecheck(flags) {
     const specFile = path.join(recheckDir, `question-${seat.id}.md`);
     writeFileSyncAtomic(specFile, `${prompt}\n`);
     writeFileSyncAtomic(path.join(recheckDir, 'diff.txt'), `${items.map((i) => i.repaired).join('\n')}\n`);
-    const res = await runSeatDispatch(seat, repoRoot, recheckDir, specFile, timeout, implementerFamilies.join(','));
+    const res = await runSeatDispatch(seat, repoRoot, recheckDir, specFile, timeout, implementerFamilies.join(','), true);
     const raw = res.rawOutput && typeof res.rawOutput === 'object' ? res.rawOutput : {};
-    const ok = res.status === 'reviewed' && typeof raw.findings === 'string';
+    const ok = res.status === 'reviewed' && typeof raw.answer === 'string';
     return {
       ok,
-      text: ok ? raw.findings : '',
+      text: ok ? raw.answer : '',
       usage: res.usage,
       duration_ms: res.duration_ms,
       error: ok ? '' : (raw.error || raw.reject_reason || res.stderr || 'no verdict'),
     };
   };
-  const run = await repairRecheck.runRecheck({
-    kind: 'code', blockers: items, seats, implementerFamilies, familyOf, ask, nonce,
-  });
+  const missingEvidence = items.filter((item) => !item.repaired).map((item) => ({ id: item.id, status: 'not_fixed', reason: 'no_repair_hunk' }));
+  const evidencedItems = items.filter((item) => item.repaired);
+  const run = evidencedItems.length === 0
+    ? {
+      status: 'failed', blocker_count: items.length, seat: null, excluded_seats: [], attempts: [],
+      results: missingEvidence, not_fixed_ids: missingEvidence.map((item) => item.id),
+      error: null, usage: null, duration_ms: 0,
+    }
+    : await repairRecheck.runRecheck({
+      kind: 'code', blockers: evidencedItems, seats, implementerFamilies, familyOf, ask, nonce,
+    });
+  if (missingEvidence.length && evidencedItems.length) {
+    run.blocker_count = items.length;
+    run.results = [...run.results, ...missingEvidence];
+    run.not_fixed_ids = [...run.not_fixed_ids, ...missingEvidence.map((item) => item.id)];
+    if (run.status === 'passed') run.status = 'failed';
+  }
   const passed = run.status === 'passed';
   const listed = run.status === 'failed' ? blockersRaw.filter((f) => run.not_fixed_ids.includes(f.id)) : blockersRaw;
   const out = {

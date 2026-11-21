@@ -20,7 +20,7 @@
 const POLICY_PASSED = 'generation_cap_repair_recheck_passed';
 const POLICY_ADJUDICATION = 'generation_cap_requires_depth_0_adjudication';
 const ANSWER_STATUSES = new Set(['fixed', 'not_fixed']);
-const MAX_SEAT_TRIES = 2;
+const MAX_SEAT_TRIES = 1;
 const EFFORT_RANK = Object.freeze({ low: 1, medium: 2, high: 3, xhigh: 4, max: 5, default: 6 });
 
 function isRecord(value) {

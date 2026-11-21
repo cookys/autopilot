@@ -98,6 +98,9 @@ TRUNCATED_BEGIN="${TRUNCATED_BEGIN%>}"
 EMBEDDED_BEGIN_LINE="some prose $BEGIN more prose"
 
 case "$MODE" in
+  raw_json)
+    printf '%s\n' '{"results":[{"id":"fixture-blocker","status":"fixed","reason":"repair is present"}]}'
+    ;;
   pass)
     echo "$BEGIN"
     echo "VERDICT: FIX-THEN-SHIP"

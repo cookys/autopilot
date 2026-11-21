@@ -895,6 +895,7 @@
   "v74.d.sum_held": "sending",
   "v74.d.unpicked": "{n} not picked",
   "v74.d.more": "{n} more · {ud} change card",
+  "v74.d.more_picked": "{n} more (picked {p}) · {ud} change card",
   "v74.d.result": "sent {n} · {left} still open",
   "v74.d.preview": "will send {list} · press s again to confirm · Esc cancels",
   "v74.d.no_source": "decision source missing (fleet decision list)",

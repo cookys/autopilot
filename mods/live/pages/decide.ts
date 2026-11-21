@@ -549,8 +549,14 @@ function boxOpen(c: DecideCard, i: number, nav: DecideNav, ctx: PageCtx, fit: Fi
 // The card at the cursor is the open one, at its own place in the list; every other card keeps its order as one summary row. `collapse` folds the cards before it and the cards after it into
 // one row each (`另有 N 張 · ↑↓ 換張`).
 function boxBody(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: number, fit: Fit, head: Row): Row[] {
-  const more = (n: number): Row[] => (n === 0 ? [] : [[seg('   ' + ctx.t('v74.d.more', { n, ud: GLYPHS.structure.up + GLYPHS.structure.behind }))]])
-  if (fit.collapse) return [head, ...more(cursor), ...boxOpen(cards[cursor], cursor, nav, ctx, fit), ...more(cards.length - cursor - 1)]
+  // r10b #3: a collapsed row keeps the answers already picked in it, so a pick never disappears from the screen
+  const more = (hidden: DecideCard[]): Row[] => {
+    if (hidden.length === 0) return []
+    const p = hidden.filter(c => nav.picks[c.id] !== undefined).length
+    const ud = GLYPHS.structure.up + GLYPHS.structure.behind
+    return [[seg('   ' + (p === 0 ? ctx.t('v74.d.more', { n: hidden.length, ud }) : ctx.t('v74.d.more_picked', { n: hidden.length, p, ud })))]]
+  }
+  if (fit.collapse) return [head, ...more(cards.slice(0, cursor)), ...boxOpen(cards[cursor], cursor, nav, ctx, fit), ...more(cards.slice(cursor + 1))]
   return [head, ...cards.flatMap((c, i) => (i === cursor ? boxOpen(c, i, nav, ctx, fit) : [boxSummary(c, i, nav, ctx)]))]
 }
 function renderBoxV74(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: number, actions: Row[]): { body: Row[]; actions: Row[] } {

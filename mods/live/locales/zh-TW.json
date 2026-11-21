@@ -895,6 +895,7 @@
   "v74.d.sum_held": "送出中",
   "v74.d.unpicked": "另 {n} 張未選",
   "v74.d.more": "另有 {n} 張 · {ud} 換張",
+  "v74.d.more_picked": "另有 {n} 張（已選 {p}）· {ud} 換張",
   "v74.d.result": "已送出 {n} 張 · 尚有 {left} 張待決",
   "v74.d.preview": "將送出 {list}，再按 s 確認 · Esc 取消",
   "v74.d.no_source": "沒有待決來源（fleet decision list）",

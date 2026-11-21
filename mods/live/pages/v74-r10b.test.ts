@@ -78,3 +78,15 @@ test('r10b #2: the send feedback after sending stays', () => {
   const { actions } = decidePage.render(ctxOf({ sendResult: { n: 2, left: 1 } }))
   expect(actions.map(text).join('\n')).toContain('已送出 2 張 · 尚有 1 張待決')
 })
+
+// ---- #3 the collapsed row keeps the picked answers ----
+test('r10b #3: other cards folded into 另有 N 張 still say how many of them hold a picked answer', () => {
+  const nav = { ...NO_NAV, cursor: 0, picks: { [decide[1].id]: 0, [decide[2].id]: 1 } }
+  const body = (rows: number) => decidePage.render({ ...(ctxOf({}, rows) as object), decide: nav } as never).body.map(text).join('\n')
+  expect(body(40)).not.toContain('另有') // roomy: every card keeps its own summary row, with 已選
+  expect(body(13)).toContain('另有 2 張（已選 2）')
+  // negative control: nothing picked among the hidden cards keeps the plain wording
+  const plain = decidePage.render({ ...(ctxOf({}, 13) as object), decide: { ...NO_NAV, cursor: 0 } } as never).body.map(text).join('\n')
+  expect(plain).toContain('另有 2 張 ·')
+  expect(plain).not.toContain('已選')
+})

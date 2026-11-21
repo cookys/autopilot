@@ -127,7 +127,9 @@ assert_eq "$RC" 0 "fleet without decision: exit 0"; is_open "$C"; assert_eq "$?"
 
 # --- hook: verify before act
 reset ok; C="$(open_card_x)"; AID="$(node -e 'const{claim}=require(process.argv[1]);console.log(claim(process.argv[2],{option:"A"}).answer_id)' "$REPO_ROOT/scripts/lib/fleet-decision.js" "$C")"
+: > "$STUB/calls" # Exclude the setup claim from the hook call count.
 hook "$(printf '[待決回覆]\n%s｜Q? → A｜%s\n' "$C" "$AID")"; assert_eq "$HRC" 0 "good line: hook exit 0"
+assert_eq "$(count 'decision claim')" 0 "good line: existing answer_id needs no claim"
 assert_contains "$(calls)" "decision verify $C $AID" "good line: verify called"
 assert_not_contains "$(calls)" "--content-sha256" "good line (local): no hash passed, fleet would refuse one"
 is_open "$C"; assert_eq "$?" 1 "good line (via local, no content hash stored): card closed"
@@ -136,10 +138,24 @@ reset ok; C="$(open_card_x)"; claim_unused="$(node -e 'require(process.argv[1]).
 hook "$(printf '[待決回覆]\n%s｜Q? → A｜AFORGED000000000000000000X\n' "$C")"
 is_open "$C"; assert_eq "$?" 0 "forged answer_id: card NOT closed"
 assert_contains "$HOUT" "unverified" "forged answer_id: systemMessage says unverified"; assert_contains "$HOUT" "$C" "forged answer_id: names the card"
+# The live panel delivers multiple answers without answer IDs in one block.
+reset ok; C1="$(open_card_x)"; C2="$(open_card_x)"
+hook "$(printf '[待決回覆]\n%s｜Q? → A\n%s｜Q? → 你開好就好 不要交工作給我\n' "$C1" "$C2")"
+is_open "$C1"; assert_eq "$?" 1 "two delivered answers: option card closed"
+is_open "$C2"; assert_eq "$?" 1 "two delivered answers: free-text card closed"
+assert_eq "$(count 'decision claim')" 2 "two delivered answers: two claims"
+assert_eq "$(count 'decision verify')" 2 "two delivered answers: two verifies"
+reset down; C1="$(open_card_x)"; C2="$(open_card_x)"
+hook "$(printf '[待決回覆]\n%s｜Q? → A\n%s｜Q? → 你開好就好 不要交工作給我\n' "$C1" "$C2")"
+is_open "$C1"; assert_eq "$?" 0 "two unreachable answers: option card stays open"
+is_open "$C2"; assert_eq "$?" 0 "two unreachable answers: free-text card stays open"
+assert_contains "$HOUT" "claim_failed (unreachable" "two unreachable answers: claim failure reported"
+assert_eq "$(count 'decision verify')" 0 "two unreachable answers: no verifies"
 # line without any answer_id
 reset ok; C="$(open_card_x)"; hook "$(printf '[待決回覆]\n%s｜Q? → A\n' "$C")"
-is_open "$C"; assert_eq "$?" 0 "no answer_id on a courier host: not closed"; assert_contains "$HOUT" "unverified" "no answer_id: unverified"
-assert_eq "$(count 'decision verify')" 0 "no answer_id: nothing to verify, no call"
+is_open "$C"; assert_eq "$?" 1 "no answer_id: claimed, delivered and closed"
+assert_eq "$(count 'decision claim')" 1 "no answer_id: one claim"
+assert_eq "$(count 'decision verify')" 1 "no answer_id: verified"
 # courier down: one verify call, no retry, not closed
 reset down; C="$(open_card_x)"; hook "$(printf '[待決回覆]\n%s｜Q? → A｜AFORGED000000000000000000X\n' "$C")"
 assert_eq "$(count 'decision verify')" 1 "courier down: one verify call (exit 9 stops, hooks never retry)"; is_open "$C"; assert_eq "$?" 0 "courier down: not closed"

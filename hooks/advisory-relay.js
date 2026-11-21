@@ -115,17 +115,42 @@ function closeDecideReply(payload) {
     if (fd) {
       const line = idLine.get(id);
       const block = (idBlockLines.get(id) || [line]).join('\n');
-      const aid = line.split('｜').pop().trim();
-      const v = /^[0-9A-Za-z]{20,40}$/.test(aid) ? fd.verify(id, aid, block) : { ok: false, outcome: 'unverified' };
+      let aid = line.split('｜').pop().trim();
+      let verifiedLine = line;
+      if (!/^[0-9A-Za-z]{20,40}$/.test(aid)) {
+        const dl = require('../scripts/lib/decide-line.js');
+        const parsed = dl.parseDecideLine(`${line}｜placeholder`);
+        let card = null;
+        try { for (const f of files) { card = readEntries(f, { all: true }).find((x) => x.id === id); if (card) break; } } catch (_e) { card = null; }
+        const prefix = card && `${dl.wire(dl.excerptOf(card.question))} → `;
+        const answer = parsed && prefix && parsed.body.startsWith(prefix) ? parsed.body.slice(prefix.length).trim() : '';
+        const option = card && Array.isArray(card.options) && card.options.find((o) => dl.wire(o.label) === answer);
+        const freeText = answer === '都不選' && parsed.note ? parsed.note.slice('補充：'.length).trim() : answer;
+        let claim = { outcome: 'error', detail: 'invalid answer line' };
+        if (answer && (option || freeText)) {
+          const previous = process.env.AUTOPILOT_CLAIM_RETRIES;
+          process.env.AUTOPILOT_CLAIM_RETRIES = '1';
+          try { claim = fd.claim(id, option ? { option: option.label } : { freeText }); }
+          finally { if (previous === undefined) delete process.env.AUTOPILOT_CLAIM_RETRIES; else process.env.AUTOPILOT_CLAIM_RETRIES = previous; }
+        }
+        aid = claim.answer_id || (claim.outcome === 'already_answered' && claim.json && claim.json.answer_id) || '';
+        if (!/^[0-9A-Za-z]{20,40}$/.test(aid)) {
+          const reason = `claim_failed (${claim.outcome}${claim.detail ? `: ${claim.detail}` : ''})`;
+          if (!parkExecutorCard(id, reason)) unverified.push(`${id} (${reason})`);
+          continue;
+        }
+        verifiedLine = `${line}｜${aid}`;
+      }
+      const v = fd.verify(id, aid, block);
       if (!v.ok) { if (!parkExecutorCard(id, `verify_failed (${v.detail || v.outcome})`)) unverified.push(`${id} (${v.detail || v.outcome})`); continue; }
       // the verified STORED answer is the only authority: the line's own text must say that same answer
       // strict, field-wise (scripts/lib/decide-line.js): the question comes from the ledger card, the answer must EQUAL the stored one
       let question = null;
       try { for (const f of files) { const e = readEntries(f, { all: true }).find((x) => x.id === id); if (e) { question = e.question; break; } } } catch (_e) { question = null; }
-      const bound = require('../scripts/lib/decide-line.js').lineSaysAnswer(line, v.answer, question);
+      const bound = require('../scripts/lib/decide-line.js').lineSaysAnswer(verifiedLine, v.answer, question);
       if (!bound.ok) { if (parkExecutorCard(id, 'content_mismatch')) continue; unverified.push(`${id} (content_mismatch; the courier stored ${storedText(v.answer)})`); continue; }
       // the note beside the picked option (`｜補充：<note>`): kept as local_note in case the courier stored the option only (parkAnswer decides)
-      const dl = require('../scripts/lib/decide-line.js').parseDecideLine(line);
+      const dl = require('../scripts/lib/decide-line.js').parseDecideLine(verifiedLine);
       const localNote = dl && dl.note ? dl.note.slice('補充：'.length).trim() : null;
       delivery.set(id, { answer: v.answer, answer_id: aid, local_note: localNote });
     }

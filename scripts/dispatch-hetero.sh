@@ -6542,14 +6542,22 @@ run_hands_content_gate() {
 # accepting the commits.
 run_hands_backlog_gate() {
   local bsw_touched=0 bsw_path="" bsw_out="" bsw_rc=0
+  BACKLOG_VIEW_TOUCHED=0
   while IFS= read -r -d '' bsw_path; do
     case "$bsw_path" in
-      project/backlog/BACKLOG.md|docs/BACKLOG.md|.hippo/*)
+      project/backlog/BACKLOG.md)
+        BACKLOG_VIEW_TOUCHED=1
         bsw_touched=1
-        break
+        ;;
+      docs/BACKLOG.md|.hippo/*)
+        bsw_touched=1
         ;;
     esac
-  done < <(_wt_git diff --name-only -z "$BASE_SHA..$HEAD_SHA" 2>/dev/null || true)
+    [ "$bsw_touched" -eq 1 ] && [ "$BACKLOG_VIEW_TOUCHED" -eq 1 ] && break
+  done < <(_wt_git diff --ignore-submodules=none --name-only -z "$BASE_SHA..$HEAD_SHA" 2>/dev/null || true)
+  if ! run_hands_backlog_reconcile_gate; then
+    return 1
+  fi
   [ "$bsw_touched" -eq 1 ] || return 0
   bsw_out="$(cd "$WT" && node "$SELF_DIR/check-backlog-single-writer.js" --range "$BASE_SHA..$HEAD_SHA" --target "$WT" 2>&1 < /dev/null)" && bsw_rc=0 || bsw_rc=$?
   if [ "$bsw_rc" -ne 0 ]; then
@@ -6558,6 +6566,26 @@ run_hands_backlog_gate() {
     fi
     HANDS_BOUNDARY_CODE="backlog_single_writer"
     HANDS_BOUNDARY_ERROR="boundary_rejected: backlog_single_writer — ${bsw_out}"
+    return 1
+  fi
+  return 0
+}
+
+# Store/view gate, beside the single-writer check. A repo with .hippo/repo.toml must not
+# accept a hand commit that changes project/backlog/BACKLOG.md while
+# check-backlog-entries.js --hippo --reconcile (working tree, after the commit) is non-zero.
+# No store: return 0 and leave today's acceptance path unchanged.
+run_hands_backlog_reconcile_gate() {
+  local rec_out="" rec_rc=0
+  [ -f "$WT/.hippo/repo.toml" ] || return 0
+  [ "${BACKLOG_VIEW_TOUCHED:-0}" -eq 1 ] || return 0
+  rec_out="$(cd "$WT" && node "$SELF_DIR/check-backlog-entries.js" --hippo --reconcile 2>&1 < /dev/null)" && rec_rc=0 || rec_rc=$?
+  if [ "$rec_rc" -ne 0 ]; then
+    if [ -n "${LOG:-}" ]; then
+      printf '\n[dispatch-hetero: backlog_store_reconcile]\n%s\n' "$rec_out" >> "$LOG"
+    fi
+    HANDS_BOUNDARY_CODE="backlog_store_reconcile"
+    HANDS_BOUNDARY_ERROR="boundary_rejected: project/backlog/BACKLOG.md changed but the hippo store does not match (check-backlog-entries.js --hippo --reconcile exited ${rec_rc}); use node scripts/project-record.js backlog ..."
     return 1
   fi
   return 0
@@ -7527,7 +7555,7 @@ dispatch_detached_run() {
     # detached child dies with "command not found" before the claude worker starts.
     declare -f token_seat_guard 2>/dev/null || true
     declare -f agy_print_timeout agy_assert_disposable_home die_precondition fell_back_json_suffix hetero_log_fallback child_session_env_setup repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_worker_alive _watchdog_signal_worker _arm_worker_watchdog _worker_has_busy_descendant _supervise_commit_quiet _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts capture_structured_provider_error _prefer_structured_classified_error passive_capture \
-      _is_engine_unavailable _hetero_runner_token _capability_write_note _capability_write_suppress_now seat_strike_capture classify_outcome _emit_question_waiting_event heartbeat_loop detached_main seal_runner_prompt_bytes write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks resolve_tip_verify_commands run_tip_verify _fp_unverifiable main_checkout_fingerprint main_checkout_parts_digest main_checkout_describe_delta main_checkout_wt_symlink_leaks check_main_checkout_boundary run_hands_content_gate run_hands_backlog_gate \
+      _is_engine_unavailable _hetero_runner_token _capability_write_note _capability_write_suppress_now seat_strike_capture classify_outcome _emit_question_waiting_event heartbeat_loop detached_main seal_runner_prompt_bytes write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks resolve_tip_verify_commands run_tip_verify _fp_unverifiable main_checkout_fingerprint main_checkout_parts_digest main_checkout_describe_delta main_checkout_wt_symlink_leaks check_main_checkout_boundary run_hands_content_gate run_hands_backlog_gate run_hands_backlog_reconcile_gate \
       _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \
       _wt_has_control_chars _wt_resolve_repo_root _wt_read_marker_created_at _wt_json_escape _wt_is_live \

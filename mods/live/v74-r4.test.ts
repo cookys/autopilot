@@ -69,8 +69,8 @@ test('r5 pick: a chosen option changes the line, not only its colour', () => {
     decide: { ...NO_NAV, picks: { [cards[0].id]: 1 } },
   }))
   const line = walk(tree).filter(n => n.kind === 'Text').map(flat).join('\n')
-  expect(line).toContain('◆')
-  expect(line).toMatch(/b: .*\u25c6|◆/)
+  expect(line).toContain('→')
+  expect(line).toMatch(/b: .*→|→ /)
 })
 
 test('r5 note: while typing, the note Input is the only autoFocus and a later digit hotkey is gone', () => {

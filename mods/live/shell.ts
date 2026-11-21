@@ -320,7 +320,7 @@ export function shellPlan(inp: ShellInput): ShellPlan | null {
 }
 
 // the marks band.tsx draws (it sets no colour of its own): a picked option's ◆ and the `│` between the quick row's slots
-export const PICK_MARK: Seg = { text: GLYPHS.structure.decisions, color: PALETTE.action }
+export const PICK_MARK: Seg = { text: GLYPHS.structure.answer, color: PALETTE.action }
 export const QUICK_SEP: Seg = { text: ' ' + GLYPHS.structure.bandSep + ' ', color: PALETTE.structure }
 
 // ---- the card list (ux-v7): the left column of the 待決 tab, one row per question; and the progress row inside the main window ----
@@ -336,7 +336,7 @@ export function cardRows(cards: readonly Card[], cursor: number, inner: number, 
   cards.forEach((c, n) => {
     const here = n === cursor
     const answered = c.sent || c.answer !== null
-    const glyph: Seg = here ? { text: GLYPHS.chart.here, color: PALETTE.here } : c.gone === true ? { text: GLYPHS.structure.decisions, color: PALETTE.idle } : answered ? { text: GLYPHS.structure.decisions, color: c.sent ? PALETTE.done : PALETTE.action } : { text: GLYPHS.state.pending, color: PALETTE.idle }
+    const glyph: Seg = here ? { text: GLYPHS.chart.here, color: PALETTE.here } : c.gone === true ? { text: GLYPHS.structure.answer, color: PALETTE.idle } : answered ? { text: GLYPHS.structure.answer, color: c.sent ? PALETTE.done : PALETTE.action } : { text: GLYPHS.state.pending, color: PALETTE.idle }
     const usable = inner - 1
     const answer = c.answer === null ? '' : clipSegs([{ text: c.answer }], Math.max(1, Math.min(displayWidth(c.answer), Math.floor(usable / 2))))[0]?.text ?? ''
     const answerW = answer === '' ? 0 : displayWidth(answer) + 1
@@ -366,7 +366,7 @@ export function progressSegs(o: { cards: readonly Card[]; last: { name: string; 
   const head: Seg[] = [...meter, { text: ' ' + (picked.length + sentN) + '/' + cards.length }]
   let tail: Seg[] = []
   if (sentN > 0 && picked.length === 0) tail = [{ text: '  ' }, { text: GLYPHS.state.done, color: PALETTE.done }, { text: ' ' + t('shell.sent_n', { n: sentN }) }]
-  else if (o.last !== null) tail = [{ text: '  ' }, { text: GLYPHS.structure.decisions, color: PALETTE.action }, { text: ' ' + t('shell.prev') + ' ' }, ...clipSegs([{ text: o.last.name }], 16), { text: ' ' + GLYPHS.structure.answer + ' ' + o.last.answer }]
+  else if (o.last !== null) tail = [{ text: '  ' }, { text: GLYPHS.structure.answer, color: PALETTE.action }, { text: ' ' + t('shell.prev') + ' ' }, ...clipSegs([{ text: o.last.name }], 16), { text: ' ' + GLYPHS.structure.answer + ' ' + o.last.answer }]
   const toSend = (names: boolean): Seg[] => {
     if (!o.wide || picked.length === 0) return []
     return [{ text: ' · ' + t('shell.to_send', { n: picked.length }) + (names ? '（' + picked.map(c => c.name).join('、') + '）' : '') }]

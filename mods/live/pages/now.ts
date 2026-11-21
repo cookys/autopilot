@@ -800,7 +800,7 @@ function v74ProxySection(ctx: PageCtx, wide: boolean): Row[] {
     const ageMs = r.at != null && Number.isFinite(Date.parse(r.at)) ? nowMs - Date.parse(r.at) : null
     const age = ageMs === null ? '' : '  · ' + t('page.now.ago', { age: ageUnit(t, ageMs) })
     const summary = r.decision.split('\n').find(l => l.trim() !== '')?.trim() ?? r.decision
-    rows.push(truncateSegs([dim(wide ? '  ' : ' '), plain(GLYPHS.structure.decisions + ' ' + summary + age)], size.cols))
+    rows.push(truncateSegs([dim(wide ? '  ' : ' '), plain(GLYPHS.state.done + ' ' + summary + age)], size.cols))
   }
   return rows
 }

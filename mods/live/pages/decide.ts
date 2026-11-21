@@ -427,7 +427,7 @@ function actionRows(cur: Item, _cursor: number, nav: DecideNav, ctx: PageCtx, wi
   if (sent) return R(t('page.decide.act_sent', { k }), navKeys)
   if (nav.textMode) return R(t('page.decide.act_text'), t('page.decide.act_text_keys'))
   if (decideDialog(d)) return R(navKeys)
-  return R(k === '' ? '' : GLYPHS.structure.decisions + ' ' + k, t('page.decide.act_note_c'), t('page.decide.act_send_c'), navKeys,
+  return R(k === '' ? '' : GLYPHS.structure.answer + ' ' + k, t('page.decide.act_note_c'), t('page.decide.act_send_c'), navKeys,
     total > 1 ? fold : '', t('page.decide.act_fill_c')) // V3: folding never replaces filling.
 }
 
@@ -461,7 +461,7 @@ function v74Card(c: DecideCard, i: number, selected: boolean, nav: DecideNav, ct
   const room = Math.max(4, Math.floor(cols / 2))
   c.options.forEach((o, k) => {
     const rec = o.recommended ? ' ' + GLYPHS.structure.recommend : ''
-    const markPick = picked === k ? ' ' + GLYPHS.structure.decisions : ''
+    const markPick = picked === k ? ' ' + GLYPHS.structure.answer : ''
     const tone = picked === k ? { color: PALETTE.here } : o.recommended ? { color: PALETTE.attention } : {}
     if (box && k > 0) out.push([seg('')])
     if (!selected || k >= THREE || box) {
@@ -529,7 +529,7 @@ function boxOpen(c: DecideCard, i: number, nav: DecideNav, ctx: PageCtx, fit: Fi
   out.push(...labelledBox(t('v74.d.bg'), c.background ?? t('v74.d.bg_none'), width), ...gap)
   c.options.forEach((o, k) => {
     if (k > 0 && fit.between) out.push([seg('')])
-    const mark = picked === k ? ' ' + GLYPHS.structure.decisions : ''
+    const mark = picked === k ? ' ' + GLYPHS.structure.answer : ''
     const tone = picked === k ? { color: PALETTE.here } : o.recommended ? { color: PALETTE.attention } : {}
     const label = (k < THREE ? PICK_KEYS[k] + ': ' : DOT + ' ') + o.label
     const rec = o.recommended ? [seg('  ' + GLYPHS.structure.recommend + ' ' + t('v74.d.rec'), { color: PALETTE.attention })] : []

@@ -25,6 +25,7 @@ export function renderHelp(ctx: PageCtx): { body: Row[]; actions: Row[] } {
       title(ctx, 'v74.b.help.status_title'),
       legend([[s.failed, ctx.t('legend.help.failed')], [s.stalled, ctx.t('legend.help.idle')], [s.unknown, ctx.t('legend.help.unknown')], [s.need_you, ctx.t('legend.help.attention')]]),
       legend([[s.running, ctx.t('legend.help.running')], [s.done, ctx.t('legend.help.done')], [s.pending, ctx.t('legend.help.pending')], [s.waiting, ctx.t('legend.help.waiting')], [g.decisions, ctx.t('legend.help.decision')]]),
+      legend([[g.answer, ctx.t('legend.help.answer')], [s.done, ctx.t('legend.help.proxy')]]),
       row(''),
       title(ctx, 'v74.b.help.symbol_title'),
       legend([[g.open, ctx.t('legend.help.open')], [g.folded, ctx.t('legend.help.folded')], [g.info, ctx.t('legend.help.info')]]),

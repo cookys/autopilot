@@ -112,7 +112,9 @@ test('r8 #9: a wrapped labelled help row hangs under its own text', () => {
 test('r8 #5: the legend names ⋯ and says what ◆ ▸ ▲ mean on the decide page and in the band', () => {
   const all = helpLines().join('\n')
   expect(all).toContain('⋯ 等待中')
-  expect(all).toContain('◆ 等你決定 · 你選的答案')
+  expect(all).toContain('◆ 等你決定')
+  expect(all).toContain('→ 你選的答案')
+  expect(all).toContain('✓ 我替你決定的紀錄')
   expect(all).toContain('▸ 已摺疊 · 目前這張')
   expect(all).toContain('▲ 要你處理')
 })

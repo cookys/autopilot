@@ -1584,7 +1584,7 @@ export function slotReview(r: ReviewView | null, q: QcView | null, t: T = T_EN):
 export function slotDecisions(d: DecisionsView | null): Slot | null {
   if (d === null) return null
   const parts: Seg[][] = []
-  if (d.count > 0) parts.push(ui.chipSegs([sp(GT.decisions)], [sp(String(d.count))]))
+  if (d.count > 0) parts.push(ui.chipSegs([sp(GS.done)], [sp(String(d.count))]))
   if (d.undocumented > 0) parts.push(ui.chipSegs([sp(GS.unknown, { color: PALETTE.idle })], [sp(String(d.undocumented), { color: PALETTE.idle })]))
   if (d.ladder !== null) parts.push([sp(d.ladder.rung)])
   if (parts.length === 0) return null

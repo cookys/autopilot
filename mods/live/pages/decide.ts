@@ -552,24 +552,24 @@ function boxOpen(c: DecideCard, i: number, nav: DecideNav, ctx: PageCtx, fit: Fi
 // one row each (`另有 N 張 · ↑↓ 換張`).
 function boxBody(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: number, fit: Fit, head: Row): Row[] {
   // r10b #3: a collapsed row keeps the answers already picked in it, so a pick never disappears from the screen
-  const more = (hidden: DecideCard[]): Row[] => {
+  const more = (hidden: DecideCard[], from: number): Row[] => {
     if (hidden.length === 0) return []
     const p = hidden.filter(c => nav.picks[c.id] !== undefined).length
     const ud = GLYPHS.structure.up + GLYPHS.structure.behind
     const base = '   ' + (p === 0 ? ctx.t('v74.d.more', { n: hidden.length, ud }) : ctx.t('v74.d.more_picked', { n: hidden.length, p, ud }))
-    // r11 #10: name the hidden cards: short code, `→letter` for a picked one, cut to what the row still has
+    // r11 #10: name the hidden cards by the number they are drawn with (ids share long prefixes), `→letter` for a picked one, cut to what the row still has
     let list = ''
     const room = ctx.size.cols - 4 - displayWidth(base) - 3
-    for (const c of hidden) {
+    for (const [k, c] of hidden.entries()) {
       const at = nav.picks[c.id]
-      const one = [...c.id].slice(0, 8).join('') + (at === undefined ? '' : GLYPHS.structure.answer + letterOf(at))
+      const one = String(from + k + 1) + (at === undefined ? '' : GLYPHS.structure.answer + letterOf(at))
       const next = list === '' ? one : list + ' ' + one
       if (displayWidth(next) > room) { list += '…'; break }
       list = next
     }
     return [[seg(base), ...(list === '' || room <= 0 ? [] : [dimSeg(' ' + DOT + ' ' + list)])]]
   }
-  if (fit.collapse) return [head, ...more(cards.slice(0, cursor)), ...boxOpen(cards[cursor], cursor, nav, ctx, fit), ...more(cards.slice(cursor + 1))]
+  if (fit.collapse) return [head, ...more(cards.slice(0, cursor), 0), ...boxOpen(cards[cursor], cursor, nav, ctx, fit), ...more(cards.slice(cursor + 1), cursor + 1)]
   return [head, ...cards.flatMap((c, i) => (i === cursor ? boxOpen(c, i, nav, ctx, fit) : [boxSummary(c, i, nav, ctx)]))]
 }
 function renderBoxV74(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: number, actions: Row[]): { body: Row[]; actions: Row[] } {

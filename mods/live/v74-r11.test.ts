@@ -110,13 +110,12 @@ test('r11 #8: the Enter hint names what it folds and is absent where nothing fol
   for (const id of ['now', 'dispatch', 'hygiene', 'help']) expect(hint(id)).not.toContain('Enter')
 })
 
-test('r11 #10: the collapsed "另有 N 張" row lists the hidden cards by short code, →letter when picked', () => {
+test('r11 #10: the collapsed "另有 N 張" row lists the hidden cards by their drawn number, →letter when picked', () => {
   const nav = { ...NO_NAV, cursor: 0, picks: { [decide[2].id]: 0 } }
   const { body } = decidePage.render(ctxOf({}, 14, 100, { decide: nav }))
   const more = body.map(text).find(r => r.includes('另有'))
   expect(more, body.map(text).join('\n')).toBeDefined()
-  expect(more).toContain(decide[1].id.slice(0, 8))
-  expect(more).toContain(decide[2].id.slice(0, 8) + GLYPHS.structure.answer + 'a')
+  expect(more).toMatch(/· 2 3→a/) // card 1 is open; 2 and 3 are hidden, 3 picked a (ids share prefixes, so numbers, not codes)
 })
 
 test('r11 #11: the spend chart label states unit and source', () => {

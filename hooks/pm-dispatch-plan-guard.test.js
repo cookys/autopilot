@@ -140,20 +140,40 @@ test('pm-console: walks up to first .git and requires autopilot.console/1 + mode
 
 test('pm-console: isPmConsole writes nothing to stderr when seat is undetermined', () => {
   const fx = mkPmFixture();
-  const origWrite = process.stderr.write.bind(process.stderr);
-  let captured = '';
-  process.stderr.write = (chunk, ...args) => {
-    captured += String(chunk);
-    return origWrite(chunk, ...args);
-  };
+  const xdg = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-stdio-'));
+  const dirs = { undet: fx.noGitDir, pm: fx.pmRepo, nonPm: fx.nonProgramRepo };
   try {
-    assert.equal(isPmConsole(fx.noGitDir), false);
-    assert.equal(captured, '');
-    assert.deepEqual(pmConsoleStatus(fx.noGitDir), { pm: false, undetermined: true });
-    assert.deepEqual(pmConsoleStatus(fx.pmRepo), { pm: true, undetermined: false });
-    assert.deepEqual(pmConsoleStatus(fx.nonProgramRepo), { pm: false, undetermined: false });
+    // Hermetic child: the checks must not inherit the caller's FLEET_ADDRESS /
+    // session ids, or "undetermined" flips on a real seat.
+    const r = spawnSync(process.execPath, ['-e', `
+      const pm = require(process.argv[1]);
+      const dirs = JSON.parse(process.argv[2]);
+      const out = {};
+      for (const [name, dir] of Object.entries(dirs)) {
+        out[name] = { isPm: pm.isPmConsole(dir), status: pm.pmConsoleStatus(dir) };
+      }
+      process.stdout.write(JSON.stringify(out));
+    `, path.join(__dirname, '_shared/pm-console.js'), JSON.stringify(dirs)], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        HOME: fx.home,
+        FLEET_ADDRESS: '',
+        AUTOPILOT_FLEET_ADDRESS: '',
+        CLAUDE_CODE_SESSION_ID: '',
+        AUTOPILOT_SESSION_ID: '',
+        XDG_RUNTIME_DIR: xdg,
+      },
+    });
+    assert.equal(r.status, 0, `child exit 0 (${r.stderr})`);
+    assert.equal(r.stderr, '', `expected silent child, got: ${r.stderr}`);
+    const results = JSON.parse(r.stdout);
+    assert.equal(results.undet.isPm, false);
+    assert.deepEqual(results.undet.status, { pm: false, undetermined: true });
+    assert.deepEqual(results.pm.status, { pm: true, undetermined: false });
+    assert.deepEqual(results.nonPm.status, { pm: false, undetermined: false });
   } finally {
-    process.stderr.write = origWrite;
+    fs.rmSync(xdg, { recursive: true, force: true });
     fx.cleanup();
   }
 });
@@ -320,12 +340,22 @@ test('pm-console fleet address identifies the PM and gates Agent briefs', () => 
     assert.equal(probe('x/y/autopilot--claude').stdout, 'false');
     const missing = probe('', fx.childRepoDir);
     assert.equal(missing.stdout, 'false');
-    assert.equal(missing.stderr, 'pm-console: cannot determine PM seat (no console.json mode, no fleet address)\n');
+    assert.equal(missing.stderr, '');
     assert.equal(probe('', fx.pmRepo).stdout, 'true');
     const payload = { tool_name: 'Agent', cwd: fx.nonProgramRepo, tool_input: { model: 'sonnet', prompt: 'Engine: sonnet\nDo work.' } };
     for (const [address, denied] of [['x/y/pm--claude', true], ['x/y/autopilot--claude', false]]) {
       const res = runGuard(path.join(__dirname, 'dispatch-model-guard.js'), payload, { ...fx, envExtra: { FLEET_ADDRESS: address, AUTOPILOT_FLEET_ADDRESS: '', CLAUDE_CODE_SESSION_ID: '', AUTOPILOT_MECHANICAL_REROUTE: 'off' } });
       assert.equal(res.stdout.includes('Fleet-Task:'), denied, address);
     }
+    // The undetermined-seat warning moved from isPmConsole to dispatch-model-guard:
+    // one Agent run on an undetermined seat must print it exactly once on stderr.
+    const seatWarn = 'pm-console: cannot determine PM seat (no console.json mode, no fleet address)';
+    const warned = runGuard(
+      path.join(__dirname, 'dispatch-model-guard.js'),
+      { tool_name: 'Agent', cwd: fx.childRepoDir, tool_input: { model: 'sonnet', prompt: 'Engine: sonnet\nDo work.' } },
+      { ...fx, envExtra: { FLEET_ADDRESS: '', AUTOPILOT_FLEET_ADDRESS: '', CLAUDE_CODE_SESSION_ID: '' } },
+    );
+    assert.equal(warned.status, 0, `guard exit 0 (${warned.stderr})`);
+    assert.equal(warned.stderr.split(seatWarn).length - 1, 1, `expected ${seatWarn} exactly once, got: ${warned.stderr}`);
   } finally { fx.cleanup(); }
 });

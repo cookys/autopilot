@@ -190,6 +190,7 @@ type World = {
   lists: string[]
   listErrors: Record<string, string> // $.fs.list rejects with this message
   statErrors: Record<string, string> // $.fs.stat rejects with this message (the engine passes a message only, no `code`)
+  statPaths: string[] // every $.fs.stat path, used to measure source-check I/O separately from UI reads
   existsThrows: Set<string> // $.fs.exists rejects for these paths
   env: Record<string, string> // what $.env.get answers; a test may change it between ticks
   clock: ReturnType<typeof mock.clock>
@@ -209,7 +210,7 @@ let TURN_AT = 0
 // Registers the bottom hooks (what the engine would answer) for one test.
 function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en' | 'zh-TW' | null = 'zh-TW', env: Record<string, string> = {}): World {
   barLocale = locale ?? 'zh-TW'
-  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, stats: {}, toasts: [], invalidates: 0, panes: [], opens: [], panesThrow: false, panesGate: null, openGate: null, writes: [], bodies: {}, reads: [], lists: [], listErrors: {}, statErrors: {}, existsThrows: new Set(), lower: null, order: [], env: { HOME, ...(locale === null ? {} : { AUTOPILOT_LOCALE: locale }), ...env }, clock: undefined as never }
+  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, stats: {}, toasts: [], invalidates: 0, panes: [], opens: [], panesThrow: false, panesGate: null, openGate: null, writes: [], bodies: {}, reads: [], lists: [], listErrors: {}, statErrors: {}, statPaths: [], existsThrows: new Set(), lower: null, order: [], env: { HOME, ...(locale === null ? {} : { AUTOPILOT_LOCALE: locale }), ...env }, clock: undefined as never }
   w.clock = mock.clock(on, { now: nowMs })
   // the suite pins zh-TW: the band words these cases assert are the zh-TW table's. Answered here rather than by mock.env, which keeps
   // its own copy, so a test can change a variable between ticks
@@ -243,6 +244,7 @@ function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en'
   })
   on('fs.stat', ($, e) => {
     w.order.push('stat')
+    w.statPaths.push(e.path)
     if (w.statErrors[e.path] !== undefined) throw new Error(w.statErrors[e.path])
     return statOf(e)
   })
@@ -834,11 +836,12 @@ for (const surface of SURFACES) {
     const w = oldWorld({ sources: g })
     await start($, surface)
     expect(await bandText($, surface)).toContain(FOUND)
-    const firstStats = w.order.filter((x: string) => x === 'stat').length
-    expect(firstStats).toBeGreaterThanOrEqual(MANY) // a never-seen publish gets the full pass: every listed file once
+    const sourceStat = (p: string) => p === MDIR || p.startsWith(MDIR + '/') || p === KDIR || p.startsWith(KDIR + '/')
+    const firstStats = w.statPaths.filter(sourceStat).length
+    expect(firstStats).toBeGreaterThanOrEqual(MANY + 3) // before memoization: 2,003 source stats per poll (2,000 markers + manifest + 2 dirs)
     await w.clock.advance(60000) // 12 more polls, nothing moved
-    const stats = w.order.filter((x: string) => x === 'stat').length
-    expect(stats - firstStats).toBeLessThan(2 * 2 * 12 + 6 * 12) // per poll: the two group dirs, plus a few non-source stats (cwd, .claude.json, the pet heartbeat)
+    const stats = w.statPaths.filter(sourceStat).length
+    expect(stats - firstStats).toBeLessThanOrEqual(2 * 2 * 14) // after: at most 2 directory stats per group per poll (allow two extra poll reads)
     expect(await bandText($, surface)).toContain(FOUND)
   })
   test('band: after a memoized fresh poll, a moved dir mtime with a changed marker is stale again (' + surface + ')', async ($, on) => {

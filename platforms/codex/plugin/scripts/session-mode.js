@@ -53,6 +53,11 @@
  * - TTL (default 24h): expired ⇒ status active:false — fail-open, a crashed
  *   session can never block a later one.
  * - Atomic write via tmp+rename; corrupt marker reads as active:false.
+ * - A marker write also sweeps its own directory best-effort: markers whose expires_at is
+ *   MORE than 24h in the past (or, missing/unparsable expires_at, mtime older than 7 days)
+ *   are removed — at most 500 per write, .json only, never the marker being written. The
+ *   live mod re-stat'ed every marker listed in an envelope on every poll, so the dead ones
+ *   had to stop accumulating.
  *
  * Usage:
  *   node scripts/session-mode.js set --level l3|l4|l5|l6 [--entry-level l3|l4|l5|l6]
@@ -680,6 +685,7 @@ function bindCampaignRoot({ root, repoIdentity, now = Date.now() } = {}) {
       }
       const roots = [...prior.filter((r) => r !== root), root].slice(-CAMPAIGN_ROOTS_MAX);
       const next = { ...current, campaign_roots: roots };
+      sweepExpiredMarkers(path.dirname(file), file); // best-effort: a marker write is a write; the sweep is bounded and protected
       const tmp = `${file}.tmp-${process.pid}`;
       fs.writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`);
       fs.renameSync(tmp, file);
@@ -738,9 +744,44 @@ function buildPlainMarker({ sessionId, repoRoot, scope, now, ttlHours = DEFAULT_
 
 function writeMarkerFile(file, marker) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
+  sweepExpiredMarkers(path.dirname(file), file);
   const tmp = `${file}.tmp-${process.pid}`;
   fs.writeFileSync(tmp, `${JSON.stringify(marker, null, 2)}\n`);
   fs.renameSync(tmp, file); // atomic on same fs
+}
+
+// Best-effort cleanup when a marker is written (the set path and its kin): the session-mode dir historically
+// accumulated forever (a real host held 2,615 files, oldest from months ago, never cleaned), and the live mod
+// re-stat'ed every marker it listed in an envelope on every poll, so the dead ones burned CPU for no reason.
+// Remove the siblings whose `expires_at` is MORE than 24 h in the past, or, when it is missing or unparsable,
+// whose mtime is older than 7 days. Rules: at most 500 removals per write (the rest wait for the next write);
+// never the marker being written; never a name that does not end in `.json` (locks, tmp files, foreign files);
+// every error is ignored (a failed unlink is simply retried by the next write). Removal is fs.unlinkSync on a
+// path built from this directory's own readdir — nothing else is ever opened for deletion.
+const SWEEP_MAX_REMOVALS = 500;
+const SWEEP_EXPIRED_AFTER_MS = 24 * 3600 * 1000; // expires_at must be more than this far in the past
+const SWEEP_MTIME_AFTER_MS = 7 * 24 * 3600 * 1000; // the fallback age when expires_at is missing or unparsable
+function sweepExpiredMarkers(dir, protectFile, now = Date.now()) {
+  let names = [];
+  try { names = fs.readdirSync(dir); } catch (_error) { return; }
+  let removed = 0;
+  for (const name of names) {
+    if (removed >= SWEEP_MAX_REMOVALS) break;
+    if (!name.endsWith('.json')) continue;
+    const p = path.join(dir, name);
+    if (protectFile !== null && path.resolve(p) === path.resolve(protectFile)) continue;
+    try {
+      let parsable = null;
+      try {
+        const m = JSON.parse(fs.readFileSync(p, 'utf8'));
+        parsable = m && typeof m === 'object' ? Date.parse(m.expires_at) : NaN;
+      } catch (_error) { /* unreadable: parsable stays null */ }
+      const dead = parsable === null || Number.isNaN(parsable)
+        ? now - fs.statSync(p).mtimeMs > SWEEP_MTIME_AFTER_MS // no parsable expires_at: the mtime rule decides
+        : now - parsable > SWEEP_EXPIRED_AFTER_MS; // parsable: the expires_at rule alone decides
+      if (dead) { fs.unlinkSync(p); removed += 1; }
+    } catch (_error) { /* one file failed: the next write tries again */ }
+  }
 }
 
 // SessionStart ensure (hooks/runs-watch-autostart.js). Rule: create a plain marker for `sessionId` ONLY when no
@@ -1559,6 +1600,7 @@ function cmdSet(args) {
     assignFleetTaskId(marker, args);
   }
   fs.mkdirSync(markerDir(), { recursive: true });
+  sweepExpiredMarkers(markerDir(), target.file); // best-effort: the dead markers this write would leave behind
   const tmp = `${target.file}.tmp-${process.pid}`;
   fs.writeFileSync(tmp, `${JSON.stringify(marker, null, 2)}\n`);
   fs.renameSync(tmp, target.file); // atomic on same fs

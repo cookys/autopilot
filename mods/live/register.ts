@@ -567,7 +567,7 @@ const SOURCE_MEMO_MAX = 256
 const sourceMemo = new Map<string, { dirs: (number | null)[]; pending: { p: string; g: number }[] }>()
 function rememberVerdict(key: string, dirs: (number | null)[], pending: { p: string; g: number }[], verdict: EnvelopeCheck): EnvelopeCheck {
   if (verdict.status === 'fresh') {
-    if (sourceMemo.size > SOURCE_MEMO_MAX) sourceMemo.clear()
+    if (sourceMemo.size >= SOURCE_MEMO_MAX) sourceMemo.clear()
     sourceMemo.set(key, { dirs, pending })
   }
   return verdict
@@ -579,7 +579,8 @@ async function judgeByChange($: EngineInterface, check: EnvelopeCheck, idPath: s
   const moved: EnvelopeCheck = { ...check, status: 'stale', moved: true }
   const groups = sourcesOf(env)
   if (groups === null) return moved // a list that is there but unreadable cannot confirm nothing changed
-  const memoKey = idPath + '|' + (typeof env.published_at === 'string' ? env.published_at : '') + '|' + (typeof env.observed_at === 'string' ? env.observed_at : '')
+  // Include the immutable envelope bytes too: timestamp precision alone is not a unique publish identity.
+  const memoKey = idPath + '|' + JSON.stringify(env)
   const hit = sourceMemo.get(memoKey)
   if (hit !== undefined) {
     const freshNow: EnvelopeCheck = { status: 'fresh', envelope: env }

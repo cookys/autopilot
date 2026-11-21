@@ -64,6 +64,7 @@ const { isPmConsole } = require('./_shared/pm-console.js');
 const { findTaskId, checkTaskOpen } = require('../scripts/lib/fleet-task-ref.js');
 const { ownerAddress, whoamiSession } = require('../scripts/lib/fleet-task.js');
 const { userRuntimeBase, ensurePrivateDir } = require('../scripts/lib/runtime-paths.js');
+const { SEEN_AT_FRESH_MS } = require('../scripts/lib/pace-reading.js');
 // default-on since v2.35.15 (was opt-in). Opt out: AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=off
 // (or `- mode: off` in .claude/dispatch-guard-config.md). Set AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=warn
 // to downgrade overloaded-Claude mechanical blocks to warnings. The 2026-09-04 cuda quota digest:
@@ -465,6 +466,8 @@ function mechanicalReroute(input, toolInput, prompt) {
   );
 }
 
+const OVERLOADED_MECHANICAL_ROLES = new Set([...MECHANICAL_ROLES, 'implementer']);
+
 function checkOverloadedClaudeMechanical(toolInput, prompt, advisories) {
   const model = String(toolInput.model || '').trim().toLowerCase();
   const isClaudeModel = model === '' || model === 'haiku' || model === 'sonnet' || model === 'opus' || model === 'fable' || model.startsWith('claude-');
@@ -477,7 +480,7 @@ function checkOverloadedClaudeMechanical(toolInput, prompt, advisories) {
     const m = field.match(/^Role:\s*([A-Za-z][\w-]*)/i);
     if (m) {
       const candidate = m[1].toLowerCase();
-      if (MECHANICAL_ROLES.has(candidate)) {
+      if (OVERLOADED_MECHANICAL_ROLES.has(candidate)) {
         matchedRole = candidate;
       }
       break;
@@ -493,6 +496,10 @@ function checkOverloadedClaudeMechanical(toolInput, prompt, advisories) {
     return;
   }
   if (!pace || typeof pace !== 'object' || !Array.isArray(pace.rows) || pace.stale === true) return;
+  if (typeof pace.generated_at === 'string' && pace.generated_at.trim() !== '') {
+    const genMs = Date.parse(pace.generated_at.trim());
+    if (!Number.isFinite(genMs) || (Date.now() - genMs) > SEEN_AT_FRESH_MS) return;
+  }
 
   const claudeOverloaded = pace.rows.some((r) => (
     r && r.class === 'claude' && (
@@ -502,9 +509,18 @@ function checkOverloadedClaudeMechanical(toolInput, prompt, advisories) {
   ));
   if (!claudeOverloaded) return;
 
+  const heteroReservePct = (typeof pace.hetero_reserve_pct === 'number' && Number.isFinite(pace.hetero_reserve_pct))
+    ? pace.hetero_reserve_pct
+    : 50;
+  const agyReserveCeiling = 100 - heteroReservePct;
+
   const overCeilingPools = new Set(
     pace.rows
-      .filter((r) => r && typeof r.used_pct === 'number' && Number.isFinite(r.used_pct) && r.used_pct >= 85 && typeof r.pool === 'string')
+      .filter((r) => {
+        if (!r || typeof r.used_pct !== 'number' || !Number.isFinite(r.used_pct) || typeof r.pool !== 'string') return false;
+        const ceiling = r.pool.toLowerCase() === 'agy' ? agyReserveCeiling : 85;
+        return r.used_pct >= ceiling;
+      })
       .map((r) => r.pool.toLowerCase())
   );
   const targets = Array.isArray(pace.burn_more?.targets_in_order)

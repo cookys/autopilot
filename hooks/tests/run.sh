@@ -2,7 +2,7 @@
 # hooks/tests/run.sh — umbrella runner for autopilot's hook test suite.
 #
 # Discovers and runs:
-#   - L1 unit tests: `node --test` on hooks/*.test.js + scripts/*.test.js
+#   - L1 unit tests: `node --test` on hooks/*.test.js + scripts/*.test.js + scripts/lib/account-fixtures/*.test.js + mods/tux/*.test.js
 #   - L2 integration tests: every hooks/tests/*.test.sh + scripts/*.test.sh file
 #
 # Exit 0 only if every layer passes. Per-file pass/fail summary at the end.
@@ -13,6 +13,7 @@
 #   bash hooks/tests/run.sh state-checkpoint   # filter (substring match on file)
 #   bash hooks/tests/run.sh --parallel [N]     # parallel L2 (N workers; omitted N = nproc)
 #   bash hooks/tests/run.sh --parallel 8 filter
+#   bash hooks/tests/run.sh --release          # also run archived skill-onoff suites
 #
 # The default pool starts the slowest files first, using
 # the per-file seconds the previous UNFILTERED parallel run recorded in
@@ -363,7 +364,7 @@ trap '__suite_on_interrupt INT' INT
 trap '__suite_on_interrupt TERM' TERM
 
 # ── Argument parsing ──
-# Support, in any order: optional --parallel [N] / --jobs N, optional --serial, optional substring FILTER.
+# Support, in any order: optional --parallel [N] / --jobs N, optional --serial, optional --release, optional substring FILTER.
 # Default is the parallel pool (jobs = max(2, floor(nproc/2))). --serial (and --jobs 1) is one file at a time:
 # each file is captured and printed when it finishes (not live), with stderr merged into stdout.
 PARALLEL=0
@@ -372,6 +373,7 @@ FILTER=""
 SERIAL_REQ=0
 DRY=0
 DEFAULT_POOL=0
+RELEASE=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -411,9 +413,13 @@ while [ $# -gt 0 ]; do
       PARALLEL_N="${1#--parallel=}"
       shift
       ;;
+    --release)
+      RELEASE=1
+      shift
+      ;;
     -*)
       echo "Unknown option: $1" >&2
-      echo "Usage: bash hooks/tests/run.sh [--parallel [N] | --jobs N | --serial] [--dry-run] [filter]" >&2
+      echo "Usage: bash hooks/tests/run.sh [--parallel [N] | --jobs N | --serial] [--dry-run] [--release] [filter]" >&2
       exit 2
       ;;
     *)
@@ -754,6 +760,9 @@ run_one() {
   local file="$1"
   local rel="${file#$REPO_ROOT/}"
   local ec
+  if [[ "$rel" == *skill-onoff* ]] && [ "$RELEASE" -ne 1 ]; then
+    return
+  fi
   TOTAL=$((TOTAL + 1))
   if [ -n "$FILTER" ] && [[ "$rel" != *"$FILTER"* ]]; then
     TOTAL=$((TOTAL - 1))
@@ -792,8 +801,13 @@ echo "════════ L1 unit tests (node --test) ═══════
 # unit tests used to live outside every scan glob and never ran in CI (found 2026-07-16;
 # scripts/lib/ added 2026-09-05 after the same thing happened to live-state-dir.test.js).
 shopt -s nullglob
-UNIT_FILES=("$HOOKS_DIR"/*.test.js "$SCRIPTS_DIR"/*.test.js "$SCRIPTS_LIB_DIR"/*.test.js)
+UNIT_FILES=("$HOOKS_DIR"/*.test.js "$SCRIPTS_DIR"/*.test.js "$SCRIPTS_LIB_DIR"/*.test.js "$SCRIPTS_LIB_DIR"/account-fixtures/*.test.js "$REPO_ROOT"/mods/tux/*.test.js)
 shopt -u nullglob
+if [ "$RELEASE" -ne 1 ]; then
+  FILTERED=()
+  for f in "${UNIT_FILES[@]}"; do [[ "$f" == *skill-onoff* ]] || FILTERED+=("$f"); done
+  UNIT_FILES=("${FILTERED[@]}")
+fi
 if [ "${#UNIT_FILES[@]}" -eq 0 ]; then
   echo "(no L1 unit tests yet)"
 else
@@ -891,6 +905,9 @@ else
   for file in "$TESTS_DIR"/*.test.sh "$SCRIPTS_DIR"/*.test.sh; do
     [ -f "$file" ] || continue
     rel="${file#$REPO_ROOT/}"
+    if [[ "$rel" == *skill-onoff* ]] && [ "$RELEASE" -ne 1 ]; then
+      continue
+    fi
     if [ -n "$FILTER" ] && [[ "$rel" != *"$FILTER"* ]]; then
       continue
     fi

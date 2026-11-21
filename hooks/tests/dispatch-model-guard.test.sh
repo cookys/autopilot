@@ -622,4 +622,51 @@ assert_eq 0 "$__RUN_EXIT" "pm-seat-undetermined-exit"
 assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "pm-seat-undetermined allows"
 assert_contains "$__RUN_STDERR" "pm-console: cannot determine PM seat (no console.json mode, no fleet address)" "pm-seat-undetermined logs warning"
 
+# Overloaded Claude pool + mechanical subagent cases
+PACE_OVERLOADED="$TEST_TMP/pace-overloaded.json"
+cat > "$PACE_OVERLOADED" <<'EOF'
+{"schema":"capacity.pace/1","burn_more":{"targets_in_order":["agy","minimax"]},"rows":[{"pool":"claude","class":"claude","used_pct":90,"status":"ALERT_ahead"},{"pool":"agy","class":"other","used_pct":20}]}
+EOF
+PACE_OK="$TEST_TMP/pace-ok.json"
+cat > "$PACE_OK" <<'EOF'
+{"schema":"capacity.pace/1","burn_more":{"targets_in_order":["agy","minimax"]},"rows":[{"pool":"claude","class":"claude","used_pct":30,"status":"ok"},{"pool":"agy","class":"other","used_pct":20}]}
+EOF
+
+PAYLOAD_MECH='{"tool_name":"Agent","tool_input":{"model":"sonnet","prompt":"Engine: sonnet\nRole: implementer\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+AUTOPILOT_PACE_FILE="$PACE_OVERLOADED" run_hook dispatch-model-guard.js "$PAYLOAD_MECH"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "overloaded-claude-mechanical-blocks"
+assert_contains "$__RUN_STDOUT" "agy" "overloaded-claude-mechanical-names-agy"
+
+AUTOPILOT_PACE_FILE="$PACE_OVERLOADED" AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=warn run_hook dispatch-model-guard.js "$PAYLOAD_MECH"
+assert_eq 0 "$__RUN_EXIT" "overloaded-claude-mechanical-warn-exit"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "overloaded-claude-mechanical-warn-no-deny"
+assert_contains "$__RUN_STDOUT" "agy" "overloaded-claude-mechanical-warn-names-agy"
+
+PAYLOAD_NONMECH='{"tool_name":"Agent","tool_input":{"model":"sonnet","prompt":"Engine: sonnet\nRole: reviewer\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+AUTOPILOT_PACE_FILE="$PACE_OVERLOADED" run_hook dispatch-model-guard.js "$PAYLOAD_NONMECH"
+assert_eq 0 "$__RUN_EXIT" "overloaded-claude-nonmechanical-exit"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "overloaded-claude-nonmechanical-allowed"
+
+AUTOPILOT_PACE_FILE="$PACE_OK" run_hook dispatch-model-guard.js "$PAYLOAD_MECH"
+assert_eq 0 "$__RUN_EXIT" "nonoverloaded-claude-mechanical-exit"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "nonoverloaded-claude-mechanical-allowed"
+
+# agy at or above hetero reserve line (50%) -> skipped in favor of minimax
+PACE_AGY_RESERVE="$TEST_TMP/pace-agy-reserve.json"
+cat > "$PACE_AGY_RESERVE" <<'EOF'
+{"schema":"capacity.pace/1","burn_more":{"targets_in_order":["agy","minimax"]},"rows":[{"pool":"claude","class":"claude","used_pct":90,"status":"ALERT_ahead"},{"pool":"agy","class":"other","used_pct":55},{"pool":"minimax","class":"other","used_pct":20}]}
+EOF
+AUTOPILOT_PACE_FILE="$PACE_AGY_RESERVE" run_hook dispatch-model-guard.js "$PAYLOAD_MECH"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "overloaded-claude-mechanical-agy-reserve-blocks"
+assert_contains "$__RUN_STDOUT" "minimax" "overloaded-claude-mechanical-agy-reserve-skips-agy"
+
+# stale generated_at (> 24h old) -> treated as stale, does nothing
+PACE_STALE_GEN="$TEST_TMP/pace-stale-gen.json"
+cat > "$PACE_STALE_GEN" <<'EOF'
+{"schema":"capacity.pace/1","generated_at":"2020-01-01T00:00:00Z","burn_more":{"targets_in_order":["agy","minimax"]},"rows":[{"pool":"claude","class":"claude","used_pct":90,"status":"ALERT_ahead"},{"pool":"agy","class":"other","used_pct":20}]}
+EOF
+AUTOPILOT_PACE_FILE="$PACE_STALE_GEN" run_hook dispatch-model-guard.js "$PAYLOAD_MECH"
+assert_eq 0 "$__RUN_EXIT" "overloaded-claude-mechanical-stale-gen-exit"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "overloaded-claude-mechanical-stale-gen-allowed"
+
 finalize_test

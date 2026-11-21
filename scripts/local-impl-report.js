@@ -27,8 +27,8 @@ function isLocal(m) {
   if (!isImplementerManifest(m)) return false;
   if (m.runner === 'local') return true;
   const ep = String(m.endpoint || '');
-  if (ep === 'qwen_local') return true;
-  return m.resolved_runner === 'cc-shim' && ep === 'qwen_local';
+  if (ep === 'qwen_local' || ep === 'glm_local') return true;
+  return m.resolved_runner === 'cc-shim' && (ep === 'qwen_local' || ep === 'glm_local');
 }
 
 function startedMs(m) {
@@ -81,6 +81,9 @@ function ratio(n, d) {
 
 function report(dir, sinceMs) {
   const out = {
+    implementer_total: 0,
+    by_endpoint: { qwen_local: 0, glm_local: 0 },
+    cloud_fallbacks: [],
     local_runs: 0,
     local_first_review_pass: { count: null, ratio: null },
     local_reworked: { count: null, ratio: null },
@@ -104,6 +107,12 @@ function report(dir, sinceMs) {
     if (t === null || t < sinceMs) continue;
     const fb = m.local_fallback;
     if (fb && typeof fb === 'object' && fb.reason) {
+      if (m.runner !== 'local' && isImplementerManifest(m)) {
+        const reason = String(fb.reason);
+        const existing = out.cloud_fallbacks.find((x) => x.reason === reason);
+        if (existing) existing.count += 1;
+        else out.cloud_fallbacks.push({ reason, count: 1 });
+      }
       out.fallbacks += 1;
       const detail = fb.detail == null ? '' : String(fb.detail);
       const prefix = detail.split(':')[0];
@@ -117,6 +126,9 @@ function report(dir, sinceMs) {
     }
     if (!isLocal(m)) continue;
     out.local_runs += 1;
+    out.implementer_total += 1;
+    const endpoint = String(m.endpoint || 'qwen_local');
+    if (Object.prototype.hasOwnProperty.call(out.by_endpoint, endpoint)) out.by_endpoint[endpoint] += 1;
     const pass = reviewPass(m);
     if (pass !== null) { passKnown += 1; if (pass) passYes += 1; }
     const rw = reworked(m);

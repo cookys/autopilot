@@ -485,8 +485,8 @@ async function cmdRun(o) {
     const family = SEATS[n].family;
     const base = { runner: s.runner, engine: s.engine, model: s.model, effort: s.effort, family, qualified: isQualified(s, scorecardBin) };
     if (family === o['implementer-family']) { state[n] = { ...base, state: 'excluded_family' }; continue; }
-    // d-1dfcf757: a seat in a family barred from transcript content is not dispatched for a marked task.
-    const tfg = transcriptGate.check({ runner: s.runner, model: s.model, endpoint: s.endpoint, role: 'reviewer', files: [o['spec-file'], o.methodology], diffFiles: [o.pack], cwd: process.cwd() });
+    // Restricted cloud operators cannot receive this repository review payload.
+    const tfg = transcriptGate.check({ runner: s.runner, model: s.model, endpoint: s.endpoint || s.runner, files: [o['spec-file'], o.methodology].filter(Boolean), cwd: process.cwd() });
     if (!tfg.allowed) { state[n] = { ...base, state: 'barred_family', reason: tfg.line }; barredLines.push(tfg.line); continue; }
     const reach = s.endpoint ? endpointReady(s.endpoint) : runnerFound(s);
     if (!reach) { state[n] = { ...base, state: 'unavailable', reason: s.endpoint ? `endpoint ${s.endpoint} not ready on this account` : `runner ${s.bin} not found on this account` }; continue; }

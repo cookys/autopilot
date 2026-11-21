@@ -21,7 +21,7 @@
  * plus diff and spec bytes for review-seat1, exceeds 150000 bytes, when
  * two `--input` files share a basename, or when the `--brief` file's first
  * 8 lines omit any gate header (`Size:`, `Role:`, `Scope:`, `Task-Class:`) or
- * use a `Task-Class:` outside `cn-model-dispatch-gate.js` `local_task_classes`.
+ * use a `Task-Class:` outside noncq's fixed task-class set.
  * `--needs-shell` stores `needs_shell: true`; drain will not assign that item
  * to a runner of `agy`.
  * Notify copies `result.md` to `share/result.md` (0640), uploads it with the
@@ -68,11 +68,7 @@ const {
   isFreshRow,
   rowRemaining,
 } = require('./lib/pace-reading.js');
-const {
-  taskFacts,
-  loadConfig,
-  repoRootOf,
-} = require('./lib/cn-model-dispatch-gate.js');
+const NONCQ_TASK_CLASSES = Object.freeze(['format-convert', 'log-summary', 'simple-script', 'test-scaffold']);
 
 const SCHEMA = 'noncq/1';
 const KINDS = Object.freeze(['review-seat1', 'research', 'replay', 'data', 'draft']);
@@ -347,12 +343,18 @@ function validateLane(lane) {
 }
 
 function validateBriefHeader(briefPath, cwd = process.cwd()) {
-  const facts = taskFacts({ files: [briefPath], env: {} });
+  let lines = [];
+  try { lines = fs.readFileSync(briefPath, 'utf8').split(/\r?\n/, 8); } catch { /* reported as missing headers */ }
+  const field = (name) => (lines.map((line) => new RegExp(`(?:^|\\|)\\s*${name}:\\s*([^|]+)`, 'i').exec(line)?.[1]?.trim()).find(Boolean) || '');
+  const size = field('Size').toUpperCase();
+  const role = field('Role');
+  const scope = field('Scope');
+  const taskClass = field('Task-Class').toLowerCase();
   const missing = [];
-  if (!facts.size) missing.push('Size:');
-  if (!facts.headerRole) missing.push('Role:');
-  if (facts.scope.length === 0) missing.push('Scope:');
-  if (!facts.taskClass) missing.push('Task-Class:');
+  if (!size) missing.push('Size:');
+  if (!role) missing.push('Role:');
+  if (!scope) missing.push('Scope:');
+  if (!taskClass) missing.push('Task-Class:');
   if (missing.length > 0) {
     throw new Error(
       `--brief 標頭（前 8 行）缺少必要欄位：${missing.join(', ')}\n`
@@ -360,11 +362,10 @@ function validateBriefHeader(briefPath, cwd = process.cwd()) {
       + `${BRIEF_HEADER_EXAMPLE}`,
     );
   }
-  const cfg = loadConfig(repoRootOf(cwd));
-  const allowed = Array.isArray(cfg.local_task_classes) ? cfg.local_task_classes : [];
-  if (!allowed.includes(facts.taskClass)) {
+  const allowed = NONCQ_TASK_CLASSES;
+  if (!allowed.includes(taskClass)) {
     throw new Error(
-      `--brief 標頭的 Task-Class ${JSON.stringify(facts.taskClass)} 不在允許清單內；允許值：${allowed.join(', ')}\n`
+      `--brief 標頭的 Task-Class ${JSON.stringify(taskClass)} 不在允許清單內；允許值：${allowed.join(', ')}\n`
       + '範例標頭區塊：\n'
       + `${BRIEF_HEADER_EXAMPLE}`,
     );

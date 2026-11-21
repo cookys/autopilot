@@ -218,6 +218,16 @@ function check(opts) {
   const ref = readText(opts.reference);
   if (ref === null) add('user_undocumented', '*', `reference ${opts.reference} is missing`);
   else {
+    const referenceKeys = new Set();
+    for (const [i, line] of ref.split(/\r?\n/).entries()) {
+      if (!line.startsWith('# ') && /(^|[^#])# /.test(line)) {
+        add('reference_embedded_heading', String(i + 1), 'heading marker `# ` must start a line');
+      }
+      const row = line.match(/^\| `([^`]+)`/);
+      if (!row) continue;
+      if (referenceKeys.has(row[1])) add('reference_duplicate_key', row[1], `table key appears more than once (line ${i + 1})`);
+      referenceKeys.add(row[1]);
+    }
     for (const e of reg.entries) {
       if (e.audience === 'user' && !mentions(ref, e.name)) {
         add('user_undocumented', e.name, `audience=user but not mentioned in ${path.relative(opts.root, opts.reference)}`);

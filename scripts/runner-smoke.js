@@ -378,11 +378,6 @@ function buildSmokeChildEnv(baseEnv, paths, runner) {
   env.AUTOPILOT_SESSION_MODE_DIR = paths.sessionModeDir;
   env.AUTOPILOT_AUTHOR_MAX_TOKENS = '512';
   env.AUTOPILOT_SETTLE_MS = '250';
-  if (runner === 'kimi') {
-    env.AUTOPILOT_TASK_SIZE = 'XS';
-    env.AUTOPILOT_TASK_ROLE = 'author';
-    env.AUTOPILOT_TASK_SCOPE = 'docs/smoke.md';
-  }
   return env;
 }
 

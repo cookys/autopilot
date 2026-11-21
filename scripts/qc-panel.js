@@ -271,13 +271,11 @@ async function main() {
     }
     accountActive = layer.state === 'active';
   }
-  // Review seats: qc_panel is barred for a Chinese-model family at every size. Force the role
-  // in the env object so a parent implementer env cannot widen a glm/kimi/minimax judge.
+  // Review seats use the same operator and private-workdir gate as dispatch rails.
   // Judge B is checked on the requested model, before resolveAgyAlias (that calls `agy models`).
   // Required here, not at load: the null-verdict path exits above, and the sandbox copy of this
   // file does not carry the gate module.
   const cnGate = require('./lib/cn-model-dispatch-gate');
-  const qcRoleEnv = { ...process.env, AUTOPILOT_TASK_ROLE: 'qc_panel' };
   const qcSeats = [
     {
       runner: (path.basename(claudeBin) === 'codex' || judgeAModel.includes('gpt-5.5')) ? 'codex' : 'claude',
@@ -296,9 +294,9 @@ async function main() {
     const cn = cnGate.check({
       runner: seat.runner,
       model: seat.model,
-      role: 'qc_panel',
-      env: qcRoleEnv,
-      diffFiles: diffFile ? [diffFile] : [],
+      endpoint: '',
+      env: process.env,
+      files: diffFile ? [diffFile] : [],
       cwd: process.cwd(),
     });
     if (!cn.allowed) {

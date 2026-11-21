@@ -2,8 +2,10 @@
 # Real rails with sentinel PATH: quota selection, caller pins and manifest evidence.
 . "$(dirname "$0")/lib.sh"
 install_cli_sentinels
-# Drop any inherited task/token-seat env so brief headers and rail role control the CN gate.
-unset AUTOPILOT_TASK_SIZE AUTOPILOT_TASK_ROLE AUTOPILOT_TASK_SCOPE AUTOPILOT_TASK_NOVEL AUTOPILOT_TASK_READS_TRANSCRIPT AUTOPILOT_TASK_CLASS AUTOPILOT_TOKEN_SEAT AUTOPILOT_ENDPOINT_GLM_TRANSPORT
+# Drop inherited quota/token-seat selectors so the fixture exercises defaults.
+unset AUTOPILOT_TOKEN_SEAT AUTOPILOT_ENDPOINT_GLM_TRANSPORT \
+  AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN \
+  AUTOPILOT_ENDPOINT_GLM_LOCAL_URL AUTOPILOT_ENDPOINT_GLM_LOCAL_TOKEN
 export AUTOPILOT_ENDPOINTS_ENV=/nonexistent
 export AUTOPILOT_QUALIFIED_FILE="$TEST_TMP/missing-qualified.json"
 export AUTOPILOT_PACE_FILE="$REPO_ROOT/scripts/fixtures/pace-select/quota-default.json"
@@ -111,7 +113,7 @@ assert_eq "$?" 0 'missing pace dispatch exits 0 with the cheap default'
 assert_contains "$(cat "$TEST_TMP/missing.err")" 'pace_unknown' 'missing telemetry fallback is visible'
 assert_contains "$(cat "$TEST_TMP/missing.out")" '"runner": "grok"' 'missing telemetry lands on the grok default'
 assert_contains "$(cat "$TEST_TMP/missing.out")" '"model": "grok-4.7"' 'missing telemetry default model is grok-4.7'
-# The author rail itself supplies its role when the brief only names size/scope.
+# The operator rule refuses GLM when the author dispatch works in this private repo.
 printf 'Size: S\nScope: docs/example.md\nWrite a public documentation note.\n' > "$TEST_TMP/small-brief"
 export CLAUDE_CONFIG_DIR="$TEST_TMP/claude-fixture"
 seed_fake_claude_credentials "$CLAUDE_CONFIG_DIR"
@@ -119,7 +121,9 @@ AUTOPILOT_ENDPOINT_GLM_URL=https://fixture.invalid/v1 AUTOPILOT_ENDPOINT_GLM_TOK
   bash "$REPO_ROOT/scripts/dispatch-author.sh" --runner cc-shim --model glm-5.3 --endpoint glm \
     --prompt-file "$TEST_TMP/small-brief" --bin "$TEST_TMP/bin/grok" --timeout 10s \
     > "$TEST_TMP/author-role.out" 2> "$TEST_TMP/author-role.err"
-assert_eq "$?" 0 'author selector and dispatch gate agree on the implied author role'
+AUTHOR_RC=$?
+assert_eq "$AUTHOR_RC" 2 'restricted GLM author dispatch is refused in the private repo'
+assert_contains "$(cat "$TEST_TMP/author-role.out")" 'restricted_operator_private_workdir' 'author result names the operator workdir refusal'
 # Retry the actual agy retreat function with a sentinel child and fixture policy.
 # Original argv intentionally has no runner/model: the automatic choice must be pinned on retry.
 mkdir -p "$TEST_TMP/retry-tools/lib"

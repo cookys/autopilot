@@ -1329,15 +1329,15 @@ function dispatchSeat(
   legacyEnv,
   sequenceAttempt = attempt,
   repoRoot,
+  dispatchBrief,
 ) {
-  // Chinese-model gate (01M7E2A1, d-1dfcf757): a plan is novel work, so a barred-family seat is refused
+  // Operator gate (01M7E2A1, d-1dfcf757): restricted cloud seats need a clean brief in a fresh sandbox
   // before anything spawns (fail closed; the run then exits 2, see finish()).
   const cn = cnGate.check({
     runner: target.runner,
     model: target.model,
-    endpoint: target.endpoint === 'default' ? undefined : target.endpoint,
-    role: 'plan_review',
-    env: { ...process.env, AUTOPILOT_TASK_ROLE: 'plan_review', AUTOPILOT_TASK_NOVEL: '1' },
+    endpoint: target.endpoint === 'default' ? target.runner : target.endpoint,
+    files: [dispatchBrief].filter(Boolean),
     cwd: repoRoot || process.cwd(),
   });
   if (!cn.allowed) {
@@ -1651,14 +1651,16 @@ function reviewSeat({
         ? 'AUTOPILOT_PLAN_REVIEW_DEEP_RESPONSE_FILE'
         : `AUTOPILOT_PLAN_REVIEW_${seat.id.toUpperCase()}_RESPONSE_FILE`;
     if (panel) panel.seatStart(seat.id, selected.id, attempt);
+    const dispatchPrompt = buildPrompt(bounded, planBytes, rubricBytes, rubricIds, contextBundle);
     const dispatched = dispatchSeat(
       bounded,
-      buildPrompt(bounded, planBytes, rubricBytes, rubricIds, contextBundle),
+      dispatchPrompt,
       attempt,
       sequence,
       legacyEnv,
       selected.id === seat.id ? attempt : 1,
       repoRoot,
+      dispatchPrompt,
     );
     const normalized = normalizePlanReviewPayload({
       envelope: dispatched.envelope,

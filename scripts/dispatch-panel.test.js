@@ -76,6 +76,7 @@ const rec = {
   promptFile,
   cwd: process.cwd(),
   cwdMode: fs.statSync(process.cwd()).mode & 0o777,
+  promptMode: fs.statSync(promptFile).mode & 0o777,
   cwdEntries: fs.readdirSync(process.cwd()),
   envKeys: Object.keys(process.env),
   startedAt: Date.now(),
@@ -208,7 +209,9 @@ test('3 allowed seats run concurrently, wait for slowest, write 0700 D / 0600 pr
     assert.equal(calls.length, 3);
     for (const c of calls) {
       assert.equal(c.cwdMode, 0o700);
-      assert.deepEqual(c.cwdEntries, []);
+      assert.equal(c.promptFile, path.join(c.cwd, 'brief.md'));
+      assert.equal(c.promptMode, 0o600);
+      assert.deepEqual(c.cwdEntries, ['brief.md']);
       assert.notEqual(c.cwd, outDir);
       assert.equal(fs.existsSync(c.cwd), false, 'temp seat cwd should be cleaned up');
     }

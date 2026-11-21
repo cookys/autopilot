@@ -78,6 +78,12 @@ test('checkTaskOpen returns not_found for not_found JSON or exit error', () => {
   });
 });
 
+test('checkTaskOpen returns not_found for the courier table error', () => {
+  withTempStub(`printf "fleet: no task '%s' in this courier's table\\n" "$3" >&2; exit 1`, () => {
+    assert.deepEqual(checkTaskOpen(SAMPLE_ID), { state: 'not_found' });
+  });
+});
+
 test('checkTaskOpen returns unavailable on missing binary, invalid JSON, or timeout', () => {
   const prev = process.env.FLEET_BIN;
   process.env.FLEET_BIN = '/nonexistent/fleet-binary-missing-12345';

@@ -536,10 +536,16 @@ printf '{"schema":"autopilot.console/1","mode":"program"}\n' > "$PM_REPO/.claude
 FLEET_STUB_OPEN="$TEST_TMP/fleet-open"
 FLEET_STUB_DONE="$TEST_TMP/fleet-done"
 FLEET_STUB_NF="$TEST_TMP/fleet-nf"
+FLEET_STUB_COURIER_NF="$TEST_TMP/fleet-courier-nf"
 printf '#!/usr/bin/env bash\nprintf '\''{"id":"%s","status":"open"}\\n'\'' "$3"\n' "$PM_TASK_ID" > "$FLEET_STUB_OPEN"
 printf '#!/usr/bin/env bash\nprintf '\''{"id":"%s","status":"done"}\\n'\'' "$3"\n' "$PM_TASK_ID" > "$FLEET_STUB_DONE"
 printf '#!/usr/bin/env bash\nprintf '\''{"error":"not_found"}\\n'\'' ; exit 1\n' > "$FLEET_STUB_NF"
-chmod +x "$FLEET_STUB_OPEN" "$FLEET_STUB_DONE" "$FLEET_STUB_NF"
+cat > "$FLEET_STUB_COURIER_NF" <<'EOF'
+#!/usr/bin/env bash
+printf "fleet: no task '%s' in this courier's table\n" "$3" >&2
+exit 1
+EOF
+chmod +x "$FLEET_STUB_OPEN" "$FLEET_STUB_DONE" "$FLEET_STUB_NF" "$FLEET_STUB_COURIER_NF"
 
 # 1. missing id -> deny (zh-TW with fleet task show + Fleet-Task + first 10 lines)
 PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"sonnet","subagent_type":"general-purpose","prompt":"Engine: sonnet\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$PM_REPO"'"}'
@@ -563,6 +569,10 @@ assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "pm-fleet-done den
 # 3. stub not_found -> deny
 FLEET_BIN="$FLEET_STUB_NF" run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "pm-fleet-not-found denies"
+
+FLEET_BIN="$FLEET_STUB_COURIER_NF" run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "pm-fleet-courier-not-found denies"
+assert_contains "$__RUN_STDOUT" '查無此單' "pm-fleet-courier-not-found explains"
 
 # 4. stub open -> allow
 FLEET_BIN="$FLEET_STUB_OPEN" run_hook dispatch-model-guard.js "$PAYLOAD"

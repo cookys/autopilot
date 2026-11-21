@@ -72,7 +72,7 @@ function checkTaskOpen(id, opts = {}) {
     }
   }
 
-  if (r.status !== 0 && /\bnot[ _-]?found\b/i.test(`${out}\n${err}`)) {
+  if (r.status !== 0 && /(?:\bnot[ _-]?found\b|no task\b.*\bin this courier\x27?s table)/i.test(`${out}\n${err}`)) {
     return { state: 'not_found' };
   }
 

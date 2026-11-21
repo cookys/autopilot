@@ -10,6 +10,7 @@ SCRIPT="$REPO_ROOT/scripts/dispatch-hetero.sh"
 export AUTOPILOT_QUALIFIED_FILE="$TEST_TMP/missing-qualified.json"
 export AUTOPILOT_PACE_FILE="$TEST_TMP/missing-pace.json"
 export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session-mode"
+export AUTOPILOT_LOCAL_SLOT_RR_FILE="$TEST_TMP/local-slot-rr.json"
 export AUTOPILOT_ENDPOINT_PREPROBE=off
 export AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token
 export AUTOPILOT_LOCAL_SLOTS_CMD='printf %s '"'"'{"free":1,"draining":false}'"'"''
@@ -136,6 +137,35 @@ assert_eq "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync
 assert_eq "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).model||"")' "$MF")" "glm" "a2: manifest model is glm"
 assert_contains "$(cat "$LEASE_LOG")" '"url":"/v1/local/lease"' "a2: GLM slot goes through lease"
 assert_contains "$(cat "$GATE_LOG")" '--model glm --endpoint glm_local' "a2: CN gate receives selected GLM model and endpoint"
+
+# (a2rr) Equal local capacity rotates away from the previously selected Qwen backend.
+export AUTOPILOT_LOCAL_SLOTS_CMD='printf %s '\''{"endpoints":[{"id":"qwen-a","state":"up","free":2},{"id":"glm-a","models":["GLM-4"],"state":"up","free":2}]}'\'''
+printf '{"family":"qwen"}\n' > "$AUTOPILOT_LOCAL_SLOT_RR_FILE"
+PROMPT="$TEST_TMP/prompt-a2rr.txt"
+printf 'Fleet-Task: 01ARZ3NDEKTSV4RRFFQ69G5FAV\nSize: S\nRole: implementer\nTask-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
+: > "$GATE_LOG"
+run_local a2rr
+[ "$EXIT" -eq 0 ] || printf 'local-default diagnostic (a2rr): %s\n%s\n' "$OUT" "$ERR" >&2
+assert_eq "0" "$EXIT" "a2rr: tied local slots dispatch successfully"
+assert_eq "glm" "$(json_get "$OUT" model)" "a2rr: prior Qwen choice rotates unpinned run to GLM"
+assert_contains "$(cat "$GATE_LOG")" '--model glm --endpoint glm_local' "a2rr: CN gate receives tie-selected GLM"
+TIE_CHECK_RR="$TEST_TMP/tie-check-rr.json"
+printf '{"family":"qwen"}\n' > "$TIE_CHECK_RR"
+TIE_DECISION="$(node - "$TIE_CHECK_RR" <<'NODE'
+const slots = require('./scripts/lib/local-impl-slot');
+const env = { ...process.env,
+  AUTOPILOT_LOCAL_SLOT_RR_FILE: process.argv[2],
+  AUTOPILOT_LOCAL_SLOTS_CMD: `printf '%s' '${JSON.stringify({ endpoints: [
+    { id: 'qwen-a', state: 'up', free: 2 },
+    { id: 'glm-a', models: ['GLM-4'], state: 'up', free: 2 },
+  ] })}'`,
+};
+slots.acquireLocalSlot({ env, cfg: {} }).then((decision) => console.log(JSON.stringify(decision)));
+NODE
+)"
+assert_contains "$TIE_DECISION" '"family":"glm"' "a2rr: tie selector chooses GLM after Qwen"
+assert_contains "$TIE_DECISION" '"pick_reason":"tie_round_robin"' "a2rr: tie selector reports tie_round_robin"
+
 export AUTOPILOT_LOCAL_SLOTS_CMD='printf %s '\''{"free":1,"draining":false}'\'''
 
 # (a) implementer, no --runner -> manifest runner local, model qwen.

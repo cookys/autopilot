@@ -90,6 +90,14 @@ const SEMANTIC_LEAK_TOKENS = ['missing-null-guard', 'null-guard', 'null guard', 
 
 const PROVIDER = path.join(__dirname, 'qualification-review-provider.js');
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-qrp-test-'));
+const childHome = fs.mkdtempSync(path.join(tempRoot, 'home-'));
+const childState = path.join(childHome, '.autopilot');
+const childConfig = path.join(childHome, '.config');
+const childData = path.join(childHome, '.local', 'share');
+const childRuntime = path.join(childHome, '.runtime');
+for (const dir of [childState, childConfig, childData, childRuntime]) {
+  fs.mkdirSync(dir, { recursive: true });
+}
 let assertions = 0;
 
 function check(value, message) {
@@ -348,16 +356,25 @@ function brainRequest(content = BRAIN_BUNDLE) {
 let captureCounter = 0;
 function runProvider({ env = {}, request, stubOutput, stubExit, stubSleepMs }) {
   captureCounter += 1;
-  const capture = path.join(tempRoot, `capture-${captureCounter}.json`);
+  const captureDir = fs.mkdtempSync(path.join(tempRoot, 'invocation-'));
+  const capture = path.join(captureDir, `capture-${captureCounter}.json`);
   const child = spawnSync(process.execPath, [PROVIDER], {
     input: `${JSON.stringify(request)}\n`,
     encoding: 'utf8',
     timeout: 30_000,
     env: {
       PATH: process.env.PATH,
-      HOME: tempRoot,
-      TMPDIR: tempRoot,
-      AUTOPILOT_ACCOUNTS_DIR: path.join(tempRoot, 'no-accounts'), // G37: never consult the real registry
+      HOME: childHome,
+      TMPDIR: captureDir,
+      XDG_CONFIG_HOME: childConfig,
+      XDG_DATA_HOME: childData,
+      XDG_STATE_HOME: path.join(childHome, '.local', 'state'),
+      XDG_CACHE_HOME: path.join(childHome, '.cache'),
+      XDG_RUNTIME_DIR: childRuntime,
+      AUTOPILOT_ACCOUNTS_DIR: path.join(childState, 'no-accounts'), // G37: never consult the real registry
+      AUTOPILOT_LIVE_DIR: path.join(childState, 'live'),
+      AUTOPILOT_STATE_DIR: childState,
+      AUTOPILOT_CONFIG: path.join(childConfig, 'autopilot.json'),
       QRP_PROVIDER: 'fake-provider',
       QRP_MODEL: 'fake-model-exact',
       STUB_CAPTURE: capture,
@@ -1429,7 +1446,7 @@ function roleOnlyRequest(role, content = 'x') {
   // one). What must hold is that HOME is redirected AND carries the seeded content.
   check(captured.env.HOME !== examHome,
     'the child gets a clone, not the QRP_CLI_HOME template path itself');
-  check(captured.env.HOME !== process.env.HOME && captured.env.HOME !== tempRoot,
+  check(captured.env.HOME !== process.env.HOME && captured.env.HOME !== childHome,
     'the redirected HOME is neither the ambient nor the broker-assigned home');
 }
 {
@@ -1440,7 +1457,7 @@ function roleOnlyRequest(role, content = 'x') {
     stubOutput: REVIEWER_MODEL_OUTPUT,
     env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude },
   });
-  equal(captured.env.HOME, tempRoot,
+  equal(captured.env.HOME, childHome,
     'without QRP_CLI_HOME the child keeps the broker-assigned HOME');
 }
 

@@ -952,6 +952,23 @@ function deriveTopology(repoRoot, options = {}) {
     if (excludeSet.size > 0) {
       ladder = ladder.filter((s) => !seatMatchesExcluded(s.engine, s.effort, s.runner, excludeSet));
     }
+    const exclusion = require('./lib/local-reviewer-exclusion');
+    const implSeat = exclusion.reviewedImplementer(process.env, {
+      runner: process.env.AUTOPILOT_REVIEWED_IMPLEMENTER_RUNNER || '',
+      endpoint: process.env.AUTOPILOT_REVIEWED_IMPLEMENTER_ENDPOINT || '',
+      model: process.env.AUTOPILOT_REVIEWED_IMPLEMENTER_MODEL || '',
+    });
+    if (exclusion.implementerIsLocalQwen(implSeat)) {
+      const filtered = exclusion.filterReviewers(ladder.map((s) => ({
+        runner: s.runner, endpoint: s.endpoint, model: s.engine, family: s.family,
+      })), implSeat);
+      if (filtered.empty) {
+        process.stderr.write(`${exclusion.REFUSAL}\n`);
+        process.exit(3);
+      }
+      const keep = new Set(filtered.seats.map((s) => `${s.runner}\0${s.endpoint || ''}\0${s.model}`));
+      ladder = ladder.filter((s) => keep.has(`${s.runner}\0${s.endpoint || ''}\0${s.engine}`));
+    }
     out.reviewer_ladder = ladder;
   }
 

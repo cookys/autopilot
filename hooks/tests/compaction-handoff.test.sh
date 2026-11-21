@@ -529,10 +529,15 @@ const out = h.buildHandoff({
 });
 let miss = 0;
 for (let i = 0; i < 54; i++) if (!out.includes(`01M7TTT00000000000000000${String(i).padStart(2, "0")}`)) miss++;
+const pointer = out.match(/full list \(55\): ([^\n]+)/);
+const full = pointer ? require("fs").readFileSync(pointer[1], "utf8") : "";
+let missFull = 0;
+for (let i = 0; i < 54; i++) if (!full.includes(`01M7TTT00000000000000000${String(i).padStart(2, "0")}`)) missFull++;
 console.log(Buffer.byteLength(out) <= h.BODY_CAP ? "cap-ok" : "cap-" + Buffer.byteLength(out),
-  miss === 0 ? "all54-ok" : "miss-" + miss,
-  out.includes("01M7DQ66000000000000000000") ? "oldest-ok" : "oldest-missing");
+  pointer && missFull === 0 ? "full54-ok" : "full-miss-" + missFull,
+  full.includes("01M7DQ66000000000000000000") ? "oldest-full-ok" : "oldest-full-missing",
+  miss < 54 ? "some-selected" : "none-selected");
 ' "$LIB" "$HD" "$REPO" "$TEST_TMP/empty-runs" "$AUTOPILOT_LIVE_DIR")
-assert_eq "$tight_verdict" "cap-ok all54-ok oldest-ok" "tight buildHandoff with inbound + 55 open tasks stays <= BODY_CAP and keeps all 55 ids"
+assert_eq "$tight_verdict" "cap-ok full54-ok oldest-full-ok some-selected" "tight buildHandoff stays <= BODY_CAP, retains full-list pointer/data, and selects readable rows"
 
 finalize_test

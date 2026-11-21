@@ -22,6 +22,8 @@
 //      `find -delete`. Rule: "To delete files, use one standalone rm command whose targets are literal paths under the
 //      scratchpad or $TMPDIR. Never put rm inside sh -c / bash -c / zsh -c, a heredoc, or a for/while loop. Write briefs and
 //      other text files with the Write tool, not a heredoc inside bash -c."
+//  10. zsh-syntax (DENY by default; knob off|warn|deny) — zsh parameter flags, glob qualifiers, and `=(...)` temp-file
+//      process substitution that Bash cannot parse. Single-quoted spans are data and are ignored.
 // Rules run on EXECUTABLE text (heredoc bodies / comments stripped by bash-wait-rules.js, except Rule 9's multi-line `-c` scan).
 //
 // scripts/lib/dispatch-detach.sh is NOT a launcher: it is a sourceable helper the read rails
@@ -911,6 +913,38 @@ function detectZshExpansion(cmd, cwd) {
       };
     }
   }
+  return null;
+}
+
+// Rule 10: catch zsh-only grammar before Claude Code's permission parser sees an invalid Bash command.
+// Keep this lexical and narrow: ordinary substitutions, Bash parameter forms, and <(...) are valid Bash.
+function detectZshSyntax(cmd) {
+  const raw = typeof cmd === 'string' ? cmd : '';
+  if (raw.length > ZSH_MAX_TEXT) return null;
+  let text = '';
+  let doubleQuoted = false;
+  for (let i = 0; i < raw.length; i += 1) {
+    if (raw[i] === '\\' && i + 1 < raw.length) {
+      text += raw[i] + raw[i + 1];
+      i += 1;
+    } else if (raw[i] === '"') {
+      doubleQuoted = !doubleQuoted;
+      text += raw[i];
+    } else if (!doubleQuoted && raw[i] === "'") {
+      const end = raw.indexOf("'", i + 1);
+      i = end < 0 ? raw.length : end;
+      text += ' ';
+    } else {
+      text += raw[i];
+    }
+  }
+  let match = text.match(/\$\{\s*\([^}]*\)\s*[^}]*\}/);
+  if (match) return { rule: 'zsh-syntax', syntax: match[0], why: 'zsh parameter flags (${(...)}) are not valid Bash syntax' };
+  match = text.match(/(?<![A-Za-z0-9_\]<])=\([^)]*\)/);
+  if (match) return { rule: 'zsh-syntax', syntax: match[0], why: 'zsh temp-file process substitution =(…) is not valid Bash syntax' };
+  // A glob metacharacter immediately followed by (...) is a zsh qualifier; function definitions and subshells lack a glob.
+  match = text.match(/(?:\*\*?|\?|\[[^\]\s]+\])(?:[^\s'"`()]*)(\([^()\s]*[./NnOmM][^()\s]*\))/);
+  if (match) return { rule: 'zsh-syntax', syntax: match[0], why: 'zsh glob qualifiers such as *(.) are not valid Bash syntax' };
   return null;
 }
 
@@ -2379,6 +2413,7 @@ module.exports = {
   detectPkillSelfMatch,
   patternMatchesSelf,
   detectZshExpansion,
+  detectZshSyntax,
   segments,
   expandSegments,
 };

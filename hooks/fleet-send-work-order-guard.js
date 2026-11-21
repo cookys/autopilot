@@ -3,6 +3,16 @@
  * fleet-send-work-order-guard — PreToolUse, matcher mcp__fleet__send (and
  * mcp__fleet__dispatch for PM plan-first guard).
  *
+ * mcp__fleet__reply to a courier wake (`from` ends in `/courier`) is denied: reply cannot
+ * reach that address (member_unknown). The reason tells the sender to use task_comment
+ * and includes `task_id:` from that message body when the line is present. An id that
+ * is not in the transcript is allowed.
+ *
+ * mcp__fleet__send, mcp__fleet__dispatch and mcp__fleet__task_comment: a real
+ * ~/.claude path (`~/`, `$HOME/`, `/home/<user>/`, `/Users/<user>/`) is denied.
+ * Only a path under `.claude/projects/` is allowed. Reading the real ~/.claude
+ * needs the operator's card.
+ *
  * mcp__fleet__reply (same rule, default-on): a reply that is a work order is denied unless it carries task context
  * (a `task_id: <26-char id>` header line at the top of the body, or a 26-char task id in the text). fyi=true does not exempt a send/reply that asks for work
  * (imperative phrases); only the bare mention 回報 stays allowed under fyi.
@@ -42,6 +52,10 @@ const REPLY_DENY_REASON = '這則 reply 是在派工（要對方現在做事或�
 // noun 回報 (a mention, e.g. "晚點補完整回報") stays allowed under fyi.
 const FYI_BENIGN_PHRASES = Object.freeze(['回報']);
 const HEADER_TASK_ID_RE = /^task_id:\s*[0-9A-HJKMNP-TV-Z]{26}\s*$/m;
+const BODY_TASK_ID_RE = /(?:^|\n)task_id:\s*([0-9A-HJKMNP-TV-Z]{26})\s*(?:\n|$)/;
+const COURIER_REPLY_REASON = 'reply 不能回 courier 的 wake 訊息，請改用 task_comment（task_id 見該訊息的 task_id 行）';
+const CLAUDE_HOME_RE = /(?:~\/|\$HOME\/|\/home\/[^/\s]+\/|\/Users\/[^/\s]+\/)\.claude(?!\/projects(?:\/|$))/;
+const CLAUDE_PATH_DENY = '這則訊息要對方讀真實的 ~/.claude。讀取真實 ~/.claude 需要操作員本人的卡。請改請該席用自己被允許的讀取方式提供資料，或拿掉這一步。';
 const ULID_IN_TEXT_RE = /\b[0-9A-HJKMNP-TV-Z]{26}\b/;
 const DISPATCH_OPT_IN = 'pm-dispatch-plan-guard';
 const DISPATCH_SIZE_DENY_REASON = '每張派工都要帶 Size（XS|S|M|L|XL），請補上';
@@ -104,8 +118,75 @@ function decideDispatch(input) {
   return null;
 }
 
+function channelAttrs(attrText) {
+  const attrs = {};
+  const re = /([A-Za-z_][\w-]*)="([^"]*)"/g;
+  let m;
+  while ((m = re.exec(attrText))) attrs[m[1]] = m[2];
+  return attrs;
+}
+
+function textParts(content) {
+  if (typeof content === 'string') return [content];
+  if (!Array.isArray(content)) return [];
+  return content.filter((b) => b && typeof b.text === 'string').map((b) => b.text);
+}
+
+// Last matching inbound channel. Missing file or id => null (allow; do not guess).
+function fleetChannel(transcriptPath, messageId) {
+  if (typeof transcriptPath !== 'string' || !transcriptPath || typeof messageId !== 'string' || !messageId) return null;
+  let raw;
+  try { raw = fs.readFileSync(transcriptPath, 'utf8'); } catch { return null; }
+  let found = null;
+  for (const line of raw.split('\n')) {
+    if (!line.trim()) continue;
+    let rec;
+    try { rec = JSON.parse(line); } catch { continue; }
+    const content = rec && rec.message && rec.message.content;
+    for (const text of textParts(content)) {
+      const openRe = /<channel\s+([^>]+)>/g;
+      let m;
+      while ((m = openRe.exec(text))) {
+        const attrs = channelAttrs(m[1]);
+        if (attrs.source !== 'fleet' || attrs.message_id !== messageId) continue;
+        const next = text.indexOf('<channel ', m.index + m[0].length);
+        let inner = text.slice(m.index + m[0].length, next === -1 ? text.length : next);
+        const close = inner.lastIndexOf('</channel>');
+        if (close >= 0) inner = inner.slice(0, close);
+        found = { from: String(attrs.from || '').replace(/@[^@/]*$/, ''), body: inner };
+      }
+    }
+  }
+  return found;
+}
+
+function courierReplyDeny(input) {
+  if (!input || input.tool_name !== 'mcp__fleet__reply') return null;
+  const toolInput = input.tool_input && typeof input.tool_input === 'object' ? input.tool_input : {};
+  const hit = fleetChannel(input.transcript_path, toolInput.message_id);
+  if (!hit || !hit.from.endsWith('/courier')) return null;
+  const id = BODY_TASK_ID_RE.exec(hit.body);
+  const reason = id
+    ? `reply 不能回 courier 的 wake 訊息，請改用 task_comment（task_id: ${id[1]}）`
+    : COURIER_REPLY_REASON;
+  return preToolDeny(reason);
+}
+
+function claudePathDeny(input) {
+  const name = input && input.tool_name;
+  if (name !== 'mcp__fleet__send' && name !== 'mcp__fleet__dispatch' && name !== 'mcp__fleet__task_comment') return null;
+  const toolInput = input.tool_input && typeof input.tool_input === 'object' ? input.tool_input : {};
+  const text = name === 'mcp__fleet__dispatch' ? toolInput.task : name === 'mcp__fleet__task_comment' ? toolInput.text : toolInput.content;
+  if (typeof text !== 'string' || !CLAUDE_HOME_RE.test(text)) return null;
+  return preToolDeny(CLAUDE_PATH_DENY);
+}
+
 function decide(input, env = envBag()) {
   if (!input || typeof input !== 'object') return null;
+  const courier = courierReplyDeny(input);
+  if (courier) return courier;
+  const claudePath = claudePathDeny(input);
+  if (claudePath) return claudePath;
   if (input.tool_name === 'mcp__fleet__dispatch') {
     return decideDispatch(input);
   }

@@ -104,6 +104,13 @@ test('PM asks, operator imperatives and promises are detected', () => {
   ]) assert.ok(guard.findOwnerQuestion(text), text);
 });
 
+test('habitual past role descriptions are not owner asks', () => {
+  for (const text of [
+    '紅線、授權表、開卡分類、那些 hook，大多是我們一起討論出來的：我起草或提方案，你拍板，之後由我維護文字和追蹤有沒有落實。',
+    '做法一直是我起草或提方案，你拍板；文字是我在維護。',
+  ]) assert.equal(guard.findOwnerQuestion(text), null, text);
+});
+
 test('status and quoted lane text pass', () => {
   for (const text of [
     '已完成更新，測試通過，沒有待決事項。',

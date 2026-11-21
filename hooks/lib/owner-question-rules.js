@@ -49,7 +49,7 @@ const HIT_PATTERNS = {
   /等(?:待|候)?\s*(?:owner|你|您)/i,
   /(?:須|必須|需)經(?:過)?\s*(?:owner|你|您)/i,
   // "after you approve I will ..."
-  /[你您](?:批准|核准|同意|授權|確認|決定|點頭)(?:之後|後|才|再)/,
+  /[你您](?:批准|核准|同意|授權|確認|決定|點頭|拍板)(?:之後|後|才|再)/,
   // "should I / may I ...嗎": a yes-no question put to the reader, with or without the question mark
   /(?:要我|讓我|需要我|是否要我|我可以|我能|我要不要|我該不該|我應不應該)[^。？?！\n]{0,40}嗎/,
   /(?:可以|能不能|能否|行不行|好不好|對不對|同意|批准|核准|沒問題|ok)\s*嗎/i,
@@ -61,7 +61,7 @@ const HIT_PATTERNS = {
   /\b(?:may I|can I (?:go ahead|proceed|push|merge)|ok(?:ay)? to (?:push|merge|proceed))\b/i,
   // Additional asks from the retired PM Stop hook (bare 要不要 is only a question with ?).
   /你覺得(?:可以|如何|呢|怎樣)|請你(?:看|回)|你(?:同意|決定|選)(?:嗎|哪)/,
-  /跟我說一聲|告訴我你|你看(?:要|是)|等你(?:回|選)|你希望.{0,20}(?:就|再)|你點頭|你拍板|由你決定/,
+  /跟我說一聲|告訴我你|你看(?:要|是)|等你(?:回|選)|你希望.{0,20}(?:就|再)|你點頭|由你決定/,
   ],
   'operator-step': [
     /要[你您]本人|[你您]自己(?:執行|做|登入|操作)|有空時照做|[你您]要做的事|[你您]只要(?:貼|輸入|執行)/,
@@ -92,6 +92,14 @@ const CONDITION_ON_OWNER = /(?:沒有|沒|未經|未獲|未得到|缺少)[你您
 // Explicit negators only. A bare 不 is NOT one: "能不能請你確認", "是不是要你批准" are A-not-A questions, not denials.
 const NEGATED = /(?:沒有|沒|無需|不需要|不用|不必|毋須|不會|不要)[^，。,；;、]{0,6}[你您]|\b(?:no|not|nothing|don'?t|doesn'?t|isn'?t)\b[^.,;]{0,24}\b(?:you|your)\b|\bno (?:approval|decision|confirmation)\b/i;
 const CLAUSE_SPLIT = /[，,；;：:、]|但是|但|不過|而是|\bbut\b|\bhowever\b/i;
+// Bare 你拍板 is an ask. The same words inside a habitual or past role split
+// (一直是 / 大多是 … 我起草，你拍板，之後由我維護) describe how the roles worked, not a forward promise.
+const BARE_PAIBAN = /(?<![等請要待需會得])你拍板(?!後|再|才)/;
+const HABITUAL_ROLE_FRAME = /一直是|一向是|向來是|大多是/;
+const ROLE_SPLIT_WORK = /我起草|提方案|由我維護|是我在維護|我在維護|討論出來/;
+function habitualPastRole(sentence) {
+  return HABITUAL_ROLE_FRAME.test(sentence) && ROLE_SPLIT_WORK.test(sentence);
+}
 
 function offValue(v) {
   return typeof v === 'string' && ['off', 'false', '0', 'no'].includes(v.trim().toLowerCase());
@@ -231,6 +239,7 @@ function findHits(text) {
       for (const [kind, patterns] of Object.entries(HIT_PATTERNS)) {
         if (patterns.some((re) => re.test(clause))) classes.add(kind);
       }
+      if (BARE_PAIBAN.test(clause) && !habitualPastRole(s)) classes.add('question');
     }
     if (classes.size) hits.push({ sentence: s, classes: [...classes] });
   }

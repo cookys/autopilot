@@ -9,7 +9,6 @@ SCRIPT="$REPO_ROOT/scripts/dispatch-hetero.sh"
 export AUTOPILOT_QUALIFIED_FILE="$TEST_TMP/missing-qualified.json"
 export AUTOPILOT_PACE_FILE="$TEST_TMP/missing-pace.json"
 export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session-mode"
-export AUTOPILOT_TEST_CN_GATE_OFF=1
 export AUTOPILOT_ENDPOINT_PREPROBE=off
 export AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token
 export AUTOPILOT_LOCAL_SLOTS_CMD='printf %s '"'"'{"free":1,"draining":false}'"'"''
@@ -20,7 +19,7 @@ GATE_LOG="$TEST_TMP/cn-gate-requests.jsonl"
 printf '201\n' > "$LEASE_STATUS_FILE"
 LEASE_BUSY_FILE="$TEST_TMP/lease-endpoint-busy"
 LEASE_PORT_FILE="$TEST_TMP/lease.port"
-node - "$LEASE_STATUS_FILE" "$LEASE_LOG" "$LEASE_PORT_FILE" "$LEASE_BUSY_FILE" <<'NODE' &
+node - "$LEASE_STATUS_FILE" "$LEASE_LOG" "$LEASE_PORT_FILE" "$LEASE_BUSY_FILE" <<'NODE' >/dev/null 2>&1 &
 const http = require('http'), fs = require('fs');
 const [statusFile, logFile, portFile, busyFile] = process.argv.slice(2);
 const server = http.createServer((req, res) => {
@@ -42,6 +41,11 @@ const server = http.createServer((req, res) => {
 server.listen(0,'127.0.0.1',()=>fs.writeFileSync(portFile,String(server.address().port)));
 NODE
 LEASE_SERVER_PID=$!
+cleanup_lease_server() {
+  kill "$LEASE_SERVER_PID" 2>/dev/null || true
+  wait "$LEASE_SERVER_PID" 2>/dev/null || true
+}
+trap cleanup_lease_server EXIT
 for _i in 1 2 3 4 5 6 7 8 9 10; do [ -s "$LEASE_PORT_FILE" ] && break; sleep 0.1; done
 LEASE_PORT="$(cat "$LEASE_PORT_FILE")"
 export AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL="http://127.0.0.1:${LEASE_PORT}/v1"
@@ -67,7 +71,15 @@ printf '%s' '{"type":"result","is_error":false,"result":"ok"}'
 EOF
 chmod +x "$STUB_CLAUDE"
 
-export AUTOPILOT_TEST_CN_GATE_OFF=1
+REAL_NODE="$(command -v node)"
+cat > "$TEST_TMP/bin/node" <<EOF
+#!/usr/bin/env bash
+if [ "\${1:-}" = "$REPO_ROOT/scripts/lib/cn-model-dispatch-gate.js" ] && [ "\${2:-}" = "check" ]; then
+  printf '%s\n' "\$*" >> "$GATE_LOG"
+fi
+exec "$REAL_NODE" "\$@"
+EOF
+chmod +x "$TEST_TMP/bin/node"
 
 STUB_GROK="$TEST_TMP/grok"
 cat > "$STUB_GROK" <<'EOF'
@@ -110,7 +122,7 @@ run_local() {
   MF="$(find "$runs" -name '*.manifest.json' | head -1)"
 }
 
-# (a2) stubbed gateway payload selects GLM when qwen is full; gate and manifest carry the selected seat.
+# (a2) A free GLM slot wins before a fixture that otherwise selects codex; gate and manifest carry GLM.
 export AUTOPILOT_LOCAL_SLOTS_CMD='printf %s '\''{"endpoints":[{"id":"qwen-a","state":"up","free":0},{"id":"glm-a","models":["GLM-4"],"state":"up","free":1}]}'\'''
 PROMPT="$TEST_TMP/prompt-a2.txt"
 printf 'Size: S\nRole: implementer\nTask-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
@@ -122,6 +134,7 @@ assert_file_exists "$MF" "a2: GLM manifest written"
 assert_eq "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).endpoint||"")' "$MF")" "glm_local" "a2: manifest endpoint is glm_local"
 assert_eq "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).model||"")' "$MF")" "glm" "a2: manifest model is glm"
 assert_contains "$(cat "$LEASE_LOG")" '"url":"/v1/local/lease"' "a2: GLM slot goes through lease"
+assert_contains "$(cat "$GATE_LOG")" '--model glm --endpoint glm_local' "a2: CN gate receives selected GLM model and endpoint"
 export AUTOPILOT_LOCAL_SLOTS_CMD='printf %s '\''{"free":1,"draining":false}'\'''
 
 # (a) implementer, no --runner -> manifest runner local, model qwen.
@@ -137,8 +150,9 @@ assert_eq "local" "$(node -e 'process.stdout.write(JSON.parse(require("fs").read
 assert_eq "qwen" "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).model)' "$MF")" "a: manifest model is qwen"
 assert_eq "<null>" "$(json_get "$OUT" local_fallback)" "a: local choice records local_fallback null"
 assert_eq "null" "$(node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).local_fallback; process.stdout.write(v===null?"null":JSON.stringify(v))' "$MF")" "a: manifest local_fallback is null"
+assert_contains "$(cat "$GATE_LOG")" '--model qwen --endpoint qwen_local' "a: CN gate receives selected Qwen model and endpoint"
 
-# (b) local, no Task-Class line -> dispatched prompt gains it; caller file unchanged.
+# (b) local, no Task-Class line -> dispatched prompt stays unchanged; caller file unchanged.
 PROMPT="$TEST_TMP/prompt-b.txt"
 printf 'edit only this line\n' > "$PROMPT"
 BEFORE="$(sha256sum "$PROMPT" | awk '{print $1}')"
@@ -149,11 +163,10 @@ AFTER="$(sha256sum "$PROMPT" | awk '{print $1}')"
 assert_eq "$BEFORE" "$AFTER" "b: caller prompt file is unchanged"
 SHA_B="$(git -C "$SBX" rev-parse "feat/local-b")"
 DISPATCHED="$(git -C "$SBX" show "${SHA_B}:got-prompt.txt")"
-assert_contains "$DISPATCHED" "Task-Class: simple-script" "b: dispatched prompt carries Task-Class: simple-script"
-assert_contains "$ERR" "dispatched copy adds Task-Class: simple-script" "b: stderr says the copy was added"
+assert_contains "$DISPATCHED" "edit only this line" "b: dispatched prompt contains caller text"
+assert_not_contains "$DISPATCHED" "Task-Class: simple-script" "b: gate adds no Task-Class metadata"
 
-# (b2) body prose names Task-Class: outside the header window. The gate reads only
-# the first 8 lines, so the dispatched copy still gains the field. Caller file stays.
+# (b2) body prose naming Task-Class passes through unchanged. Caller file stays unchanged.
 PROMPT="$TEST_TMP/prompt-b2.txt"
 {
   printf 'edit only this line\n'
@@ -172,8 +185,8 @@ AFTER="$(sha256sum "$PROMPT" | awk '{print $1}')"
 assert_eq "$BEFORE" "$AFTER" "b2: caller prompt file is unchanged"
 SHA_B2="$(git -C "$SBX" rev-parse "feat/local-b2")"
 DISPATCHED="$(git -C "$SBX" show "${SHA_B2}:got-prompt.txt")"
-assert_contains "$DISPATCHED" "Task-Class: simple-script" "b2: dispatched prompt carries Task-Class: simple-script"
-assert_contains "$ERR" "dispatched copy adds Task-Class: simple-script" "b2: stderr says the copy was added"
+assert_contains "$DISPATCHED" "please add a Task-Class: header" "b2: dispatched prompt preserves body prose"
+assert_not_contains "$DISPATCHED" "Task-Class: simple-script" "b2: gate adds no Task-Class metadata"
 
 # (c) local, no --worktree-parent -> worktree is outside the repo root.
 XDG_RUNTIME_DIR="$(mktemp -d /tmp/local-default-xdg.XXXXXX)"

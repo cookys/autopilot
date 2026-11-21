@@ -86,8 +86,8 @@ export function stackRows(el: { Box: El }, rows: unknown[]) {
   return <Box flexDirection="column" justifyContent="flex-end">{rows}</Box>
 }
 
-// the scroll hint row of a window that holds more than it shows (guideline §13.3): `↑ 還有 N 行 · ↓ 還有 M 行`, each half a `[ … ]` Button (BarButton's look) that moves the window a page (a click, or Tab and Enter, reach what
-// the wheel and the scroll keys also do), a half with nothing in that direction is not drawn
+// the scroll hint row of a window that holds more than it shows (guideline §13.3): `↑ 還有 N 行 · k 往上` and `↓ 還有 M 行 · j 往下`, each half a `[ … ]` Button (BarButton's look) that moves the window a page (a click, or Tab and
+// Enter, or the j/k hotkeys cardSplit draws, reach what the wheel and the scroll keys also do), a half with nothing in that direction is not drawn
 export function scrollHint(el: { Box: El; Text: El; Button?: El }, t: T, above: number, below: number, onUp: () => void, onDown: () => void): unknown {
   const { Box, Text, Button } = el
   const half = (k: string, text: string, press: () => void) => {
@@ -98,9 +98,9 @@ export function scrollHint(el: { Box: El; Text: El; Button?: El }, t: T, above: 
   return (
     <Box key="scrollhint">
       <Text>{' '}</Text>
-      {above > 0 ? half('scroll:up', t('shell.more_up', { n: above }), onUp) : <Text key="nu">{''}</Text>}
+      {above > 0 ? half('scroll:up', t('shell.more_up', { n: above }) + t('shell.scroll_key_up'), onUp) : <Text key="nu">{''}</Text>}
       {above > 0 && below > 0 ? <Text key="sep">{' '}</Text> : <Text key="ns">{''}</Text>}
-      {below > 0 ? half('scroll:down', t('shell.more_down', { n: below }), onDown) : <Text key="nd">{''}</Text>}
+      {below > 0 ? half('scroll:down', t('shell.more_down', { n: below }) + t('shell.scroll_key_down'), onDown) : <Text key="nd">{''}</Text>}
     </Box>
   )
 }
@@ -686,7 +686,7 @@ export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t:
 // (the options, the fill Button, the page Buttons). The strip never moves with the scroll. `cells` is the main window's width. Returns exactly `room` rows when the strip fits; a strip taller than `room`
 // leaves the window one row and the rest is cut by the shell (reported, not hidden: no layout of its own is invented).
 export function cardSplit(el: { Box: El; Text: El; Button?: El }, t: T, o: { top: unknown[]; strip: unknown[]; room: number; cells: number; model: ScrollModel; onPage: (by: number) => void }): { rows: unknown[]; from: number; to: number } {
-  const { Box, Text } = el
+  const { Box, Text, Button } = el
   const fixed = 1 + o.strip.length // the rule and the strip
   const fits = o.top.length <= o.room - fixed
   const winRows = Math.max(1, fits ? o.room - fixed : o.room - fixed - 1) // an overflowing window gives one more row to the page Buttons
@@ -700,7 +700,17 @@ export function cardSplit(el: { Box: El; Text: El; Button?: El }, t: T, o: { top
     return <Box key={'sw' + i}><Box key="c" width={o.cells - 1} flexShrink={0} overflow="hidden">{r}</Box>{bar}</Box>
   })
   while (rows.length < winRows) rows.unshift(<Text key={'sp' + rows.length}>{' '}</Text>)
-  rows.push(<Text key="rule" color={PALETTE.structure}>{GLYPHS.structure.rule.repeat(Math.max(1, o.cells - 1))}</Text>)
+  // The window's page keys (j down / k up) as zero-size hotkey Buttons (the band75 shape): the letters take no row, so the window moves a page on a keypress, not only a click. h is the top menu's help letter on this page, so
+  // j/k take the scrolling; ↑/↓ keep switching cards and the digit options keep their keys. A direction with nothing to show (offset at that edge) has no key.
+  const hot = (id: string, key: string, press: () => void) => <Box key={'card:scrollbox:' + id} width={0} height={0} overflow="hidden"><Button key={'card:scroll:' + id} plain hotkey={key} onPress={press}>{key}</Button></Box>
+  const scrollKeys: unknown[] = Button === undefined ? [] : [
+    ...(win.above > 0 ? [hot('up', 'k', () => o.onPage(-1))] : []),
+    ...(win.below > 0 ? [hot('down', 'j', () => o.onPage(1))] : []),
+  ]
+  const rule = GLYPHS.structure.rule.repeat(Math.max(1, o.cells - 1))
+  rows.push(scrollKeys.length > 0
+    ? <Box key="rule"><Text key="r" color={PALETTE.structure}>{rule}</Text>{scrollKeys}</Box>
+    : <Text key="rule" color={PALETTE.structure}>{rule}</Text>)
   if (win.hint) rows.push(scrollHint(el, t, win.above, win.below, () => o.onPage(-1), () => o.onPage(1)))
   rows.push(...o.strip)
   return { rows, from: win.offset, to: win.offset + win.rows } // [from, to): the rows of `top` the window shows

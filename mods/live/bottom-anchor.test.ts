@@ -209,6 +209,43 @@ test('shell overflow: default opens at bottom, scrolling up survives redraw', ()
   assert.equal(model.offset, offset)
 })
 
+test('card scroll keys: a long card keeps the option strip whole and j/k page the window', () => {
+  const model = S.newScroll()
+  // a 40-row card (the operator's long pending card) with a 3-option strip; at 209x49 the frame cannot hold all of it, so it splits and scrolls
+  const top = Array.from({ length: 40 }, (_, i) => el.Text({ children: ['card row ' + i] }))
+  const strip = ['1: option one', '2: option two', '3: option three'].map(s => el.Box({ children: [el.Text({ children: [s] })] }))
+  // onPage moves the window a whole page and clamps (register.ts:2512)
+  const page = (by: number) => { model.offset = Math.max(0, Math.min(model.max, model.offset + by * Math.max(1, model.room))) }
+  let out: { rows: unknown[] }
+  const draw = () => { out = B.cardSplit(el, t, { top, strip, room: 20, cells: 209, model, onPage: page }) }
+  const nodes = () => walk(el.Box({ children: out.rows }))
+  const hotkeys = () => nodes().filter(n => n.props?.hotkey !== undefined).map(n => n.props.hotkey).sort()
+  draw()
+  assert.ok(model.max > 0, 'the 40-row card overflows the frame and scrolls')
+  assert.equal(model.offset, model.max, 'a fresh window opens at the bottom')
+  const all = out.rows.map(r => textOf(r)).join('\n')
+  assert.ok(all.includes('option one') && all.includes('option two') && all.includes('option three'), 'every option row stays in the fixed strip')
+  assert.deepEqual(hotkeys(), ['k'], 'at the bottom only k (up) is a hotkey')
+  // step up a page: the window leaves the bottom, so a downward key appears
+  page(-1); draw()
+  assert.ok(model.offset > 0 && model.offset < model.max, 'the window is in the middle')
+  assert.deepEqual(hotkeys(), ['j', 'k'], 'in the middle both j (down) and k (up) are hotkeys')
+  // pressing j moves the window down: the above count grows
+  const before = model.offset
+  const down = nodes().find(n => n.props?.hotkey === 'j')
+  assert.ok(down, 'the j (down) Button is drawn')
+  down.props.onPress()
+  draw()
+  assert.ok(model.offset > before, 'pressing j moves the window down, above grows ' + before + ' -> ' + model.offset)
+  // pressing k moves it back up
+  const atBottom = model.offset
+  const up = nodes().find(n => n.props?.hotkey === 'k')
+  assert.ok(up, 'the k (up) Button is drawn')
+  up.props.onPress()
+  draw()
+  assert.equal(model.offset, Math.max(0, atBottom - Math.max(1, model.room)), 'pressing k moves the window back up')
+})
+
 const R14_SIZES = [[80, 24, 'inline'], [120, 30, 'dock'], [160, 40, 'dock']] as const
 const rowText = row => row.map(s => s.text).join('')
 

@@ -456,6 +456,8 @@
   "shell.send": "送出 {n} 張",
   "shell.more_up": "上面還有 {n} 行",
   "shell.more_down": "下面還有 {n} 行",
+  "shell.scroll_key_up": " · k 往上",
+  "shell.scroll_key_down": " · j 往下",
   "shell.prev": "上一張",
   "shell.next": "下一張",
   "shell.next_menu": "下一個選單",

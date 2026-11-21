@@ -456,6 +456,8 @@
   "shell.send": "Send {n}",
   "shell.more_up": "{n} more lines above",
   "shell.more_down": "{n} more lines below",
+  "shell.scroll_key_up": " · k up",
+  "shell.scroll_key_down": " · j down",
   "shell.prev": "Previous",
   "shell.next": "Next",
   "shell.next_menu": "Next menu",

@@ -1,0 +1,10 @@
+#!/bin/sh
+# hippo-guard v1
+# Installed by hippo. hippo is looked up on PATH, then at $HOME/.local/bin/hippo (the installer's link;
+# agent sessions started from tmux often lack ~/.local/bin on PATH). Without either the check is skipped with a warning.
+h=$(command -v hippo 2>/dev/null) || h="$HOME/.local/bin/hippo"
+if [ ! -x "$h" ]; then
+  echo "hippo: not on PATH or at $HOME/.local/bin/hippo; the hippo pre-merge-commit check was skipped" >&2
+  exit 0
+fi
+exec "$h" hook pre-merge-commit "$@"

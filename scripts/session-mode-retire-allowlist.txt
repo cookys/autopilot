@@ -1,0 +1,17 @@
+# Minimal allowlist for session-mode retirement grep check.
+# Format: path<TAB>function-or-fixture<TAB>plan section that keeps it
+scripts/dispatch-hetero.sh	check_marker_campaign_admission_bridge()	9.4
+platforms/codex/plugin/scripts/dispatch-hetero.sh	check_marker_campaign_admission_bridge()	9.4
+scripts/dispatch-hetero.sh	check_session_mode_gate()	9.4
+scripts/dispatch-author.sh	check_session_mode_gate()	9.4
+scripts/check-canonical-invariants.sh	invariant string assertion	9.4
+hooks/tests/autopilot-cli.test.sh	marker fixture	9.4
+hooks/tests/child-session-identity.test.sh	SessionStart identity fixture	9.4
+hooks/tests/engine-bind-campaign-root.test.sh	marker fixture	9.4
+hooks/tests/mission-routing-campaign-bridge.test.sh	fixture dir listing	9.4
+hooks/tests/session-mode-phase.test.sh	gate comment	9.4
+hooks/tests/session-mode.test.sh	marker fixture	9.4
+hooks/tests/skill-onoff-findings-batch-v2.test.sh	JSON fixture	9.4
+hooks/tests/skill-onoff-findings-batch-v3.test.sh	git fixture	9.4
+hooks/tests/skill-onoff-g67.test.sh	plugin manifest assertion	9.4
+hooks/tests/skill-onoff-stage-graph.test.sh	stage marker fixture parser	9.4

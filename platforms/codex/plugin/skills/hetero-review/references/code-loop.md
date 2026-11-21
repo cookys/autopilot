@@ -44,6 +44,10 @@ Verdict rule (PM ruling 01M6Q49K0K, 2026-11-06): a verified finding at `Major` o
 
 A range too large for one packet is split by path with `--packets <packets.json> --packet <id>` (every changed file in exactly one packet) and gated by `check-phase-review-receipt.js --packets`; `--exclude` is never the way to shrink a review.
 
+Default ledger and usage: with `--ledger` omitted the loop uses `${AUTOPILOT_STATE_DIR:-$HOME/.autopilot}/review-ledgers/<repo-basename>/<branch-slug>/` (the git-common-dir pointer file is still written). Each chain entry and seat record carries `usage` (null when the runner reported none, never zero) and `duration_ms`; seats also list `attempts` (format retries included).
+
+Repair recheck at the cap: `hetero-review-loop.js recheck --phase <id> --generation <n> [--repaired-head <rev>] [--seats <specs>]` takes the generation's unresolved Critical/Major findings, builds for each the hunks of reviewed head..repaired head near the file:line it names, and asks ONE seat of a family other than the implementer's (cheapest effort first; seats from the resolver or `--seats`; the Chinese-model gate stays in the dispatch path) for `fixed | not_fixed` with a one-line reason. It writes `review-<phase>/recheck-g<n>.json` and changes neither the chain nor the receipt. All fixed: `SHIP-AS-IS` with `generation_cap_repair_recheck_passed`. Any `not_fixed`: `FIX-THEN-SHIP` with `generation_cap_requires_depth_0_adjudication`, listing only those. Extra keys or ids outside the blocker set: `recheck_invalid`, exit 5, nothing frozen; no seat of another family: `recheck_no_seat`, exit 5.
+
 Packet set rule on heads: every packet pins the same range h1 (the earliest first reviewed head), and the exact cover is checked at h1. One exception: a packet may be first reviewed at a later head h2 when none of that packet's own paths changed between h1 and h2. A packet whose own paths changed in h1..h2 is refused ("first reviewed at a different head"); a change to another packet's file does not matter to it, but that other packet must be re-reviewed at the new tip (generation 2).
 
 ## The Growth Rail

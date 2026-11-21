@@ -64,10 +64,12 @@ const {
 const {
   applyDispositions,
   backlogCandidates,
+  demoteNoReachableScenario,
   loadDispositionFile,
   normalizeAndDedupeFindings,
   unresolvedCandidateFingerprints,
 } = require('./lib/plan-review-findings');
+const repairRecheck = require('./lib/repair-recheck');
 const { effortSeatTimeoutSeconds } = require('./lib/plan-review-timeout');
 const { createPanelManifest } = require('./lib/plan-review-panel');
 const { stageWrite } = require('./lib/stage-write');
@@ -118,6 +120,8 @@ function usage() {
     [--context-file <repo-source-file>]... [--timeout <Ns|Nm>] [--state-dir <dir>] [--now <ISO-8601>] \\
     [--allow-unregistered] [--no-topology-fallbacks] [--expect-revision <git-rev>] \\
     [--same-family-exception "<d-xxxxxxxx|fleet message id>: <reason>"]
+  node scripts/dispatch-plan-review.js --repair-recheck <g2-artifact.json> --plan-file <repaired plan> \\
+    --manifest-file <manifest.json> --implementer-family <family[,family]> [--timeout <Ns|Nm>] [--out <file>]
 
 --plan-file: a relative path resolves against --repo-root (never the cwd) and must stay inside
   it (an absolute path may point elsewhere but then carries no git provenance); a warning is printed if the cwd has a same-named file with different content. Artifacts
@@ -152,6 +156,14 @@ Cross-family rule: READY needs at least one reviewed seat whose model family is 
   set or it is refused (exit 3). A changed file CONTENT is resealed as a new version (state
   context_versions, one stderr line naming the files); every generation artifact carries the
   context_sha256 it was reviewed against.
+
+--repair-recheck: after a plan stopped at generation 2 with candidate blockers (policy_reason
+  generation_cap_requires_depth_0_adjudication) is repaired, ONE seat from the manifest whose family is not
+  the implementer's answers fixed | not_fixed per blocker (no new findings possible; extra keys are rejected).
+  Writes <plan stem>.g2-recheck.json; the generation-2 artifact stays immutable. All fixed -> READY /
+  generation_cap_repair_recheck_passed. Any not_fixed -> CONDITIONAL / generation_cap_requires_depth_0_adjudication
+  listing only those blockers. Invalid answer, no cross-family seat or transport failure: CONDITIONAL, exit 5,
+  nothing frozen.
 
 Legacy compatibility:
   replace --manifest-file with --runner/--model/--effort/--endpoint and optional
@@ -1253,6 +1265,9 @@ repair, blocks_next_slice_or_immediate_integrity, cannot_defer_to_spike. The fir
 must be non-empty JSON strings and the last two keys must be JSON booleans. This remains true for
 non-blocking findings; give them concrete evidence and a non-empty repair string such as
 "No current change; follow-up only." Never use null for evidence or repair.
+A finding with severity "blocking" must also carry an eleventh string key, failure_scenario: one
+concrete reachable scenario (the input or state that leads to a wrong result). From generation 2 a
+blocking finding with an empty or missing failure_scenario is demoted to a non-blocking note.
 Every string value must be valid RFC 8259 JSON: JSON-escape embedded double quotes, backslashes,
 newlines, tabs, and other control characters; never copy raw shell quoting into a string. Before
 returning, ensure a strict JSON parse would succeed; if a command example needs quoting, paraphrase
@@ -1397,7 +1412,7 @@ function dispatchSeat(
         digest: sha256(raw),
       },
     });
-    return { envelope, raw, authorError: null };
+    return { envelope, raw, authorError: null, usage: descriptor.usage };
   }
 
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-plan-review-'));
@@ -1515,7 +1530,13 @@ function dispatchSeat(
       error: authorError ? redactedTail(authorError) : null,
       runner_stderr_tail: redactedTail(run.stderr),
     };
-    return { envelope, raw, authorError: policyRefuse ? authorError : null, failure };
+    return {
+      envelope,
+      raw,
+      authorError: policyRefuse ? authorError : null,
+      failure,
+      usage: authorEnvelope ? authorEnvelope.usage : undefined,
+    };
   } finally {
     fs.rmSync(promptPath, { force: true });
     try {
@@ -1651,6 +1672,7 @@ function reviewSeat({
         ? 'AUTOPILOT_PLAN_REVIEW_DEEP_RESPONSE_FILE'
         : `AUTOPILOT_PLAN_REVIEW_${seat.id.toUpperCase()}_RESPONSE_FILE`;
     if (panel) panel.seatStart(seat.id, selected.id, attempt);
+    const dispatchStartedMs = Date.now();
     const dispatched = dispatchSeat(
       bounded,
       buildPrompt(bounded, planBytes, rubricBytes, rubricIds, contextBundle),
@@ -1660,6 +1682,7 @@ function reviewSeat({
       selected.id === seat.id ? attempt : 1,
       repoRoot,
     );
+    const attemptDurationMs = Date.now() - dispatchStartedMs;
     const normalized = normalizePlanReviewPayload({
       envelope: dispatched.envelope,
       raw: dispatched.raw,
@@ -1708,6 +1731,9 @@ function reviewSeat({
       } : {}),
       transport_envelope: dispatched.envelope,
       transport_status: normalized.transport_status,
+      // Runner-reported tokens only (null when the runner reports none, never a guess) and wall time.
+      usage: repairRecheck.normalizeUsage(dispatched.usage),
+      duration_ms: attemptDurationMs,
       ...(dispatched.authorError ? { error: dispatched.authorError } : {}),
       ...(dispatched.failure && !dispatched.authorError && dispatched.failure.error
         ? { error: dispatched.failure.error } : {}),
@@ -1981,9 +2007,199 @@ function checkPlanRegistration(opts) {
   );
 }
 
+// ---- --repair-recheck: the generation-cap repair recheck (lib/repair-recheck.js) ------------------
+// Input: the immutable generation-2 artifact (terminal, generation_cap_requires_depth_0_adjudication)
+// and the repaired plan. Output: a NEW artifact `<plan stem>.g2-recheck.json` (the generation-2 artifact
+// and the session state are never written). All blockers fixed -> READY / generation_cap_repair_recheck_passed;
+// any not_fixed -> CONDITIONAL / generation_cap_requires_depth_0_adjudication listing ONLY the not_fixed
+// blockers; an invalid answer, no cross-family seat or a transport failure -> CONDITIONAL, nothing frozen.
+const SECTION_CAP_CHARS = 6000;
+
+function planSections(planText) {
+  const lines = planText.split('\n');
+  const heads = [];
+  lines.forEach((line, index) => {
+    const match = /^(#{1,6})\s+(.*)$/.exec(line);
+    if (match) heads.push({ level: match[1].length, title: match[2].trim(), index });
+  });
+  return heads.map((head, i) => {
+    let end = lines.length;
+    for (let j = i + 1; j < heads.length; j += 1) {
+      if (heads[j].level <= head.level) { end = heads[j].index; break; }
+    }
+    return { ...head, text: lines.slice(head.index, end).join('\n') };
+  });
+}
+
+// The repaired section(s) a blocker's affected_surface points at: a dotted section number ("2.7",
+// "Section 2.7", "§2.7") or a phase token ("P1") found in a heading. Empty string when none is located.
+function repairedSectionFor(sections, surface) {
+  const wanted = new Set();
+  for (const match of String(surface || '').matchAll(/\b(\d+\.\d+(?:\.\d+)*)\b/g)) wanted.add(match[1]);
+  const phases = [...String(surface || '').matchAll(/\bP\d+\b/g)].map((match) => match[0]);
+  const picked = sections.filter((section) => {
+    const num = /^(?:§\s*)?(?:Section\s+)?(\d+(?:\.\d+)*)[.)\s]/.exec(section.title);
+    if (num && wanted.has(num[1])) return true;
+    return phases.some((phase) => new RegExp(`\\b${phase}\\b`).test(section.title));
+  });
+  return picked.map((section) => section.text).join('\n\n').slice(0, SECTION_CAP_CHARS);
+}
+
+function recheckCandidates(manifest) {
+  const out = [];
+  for (const seat of manifest.seats) {
+    for (const candidate of [seat, ...(seat.fallbacks || [])]) {
+      if (candidate.readiness_status === 'ready' && candidate.qualification_status === 'qualified') {
+        out.push({
+          id: `recheck_${candidate.id}`,
+          runner: candidate.runner,
+          model: candidate.model,
+          effort: candidate.effort,
+          endpoint: candidate.endpoint || 'default',
+          family: candidate.family,
+        });
+      }
+    }
+  }
+  return out;
+}
+
+function parseRecheckArgs(argv) {
+  const flags = new Map([
+    ['--repair-recheck', 'artifact'],
+    ['--plan-file', 'planFile'],
+    ['--manifest-file', 'manifestFile'],
+    ['--implementer-family', 'implementerFamily'],
+    ['--repo-root', 'repoRoot'],
+    ['--timeout', 'timeout'],
+    ['--out', 'out'],
+  ]);
+  const opts = { timeout: '5m' };
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    const key = flags.get(arg);
+    if (!key) throw new CliError(`--repair-recheck mode does not accept ${arg}`);
+    if (index + 1 >= argv.length || argv[index + 1] === '') throw new CliError(`${arg} requires a non-empty value`);
+    opts[key] = argv[++index];
+  }
+  for (const key of ['artifact', 'planFile', 'manifestFile', 'implementerFamily']) {
+    if (!opts[key]) throw new CliError(`--repair-recheck needs --repair-recheck <g2-artifact>, --plan-file, --manifest-file and --implementer-family (missing ${key})`);
+  }
+  opts.repoRoot = canonicalDirectory(opts.repoRoot || process.cwd(), '--repo-root');
+  opts.planFile = resolvePlanFile(opts.planFile, opts.repoRoot, '--plan-file');
+  opts.artifact = canonicalFile(opts.artifact, '--repair-recheck');
+  opts.manifestFile = canonicalFile(opts.manifestFile, '--manifest-file');
+  opts.timeoutSeconds = parseTimeoutSeconds(opts.timeout);
+  opts.implementerFamilies = opts.implementerFamily.split(',').map((f) => f.trim()).filter(Boolean);
+  return opts;
+}
+
+async function runRepairRecheck(argv) {
+  const opts = parseRecheckArgs(argv);
+  let source;
+  try {
+    source = JSON.parse(fs.readFileSync(opts.artifact, 'utf8'));
+  } catch (error) {
+    throw new CliError(`generation-2 artifact is not valid JSON: ${error.message}`);
+  }
+  if (!source || source.artifact_type !== 'plan_review_artifact' || source.generation !== 2
+      || source.terminal !== true || source.policy_reason !== repairRecheck.POLICY_ADJUDICATION
+      || !Array.isArray(source.findings)) {
+    throw new CliError(`--repair-recheck needs a terminal generation-2 artifact with policy_reason ${repairRecheck.POLICY_ADJUDICATION}`, 3);
+  }
+  const planBytes = fs.readFileSync(opts.planFile);
+  if (sha256(planBytes) === source.plan_sha256) {
+    throw new CliError('plan_unchanged: the plan file is byte-identical to the one generation 2 reviewed; nothing was repaired', 3);
+  }
+  const planText = planBytes.toString('utf8');
+  const blockers = source.findings.filter((finding) => finding.candidate_blocker && finding.disposition == null);
+  if (blockers.length === 0) throw new CliError('generation-2 artifact lists no open blocker candidates; nothing to recheck', 3);
+  const manifest = loadManifest({ manifestFile: opts.manifestFile }).manifest;
+  const sections = planSections(planText);
+  let needsFullPlan = false;
+  const items = blockers.map((finding) => {
+    const repaired = repairedSectionFor(sections, finding.affected_surface);
+    if (!repaired) needsFullPlan = true;
+    return {
+      id: finding.fingerprint,
+      original: `${finding.claim}\n(surface: ${finding.affected_surface})`,
+      repair: finding.repair,
+      repaired: repaired || '(no section located by surface; see the FULL PLAN block)',
+    };
+  });
+  const nonce = crypto.randomBytes(12).toString('hex');
+  const candidates = recheckCandidates(manifest);
+  const planSeam = testSequence();
+  const run = await repairRecheck.runRecheck({
+    kind: 'plan',
+    blockers: items,
+    seats: candidates,
+    implementerFamilies: opts.implementerFamilies,
+    familyOf: (seat) => seat.family,
+    nonce,
+    appendix: needsFullPlan ? planText : '',
+    ask: (seat, prompt) => {
+      const startedMs = Date.now();
+      const target = {
+        ...seat,
+        timeoutSeconds: effortSeatTimeoutSeconds(seat.effort, opts.timeoutSeconds, prompt.length),
+      };
+      const dispatched = dispatchSeat(target, prompt, 1, planSeam, 'AUTOPILOT_PLAN_REVIEW_RECHECK_RESPONSE_FILE', 1, opts.repoRoot);
+      const durationMs = Date.now() - startedMs;
+      const ok = dispatched.envelope.outcome.classification === 'success' && dispatched.raw.length > 0;
+      return {
+        ok,
+        text: dispatched.raw.toString('utf8'),
+        usage: dispatched.usage,
+        duration_ms: durationMs,
+        error: dispatched.authorError || (dispatched.failure && dispatched.failure.error) || dispatched.envelope.outcome.classification,
+      };
+    },
+  });
+  const passed = run.status === 'passed';
+  const notFixedIds = new Set(run.not_fixed_ids);
+  const listed = run.status === 'failed'
+    ? blockers.filter((finding) => notFixedIds.has(finding.fingerprint))
+    : (passed ? [] : blockers);
+  const reasonById = new Map(run.results.map((result) => [result.id, result.reason]));
+  const artifact = {
+    ...source,
+    verdict: passed ? 'READY' : 'CONDITIONAL',
+    semantic_verdict: passed ? 'READY' : 'CONDITIONAL',
+    terminal: true,
+    policy_reason: passed
+      ? repairRecheck.POLICY_PASSED
+      : (run.status === 'failed' ? repairRecheck.POLICY_ADJUDICATION : `recheck_${run.status}`),
+    repair_authorized: false,
+    next_generation: null,
+    plan_sha256: sha256(planBytes),
+    // Only the blockers still needing the PM: not_fixed ones (or all of them when the recheck could
+    // not answer). Fixed blockers and non-blocking findings stay in the immutable generation-2 artifact.
+    findings: listed.map((finding) => ({
+      ...finding,
+      recheck_reason: reasonById.get(finding.fingerprint) || null,
+    })),
+    backlog_candidates: [],
+    recheck: {
+      ...repairRecheck.recheckBlock(run),
+      source_artifact_sha256: sha256(fs.readFileSync(opts.artifact)),
+    },
+    usage: run.usage,
+    duration_ms: run.duration_ms,
+    reviewed_at: new Date().toISOString(),
+  };
+  const outPath = opts.out
+    ? path.resolve(opts.out)
+    : `${opts.planFile.replace(/\.md$/, '')}.g2-recheck.json`;
+  atomicWriteJson(outPath, artifact);
+  process.stdout.write(`${JSON.stringify(publicArtifact(artifact), null, 2)}\n`);
+  process.exit(cnRefusedSeats.length > 0 ? 2 : (passed ? 0 : (run.status === 'failed' ? 0 : 5)));
+}
+
 function main() {
   let opts;
   try {
+    if (process.argv.includes('--repair-recheck')) return reportFatal(runRepairRecheck(process.argv.slice(2)));
     opts = parseArgs(process.argv.slice(2));
     checkPlanRegistration(opts);
     // The plan is read exactly once; the same Buffer feeds provenance, --expect-revision,
@@ -2060,6 +2276,7 @@ function main() {
   const contextCopy = path.join(sessionDir, 'context.json');
   const contextSeal = path.join(sessionDir, 'context-seal.json');
   const clock = createClock(opts.now);
+  const generationStartedMs = Date.now();
   const now = new Date(clock.now());
   const claimId = crypto.randomBytes(16).toString('hex');
   const binding = logicalBinding(opts, repoIdentity, manifest, sessionKey);
@@ -2514,6 +2731,8 @@ function main() {
       findings = applyDispositions(findings, decisions, {
         legacyAutoAdmit: loaded.legacy,
       });
+      // Post-admission, generation 2 only: a blocker with no reachable scenario is a note.
+      demoteNoReachableScenario(findings, opts.generation);
       const accepted = findings.filter((finding) => finding.disposition === 'accepted_blocker');
       const unresolved = unresolvedCandidateFingerprints(findings);
       // Preserve whether any blocker candidates existed before disposition. Fully
@@ -2623,6 +2842,9 @@ function main() {
       };
     }
 
+    // Per-generation totals over every reviewer attempt of this run (usage null when none reported any).
+    artifact.usage = repairRecheck.sumUsage(attempts.map((attempt) => attempt.usage));
+    artifact.duration_ms = Date.now() - generationStartedMs;
     withLock(sessionDir, '.claim.lock', () => {
       state = loadState(statePath);
       if (!state.active_claim || state.active_claim.claim_id !== claimId) {
@@ -2670,13 +2892,21 @@ function main() {
   }
 }
 
-try {
-  main();
-} catch (error) {
+function fatal(error) {
   if (error instanceof CliError || error instanceof TypeError) {
     process.stderr.write(`dispatch-plan-review: ${error.message}\n`);
     process.exit(error instanceof CliError ? error.exitCode : 2);
   }
   process.stderr.write(`dispatch-plan-review: ${error.stack || error.message || String(error)}\n`);
   process.exit(2);
+}
+
+function reportFatal(promise) {
+  promise.catch(fatal);
+}
+
+try {
+  main();
+} catch (error) {
+  fatal(error);
 }

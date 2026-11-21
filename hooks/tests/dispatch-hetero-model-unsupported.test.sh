@@ -11,6 +11,8 @@ export AUTOPILOT_STRIKE_WRITER=off
 export ENGINE_CAPABILITY_DIR="$TEST_TMP/cap"
 mkdir -p "$ENGINE_CAPABILITY_DIR"
 export DISPATCH_QUIET=1
+export HOME="$TEST_TMP/home"
+mkdir -p "$HOME"
 
 SCRIPT="$REPO_ROOT/scripts/dispatch-hetero.sh"
 SBX="$TEST_TMP/repo"
@@ -66,7 +68,7 @@ node -e '
     console.error("model_unsupported must not escalate", o.status);
     process.exit(1);
   }
-  const want = "codex model gpt-6-terra is not available for this account; pick another model (e.g. --model gpt-6-luna)";
+  const want = "codex model gpt-6-terra is not available for this account (models_cache: unavailable)";
   if (o.error !== want) {
     console.error("error", JSON.stringify(o.error));
     process.exit(1);

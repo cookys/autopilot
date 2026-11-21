@@ -3069,6 +3069,9 @@ write_manifest() {
   if [ -n "${ENGINE_PREFLIGHT_JSON:-}" ]; then
     node -e 'const fs=require("fs"),f=process.argv[1],v=JSON.parse(process.argv[2]);const j=JSON.parse(fs.readFileSync(f,"utf8"));j.engine_preflight=v;fs.writeFileSync(f,JSON.stringify(j)+"\n")' "$tmp" "$ENGINE_PREFLIGHT_JSON" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
   fi
+  if [ -n "${MODEL_SUBSTITUTED_JSON:-}" ]; then
+    node -e 'const fs=require("fs"),f=process.argv[1],v=JSON.parse(process.argv[2]);const j=JSON.parse(fs.readFileSync(f,"utf8"));j.model_substituted=v;fs.writeFileSync(f,JSON.stringify(j)+"\n")' "$tmp" "$MODEL_SUBSTITUTED_JSON" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
+  fi
   mv -f "$tmp" "$MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
   return 0
 }
@@ -6288,6 +6291,23 @@ if [ "$IS_CODEX" -eq 1 ]; then
       --dangerously-bypass-approvals-and-sandbox \
       --dangerously-bypass-hook-trust \
       -c "model_reasoning_effort=\"$3\"" < "$4"' _ "$WT" "$MODEL" "$EFFORT" "$PROMPT_FILE" "$CODEX_BIN" "$MANAGED_CODEX_HOME"
+  if [ "${AGENT_EXIT:-0}" -ne 0 ] && [ "${MODEL_SUBSTITUTED_TRIED:-0}" -eq 0 ] && [ -r "${LOG:-}" ]; then
+    _codex_err_cls="$(node "$SELF_DIR/engine-capability-state.js" classify-error --file "$LOG" 2>/dev/null || true)"
+    if [ "$_codex_err_cls" = "model_unsupported" ]; then
+      _codex_sub="$(node "$SELF_DIR/lib/codex-models-cache.js" substitute "$MODEL" "${CODEX_HOME:-${HOME:-}/.codex}/models_cache.json" 2>/dev/null || true)"
+      if [ -n "$_codex_sub" ]; then
+        MODEL_SUBSTITUTED_TRIED=1
+        MODEL_SUBSTITUTED_JSON="$(node -e 'process.stdout.write(JSON.stringify({from:process.argv[1],to:process.argv[2]}))' "$MODEL" "$_codex_sub" 2>/dev/null || true)"
+        printf 'dispatch-hetero: codex model %s unsupported; retrying once with same-tier substitute %s\n' "$MODEL" "$_codex_sub" >&2
+        MODEL="$_codex_sub"
+        run_worker bash -c 'cd "$1" && exec env -u CODEX_THREAD_ID CODEX_HOME="$6" \
+            "$5" exec --ignore-user-config --model "$2" \
+            --dangerously-bypass-approvals-and-sandbox \
+            --dangerously-bypass-hook-trust \
+            -c "model_reasoning_effort=\"$3\"" < "$4"' _ "$WT" "$MODEL" "$EFFORT" "$PROMPT_FILE" "$CODEX_BIN" "$MANAGED_CODEX_HOME"
+      fi
+    fi
+  fi
   cleanup_managed_codex_home
 elif [ "$IS_CCSHIM" -eq 1 ] || [ "$IS_CNATIVE" -eq 1 ]; then
   EFFORT_SENT="${CLAUDE_EFFORT_ARG:-default}"
@@ -8042,9 +8062,14 @@ classify_outcome() {
       fi
     fi
   fi
-  # Caller error, not an auth/quota escalation: name the model and a usable alternative.
+  # Caller error, not an auth/quota escalation: name the model and cached alternatives.
   if [ "${CLASSIFIED_ERROR:-}" = "model_unsupported" ]; then
-    OUTCOME_ERR="codex model ${MODEL:-unknown} is not available for this account; pick another model (e.g. --model gpt-6-luna)"
+    _codex_cache_models="$(node "$SELF_DIR/lib/codex-models-cache.js" ids "${CODEX_HOME:-${HOME:-}/.codex}/models_cache.json" 2>/dev/null || true)"
+    if [ -n "$_codex_cache_models" ]; then
+      OUTCOME_ERR="codex model ${MODEL:-unknown} is not available for this account (models_cache: ${_codex_cache_models})"
+    else
+      OUTCOME_ERR="codex model ${MODEL:-unknown} is not available for this account (models_cache: unavailable)"
+    fi
   fi
   if [ "${WORKER_TIMED_OUT:-0}" -eq 1 ]; then
     OUTCOME_STATUS="failure"

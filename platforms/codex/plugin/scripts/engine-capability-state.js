@@ -2078,7 +2078,9 @@ function classifyErrorContent(content) {
   if (
     text.includes('model is not supported when using codex') ||
     text.includes('model_not_supported') ||
-    text.includes('unsupported model')
+    text.includes('unsupported model') ||
+    text.includes('model unavailable') ||
+    text.includes('model is not available')
   ) {
     return 'model_unsupported';
   }

@@ -318,6 +318,8 @@ the cell finishes.
 
 ## Sending results to the registry (outbox)
 
+`engine-scorecard.js record` also accepts `record_kind: "field-outcome"` rows (closed field set: `engine`, `task_id`, `run_id`, `outcome` `usable|unusable|partial`, `evidence` string): they log an engine's first real-task outcome, every reader validates them but none counts them as qualification evidence, and the official-defaults builder (`build-qualification-defaults.js`) skips them.
+
 `engine-scorecard.js record` keeps writing the local scorecard. With `qualification_outbox.enqueue` on (default off) it also queues the completed record in `~/.autopilot/qualification-outbox` (one `enqueued` line per `record_id`, fsynced; an administration that did not complete writes nothing). `node scripts/qualification-send-queue.js flush` sends un-acked ids; with `qualification_outbox.transport` off (default) it sends nothing. The `git` transport works in a dedicated clone (`qualification_outbox.registry_repo`): ingest on a `bot/qualification-<id12>` branch, push that branch, open a pull request. It never pushes the default branch. An id is acked only when the record file is on the registry's default branch with identical bytes; the ack sha is the first commit on its first-parent chain that holds it. `engine-scorecard.js status` and `qualification-send-queue.js status` list pending, rejected and older-than-24h items. Strikes use the same queue (`enqueue --kind strike`). Plan: `project/plans/2026-10-16-bl0194-qualification-registry-move.md` section 4.
 
 ## Exporting local qualification state (`qualified.v1.json`)

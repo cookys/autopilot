@@ -128,6 +128,14 @@ const SUPERSESSION_FORBIDDEN_FIELDS = ['quality', 'capability_score', 'evidence'
 const SUPERSESSION_BODY_ALLOWED = new Set(['engine', 'runner', 'role']);
 const SUPERSESSION_STATE_VALUES = new Set(['superseded']);
 
+// Field-outcome rows (2026-11-22): a closed-field-set record_kind that logs the
+// outcome of an engine's FIRST real task (usable|unusable|partial) without ever
+// counting as qualification evidence. Readers validate the row (a malformed one is
+// a hard read error, same as a supersession marker) but never let it into
+// ordinaryRows, so current/report/ladder/seat-status/export-qualified ignore it.
+const FIELD_OUTCOME_VALUES = new Set(['usable', 'unusable', 'partial']);
+const FIELD_OUTCOME_FORBIDDEN_FIELDS = ['quality', 'capability_score', 'status', 'qualified_at', 'expires', 'cost'];
+
 const HELP_TEXT = `Usage:\n\
   node scripts/engine-scorecard.js record [--file <path>]\n\
   node scripts/engine-scorecard.js status   (registry outbox: pending, rejected, older than 24h)\n\
@@ -142,6 +150,9 @@ const HELP_TEXT = `Usage:\n\
   node scripts/engine-scorecard.js strip-expiry [--dry-run]\n\
   node scripts/engine-scorecard.js relabel-effort --to default --reason <text> [--event-id <N>]... [--evidence-event-id <N>]... [--dry-run]\n\
 \n  --file <path>  Read one JSON row from this file (optional with --supersede-provisional).\n\
+  record accepts record_kind=field-outcome rows (engine/task_id/run_id/outcome\n\
+    usable|unusable|partial/evidence string): a real-task outcome log that every\n\
+    qualification reader validates but never counts as qualification evidence.\n\
   --supersede-provisional  Append a record_kind=supersession marker for a prior event.\n\
   --supersedes-event-id <N>  Target event_id that must exist and match engine/runner/role.\n\
   --reason <string>  Supersession reason (required with --supersede-provisional).\n\
@@ -298,6 +309,15 @@ function readStorePartition(silentWarn = false, strict = false) {
       // Both readers validate; malformed marker = hard error (not a skip).
       validateSupersessionMarker(row);
       supersededEventIds.add(row.supersedes_event_id);
+      allRows.push(row);
+      continue;
+    }
+
+    if (row.record_kind === 'field-outcome') {
+      // Same contract as markers: always validated (malformed = hard read error)
+      // and excluded from ordinary-row derivation, so no qualification reader
+      // counts a field-outcome row as evidence.
+      validateFieldOutcomeRow(row);
       allRows.push(row);
       continue;
     }
@@ -609,6 +629,37 @@ function validateSupersessionMarker(row) {
   for (const field of SUPERSESSION_FORBIDDEN_FIELDS) {
     if (row[field] !== undefined) {
       failValidation(`supersession marker forbids field '${field}'`);
+    }
+  }
+}
+
+// Field-outcome rows: closed field set like supersession markers (plan-free
+// addition, 2026-11-22). The row logs a real-task outcome; it must never be
+// able to carry a qualification verdict, so the qualification-only fields are
+// forbidden and `evidence` is a string pointer, not an evidence block.
+function validateFieldOutcomeRow(row) {
+  const required = ['record_kind', 'engine', 'task_id', 'run_id', 'outcome', 'evidence'];
+  const missing = required.filter((field) => row[field] === undefined);
+  if (missing.length > 0) {
+    failValidation(`field-outcome row missing required field(s): ${missing.join(', ')}`);
+  }
+  if (row.record_kind !== 'field-outcome') {
+    failValidation(`field-outcome row record_kind must be 'field-outcome'`);
+  }
+  if (typeof row.engine !== 'string' || row.engine.trim().length === 0) {
+    failValidation('engine must be a non-empty string');
+  }
+  for (const field of ['task_id', 'run_id', 'evidence']) {
+    if (typeof row[field] !== 'string' || row[field].trim().length === 0) {
+      failValidation(`${field} must be a non-empty string`);
+    }
+  }
+  if (!FIELD_OUTCOME_VALUES.has(row.outcome)) {
+    failValidation(`field-outcome row: invalid outcome '${row.outcome}' (usable|unusable|partial)`);
+  }
+  for (const field of FIELD_OUTCOME_FORBIDDEN_FIELDS) {
+    if (row[field] !== undefined) {
+      failValidation(`field-outcome row forbids field '${field}'`);
     }
   }
 }
@@ -2415,7 +2466,13 @@ function cmdRecord(args) {
     : fs.readFileSync(0, 'utf8');
   const parsed = parseJsonObject(raw, 'record input');
 
-  validateRecordRow(parsed);
+  // A field-outcome row follows the marker path: its own closed field set, no
+  // REQUIRED_FIELDS qualification validation, no evidence-block binding.
+  if (parsed.record_kind === 'field-outcome') {
+    validateFieldOutcomeRow(parsed);
+  } else {
+    validateRecordRow(parsed);
+  }
 
   const stored = { ...parsed };
   delete stored.event_id;

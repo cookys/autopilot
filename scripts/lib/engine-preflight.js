@@ -41,6 +41,8 @@ const SCHEMA = 'autopilot.engine-preflight/1';
 const CAPACITY_SCHEMA = 'capacity.engines/1';
 const BURN_SCHEMA = 'capacity.burn_more/1';
 const CAPACITY_MAX_AGE_MS = 30 * 60 * 1000;
+const AUTH_CACHE_TTL_MS = 5 * 60 * 1000;
+const AUTH_NOTIFY_TTL_MS = 15 * 60 * 1000;
 const DEFAULT_WINDOW_MIN = 15;
 const PROBE_TIMEOUT_MS = 20000;
 const PROBE_EXIT = { 75: 'overloaded', 76: 'rate_limited', 77: 'unsupported' };
@@ -200,6 +202,64 @@ function loadRuns(dir) {
   return out;
 }
 
+function authFileForRunner(runner, env) {
+  if (runner === 'codex') {
+    return path.join(homeOf(env), '.codex', 'auth.json');
+  }
+  return null;
+}
+
+function writeJsonBestEffort(file, data) {
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(file, JSON.stringify(data));
+  } catch {
+    // Best-effort cache/notify state; never block preflight.
+  }
+}
+
+function checkAuthWithCache(runner, env, nowMs, dir) {
+  const authFile = authFileForRunner(runner, env);
+  if (!authFile) return null;
+  const cacheFile = path.join(dir, `auth-probe-${runner}.json`);
+  const cached = readJson(cacheFile);
+  if (
+    cached.ok &&
+    cached.value &&
+    typeof cached.value.checkedAt === 'number' &&
+    typeof cached.value.ok === 'boolean' &&
+    nowMs >= cached.value.checkedAt &&
+    (nowMs - cached.value.checkedAt) < AUTH_CACHE_TTL_MS
+  ) {
+    return cached.value.ok ? null : 'auth:missing';
+  }
+  let ok = false;
+  try {
+    const st = fs.statSync(authFile);
+    ok = st.isFile() && st.size > 0;
+  } catch {
+    ok = false;
+  }
+  writeJsonBestEffort(cacheFile, { ok, checkedAt: nowMs });
+  return ok ? null : 'auth:missing';
+}
+
+function shouldNotifyAuthMissing(runner, nowMs, dir) {
+  const notifyFile = path.join(dir, `auth-notify-${runner}.json`);
+  const prev = readJson(notifyFile);
+  if (
+    prev.ok &&
+    prev.value &&
+    typeof prev.value.notifiedAt === 'number' &&
+    nowMs >= prev.value.notifiedAt &&
+    (nowMs - prev.value.notifiedAt) < AUTH_NOTIFY_TTL_MS
+  ) {
+    return false;
+  }
+  writeJsonBestEffort(notifyFile, { notifiedAt: nowMs });
+  return true;
+}
+
 function probeCandidate(probe, candidate) {
   if (!probe) return { skip: null, warning: null };
   const result = spawnSync(probe, [candidate.runner, candidate.model], {
@@ -265,7 +325,8 @@ function preflight({ candidates, now, sources, preferBurnMore = false, localFirs
     const row = capacity.find((r) => r && r.harness === runner && r.model === model);
     const cap = row ? capacityReason(row) : null;
     const recent = recentReason({ runner, model }, runs, nowMs, windowMs);
-    let reason = cap || recent;
+    const auth = checkAuthWithCache(runner, env, nowMs, dir);
+    let reason = cap || recent || auth;
     let warning = null;
     if (!reason && probe) {
       const probed = probeCandidate(probe, { runner, model });
@@ -287,12 +348,20 @@ function preflight({ candidates, now, sources, preferBurnMore = false, localFirs
     chosen = { runner: first.runner, model: first.model, fallback: true };
     warnings.push('all_candidates_skipped_default_order');
   }
+  const authSkipped = skipped.find((s) => s.reason === 'auth:missing');
+  const fallback = (chosen && authSkipped)
+    ? { from: authSkipped.runner, to: chosen.runner, reason: 'auth:missing' }
+    : null;
+  if (fallback && shouldNotifyAuthMissing(authSkipped.runner, nowMs, dir)) {
+    fs.writeSync(2, `preflight: auth:missing for ${authSkipped.runner}; falling back to ${chosen.runner}\n`);
+  }
   return {
     schema: SCHEMA,
     chosen,
     skipped,
     warnings,
     burn_more: burnListed,
+    fallback,
     table_path: capacityPath,
     generated_at: capacityDoc && typeof capacityDoc.generated_at === 'string' ? capacityDoc.generated_at : null,
   };

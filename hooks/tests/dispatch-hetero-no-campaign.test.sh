@@ -19,7 +19,7 @@ for _git_cfg_i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
 done
 unset _git_cfg_i
 
-SCRIPT="$REPO_ROOT/scripts/dispatch-hetero.sh"
+SCRIPT="${HETERO_SCRIPT_OVERRIDE:-$REPO_ROOT/scripts/dispatch-hetero.sh}"
 SBX="$TEST_TMP/repo"
 mkdir -p "$SBX"
 git -C "$SBX" init -q -b develop
@@ -54,6 +54,7 @@ export AGY_FIXTURE_HELPER
 STUB="$TEST_TMP/agy-ok"
 cat > "$STUB" <<EOF
 #!/usr/bin/env bash
+sleep "\${STUB_SLEEP:-0}"
 echo ok > ok.txt
 git add ok.txt
 git -c user.email=t@t -c user.name=t commit -q -m "test: backlog S fix"
@@ -159,5 +160,21 @@ assert_file_exists "$E_MF" "(e) mode off still writes the run manifest"
 assert_not_contains "$(cat "$E_MF")" "campaign_scope" "(e) mode off manifest has no campaign_scope"
 E_ROW="$(grep -F '"branch":"feat/no-campaign-e"' "$B_LEDGER")"
 assert_not_contains "$E_ROW" "campaign_scope" "(e) mode off ledger row has no campaign_scope"
+
+# A repeated implementer-manifest write must preserve the true start time.
+OUT="$(STUB_SLEEP=2 run_dispatch --branch feat/no-campaign-timed --no-campaign --run-id no-campaign-timed)"; RC=$?
+assert_eq "0" "$RC" "(f) timed run exits 0: $OUT"
+TIMED_MF="$RUNS_DIR/no-campaign-timed.manifest.json"
+assert_file_exists "$TIMED_MF" "(f) timed run manifest written"
+node - "$TIMED_MF" <<'NODE'
+const fs = require('fs');
+const m = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+const start = Date.parse(m.started_at);
+const end = Date.parse(m.ended_at);
+if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) throw new Error('started_at must precede ended_at');
+if (Math.floor(start / 1000) !== m.started_epoch) throw new Error('started_at must match started_epoch');
+if (m.ended_epoch - m.started_epoch < 2) throw new Error('run must span at least two seconds');
+NODE
+assert_eq "0" "$?" "(f) timed run preserves the start and spans at least two seconds"
 
 finalize_test

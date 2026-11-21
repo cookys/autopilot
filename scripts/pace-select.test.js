@@ -358,7 +358,6 @@ test('(a) reset-weighted quota outranks linear pace; claude rows are never candi
       { engine: 'glm', pool: 'glm', slack_pts: -3 },
       { engine: 'codex', reason: 'unknown' },
       { engine: 'grok', pool: 'grok-cli', slack_pts: 14 },
-      { engine: 'kimi', reason: 'unknown', basis: 'none' },
       { engine: 'opencode', reason: 'unknown' },
     ],
   });
@@ -694,7 +693,6 @@ test('(f) alias rows of one key: the larger fresh slack is used', () => {
       { engine: 'glm', reason: 'unknown' },
       { engine: 'codex', reason: 'unknown' },
       { engine: 'grok', pool: 'grok-cli(alias 2)', slack_pts: 11 },
-      { engine: 'kimi', reason: 'unknown', basis: 'none' },
       { engine: 'opencode', reason: 'unknown' },
     ],
   });
@@ -739,7 +737,6 @@ test('(g) scarce codex row 35 pts ahead is a known reading with slack -35, not u
       { engine: 'glm', reason: 'unknown' },
       { engine: 'codex', pool: 'codex A', slack_pts: -35, basis: 'pace', demoted: 'ahead' },
       { engine: 'grok', reason: 'unknown' },
-      { engine: 'kimi', reason: 'unknown', basis: 'none' },
       { engine: 'opencode', reason: 'unknown' },
     ],
   });
@@ -2284,6 +2281,7 @@ test('behind-pace (4): kimi behind, prompt passes gate, broker available -> kimi
     assert.equal(typeof expectedKimiModel, 'string');
     assert.notEqual(expectedKimiModel, '');
     assert.equal(res.engine, 'kimi');
+    assert.ok(res.candidates.some((candidate) => candidate.engine === 'kimi'), 'kimi remains in the pool while its broker socket is listening');
     assert.equal(res.runner, 'kimi');
     assert.equal(res.model, expectedKimiModel);
     assert.equal(res.basis, 'proxy_runs');

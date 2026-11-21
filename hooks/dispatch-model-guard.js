@@ -308,7 +308,7 @@ function checkPmFleetTask(input, toolInput, prompt) {
   warnIfPmSeatUndetermined(input);
   if (!isPmConsole(input)) return;
   const subagentType = String(toolInput.subagent_type || '').trim();
-  if (PM_READ_ONLY_SUBAGENT_TYPES.has(subagentType) || String(toolInput.model || '').toLowerCase().includes('haiku')) return;
+  if (PM_READ_ONLY_SUBAGENT_TYPES.has(subagentType)) return;
   const hasEngine = Boolean(engineTokenFromPrompt(prompt))
     || Boolean(findHeadMatch(prompt, /^Engine:\s*\S/));
   if (!hasEngine) return;
@@ -746,7 +746,7 @@ try {
   // `(intentional: …)` does not skip it: handleGuard's allow path is below.
   denyIfMissingCostLine(config, promptRaw, modelRaw);
 
-  // PM Console hard block: Engine dispatches require an open Fleet-Task, except read-only types and Haiku models.
+  // PM Console hard block: Engine dispatches require an open Fleet-Task, except read-only types.
   checkPmFleetTask(input, toolInput, promptRaw);
 
   // Mechanical subagent reroute on PM / lead seats.

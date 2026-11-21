@@ -68,11 +68,11 @@ for (const cols of [120, 160]) for (const mode of [false, true]) test(`X4: ${col
   const band = await mountBand($, cols, 30)
   const tree = await band.drawn() as Node
   const summary = text(tree)
-  expect(summary).toContain('視窗高度不足')
-  expect(summary).toContain('目前 2')
+  expect(summary).not.toContain('視窗高度不足')
+  expect(summary).toContain('ⓘ')
+  expect(summary.endsWith('▴')).toBe(true)
   expect(summary).not.toContain('1 現況')
-  expect(displayWidth(text(tree.children?.[0]))).toBeLessThanOrEqual(cols - 4)
-  expect(tree.children?.filter(n => n?.type === 'Box').length).toBe(1)
+  expect(displayWidth(summary)).toBeLessThanOrEqual(cols)
   await band.unmount()
   await $.session.end({ reason: 'exit' })
 })
@@ -85,12 +85,11 @@ for (const [cols, rows] of [[120, 30], [160, 40]]) for (const open of [false, tr
     const band = await mountBand($, cols, rows)
     const tree = await band.drawn() as Node
     const summary = text(tree)
-    expect(summary).toContain('視窗高度不足')
-    expect(summary).toContain('目前 2')
-    expect(summary).not.toContain('1 現況')
-    expect(summary).not.toContain('watcher 沒有在發佈')
-    expect(displayWidth(text(tree.children?.[0]))).toBeLessThanOrEqual(cols - 4)
-    expect(tree.children?.filter(n => n?.type === 'Box').length).toBe(1)
+    expect(summary).not.toContain('視窗高度不足')
+    expect(summary).toContain('資料過舊') // v7.4: the stale reason stays on the one band row
+    expect(summary).not.toContain('1 現況') // maxRows 2: no frame and no tab row, whatever the pane state
+    expect(summary.endsWith(open ? '▾' : '▴')).toBe(true)
+    expect(displayWidth(summary)).toBeLessThanOrEqual(cols)
     await band.unmount()
     await $.session.end({ reason: 'exit' })
   })
@@ -119,7 +118,7 @@ for (const [cols, rows] of [[120, 30], [160, 40]]) {
     const drawn = await band.drawn()
     const nav = buttons(drawn).filter(n => /^(tab:|forge$)/.test(n.props?.key ?? ''))
     expect(nav).toEqual([])
-    expect(text(drawn)).toContain('視窗高度不足')
+    expect(text(drawn)).not.toContain('視窗高度不足') // v7.4: the closed band is one row, no height note
     await band.unmount()
     await $.session.end({ reason: 'exit' })
   })
@@ -170,7 +169,7 @@ for (const cols of [80, 120, 160]) test(`Z3: page 0 is labelled 寵物 in both s
   const drawn = await band.drawn()
   const forgeBand = buttons(drawn).find(n => n.props?.key === 'forge')
   expect(forgeBand).toBeUndefined()
-  expect(text(drawn)).toContain('視窗高度不足')
+  expect(text(drawn)).not.toContain('視窗高度不足')
   await band.unmount()
   const pane = await mountPane($, cols, 24)
   const forgePane = buttons(await pane.drawn()).find(n => n.props?.hotkey === '0')
@@ -179,12 +178,12 @@ for (const cols of [80, 120, 160]) test(`Z3: page 0 is labelled 寵物 in both s
   await $.session.end({ reason: 'exit' })
 })
 
-test('X1: a closed band under 12 rows is one height hint and opens no page', async ($, on) => {
+test('X1: a closed band with no room for a frame is one band row and opens no page', async ($, on) => {
   const h = host(on)
   await $.session.start({ surface: 'terminal', cwd: REPO })
   const band = await mountBand($, 120, 30)
   const tree = await band.drawn() as Node
-  expect(text(tree)).toContain('視窗高度不足')
+  expect(text(tree)).not.toContain('視窗高度不足')
   expect(buttons(tree).filter(n => /^(tab:|forge$)/.test(n.props?.key ?? ''))).toEqual([])
   expect(h.isOpen()).toBe(false)
   await band.unmount()
@@ -226,8 +225,8 @@ test('W3: mounted remote detail buttons page through the full text and return to
 const mountTallBand = ($: any, columns: number, rows: number, legacyTabs = false) => $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', props: { bodyColumns: columns, maxRows: rows, view: { agentId: undefined }, ...(legacyTabs ? { legacyTabs: true } : {}) }, viewport: { columns, rows: 50, isFullscreen: true } })
 const toggleOf = async (band: any) => (await band.findAll({ type: 'Button' }) as Node[]).find(b => b.props?.key === 'pane-toggle')
 
-// the toggle lives on the BandBar node, which the band draws when the shell does not fit (narrow width); the shell and the short-height note carry no toggle
-test('B2-7: the band toggle opens the pane when closed and closes it when open (the pane\'s own paths)', async ($, on) => {
+// v7.4: the toggle is on the one band row at every width and height; open/closed is the band's own state (no host Pane)
+test('B2-7: the band toggle opens the page when closed and closes it when open (the band\'s own state)', async ($, on) => {
   const h = host(on)
   await $.session.start({ surface: 'terminal', cwd: REPO })
   await h.clock.advance(5000)
@@ -238,46 +237,46 @@ test('B2-7: the band toggle opens the pane when closed and closes it when open (
   expect(text(t1)).toBe('▴')
   await closed.press({ key: 'pane-toggle' })
   await h.clock.advance(0)
-  expect(h.isOpen(), 'pressed while closed: the pane opened').toBe(true)
+  expect(h.isOpen(), 'v7.4 opens no host pane').toBe(false)
   await closed.unmount()
   const open = await mountTallBand($, 50, 12)
   const t2 = await toggleOf(open)
-  expect(text(t2), 'the open band draws ▾').not.toBe('▴')
+  expect(text(t2), 'the open band draws ▾').toBe('▾')
+  expect(text(await open.drawn()), 'pressed while closed: the frame is drawn').toContain('╭─')
   await open.press({ key: 'pane-toggle' })
   await h.clock.advance(0)
-  expect(h.isOpen(), 'pressed while open: the pane closed').toBe(false)
   await open.unmount()
+  const again = await mountTallBand($, 50, 12)
+  expect(text(await toggleOf(again)), 'pressed while open: closed again').toBe('▴')
+  expect(text(await again.drawn())).not.toContain('╭─')
+  await again.unmount()
   await $.session.end({ reason: 'exit' })
 })
 
-test('B2-7 negative control: legacy tab mode and the short-height band draw no toggle', async ($, on) => {
+test('B2-7 negative control: legacy tab mode draws no toggle; the short-height v7.4 band keeps it', async ($, on) => {
   host(on)
   await $.session.start({ surface: 'terminal', cwd: REPO })
   const legacy = await mountTallBand($, 120, 12, true)
   expect(await toggleOf(legacy), 'legacy mode: no toggle').toBeUndefined()
   await legacy.unmount()
-  const short = await mountBand($, 120, 30) // maxRows 2: the one-row 視窗高度不足 note
-  expect(await toggleOf(short), 'short-height band: one row, no toggle').toBeUndefined()
+  const short = await mountBand($, 120, 30) // maxRows 2: v7.4 draws the band row only, with its toggle
+  expect(await toggleOf(short), 'short-height v7.4 band: one row with the toggle').toBeDefined()
   await short.unmount()
   await $.session.end({ reason: 'exit' })
 })
 
-// r3 x v7.4 S1: the r3 fold cell (shell rows) and the S1 pane toggle (one-line BandBar) both live left of the host [-]; neither replaces the other
-test('B2-7 x r3: the shell draws the r3 fold cell, the narrow bar draws the pane toggle, and pressing the fold never opens the pane', async ($, on) => {
+// r3 x v7.4: the O4 shell and its r3 fold cell are gone in v7.4 mode; every width draws the same band row with the pane toggle, and pressing the toggle opens no host pane
+test('B2-7 x r3: no O4 fold cell at 120 or 50 columns; the pane toggle is drawn at both', async ($, on) => {
   const h = host(on)
   await $.session.start({ surface: 'terminal', cwd: REPO })
   await h.clock.advance(5000)
   const buttons = async (band: any) => (await band.findAll({ type: 'Button' }) as Node[])
-  const wide = await mountTallBand($, 120, 12)
-  const wideFold = (await buttons(wide)).find(b => b.props?.key === FOLD_KEY)
-  expect(wideFold, 'shell band: the r3 fold cell is drawn').toBeDefined()
-  expect(await toggleOf(wide), 'shell band: no pane toggle on the shell rows').toBeUndefined()
-  await wide.press({ key: FOLD_KEY })
-  await h.clock.advance(0)
-  expect(h.isOpen(), 'the r3 fold only folds the band; the pane stays closed').toBe(false)
-  await wide.unmount()
-  const narrow = await mountTallBand($, 50, 12)
-  expect(await toggleOf(narrow), 'narrow bar: the pane toggle is drawn').toBeDefined()
-  await narrow.unmount()
+  for (const cols of [120, 50]) {
+    const band = await mountTallBand($, cols, 12)
+    expect((await buttons(band)).find(b => b.props?.key === FOLD_KEY), cols + ': no r3 fold cell').toBeUndefined()
+    expect(await toggleOf(band), cols + ': the pane toggle is drawn').toBeDefined()
+    await band.unmount()
+  }
+  expect(h.isOpen()).toBe(false)
   await $.session.end({ reason: 'exit' })
 })

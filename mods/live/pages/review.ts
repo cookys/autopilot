@@ -83,13 +83,16 @@ function reviewRow(ctx: PageCtx, label: string, seats: readonly ReviewSeat[], ki
   for (const s of seats) {
     const st = STATES[stateOf('seat', { kind, verdict: s.verdict ?? null, status: s.status }).id]
     const word = (s.verdict ?? '') !== '' ? (s.verdict as string) : (s.status ?? GLYPHS.state.unknown)
-    out.push(seg(ctx.t('v74.e.rv_engine', { name: seatLabel(s, seats) }) + ' '), seg(word, st.wordKey === undefined ? {} : { color: st.wordKey }), seg('  '))
+    const name = seatLabel(s, seats)
+    const suffix = ctx.t('v74.e.rv_engine', { name: '' }).trim()
+    out.push(seg((name.trimEnd().endsWith(suffix) ? name : ctx.t('v74.e.rv_engine', { name })) + ' '), seg(word, st.wordKey === undefined ? {} : { color: st.wordKey }), seg('  '))
   }
   out.push(seg('· ' + ctx.t('v74.e.rv_round', { n: gen })), ...tail)
   return truncateSegs(out, ctx.size.cols)
 }
 
 function codeLabel(c: CodeReviewView): string {
+  if (c.branch?.trim()) return c.branch
   return c.head !== null && c.head !== '' ? c.head.slice(0, 8) : c.base !== null && c.base !== '' ? c.base.slice(0, 8) : GLYPHS.structure.empty
 }
 
@@ -145,7 +148,7 @@ function decidedRows(ctx: PageCtx, dv: DecisionsView, folded: boolean): Row[] {
 function parsePlanIdentity(p: PlanReviewView, live: LiveSnapshot): { name: string; sha: string | null; verdictWord: string | null } {
   const rawId = p.logical_plan_id ?? live.detail.project ?? live.project_key ?? GLYPHS.structure.empty
   const idMatch = /^(.+)@([0-9a-f]{7,40})$/i.exec(rawId)
-  const name = idMatch !== null ? idMatch[1] : rawId
+  const name = p.branch?.trim() ? p.branch : idMatch !== null ? idMatch[1] : rawId
   let sha: string | null = idMatch !== null ? idMatch[2].slice(0, 8) : null
   let verdictWord: string | null = null
   if (p.verdict !== null && p.verdict.trim() !== '') {

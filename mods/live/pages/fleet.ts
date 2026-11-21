@@ -65,7 +65,7 @@ function othersRows(ctx: FleetCtx, wide: boolean): Row[] {
   const out: Row[] = [openRule(t('v74.f.sec_others', { n: o.cards.length }), age, wide)]
   for (const c of o.cards) {
     const title = c.title ?? truncateToWidth(c.question, 24)
-    out.push([{ text: ' ' }, { text: GLYPHS.structure.bullet + ' ', color: PALETTE.attention }, { text: c.id + ' ' + title + ' ' + t('v74.f.others_answer', { where: c.where }) }])
+    out.push([{ text: ' ' }, { text: GLYPHS.structure.remoteDecision + ' ', color: PALETTE.attention }, { text: c.id + ' ' + title + '  ' + t('v74.f.others_answer', { where: c.where.split('/').filter(Boolean).pop() ?? c.where }) }])
   }
   return out
 }
@@ -77,12 +77,12 @@ function runRow(ctx: FleetCtx, r: LivePaneRow, sid: StateId, block: Block): Row 
   const { t, nowMs } = ctx
   const st = STATES[sid]
   const engine = [r.runner, r.model].filter((x): x is string => x !== null && x.trim() !== '').filter((x, i, a) => a.indexOf(x) === i).join('/')
-  const parts = [r.run_id, ...(engine === '' ? [] : [engine]), ...(r.role === null || r.role === '' ? [] : [r.role])]
+  const parts = [[r.run_id, engine].filter(Boolean).join(' '), ...(r.role === null || r.role === '' ? [] : [r.role])]
   const tail: string | null =
     block === 'done' ? (runEndedMs(r) === null ? null : t('v74.f.run_done', { age: ageText(t, Math.max(0, nowMs - (runEndedMs(r) as number))) }))
-    : block === 'failed' ? (r.final_status ?? (r.rc === null ? null : 'rc ' + r.rc))
+    : block === 'failed' ? (r.final_status !== null && /time[-_ ]?out|timed[-_ ]?out/i.test(r.final_status) ? (r.elapsed_s === null ? t('v74.e.st_timeout_unknown') : t('v74.e.st_timeout', { n: r.elapsed_s })) : r.final_status ?? (r.rc === null ? null : 'rc ' + r.rc))
     : r.elapsed_s === null ? null : t('v74.f.run_running', { age: durText(t, r.elapsed_s) })
-  const seg: Seg = { text: parts.join(' · ') + (tail === null ? '' : ' · ' + tail) }
+  const seg: Seg = { text: parts.join(' · ') + (tail === null ? '' : '  · ' + tail) }
   return [{ text: ' ' }, { text: st.glyph + ' ', ...(st.key === undefined ? {} : { color: st.key }) }, seg]
 }
 

@@ -114,6 +114,40 @@ let sending = false
 // The real send of `only`. First answers: ONE `[待決回覆]` prompt. Reopened cards: one `[待決回覆·更正]` prompt each. The claim is never awaited on this path (PM rule 2026-11-08: a claim
 // never blocks the send, and the pane froze for up to 120 s per card when it did): answerIds is what holdSend's background claims have already returned. Nothing here awaits the prompt: `post` is fired and only its refusal is handled. The cards are
 // marked sent BEFORE the prompt goes; a prompt the session refuses takes the marks back, so a card never stays in a sending state. Returns the ids of the first answers that went out.
+// v7.4 s: write each answered card into the card store (open-decision.js close) before any model turn.
+// Only a card whose close succeeded is marked sent and named in the reply; a failed close (non-zero
+// exit, timeout, no script) leaves the card on the list and comes back in `failed`. A card with no
+// answer (no option, empty note) is never closed. `post` is optional and is not awaited.
+export async function writeV74Answers(d: {
+  cards: readonly LiveDecision[]
+  state: DecideState
+  now: number
+  run: (args: string[]) => Promise<boolean>
+  post?: (text: string) => Promise<unknown>
+}): Promise<{ state: DecideState; failed: string[] }> {
+  const ready = d.cards.filter(c => c.id !== null && decideOpen(c, d.state) && decideLine(c, d.state) !== null)
+  const sent = { ...d.state.sent }
+  const closed: LiveDecision[] = []
+  const failed: string[] = []
+  for (const c of ready) {
+    const id = c.id as string
+    const ans = decideAnswer(c, d.state)
+    if (ans === null) continue
+    const hasNote = ans.freeText !== undefined && ans.freeText !== ''
+    if (!('option' in ans) && !hasNote) continue
+    const args = ['close', '--id', id]
+    if ('option' in ans) args.push('--option', ans.option)
+    if (hasNote) args.push('--free-text', ans.freeText as string)
+    if (await d.run(args).catch(() => false)) { sent[id] = d.now; closed.push(c) } else failed.push(id)
+  }
+  const next: DecideState = { ...d.state, sent }
+  if (d.post !== undefined && closed.length > 0) {
+    const reply = decideReply(closed, d.state)
+    if (reply !== null) void d.post(reply.text).catch(() => undefined)
+  }
+  return { state: next, failed }
+}
+
 export async function sendNow(d: SendDeps, only: ReadonlySet<string>): Promise<string[]> {
   if (sending) return []
   sending = true

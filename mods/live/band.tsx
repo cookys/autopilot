@@ -271,7 +271,8 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
     const draw = <Text key="[REDACTED]" {...drawSeg(moreSeg())} wrap="truncate">{glyph}</Text>
     return [<Text key="tgpad">{' '.repeat(pad)}</Text>, Button === undefined ? draw : <Button key="pane-toggle" plain onPress={onTogglePane}>{draw}</Button>]
   })()
-  return { node: <Box flexDirection="column"><Box>{left.nodes}{speed}{qnode}{toggleNode}</Box>{repairBelow ? <Box height={1} width={columns}><Text {...drawSeg(staleBadge('  autopilot status runs --watch'))}>{'  autopilot status runs --watch'}</Text></Box> : noTabs ? <Box height={1} width={columns} /> : stripRow}</Box>, stripRow, strip, tabsAt: gap }
+  const row1 = <Box>{left.nodes}{speed}{qnode}{toggleNode}</Box>
+  return { row1, node: <Box flexDirection="column">{row1}{repairBelow ? <Box height={1} width={columns}><Text {...drawSeg(staleBadge('  autopilot status runs --watch'))}>{'  autopilot status runs --watch'}</Text></Box> : noTabs ? <Box height={1} width={columns} /> : stripRow}</Box>, stripRow, strip, tabsAt: gap }
 }
 
 // the rule under the bar

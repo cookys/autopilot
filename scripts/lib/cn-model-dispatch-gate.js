@@ -10,11 +10,15 @@
 //                 `Reads-Transcript: yes` header line in the first 8 lines of the brief/spec)
 //   [sensitive]   the repo name or any path in the task's read/write scope matches the sensitive list
 //                 (money/payments, PII, private-home data, keys/credentials, customer data)
-//   [review-role] role is in review_roles (reviewer, review, qc, qc_panel, plan_review, loop_reviewer,
+//   [review-role] role is in review_roles (reviewer, review, qc, qc_panel, plan_review, loop_reviewer, ux-reference-reviewer,
 //                 verifier), regardless of size, including a missing size. The local served family on a
 //                 local-sandbox endpoint is exempt from THIS class only when review_local_exceptions in
 //                 the shipped defaults names that endpoint, now < until, and the repo is not in
 //                 local_deny_repos (d-ede04b92, PM 01M7JPZQ; today qwen_local until 2026-11-21T23:59:59+08:00).
+//                 An entry may carry optional repos (globs on the repo directory name) and roles (every review
+//                 role the task names must be listed); an entry without them applies to any repo and role.
+//                 Today's second entry: glm_local, repos thinksmart*, role ux-reference-reviewer only (a
+//                 non-scoring UX reference reviewer), until 2026-11-28T23:59:59+08:00 (PM 01M7XP968Q66).
 //                 Past until, with no entry, or on a denied repo, the class is review-role. A repo
 //                 .claude/cn-model-gate.json cannot add, extend, or shrink an entry: the window is the
 //                 operator's decision, not a repo's. Every other check still applies. A cloud endpoint
@@ -337,13 +341,21 @@ function gateNow(opts) {
   return Date.now();
 }
 
-function reviewLocalExempt(endpoint, nowMs, root, denyGlobs) {
+// An entry may narrow itself with repos (globs on the repo directory name) and roles (every review
+// role the task names must be in the list). An entry without them applies to any repo and role.
+function reviewLocalExempt(endpoint, nowMs, root, denyGlobs, reviewHits = []) {
   if (nowMs == null) return false;
-  if (matchesAny(path.basename(root), denyGlobs)) return false;
+  const repoName = path.basename(root);
+  if (matchesAny(repoName, denyGlobs)) return false;
   const ep = String(endpoint || '');
   return shippedReviewExceptions().some((e) => {
     if (!e || typeof e !== 'object') return false;
     if (String(e.endpoint || '') !== ep) return false;
+    if (e.repos !== undefined && !(Array.isArray(e.repos) && matchesAny(repoName, e.repos.map(String)))) return false;
+    if (e.roles !== undefined) {
+      const roles = Array.isArray(e.roles) ? e.roles.map((r) => String(r).toLowerCase()) : [];
+      if (!reviewHits.every((r) => roles.includes(r))) return false;
+    }
     const until = Date.parse(String(e.until || ''));
     return Number.isFinite(until) && nowMs < until;
   });
@@ -506,8 +518,9 @@ function check(opts = {}) {
   // env/header Role: implementer cannot lower. The local served family skips this class only
   // inside a shipped review_local_exceptions window on a repo outside local_deny_repos.
   const reviewRolesToCheck = [f.role, f.railRole, f.headerRole].filter(Boolean);
-  if (reviewRolesToCheck.some((r) => cfg.review_roles.includes(r))) {
-    const exempt = localServed && reviewLocalExempt(effectiveEndpoint, gateNow(opts), root, cfg.local_deny_repos);
+  const reviewHits = reviewRolesToCheck.filter((r) => cfg.review_roles.includes(r));
+  if (reviewHits.length) {
+    const exempt = localServed && reviewLocalExempt(effectiveEndpoint, gateNow(opts), root, cfg.local_deny_repos, reviewHits);
     if (!exempt) return block('review-role');
   }
   // Proven-local served family: size above S is not a CN core-size bar (gpu-lead 27B). A missing size still fails closed below.

@@ -862,3 +862,30 @@ test('local by URL: loopback, gateway host, external host, cloud CN, model auto,
   });
   assert.equal(suffixed.allowed, true, 'case and a model suffix still name the local endpoint');
 });
+
+// Scoped review exception (PM 01M7XP968Q66): glm_local may act as the non-scoring ThinkSmart UX
+// reference reviewer only. repos/roles on an entry narrow it; an entry without them is unchanged.
+const GLM_BEFORE = '2026-11-25T12:00:00+08:00';
+const GLM_AFTER = '2026-11-29T00:00:00+08:00';
+const GLM_LOCAL = { runner: 'cc-shim', model: 'GLM-5.3', endpoint: 'glm_local' };
+const GLM_REF = { AUTOPILOT_TASK_SIZE: 'S', AUTOPILOT_TASK_ROLE: 'ux-reference-reviewer', AUTOPILOT_TASK_SCOPE: 'docs/a.md', AUTOPILOT_TASK_CLASS: 'test-scaffold' };
+
+test('review_local_exceptions: glm_local is a reference reviewer for thinksmart* only, in the shipped window', () => {
+  const ts = excRepo('thinksmart-web');
+  const other = excRepo('autopilot-glm-ref');
+  const ok = gate.check({ ...GLM_LOCAL, env: GLM_REF, cwd: ts, now: GLM_BEFORE });
+  assert.equal(ok.allowed, true, 'thinksmart + glm_local + reference role is allowed');
+  assert.equal(ok.family, 'zhipu');
+  const scoring = gate.check({ ...GLM_LOCAL, env: { ...GLM_REF, AUTOPILOT_TASK_ROLE: 'reviewer' }, cwd: ts, now: GLM_BEFORE });
+  assert.equal(scoring.cls, 'review-role', 'a scoring reviewer role stays refused');
+  assert.equal(gate.check({ ...GLM_LOCAL, env: { ...GLM_REF, AUTOPILOT_TASK_ROLE: 'qc' }, cwd: ts, now: GLM_BEFORE }).cls, 'review-role');
+  assert.equal(gate.check({ ...GLM_LOCAL, env: GLM_REF, cwd: other, now: GLM_BEFORE }).cls, 'review-role', 'another repo is refused');
+  assert.equal(gate.check({ ...GLM_LOCAL, env: GLM_REF, cwd: ts, now: GLM_AFTER }).cls, 'review-role', 'past until is refused');
+  assert.equal(gate.check({ ...GLM_LOCAL, env: GLM_REF, cwd: ts, now: '2026-11-28T23:59:59+08:00' }).cls, 'review-role', 'now == until is refused');
+  assert.equal(gate.check({ ...GLM_LOCAL, env: { ...GLM_REF, AUTOPILOT_TASK_ROLE: 'implementer' }, cwd: ts, now: GLM_BEFORE }).allowed, true, 'implementer role unaffected');
+  // a brief Role: header that names a scoring role cannot hide behind the reference env role
+  const hdr = briefFile('glm-ref-hdr.md', 'Role: reviewer\nSize: S\nScope: docs/a.md\n');
+  assert.equal(gate.check({ ...GLM_LOCAL, env: { ...GLM_REF }, files: [hdr], cwd: ts, now: GLM_BEFORE }).cls, 'review-role', 'a scoring header role still blocks');
+  // qwen_local entry without repos/roles behaves as before, on any repo and role
+  assert.equal(gate.check({ ...EXC_LOCAL, env: EXC_REV, cwd: other, now: EXC_BEFORE }).allowed, true, 'qwen_local unchanged');
+});

@@ -1,12 +1,12 @@
 # fleet 與 autopilot:誰管什麼
 
-一句話:fleet 管「工單與看板」——任務、巡邏、消息、長工作的等待與取件,跨座位運作;autopilot 管「session 內」——hooks 把關、skills 方法論、決策卡、派工軌,在你這個座位內運作。
+一句話:fleet 管「工單與看板」——任務、巡查、訊息、長工作的等待與取件,跨席位運作;autopilot 管「session 內」——hooks 把關、skills 方法論、決策卡、派工軌,在你這個席位內運作。
 
 | 職責 | 歸屬 | 入口 |
 |------|------|------|
 | 工單（tasks） | fleet | `fleet task show <id>`、PM console 的任務清單 |
-| 巡邏 / 看板 | fleet | `fleet pm status`(每個 project 一行);stuck/overdue 就 `fleet pm <project> status` 下钻 |
-| 消息 | fleet | fleet 的 send / messaging(座位間通訊) |
+| 巡查 / 看板 | fleet | `fleet pm status`(每個 project 一行);stuck/overdue 就 `fleet pm <project> status` 往下查 |
+| 訊息 | fleet | fleet 的 send / messaging(席位間通訊) |
 | 長工作等待(watch)、上傳(upload)、取件(fetch) | fleet | `fleet watch`(完整參數與用法見 fleet plugin 的 `fleet-usage` skill) |
 | session 內 gates(hooks) | autopilot | [hooks/README.md](../../hooks/README.md) |
 | skills(方法論流程) | autopilot | [docs/guide/skills.md](skills.md) |
@@ -15,9 +15,9 @@
 
 ## 遇到 X 去哪裡
 
-- **不知道哪些工單在跑、誰卡住** → `fleet pm status`;哪個 project 顯示 stuck/overdue,就用 `fleet pm <project> status` 下钻(project 名稱,或 task id / 8 字以上前綴)。
+- **不知道哪些工單在跑、誰卡住** → `fleet pm status`;哪個 project 顯示 stuck/overdue,就用 `fleet pm <project> status` 往下查(project 名稱,或 task id / 8 字以上前綴)。
 - **工作超過 15 分鐘** → 背景起跑 + `fleet watch --pid <pid> --log <abs log> --task <fleet task id>`(session 內用 fleet MCP 的 `watch` tool,傳 pid、log 路徑與 task id),絕不 sleep、不輪詢。完整參數以 fleet plugin 的 `fleet-usage` skill 為準。
-- **要傳消息、下工單、取回產物** → fleet 的 messaging / upload / fetch,不是 autopilot。
+- **要傳訊息、下工單、取回產物** → fleet 的 messaging / upload / fetch,不是 autopilot。
 - **派工被擋下** → 看下面的「派工被擋下時」。
 - **要發決策卡 / 問 PM** → `scripts/open-decision.js`。
 - **不知道該用哪個 skill** → [docs/guide/skills.md](skills.md) 的 31 個 skill 目錄。
@@ -25,7 +25,7 @@
 
 ## 派工被擋下時
 
-PM console 座位派工時,`hooks/dispatch-model-guard.js` 對帶 `Engine:` 標頭的 subagent brief 做 Fleet-Task 硬阻擋;read-only brief(`Explore` / `Plan` / `web-fetch` / `claude-code-guide`)與 haiku 席位不查。三種擋下與修法(hook 原文):
+PM console 席位派工時,`hooks/dispatch-model-guard.js` 對帶 `Engine:` 標頭的 subagent brief 做 Fleet-Task 硬阻擋;read-only brief(`Explore` / `Plan` / `web-fetch` / `claude-code-guide`)與 haiku 席位不查。三種擋下與修法(hook 原文):
 
 | 擋下原因 | hook 原文 | 修法 |
 |----------|-----------|------|

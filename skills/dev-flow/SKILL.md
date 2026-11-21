@@ -408,8 +408,8 @@ foreground `sleep`, never `Monitor`.
 
 預期超過 15 分鐘的工作在背景起跑,並綁定到對應的 fleet 任務:開跑後用
 `fleet watch --pid <pid> --log <abs log> --task <fleet task id>`(session 內用 fleet MCP 的
-`watch` tool,傳 pid、log 路徑與 task id),讓 courier 在進程結束、檔案出現、命令 exit 0 或
-timeout 時喚醒座位;絕不 sleep、不輪詢。完整參數與用法以 fleet plugin 的 `fleet-usage` skill 為準。
+`watch` tool,傳 pid、log 路徑與 task id),讓 courier 在程序結束、檔案出現、指令 exit 0 或
+timeout 時喚醒席位;絕不 sleep、不輪詢。完整參數與用法以 fleet plugin 的 `fleet-usage` skill 為準。
 
 ### Urgent
 

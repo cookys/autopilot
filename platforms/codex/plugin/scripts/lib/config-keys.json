@@ -736,6 +736,27 @@
       ]
     },
     {
+      "name": "depth0_delegate_gate.zsh_syntax",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": "deny",
+      "readers": [
+        "hooks/depth0-delegate-gate.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_BASH_GUARD_ZSH_SYNTAX_MODE"
+      ],
+      "summary": "What to do when a Bash command contains zsh-only parameter flags, glob qualifiers or =(...) temp-file process substitution; single-quoted text is ignored: values are deny, warn, off; default deny.",
+      "type": "enum",
+      "allowed": [
+        "deny",
+        "warn",
+        "off"
+      ]
+    },
+    {
       "name": "depth0_delegate_gate.secret_print",
       "kind": "config_key",
       "audience": "user",
@@ -4961,6 +4982,21 @@
         "depth0_delegate_gate.rm_wrapped"
       ],
       "summary": "Environment override of depth0_delegate_gate.rm_wrapped; values are off, warn, deny (default deny); a garbage value maps to deny."
+    },
+    {
+      "name": "AUTOPILOT_BASH_GUARD_ZSH_SYNTAX_MODE",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/depth0-delegate-gate.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "depth0_delegate_gate.zsh_syntax"
+      ],
+      "summary": "Environment override of depth0_delegate_gate.zsh_syntax; values are off, warn, deny (default deny); a garbage value maps to deny."
     },
     {
       "name": "AUTOPILOT_BASH_GUARD_SECRET_MODE",

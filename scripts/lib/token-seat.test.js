@@ -14,6 +14,9 @@ const { spawnSync } = require('node:child_process');
 
 const REPO = path.resolve(__dirname, '../..');
 const TOKEN = 'test-token-A';
+const FAKE_URL = 'http://127.0.0.1:9/anthropic';
+const FAKE_AUTH = 'fake-token-0000';
+const FAKE_KEY = 'fake-key-0000';
 const EXPECT = crypto.createHash('sha256').update(TOKEN).digest('hex');
 const EMPTY = crypto.createHash('sha256').update('').digest('hex');
 const REFUSAL = require('./token-seat').REFUSAL;
@@ -45,6 +48,9 @@ function baseEnv(s, extra) {
     PATH: `${s.bin}${path.delimiter}${process.env.PATH}` };
   delete env.CLAUDE_CODE_OAUTH_TOKEN;
   delete env.AUTOPILOT_TOKEN_SEAT;
+  delete env.ANTHROPIC_BASE_URL;
+  delete env.ANTHROPIC_AUTH_TOKEN;
+  delete env.ANTHROPIC_API_KEY;
   delete env.BENCH_CREDENTIALS;
   delete env.SEED_TEST_PAUSE_AFTER_WRITE_MS;
   for (const [k, v] of Object.entries(extra || {})) {
@@ -78,9 +84,15 @@ function loadExtra(rel, names) {
 }
 
 function withProcessEnv(patch, fn) {
-  const prev = new Map(Object.keys(patch).map((k) => [k, Object.prototype.hasOwnProperty.call(process.env, k) ? process.env[k] : undefined]));
+  const fullPatch = {
+    ANTHROPIC_BASE_URL: undefined,
+    ANTHROPIC_AUTH_TOKEN: undefined,
+    ANTHROPIC_API_KEY: undefined,
+    ...patch,
+  };
+  const prev = new Map(Object.keys(fullPatch).map((k) => [k, Object.prototype.hasOwnProperty.call(process.env, k) ? process.env[k] : undefined]));
   try {
-    for (const [k, v] of Object.entries(patch)) {
+    for (const [k, v] of Object.entries(fullPatch)) {
       if (v === undefined) delete process.env[k];
       else process.env[k] = v;
     }
@@ -93,13 +105,116 @@ function withProcessEnv(patch, fn) {
   }
 }
 
-test('tokenSeatError refuses only a declared seat with an empty token', () => {
+test('tokenSeatError allows OAuth token or explicit endpoint auth and refuses incomplete declared seats', () => {
   const { tokenSeatError } = require('./token-seat');
   assert.equal(tokenSeatError({}), null);
   assert.equal(tokenSeatError({ CLAUDE_CODE_OAUTH_TOKEN: TOKEN }), null);
   assert.equal(tokenSeatError({ AUTOPILOT_TOKEN_SEAT: '1', CLAUDE_CODE_OAUTH_TOKEN: TOKEN }), null);
+  // endpoint + auth token -> allowed
+  assert.equal(tokenSeatError({
+    AUTOPILOT_TOKEN_SEAT: '1',
+    ANTHROPIC_BASE_URL: FAKE_URL,
+    ANTHROPIC_AUTH_TOKEN: FAKE_AUTH,
+  }), null);
+  // endpoint + api key -> allowed
+  assert.equal(tokenSeatError({
+    AUTOPILOT_TOKEN_SEAT: '1',
+    ANTHROPIC_BASE_URL: FAKE_URL,
+    ANTHROPIC_API_KEY: FAKE_KEY,
+  }), null);
+  // endpoint without auth -> refused
+  assert.equal(tokenSeatError({
+    AUTOPILOT_TOKEN_SEAT: '1',
+    ANTHROPIC_BASE_URL: FAKE_URL,
+  }), REFUSAL);
+  assert.equal(tokenSeatError({
+    AUTOPILOT_TOKEN_SEAT: '1',
+    ANTHROPIC_BASE_URL: FAKE_URL,
+    ANTHROPIC_AUTH_TOKEN: '',
+    ANTHROPIC_API_KEY: '',
+  }), REFUSAL);
+  // auth without endpoint -> refused
+  assert.equal(tokenSeatError({
+    AUTOPILOT_TOKEN_SEAT: '1',
+    ANTHROPIC_AUTH_TOKEN: FAKE_AUTH,
+  }), REFUSAL);
+  assert.equal(tokenSeatError({
+    AUTOPILOT_TOKEN_SEAT: '1',
+    ANTHROPIC_API_KEY: FAKE_KEY,
+  }), REFUSAL);
+  assert.equal(tokenSeatError({
+    AUTOPILOT_TOKEN_SEAT: '1',
+    ANTHROPIC_BASE_URL: '',
+    ANTHROPIC_AUTH_TOKEN: FAKE_AUTH,
+  }), REFUSAL);
+  // nothing -> refused
   assert.equal(tokenSeatError({ AUTOPILOT_TOKEN_SEAT: '1' }), REFUSAL);
   assert.equal(tokenSeatError({ AUTOPILOT_TOKEN_SEAT: '1', CLAUDE_CODE_OAUTH_TOKEN: '' }), REFUSAL);
+});
+
+test('endpoint seat matrix matches across JS spawn sites and token-seat.sh', () => {
+  const s = scratch();
+  const probe = path.join(REPO, 'scripts/probe-todo-tools-pin.js');
+  const probeArgs = [probe, '--claude-bin', s.stub, '--timeout-seconds', '10', '--cwd', s.root, '--expect-absent'];
+  const probeOut = '{"type":"result","result":"NO_TASK_TOOL"}';
+  const guardSh = path.join(REPO, 'scripts/lib/token-seat.sh');
+
+  const cases = [
+    {
+      name: 'endpoint + auth token -> allowed',
+      extra: { AUTOPILOT_TOKEN_SEAT: '1', ANTHROPIC_BASE_URL: FAKE_URL, ANTHROPIC_AUTH_TOKEN: FAKE_AUTH },
+      allowed: true,
+    },
+    {
+      name: 'endpoint + api key -> allowed',
+      extra: { AUTOPILOT_TOKEN_SEAT: '1', ANTHROPIC_BASE_URL: FAKE_URL, ANTHROPIC_API_KEY: FAKE_KEY },
+      allowed: true,
+    },
+    {
+      name: 'endpoint without auth -> refused',
+      extra: { AUTOPILOT_TOKEN_SEAT: '1', ANTHROPIC_BASE_URL: FAKE_URL },
+      allowed: false,
+    },
+    {
+      name: 'auth without endpoint -> refused',
+      extra: { AUTOPILOT_TOKEN_SEAT: '1', ANTHROPIC_AUTH_TOKEN: FAKE_AUTH },
+      allowed: false,
+    },
+    {
+      name: 'api key without endpoint -> refused',
+      extra: { AUTOPILOT_TOKEN_SEAT: '1', ANTHROPIC_API_KEY: FAKE_KEY },
+      allowed: false,
+    },
+    {
+      name: 'nothing -> refused',
+      extra: { AUTOPILOT_TOKEN_SEAT: '1' },
+      allowed: false,
+    },
+  ];
+
+  for (const c of cases) {
+    reset(s);
+    const jsRun = spawnSync(process.execPath, probeArgs, {
+      env: baseEnv(s, { ...c.extra, STUB_STDOUT: probeOut }),
+      encoding: 'utf8',
+    });
+    const shRun = spawnSync('bash', ['-c', '. "$1" && token_seat_guard', '_', guardSh], {
+      env: baseEnv(s, c.extra),
+      encoding: 'utf8',
+    });
+    if (c.allowed) {
+      assert.equal(jsRun.status, 0, `${c.name} (js): ${jsRun.stderr}`);
+      assert.ok(fs.existsSync(s.invoked), `${c.name} (js): stub invoked`);
+      assert.equal(shRun.status, 0, `${c.name} (sh): ${shRun.stdout}${shRun.stderr}`);
+      assert.equal(shRun.stdout, '', `${c.name} (sh): silent when allowed`);
+    } else {
+      assert.equal(jsRun.status, 78, `${c.name} (js): exits 78`);
+      assert.match(jsRun.stderr, /token seat refused/, `${c.name} (js): refusal message`);
+      assert.ok(!fs.existsSync(s.invoked), `${c.name} (js): stub not invoked`);
+      assert.equal(shRun.status, 78, `${c.name} (sh): returns 78`);
+      assert.match(shRun.stdout, /token seat refused/, `${c.name} (sh): refusal message`);
+    }
+  }
 });
 
 test('seed-claude-config --exec passes the parent token and refuses a declared seat', () => {

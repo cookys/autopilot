@@ -3439,6 +3439,17 @@
       "summary": "Overrides config local_slots_url, even when empty. Full URL of the gateway slot query. Empty uses the qwen_local origin plus /v1/local/slots."
     },
     {
+      "name": "AUTOPILOT_LOCAL_SLOT_RR_FILE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": ["scripts/lib/local-impl-slot.js"],
+      "doc": null,
+      "relates": [],
+      "summary": "Test seam: path of the round-robin cursor file used by the local implementer slot picker."
+    },
+    {
       "name": "AUTOPILOT_REVIEWED_IMPLEMENTER_ENDPOINT",
       "kind": "env",
       "audience": "internal",

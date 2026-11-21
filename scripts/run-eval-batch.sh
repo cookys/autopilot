@@ -119,7 +119,8 @@ mkdir -p "$EMPTY_PLUGIN_DIR"
 # Write the wrapper script
 cat << 'EOF' > "$WRAPPER_DIR/claude"
 #!/usr/bin/env bash
-if [ "${AUTOPILOT_TOKEN_SEAT:-}" = 1 ] && [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+if [ "${AUTOPILOT_TOKEN_SEAT:-}" = "1" ] && [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] \
+    && ! { [ -n "${ANTHROPIC_BASE_URL:-}" ] && { [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ] || [ -n "${ANTHROPIC_API_KEY:-}" ]; }; }; then
   printf '%s\n' 'token seat refused: AUTOPILOT_TOKEN_SEAT=1 but CLAUDE_CODE_OAUTH_TOKEN is missing; refusing to spawn claude (would fall back to the host login)' >&2
   exit 78
 fi

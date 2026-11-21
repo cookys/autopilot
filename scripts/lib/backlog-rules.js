@@ -272,6 +272,35 @@ function blIdEnforced(cfg) {
   return Boolean(cfg && (cfg.next_id_mark || (cfg.required_fields || []).includes('Id')));
 }
 
+function hasIdPattern(cfg) {
+  return Boolean(cfg && cfg.id_pattern && cfg.id_pattern !== 'none');
+}
+
+function anchoredIdRe(cfg) {
+  if (!hasIdPattern(cfg)) return BL_ID_RE;
+  try {
+    return new RegExp(`^(?:${cfg.id_pattern})$`);
+  } catch {
+    return /(?!)/;
+  }
+}
+
+function expectedIdPattern(cfg) {
+  return hasIdPattern(cfg) ? String(cfg.id_pattern) : 'BL-NNNN';
+}
+
+function parseEntryId(raw, cfg) {
+  const id = String(raw == null ? '' : raw).trim();
+  if (!id) return null;
+  if (!hasIdPattern(cfg)) {
+    const m = id.match(BL_ID_RE);
+    return m ? { id, n: Number(m[1]) } : null;
+  }
+  if (!anchoredIdRe(cfg).test(id)) return null;
+  const runs = id.match(/\d+/g);
+  return { id, n: runs ? Number(runs[runs.length - 1]) : null };
+}
+
 // The cfg a file is checked with: `next_id_mark` set when the text carries `<!-- next-id -->`.
 function withNextIdMark(cfg, text) {
   const base = cfg || {};
@@ -320,11 +349,8 @@ function checkReporterFields(entry, fields, title, cfg) {
   }
   if (!entry.tableId && present('Id') && blIdEnforced(cfg)) {
     const id = String(fields.Id).trim();
-    let ok = BL_ID_RE.test(id);
-    if (!ok && cfg.id_pattern) {
-      try { ok = new RegExp(cfg.id_pattern).test(id); } catch { /* ignore bad pattern */ }
-    }
-    if (!ok) push('bad_id', 'Id', `${id} (expected BL-NNNN)`);
+    const ok = anchoredIdRe(cfg).test(id);
+    if (!ok) push('bad_id', 'Id', `${id} (expected ${expectedIdPattern(cfg)})`);
   }
   if (present('Since') && !isValidDate(String(fields.Since).trim())) {
     push('bad_since', 'Since', `${fields.Since} (expected YYYY-MM-DD)`);
@@ -444,20 +470,22 @@ function afterList(entry) {
   return String(raw).split(';').map((s) => s.trim());
 }
 
-function nextIdFromText(text) {
+function nextIdFromText(text, cfg) {
   const mark = String(text || '').match(NEXT_ID_RE);
   if (!mark) return null;
-  const m = String(mark[1]).match(BL_ID_RE);
-  return m ? Number(m[1]) : null;
+  const parsed = parseEntryId(mark[1], cfg);
+  return parsed ? parsed.n : null;
 }
 
-function normalizeNextId(nextId) {
+function normalizeNextId(nextId, cfg) {
   if (typeof nextId === 'number' && Number.isFinite(nextId)) return nextId;
   if (nextId == null || nextId === '') return null;
-  return nextIdFromText(String(nextId)) != null && NEXT_ID_RE.test(String(nextId))
-    ? nextIdFromText(String(nextId))
+  return nextIdFromText(String(nextId), cfg) != null && NEXT_ID_RE.test(String(nextId))
+    ? nextIdFromText(String(nextId), cfg)
     : (() => {
-      const m = String(nextId).trim().match(BL_ID_RE) || String(nextId).trim().match(/^(\d+)$/);
+      const parsed = parseEntryId(nextId, cfg);
+      if (parsed && parsed.n != null) return parsed.n;
+      const m = String(nextId).trim().match(/^(\d+)$/);
       return m ? Number(m[1]) : null;
     })();
 }
@@ -469,10 +497,11 @@ function findRow(entries, id) {
 // null when the dependency is well-formed. Dropped, malformed, at/above the mark, or absent
 // with no mark is after_broken. An id below the mark that is simply not in the file is a
 // deleted row (shipped or dropped cannot be told apart) and is not broken.
-function afterBrokenReason(id, entries, nextNum) {
-  if (!BL_ID_RE.test(id)) return `${id} (expected BL-NNNN)`;
-  const n = Number(BL_ID_RE.exec(id)[1]);
-  if (nextNum != null && n >= nextNum) return `${id} is not below next-id`;
+function afterBrokenReason(id, entries, nextNum, cfg) {
+  const parsed = parseEntryId(id, cfg);
+  if (!parsed) return `${id} (expected ${expectedIdPattern(cfg)})`;
+  const n = parsed.n;
+  if (nextNum != null && n != null && n >= nextNum) return `${id} is not below next-id`;
   const ent = findRow(entries, id);
   if (ent) {
     const st = String((ent.fields && ent.fields.Status) || '').trim();
@@ -483,21 +512,23 @@ function afterBrokenReason(id, entries, nextNum) {
   return null;
 }
 
-function afterIdSatisfied(id, entries, nextNum) {
-  if (afterBrokenReason(id, entries, nextNum)) return false;
+function afterIdSatisfied(id, entries, nextNum, cfg) {
+  if (afterBrokenReason(id, entries, nextNum, cfg)) return false;
   const ent = findRow(entries, id);
   if (ent) return /^shipped\b/.test(String((ent.fields && ent.fields.Status) || '').trim());
-  return BL_ID_RE.test(id) && nextNum != null && Number(BL_ID_RE.exec(id)[1]) < nextNum;
+  const parsed = parseEntryId(id, cfg);
+  return Boolean(parsed && parsed.n != null && nextNum != null && parsed.n < nextNum);
 }
 
-function findAfterCycles(entries) {
+function findAfterCycles(entries, cfg) {
+  const idRe = anchoredIdRe(cfg);
   const nodes = new Set();
   const graph = new Map();
   for (const e of entries || []) {
     const id = rowId(e);
-    if (!BL_ID_RE.test(id)) continue;
+    if (!idRe.test(id)) continue;
     nodes.add(id);
-    const outs = afterList(e).filter((a) => BL_ID_RE.test(a));
+    const outs = afterList(e).filter((a) => idRe.test(a));
     if (outs.length) graph.set(id, outs);
   }
   const color = new Map();
@@ -533,8 +564,8 @@ function checkQueueEntry(entry, cfg, repoRoot, existsFn) {
   for (const f of required) {
     if (!queuePresent(fields, f)) push('missing_field', f, `${f} missing`);
   }
-  if (queuePresent(fields, 'Id') && !BL_ID_RE.test(String(fields.Id).trim()) && !blIdEnforced(cfg)) {
-    push('bad_id', 'Id', `${String(fields.Id).trim()} (expected BL-NNNN)`);
+  if (queuePresent(fields, 'Id') && !anchoredIdRe(cfg).test(String(fields.Id).trim()) && !blIdEnforced(cfg)) {
+    push('bad_id', 'Id', `${String(fields.Id).trim()} (expected ${expectedIdPattern(cfg)})`);
   }
   if (queuePresent(fields, 'Effort')) {
     const parsed = parseEffortValue(fields.Effort);
@@ -581,11 +612,12 @@ function checkQueueEntry(entry, cfg, repoRoot, existsFn) {
 }
 
 // Cross-row queue rules: after_cycle, after_broken, feeds_broken. Per-row rules stay in checkEntry.
-function checkQueueLinks(entries, text) {
-  const nextNum = nextIdFromText(text);
+function checkQueueLinks(entries, text, cfg) {
+  const nextNum = nextIdFromText(text, cfg);
+  const idRe = anchoredIdRe(cfg);
   const vios = [];
   const cycleById = new Map();
-  for (const cycle of findAfterCycles(entries)) {
+  for (const cycle of findAfterCycles(entries, cfg)) {
     const detail = cycle.join(' -> ');
     for (const id of new Set(cycle.slice(0, -1))) {
       if (!cycleById.has(id)) cycleById.set(id, []);
@@ -602,12 +634,12 @@ function checkQueueLinks(entries, text) {
       vios.push({ code: 'after_cycle', title, field: 'after', detail: cycleById.get(id).join('; ') });
     }
     for (const dep of afterList(ent)) {
-      const reason = afterBrokenReason(dep, entries, nextNum);
+      const reason = afterBrokenReason(dep, entries, nextNum, cfg);
       if (reason) vios.push({ code: 'after_broken', title, field: 'after', detail: reason });
     }
     if (String(fields.Artifact || '').trim() === 'text' && queuePresent(fields, 'Feeds')) {
       const fid = String(fields.Feeds).trim();
-      if (!BL_ID_RE.test(fid) || !findRow(entries, fid)) {
+      if (!idRe.test(fid) || !findRow(entries, fid)) {
         vios.push({ code: 'feeds_broken', title, field: 'Feeds', detail: `${fid} is not an Id of a row in this file` });
       }
     }
@@ -615,10 +647,10 @@ function checkQueueLinks(entries, text) {
   return vios;
 }
 
-function afterDependenciesSatisfied(entry, entries, nextId) {
-  const nextNum = normalizeNextId(nextId);
+function afterDependenciesSatisfied(entry, entries, nextId, cfg) {
+  const nextNum = normalizeNextId(nextId, cfg);
   for (const id of afterList(entry)) {
-    if (!afterIdSatisfied(id, entries, nextNum)) return false;
+    if (!afterIdSatisfied(id, entries, nextNum, cfg)) return false;
   }
   return true;
 }
@@ -631,7 +663,7 @@ function queueReadyCore(entry, ctx) {
   if (!isQueueForm(entry)) return false;
   const vios = Array.isArray(entry.violations) ? entry.violations : null;
   if (!vios || vios.some((v) => levelOf(v) !== 'warn')) return false;
-  return afterDependenciesSatisfied(entry, c.entries || [], c.nextId);
+  return afterDependenciesSatisfied(entry, c.entries || [], c.nextId, c.cfg);
 }
 
 // READY iff Status is open, Trigger-Type is ready, the row is queue-form with zero blocking
@@ -1075,7 +1107,8 @@ module.exports = {
   ROW_ORDER, WRITER_REQUIRED,
   loadSizes, parseEffortValue, badEffortDetail, byteLen, realCalendarDate, triggerTypeCode, pointerOk, statusDate, daysAgo,
   checkCapsRaised, effectiveCap, isValidDate, splitMulti, replyOk, replyUnanswered, reportPairs, unansweredReports,
-  hasNewFields, legacyBytes, blIdEnforced, withNextIdMark, triggerTypeRequired, fieldOptedIn, checkReporterFields, checkEntry,
+  hasNewFields, legacyBytes, blIdEnforced, hasIdPattern, anchoredIdRe, expectedIdPattern, parseEntryId,
+  withNextIdMark, triggerTypeRequired, fieldOptedIn, checkReporterFields, checkEntry,
   isQueueForm, checkQueueLinks, isReady, nextIdFromText, normalizeNextId,
   EFFORT_HOURS, PADDED_DEADLINE_MULTIPLIER, paddedDeadline,
   RuleViolationError, levelOf, proposedFields, renderRow, entryForFields, validateProposed, assertProposedValid, assertPeerClosable,

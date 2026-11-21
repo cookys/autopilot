@@ -12,6 +12,7 @@
 // acquireLocalSlot is the only slot query. A later lease API replaces that function.
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { configPath } = require('./config-path');
@@ -182,7 +183,29 @@ function freeOf(ep) {
   return integerFree(ep.free);
 }
 
-function interpretGateway(o, source) {
+function roundRobinFile(env) {
+  if (env.AUTOPILOT_LOCAL_SLOT_RR_FILE) return env.AUTOPILOT_LOCAL_SLOT_RR_FILE;
+  if (env.XDG_RUNTIME_DIR) return path.join(env.XDG_RUNTIME_DIR, 'autopilot', 'local-slot-rr.json');
+  return path.join(os.tmpdir(), `autopilot-${typeof process.getuid === 'function' ? process.getuid() : 'unknown'}`, 'local-slot-rr.json');
+}
+
+function previousFamily(file) {
+  try {
+    const state = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return state && (state.family === 'qwen' || state.family === 'glm') ? state.family : null;
+  } catch { return null; }
+}
+
+function recordFamily(file, family) {
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+    const tmp = `${file}.${process.pid}.${Math.random().toString(16).slice(2)}.tmp`;
+    fs.writeFileSync(tmp, `${JSON.stringify({ family })}\n`, { mode: 0o600 });
+    fs.renameSync(tmp, file);
+  } catch { /* an unavailable state file behaves like no prior choice */ }
+}
+
+function interpretGateway(o, source, env = process.env) {
   const endpoints = Array.isArray(o.endpoints) ? o.endpoints : null;
   if (!endpoints) return null;
   const familyResult = (family) => {
@@ -200,20 +223,39 @@ function interpretGateway(o, source) {
     return null;
   };
   const qwen = familyResult('qwen');
-  if (qwen && qwen.local) return qwen;
   const glm = familyResult('glm');
-  if (glm && glm.local) {
-    if (qwen && qwen.fallback) glm.local_fallback_from = { family: 'qwen', reason: qwen.fallback.reason };
-    return glm;
+  const available = [qwen, glm].filter((result) => result && result.local);
+  if (available.length === 2) {
+    let selected;
+    if (qwen.free > glm.free) {
+      selected = qwen;
+      selected.pick_reason = 'more_free';
+    } else if (glm.free > qwen.free) {
+      selected = glm;
+      selected.pick_reason = 'more_free';
+    } else {
+      const file = roundRobinFile(env);
+      selected = previousFamily(file) === 'qwen' ? glm : qwen;
+      selected.pick_reason = 'tie_round_robin';
+      recordFamily(file, selected.family);
+    }
+    return selected;
+  }
+  if (available.length === 1) {
+    const selected = available[0];
+    selected.pick_reason = 'only_free';
+    if (selected.family === 'glm' && qwen && qwen.fallback) selected.local_fallback_from = { family: 'qwen', reason: qwen.fallback.reason };
+    recordFamily(roundRobinFile(env), selected.family);
+    return selected;
   }
   if (qwen && qwen.fallback) return qwen;
   if (glm && glm.fallback) return glm;
   return queryFailed(source, 'no_backend');
 }
 
-function interpretPayload(o, source) {
+function interpretPayload(o, source, env = process.env) {
   if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
-  if (Array.isArray(o.endpoints) || Array.isArray(o.models)) return interpretGateway(o, source);
+  if (Array.isArray(o.endpoints) || Array.isArray(o.models)) return interpretGateway(o, source, env);
   const free = o.free;
   if (typeof free === 'number' && Number.isInteger(free) && typeof o.draining === 'boolean') {
     if (o.draining) {
@@ -251,7 +293,7 @@ function slotsFromCmd(cmd, env) {
   if (!line) return queryFailed('cmd', 'malformed');
   let o;
   try { o = JSON.parse(line); } catch { return queryFailed('cmd', 'malformed'); }
-  return interpretPayload(o, 'cmd') || queryFailed('cmd', 'malformed');
+  return interpretPayload(o, 'cmd', env) || queryFailed('cmd', 'malformed');
 }
 
 // Keep the query on this event loop so in-process gateway stubs and callers can
@@ -301,7 +343,7 @@ function httpGet(urlStr, timeoutMs) {
   });
 }
 
-async function slotsFromHttp(urlStr) {
+async function slotsFromHttp(urlStr, env = process.env) {
   const res = await httpGet(urlStr, HTTP_TIMEOUT_MS);
   if (!res || res.error === 'timeout') return queryFailed('gateway', 'timeout');
   if (res.error) return queryFailed('gateway', 'unreachable');
@@ -311,7 +353,7 @@ async function slotsFromHttp(urlStr) {
   }
   let o;
   try { o = JSON.parse(res.body); } catch { return queryFailed('gateway', 'malformed'); }
-  return interpretPayload(o, 'gateway') || queryFailed('gateway', 'malformed');
+  return interpretPayload(o, 'gateway', env) || queryFailed('gateway', 'malformed');
 }
 
 function slotsUrl(cfg, env, baseUrl) {
@@ -338,7 +380,7 @@ async function acquireLocalSlot(opts = {}) {
   const info = opts.endpoint || endpointInfo(env);
   const url = slotsUrl(cfg, env, info.baseUrl);
   if (!url) return queryFailed('gateway', 'unreachable');
-  return slotsFromHttp(url);
+  return slotsFromHttp(url, env);
 }
 
 function slotView(slot) {

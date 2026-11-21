@@ -18,7 +18,7 @@ mk() { node "$OD" open --category goal --executor ns/cc/exec--claude --cwd "$R" 
 OPEN="$(mk "Q-OPEN?")"; AWAIT="$(mk "Q-AWAIT?")"; CLOSED="$(mk "Q-CLOSED?")"; PEND="$(mk "Q-PEND?")"
 node "$OD" close --cwd "$R" --root-run-id rr --id "$PEND" --answer "p" --executor ns/cc/exec--claude >/dev/null
 node "$OD" close --cwd "$R" --root-run-id rr --id "$AWAIT" --answer "a" --awaiting-operator "run it" >/dev/null
-node "$OD" close --cwd "$R" --root-run-id rr --id "$CLOSED" >/dev/null
+node "$OD" close --cwd "$R" --root-run-id rr --id "$CLOSED" --withdraw "test fixture" --by test >/dev/null
 export R REPO_ROOT OPEN AWAIT CLOSED PEND
 
 # one script asks every reader; prints "name:ids" lines. SRC = where src/status comes from (the sabotaged copy in NC-R).
@@ -91,7 +91,7 @@ assert_not_contains "$(pgf closedOnly)" "待你動手" "review page: a closed ca
 assert_not_contains "$(pgf closedOnly)" "待派工" "review page: a closed card shows no pending block"
 
 # a project whose cards are ALL closed: nothing is open for the autostart rule / the watcher / the file-exists root check
-node "$OD" close --cwd "$R" --root-run-id rr --id "$OPEN" >/dev/null; node "$OD" done --cwd "$R" --root-run-id rr --id "$AWAIT" >/dev/null; node "$OD" close --cwd "$R" --root-run-id rr --id "$PEND" --dispatched t-1 >/dev/null
+node "$OD" close --cwd "$R" --root-run-id rr --id "$OPEN" --withdraw "test cleanup" --by test >/dev/null; node "$OD" done --cwd "$R" --root-run-id rr --id "$AWAIT" >/dev/null; node "$OD" close --cwd "$R" --root-run-id rr --id "$PEND" --dispatched t-1 >/dev/null
 ASK2="$(node "$TEST_TMP/ask.js")"
 assert_contains "$ASK2" "decision-input:none" "all closed: decision-input reports none"
 assert_contains "$ASK2" "runs-watch-count:0" "all closed: runs-watch count 0"
@@ -100,7 +100,7 @@ HAS="$(node -e 'const p=require("path"),r=process.env.REPO_ROOT;const {scopeFrom
 assert_eq "$HAS" "false,1,false" "all closed: hasOpenDecision false, the scope file is still there (the record), scopeFileHasLive false"
 
 # NC-R: a reader that was not updated shows the closed card again, and this test sees it
-mkrepo "$R"; OPEN="$(mk "Q-OPEN?")"; CLOSED="$(mk "Q-CLOSED?")"; node "$OD" close --cwd "$R" --root-run-id rr --id "$CLOSED" >/dev/null; export OPEN CLOSED
+mkrepo "$R"; OPEN="$(mk "Q-OPEN?")"; CLOSED="$(mk "Q-CLOSED?")"; node "$OD" close --cwd "$R" --root-run-id rr --id "$CLOSED" --withdraw "test fixture" --by test >/dev/null; export OPEN CLOSED
 SAB="$TEST_TMP/sabotaged-root"; mkdir -p "$SAB/src/status" "$SAB/scripts/lib"; cp "$REPO_ROOT"/src/status/scope-key.js "$REPO_ROOT"/src/status/decision-input.js "$SAB/src/status/"; cp "$REPO_ROOT"/scripts/lib/card-notice.js "$SAB/scripts/lib/" # decision-input.js requires ../../scripts/lib/card-notice.js
 sed -i '/if (isClosedEntry(e)) return null;/d' "$SAB/src/status/decision-input.js"
 grep -q "isClosedEntry(e)) return null" "$SAB/src/status/decision-input.js" && fail "sabotage did not apply"

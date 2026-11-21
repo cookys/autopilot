@@ -77,7 +77,7 @@ assert_file_exists "$LIVE/runs/paths/$KEY.json" "S1 the watcher's paths file (ho
 assert_contains "$(cat "$LIVE/runs/paths/$KEY.json")" "$(cd "$R" && pwd -P)" "S1 the paths file names the repo"
 assert_contains "$(cat "$SB/err")" "UNBOUND scope" "S1 stderr still says where the card went"
 # S3: closing the last card empties the page
-cenv s1 node "$OD" close --cwd "$R" --id "$ID1" >/dev/null
+cenv s1 node "$OD" close --cwd "$R" --id "$ID1" --withdraw "test cleanup" --by test >/dev/null
 assert_eq "false:" "$(wait_cards s1 unbound "false:")" "S3 closing the last card empties the unbound page"
 
 # ---- S2: a plain session, no runs: the marker root's page ----

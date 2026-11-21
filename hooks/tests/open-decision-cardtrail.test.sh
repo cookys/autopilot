@@ -75,7 +75,7 @@ libcard "Q3?"; C3="$OUT"
 od close --id "$C3" --answer "x" --executor "$EXEC"; assert_eq "$RC" 0 "executor given at close: exit 0"
 assert_eq "$(pj dispatch.to)" "$EXEC" "close --executor: dispatch JSON"; assert_eq "$(pj fyi)" "null" "no asker -> fyi null"; assert_eq "$(field "$C3" status)" "pending_dispatch" "executor given at close: pending_dispatch"
 od close --id "$C3" --dispatched t3 >/dev/null; od close --id "$C3" --dispatched t4; assert_eq "$RC" 2 "second --dispatched refused"
-for st in open; do opencard "Q-D?"; CD="$OUT"; od close --id "$CD" --dispatched t9; assert_eq "$RC" 2 "--dispatched on an $st card: refused"; assert_eq "$(field "$CD" status)" "open" "still open"; od close --id "$CD" >/dev/null; done
+for st in open; do opencard "Q-D?"; CD="$OUT"; od close --id "$CD" --dispatched t9; assert_eq "$RC" 2 "--dispatched on an $st card: refused"; assert_eq "$(field "$CD" status)" "open" "still open"; od close --id "$CD" --withdraw "test cleanup" --by test >/dev/null; done
 
 # 4. awaiting_operator_action
 opencard "Q5?" --executor "$EXEC"; C5="$OUT"

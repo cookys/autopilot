@@ -57,7 +57,17 @@
       "default": "1",
       "readers": ["hooks/bash-test-timeout-guard.js"],
       "relates": [],
-      "note": "Set to 0 to disable the PreToolUse Bash test/check timeout-prefix guard (bash-test-timeout-guard)."
+      "summary": "Set to 0 to disable the PreToolUse Bash test/check timeout-prefix guard (bash-test-timeout-guard)."
+    },
+    {
+      "name": "AUTOPILOT_BASH_TEST_TIMEOUT_NOW",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": ["hooks/bash-test-timeout-guard.js"],
+      "doc": null,
+      "relates": []
     },
     {
       "kind": "env",

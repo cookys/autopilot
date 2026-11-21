@@ -99,6 +99,46 @@ test('blocks bare test runner invocations at cutoff', () => {
   }
 });
 
+test('command-start regression cases', () => {
+  const cases = [
+    [2, 'nohup npm test > log 2>&1 &'],
+    [2, 'sh -c "npm test"'],
+    [2, "bash -c 'node a.test.js'"],
+    [2, 'echo $(node a.test.js)'],
+    [2, 'x=$(npm test)'],
+    [2, '(cd pkg && npm test)'],
+    [2, '{ npm test; }'],
+    [2, 'node "tests/a.test.js"'],
+    [2, 'node --test-name-pattern foo'],
+    [2, './node_modules/.bin/jest'],
+    [2, 'uv run pytest'],
+    [2, 'yarn jest'],
+    [2, 'npx --yes jest'],
+    [2, 'python3.11 -m pytest'],
+    [2, '/usr/bin/node a.test.js'],
+    [2, 'npm test:unit'],
+    [2, './scripts/affected-suites.js --fast --run'],
+    [2, 'node a.test.js'],
+    [2, 'FOO=1 bash hooks/tests/x.test.sh'],
+    [2, 'cd x && npm test'],
+    [0, 'grep -rn jest src'],
+    [0, 'cat scripts/check-test-cli-timeout.js'],
+    [0, 'git log --grep pytest'],
+    [0, 'git commit -m "add npm test coverage"'],
+    [0, 'echo jest'],
+    [0, 'timeout 1h node x.test.js'],
+    [0, `git commit -m "$(cat <<'EOF'
+npm test
+EOF
+)"`],
+    [0, 'nohup timeout 30m npm test &'],
+    [0, "bash -c 'timeout 5m npm test'"],
+  ];
+  for (const [expected, command] of cases) {
+    assert.equal(runHook(command).status, expected, command);
+  }
+});
+
 test('AUTOPILOT_BASH_TEST_TIMEOUT=0 disables the guard', () => {
   const res = runHook('node hooks/foo.test.js', { AUTOPILOT_BASH_TEST_TIMEOUT: '0' });
   assert.equal(res.status, 0);

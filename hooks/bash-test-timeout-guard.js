@@ -22,29 +22,20 @@ function readStdin() {
   }
 }
 
-/**
- * Split a shell command into segments on &&, ||, ;, |, and newlines,
- * respecting single quotes, double quotes, and backslash escapes.
- */
+/** Split shell operators outside quotes, preserving quoted arguments. */
 function splitShellSegments(cmd) {
   const segments = [];
   let cur = '';
   let quote = null;
   for (let i = 0; i < cmd.length; i++) {
     const ch = cmd[i];
-    if (quote === "'") {
-      cur += ch;
-      if (ch === "'") quote = null;
+    if (ch === '\\' && quote !== "'" && i + 1 < cmd.length) {
+      cur += ch + cmd[++i];
       continue;
     }
-    if (ch === '\\' && i + 1 < cmd.length) {
-      cur += ch + cmd[i + 1];
-      i++;
-      continue;
-    }
-    if (quote === '"') {
+    if (quote) {
       cur += ch;
-      if (ch === '"') quote = null;
+      if (ch === quote) quote = null;
       continue;
     }
     if (ch === "'" || ch === '"') {
@@ -52,26 +43,10 @@ function splitShellSegments(cmd) {
       cur += ch;
       continue;
     }
-    if (ch === '\n' || ch === '\r' || ch === ';') {
+    if ('\n\r;|&`(){}'.includes(ch) || (ch === '$' && cmd[i + 1] === '(')) {
       if (cur.trim()) segments.push(cur.trim());
       cur = '';
-      continue;
-    }
-    if (ch === '&' && cmd[i + 1] === '&') {
-      if (cur.trim()) segments.push(cur.trim());
-      cur = '';
-      i++;
-      continue;
-    }
-    if (ch === '|' && cmd[i + 1] === '|') {
-      if (cur.trim()) segments.push(cur.trim());
-      cur = '';
-      i++;
-      continue;
-    }
-    if (ch === '|') {
-      if (cur.trim()) segments.push(cur.trim());
-      cur = '';
+      if (ch === '$') i++;
       continue;
     }
     cur += ch;
@@ -80,72 +55,77 @@ function splitShellSegments(cmd) {
   return segments;
 }
 
-const ENV_ASSIGN_RE = /^(?:[A-Za-z_][A-Za-z0-9_]*=(?:'[^']*'|"[^"]*"|\S*)\s+)*/;
-const TIMEOUT_PREFIX_RE = /^(?:[A-Za-z_][A-Za-z0-9_]*=(?:'[^']*'|"[^"]*"|\S*)\s+)*(?:timeout|gtimeout)\s+(?:(?:--(?:signal|kill-after)(?:=\S+|\s+\S+)|-[ks]\s+\S+|-\S+)\s+)*\d+(?:\.\d+)?[smhd]?\b/;
-
-function stripQuotes(str) {
-  return str.replace(/'[^']*'|"[^"]*"/g, '""');
-}
+const ENV_ASSIGN_RE = /^[A-Za-z_][A-Za-z0-9_]*=(?:'[^']*'|"[^"$()]*"|[^\s$()]*)$/;
+const TIMEOUT_DURATION_RE = /^\d+(?:\.\d+)?[smhd]?$/;
 
 function getCommandTokens(seg) {
-  let rest = seg.replace(ENV_ASSIGN_RE, '');
-  if (TIMEOUT_PREFIX_RE.test(seg)) {
-    rest = seg.replace(TIMEOUT_PREFIX_RE, '').trim();
+  const tokens = [];
+  const words = seg.match(/(?:[^\s'"\\]+|\\.|'[^']*'|"(?:\\.|[^"\\])*")+/g) || [];
+  for (const word of words) {
+    tokens.push(word.replace(/'([^']*)'|"((?:\\.|[^"\\])*)"|\\(.)/g,
+      (_, single, double, escaped) => single ?? double ?? escaped));
   }
-  const unquoted = stripQuotes(rest).trim();
-  if (!unquoted) return [];
-  return unquoted.split(/\s+/);
+  return tokens;
+}
+
+function commandInfo(seg) {
+  const tokens = getCommandTokens(seg);
+  let i = 0;
+  while (i < tokens.length) {
+    const cmd = tokens[i].split('/').pop();
+    if (ENV_ASSIGN_RE.test(tokens[i])) { i++; continue; }
+    if (cmd === 'timeout' || cmd === 'gtimeout') {
+      let j = i + 1;
+      while (tokens[j] && tokens[j].startsWith('-')) {
+        if (/^(?:-k|-s|--kill-after|--signal)$/.test(tokens[j])) j++;
+        j++;
+      }
+      if (TIMEOUT_DURATION_RE.test(tokens[j] || '')) return { timeout: true, tokens: [] };
+    }
+    if (['nohup', 'env', 'time', 'exec', 'command', 'xargs', 'stdbuf'].includes(cmd)) {
+      i++;
+      while (tokens[i] && (tokens[i].startsWith('-') || (cmd === 'env' && ENV_ASSIGN_RE.test(tokens[i])))) i++;
+      continue;
+    }
+    break;
+  }
+  return { timeout: false, tokens: tokens.slice(i) };
 }
 
 function isTestOrCheckSegment(seg) {
-  const tokens = getCommandTokens(seg);
-  if (tokens.length === 0) return false;
-  const cmd = tokens[0];
+  const { tokens } = commandInfo(seg);
+  if (!tokens.length) return false;
+  const fullCmd = tokens[0];
+  const cmd = fullCmd.split('/').pop();
   const arg1 = tokens[1] || '';
   const arg2 = tokens[2] || '';
-
+  if (['bash', 'sh', 'zsh'].includes(cmd) && arg1 === '-c') return Boolean(checkCommand(arg2));
   if (cmd === 'node') {
-    const nonFlagArgs = tokens.slice(1).filter((t) => !t.startsWith('-'));
-    if (tokens.includes('--test')) return true;
-    return nonFlagArgs.some(
-      (a) =>
-        /\.test\.[cm]?js$/.test(a) ||
-        /(?:^|\/)scripts\/affected-suites\.js$/.test(a) ||
-        /(?:^|\/)scripts\/check-\S+\.js$/.test(a)
-    );
+    return tokens.slice(1).some((a) => a.startsWith('--test') || /\.test\.[cm]?js$/.test(a) || /(?:^|\/)scripts\/(?:affected-suites|check-[^/]+)\.js$/.test(a));
   }
-
-  if (cmd === 'bash' || cmd === 'sh') {
-    const nonFlagArgs = tokens.slice(1).filter((t) => !t.startsWith('-'));
-    return nonFlagArgs.some(
-      (a) =>
-        /\.test\.sh$/.test(a) ||
-        /(?:^|\/)hooks\/tests\/\S+\.sh$/.test(a) ||
-        /(?:^|\/)scripts\/check-\S+\.sh$/.test(a)
-    );
+  if (['bash', 'sh', 'zsh'].includes(cmd)) {
+    return tokens.slice(1).some((a) => /\.test\.sh$/.test(a) || /(?:^|\/)hooks\/tests\/[^/]+\.sh$/.test(a) || /(?:^|\/)scripts\/check-[^/]+\.sh$/.test(a));
   }
-
-  if (/(?:^|\/)hooks\/tests\/\S+\.sh$/.test(cmd)) return true;
-  if (cmd === 'pytest' || cmd === 'jest' || cmd === 'vitest') return true;
-  if ((cmd === 'python' || cmd === 'python3') && arg1 === '-m' && arg2 === 'pytest') return true;
-  if (cmd === 'npm' && (arg1 === 'test' || arg1 === 't' || (arg1 === 'run' && /^test/.test(arg2)))) return true;
-  if ((cmd === 'pnpm' || cmd === 'yarn') && (arg1 === 'test' || (arg1 === 'run' && /^test/.test(arg2)))) return true;
-  if (cmd === 'npx' && (arg1 === 'jest' || arg1 === 'vitest')) return true;
-  if ((cmd === 'cargo' || cmd === 'go') && arg1 === 'test') return true;
-
-  return false;
+  if (/(?:^|\/)hooks\/tests\/[^/]+\.sh$/.test(fullCmd) || /(?:^|\/)scripts\/(?:affected-suites\.js|check-[^/]+\.(?:js|sh))$/.test(fullCmd)) return true;
+  if (['pytest', 'jest', 'vitest', 'mocha'].includes(cmd)) return true;
+  if (/^python(?:3(?:\.\d+)?)?$/.test(cmd) && arg1 === '-m' && arg2 === 'pytest') return true;
+  if (cmd === 'uv' && arg1 === 'run' && arg2 === 'pytest') return true;
+  if (cmd === 'npm' && (/^test/.test(arg1) || arg1 === 't' || (arg1 === 'run' && /^test/.test(arg2)))) return true;
+  if (cmd === 'pnpm' || cmd === 'yarn') {
+    const args = tokens.slice(1).filter((t) => !t.startsWith('-'));
+    return /^test/.test(args[0] || '') || args[0] === 'jest' || (args[0] === 'run' && /^test/.test(args[1] || ''));
+  }
+  if (cmd === 'npx') return ['jest', 'vitest', 'mocha'].includes(tokens.slice(1).find((t) => !t.startsWith('-')));
+  return (cmd === 'cargo' || cmd === 'go') && arg1 === 'test';
 }
 
 function hasTimeoutPrefix(seg) {
-  return TIMEOUT_PREFIX_RE.test(seg);
+  return commandInfo(seg).timeout;
 }
 
 function checkCommand(command) {
-  const segments = splitShellSegments(command);
-  for (const seg of segments) {
-    if (isTestOrCheckSegment(seg) && !hasTimeoutPrefix(seg)) {
-      return seg;
-    }
+  for (const seg of splitShellSegments(command)) {
+    if (!hasTimeoutPrefix(seg) && isTestOrCheckSegment(seg)) return seg;
   }
   return null;
 }

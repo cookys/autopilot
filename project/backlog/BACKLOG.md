@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0494 -->
+<!-- next-id: BL-0498 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -2261,4 +2261,56 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: autopilot lane 2026-11-16
+- **Pointer**: none
+
+### T2 交棒提醒在視窗恰為 200000 時不觸發
+- **Id**: BL-0494
+- **Status**: open
+- **Since**: 2026-11-22
+- **Origin**: self
+- **Problem**: 情境預算的 T2 警告判斷是「視窗小於基本視窗才警告」，視窗恰等於 200000 時回空；座次把 t2 設成 450k 但 Claude Code 視窗解析成 200k（例如本地模型名 glm 查不到）時，167k 就會壓縮，卻永遠不給 T2 交棒提醒。
+- **Impact**: 本地模型座次在壓縮前收不到 T2 交棒提醒，交接悄悄斷掉。
+- **Trigger**: 下次修改情境預算 T2 警告或視窗解析邏輯時
+- **Trigger-Type**: event
+- **Effort**: XS
+- **Source**: autopilot lane, 2026-11-22 (01M801WE / 01M7V30B / 01M802A25 follow-ups)
+- **Pointer**: none
+
+### 派工模型守卫把本地代理誤判為本地座次
+- **Id**: BL-0495
+- **Status**: open
+- **Since**: 2026-11-22
+- **Origin**: self
+- **Problem**: 派工模型守卫判斷非 Claude 主座時，凡回環或私網的 API 端點一律視為本地座次，經本地代理轉出的 Claude 座次也被算進去，未指定模型的子代理改繼承主模型。
+- **Impact**: 這類座次的子代理悄悄跑在 opus/fable 而非 sonnet，成本上升。
+- **Trigger**: 下次修改派工模型守卫的本地座次判定時
+- **Trigger-Type**: event
+- **Effort**: XS
+- **Source**: autopilot lane, 2026-11-22 (01M801WE / 01M7V30B / 01M802A25 follow-ups)
+- **Pointer**: none
+
+### hetero 沙箱套件兩例 transcript 用例在基線已紅
+- **Id**: BL-0496
+- **Status**: open
+- **Since**: 2026-11-22
+- **Origin**: self
+- **Problem**: 派工 hetero 沙箱套件的 transcript 與 transcript-symlink 兩例在基線提交上已經是紅的，不是本次改動引入。
+- **Impact**: 這兩例修好前，套件抓不到那兩條路徑的新回歸。
+- **Trigger**: 下次修改 hetero 沙箱套件的 transcript 用例時
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: autopilot lane, 2026-11-22 (01M801WE / 01M7V30B / 01M802A25 follow-ups)
+- **Pointer**: none
+
+### 端點預探測放過以 /v1 結尾的錯誤端點
+- **Id**: BL-0497
+- **Status**: open
+- **Since**: 2026-11-22
+- **Origin**: self
+- **Problem**: runner 預探測跳過以 /v1 結尾的端點，諮詢派工與審查派工的端點參數也沒有 /v1 防線，組態錯誤的端點能通過預探測。
+- **Impact**: 端點配錯時預探測通過，真正呼叫時才失敗。
+- **Trigger**: 下次修改 runner 預探測或派工端點參數時
+- **Trigger-Type**: event
+- **Effort**: XS
+- **Source**: autopilot lane, 2026-11-22 (01M801WE / 01M7V30B / 01M802A25 follow-ups)
 - **Pointer**: none

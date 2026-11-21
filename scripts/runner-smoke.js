@@ -434,7 +434,7 @@ function runDispatchAuthorSmoke(item, paths, opts) {
 
   const railClassification = (parsed && typeof parsed.status === 'string' && parsed.status)
     ? parsed.status
-    : (railExit === 124 ? 'timeout' : 'runner_failed');
+    : (railExit === 124 ? 'timeout' : (railExit === 6 ? 'quota_exhausted' : 'runner_failed'));
 
   let answer = '';
   if (parsed && typeof parsed.raw_log === 'string' && parsed.raw_log !== '') {
@@ -452,6 +452,16 @@ function runDispatchAuthorSmoke(item, paths, opts) {
   };
   if (!pass) {
     Object.assign(outcome, extractRunFailureDetails(run));
+    if (railClassification === 'quota_exhausted' || railClassification === 'runner_failed') {
+      if (parsed && typeof parsed.cli_last_line === 'string') {
+        outcome.cli_last_line = parsed.cli_last_line;
+      } else {
+        const combined = `${run && run.stdout ? run.stdout : ''}\n${run && run.stderr ? run.stderr : ''}`;
+        const lines = combined.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        const last = lines.length ? lines[lines.length - 1] : '';
+        outcome.cli_last_line = redactText(last).text.slice(0, 200);
+      }
+    }
   }
   return outcome;
 }
@@ -556,6 +566,16 @@ function runOpencodeContainedSmoke(item, actualVersion, paths, opts) {
   };
   if (!pass) {
     Object.assign(outcome, extractRunFailureDetails(run));
+    if (railClassification === 'quota_exhausted' || railClassification === 'runner_failed') {
+      if (parsed && typeof parsed.cli_last_line === 'string') {
+        outcome.cli_last_line = parsed.cli_last_line;
+      } else {
+        const combined = `${run && run.stdout ? run.stdout : ''}\n${run && run.stderr ? run.stderr : ''}`;
+        const lines = combined.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        const last = lines.length ? lines[lines.length - 1] : '';
+        outcome.cli_last_line = redactText(last).text.slice(0, 200);
+      }
+    }
   }
   return outcome;
 }

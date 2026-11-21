@@ -489,6 +489,9 @@ ENDPOINT=""          # optional named endpoint (cc-shim only) → resolve-endpoi
 ENDPOINT_SUPPLIED=0
 LOCAL_RUNNER=0       # --runner local: public name stays local; the rail is cc-shim
 GATEWAY_TOKEN_SOURCE="" # local only: lane-file | endpoint. Never the token bytes.
+LOCAL_LEASE_ID="" LOCAL_LEASE_URL="" LOCAL_LEASE_TOKEN_ENV=""
+LOCAL_LEASE_STATUS="null" LOCAL_LEASE_GRANTED=0 LOCAL_LEASE_RELEASED=0 LOCAL_LEASE_RELEASE_ATTEMPTED=0 LOCAL_LEASE_DETAIL=""
+LOCAL_LEASE_HEARTBEATS=0 LOCAL_LEASE_HEARTBEAT_PID="" LOCAL_LEASE_HEARTBEAT_FILE="" LOCAL_LEASE_HEARTBEAT_SLEEP_FILE=""
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=lib/repo-identity.sh
 # Fail-open: a missing helper only degrades the manifest to repo_identity null (telemetry sidecar).
@@ -784,6 +787,7 @@ _cont_finalize_or_die() {
 }
 cleanup() {
   trap - EXIT
+  release_local_lease || true
   [ -n "${PACKED_PROMPT_TEMP:-}" ] && rm -f "$PACKED_PROMPT_TEMP"
   [ -n "${CAMPAIGN_PROMPT_FILE:-}" ] && rm -f "$CAMPAIGN_PROMPT_FILE"
   [ -n "${CAMPAIGN_CONTRACT_SNAPSHOT:-}" ] && rm -f "$CAMPAIGN_CONTRACT_SNAPSHOT"
@@ -808,6 +812,64 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+
+local_lease_json() {
+  local granted=false released=false id=null detail=null
+  [ "$LOCAL_LEASE_GRANTED" -eq 1 ] && granted=true
+  [ "$LOCAL_LEASE_RELEASED" -eq 1 ] && released=true
+  [ -z "$LOCAL_LEASE_ID" ] || id="\"$(_flat_json_escape "$LOCAL_LEASE_ID")\""
+  [ -z "$LOCAL_LEASE_DETAIL" ] || detail="\"$(_flat_json_escape "$LOCAL_LEASE_DETAIL")\""
+  if [ -n "$LOCAL_LEASE_HEARTBEAT_FILE" ] && [ -f "$LOCAL_LEASE_HEARTBEAT_FILE" ]; then
+    LOCAL_LEASE_HEARTBEATS="$(awk '$0=="." {n++} END {print n+0}' "$LOCAL_LEASE_HEARTBEAT_FILE" 2>/dev/null)"
+    LOCAL_LEASE_HEARTBEATS="${LOCAL_LEASE_HEARTBEATS:-0}"
+    if [ -z "$LOCAL_LEASE_DETAIL" ] && grep -q '^missed$' "$LOCAL_LEASE_HEARTBEAT_FILE" 2>/dev/null; then
+      LOCAL_LEASE_DETAIL="heartbeat_missed"
+    fi
+  fi
+  printf '{"id":%s,"granted":%s,"status":%s,"heartbeats":%s,"released":%s,"detail":%s}' "$id" "$granted" "$LOCAL_LEASE_STATUS" "$LOCAL_LEASE_HEARTBEATS" "$released" "$detail"
+}
+
+local_lease_heartbeat_loop() {
+  local interval="${AUTOPILOT_LOCAL_LEASE_TTL_S:-180}"
+  interval=$((interval / 3)); [ "$interval" -gt 0 ] || interval=1
+  while :; do
+    sleep "$interval" &
+    local sleep_pid=$!
+    printf '%s\n' "$sleep_pid" > "$LOCAL_LEASE_HEARTBEAT_SLEEP_FILE"
+    wait "$sleep_pid" || break
+    if node "$SELF_DIR/lib/local-impl-slot.js" --lease-operation heartbeat --lease-url "$LOCAL_LEASE_URL" --lease-id "$LOCAL_LEASE_ID" --token-env "$LOCAL_LEASE_TOKEN_ENV" >/dev/null 2>&1; then
+      printf '.\n' >> "$LOCAL_LEASE_HEARTBEAT_FILE"
+    else
+      printf 'missed\n' >> "$LOCAL_LEASE_HEARTBEAT_FILE"
+    fi
+  done
+}
+
+release_local_lease() {
+  [ "$LOCAL_LEASE_GRANTED" -eq 1 ] || return 0
+  local sleep_pid=""
+  if [ -r "$LOCAL_LEASE_HEARTBEAT_SLEEP_FILE" ]; then
+    IFS= read -r sleep_pid < "$LOCAL_LEASE_HEARTBEAT_SLEEP_FILE" || true
+    if [[ "$sleep_pid" =~ ^[0-9]+$ ]] && kill -0 "$sleep_pid" 2>/dev/null && [ "$(cat "/proc/$sleep_pid/comm" 2>/dev/null)" = "sleep" ]; then
+      kill "$sleep_pid" 2>/dev/null || true
+    fi
+  fi
+  if [ -n "$LOCAL_LEASE_HEARTBEAT_PID" ]; then
+    kill "$LOCAL_LEASE_HEARTBEAT_PID" 2>/dev/null || true
+    wait "$LOCAL_LEASE_HEARTBEAT_PID" 2>/dev/null || true
+    LOCAL_LEASE_HEARTBEAT_PID=""
+  fi
+  rm -f -- "$LOCAL_LEASE_HEARTBEAT_SLEEP_FILE"
+  if [ "$LOCAL_LEASE_RELEASE_ATTEMPTED" -eq 0 ]; then
+    LOCAL_LEASE_RELEASE_ATTEMPTED=1
+    if node "$SELF_DIR/lib/local-impl-slot.js" --lease-operation release --lease-url "$LOCAL_LEASE_URL" --lease-id "$LOCAL_LEASE_ID" --token-env "$LOCAL_LEASE_TOKEN_ENV" >/dev/null 2>&1; then
+      LOCAL_LEASE_RELEASED=1
+    else
+      LOCAL_LEASE_DETAIL="release_failed"
+    fi
+  fi
+  return 0
+}
 
 usage() { awk 'NR>1 { if ($0 !~ /^#/) exit; print }' "$0" | sed 's/^# \{0,1\}//'; }
 
@@ -1347,7 +1409,11 @@ NODE
   if [ "${BROKER_VERDICT_UNKNOWN_SET:-0}" -eq 1 ]; then
     broker_fields="${broker_fields}, \"broker_verdict_unknown\": \"$(_flat_json_escape "${BROKER_VERDICT_UNKNOWN:-}")\""
   fi
-  tip_verify_fields="$tip_verify_fields$broker_fields, \"local_fallback\": ${LOCAL_FALLBACK_JSON:-null}, \"local_slots\": ${LOCAL_SLOTS_JSON:-null}, \"shed\": ${SHED_ROUTE_JSON:-null}, \"target_precommit\": $(target_precommit_json)"
+  release_local_lease
+  tip_verify_fields="$tip_verify_fields$broker_fields, \"local_fallback\": ${LOCAL_FALLBACK_JSON:-null}, \"local_slots\": ${LOCAL_SLOTS_JSON:-null}, \"local_lease\": $(local_lease_json), \"shed\": ${SHED_ROUTE_JSON:-null}, \"target_precommit\": $(target_precommit_json)"
+  if [ "${SCRATCH:-0}" -eq 1 ]; then
+    tip_verify_fields="$tip_verify_fields, \"scratch\": {\"dir\": \"$(_flat_json_escape "${SCRATCH_DIR:-}")\", \"files\": ${SCRATCH_FILES:-0}, \"gate_result\": \"allowed\", \"rejected_manifest\": \"$(_flat_json_escape "${SCRATCH_REJECTED_FILE:-}")\"}"
+  fi
   hetero_log_fallback "$1"
   local _emit_json
   _emit_json="$(printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "num_turns": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s%s%s%s%s%s%s%s }\n' \
@@ -2687,6 +2753,7 @@ NODE
     [ -n "$_inst" ] && args+=(--expected-worktree-instance "$_inst")
     [ -n "${WORKTREE_ROOT_RUN_ID:-}" ] && export AUTOPILOT_WORKTREE_ROOT_RUN_ID="$WORKTREE_ROOT_RUN_ID"
   fi
+  release_local_lease
   unset ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN
   export LOCAL_BUSY_REDISPATCH=1
   export AUTOPILOT_LOCAL_FALLBACK_PRESET='{"reason":"no_free_slot","detail":"busy_at_run"}'
@@ -2941,7 +3008,7 @@ write_manifest() {
       "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$tip_verify_json" "$tip_verify_source_json" "$parent_json" "$root_json" "$depth_json" \
       "$mf_timeout_secs" "$(_flat_json_escape "$mf_timeout_source")" "$mf_timeout_enforced" "$strict_manifest_fields" "$strike_suppressed_fields" "$capability_suppressed_fields" "$effort_manifest_fields$role_kit_manifest_fields" "$campaign_scope_fields" "$REPO_IDENTITY_FIELDS$(declare -F dispatch_attr_fields >/dev/null 2>&1 && dispatch_attr_fields "${PROMPT_FILE:-}" "$runner" "${ENDPOINT:-}" "${MANIFEST_FINAL_STATUS:+${OUTCOME_COMMIT:-}}")" \
       "$(declare -F manifest_session_id_json >/dev/null 2>&1 && manifest_session_id_json || printf null)" \
-      "$(declare -F manifest_child_session_json >/dev/null 2>&1 && manifest_child_session_json || printf null), \"local_fallback\": ${LOCAL_FALLBACK_JSON:-null}, \"local_slots\": ${LOCAL_SLOTS_JSON:-null}" \
+      "$(declare -F manifest_child_session_json >/dev/null 2>&1 && manifest_child_session_json || printf null), \"local_fallback\": ${LOCAL_FALLBACK_JSON:-null}, \"local_slots\": ${LOCAL_SLOTS_JSON:-null}, \"local_lease\": $(local_lease_json)" \
       "$(target_precommit_json)" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
   return 0
@@ -2951,6 +3018,7 @@ write_manifest() {
 # reports phase:"exited" even after all processes/locks are gone. Best-effort.
 manifest_finalize() {
   [ -n "${MANIFEST_FILE:-}" ] || return 0
+  release_local_lease
   MANIFEST_FINAL_STATUS="${1:-}"
   MANIFEST_ENDED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   MANIFEST_ENDED_EPOCH="$(date +%s)"
@@ -3476,7 +3544,7 @@ SHED_ROUTE_MANIFEST_JSON=null
 SHED_ROUTE_TARGET=""
 IMPLICIT_LOCAL_DEFAULT=0
 _impl_role="${PACE_ROLE:-${AUTOPILOT_DISPATCH_ROLE:-implementer}}"
-if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_SUPPLIED" -eq 0 ] && [ "$RUNNER" = "auto" ] && [ "$STRICT_CONTRACT" -eq 0 ] \
+if [ "$RUNNER" = "auto" ] && [ "$STRICT_CONTRACT" -eq 0 ] \
    && [ -z "${ENGINE_CHOICE_JSON:-}" ] && [ -z "${AUTOPILOT_QUALIFICATION_OVERRIDE:-}" ] \
    && [ "$_impl_role" = "implementer" ] && [ -z "${AUTOPILOT_LOCAL_FALLBACK_PRESET:-}" ]; then
   if [ "${AUTOPILOT_SHED_ROUTE:-1}" != "0" ]; then
@@ -3535,33 +3603,48 @@ if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_S
     esac
   fi
   unset _shed_args _shed_skips _shed_skip _shed_skip_target _shed_runner _shed_model _shed_endpoint _shed_reason _shed_gate_msg _shed_gate_rc _shed_iterations _shed_iteration_limit
-  if [ "$RUNNER" != "auto" ]; then
-    : # shed selected a cloud target; the local slot probe is not applicable
-  else
+fi
+if [ "$RUNNER" = "auto" ] && [ "$STRICT_CONTRACT" -eq 0 ] \
+   && [ -z "${ENGINE_CHOICE_JSON:-}" ] && [ -z "${AUTOPILOT_QUALIFICATION_OVERRIDE:-}" ] \
+   && [ "$_impl_role" = "implementer" ] && [ -z "${AUTOPILOT_LOCAL_FALLBACK_PRESET:-}" ]; then
   _slot_line="$(node "$SELF_DIR/lib/local-impl-slot.js" --prompt-file "$PROMPT_FILE" --cwd "$(pwd)")"
-  _slot_parsed="$(node -e 'let o; try { o=JSON.parse(process.argv[1]); } catch { o={choose:false,reason:"no_free_slot",detail:"slot_query_failed:malformed"}; } const slots=o.local_slots==null?"null":JSON.stringify(o.local_slots); if (o.choose) process.stdout.write("choose\nnull\n"+slots+"\n"); else process.stdout.write("fallback\n"+JSON.stringify({reason:o.reason||"no_free_slot",detail:String(o.detail||"")})+"\n"+slots+"\n");' "$_slot_line")"
+  _slot_parsed="$(node -e 'let o; try{o=JSON.parse(process.argv[1]);}catch{o={choose:false,reason:"no_free_slot",detail:"lease_query_failed:malformed"};} const fb={reason:o.reason||"no_free_slot",detail:String(o.detail||"")}; if(o.family==="glm"||o.local_fallback_from) Object.assign(fb,{family:o.family||"glm",endpoint:o.endpoint||"glm_local",local_fallback_from:o.local_fallback_from||null}); console.log(o.choose?"choose":"fallback"); console.log(JSON.stringify(o.local_lease||null)); console.log(JSON.stringify(o.local_slots||null)); console.log(o.lease_url||""); console.log(o.lease_token_env||""); console.log(JSON.stringify(fb));' "$_slot_line")"
   _slot_kind="$(printf '%s\n' "$_slot_parsed" | sed -n '1p')"
   if [ "$_slot_kind" = "choose" ]; then
+    _lease_json="$(printf '%s\n' "$_slot_parsed" | sed -n '2p')"
+    LOCAL_LEASE_ID="$(node -e 'const o=JSON.parse(process.argv[1]); process.stdout.write(o.id||"")' "$_lease_json")"
+    LOCAL_LEASE_STATUS="$(node -e 'const o=JSON.parse(process.argv[1]); process.stdout.write(String(o.status))' "$_lease_json")"
+    LOCAL_LEASE_GRANTED=1
+    LOCAL_LEASE_URL="$(printf '%s\n' "$_slot_parsed" | sed -n '4p')"
+    LOCAL_LEASE_TOKEN_ENV="$(printf '%s\n' "$_slot_parsed" | sed -n '5p')"
+    _slot_choice="$(printf '%s\n' "$_slot_parsed" | sed -n '6p')"
+    _slot_family="$(node -e 'const o=JSON.parse(process.argv[1]); process.stdout.write(o.family||"qwen")' "$_slot_choice")"
+    ENDPOINT="$(node -e 'const o=JSON.parse(process.argv[1]); process.stdout.write(o.endpoint||"qwen_local")' "$_slot_choice")"
     LOCAL_SLOTS_JSON="$(printf '%s\n' "$_slot_parsed" | sed -n '3p')"
-    _gate_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner cc-shim --model qwen --endpoint qwen_local --cwd "$(pwd)" --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" && _gate_rc=0 || _gate_rc=$?
+    LOCAL_LEASE_HEARTBEAT_FILE="${TMPDIR:-/tmp}/autopilot-local-lease-heartbeats-$$"
+    : > "$LOCAL_LEASE_HEARTBEAT_FILE"
+    _gate_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner cc-shim --model "$_slot_family" --endpoint "$ENDPOINT" --cwd "$(pwd)" --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" && _gate_rc=0 || _gate_rc=$?
     if [ "$_gate_rc" -eq 0 ]; then
+      LOCAL_LEASE_HEARTBEAT_SLEEP_FILE="${TMPDIR:-/tmp}/autopilot-local-lease-heartbeat-sleep-$$"
+      local_lease_heartbeat_loop >/dev/null 2>&1 & LOCAL_LEASE_HEARTBEAT_PID=$!
       RUNNER="local"
+      MODEL="$_slot_family"
+      ENDPOINT_SUPPLIED=1
       IMPLICIT_LOCAL_DEFAULT=1
       export IMPLICIT_LOCAL_DEFAULT
-      LOCAL_FALLBACK_JSON=null
+      LOCAL_FALLBACK_JSON="$(node -e 'const o=JSON.parse(process.argv[1]); process.stdout.write(JSON.stringify(o.local_fallback_from||null))' "$_slot_choice")"
     else
       # A CN-gate refusal of the local seat is a block, not a cloud fallback.
       die_precondition "${_gate_msg:-cn_model_dispatch_barred alibaba local_name_external_host (01M7E2A1, d-1dfcf757)}"
     fi
   else
-    LOCAL_FALLBACK_JSON="$(printf '%s\n' "$_slot_parsed" | sed -n '2p')"
-    LOCAL_SLOTS_JSON="$(printf '%s\n' "$_slot_parsed" | sed -n '3p')"
-    if [ "$SHED_ROUTE_TARGET" = "local" ]; then
-      RUNNER="codex"
-    fi
+    _lease_json="$(printf '%s\n' "$_slot_parsed" | sed -n '2p')"
+    LOCAL_LEASE_STATUS="$(node -e 'try{const o=JSON.parse(process.argv[1]);process.stdout.write(o&&o.status!==null?String(o.status):"null")}catch{}' "$_lease_json")"
+    LOCAL_LEASE_DETAIL="$(node -e 'try{const o=JSON.parse(process.argv[1]);process.stdout.write(o&&o.detail||"")}catch{}' "$_lease_json")"
+    LOCAL_FALLBACK_JSON="$(printf '%s\n' "$_slot_parsed" | sed -n '6p')"
+    LOCAL_SLOTS_JSON=null
   fi
-  unset _slot_line _slot_parsed _slot_kind _gate_msg _gate_rc
-  fi
+  unset _slot_line _slot_parsed _slot_kind _lease_json _gate_msg _gate_rc
 fi
 unset _impl_role
 if [ "$RUNNER" = "local" ]; then
@@ -3569,7 +3652,7 @@ if [ "$RUNNER" = "local" ]; then
 fi
 # --runner local (explicit or the implementer default) with no --model is qwen. An explicit --model wins.
 if [ "$LOCAL_RUNNER" -eq 1 ] && [ "$MODEL_SUPPLIED" -eq 0 ]; then
-  MODEL="qwen"
+  MODEL="${_slot_family:-qwen}"
   MODEL_IS_DEFAULT=0
 fi
 # The reviewed run's actual seat (implicit local or the cloud seat this invocation

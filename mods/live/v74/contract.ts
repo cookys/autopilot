@@ -54,6 +54,12 @@ export function fleetLines(s: PmStatus): FleetLine[] {
 export type CardOption = { label: string; detail: string; recommended: boolean }
 export type DecideCard = { id: string; title: string; question: string; background: string | null; options: CardOption[] }
 export type TodoCard = { id: string; title: string; dueMs: number | null; question: string; options: CardOption[] } // source not live: fixtures/v74/todo.json
+// The decision list names the set-aside answer `待辦` (option c) in its own option list. It only works when a todo source exists to take the card, so a draw with no todo source drops it (r11 #1): no row, and `c` picks nothing.
+export const isTodoOption = (o: CardOption): boolean => ['待辦', 'todo'].includes(o.label.trim().toLowerCase())
+export function offerTodo(cards: DecideCard[] | null, todo: TodoCard[] | null): DecideCard[] | null {
+  if (cards === null || todo !== null) return cards
+  return cards.map(c => { const keep = c.options.filter(o => !isTodoOption(o)); return keep.length === 0 || keep.length === c.options.length ? c : { ...c, options: keep } })
+}
 export type CardNav = { cursor: number; picks: Record<string, number>; notes: Record<string, string>; noteMode: boolean } // picks/notes keyed by card id; only the card at cursor draws its options as buttons
 
 // ---- v7.4 page order and keys (sub-task B owns keys.ts / layout.ts / index.ts; everyone else reads this) ----
@@ -65,4 +71,4 @@ export const PET_KEY = '0' // the pet keeps its own tab (operator rule, PM 01M78
 export const PICK_KEYS = ['a', 'b', 'c'] as const
 
 // ---- what every v7.4 page receives (PageCtx.v74); a null field means the source is missing (draw the broken marker, never invent rows) ----
-export type V74Ctx = { pm: PmStatus | null; pmFetchedMs: number | null; decide: DecideCard[] | null; todo: TodoCard[] | null; nav: CardNav; ages?: Record<string, number | null> }
+export type V74Ctx = { pm: PmStatus | null; pmFetchedMs: number | null; decide: DecideCard[] | null; todo: TodoCard[] | null; nav: CardNav; ages?: Record<string, number | null>; keysHeld?: boolean; sendResult?: { n: number; left: number } | null }

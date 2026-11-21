@@ -10,6 +10,10 @@ import { v74Keylog } from './v74/keylog'
 import type { DecideCard } from './v74/contract'
 import decideFx from './fixtures/v74/decide.fixture'
 
+// r10b #2: s previews first, the second s sends
+const sendS = (nav: Parameters<typeof decideReduce>[0], c: Parameters<typeof decideReduce>[2], now: number) => decideReduce(decideReduce(nav, { kind: 'submit' }, c, now).nav, { kind: 'confirm' }, c, now)
+
+
 const t = makeT('zh-TW')
 const cards = decideFx as DecideCard[]
 type Node = { kind: string; props: Record<string, any> }
@@ -98,7 +102,7 @@ test('r6 send: s after the picks is decideReduce submit, which holds the cards',
   let nav = decideReduce({ ...NO_NAV }, { kind: 'pick', index: 0 }, ctx, 1).nav
   nav = decideReduce(nav, { kind: 'move', by: 1 }, ctx, 1).nav
   nav = decideReduce(nav, { kind: 'pick', index: 0 }, ctx, 1).nav
-  const sent = decideReduce(nav, { kind: 'submit' }, ctx, 5)
+  const sent = sendS(nav, ctx, 5)
   expect(sent.effect?.kind).toBe('send')
   expect(sent.nav.hold?.[cards[0].id]).toBe(5)
   expect(cards.filter(c => decideLine(cardToLive(c), sent.nav) !== null && sent.nav.hold?.[c.id] === undefined).length).toBe(0)
@@ -113,14 +117,14 @@ test('r6 dirty digit: the hotkey Button the host presses still switches to page 
   expect(d.prompt()).toBe('dirty prompt')
 })
 
-test('r6 narrow: 艦隊, 待決 and tok/s stay when the row is about 100 columns', () => {
+test('r6 narrow: 產線, 待決 and tok/s stay when the row is about 100 columns', () => {
   const slots = v74BareBandSlots('▲ 要你決定', { stuck: 1, running: 2, waiting: 3 }, 4, t)
   const speed = [{ role: 'bolt' as const, text: 'ϟ ' }, { role: 'value' as const, text: '—' }, { role: 'unit' as const, text: ' tok/s' }]
   const fitted = layoutBandLine(slots, 100, speed, [['pet'], ['fleetWait'], ['fleetRun', 'fleetWord'], ['trend']], false)
   const keptSpeed = fitted.speed ?? speed
   const segs = v74FitBand(fitted.band.segs, keptSpeed, false, 60)
   const line = segs.map(s => s.text).join('') + keptSpeed.map(s => s.text).join('')
-  expect(line).toContain('艦隊')
+  expect(line).toContain('產線')
   expect(line).toContain('待決')
   expect(line).toContain('tok/s')
   expect(v74SpeedText([])).toContain('tok/s')

@@ -69,8 +69,8 @@ test('r5 pick: a chosen option changes the line, not only its colour', () => {
     decide: { ...NO_NAV, picks: { [cards[0].id]: 1 } },
   }))
   const line = walk(tree).filter(n => n.kind === 'Text').map(flat).join('\n')
-  expect(line).toContain('◆')
-  expect(line).toMatch(/b: .*\u25c6|◆/)
+  expect(line).toContain('→')
+  expect(line).toMatch(/b: .*→|→ /)
 })
 
 test('r5 note: while typing, the note Input is the only autoFocus and a later digit hotkey is gone', () => {
@@ -127,7 +127,7 @@ test('r4 status: outside a project the own-seat segment says no project and the 
   const text = slots.flatMap(s => s.segs.map(g => g.text)).join('')
   expect(slots[0].segs[0].text).toBe('沒有專案')
   expect(text).not.toContain('autopilot status runs --watch')
-  expect(text).toContain('艦隊')
+  expect(text).toContain('產線')
   expect(text).toContain('來源')
   expect(text).toContain('待決')
   expect(text).toContain('0')

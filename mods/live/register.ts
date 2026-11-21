@@ -78,10 +78,11 @@ import { routeKey } from './pages/keys'
 import type { KeyAction } from './pages/keys'
 import { decideReduce, NO_NAV, v74Pool } from './pages/decide'
 import type { DecideNav } from './pages/decide'
-import { SEATS_TIMEOUT_MS, seatQuota } from './pages/now'
+import { SEATS_TIMEOUT_MS, seatQuota, v74PmCounts } from './pages/now'
 import { PAGES, EXTRA_PAGES } from './pages/index'
 import { makeDecideFeed, makePmFeed, mergeDecideCards } from './v74/feeds'
-import type { CardNav, DecideCard, V74Ctx } from './v74/contract'
+import { offerTodo } from './v74/contract'
+import type { CardNav, DecideCard, PmStatus, TodoCard, V74Ctx } from './v74/contract'
 import { v74Keylog } from './v74/keylog'
 import { frameHeight } from './pages/frame'
 import type { PageId } from './pages/frame'
@@ -98,14 +99,14 @@ import {
   readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
   paneWidth, DEFAULT_PANE_COLS, slotTab, slotUnfolds, truncateToWidth, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
 } from './model'
-import type { AccountView, ActivityItem, Counts, DecideState, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveDecision, LiveSnapshot, LookTarget, Manifest, PaneLine, PaneTab, Seg, Slot, SlotId, QuotaWindow, Sources } from './model'
+import type { AccountView, ActivityItem, Counts, DecideState, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveDecision, LiveSnapshot, LookTarget, Manifest, PaneLine, PaneTab, Seg, Slot, SlotId, QuotaWindow, Sources, SourceGroup } from './model'
 
 const TICK_MS = 5000
 const FACTS_PRUNE_MS = 60_000
 const FACTS_TMP_STALE_MS = 5 * 60 * 1000
 const PANE_ID = 'autopilot-live'
 const V74_FRAME_MIN = 6
-const V74_FRAME_MAX = 27 // design S2: 25 body rows + both borders. V74_FRAME_MIN: the smallest v7.4 page frame (two borders and four rows); under it only the band row draws
+const V74_FRAME_MAX = 28 // design S2..S10 measure 28 rows from ╭ to ╰ (26 body rows + both borders; r8 #6 had 27). V74_FRAME_MIN: the smallest v7.4 page frame (two borders and four rows); under it only the band row draws
 const MAX_PATH_FILES = 256
 const MAX_RECEIPT_FILES = 64
 const MAX_CAMPAIGN_ROOTS = 8 // session-mode.js CAMPAIGN_ROOTS_MAX
@@ -195,12 +196,17 @@ export function v74TabStep(page: string, element: unknown, origin: unknown): { k
   const by = Math.abs(d) === 1 ? d : -Math.sign(d)
   return { kind: 'move', by: by > 0 ? 1 : -1 }
 }
+// the 現況 page's 產線 counts (✗ fail, ⊘ parked, ⋯ unknown, ● running) as the band's chips: failed, stuck(⊘), waiting(⋯), running
+export function v74LineCounts(pm: PmStatus): { failed: number; stuck: number; running: number; waiting: number; normal: number } {
+  const c = v74PmCounts(pm)
+  return { failed: c.fail, stuck: c.idle, running: c.ok, waiting: c.unknown, normal: 0 }
+}
 export function v74BareBandSlots(own: string, fleet: { stuck: number; running: number; waiting: number } | null, decideN: number, t: T): Slot[] {
-  const fleetSlot = slotFleet(fleet ?? { stuck: 0, running: 0, waiting: 0 }, t)
+  const fleetSlot = slotFleet(fleet ?? { stuck: 0, running: 0, waiting: 0 }, t, true)
   return [
     { id: 'verdict', segs: [{ text: own.split(' · ')[0], bold: true }] },
     ...(fleetSlot === null ? [] : [fleetSlot]),
-    { id: 'hygiene', segs: [{ text: t('band.src_unknown'), dim: true, tag: 'chip' }] },
+    { id: 'hygiene', segs: [{ text: t('v74.b.source_word'), dim: true, tag: 'chip' }, { text: ' ', tag: 'chip' }, { text: t('band.src_unknown'), dim: true, tag: 'chip' }] },
     { id: 'decide', segs: [{ text: t('v74.b.decide_word'), dim: true, tag: 'chip' }, { text: ' ', tag: 'chip' }, { text: String(decideN), tag: 'chip' }] },
   ]
 }
@@ -223,11 +229,12 @@ function kickV74($: EngineInterface, nowMs: number): void {
   void pmFeed.refresh(run, nowMs).then(r => { if (r) void $.ui.invalidate('ui.render') }).catch(() => {})
   void decideFeed.refresh(run, nowMs).then(r => { if (r) void $.ui.invalidate('ui.render') }).catch(() => {})
 }
+const V74_TODO: TodoCard[] | null = null // the todo source (fleet todo --json) is not wired: decision cards do not offer `待辦` (offerTodo) until it is
 async function v74CtxOf($: EngineInterface, withStore = false): Promise<V74Ctx> {
   const nav = await read($, V74_NAV)
   // The host Pane's 待決 tab stays the retired pointer. Only the band box merges the card store.
-  const decide = withStore ? mergedDecide() : decideFeed.cards()
-  return { pm: pmFeed.status(), pmFetchedMs: pmFeed.fetchedMs(), decide, todo: null, nav, ages: { now: pmFeed.fetchedMs(), decide: decideFeed.fetchedMs(), fleet: fleetFeed.fetchedMs() } }
+  const decide = offerTodo(withStore ? mergedDecide() : decideFeed.cards(), V74_TODO)
+  return { pm: pmFeed.status(), pmFetchedMs: pmFeed.fetchedMs(), decide, todo: V74_TODO, nav, keysHeld: v74KeysHeld, sendResult: v74SendResult, ages: { now: pmFeed.fetchedMs(), decide: decideFeed.fetchedMs(), fleet: fleetFeed.fetchedMs() } }
 }
 // The summary other plugins read (PM G33a; fleet.ts `FleetSummary`, `v: 1`): written by the feed after each run, success or failure, never while drawing. Each row is counted
 // by the state the Fleet tab draws for it, so the band reader and the tab never disagree.
@@ -548,14 +555,80 @@ async function resolveScope($: EngineInterface, autopilotHome: string, liveBase:
 //    is not normally visible; it is retried on the next poll.
 //  - a listed file or directory of this project that cannot be checked (stat fails: gone, or EACCES, the engine gives a message only) reads as changed (stale),
 //    and so does a directory that cannot be listed once its mtime moved: with no way to confirm nothing changed, the age verdict stands.
+// The fresh verdict of one publish is MEMOIZED (keyed by the envelope's path + published_at + observed_at: the bytes of a publish are fixed once its tmp + rename
+// landed) together with the group dirs' mtimes the full check saw and the new files it could not judge yet (unreadable, unparseable, or a missing / non-string
+// owner: "not an answer, not cached"). The next poll of the same publish stats the group DIRS only: every writer creates / replaces / deletes by tmp + rename, so
+// any of those moves the dir's own mtime; equal dir mtimes confirm nothing of this project's moved and the memoized fresh stands without a single per-file stat
+// (a host's session-mode dir holds thousands of files, and a per-file pass per poll burned 11-22% of a core per seat). The pending files are re-read before the
+// memoized fresh is trusted (a repair must be seen on the next poll, exactly as by the full check), and a dir whose mtime moved, or that cannot be confirmed
+// (absent / EACCES: the same two outcomes as the full check), runs the full check, which re-memoizes a fresh verdict with what it saw. The memo is bounded
+// (SOURCE_MEMO_MAX: cleared whole above it) and a hot reload drops it with the rest of the module state.
+const SOURCE_MEMO_MAX = 256
+const sourceMemo = new Map<string, { dirs: (number | null)[]; pending: { p: string; g: number }[] }>()
+function rememberVerdict(key: string, dirs: (number | null)[], pending: { p: string; g: number }[], verdict: EnvelopeCheck): EnvelopeCheck {
+  if (verdict.status === 'fresh') {
+    if (sourceMemo.size >= SOURCE_MEMO_MAX) sourceMemo.clear()
+    sourceMemo.set(key, { dirs, pending })
+  }
+  return verdict
+}
 const notOurs = new Set<string>()
-async function judgeByChange($: EngineInterface, check: EnvelopeCheck): Promise<EnvelopeCheck> {
+async function judgeByChange($: EngineInterface, check: EnvelopeCheck, idPath: string): Promise<EnvelopeCheck> {
   const env = check.envelope as Json
   if (env.sources === undefined) return check // an older watcher: no list, the age verdict stands
   const moved: EnvelopeCheck = { ...check, status: 'stale', moved: true }
   const groups = sourcesOf(env)
   if (groups === null) return moved // a list that is there but unreadable cannot confirm nothing changed
-  for (const g of groups) {
+  // Include the immutable envelope bytes too: timestamp precision alone is not a unique publish identity.
+  const memoKey = idPath + '|' + JSON.stringify(env)
+  const hit = sourceMemo.get(memoKey)
+  if (hit !== undefined) {
+    const freshNow: EnvelopeCheck = { status: 'fresh', envelope: env }
+    // The last full check of this publish was fresh and saw these dir mtimes. Equal dir mtimes confirm nothing of this project's
+    // moved (see above): no per-file stats. A dir that cannot be re-stat'ed gets the full check's own two outcomes: absent then
+    // and still absent is no change, anything else cannot confirm nothing changed.
+    let same = true
+    for (let i = 0; i < groups.length && same; i++) {
+      const g = groups[i]
+      const dirSt = await $.fs.stat(g.dir).catch(() => null)
+      if (dirSt === null) {
+        const absent = await $.fs.exists(g.dir).then(x => !x).catch(() => false)
+        if (absent && g.dir_mtime_ms === null && hit.dirs[i] === null) continue
+        return moved
+      }
+      same = dirSt.mtimeMs === hit.dirs[i]
+    }
+    if (!same) return await fullSourceCheck($, check, groups, memoKey)
+    // The pending files are the ones the last fresh verdict could not judge: they are re-read, the full check's way (a repair
+    // must be seen on the next poll); only a string owner equal to this project's makes the snapshot stale, a different string
+    // settles them into notOurs, everything else stays pending.
+    const still: { p: string; g: number }[] = []
+    for (const pr of hit.pending) {
+      const g = groups[pr.g]
+      const text = await readText($, pr.p)
+      if (text === null) { still.push(pr); continue }
+      const parsed = parseJson(text)
+      if (!parsed.ok || !isObject(parsed.value)) { still.push(pr); continue }
+      const owner = parsed.value[g.match_field]
+      if (owner === g.match_value) return moved
+      if (typeof owner !== 'string') { still.push(pr); continue }
+      if (notOurs.size > 20000) notOurs.clear()
+      notOurs.add(pr.p + '|' + g.match_field + '=' + g.match_value)
+    }
+    if (still.length !== hit.pending.length) rememberVerdict(memoKey, hit.dirs, still, freshNow) // the set shrank: keep the memo current
+    return freshNow
+  }
+  return await fullSourceCheck($, check, groups, memoKey)
+}
+// The full per-file pass (what this used to be): every listed file is stat'ed, a moved dir is listed and every file not seen
+// before is read once and judged by this project's match value. `pending` collects the new files left unanswered, for the memo.
+async function fullSourceCheck($: EngineInterface, check: EnvelopeCheck, groups: SourceGroup[], memoKey: string): Promise<EnvelopeCheck> {
+  const env = check.envelope as Json
+  const moved: EnvelopeCheck = { ...check, status: 'stale', moved: true }
+  const dirsSeen: (number | null)[] = []
+  const pending: { p: string; g: number }[] = []
+  for (let gi = 0; gi < groups.length; gi++) {
+    const g = groups[gi]
     for (const f of g.files) {
       const st = await $.fs.stat(f.path).catch(() => null)
       if (st === null || sourceMoved(f.mtime_ms, st.mtimeMs)) return moved // a listed file that cannot be checked is a change, whatever was recorded
@@ -564,9 +637,10 @@ async function judgeByChange($: EngineInterface, check: EnvelopeCheck): Promise<
     if (dirSt === null) {
       // absent then and still absent is no change; any other failure (EACCES: the engine gives a message only) cannot be told from it by stat, so ask exists
       const absent = await $.fs.exists(g.dir).then(x => !x).catch(() => false)
-      if (absent && g.dir_mtime_ms === null) continue
+      if (absent && g.dir_mtime_ms === null) { dirsSeen.push(null); continue }
       return moved
     }
+    dirsSeen.push(dirSt.mtimeMs)
     if (!sourceMoved(g.dir_mtime_ms, dirSt.mtimeMs)) continue
     let entries: { name: string; kind: string }[]
     try { entries = await $.fs.list(g.dir) } catch { return moved }
@@ -577,17 +651,17 @@ async function judgeByChange($: EngineInterface, check: EnvelopeCheck): Promise<
       const memo = p + '|' + g.match_field + '=' + g.match_value
       if (known.has(p) || notOurs.has(memo)) continue
       const text = await readText($, p)
-      if (text === null) continue // unreadable now: not an answer, not cached, read again next poll
+      if (text === null) { pending.push({ p, g: gi }); continue } // unreadable now: not an answer, not cached, read again next poll
       const parsed = parseJson(text)
-      if (!parsed.ok || !isObject(parsed.value)) continue // same: a half-written or foreign shape is retried
+      if (!parsed.ok || !isObject(parsed.value)) { pending.push({ p, g: gi }); continue } // same: a half-written or foreign shape is retried
       const owner = parsed.value[g.match_field]
       if (owner === g.match_value) return moved
-      if (typeof owner !== 'string') continue // field missing, null or not a string: an incomplete file, not another project's; read again next poll
+      if (typeof owner !== 'string') { pending.push({ p, g: gi }); continue } // field missing, null or not a string: an incomplete file, not another project's; read again next poll
       if (notOurs.size > 20000) notOurs.clear()
       notOurs.add(memo)
     }
   }
-  return { status: 'fresh', envelope: env }
+  return rememberVerdict(memoKey, dirsSeen, pending, { status: 'fresh', envelope: env })
 }
 
 // The envelope of one scope: the tmpfs file, then the SSD copy; a fresh one beats a stale one.
@@ -600,7 +674,7 @@ async function findEnvelope($: EngineInterface, autopilotHome: string, liveBase:
   for (const path of paths) {
     let check = checkEnvelope(await readText($, path), want, nowMs)
     // a writer that is gone (the final publish) leaves a snapshot judged by what it was built from, never by its age: a change makes it stale even while valid_for_s runs
-    if ((check.status === 'fresh' || check.status === 'stale') && check.envelope !== null && check.envelope.writer === null) check = await judgeByChange($, check)
+    if ((check.status === 'fresh' || check.status === 'stale') && check.envelope !== null && check.envelope.writer === null) check = await judgeByChange($, check, path)
     if (check.status === 'fresh') return check
     if (check.status === 'stale' && stale === null) stale = check
     if (check.status === 'malformed') malformed = true
@@ -1141,6 +1215,7 @@ async function decidePress($: EngineInterface, id: string): Promise<void> {
     if (m !== null) {
       const k = Number(m[2])
       decideFocus = optKey(m[1], k)
+      decideLocal = { ...decideLocal, armed: false } // a pick changes what `s` would send: the preview is over
       await update($, DECIDE, s => applyPick(s, m[1], k))
     } else if (id === 'submit') await holdDecide($)
     else if (id.startsWith('undo:')) await undoDecide($, id.slice(5))
@@ -1401,6 +1476,10 @@ async function commitV74Send($: EngineInterface, st: DecideState, feed: readonly
   })
   if (failed.length > 0) $.ui.toast(t('decide.send_failed', { reason: failed.join(' ') }))
   for (const id of Object.keys(next.sent)) if (st.sent[id] === undefined) durableClosedIds.add(id)
+  const sentNow = Object.keys(next.sent).filter(id => st.sent[id] === undefined).length
+  v74SendResult = { n: sentNow, left: feed.filter(c => next.sent[c.id] === undefined).length }
+  v74KeysHeld = v74KeysHeldNext(v74KeysHeld, { kind: 'sent' })
+  void $.ui.invalidate('ui.render')
   await update($, DECIDE, s => ({ ...s, sent: next.sent }))
 }
 async function undoDecide($: EngineInterface, id: string): Promise<void> {
@@ -1520,8 +1599,23 @@ async function panePagePress($: EngineInterface, id: PageId): Promise<void> {
   paneTab = PAGE_TAB_OF[id] ?? paneTab
   keyed(decideScroll, 'page:' + id) // K1: a different page starts at its first row.
   void $.ui.scroll({ in: PANE_ID, to: 'start' }).catch(() => undefined)
-  decideLocal = { ...decideLocal, textMode: false, textBuf: '' } // a tab press ends a note being typed: the mode must not outlive the page
+  decideLocal = { ...decideLocal, textMode: false, textBuf: '', armed: false } // a tab press ends a note being typed: the mode must not outlive the page
   $.ui.invalidate('ui.render')
+  // r8-2 keylog: in the band box the tab Buttons keep their keys across pages, so autoFocus does not fire again and the host's ring stays on the
+  // tab of the page left (4 → tab:review). Back on 待決, Down then lands on tab:spend, three tabs away, which v74TabStep reads as the wrap (Up).
+  // Put the ring on the page's own tab, as armNote does for the note.
+  if (v74Open && (id === 'decide' || id === 'todo')) void ringToTab($, id)
+}
+async function renderLater($: EngineInterface): Promise<void> {
+  await Promise.resolve()
+  await Promise.resolve()
+  await $.ui.invalidate('ui.render').catch(() => undefined)
+}
+async function ringToTab($: EngineInterface, id: PageId): Promise<void> {
+  await Promise.resolve()
+  await Promise.resolve()
+  if (panePage !== id) return
+  await $.ui.focus({ requestId: ABOVE_PROMPT, key: 'tab:' + id }).catch(() => undefined)
 }
 
 async function paneTabPress($: EngineInterface, t: PaneTab, legacy = false): Promise<void> {
@@ -1533,7 +1627,7 @@ async function paneTabPress($: EngineInterface, t: PaneTab, legacy = false): Pro
     }
     paneTab = t
     panePage = pageOfTab(t)
-    decideLocal = { ...decideLocal, textMode: false, textBuf: '' }
+    decideLocal = { ...decideLocal, textMode: false, textBuf: '', armed: false }
     $.ui.invalidate('ui.render')
     return
   }
@@ -1549,7 +1643,7 @@ const focusRows = (id: string, expanded: boolean): number => {
   if (id === 'spend') return spendFocusRows(snapshot)
   return 1
 }
-let decideLocal: Pick<DecideNav, 'cursor' | 'folded' | 'textMode' | 'textBuf' | 'opt' | 'detailOffset'> = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt }
+let decideLocal: Pick<DecideNav, 'cursor' | 'folded' | 'textMode' | 'textBuf' | 'opt' | 'detailOffset' | 'armed'> = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt }
 const framePageId = (): string => panePage
 // B56: crossing the side-dock width threshold unmounts `<Pane placement="dock">` and mounts `<Pane placement="inline">` (or back).
 // On CC 2.1.327 that remount drops the pane's keyboard focus to the prompt and collides on the previous placement's Button keys,
@@ -1575,13 +1669,39 @@ let panePlacementEpoch = 0
 let paneFocused = false
 let paneOpenAsked = false
 let paneOpened = false
+// r8 #2: whether the band's frame holds the keyboard now, shown as words in the bottom border (`keys in pane` / `ctrl+x tab`). A focus event that names a band element, or a key that reached the frame, says yes;
+// a focus event that names nothing (the prompt took it back), the close key and a closed pane say no.
+let v74KeysHeld = false
+// r8 #3: how many cards the last `s` sent, shown under the send row (`已送出 N 張 · 尚有 M 張待決`); a new pane open clears it
+let v74SendResult: { n: number; left: number } | null = null
+// r10 #2: a focus event the program raised itself (the current tab's autoFocus mounting again after a render, or after Esc handed the keyboard back) is not the person taking the keyboard:
+// only an event whose origin is the person sets the word to `keys in pane`; any event that names no band element clears it.
+export function v74KeysHeldAfter(was: boolean, named: string | undefined, origin: unknown): boolean {
+  if (!bandElement(named)) return false
+  return (origin as { kind?: unknown } | undefined)?.kind === 'person' ? true : was
+}
+// r11 #4: while the send preview is up, a focus event that names no band element is the host's Esc handing the keyboard to the prompt; it cancels the preview instead (one meaning for Esc there).
+export const v74EscCancelsPreview = (armed: boolean | undefined, open: boolean, page: string, named: string | undefined): boolean => open && armed === true && page === 'decide' && !bandElement(named)
+// r11 #2: every change of the border word goes through this one function, so the sequence open -> keys -> send -> Esc is testable without the host.
+// A send posts the [待決回覆] line to the prompt and starts a turn; the host then gives the first Esc to the turn (it stops it) and raises no focus event for it, so the pane cannot tell
+// when the prompt has the keyboard again. After a send the word therefore falls back to `ctrl+x tab` and comes back only on evidence: a key that reached the pane or a focus event of the person.
+export type V74KeysEvent = { kind: 'open' } | { kind: 'closed' } | { kind: 'sent' } | { kind: 'key'; key: KeyAction['kind'] } | { kind: 'focus'; named: string | undefined; origin: unknown }
+export function v74KeysHeldNext(was: boolean, ev: V74KeysEvent): boolean {
+  if (ev.kind === 'open' || ev.kind === 'closed' || ev.kind === 'sent') return false
+  if (ev.kind === 'key') return ev.key !== 'close' && ev.key !== 'page' ? true : was
+  return v74KeysHeldAfter(was, ev.named, ev.origin)
+}
+const bandElement = (named: string | undefined): boolean => named !== undefined && /^(tab:|card:|letter:|hotkey:|opt:|v74-note$)/.test(named)
 function markPaneOpen(): void {
+  v74KeysHeld = false
+  v74SendResult = null
   v74Open = true
   paneOpened = true
   paneOpenAsked = true
   panePlacement = null
 }
 function markPaneClosed(): void {
+  v74KeysHeld = false
   v74Open = false
   paneOpened = false
   paneOpenAsked = false
@@ -1647,6 +1767,7 @@ async function frameKeyBody($: EngineInterface, k: KeyAction): Promise<void> {
     ...(k.kind === 'cursor' ? { cursorBefore, cursorAfter: cursorBefore } : {}),
   })
   const noteWas = decideLocal.textMode
+  v74KeysHeld = v74KeysHeldNext(v74KeysHeld, { kind: 'key', key: k.kind })
   try {
     if (k.kind === 'page') { await panePagePress($, k.to as PageId); return }
     if (k.kind === 'close') {
@@ -1671,7 +1792,7 @@ async function frameKeyBody($: EngineInterface, k: KeyAction): Promise<void> {
       }
       const ctx = { live: snapshot, console: consoleSnap, size: { cols: decideCols, rows: 24 }, t: tr, nowMs, v74 }
       const r = decideReduce({ ...st, ...decideLocal }, k, ctx, nowMs)
-      decideLocal = { cursor: r.nav.cursor, folded: r.nav.folded, textMode: r.nav.textMode, textBuf: r.nav.textBuf, opt: r.nav.opt, detailOffset: r.nav.detailOffset }
+      decideLocal = { cursor: r.nav.cursor, folded: r.nav.folded, textMode: r.nav.textMode, textBuf: r.nav.textBuf, opt: r.nav.opt, detailOffset: r.nav.detailOffset, armed: r.nav.armed }
       if (k.kind === 'cursor') {
         void v74Keylog($, {
           handler: 'frameKey', component: 'AbovePrompt', key: 'cursor', event: 'cursor',
@@ -1715,6 +1836,7 @@ export async function paneKey($: EngineInterface, key: string, over: { paneFocus
     paneFocus: over.paneFocus ?? true,
     focusedButton: over.focusedButton ?? false,
     textMode: page === 'decide' && decideLocal.textMode,
+    armed: page === 'decide' && decideLocal.armed === true,
   })
   if (act.kind !== 'none' && act.kind !== 'pass' && act.kind !== 'button') await frameKey($, act)
   return act
@@ -1907,7 +2029,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const pageOpen = async (id: BandPageId, unfold: string | null = null, legacyCon?: ConsoleTab) => {
       const tab = PAGE_TAB_OF[id] ?? 'now'
       consoleTab = legacyCon ?? PAGE_CONSOLE_OF[id] ?? 'command'
-      decideLocal = { ...decideLocal, textMode: false, textBuf: '' }
+      decideLocal = { ...decideLocal, textMode: false, textBuf: '', armed: false }
       await openOn(tab, unfold, id)
     }
     const consoleInfo = async () => {
@@ -1969,16 +2091,27 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const fleetNow = await read($, FLEET)
     // X3: a bus snapshot owns every pane/band count. Preserve the existing
     // task-only band when no console snapshot has ever been available.
-    const fleetCounts = consoleSnap !== null ? consoleFleetCounts(consoleSnap, t) : fleetNow.fetchedMs !== null
+    // r10 #3: in the v7.4 band the 產線 counts are the 現況 page's own (v74PmCounts over fleet pm status), so the band and the page never disagree; before that feed answers, the older sources stay
+    const pmNow = v74 ? pmFeed.status() : null
+    const fleetCounts = pmNow !== null ? v74LineCounts(pmNow) : consoleSnap !== null ? consoleFleetCounts(consoleSnap, t) : fleetNow.fetchedMs !== null
       ? { stuck: fleetNow.totals.stuck, running: fleetNow.totals.running, waiting: fleetNow.totals.waiting } : null
-    const fleetSlot = snap !== null && snap.band !== null && (!consoleOn || v74) ? slotFleet(fleetCounts, t) : null // v7.4: the band row carries the fleet counts in console mode too (design S1)
+    const fleetSlot = snap !== null && snap.band !== null && (!consoleOn || v74) ? slotFleet(fleetCounts, t, v74) : null // v7.4: the band row carries the fleet counts in console mode too (design S1)
     if (fleetSlot !== null && snap !== null && snap.band !== null) {
       const base = snap.band.slots
       const atV = base.findIndex(s => s.id === 'verdict')
       // v7.4 (design S1): `待決 N` after the fleet counts, N = the cards `fleet decision list` returned; a click opens the 待決 page
       const decideN = v74 ? mergedDecide()?.length ?? 0 : 0
       const decideSlot: Slot | null = decideN > 0 && !base.some(s => s.id === 'decide') ? { id: 'decide', segs: [{ text: t('v74.b.decide_word'), dim: true, tag: 'chip' }, { text: ' ', tag: 'chip' }, { text: String(decideN), tag: 'chip' }] } : null
-      const withFleet = [...base.slice(0, atV + 1), fleetSlot, ...(decideSlot === null ? [] : [decideSlot]), ...base.slice(atV + 1)]
+      // r8 #12 (design S1): `艦隊 … │ 來源 <load source> ⚑ n │ 待決 N`. The hygiene slot moves up to sit right after the fleet counts and carries the 來源 label; v7.4 only.
+      const hyg = v74 ? base.find(s => s.id === 'hygiene') ?? null : null
+      const sourceSlot: Slot | null = hyg === null ? null : { ...hyg, segs: [{ text: t('v74.b.source_word'), dim: true, tag: 'chip' }, { text: ' ', tag: 'chip' }, ...hyg.segs] }
+      // r8 #4: the band names the question of the card the 待決 page has at its cursor, not the first pending one
+      const feedCards = v74 ? mergedDecide() : null
+      const cur = feedCards === null || feedCards.length === 0 ? null : feedCards[Math.max(0, Math.min(feedCards.length - 1, decideLocal.cursor))]
+      const baseQ = cur === null ? base : base.map(s => s.id !== 'verdict' || !s.segs.some(x => x.tag === 'reason') ? s : { ...s, segs: s.segs.map(x => x.tag === 'reason' ? { ...x, text: cur.question } : x) })
+      const rest = hyg === null ? baseQ : baseQ.filter(s => s.id !== 'hygiene')
+      const atV2 = rest.findIndex(s => s.id === 'verdict')
+      const withFleet = [...rest.slice(0, atV2 + 1), fleetSlot, ...(sourceSlot === null ? [] : [sourceSlot]), ...(decideSlot === null ? [] : [decideSlot]), ...rest.slice(atV2 + 1)]
       const parts = rows >= 1 ? v74SpeedParts(steps, petText) : null
       // room is the cells left after the strip and the one-cell gap. The › is not subtracted here: fittedBandWidth counts it when `more` is set.
       // Row 2 owns the tab strip. Subtracting it here left row 1 about 40 cells at 100 columns,
@@ -2040,7 +2173,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge, usageOn, moreTo, con, bandPreset, consoleOn && consoleSnap !== null ? bandQuotaSeg(normalizedPools(consoleSnap), bandNow, t, qSrc) : null, paneOpen || v74, legacyTabs, forgeRow !== null, legacyTabs ? undefined : () => { void togglePane() }, paneOpen)
     // v7.4: the O4 shell and the two-row band never draw. Closed: the one-line BandBar. Open: the page as a full-width framed tree (title in the top border, hint in the bottom border), the tab row, then the BandBar row.
     if (v74) {
-      const height = Math.min(rows - 1, V74_FRAME_MAX) // the band row stays; the tab row is the frame's bottom border. Never more than the design's 27 rows.
+      const height = Math.min(rows - 1, V74_FRAME_MAX) // the band row stays; the tab row is the frame's bottom border. Never more than the design's 28 rows.
       if (!v74Open || height < V74_FRAME_MIN) return stackRows(el, [bar.row1])
       const page = await paneTree($, e as never, false, height)
       await logBandGeometry($, rows, columns, height + 2)
@@ -2314,12 +2447,16 @@ export function registerLive(on: Parameters<Register>[0]): void {
   on('ui.focus', ($, e, next) => {
     const raw = e as { element?: unknown; key?: unknown; component?: string }
     const named = typeof raw.element === 'string' ? raw.element : typeof raw.key === 'string' ? raw.key : undefined
-    void v74Keylog($, { handler: 'ui.focus', component: raw.component, element: named, page: panePage, cursor: decideLocal.cursor, focusOwner: decideLocal.textMode ? 'v74-note' : 'band', noteOpen: decideLocal.textMode })
+    void v74Keylog($, { handler: 'ui.focus', component: raw.component, element: named, origin: ((raw as { origin?: { kind?: unknown } }).origin?.kind as string | undefined), page: panePage, cursor: decideLocal.cursor, focusOwner: decideLocal.textMode ? 'v74-note' : 'band', noteOpen: decideLocal.textMode })
     if (decideLocal.textMode && noteArmed && named !== 'v74-note' && (named === undefined || named === '')) {
       noteArmed = false
       void frameKey($, { kind: 'text_cancel' })
       return {}
     }
+    if (v74EscCancelsPreview(decideLocal.armed, v74Open, panePage, named)) { void frameKey($, { kind: 'disarm' }); return {} }
+    // r8-3: the border word follows the keyboard. It only re-renders when the value really flips, and one tick later (two microtasks, as ringToTab does), never inside the focus event:
+    // a render there remounts the tab Buttons and the host's focus lands on a card Button, which wrote the cursor back (r8-1 gate, step 22).
+    if (v74Open) { const was = v74KeysHeld; v74KeysHeld = v74KeysHeldNext(was, { kind: 'focus', named, origin: (raw as { origin?: unknown }).origin }); if (was !== v74KeysHeld) void renderLater($) }
     const step = decideLocal.textMode || bandLegacy || !v74Open ? null : v74TabStep(panePage, named, (raw as { origin?: unknown }).origin)
     if (step !== null) { void frameKey($, step); return {} } // the ring stays on the current tab
     const at = v74FocusAt(raw)

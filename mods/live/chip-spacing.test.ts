@@ -106,7 +106,7 @@ test('chip spacing: each slot, as drawn, is chips joined by CHIP_GAP, each chip 
   expect(texts(slotReview(review, qc('owed')))).toBe('↺ R3  QC ▲')
   expect(texts(slotReview(null, qc('ok')))).toBe('QC ✓')
   expect(qcChip(qc('owed'))).toBe('QC ▲')
-  expect(texts(slotDecisions(dv({ count: 7, undocumented: 2, ladder: { rung: 'U3', at: 'x' } })))).toBe('◆ 7  ? 2  U3')
+  expect(texts(slotDecisions(dv({ count: 7, undocumented: 2, ladder: { rung: 'U3', at: 'x' } })))).toBe('✓ 7  ? 2  U3')
   expect(texts(slotHygiene(ls(), rs(3)))).toBe('dev ↓ 3  ⚑ 3')
   expect(texts(slotHygiene(null, rs(3)))).toBe('⚑ 3')
   expect(texts(slotHygiene(ls({ behind_upstream: 0 }), rs(3)))).toBe('dev ⚑ 3') // a label and the chip it modifies: one blank

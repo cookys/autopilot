@@ -190,6 +190,7 @@ type World = {
   lists: string[]
   listErrors: Record<string, string> // $.fs.list rejects with this message
   statErrors: Record<string, string> // $.fs.stat rejects with this message (the engine passes a message only, no `code`)
+  statPaths: string[] // every $.fs.stat path, used to measure source-check I/O separately from UI reads
   existsThrows: Set<string> // $.fs.exists rejects for these paths
   env: Record<string, string> // what $.env.get answers; a test may change it between ticks
   clock: ReturnType<typeof mock.clock>
@@ -209,7 +210,7 @@ let TURN_AT = 0
 // Registers the bottom hooks (what the engine would answer) for one test.
 function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en' | 'zh-TW' | null = 'zh-TW', env: Record<string, string> = {}): World {
   barLocale = locale ?? 'zh-TW'
-  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, stats: {}, toasts: [], invalidates: 0, panes: [], opens: [], panesThrow: false, panesGate: null, openGate: null, writes: [], bodies: {}, reads: [], lists: [], listErrors: {}, statErrors: {}, existsThrows: new Set(), lower: null, order: [], env: { HOME, ...(locale === null ? {} : { AUTOPILOT_LOCALE: locale }), ...env }, clock: undefined as never }
+  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, stats: {}, toasts: [], invalidates: 0, panes: [], opens: [], panesThrow: false, panesGate: null, openGate: null, writes: [], bodies: {}, reads: [], lists: [], listErrors: {}, statErrors: {}, statPaths: [], existsThrows: new Set(), lower: null, order: [], env: { HOME, ...(locale === null ? {} : { AUTOPILOT_LOCALE: locale }), ...env }, clock: undefined as never }
   w.clock = mock.clock(on, { now: nowMs })
   // the suite pins zh-TW: the band words these cases assert are the zh-TW table's. Answered here rather than by mock.env, which keeps
   // its own copy, so a test can change a variable between ticks
@@ -243,6 +244,7 @@ function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en'
   })
   on('fs.stat', ($, e) => {
     w.order.push('stat')
+    w.statPaths.push(e.path)
     if (w.statErrors[e.path] !== undefined) throw new Error(w.statErrors[e.path])
     return statOf(e)
   })
@@ -820,6 +822,40 @@ for (const surface of SURFACES) {
     oldWorld({ writer: { pid: 1, session_id: null, started_at: PUBLISHED } })
     await start($, surface)
     expect(await bandText($, surface)).toContain('the watcher is not publishing')
+  })
+
+  // CPU: on a real host the session-mode dir holds thousands of files and the mod stat-ed EVERY listed
+  // file of this project on every poll. judgeByChange memoizes a fresh verdict per envelope and re-checks
+  // the group dirs' mtimes only (writers create/replace/delete by tmp + rename, so any of those moves the
+  // dir's mtime); a dir whose mtime moved (or cannot be confirmed) falls back to the full per-file check.
+  test('band: an old publish that lists 2,000 markers stats only the two group dirs after its first full pass (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    const g = groups()
+    const MANY = 2000
+    g[1].files = Array.from({ length: MANY }, (_, i) => ({ path: KDIR + '/mm' + String(i).padStart(4, '0') + '.json', mtime_ms: 1000 }))
+    const w = oldWorld({ sources: g })
+    await start($, surface)
+    expect(await bandText($, surface)).toContain(FOUND)
+    const sourceStat = (p: string) => p === MDIR || p.startsWith(MDIR + '/') || p === KDIR || p.startsWith(KDIR + '/')
+    const firstStats = w.statPaths.filter(sourceStat).length
+    expect(firstStats).toBeGreaterThanOrEqual(MANY + 3) // before memoization: 2,003 source stats per poll (2,000 markers + manifest + 2 dirs)
+    await w.clock.advance(60000) // 12 more polls, nothing moved
+    const stats = w.statPaths.filter(sourceStat).length
+    expect(stats - firstStats).toBeLessThanOrEqual(2 * 2 * 14) // after: at most 2 directory stats per group per poll (allow two extra poll reads)
+    expect(await bandText($, surface)).toContain(FOUND)
+  })
+  test('band: after a memoized fresh poll, a moved dir mtime with a changed marker is stale again (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    const w = oldWorld({})
+    await start($, surface)
+    expect(await bandText($, surface)).toContain(FOUND) // first poll (full pass, nothing moved) memoizes fresh
+    w.files[KDIR + '/' + SID_A + '.json'] = j({ session_id: SID_A, project_key: KEY, root_run_id: ROOT, level: 'l5', expires_at: '2099-01-01T00:00:00.000Z' })
+    w.stats[KDIR + '/' + SID_A + '.json'] = { size: 1, mtimeMs: 2000 }
+    w.stats[KDIR] = { size: 0, mtimeMs: 2000 } // the writer replaced the marker by tmp + rename: the dir's own mtime moved
+    await w.clock.advance(5000)
+    const text = await bandText($, surface)
+    expect(text).toContain('changed since the last publish at')
+    expect(text).not.toContain(FOUND)
   })
 
   test('band: stale after valid_for_s; a re-read never makes an old envelope fresh (' + surface + ')', async ($, on) => {
@@ -4043,7 +4079,7 @@ test('P7 model: slot texts and theme keys', () => {
   expect(slotReview(null, qc('unknown'))).toBeNull()
   // decisions
   const dv = (over: Record<string, unknown>) => ({ rows: [], count: 0, irreversible: 0, writers: [], undocumented: 0, identity: null, root: null, ladder: null, ...over }) as never
-  expect(text(slotDecisions(dv({ count: 2, undocumented: 1, ladder: { rung: 'U3', at: 'x' } })))).toBe('◆ 2  ? 1  U3')
+  expect(text(slotDecisions(dv({ count: 2, undocumented: 1, ladder: { rung: 'U3', at: 'x' } })))).toBe('✓ 2  ? 1  U3')
   expect(text(slotDecisions(dv({ undocumented: 4 })))).toBe('? 4')
   expect(slotDecisions(dv({}))).toBeNull()
   expect(slotDecisions(null)).toBeNull()
@@ -7795,7 +7831,7 @@ for (const surface of SURFACES) {
     expect(left.some(r => r.includes('◐ P5') && r.includes('完整顯示')), 'the card under the cursor shows its draft answer').toBe(true)
     expect(left.some(r => r.includes('○ U6'))).toBe(true)
     expect(d.rows[9]).toContain('▰▱▱ 1/3')
-    expect(d.rows[9]).toContain('◆ 上一張 P5')
+    expect(d.rows[9]).toContain('→ 上一張 P5')
     expect(d.rows[9]).toContain('→ 完整顯示')
     expect(d.rows[9]).toContain('待送 1 張')
     expect(d.rows[11]).toContain('送出 1 張')
@@ -7931,7 +7967,7 @@ for (const surface of SURFACES) {
     const at = async (cols: number) => {
       const d = await drawShell($, cols, [], 40)
       const q = d.rows.findIndex(r => r.includes('│ P5 殘留'))
-      const o = d.rows.findIndex(r => r.includes('完整顯示') && !r.includes('◆'))
+      const o = d.rows.findIndex(r => r.includes('完整顯示') && !r.includes('→'))
       const last = d.rows[d.rows.length - 1]
       return { ok: q > 1 && o > q, qc: colOf(d.rows[q], '│ P5 殘留'), oc: colOf(d.rows[o], '完整顯示'), quick: ['送出', '上一張', '下一張', '下一個選單'].map(w => colOf(last, w)), prog: colOf(d.rows.find(r => r.includes('0/3 ')) ?? '', '0/3'), left: colOf(d.rows[2], '◐') }
     }
@@ -8269,7 +8305,7 @@ for (const surface of SURFACES) {
       for (const r of d.rows) expect(displayWidth(r), 'row width at ' + cols).toBeLessThanOrEqual(cols)
     }
     const again = await drawShell($, 160, [], 40) // the options are no Buttons, so no press can move the pick; the state shows it is still OK
-    expect(again.rows.some(r => r.includes('◆') && r.includes('OK')), 'the pick is still OK').toBe(true)
+    expect(again.rows.some(r => r.includes('→') && r.includes('OK')), 'the pick is still OK').toBe(true)
     const fixed = await drawShell($, 160, ['fix'], 40)
     expect(NO_OPT(fixed.buttons).length, '改答案 opens the card again').toBeGreaterThan(2)
   })

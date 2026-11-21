@@ -1,0 +1,11 @@
+---
+id: 01M7YC99MZTREYTNF7PDP8RC77
+kind: issue
+created: 2026-11-21T06:21:48.575Z
+---
+- **Since**: 2026-11-21
+- **Problem**: plan review 的 manifest 換 panel 時沿用舊的 logical plan id，會讀回舊狀態。建議換 panel 時更換 logical id 或先清除 state。
+- **Impact**: 審查結果可能混入上一輪。
+- **Trigger**: plan review 的 manifest 更換 panel 時
+- **Source**: autopilot lane, 2026-11-21
+- **Pointer**: none

@@ -1192,8 +1192,12 @@ cat >"$GEN2_AUTH_DISPOSITION" <<JSON
 JSON
 cp "$PLAN_FILE" "$TEST_TMP/plan-before-gen2.md"
 printf '%s\n' 'Small repair.' >>"$PLAN_FILE"
+# A generation-2 blocker stays a blocker only when it names a reachable scenario (otherwise it is demoted
+# to a note: hooks/tests/repair-recheck.test.sh covers the demotion).
+GEN2_AUTH_BLOCKER="$TEST_TMP/gen2-authority-blocker.json"
+node -e 'const fs=require("fs");const v=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));v.findings[0].failure_scenario="a second ticket resets the review budget, so the cap never binds";fs.writeFileSync(process.argv[2],JSON.stringify(v));' "$BLOCKER" "$GEN2_AUTH_BLOCKER"
 OUT="$(run_manifest gen2-authority 2 "$GEN2_AUTH_MANIFEST" \
-  "$CAP_BLOCKER_SEQUENCE" "$GEN2_AUTH_DISPOSITION")"; EXIT=$?
+  "$(sequence "architect=$GEN2_AUTH_BLOCKER")" "$GEN2_AUTH_DISPOSITION")"; EXIT=$?
 cp "$TEST_TMP/plan-before-gen2.md" "$PLAN_FILE"
 assert_exit_code "$EXIT" "0" "raw generation-2 blocker is terminal conditional"
 assert_eq "$(json_field "$OUT" verdict)" "CONDITIONAL" \

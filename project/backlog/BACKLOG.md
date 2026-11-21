@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0481 -->
+<!-- next-id: BL-0485 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -2084,3 +2084,55 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: PM 01M7XQRV 裁 6A
 - **Pointer**: project/plans/2026-10-23-guard-port.md
 - **Context**: owner autopilot lane.
+
+### 執行中的腳本遭直接修改會靜默失敗
+- **Id**: BL-0481
+- **Status**: open
+- **Since**: 2026-11-21
+- **Origin**: self
+- **Problem**: 手動用 sed 修改背景執行中的 bash 腳本，可能讀到改到一半的內容而發生語法錯誤，卻以 exit 0 結束且沒有結論。建議先寫入新檔，再用 mv 替換。
+- **Impact**: 派工或套件可能靜默失敗。
+- **Trigger**: 修改背景執行中的腳本時
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: autopilot lane, 2026-11-21
+- **Pointer**: none
+
+### 中國模型閘門使用錯誤的工作目錄
+- **Id**: BL-0482
+- **Status**: open
+- **Since**: 2026-11-21
+- **Origin**: self
+- **Problem**: 呼叫 cn-model-dispatch-gate 時若以 repo 目錄為 cwd，閘門會判定為私有工作目錄，即使實際送出的是空沙盒。建議呼叫閘門時一律帶入實際 worker cwd。
+- **Impact**: 從頭做的單會被誤擋。
+- **Trigger**: 從 repo 呼叫中國模型閘門時
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: autopilot lane, 2026-11-21
+- **Pointer**: none
+
+### 更換審查 panel 時沿用舊計畫狀態
+- **Id**: BL-0483
+- **Status**: open
+- **Since**: 2026-11-21
+- **Origin**: self
+- **Problem**: plan review 的 manifest 換 panel 時沿用舊的 logical plan id，會讀回舊狀態。建議換 panel 時更換 logical id 或先清除 state。
+- **Impact**: 審查結果可能混入上一輪。
+- **Trigger**: plan review 的 manifest 更換 panel 時
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: autopilot lane, 2026-11-21
+- **Pointer**: none
+
+### 本地端點未就緒時被閘門誤判為外部主機
+- **Id**: BL-0484
+- **Status**: open
+- **Since**: 2026-11-21
+- **Origin**: self
+- **Problem**: 本地端點因缺少 TRANSPORT opt-in 而未就緒時，閘門把本地 27B 和本地 GLM 判為外部主機（local_name_external_host）。建議閘門只檢查主機名是否在本地清單，不看就緒狀態。
+- **Impact**: 裸跑閘門或環境未載入 endpoints.env 時，本地單會被擋下。
+- **Trigger**: 本地端點缺少 TRANSPORT opt-in 時
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: autopilot lane, 2026-11-21
+- **Pointer**: none

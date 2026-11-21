@@ -736,6 +736,27 @@
       ]
     },
     {
+      "name": "depth0_delegate_gate.zsh_syntax",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": "deny",
+      "readers": [
+        "hooks/depth0-delegate-gate.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_BASH_GUARD_ZSH_MODE"
+      ],
+      "summary": "What to do when a Bash command contains zsh-only parameter flags, glob qualifiers or =(...) temp-file process substitution; single-quoted text is ignored: values are deny, warn, off; default deny.",
+      "type": "enum",
+      "allowed": [
+        "deny",
+        "warn",
+        "off"
+      ]
+    },
+    {
       "name": "depth0_delegate_gate.secret_print",
       "kind": "config_key",
       "audience": "user",
@@ -3345,6 +3366,17 @@
       "summary": "JSON local_fallback object a busy re-dispatch child prints. Set only by dispatch-hetero.sh itself."
     },
     {
+      "name": "AUTOPILOT_LOCAL_LEASE_TTL_S",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": 180,
+      "readers": ["scripts/lib/local-impl-slot.js", "scripts/dispatch-hetero.sh"],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Lease lifetime requested from the local gateway; the dispatcher heartbeats every TTL/3 seconds. Intended for gateway tuning and tests."
+    },
+    {
       "name": "AUTOPILOT_LOCAL_SLOTS_CMD",
       "kind": "env",
       "audience": "user",
@@ -3353,7 +3385,7 @@
       "readers": ["scripts/lib/local-impl-slot.js"],
       "doc": "docs/guide/settings-reference.md",
       "relates": ["local_slots_cmd"],
-      "summary": "Overrides config local_slots_cmd, even when empty. The command prints {\"free\":<int>,\"draining\":<bool>} or the gateway slots JSON and is killed after 3 seconds."
+      "summary": "Legacy override for config local_slots_cmd; implicit local dispatch no longer reads this setting because it acquires a gateway lease."
     },
     {
       "name": "AUTOPILOT_LOCAL_SLOTS_URL",
@@ -4961,6 +4993,21 @@
         "depth0_delegate_gate.rm_wrapped"
       ],
       "summary": "Environment override of depth0_delegate_gate.rm_wrapped; values are off, warn, deny (default deny); a garbage value maps to deny."
+    },
+    {
+      "name": "AUTOPILOT_BASH_GUARD_ZSH_MODE",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/depth0-delegate-gate.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "depth0_delegate_gate.zsh_syntax"
+      ],
+      "summary": "Environment override of depth0_delegate_gate.zsh_syntax; values are off, warn, deny (default deny); a garbage value maps to deny."
     },
     {
       "name": "AUTOPILOT_BASH_GUARD_SECRET_MODE",
@@ -7625,7 +7672,7 @@
       "readers": ["scripts/lib/local-impl-slot.js"],
       "doc": "docs/guide/settings-reference.md",
       "relates": ["AUTOPILOT_LOCAL_SLOTS_CMD"],
-      "summary": "Command that replaces the gateway slot query. Prints {\"free\":<int>,\"draining\":<bool>} or the gateway slots JSON. Empty means HTTP GET the slot endpoint. Timeout is 3 seconds.",
+      "summary": "Legacy slot probe command. Implicit local dispatch no longer reads this setting because it acquires a gateway lease.",
       "type": "string"
     },
     {

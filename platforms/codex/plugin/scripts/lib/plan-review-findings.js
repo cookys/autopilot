@@ -51,6 +51,7 @@ function isCandidateBlocker(raw, rubricIds) {
  * suppress a later (or earlier) candidate_blocker for the same fingerprint.
  */
 function mergeFindingClassification(existing, incoming) {
+  if (!existing.failure_scenario && incoming.failure_scenario) existing.failure_scenario = incoming.failure_scenario;
   if (!incoming.candidate_blocker) return;
   if (existing.candidate_blocker) return;
   existing.candidate_blocker = true;
@@ -63,6 +64,7 @@ function mergeFindingClassification(existing, incoming) {
   // Prefer the blocker report's repair/evidence surfaces for depth-0 adjudication.
   if (incoming.evidence !== undefined) existing.evidence = incoming.evidence;
   if (incoming.repair !== undefined) existing.repair = incoming.repair;
+  if (incoming.failure_scenario) existing.failure_scenario = incoming.failure_scenario;
 }
 
 function normalizeAndDedupeFindings(seatReviews, rubricIds) {
@@ -80,6 +82,7 @@ function normalizeAndDedupeFindings(seatReviews, rubricIds) {
         evidence: raw.evidence,
         evidence_reference: raw.evidence_reference,
         repair: raw.repair,
+        failure_scenario: typeof raw.failure_scenario === 'string' ? raw.failure_scenario.trim() : '',
         blocks_next_slice_or_immediate_integrity:
           raw.blocks_next_slice_or_immediate_integrity === true,
         cannot_defer_to_spike: raw.cannot_defer_to_spike === true,
@@ -192,6 +195,26 @@ function unresolvedCandidateFingerprints(findings) {
     .map((finding) => finding.fingerprint);
 }
 
+/**
+ * Generation 2 only, AFTER admission (the frozen rubric and its digest are untouched): a blocker
+ * candidate that names no concrete reachable scenario (input or state -> wrong result) becomes a
+ * note. Failure it prevents: a cap-generation finding with no way to happen costing the PM an
+ * adjudication. Generation 1 never calls this. Provenance records why.
+ */
+function demoteNoReachableScenario(findings, generation) {
+  if (generation !== 2) return findings;
+  for (const finding of findings) {
+    if (!finding.candidate_blocker) continue;
+    if (typeof finding.failure_scenario === 'string' && finding.failure_scenario.trim() !== '') continue;
+    finding.candidate_blocker = false;
+    finding.disposition = 'accepted_nonblocking';
+    finding.disposition_rationale = 'no_reachable_scenario';
+    finding.disposition_reason = 'no_reachable_scenario';
+    finding.provenance.push({ policy: 'generation_2_demotion', reason: 'no_reachable_scenario' });
+  }
+  return findings;
+}
+
 function backlogCandidates(findings) {
   return findings
     .filter((finding) => (
@@ -213,6 +236,7 @@ module.exports = {
   DISPOSITIONS,
   applyDispositions,
   backlogCandidates,
+  demoteNoReachableScenario,
   fingerprintFinding,
   loadDispositionFile,
   normalizeAndDedupeFindings,

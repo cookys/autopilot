@@ -280,6 +280,7 @@ fi
 . "$_REVIEW_SELF_DIR/lib/runner-fallback-bin.sh" || { echo "dispatch-review.sh: required lib unreadable: $_REVIEW_SELF_DIR/lib/runner-fallback-bin.sh" >&2; exit 2; }
 
 ROLE_KIT_DIR=""   # --role-kit (lib/role-kit.sh)
+RAW_ANSWER=0       # --raw-answer: return runner text for a caller-owned strict schema
 RUNNER=""; MODEL=""; DIFF_FILE=""; SPEC_FILE=""; EFFORT="xhigh"; EFFORT_EXPLICIT=0; TIMEOUT="5m"; IDLE_TIMEOUT="${AUTOPILOT_REVIEW_IDLE_TIMEOUT:-}"; IDLE_MARKER=""; IDLE_WRAP=(); BIN=""; ENDPOINT=""; CHECKLISTS=""; PACK_FILE=""; ALLOW_NARRATIVE=""
 QODER_BIN_EXPLICIT=""   # --qoder-bin; wins over --bin for the qoderclicn seat
 QODER_CONFIG_DIR=""     # --qoder-config-dir; forwarded as --config-dir only when set
@@ -299,6 +300,7 @@ while [[ $# -gt 0 ]]; do
     --diff-file) DIFF_FILE="${2:-}"; shift 2 ;;
     --spec-file) SPEC_FILE="${2:-}"; shift 2 ;;
     --allow-narrative) ALLOW_NARRATIVE="${2:-}"; shift 2 ;;
+    --raw-answer) RAW_ANSWER=1; shift ;;
     --pack-file) PACK_FILE="${2:-}"; shift 2 ;;
     --effort)    EFFORT="${2:-}"; EFFORT_EXPLICIT=1; shift 2 ;;
     --timeout)   TIMEOUT="${2:-}"; shift 2 ;;
@@ -2829,6 +2831,19 @@ fi
 
 
 # --- parse verdict (fail-closed and fail-toward-block) ---
+# Recheck callers own a narrower answer schema (fixed/not_fixed by blocker id). Keep
+# the dispatcher responsible for runner setup and transport, but do not route that
+# JSON through the ordinary findings/verdict format parser.
+if [ "$RAW_ANSWER" -eq 1 ]; then
+  [ -s "$PARSE_INPUT" ] || emit_no_verdict "raw answer is empty"
+  _raw_answer="$(cat "$PARSE_INPUT")"
+  _raw_json="$(node -e 'process.stdout.write(JSON.stringify({runner:process.argv[1],model:process.argv[2],status:"reviewed",answer:process.argv[3],raw_log:process.argv[4],usage:JSON.parse(process.argv[5])}))' "$RUNNER" "$MODEL" "$_raw_answer" "$RAW_LOG" "$REVIEW_USAGE_JSON")"
+  printf '%s\n' "$_raw_json"
+  review_log_fallback "reviewed"
+  record_dispatch_usage "$_raw_json"
+  exit 0
+fi
+
 # CHROME BUDGET (first-pass qc 🟠 chrome-battery-bypass): the skipped prefix is
 # bounded. The old locator required the frame at line 1, so the block size cap
 # also bounded the whole response; allowing an UNBOUNDED prefix quietly removed

@@ -45,9 +45,10 @@ function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
   const { t } = ctx
   const v = ctx.v74
   const cols = ctx.size.cols
-  if (v === undefined || v.todo === null) return { body: [brokenRow(GLYPHS.state.failed + ' ' + t('v74.d.todo_no_source'))], actions: [] }
+  // r8 #10: the empty page says what is wrong and how to get out: the cards come from `fleet todo`; a card set aside from 待決 lands here
+  if (v === undefined || v.todo === null) return { body: [brokenRow(GLYPHS.state.failed + ' ' + t('v74.d.todo_no_source') + ' · ' + t('v74.d.todo_recover'))], actions: [] }
   const cards = v.todo
-  if (cards.length === 0) return { body: [[seg(GLYPHS.state.pending + ' '), dimSeg(t('v74.d.todo_none'))]], actions: [] }
+  if (cards.length === 0) return { body: [[seg(GLYPHS.state.pending + ' '), dimSeg(t('v74.d.todo_none'))], [seg('  '), dimSeg(t('v74.d.todo_none_hint'))]], actions: [] }
   const cursor = Math.max(0, Math.min(cards.length - 1, v.nav.cursor))
   const cur = cards[cursor]
   const picked = v.nav.picks[cur.id]

@@ -29,7 +29,9 @@
 const os = require('os');
 const fs = require('fs');
 const path = require('path');
-const secrets = require('../../hooks/_shared/secret-patterns');
+function secretPatterns() {
+  return require('../../hooks/_shared/secret-patterns').patterns;
+}
 
 const CATEGORIES = ['home_path', 'tmp_claude_path', 'run_user_path', 'host', 'private_ip', 'secret', 'email', 'env_file'];
 
@@ -148,7 +150,7 @@ function rules() {
     { kind: 'email', category: 'email', re: /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}(?![A-Za-z0-9-])/g, accept: isReportableEmail },
     { kind: 'private_ip', category: 'private_ip', re: /(?<![0-9.])(?:\d{1,3}\.){3}\d{1,3}(?![0-9]|\.\d)/g, accept: isPrivateIp },
   );
-  for (const { name, pattern } of secrets.patterns) {
+  for (const { name, pattern } of secretPatterns()) {
     list.push({ kind: `secret:${name}`, category: 'secret', re: new RegExp(pattern.source, 'g') });
   }
   CACHE = list;

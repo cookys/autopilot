@@ -109,7 +109,7 @@ isolate_path_no_node() {
   mkdir -p "$dest"
   ln -sf "$BIN/systemctl" "$dest/systemctl"
   ln -sf "$BIN/codeforge" "$dest/codeforge"
-  for c in bash env sort hostname id date stat find sha256sum awk grep cp mkdir cat touch chmod sed ls basename head xargs wc mktemp readlink; do
+  for c in bash env sort hostname id date stat find sha256sum awk grep cp mkdir cat touch chmod sed ls basename dirname head xargs wc mktemp readlink; do
     if [ -x "/usr/bin/$c" ]; then ln -sf "/usr/bin/$c" "$dest/$c"
     elif [ -x "/bin/$c" ]; then ln -sf "/bin/$c" "$dest/$c"
     fi
@@ -229,6 +229,62 @@ touch -d '8 hours ago' "$(live)/quota/claude/alias/main.json"
 run_script --inventory
 [ "$RC" = "3" ] || fail "stale exit $RC out=$OUT"
 assert_verdict stale "inventory stale"
+
+# quota files old, tick-last.json fresh: heartbeat, not the producer files, decides freshness.
+new_sandbox
+seed_fresh
+install_unit_file
+enable_timer
+touch -d '2 hours ago' "$(live)/quota/claude/alias/main.json"
+now_s="$(date +%s)"
+mkdir -p "$(live)/quota"
+printf '{"schema":"autopilot.quota-mirror-tick/1","ts":%s,"ok":1,"total":4,"skipped":[]}\n' "$((now_s - 300))" > "$(live)/quota/tick-last.json"
+run_script --inventory
+[ "$RC" = "0" ] || fail "fresh tick exit $RC out=$OUT err=$ERR"
+assert_verdict ok "inventory fresh tick with old quota files"
+printf '%s\n' "$OUT" | "$REAL_NODE" -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const o=JSON.parse(s.trim().split(/\n/).filter(l=>l.startsWith("{")).pop()); if(!(o.quota_out_newest_age_s>1800)||!(o.tick_last_age_s<1800)||o.tick_last_age_s<0) process.exit(2);});' \
+  || fail "fresh tick ages out=$OUT"
+
+# tick-last.json old: stale even when quota files are fresh.
+new_sandbox
+seed_fresh
+install_unit_file
+enable_timer
+now_s="$(date +%s)"
+printf '{"schema":"autopilot.quota-mirror-tick/1","ts":%s,"ok":1,"total":4,"skipped":[]}\n' "$((now_s - 7200))" > "$(live)/quota/tick-last.json"
+run_script --inventory
+[ "$RC" = "3" ] || fail "old tick exit $RC out=$OUT"
+assert_verdict stale "inventory old tick-last"
+printf '%s\n' "$OUT" | "$REAL_NODE" -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const o=JSON.parse(s.trim().split(/\n/).filter(l=>l.startsWith("{")).pop()); if(!(o.tick_last_age_s>1800)||!(o.quota_out_newest_age_s<1800)) process.exit(2);});' \
+  || fail "old tick ages out=$OUT"
+
+# no tick-last.json, fresh quota files: today's age check.
+new_sandbox
+seed_fresh
+install_unit_file
+enable_timer
+run_script --inventory
+[ "$RC" = "0" ] || fail "no tick file exit $RC out=$OUT"
+assert_verdict ok "inventory no tick-last fresh quota"
+printf '%s\n' "$OUT" | "$REAL_NODE" -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const o=JSON.parse(s.trim().split(/\n/).filter(l=>l.startsWith("{")).pop()); if(o.tick_last_age_s!==null||o.quota_out_newest_age_s===null||o.verdict!=="ok") process.exit(2);});' \
+  || fail "no tick-last field out=$OUT"
+
+# XDG_RUNTIME_DIR unset: AUTOPILOT_TEST_RUN_USER_ROOT/<uid>/autopilot beats $HOME/.autopilot.
+new_sandbox
+unset XDG_RUNTIME_DIR
+RUN_ROOT="$BASE/fake-run-user"
+uid="$(id -u)"
+mkdir -p "$RUN_ROOT/$uid/autopilot/codeforge/usage/quota" "$RUN_ROOT/$uid/autopilot/quota/claude/alias"
+printf '{}\n' > "$RUN_ROOT/$uid/autopilot/codeforge/usage/quota/main.json"
+printf '{}\n' > "$RUN_ROOT/$uid/autopilot/quota/claude/alias/main.json"
+mkdir -p "$HOME_D/.autopilot"
+export AUTOPILOT_TEST_RUN_USER_ROOT="$RUN_ROOT"
+install_unit_file
+enable_timer
+run_script --inventory
+[ "$RC" = "0" ] || fail "run user root exit $RC out=$OUT err=$ERR"
+assert_verdict ok "inventory prefers run-user autopilot"
+unset AUTOPILOT_TEST_RUN_USER_ROOT
 
 # --- nothing_applicable tick is its own verdict, not stale ---
 new_sandbox
@@ -427,6 +483,76 @@ set -e
 [ "$RC" = "3" ] || fail "no-node apply exit $RC err=$ERR out=$OUT"
 printf '%s\n' "$ERR" | grep -q 'node not found' || fail "no-node apply reason: $ERR"
 ok "no node inventory unchanged apply exits 3"
+
+# Fake node: prints a version for --version, otherwise runs the real node.
+plant_version_node() {
+  local dest="$1" ver="$2"
+  mkdir -p "$(dirname "$dest")"
+  cat > "$dest" <<EOF
+#!/usr/bin/env bash
+if [ "\${1:-}" = "--version" ]; then
+  printf 'v%s\n' "$ver"
+  exit 0
+fi
+exec "$REAL_NODE" "\$@"
+EOF
+  chmod 755 "$dest"
+}
+
+# --apply writes the inventory node_path into ExecStart as an absolute path.
+new_sandbox
+seed_fresh
+run_script --apply
+[ "$RC" = "0" ] || fail "execstart apply exit $RC err=$ERR out=$OUT"
+GOT_NODE="$(json_node_path)"
+UNIT="$XDG_CONFIG_HOME/systemd/user/quota-mirror.service"
+grep -F "ExecStart=${GOT_NODE} " "$UNIT" >/dev/null || fail "ExecStart missing $GOT_NODE: $(cat "$UNIT")"
+grep -F '/usr/bin/env node' "$UNIT" >/dev/null && fail "ExecStart still uses PATH node"
+case "$GOT_NODE" in
+  /*) ;;
+  *) fail "node_path is not absolute: $GOT_NODE" ;;
+esac
+ok "ExecStart uses absolute node_path"
+
+# v18 first on PATH is skipped; newest qualifying nvm node is chosen.
+new_sandbox
+seed_fresh
+isolate_path_no_node
+plant_version_node "$PATH/node" "18.19.1"
+plant_version_node "$HOME_D/.nvm/versions/node/v22.14.0/bin/node" "22.14.0"
+run_script --inventory
+[ "$RC" = "3" ] || fail "v18-then-v22 inventory exit $RC err=$ERR out=$OUT"
+GOT_NODE="$(json_node_path)"
+WANT_NODE="$HOME_D/.nvm/versions/node/v22.14.0/bin/node"
+[ "$GOT_NODE" = "$WANT_NODE" ] || fail "v18-then-v22 node_path $GOT_NODE != $WANT_NODE"
+run_script --apply
+[ "$RC" = "0" ] || fail "v18-then-v22 apply exit $RC err=$ERR out=$OUT"
+UNIT="$XDG_CONFIG_HOME/systemd/user/quota-mirror.service"
+grep -F "ExecStart=${WANT_NODE} " "$UNIT" >/dev/null || fail "v22 ExecStart missing: $(cat "$UNIT")"
+ok "v18 on PATH yields nvm v22"
+
+# Only v18: install refuses, names node_path and 20.10, writes no unit.
+new_sandbox
+seed_fresh
+isolate_path_no_node
+plant_version_node "$PATH/node" "18.19.1"
+V18="$BASE/only-v18"
+plant_version_node "$V18" "18.19.1"
+BINDS=(--bind "$V18" /usr/bin/node)
+if [ -e /usr/local/bin/node ]; then
+  BINDS+=(--bind "$V18" "$(readlink -f /usr/local/bin/node)")
+fi
+set +e
+OUT="$(/usr/bin/bwrap --ro-bind / / --bind "$BASE" "$BASE" --dev /dev "${BINDS[@]}" -- bash "$SCRIPT" --apply 2>"$BASE/err")"
+RC=$?
+ERR="$(cat "$BASE/err")"
+set -e
+[ "$RC" != "0" ] || fail "only-v18 apply exit 0 out=$OUT err=$ERR"
+printf '%s\n' "$ERR" | grep -q 'node_path' || fail "only-v18 reason missing node_path: $ERR"
+printf '%s\n' "$ERR" | grep -q '20.10' || fail "only-v18 reason missing minimum: $ERR"
+[ -e "$XDG_CONFIG_HOME/systemd/user/quota-mirror.service" ] && fail "only-v18 wrote a service unit"
+[ -e "$XDG_CONFIG_HOME/systemd/user/quota-mirror.timer" ] && fail "only-v18 wrote a timer unit"
+ok "only v18 refuses install and writes no unit"
 
 if [ "$FAIL" != "0" ]; then
   printf 'rollout-quota-mirror.test.sh FAILED\n' >&2

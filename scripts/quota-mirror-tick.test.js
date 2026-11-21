@@ -49,7 +49,7 @@ function fixture(codes, stderrById) {
   return { root, bin, live, log };
 }
 
-function runTick(codes, stderrById) {
+function runTick(codes, stderrById, keep) {
   const fx = fixture(codes, stderrById);
   const r = spawnSync(process.execPath, [TICK], {
     encoding: 'utf8',
@@ -63,8 +63,8 @@ function runTick(codes, stderrById) {
     },
   });
   const lines = fs.existsSync(fx.log) ? fs.readFileSync(fx.log, 'utf8').split('\n').filter((l) => l !== '') : [];
-  fs.rmSync(fx.root, { recursive: true, force: true });
-  return { r, lines, live: fx.live };
+  if (!keep) fs.rmSync(fx.root, { recursive: true, force: true });
+  return { r, lines, live: fx.live, root: fx.root };
 }
 
 function all(code) {
@@ -72,6 +72,24 @@ function all(code) {
   for (const id of IDS) codes[id] = code;
   return codes;
 }
+
+test('a pass whose producers write nothing still writes tick-last.json', () => {
+  const { r, root, live } = runTick(all(0), null, true);
+  try {
+    assert.strictEqual(r.status, 0, r.stderr);
+    const file = path.join(live, 'quota', 'tick-last.json');
+    const j = JSON.parse(fs.readFileSync(file, 'utf8'));
+    assert.strictEqual(j.schema, 'autopilot.quota-mirror-tick/1');
+    assert.strictEqual(j.ok, 4);
+    assert.strictEqual(j.total, 4);
+    assert.deepStrictEqual(j.skipped, []);
+    assert.strictEqual(typeof j.ts, 'number');
+    const names = fs.readdirSync(path.join(live, 'quota'));
+    assert.deepStrictEqual(names.filter((n) => n !== 'tick-last.json' && !n.startsWith('.tick-last.')), []);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test('all steps ok: exit 0, every stub ran, child output is not relayed', () => {
   const { r, lines, live } = runTick(all(0));
@@ -104,6 +122,40 @@ test('every step fails: exit non-zero after all of them ran', () => {
   assert.notStrictEqual(r.status, 0);
   assert.deepStrictEqual(lines.map((l) => l.split(' ')[0]), IDS);
   assert.match(r.stdout, /quota-mirror-tick: 0\/4 ok/);
+});
+
+test('every non-skipped producer fails writes no tick-last.json and leaves an old one', () => {
+  const fresh = runTick(all(1), null, true);
+  try {
+    assert.notStrictEqual(fresh.r.status, 0);
+    assert.strictEqual(fs.existsSync(path.join(fresh.live, 'quota', 'tick-last.json')), false);
+  } finally {
+    fs.rmSync(fresh.root, { recursive: true, force: true });
+  }
+
+  const fx = fixture(all(1));
+  const dir = path.join(fx.live, 'quota');
+  fs.mkdirSync(dir, { mode: 0o700 });
+  const file = path.join(dir, 'tick-last.json');
+  const prior = '{"schema":"autopilot.quota-mirror-tick/1","ts":1,"ok":4,"total":4,"skipped":[]}\n';
+  fs.writeFileSync(file, prior, { mode: 0o600 });
+  const r = spawnSync(process.execPath, [TICK], {
+    encoding: 'utf8',
+    env: {
+      PATH: process.env.PATH,
+      HOME: fx.root,
+      AUTOPILOT_ACCOUNTS_DIR: path.join(fx.root, 'accounts'),
+      TMPDIR: fx.root,
+      AUTOPILOT_LIVE_DIR: fx.live,
+      QUOTA_MIRROR_BIN: fx.bin,
+    },
+  });
+  try {
+    assert.notStrictEqual(r.status, 0);
+    assert.strictEqual(fs.readFileSync(file, 'utf8'), prior);
+  } finally {
+    fs.rmSync(fx.root, { recursive: true, force: true });
+  }
 });
 
 test('exit 1 with token_missing is a skip, not a failure', () => {

@@ -1530,6 +1530,8 @@ for (const file of files) {
     text = (error && error.message) || String(error);
   }
   process.stdout.write(`${status}\0${String(text).replace(/\0/g, '')}\0`);
+  # Validation has finished in input order; clean expired records through the shared locked sweep.
+  node "$SELF_DIR/session-mode.js" sweep --max 0 --grace-ms 0 >/dev/null 2>&1 || true
 }
 NODE
   )

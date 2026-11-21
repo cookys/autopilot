@@ -73,6 +73,7 @@ function restore(file, id, before) {
 function answerCard({ cwd, id, option, freeText, note, source, device, sender, now = () => new Date() }) {
   if (option !== undefined && freeText !== undefined) return fail('bad_option', 'give --option or --free-text, not both');
   if (option === undefined && freeText === undefined) return fail('bad_option', 'one of --option / --free-text is required');
+  if (freeText !== undefined && (typeof freeText !== 'string' || !freeText.trim())) return fail('bad_option', 'free text must not be blank');
   let bad = null;
   if (freeText !== undefined) bad = checkText(freeText, MAX_FREE_TEXT, 'free text');
   if (!bad && note !== undefined) bad = checkText(note, MAX_NOTE, 'note');

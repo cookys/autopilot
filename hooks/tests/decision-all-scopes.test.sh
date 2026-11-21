@@ -53,7 +53,8 @@ const r = readDecision({ commonDir: commonDirOf(sc.repo_identity), key: sc.proje
 console.log(r.value.map((d) => d.question).sort().join(","));')"
 assert_eq "Q-NEW?,Q-OLD?,Q-UNBOUND?" "$PANE" "pane data excludes foreign, mismatched and corrupt files"
 for xid in d-evil1111 d-mism2222; do
-  if node "$OD" close --cwd "$R" --id "$xid" | grep -q 'not open'; then :; else fail "close reached a card in an excluded file: $xid"; fi
+  node "$OD" close --cwd "$R" --id "$xid" >"$TEST_TMP/foreign-close.out" 2>"$TEST_TMP/foreign-close.err"; assert_eq "$?" 2 "bare close of excluded card is refused: $xid"
+  assert_contains "$(cat "$TEST_TMP/foreign-close.err")" '--withdraw <reason>' "excluded card remains unclosed without withdrawal: $xid"
 done
 assert_contains "$(cat "$D/$KEY--evil.json")" "d-evil1111" "foreign file untouched by close"
 assert_contains "$(cat "$D/$KEY--named.json")" "d-mism2222" "mismatched file untouched by close"
@@ -71,7 +72,7 @@ const sc = scopeFromCwd(process.env.R);
 const r = readDecision({ commonDir: commonDirOf(sc.repo_identity), key: sc.project_key, root: null, identity: sc.repo_identity, nowMs: Date.now(), liveBase: null });
 console.log(r.value.map((d) => d.question).sort().join(","));')"
 assert_contains "$PANE2" "Q-SEEDED-OK?" "seed-shaped card in a valid scope file reaches the pane data"
-if node "$OD" close --cwd "$R" --id d-good3333 | grep -q '^closed'; then :; else fail "seed-shaped card could not be closed"; fi
+if node "$OD" close --cwd "$R" --id d-good3333 --withdraw "test closes seed fixture" --by "test/operator" | grep -q '^withdrawn'; then :; else fail "seed-shaped card could not be closed"; fi
 # BL cardtrail: close keeps the record (the file stays, the card is hidden from show, show --id still finds it as closed)
 assert_file_exists "$D/$KEY--okroot.json" "closing its last card keeps the file (the record)"
 assert_not_contains "$(node "$OD" show --cwd "$R" --root-run-id root-new)" "Q-SEEDED-OK" "closed card is not listed by show"
@@ -81,14 +82,14 @@ assert_contains "$(node "$OD" show --cwd "$R" --id d-good3333)" "status: closed"
 UID_="$(R="$R" REPO_ROOT="$REPO_ROOT" node -e 'const r=require(process.env.REPO_ROOT+"/scripts/open-decision.js").openDecision({cwd:process.env.R,root:"a b/c",session:null,question:"Q-UNSAFE-ROOT?"});console.log(r.status==="ok"?r.id:"ERR "+r.message)')"
 case "$UID_" in d-*) : ;; *) fail "open with an unsafe root failed: $UID_" ;; esac
 assert_contains "$(node "$OD" show --cwd "$R")" "Q-UNSAFE-ROOT" "unsafe-root card shows"
-if node "$OD" close --cwd "$R" --id "$UID_" | grep -q '^closed'; then :; else fail "unsafe-root card could not be closed"; fi
+if node "$OD" close --cwd "$R" --id "$UID_" --withdraw "test closes unsafe-root fixture" --by "test/operator" | grep -q '^withdrawn'; then :; else fail "unsafe-root card could not be closed"; fi
 node "$OD" show --cwd "$R" | grep -q 'Q-UNSAFE-ROOT' && fail "unsafe-root card still listed after close"
 # close --id finds a card of another scope
-node "$OD" close --cwd "$R" --root-run-id root-new --id "$ID_OLD" >/dev/null
+node "$OD" close --cwd "$R" --root-run-id root-new --id "$ID_OLD" --withdraw "test closes old-root fixture" --by "test/operator" >/dev/null
 SHOW="$(node "$OD" show --cwd "$R" --root-run-id root-new)"
 assert_not_contains "$SHOW" "Q-OLD" "closed card of another scope is gone"
-node "$OD" close --cwd "$R" --id "$ID_NEW" >/dev/null
-node "$OD" close --cwd "$R" --root-run-id root-old --id "$ID_UNB" >/dev/null
+node "$OD" close --cwd "$R" --id "$ID_NEW" --withdraw "test closes new-root fixture" --by "test/operator" >/dev/null
+node "$OD" close --cwd "$R" --root-run-id root-old --id "$ID_UNB" --withdraw "test closes unbound fixture" --by "test/operator" >/dev/null
 node "$OD" show --cwd "$R" >/dev/null 2>&1; assert_eq "1" "$?" "nothing open after closing all three"
 
 # PM report (awaitpane): a backfilled awaiting_operator_action card whose id also has an older OPEN record in another root must not be

@@ -121,4 +121,7 @@ assert_eq "$(dec list --all | jf cards.length)" 4 "list --all: includes the awai
 assert_eq "$(dec list --all | jf cards.3.state)" awaiting_operator_action "list --all: its state"
 assert_eq "$(dec show "$C4" | jf card.state)" awaiting_operator_action "show: its state"
 
+C5="$(mkcard "Blank free text?" --free-text)"
+OUT="$(ans "$C5" --free-text '   ')"; assert_eq "$?" 6 "blank free text -> 6"; assert_eq "$(printf '%s' "$OUT" | jf code)" bad_option "blank free text code"; assert_eq "$(cardstate "$C5")" open "blank free text leaves card open"
+
 finalize_test

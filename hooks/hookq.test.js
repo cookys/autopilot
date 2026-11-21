@@ -525,13 +525,13 @@ test('BL-0163 isOurs: a pointer that names an entry the session did not open (a 
   assert.strictEqual(closeDecisionById(file, hand.id, () => false).status, 'absent');
   assert.ok(allEntries(repo).some((x) => x.id === hand.id));
   assert.strictEqual(closeDecisionById(file, hand.id, (v) => v.origin === 'ask_user_question').status, 'absent', 'hand-opened: no origin');
-  assert.strictEqual(closeDecisionById(file, hand.id).status, 'closed', 'control: without a guard it closes');
+  assert.strictEqual(closeDecisionById(file, hand.id, undefined, { withdrawn: true, reason: 'test control withdrawal', by: 'test/operator' }).status, 'closed', 'control: explicit withdrawal closes');
 });
 
 test('BL-0163 close on a repo that never opened a decision creates no decisions/ directory or lock file; a later open still works', () => {
   const repo = mkRepo(); const e = mkEnv();
   const common = path.join(repo, '.git', 'autopilot');
-  const r = spawnSync('node', [OPEN, 'close', '--id', 'd-deadbeef', '--cwd', repo], { encoding: 'utf8', env: e.env });
+  const r = spawnSync('node', [OPEN, 'close', '--id', 'd-deadbeef', '--withdraw', 'test no-op', '--by', 'test/operator', '--cwd', repo], { encoding: 'utf8', env: e.env });
   assert.strictEqual(r.status, 0, r.stderr);
   assert.match(r.stdout, /not open: d-deadbeef/);
   assert.ok(!fs.existsSync(path.join(common, 'decisions')), 'no decisions/ dir created by a close');

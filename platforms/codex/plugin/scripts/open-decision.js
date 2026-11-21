@@ -19,7 +19,7 @@
  *   node scripts/open-decision.js open ... [--due <ISO time | +N(m|h|d|w), e.g. +4h, +1d>] [--kind decide|go|remind]   (dated card / reminder: see "Dated cards" below)
  *   node scripts/open-decision.js due-sweep [--cwd <dir>]   (prints `DUE <id> <title>` once per card that became due since the last sweep; exit 0)
  *   node scripts/open-decision.js redeliver [--id <id>] [--cwd <dir>]   (resend the panel answer of every pending_dispatch card the program parked, see "Panel answer delivery")
- *   node scripts/open-decision.js close --id <id> [--root-run-id <id>] [--cwd <dir>]   (answered or withdrawn; the card is KEPT, status closed)
+ *   node scripts/open-decision.js close --id <id> --withdraw <reason> [--by <actor>] [--root-run-id <id>] [--cwd <dir>]   (withdrawn; the card is KEPT, status closed)
  *   node scripts/open-decision.js close --id <id> --answer <text> [--executor <address>] [--asker <address>] [--awaiting-operator <step>] [--reask-after <4h|30m|1d>]
  *                                       (with an executor: prints the dispatch JSON and parks the card in pending_dispatch; nothing is sent.
  *                                        a card opened with operator_steps, answered with anything but a decline, goes to awaiting_operator_action
@@ -575,7 +575,7 @@ function takeFreeText(argv) {
 // BL cardtrail flags are lifted out like --kind/--target (parse()'s valued Set stays byte-identical to the frozen ask stub).
 // -> { rest, extra: { answer, executor, asker, 'awaiting-operator', 'reask-after', from, dispatched, 'dispatched-msg', title, note, 'operator-step', all, apply } } | { error }
 // operator-step is repeatable and may hold several steps separated by newlines. parse()'s valued Set stays untouched (frozen ask stub).
-const EXTRA_VALUED = ['answer', 'executor', 'asker', 'awaiting-operator', 'reask-after', 'from', 'dispatched', 'dispatched-msg', 'title', 'from-request', 'note', 'look-target', 'category', 'since', 'premise-source'];
+const EXTRA_VALUED = ['answer', 'executor', 'asker', 'awaiting-operator', 'reask-after', 'from', 'dispatched', 'dispatched-msg', 'title', 'from-request', 'note', 'look-target', 'category', 'since', 'premise-source', 'withdraw', 'by'];
 const EXTRA_REPEAT = ['operator-step'];
 const EXTRA_SWITCH = ['all', 'apply', 'irreversible', 'premise-inferred'];
 // The only seven kinds of question that go to the operator (operator rule 2026-11-15); everything else the PM decides.
@@ -889,6 +889,10 @@ function main(argv) {
     const viaOption = args.option.length > 0 || args.closeFreeText !== undefined;
     if (args.option.length > 1) return usage('close takes one --option <label>, optionally with --free-text <note>, or one --free-text <text>');
     if (ex['operator-step'] !== undefined) return usage('--operator-step belongs to `open`, not close');
+    if (ex.withdraw !== undefined && (typeof ex.withdraw !== 'string' || !ex.withdraw.trim())) return usage('close --withdraw needs a non-blank reason');
+    if (ex.withdraw !== undefined && ex.by !== undefined && !String(ex.by).trim()) return usage('--by must be non-blank');
+    if (ex.withdraw !== undefined && (ex.answer !== undefined || viaOption || ex.executor !== undefined || ex.asker !== undefined || ex['awaiting-operator'] !== undefined || ex['reask-after'] !== undefined || ex.by !== undefined && !String(ex.by).trim())) return usage('--withdraw <reason> cannot be combined with answer options, and --by must be non-blank');
+    if (ex.withdraw === undefined && ex.by !== undefined) return usage('--by is only valid with --withdraw <reason>');
     if (ex.answer !== undefined && (viaOption || !ex.answer.trim())) return usage('close --answer <text> is the whole answer: not with --option/--free-text, and not empty');
     if (ex.answer === undefined && !viaOption && (ex['awaiting-operator'] !== undefined || ex.executor !== undefined || ex.asker !== undefined || ex['reask-after'] !== undefined)) return usage('--executor/--asker/--awaiting-operator/--reask-after belong to `close --answer <text>`');
     if (ex['awaiting-operator'] !== undefined && !ex['awaiting-operator'].trim()) return usage('--awaiting-operator needs the step the operator must do');
@@ -898,8 +902,24 @@ function main(argv) {
     const found = findCard(args.cwd, args.id, { live: true });
     if (found && isAwaitingEntry(found.entry)) return usage(`${args.id} is awaiting_operator_action: the operator's step ends it (\`done --id ${args.id}\`), not close`);
     if (found && isPendingDispatchEntry(found.entry)) return refusePendingDispatch(args.id);
+    if (ex.answer === undefined && !viaOption && ex.withdraw === undefined) return usage(`no answer supplied; use \`close --id ${args.id} --withdraw <reason> --by <actor>\``);
+    if (!found && ex.withdraw === undefined && ex.answer === undefined && !viaOption) { process.stdout.write(`not open: ${args.id}\n`); return 0; }
     let noteDropped = false;
     const answerText = ex.answer !== undefined ? ex.answer : (args.option.length ? args.option[0] : (args.closeFreeText !== undefined ? args.closeFreeText : null));
+    if (ex.withdraw !== undefined) {
+      if (!found || !isOpenEntry(found.entry)) { process.stdout.write(`not open: ${args.id}\n`); return 0; }
+      const actor = (ex.by || sessionForNotice() || '').trim();
+      if (!actor) return usage('withdrawal needs --by <actor> or a session actor');
+      const withdrawPatch = { status: 'closed', closed_at: new Date().toISOString(), answer: null, closed_via: 'withdrawn', withdraw_reason: ex.withdraw.trim(), withdrawn_by: actor, reask_at: undefined };
+      const r = patchDecision(found.file, args.id, withdrawPatch);
+      if (r.status === 'error') { process.stderr.write(`open-decision: ${r.message}\n`); return 4; }
+      if (r.status === 'absent') { process.stdout.write(`not open: ${args.id}\n`); return 0; }
+      const stale = closeStaleCopies(args.cwd, args.id, found.file, withdrawPatch);
+      if (stale.status === 'error') { process.stderr.write(`open-decision: ${stale.message}\n`); return 4; }
+      notifyPm('close', { card_id: args.id, question: r.entry.question, state: 'closed' });
+      process.stdout.write(`withdrawn ${args.id}\n`);
+      return 0;
+    }
     if (answerText !== null && isDeclineAnswer(answerText)) {
       if (!found || !isOpenEntry(found.entry)) { process.stdout.write(`not open: ${args.id}\n`); return 0; }
       const r = recordDecline(found.file, args.id, answerText, reaskParsed.ms);
@@ -1182,7 +1202,9 @@ function patchDecision(file, id, patch, { isOurs, any } = {}) {
       const entries = readFile(file, { all: true });
       const hit = entries.find((e) => e.id === id && (any || isOpenEntry(e)));
       if (!hit || (isOurs && !isOurs(hit))) return { status: 'absent' };
-      const next = { ...hit, ...(typeof patch === 'function' ? patch(hit) : patch) }; // a function patch sees the stored entry under the lock (appending to an array field)
+      const delta = typeof patch === 'function' ? patch(hit) : patch; // a function patch sees the stored entry under the lock (appending to an array field)
+      if (delta && delta.__no_write === true) return { status: 'matched', entry: hit };
+      const next = { ...hit, ...delta };
       if (!isOpenEntry(next)) delete next.reask_at;
       const v = JSON.parse(fs.readFileSync(file, 'utf8'));
       writeEntries({ file, scope: { repo_identity: v.repo_identity, project_key: v.project_key } }, v.root_run_id, entries.map((e) => (e === hit ? next : e)));
@@ -1199,12 +1221,21 @@ function recordCorrection(file, id, correction) {
   return patchDecision(file, id, (hit) => ({ answer_corrections: [...(Array.isArray(hit.answer_corrections) ? hit.answer_corrections : []), correction] }), { any: true });
 }
 
-// Close the entry `id` of the scope `file`: patchDecision with status closed + closed_at (+ `answer` when given). Library callers (hooks)
-// keep this signature; the entry is kept now, not removed. Returns { status: 'closed'|'absent'|'error', message }; never throws.
-// This stays a plain close. Auto-await and decline live in the answer paths (CLI close --answer, parkAnswer/sendParked, closePanelAnswer), never here:
-// ask-decision and permission-block withdraw their own cards through this function.
-function closeDecisionById(file, id, isOurs, answer) {
-  const r = patchDecision(file, id, { status: 'closed', closed_at: new Date().toISOString(), answer: typeof answer === 'string' ? answer : null, reask_at: undefined }, { isOurs });
+// Close the entry `id` of the scope `file`. A card without a nonblank answer can only be closed by an explicit withdrawal.
+// Returns { status: 'closed'|'absent'|'error', message }; never throws.
+function closeDecisionById(file, id, isOurs, answerOrWithdrawal) {
+  const answer = typeof answerOrWithdrawal === 'string' ? answerOrWithdrawal.trim() : '';
+  const withdrawal = answerOrWithdrawal && typeof answerOrWithdrawal === 'object' ? answerOrWithdrawal : null;
+  if (isOurs || !fs.existsSync(file)) {
+    const probe = patchDecision(file, id, () => ({ __no_write: true }), { isOurs, any: true });
+    if (probe.status === 'absent' || probe.status === 'error') return probe;
+  }
+  if (!answer && !(withdrawal && withdrawal.withdrawn === true && typeof withdrawal.reason === 'string' && withdrawal.reason.trim() && typeof withdrawal.by === 'string' && withdrawal.by.trim())) {
+    return { status: 'error', message: 'closing without an answer requires an explicit withdrawal with reason and actor' };
+  }
+  const patch = { status: 'closed', closed_at: new Date().toISOString(), answer: answer || null, reask_at: undefined };
+  if (!answer) Object.assign(patch, { closed_via: 'withdrawn', withdraw_reason: withdrawal.reason.trim(), withdrawn_by: withdrawal.by.trim() });
+  const r = patchDecision(file, id, patch, { isOurs });
   return r.status === 'updated' ? { status: 'closed' } : r;
 }
 
@@ -1244,13 +1275,23 @@ function panelAnswerText(line, question) {
   return rest || null;
 }
 
-// The no-executor panel answer. Decline stays open. operator_steps and a non-decline go to awaiting_operator_action.
-// Anything else is the old closeDecisionById (answer stays null on that path, same as before this field existed).
+// The panel answer. Decline stays open. operator_steps and a non-decline go to awaiting_operator_action.
+// A nonempty answer without operator steps closes with that answer; missing text leaves the card open.
 // -> { status: 'closed'|'reask'|'awaiting'|'absent'|'error', reask_at?, message? }
 function closePanelAnswer(file, id, line) {
   const hit = readFile(file, { all: true }).find((e) => e.id === id);
-  if (!hit || !isOpenEntry(hit)) return closeDecisionById(file, id);
+  if (!hit) {
+    const probe = patchDecision(file, id, () => ({ __no_write: true }), { any: true });
+    if (probe.status === 'error') return probe;
+    return { status: 'absent' };
+  }
+  if (!isOpenEntry(hit)) return { status: 'error', message: `no open card ${id}` };
   const answerText = panelAnswerText(line, hit.question);
+  if (answerText === null || !answerText.trim()) {
+    const probe = patchDecision(file, id, () => ({ __no_write: true }), { any: true });
+    if (probe.status === 'error') return probe;
+    return { status: 'error', message: `card ${id} has no answer text; left open` };
+  }
   if (answerText !== null && isDeclineAnswer(answerText)) {
     const d = recordDecline(file, id, answerText, REASK_DEFAULT_MS);
     return d.status === 'reask' ? { status: 'reask', reask_at: d.reask_at } : d;
@@ -1262,7 +1303,8 @@ function closePanelAnswer(file, id, line) {
     });
     return r.status === 'updated' ? { status: 'awaiting' } : r;
   }
-  return closeDecisionById(file, id);
+  const r = patchDecision(file, id, { status: 'closed', closed_at: new Date().toISOString(), answer: answerText.trim(), reask_at: undefined });
+  return r.status === 'updated' ? { status: 'closed' } : r;
 }
 
 // The dispatch a caller must send for `close --answer` with an executor (PM ruling 01M6RV0Y02 — overridden for panel answers by PM 01M6ZXJYTQ, 2026-11-09, see deliverAnswer: this `close --answer` packet is still not sent by this script). Plain data, printed as one JSON.

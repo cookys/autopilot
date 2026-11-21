@@ -3,6 +3,41 @@
   "version": 1,
   "entries": [
     {
+      "file": "hooks/dispatch-model-guard.js",
+      "match": "base.startsWith('/tmp/')",
+      "reason": "Comparison rejects a shared temp-root path; it allocates nothing."
+    },
+    {
+      "file": "scripts/bg-quiet.sh",
+      "match": "WATCH_ERR_FILE=\"$(mktemp)\"",
+      "reason": "Bare mktemp captures watch stderr and is explicitly removed immediately after reading it."
+    },
+    {
+      "file": "scripts/dispatch-hetero.sh",
+      "match": "_local_wt_base=",
+      "reason": "Selects a parent passed to local-sandbox-parent.js; this assignment allocates nothing."
+    },
+    {
+      "file": "scripts/dispatch-hetero.sh",
+      "match": "_scratch_parent=",
+      "reason": "Resolves the registered autopilot-local-sbx-* worktree parent through local-sandbox-parent.js; the scratch child uses the registered dispatch-hetero-* prefix."
+    },
+    {
+      "file": "scripts/dispatch-hetero.sh",
+      "match": "SCRATCH_REJECTED_FILE=",
+      "reason": "Constructs a rejected-run evidence path in the dispatch runs directory (or configured fallback); this assignment allocates nothing."
+    },
+    {
+      "file": "scripts/dispatch-hetero.sh",
+      "match": "_ccshim_env_parent=\"${TMPDIR",
+      "reason": "Selects the parent for the registered dispatch-hetero-ccshim-env-* directory; this assignment allocates nothing."
+    },
+    {
+      "file": "scripts/dispatch-hetero.sh",
+      "match": "CCSHIM_ENV_DIR=\"$(umask",
+      "reason": "Allocates the registered dispatch-hetero-* prefix under the selected temp or sandbox parent; worker and dispatch cleanup remove it."
+    },
+    {
       "file": "scripts/lib/account-fixtures/shim-install.js",
       "match": "g37-fix-",
       "reason": "Test-only fixture builder: makeFixture() returns a cleanup() that every caller runs (tests call fx.cleanup() at the end); the root holds only FAKE- tokens and a decoy."

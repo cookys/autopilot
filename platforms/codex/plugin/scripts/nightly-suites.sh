@@ -2,8 +2,9 @@
 # Run the eval suites outside the merge gate and emit one summary line.
 set -u
 
+tmp=""
+trap 'rm -f "${tmp:-}"' EXIT
 tmp="$(mktemp "${TMPDIR:-/tmp}/autopilot-nightly-suites.XXXXXX")" || exit 2
-trap 'rm -f "$tmp"' EXIT
 node scripts/affected-suites.js --run --only-glob 'evals/**' >"$tmp" 2>&1
 rc=$?
 summary="$(sed -n '/^summary:/p' "$tmp" | tail -n 1)"

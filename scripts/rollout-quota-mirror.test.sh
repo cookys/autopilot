@@ -239,7 +239,7 @@ touch -d '8 hours ago' "$(live)/codeforge/usage/quota/main.json"
 touch -d '8 hours ago' "$(live)/quota/claude/alias/main.json"
 printf '%s\n' 'quota-mirror-tick: usage-probe skip token_missing' 'quota-mirror-tick: nothing_applicable' > "$STUB/journal"
 run_script --inventory
-[ "$RC" = "3" ] || fail "nothing_applicable exit $RC out=$OUT"
+[ "$RC" = "0" ] || fail "nothing_applicable exit $RC out=$OUT"
 assert_verdict nothing_applicable "inventory nothing_applicable"
 
 # --- apply twice ---

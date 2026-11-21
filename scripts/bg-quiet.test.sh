@@ -50,6 +50,8 @@ wait_for_file() {
 OUT="$("$BG_QUIET" --label ok-job -- bash -c 'echo hello-ok')"
 echo "$OUT" | grep -q '^bg-quiet bg-.* watch=01JABCDEFGHJKMNPQRSTVWXYZ0 log='
 wait_for_file "${QUEUE_DIR}/*.ok"
+# The stub prints a stderr noise line first (as the real fleet does on this host); the recorded id must be the real one.
+grep -q '"watch_id":"01JABCDEFGHJKMNPQRSTVWXYZ0"' "${QUEUE_DIR}"/*.json || { echo "FAIL: meta watch_id is not the 26-char id from stdout" >&2; exit 1; }
 if compgen -G "${QUEUE_DIR}/*.fail" >/dev/null 2>&1; then
   echo "FAIL: unexpected .fail file on success" >&2
   exit 1

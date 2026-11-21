@@ -76,7 +76,7 @@ function writeRowsAtomic(filePath, rows) {
   fs.renameSync(tmpPath, filePath);
 }
 
-function record({ from, to, summary, ts }, stateDir = resolveStateDir()) {
+function record({ from, to, summary, ts, dedupeKey, refusal }, stateDir = resolveStateDir()) {
   mkdirp(stateDir);
   const filePath = outboxPath(stateDir);
   const entry = {
@@ -85,10 +85,17 @@ function record({ from, to, summary, ts }, stateDir = resolveStateDir()) {
     from: from || 'unknown',
     to,
     summary: String(summary || '').slice(0, 120),
+    authorization: 'none',
+    ...(refusal ? { refusal: 'hub_required' } : {}),
     replayed: false,
   };
-  fs.appendFileSync(filePath, JSON.stringify(entry) + '\n', 'utf8');
-  return entry;
+  const release = acquireLock(path.join(stateDir, 'native-msg-outbox.lock'));
+  try {
+    if (dedupeKey && readRows(filePath).some((row) => row.dedupe_key === dedupeKey)) return null;
+    if (dedupeKey) entry.dedupe_key = dedupeKey;
+    fs.appendFileSync(filePath, JSON.stringify(entry) + '\n', 'utf8');
+    return entry;
+  } finally { release(); }
 }
 
 function flush({ fleetBin } = {}, stateDir = resolveStateDir()) {

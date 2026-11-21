@@ -27,8 +27,8 @@
 # line that starts with "quota-mirror-tick: " is
 # "quota-mirror-tick: nothing_applicable", the verdict is nothing_applicable.
 # No snapshot file contents are printed.
-# Exit 0 when verdict is ok and codeforge is on PATH.
-# Exit 3 when verdict is not ok, or codeforge is missing. For codeforge missing
+# Exit 0 when verdict is ok or nothing_applicable and codeforge is on PATH.
+# Exit 3 for other verdicts, or when codeforge is missing. For codeforge missing
 # or no_snapshot, stderr names the reason and the command hangar should run:
 #   codeforge install --all
 #
@@ -308,7 +308,7 @@ emit_inventory() {
   if [ "$verdict" = "no_snapshot" ]; then
     printf 'rollout-quota-mirror: no statusline snapshot under %s; hangar: %s\n' "$snap_dir" "$HANGAR_CMD" >&2
   fi
-  if [ "$verdict" != "ok" ] || [ "$codeforge" != "1" ]; then
+  if { [ "$verdict" != "ok" ] && [ "$verdict" != "nothing_applicable" ]; } || [ "$codeforge" != "1" ]; then
     return 3
   fi
   return 0

@@ -162,7 +162,9 @@ assert_eq 0 "$__RUN_EXIT" "empty-stdin: exit 0"
 assert_eq "" "$__RUN_STDOUT" "empty-stdin: silent stdout"
 
 # 8. Negative control: copy hook with ROLE_CLASS_MAP emptied -> all 4 mapping cases go RED, then GREEN on real hook
-MUTANT_HOOK="$TEST_TMP/fleet-dispatch-class.empty-map.js"
+mkdir -p "$TEST_TMP/hooks/lib"
+cp "$REPO_ROOT/hooks/lib/gate-hint.js" "$TEST_TMP/hooks/lib/gate-hint.js"
+MUTANT_HOOK="$TEST_TMP/hooks/fleet-dispatch-class.empty-map.js"
 node -e '
   const fs = require("fs");
   const src = fs.readFileSync(process.argv[1], "utf8");

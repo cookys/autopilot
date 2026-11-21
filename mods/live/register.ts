@@ -76,7 +76,7 @@ import type { FleetLaneSum, RoomRow } from './shell'
 import { focusAnchorKey, Pane, noteInputKey, resetNoteInputs } from './pane'
 import { routeKey } from './pages/keys'
 import { V75Band } from './band75'
-import { V75_PANE_MIN_ROWS, v75BandRows, v75FocusNext, v75Plan, v75ScrollRoute } from './v75'
+import { V75_PANE_MIN_ROWS, v75BandRows, v75FocusNext, v75ReopenAfterReload, v75Plan, v75ScrollRoute } from './v75'
 import type { V75Focus } from './v75'
 import type { KeyAction } from './pages/keys'
 import { decideReduce, NO_NAV, previewItems, previewStale, v74Pool } from './pages/decide'
@@ -321,6 +321,11 @@ let shellDrawnMs = -Infinity
 let shellRoom: { rows: RoomRow[]; raw: string } = { rows: [], raw: '' }
 let shellBaseline: number | undefined // the newest roundtable seq when the shell opened (✦ counts what came after); undefined = taken at the next read
 let panelOpenWrittenMs = -Infinity
+// the owner wants the v7.5 Pane open: written by the open paths, cleared by the 收起 / close paths (never by session.start), read once at the first render after a reload (module variables do not survive it, $.state does)
+const PANE_WANTED = atom({ plugin: 'autopilot', key: 'pane_wanted' } as const, false)
+const setPaneWanted = ($: EngineInterface, v: boolean): Promise<void> => update($, PANE_WANTED, () => v).catch(() => undefined)
+let v75ReloadChecked = false // the reopen check runs once per module load
+let v75OpenQuiet = false // the next Pane open asks no focus (a reopen after a reload must not take the keys)
 const PANEL_OPEN = atom({ plugin: 'autopilot', key: 'panel_open_at_ms' } as const, 0)
 const ROOM_RE = /^[a-z0-9-]+$/
 const MAX_ROOM_BYTES = 2_000_000 // a longer log keeps the last read (the roundtable pane reads it whole; the band does not)
@@ -1624,7 +1629,7 @@ async function ringToTab($: EngineInterface, id: PageId): Promise<void> {
 async function paneTabPress($: EngineInterface, t: PaneTab, legacy = false): Promise<void> {
   if (legacy) {
     if (t === paneTab) {
-      markPaneClosed()
+      markPaneClosed(); void setPaneWanted($, false)
       try { await $.ui.close({ id: PANE_ID }) } catch (_e) { /* already closed */ }
       return
     }
@@ -1818,7 +1823,7 @@ async function frameKeyBody($: EngineInterface, k: KeyAction): Promise<void> {
   try {
     if (k.kind === 'page') { await panePagePress($, k.to as PageId); return }
     if (k.kind === 'close') {
-      markPaneClosed()
+      markPaneClosed(); void setPaneWanted($, false)
       await closePane($)
       return
     }
@@ -1965,7 +1970,7 @@ export async function startLive($: EngineInterface): Promise<void> {
 export function registerLive(on: Parameters<Register>[0]): void {
   // /live-pane: the pane is never opened on its own (plan B); this and the band's ⓘ and slots are the ways to open it
   on('command.run', { command: 'live-pane' }, async ($) => {
-    markPaneOpen()
+    markPaneOpen(); void setPaneWanted($, true)
     await openPane($)
     return {}
   })
@@ -2048,7 +2053,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       try {
         const tab = await mine
         if (seq === pressSeq) { paneTab = tab; panePage = pageOfTab(tab) }
-        markPaneOpen()
+        markPaneOpen(); void setPaneWanted($, true)
         $.ui.invalidate('ui.render')
         await openPane($)
       } finally {
@@ -2065,7 +2070,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       await panePagePress($, pageId) // K1: band and slot navigation also enter at the top.
       if (unfold !== null) folded.delete(unfold)
       try {
-        markPaneOpen()
+        markPaneOpen(); void setPaneWanted($, true)
         $.ui.invalidate('ui.render')
         await openPane($)
       } finally {
@@ -2092,7 +2097,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       let isOpen = v74Open
       if (!v74) { try { isOpen = (await $.ui.panes()).some(p => p.id === PANE_ID) } catch (_e) { /* the engine could not list panes: treat the pane as closed */ } }
       if (!isOpen) { await pageOpen('now'); return }
-      markPaneClosed()
+      markPaneClosed(); void setPaneWanted($, false)
       await closePane($)
       $.ui.invalidate('ui.render')
     }
@@ -2222,14 +2227,21 @@ export function registerLive(on: Parameters<Register>[0]): void {
     if (v74) {
       if ((await $.env.get('AUTOPILOT_LIVE_V75').catch(() => undefined)) !== '0') { // AUTOPILOT_LIVE_V75=0: the v7.4 in-band page only (kill switch; the v7.4 host tests run with it)
       v75Rows = rows
+      if (!v75ReloadChecked) {
+        v75ReloadChecked = true
+        const wanted = await read($, PANE_WANTED).catch(() => false)
+        const hostOpen = await $.ui.panes().then(ps => ps.some(p => p.id === PANE_ID)).catch(() => false)
+        if (v75ReopenAfterReload({ wanted, hostOpen, paneOn: v75PaneOn, open: v74Open })) { v75OpenQuiet = true; markPaneOpen() }
+      }
       if (v75PaneOn) { try { v75PaneSeen($, (await $.ui.panes()).some(p => p.id === PANE_ID && p.isFocused === true)) } catch (_e) { /* no pane list: the focus events decide */ } }
       const v75c = await v74CtxOf($)
       const v75cards = v75c.decide ?? []
       let plan = v75Plan({ maxRows: rows, pending: v75cards.length, paneWanted: v74Open, notPlaced: v75NotPlaced, locked: v75Locked })
       if (v74Open && plan.pane && !v75PaneOn) {
         // open the host Pane; refused (isPlaced=false) -> the v7.4 box band, and the keyboard stays in the band
-        const placed = await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: true }).catch(() => ({ isPlaced: false }) as { isPlaced: boolean })
-        if (placed.isPlaced === true) { v75PaneOn = true; v75Focus = 'pane'; v75Locked = v75cards.length > 0 ? 5 : 1; v75LockCount = v75cards.length }
+        const quiet = v75OpenQuiet; v75OpenQuiet = false
+        const placed = await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: !quiet }).catch(() => ({ isPlaced: false }) as { isPlaced: boolean })
+        if (placed.isPlaced === true) { v75PaneOn = true; v75Focus = quiet ? 'prompt' : 'pane'; v75Locked = v75cards.length > 0 ? 5 : 1; v75LockCount = v75cards.length }
         else { v75NotPlaced = true; v75Focus = 'band'; plan = v75Plan({ maxRows: rows, pending: v75cards.length, paneWanted: v74Open, notPlaced: true, locked: null }) }
       } else if (v75PaneOn && !plan.pane) {
         v75PaneOn = false; v75Locked = null
@@ -2253,7 +2265,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
         const block = V75Band(el as never, v75BandRows(inp), inp, {
           onKey: k => { void toDecide(k) },
           onText: v => { decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') },
-          onPage: id => { markPaneOpen(); void panePagePress($, id as PageId); $.ui.invalidate('ui.render') },
+          onPage: id => { markPaneOpen(); void setPaneWanted($, true); void panePagePress($, id as PageId); $.ui.invalidate('ui.render') },
         })
         await logBandGeometry($, rows, columns, 5)
         return stackRows(el, [block, bar.row1])
@@ -2605,7 +2617,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
   on('ui.close', ($, e, next) => {
     if ((e as { id?: string }).id === PANE_ID && v75PaneOn) {
       v75PaneOn = false; v75Locked = null; v75NotPlaced = false
-      markPaneClosed()
+      markPaneClosed(); void setPaneWanted($, false)
       v75Focus = v75FocusNext(v75Focus, { kind: 'pane-gone' })
       void renderLater($)
     }

@@ -4,7 +4,7 @@ import decideFx from './fixtures/v74/decide.fixture'
 import { decidePage, decideReduce, NO_NAV, previewItems, previewStale } from './pages/decide'
 import type { DecideNav } from './pages/decide'
 import { makeT } from './i18n'
-import { V75_PANE_MIN_ROWS, v75BandRows, v75EscStep, v75FocusNext, v75Plan, v75ScrollRoute } from './v75'
+import { V75_PANE_MIN_ROWS, v75BandRows, v75EscStep, v75FocusNext, v75Plan, v75ReopenAfterReload, v75ScrollRoute } from './v75'
 import type { V75BandIn } from './v75'
 import type { DecideCard, V74Ctx } from './v74/contract'
 import type { Row } from './pages/rows'
@@ -170,4 +170,13 @@ test('v75 old shell menus: usage, pet and roundtable each have a key and a Pane 
   const room = roomPage.render({ ...(ctxOf() as object), room: [{ seq: 1, from: 'pm', kind: 'msg', text: 'hello' }] } as never)
   expect(room.body.map(text).join('\n')).toContain('pm hello')
   expect(roomPage.render(ctxOf()).body.map(text).join('')).toContain(t('v75.room_none'))
+})
+
+test('v75 reload: the Pane is reopened only when the owner wanted it, the host closed it and this module has not opened one', () => {
+  const base = { wanted: true, hostOpen: false, paneOn: false, open: false }
+  expect(v75ReopenAfterReload(base)).toBe(true)
+  expect(v75ReopenAfterReload({ ...base, wanted: false })).toBe(false) // 收起 / the Pane's close cleared it
+  expect(v75ReopenAfterReload({ ...base, hostOpen: true })).toBe(false) // the host kept it
+  expect(v75ReopenAfterReload({ ...base, paneOn: true })).toBe(false)
+  expect(v75ReopenAfterReload({ ...base, open: true })).toBe(false) // an open already asked this load
 })

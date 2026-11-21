@@ -148,6 +148,7 @@ check_session_mode_gate
     env: {
       PATH: `${wrapper.binDir}:${process.env.PATH}`,
       HOME: sandbox,
+      AUTOPILOT_ACCOUNTS_DIR: path.join(sandbox, 'accounts'),
       AUTOPILOT_SESSION_MODE_DIR: markerDir,
       AUTOPILOT_SESSION_ID: 'own-session-id',
       ...extraEnv,
@@ -246,7 +247,7 @@ test('dispatch-hetero.sh check_session_mode_gate: first-offender-wins with live 
   const wrapper2 = createNodeWrapper();
   const res2 = runGate(DISPATCH_HETERO_SH, dir2, wrapper2);
   assert.notEqual(res2.status, 0, 'gate must fail closed on invalid marker');
-  assert.match(res2.stderr, /invalid authoritative session-mode marker/, 'first offender (a-invalid.json) must be reported');
+  assert.match(res2.stderr, /authoritative session-mode marker is invalid/, 'first offender (a-invalid.json) must be reported');
 });
 
 test('17-1 per-marker node -e loop (negative control)', () => {

@@ -30,7 +30,8 @@ if [ "$1" = "--version" ]; then echo 1.19.2; exit 0; fi
 if [ "$1" = "auth" ] && [ "$2" = "export" ]; then printf '{"credential":"fixture"}'; exit 0; fi
 if [ "$1" = "auth" ]; then exit 0; fi
 sleep 300 &
-echo $! > "$GC_PID_FILE"
+_gc_pid=$!
+echo "$_gc_pid" > "$GC_PID_FILE"
 sleep 1
 if [ -n "$STUB_ORPHAN_QUOTA" ]; then
   echo '{"type":"error","error":{"name":"APIError","data":{"message":"You exceeded your current quota (insufficient_quota)"}}}'
@@ -62,7 +63,8 @@ echo '{"type":"error","error":{"name":"APIError","data":{"message":"You exceeded
 n=0
 while [ "$n" -lt 400 ]; do
   sleep 300 &
-  echo $! >> "$FORK_PID_FILE"
+  _fpid=$!
+  echo "$_fpid" >> "$FORK_PID_FILE"
   n=$((n + 1))
   sleep 0.005
 done
@@ -89,7 +91,8 @@ if [ "$1" = "--version" ]; then echo 1.19.2; exit 0; fi
 if [ "$1" = "auth" ] && [ "$2" = "export" ]; then printf '{"credential":"fixture"}'; exit 0; fi
 if [ "$1" = "auth" ]; then exit 0; fi
 sleep 300 > /dev/null 2>&1 < /dev/null &
-echo $! > "$GC_PID_FILE"
+_gc_pid=$!
+echo "$_gc_pid" > "$GC_PID_FILE"
 exit 1
 SEOF
 chmod +x "$STUB_IMM"
@@ -113,7 +116,8 @@ if [ "$1" = "auth" ] && [ "$2" = "export" ]; then printf '{"credential":"fixture
 if [ "$1" = "auth" ]; then exit 0; fi
 echo $$ > "$CH_PID_FILE"
 sleep 300 &
-echo $! > "$GC_PID_FILE"
+_gc_pid=$!
+echo "$_gc_pid" > "$GC_PID_FILE"
 wait
 SEOF
 chmod +x "$STUB_HANG"

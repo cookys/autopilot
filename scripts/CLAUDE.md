@@ -76,7 +76,7 @@ Shared Cursor/Kimi broker transport and clone rail use the cursor-named helpers;
 
 **Shared JSON & store primitives (cont.)** — `lib/hippo.js` `project-record.js` `lib/lane-manifest.js` `lib/switch-journal.js` `lib/lane-switch-preflight.js` `lib/lane-switch-handoff.js` `lib/lane-switch-transcript.js` `lib/lane-switch-confirm.js` `lib/fleet-peers.js` `lib/token-seat.js` `lib/token-seat.sh`
 
-**Test helpers** — `lib/test-reaper.js` `lib/test-tmux-claude-teardown.sh` `check-test-tmux-claude-teardown.js` `check-test-cli-timeout.js` `runaway-scan.sh`
+**Test helpers** — `lib/test-reaper.js` `lib/test-tmux-claude-teardown.sh` `check-test-tmux-claude-teardown.js` `check-test-cli-timeout.js` `runaway-scan.sh` `check-test-bg-reap.js`
 
 
 ## When adding a new script

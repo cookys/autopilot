@@ -46,6 +46,10 @@ LEASE_SERVER_PID=$!
 cleanup_lease_server() {
   kill "$LEASE_SERVER_PID" 2>/dev/null || true
   wait "$LEASE_SERVER_PID" 2>/dev/null || true
+  if [ -n "${F1B_STANDIN_PID:-}" ]; then
+    kill "$F1B_STANDIN_PID" 2>/dev/null || true
+    wait "$F1B_STANDIN_PID" 2>/dev/null || true
+  fi
 }
 trap cleanup_lease_server EXIT
 for _i in 1 2 3 4 5 6 7 8 9 10; do [ -s "$LEASE_PORT_FILE" ] && break; sleep 0.1; done

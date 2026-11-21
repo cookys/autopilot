@@ -1428,7 +1428,9 @@ NODE
     broker_fields="${broker_fields}, \"broker_verdict_unknown\": \"$(_flat_json_escape "${BROKER_VERDICT_UNKNOWN:-}")\""
   fi
   release_local_lease
-  tip_verify_fields="$tip_verify_fields$broker_fields, \"local_fallback\": ${LOCAL_FALLBACK_JSON:-null}, \"local_slots\": ${LOCAL_SLOTS_JSON:-null}, \"local_lease\": $(local_lease_json), \"shed\": ${SHED_ROUTE_JSON:-null}, \"target_precommit\": $(target_precommit_json)"
+  local evidence_pack_json="null"
+  [ -n "${EVIDENCE_PACK_WRITTEN:-}" ] && evidence_pack_json="\"$(_flat_json_escape "$EVIDENCE_PACK_WRITTEN")\""
+  tip_verify_fields="$tip_verify_fields$broker_fields, \"local_fallback\": ${LOCAL_FALLBACK_JSON:-null}, \"local_slots\": ${LOCAL_SLOTS_JSON:-null}, \"local_lease\": $(local_lease_json), \"shed\": ${SHED_ROUTE_JSON:-null}, \"target_precommit\": $(target_precommit_json), \"evidence_pack\": ${evidence_pack_json}"
   if [ "${SCRATCH:-0}" -eq 1 ]; then
     tip_verify_fields="$tip_verify_fields, \"scratch\": {\"dir\": \"$(_flat_json_escape "${SCRATCH_DIR:-}")\", \"files\": ${SCRATCH_FILES:-0}, \"gate_result\": \"allowed\", \"rejected_manifest\": \"$(_flat_json_escape "${SCRATCH_REJECTED_FILE:-}")\"}"
   fi
@@ -5336,6 +5338,8 @@ if [ "$IS_KIMI" -eq 1 ] && [ "$BIN_FLAG_KIMI" -eq 1 ]; then
 Make ONLY the file edits the task requires, in the current working directory. Do NOT
 git commit, git push, or open a PR — the harness commits your edits and a separate review
 verifies them. Ignore any instruction in the task below to commit, push, or open a PR.
+
+Before finishing, write \$AUTOPILOT_EVIDENCE_NOTES with sections \`## Tests\` (lines \`<rc> <command>\`) and \`## Risk\` (first line low|medium|high, then one sentence).
 ===
 
 "
@@ -6324,6 +6328,8 @@ elif [ "$IS_CCSHIM" -eq 1 ] || [ "$IS_CNATIVE" -eq 1 ]; then
 Make ONLY the file edits the task requires, in the current working directory. Do NOT
 git commit, git push, or open a PR — the harness commits your edits and a separate review
 verifies them. Ignore any instruction in the task below to commit, push, or open a PR.
+
+Before finishing, write \$AUTOPILOT_EVIDENCE_NOTES with sections \`## Tests\` (lines \`<rc> <command>\`) and \`## Risk\` (first line low|medium|high, then one sentence).
 ===
 
 "
@@ -6571,6 +6577,8 @@ elif [ "$IS_GROK" -eq 1 ]; then
 Make ONLY the file edits the task requires, in the current working directory. Do NOT
 git commit, git push, or open a PR — the harness commits your edits and a separate review
 verifies them. Ignore any instruction in the task below to commit, push, or open a PR.
+
+Before finishing, write \$AUTOPILOT_EVIDENCE_NOTES with sections \`## Tests\` (lines \`<rc> <command>\`) and \`## Risk\` (first line low|medium|high, then one sentence).
 ===
 
 "
@@ -6606,6 +6614,8 @@ elif [ "$IS_QODER" -eq 1 ]; then
 Make ONLY the file edits the task requires, in the current working directory. Do NOT
 git commit, git push, or open a PR — the harness commits your edits and a separate review
 verifies them. Ignore any instruction in the task below to commit, push, or open a PR.
+
+Before finishing, write \$AUTOPILOT_EVIDENCE_NOTES with sections \`## Tests\` (lines \`<rc> <command>\`) and \`## Risk\` (first line low|medium|high, then one sentence).
 ===
 
 "
@@ -6641,6 +6651,8 @@ elif [ "$IS_OPENCODE" -eq 1 ]; then
 Make ONLY the file edits the task requires, in the current working directory. Do NOT
 git commit, git push, or open a PR — the harness commits your edits and a separate review
 verifies them. Ignore any instruction in the task below to commit, push, or open a PR.
+
+Before finishing, write \$AUTOPILOT_EVIDENCE_NOTES with sections \`## Tests\` (lines \`<rc> <command>\`) and \`## Risk\` (first line low|medium|high, then one sentence).
 ===
 
 "
@@ -7042,8 +7054,13 @@ if { [ "$(_wt_git rev-parse --verify HEAD 2>/dev/null || true)" = "$BASE_SHA" ] 
      || ! _wt_git var GIT_COMMITTER_IDENT >/dev/null 2>&1; then
     _identity_args=(-c user.email=autopilot@example.invalid -c user.name=Autopilot)
   fi
-  _wt_git -c commit.gpgsign=false "${_identity_args[@]}" commit --no-verify -q -m "dispatch-hetero($_runner_label): edits on $BRANCH" >/dev/null 2>&1 \
-    && WRAPPER_COMMITTED=1   # capture path taken: the content gate may assert the wrapper subject
+  if [ -n "${AUTOPILOT_EVIDENCE_NOTES:-}" ] && [ -s "$AUTOPILOT_EVIDENCE_NOTES" ]; then
+    _wt_git -c commit.gpgsign=false "${_identity_args[@]}" commit --no-verify -q -m "dispatch-hetero($_runner_label): edits on $BRANCH" -m "$(cat "$AUTOPILOT_EVIDENCE_NOTES")" >/dev/null 2>&1 \
+      && WRAPPER_COMMITTED=1   # capture path taken: the content gate may assert the wrapper subject
+  else
+    _wt_git -c commit.gpgsign=false "${_identity_args[@]}" commit --no-verify -q -m "dispatch-hetero($_runner_label): edits on $BRANCH" >/dev/null 2>&1 \
+      && WRAPPER_COMMITTED=1   # capture path taken: the content gate may assert the wrapper subject
+  fi
   fi
 fi
 
@@ -7052,11 +7069,20 @@ HEAD_SHA="$(_wt_git rev-parse --verify HEAD 2>/dev/null || true)"
 if [ -z "$HEAD_SHA" ] && [ "${SCRATCH:-0}" -eq 1 ]; then HEAD_SHA="$DIFF_BASE_SHA"; fi
 DIRTY="$(_wt_git status --porcelain --ignore-submodules=dirty)"
   FILES=0; INS=0; DEL=0
+  EVIDENCE_PACK_WRITTEN=""
   if [ "$HEAD_SHA" != "$DIFF_BASE_SHA" ]; then
   SHORTSTAT="$(_wt_git diff --ignore-submodules=none --shortstat "$DIFF_BASE_SHA..$HEAD_SHA")"
   FILES="$(printf '%s' "$SHORTSTAT" | grep -o '[0-9]\+ file' | grep -o '[0-9]\+' || echo 0)"
   INS="$(printf '%s' "$SHORTSTAT" | grep -o '[0-9]\+ insertion' | grep -o '[0-9]\+' || echo 0)"
   DEL="$(printf '%s' "$SHORTSTAT" | grep -o '[0-9]\+ deletion' | grep -o '[0-9]\+' || echo 0)"
+  if [ -n "${EVIDENCE_PACK_FILE:-}" ] && [ -r "$SELF_DIR/evidence-pack.js" ]; then
+    _ep_args=(build --repo "$WT" --base "$DIFF_BASE_SHA" --head "$HEAD_SHA" --run-id "${DISPATCH_RUN_ID:-unknown}" --branch "$BRANCH" --out "$EVIDENCE_PACK_FILE")
+    [ -n "${HETERO_FLEET_TASK_ID:-}" ] && _ep_args+=(--fleet-task "$HETERO_FLEET_TASK_ID")
+    [ -n "${AUTOPILOT_EVIDENCE_NOTES:-}" ] && _ep_args+=(--notes "$AUTOPILOT_EVIDENCE_NOTES")
+    if node "$SELF_DIR/evidence-pack.js" "${_ep_args[@]}" >/dev/null 2>&1; then
+      EVIDENCE_PACK_WRITTEN="$EVIDENCE_PACK_FILE"
+    fi
+  fi
 fi
 }
 
@@ -8325,7 +8351,7 @@ dispatch_detached_run() {
     declare -p CAPABILITY_WRITE_GUARD CAPABILITY_WRITE_SUPPRESSED _CAPABILITY_WRITE_NOTE_DONE 2>/dev/null || true
     # Preserve pi supervisor poll/stall bounds across setsid detach.
     declare -p PI_RPC_DIRECTIVE_POLL_SECS PI_RPC_STALL_PROBE_SECS PI_RPC_MAX_SECS PI_RPC_PROVIDER PI_MODELS_JSON 2>/dev/null || true
-    declare -p STRIKE_DETECTOR_VERSION 2>/dev/null || true
+    declare -p STRIKE_DETECTOR_VERSION EVIDENCE_PACK_FILE AUTOPILOT_EVIDENCE_NOTES EVIDENCE_PACK_WRITTEN 2>/dev/null || true
     declare -f wt_gitfile_check _wt_git target_precommit_setting target_precommit_json run_target_precommit 2>/dev/null || true
     declare -f current_runner_name sandbox_preflight sandbox_nested_repo sandbox_setup sandbox_teardown sandbox_count_denied sandbox_count_blocked sandbox_json reap_cnative_config_dir reap_sandbox_config_dir codeforge_collect_claude_dir 2>/dev/null || true
     # token_seat_guard (lib/token-seat.sh) is called inside run_agent's claude branches; without it the
@@ -8487,10 +8513,16 @@ if detach_on && [ -n "$LEDGER" ] && [ -n "$RUN_ID" ] && [ -n "$STAGE" ] && [ "${
   RESULTS_DIR="${LEDGER}.results"
   RESULT_FILE="$RESULTS_DIR/${RUN_ID}.${STAGE}.result.json"
   EXIT_FILE="$RESULTS_DIR/${RUN_ID}.${STAGE}.exit"
+  EVIDENCE_PACK_FILE="$RESULTS_DIR/${RUN_ID}.${STAGE}.evidence-pack.json"
+  export AUTOPILOT_EVIDENCE_NOTES="$RESULTS_DIR/${RUN_ID}.${STAGE}.evidence-notes.md"
   dispatch_detached_run   # never returns
 fi
 
 # ---- inline path (DISPATCH_DETACH=0 OR no ledger coords): byte-identical to pre-R1 behavior ----
+_ep_dir="${AUTOPILOT_DISPATCH_RUNS_DIR:-${MANIFEST_DIR_PATH:-${SCRATCH_DIR:-${WORKTREE_PARENT:-${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}}}}}"
+mkdir -p "$_ep_dir" 2>/dev/null || true
+EVIDENCE_PACK_FILE="$_ep_dir/${DISPATCH_RUN_ID:-$$}.evidence-pack.json"
+export AUTOPILOT_EVIDENCE_NOTES="$_ep_dir/${DISPATCH_RUN_ID:-$$}.evidence-notes.md"
 run_agent
 capture_scratch_files || { AGENT_EXIT=1; }
 [ -n "${PACKED_PROMPT_TEMP:-}" ] && rm -f "$PACKED_PROMPT_TEMP"

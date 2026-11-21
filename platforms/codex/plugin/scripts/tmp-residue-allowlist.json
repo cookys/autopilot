@@ -14,6 +14,11 @@
     },
     {
       "file": "scripts/dispatch-hetero.sh",
+      "match": "_ep_dir=",
+      "reason": "Selects the evidence output parent; the assignment itself allocates nothing and run IDs can be supplied by callers."
+    },
+    {
+      "file": "scripts/dispatch-hetero.sh",
       "match": "_local_wt_base=",
       "reason": "Selects a parent passed to local-sandbox-parent.js; this assignment allocates nothing."
     },

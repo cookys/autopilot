@@ -837,6 +837,20 @@
       "owner": "scripts/lib/seed-claude-config.js",
       "retention_days": null,
       "reason": "seeded CLAUDE_CONFIG_DIR (only .credentials.json) for the claude-native child; --exec removes it when the child exits, including SIGKILL of the child; dispatch-hetero.sh still removes its single-shot dir after the worker and in cleanup/abort_dispatch"
+    },
+    {
+      "pattern": "hetero-*.evidence-pack.json",
+      "kind": "evidence",
+      "owner": "scripts/dispatch-hetero.sh",
+      "retention_days": null,
+      "reason": "Inline dispatch evidence with an automatically generated hetero- run ID; retained as evidence and pruned after retention."
+    },
+    {
+      "pattern": "hetero-*.evidence-notes.md",
+      "kind": "evidence",
+      "owner": "scripts/dispatch-hetero.sh",
+      "retention_days": null,
+      "reason": "Inline dispatch evidence with an automatically generated hetero- run ID; retained as evidence and pruned after retention."
     }
   ]
 }

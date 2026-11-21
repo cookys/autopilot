@@ -29,6 +29,7 @@ const os = require('os');
 const path = require('path');
 const { configPath, globToRegExp } = require('../../scripts/lib/config-path.js');
 const { isPmConsole } = require('../_shared/pm-console.js');
+const { enforceFromReached } = require('./enforce-from.js');
 
 const DEFAULT_ALLOW_MEMBERS = ['pm--claude', 'glm-trial*'];
 const DEFAULT_ENFORCE_FROM = '2026-11-24T00:00:00+08:00';
@@ -68,7 +69,7 @@ function loadGuardConfig(env) {
       if (ag && typeof ag === 'object') {
         if (Array.isArray(ag.allow_members)) {
           const members = ag.allow_members.filter((m) => typeof m === 'string' && m.trim()).map((m) => m.trim());
-          if (members.length) cfg.allowMembers = members;
+          cfg.allowMembers = members;
         }
         if (typeof ag.enforce_from === 'string' && ag.enforce_from.trim()) cfg.enforceFrom = ag.enforce_from.trim();
       }
@@ -109,7 +110,7 @@ function decide(opts = {}) {
   const t = Date.parse(enforceFrom);
   // Unparsable enforce-from enforces now (same shape as foreman-guard pollBlocks).
   const denyFromMs = Number.isFinite(t) ? t + WARN_WINDOW_MS : nowMs;
-  if (nowMs < denyFromMs) {
+  if (!enforceFromReached(enforceFrom, nowMs, WARN_WINDOW_MS)) {
     return { verdict: 'warn', why: 'warn-window', seat: address, member, denyFrom: new Date(denyFromMs).toISOString() };
   }
   return { verdict: 'deny', why: 'deny-window', seat: address, member, denyFrom: new Date(denyFromMs).toISOString() };

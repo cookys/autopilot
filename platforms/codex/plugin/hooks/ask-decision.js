@@ -21,13 +21,20 @@
  * question; only an answer or the session end closes it).
  *
  * Opt-out: AUTOPILOT_ASK_DECISION=off. Fail-open: any error -> one stderr line, exit 0.
- * PM and solo never block the tool and never print a permission decision.
- * A non-PM team session (lane or lead) is the exception: PreToolUse prints a deny whose
- * permissionDecisionReason points at scripts/request-decision.js, and no decision entry is written.
+ * The ask is judged by the ask-guard seat decision (hooks/lib/ask-guard.js), never by team.json:
+ * the seat is the session's fleet address (env FLEET_ADDRESS, else AUTOPILOT_FLEET_ADDRESS);
+ * no fleet address is the operator's own session and is allowed, as are the ask_guard.allow_members
+ * members (default ["pm--claude", "glm-trial*"], glob on the member part) and a PM-console cwd
+ * (the existing isPmConsole check). Every other seat follows the foreman_guard.poll_enforce_from
+ * rollout on ask_guard.enforce_from: until that instant + 1 h the ask is allowed with a stderr
+ * warning and one line in ~/.autopilot/ask-guard/hits.jsonl; at or after it the PreToolUse leg
+ * prints a deny whose permissionDecisionReason points at scripts/request-decision.js, and no
+ * decision entry is written.
  */
 'use strict';
 
 const L = require('./live-session-lib.js');
+const askGuard = require('./lib/ask-guard.js');
 
 const SOURCE = 'ask_user_question'; // the entry's `origin`
 const SOURCE_TEXT = 'depth-0 AskUserQuestion'; // the entry's `source` (who asked), shown to the owner
@@ -73,16 +80,12 @@ function applies(p) {
     && typeof p.session_id === 'string' && p.session_id && !L.knobOff(KNOB);
 }
 
-function teamRole() {
-  try { return require('../scripts/lib/team.js').resolve().role; } catch { return 'lane'; }
-}
-
-function denyNonPm() {
+function denySeat(d) {
   process.stdout.write(`${JSON.stringify({
     hookSpecificOutput: {
       hookEventName: 'PreToolUse',
       permissionDecision: 'deny',
-      permissionDecisionReason: '非 PM 的 team session 不開操作員卡。請改用 scripts/request-decision.js，把問題、選項與建議送給 PM。',
+      permissionDecisionReason: askGuard.denyReason(d),
     },
   })}\n`);
 }
@@ -91,8 +94,19 @@ function onPreToolUse(p) {
   if (!applies(p) || typeof p.cwd !== 'string' || !p.cwd) return;
   const q = questionFrom(p.tool_input);
   if (!q) return;
-  const role = teamRole();
-  if (role !== 'solo' && role !== 'pm') { denyNonPm(); return; }
+  // ask-guard seat decision (hooks/lib/ask-guard.js): identity is the session's fleet address,
+  // never team.json. allow -> the card path below; warn -> grace window: the tool call proceeds,
+  // one stderr line + one hits.jsonl line, no card; deny -> point at scripts/request-decision.js.
+  const d = askGuard.decide({ env: process.env, cwd: p.cwd });
+  if (d.verdict === 'deny') {
+    denySeat(d);
+    return;
+  }
+  if (d.verdict === 'warn') {
+    askGuard.recordHit(d, { env: process.env, sessionId: p.session_id });
+    process.stderr.write(`${askGuard.warnLine(d)}\n`);
+    return;
+  }
   const session = normSession(p.session_id);
   closeOwn(p); // this session's earlier unanswered question is superseded; nobody else's entry is touched
   const { openDecision } = require('../scripts/open-decision.js');

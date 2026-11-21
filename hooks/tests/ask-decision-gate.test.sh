@@ -141,7 +141,7 @@ for f in "$REPO_ROOT"/hooks/*.js; do [ "$(basename "$f")" = ask-decision.js ] ||
 cp "$REPO_ROOT/hooks/ask-decision.js" "$MUT1/hooks/ask-decision.js"
 for f in "$REPO_ROOT"/hooks/lib/*.js; do [ "$(basename "$f")" = ask-guard.js ] || ln -s "$f" "$MUT1/hooks/lib/$(basename "$f")"; done
 sed_mutant "$REPO_ROOT/hooks/lib/ask-guard.js" "$MUT1/hooks/lib/ask-guard.js" \
-  's#const raw = String(env.FLEET_ADDRESS || env.AUTOPILOT_FLEET_ADDRESS || '"'"';#const raw = require("../../scripts/lib/team.js").resolve().role === "solo" ? "" : "ns/c4140/gate--claude";#'
+  's#const raw = String(env.FLEET_ADDRESS || env.AUTOPILOT_FLEET_ADDRESS || '"'"''"'"');#const raw = require("../../scripts/lib/team.js").resolve().role === "solo" ? "" : "ns/c4140/gate--claude";#'
 export FLEET_ADDRESS=cookys/c4140/gpu-lead--claude
 set_cfg "$PAST"
 MUT1_OUT="$(HOME="$HOOK_HOME" TMPDIR="$HOOK_TMPDIR" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" \

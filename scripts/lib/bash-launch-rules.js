@@ -23,7 +23,7 @@
 //      scratchpad or $TMPDIR. Never put rm inside sh -c / bash -c / zsh -c, a heredoc, or a for/while loop. Write briefs and
 //      other text files with the Write tool, not a heredoc inside bash -c."
 //  10. zsh-syntax (DENY by default; knob off|warn|deny) — zsh parameter flags, glob qualifiers, and `=(...)` temp-file
-//      process substitution that Bash cannot parse. Single-quoted spans are data and are ignored.
+//      process substitution that Bash cannot parse. Single-quoted spans, comments, and heredoc bodies are ignored.
 // Rules run on EXECUTABLE text (heredoc bodies / comments stripped by bash-wait-rules.js, except Rule 9's multi-line `-c` scan).
 //
 // scripts/lib/dispatch-detach.sh is NOT a launcher: it is a sourceable helper the read rails
@@ -918,24 +918,43 @@ function detectZshExpansion(cmd, cwd) {
 
 // Rule 10: catch zsh-only grammar before Claude Code's permission parser sees an invalid Bash command.
 // Keep this lexical and narrow: ordinary substitutions, Bash parameter forms, and <(...) are valid Bash.
+function zshExecutableText(cmd, depth = 0) {
+  const source = executableText(cmd);
+  if (depth >= 64) return source;
+  let out = '';
+  for (let i = 0; i < source.length; i += 1) {
+    if (source[i] === '$' && source[i + 1] === '(') {
+      const end = closeParen(source, i + 2);
+      if (end >= 0) {
+        out += `$(${zshExecutableText(source.slice(i + 2, end), depth + 1)})`;
+        i = end;
+        continue;
+      }
+    }
+    out += source[i];
+  }
+  return out;
+}
+
 function detectZshSyntax(cmd) {
   const raw = typeof cmd === 'string' ? cmd : '';
   if (raw.length > ZSH_MAX_TEXT) return null;
+  const executable = zshExecutableText(raw);
   let text = '';
   let doubleQuoted = false;
-  for (let i = 0; i < raw.length; i += 1) {
-    if (raw[i] === '\\' && i + 1 < raw.length) {
-      text += raw[i] + raw[i + 1];
+  for (let i = 0; i < executable.length; i += 1) {
+    if (executable[i] === '\\' && i + 1 < executable.length) {
+      text += executable[i] + executable[i + 1];
       i += 1;
-    } else if (raw[i] === '"') {
+    } else if (executable[i] === '"') {
       doubleQuoted = !doubleQuoted;
-      text += raw[i];
-    } else if (!doubleQuoted && raw[i] === "'") {
-      const end = raw.indexOf("'", i + 1);
-      i = end < 0 ? raw.length : end;
+      text += executable[i];
+    } else if (!doubleQuoted && executable[i] === "'") {
+      const end = executable.indexOf("'", i + 1);
+      i = end < 0 ? executable.length : end;
       text += ' ';
     } else {
-      text += raw[i];
+      text += executable[i];
     }
   }
   let match = text.match(/\$\{\s*\([^}]*\)\s*[^}]*\}/);

@@ -560,6 +560,19 @@ for (const cmd of ['echo ${(L)e}', 'echo ${(j:,:)arr}', 'echo ${(s:/:)p}', 'ls *
     assert.match(r.reason, /bash -c '\.\.\.'/);
   });
 }
+for (const cmd of [
+  "cat <<'EOF'\nls *(.)\nEOF",
+  'cat <<EOF\n${(L)e}\nEOF',
+  "git commit -m \"$(cat <<'EOF'\nfix: deny ${(L)e} and *(.)\nEOF\n)\"",
+  'echo ok # ${(L)e}',
+]) {
+  test(`rule10 allows zsh syntax in heredoc data or comments: ${JSON.stringify(cmd)}`, () => {
+    assert.strictEqual(run(cmd).deny, false);
+  });
+}
+test('rule10 still denies zsh syntax after a heredoc', () => {
+  assert.strictEqual(run("cat <<'EOF'\nx\nEOF\necho ${(L)e}").deny, true);
+});
 test('rule10 knob warns or silences as configured', () => {
   assert.strictEqual(run('echo ${(L)e}', { env: { AUTOPILOT_BASH_GUARD_ZSH_SYNTAX_MODE: 'warn' } }).deny, false);
   assert.match(run('echo ${(L)e}', { env: { AUTOPILOT_BASH_GUARD_ZSH_SYNTAX_MODE: 'warn' } }).ctx, /zsh-syntax/);

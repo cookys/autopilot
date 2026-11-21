@@ -257,12 +257,17 @@ test('mods/viewer and mods/register.ts: a change there adds both mod runners (ne
 });
 
 // RED at 8c6ebb6de: --run unknown (exit 2); selective ENOENT order; full mode order ''; docs-only 2 !== 0.
+function pinSerial(args) {
+  if (!args.includes('--run')) return args;
+  if (['--jobs', '--serial', '--fast', '--dry-run'].some((f) => args.includes(f))) return args;
+  return ['--serial', ...args];
+}
 function runCli(dir, args) {
   // A nested `node --test` inherits NODE_TEST_CONTEXT and skips the file (no append, rc 0).
   const env = { ...process.env }
   delete env.NODE_TEST_CONTEXT
   delete env.NODE_TEST_WORKER_ID
-  return spawnSync('node', [SEL, '--root', dir, ...args], { encoding: 'utf8', env });
+  return spawnSync('node', [SEL, '--root', dir, ...pinSerial(args)], { encoding: 'utf8', env });
 }
 
 test('--run selective: suites then extra_runners, every entry runs after a failure, .test.js uses node --test, .sh uses bash', () => {
@@ -918,7 +923,7 @@ test('budget: a direct reference runs before an indirect one even when the selec
 
 // ---- --entry-timeout / --attribute ----
 function runSel(r, args, opts = {}) {
-  return spawnSync('node', [SEL, '--root', r.dir, ...args], { encoding: 'utf8', ...opts });
+  return spawnSync('node', [SEL, '--root', r.dir, ...pinSerial(args)], { encoding: 'utf8', ...opts });
 }
 function worktreeLeft(r) {
   return execFileSync('git', ['worktree', 'list', '--porcelain'], { cwd: r.dir }).toString().split('\n').filter((l) => l.startsWith('worktree ')).length;

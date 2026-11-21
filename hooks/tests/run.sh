@@ -8,13 +8,13 @@
 # Exit 0 only if every layer passes. Per-file pass/fail summary at the end.
 #
 # Usage:
-#   bash hooks/tests/run.sh                    # run everything (serial L2)
+#   bash hooks/tests/run.sh                    # run everything (parallel L2, jobs = max(2, floor(nproc/2)))
+#   bash hooks/tests/run.sh --serial           # one L2 file at a time
 #   bash hooks/tests/run.sh state-checkpoint   # filter (substring match on file)
-#   bash hooks/tests/run.sh --parallel [N]     # parallel L2 (N workers; default nproc)
+#   bash hooks/tests/run.sh --parallel [N]     # parallel L2 (N workers; omitted N = nproc)
 #   bash hooks/tests/run.sh --parallel 8 filter
 #
-# Serial runs every L2 file one after another (~60 min of CPU on the full tree); use
-# --parallel for a whole-suite run. The parallel pool starts the slowest files first, using
+# The default pool starts the slowest files first, using
 # the per-file seconds the previous UNFILTERED parallel run recorded in
 # ${AUTOPILOT_TEST_DURATIONS_FILE:-${XDG_CACHE_HOME:-~/.cache}/autopilot/test-durations.tsv}.
 # Filtered runs read that file but never write it.
@@ -363,15 +363,40 @@ trap '__suite_on_interrupt INT' INT
 trap '__suite_on_interrupt TERM' TERM
 
 # ── Argument parsing ──
-# Support, in any order: optional --parallel [N], optional substring FILTER.
-# Serial (no --parallel) is the default: same output content as before the flag, but each file is
-# captured and printed when it finishes (not live), with stderr merged into stdout.
+# Support, in any order: optional --parallel [N] / --jobs N, optional --serial, optional substring FILTER.
+# Default is the parallel pool (jobs = max(2, floor(nproc/2))). --serial (and --jobs 1) is one file at a time:
+# each file is captured and printed when it finishes (not live), with stderr merged into stdout.
 PARALLEL=0
 PARALLEL_N=""
 FILTER=""
+SERIAL_REQ=0
+DRY=0
+DEFAULT_POOL=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
+    --serial)
+      SERIAL_REQ=1
+      shift
+      ;;
+    --dry-run)
+      DRY=1
+      shift
+      ;;
+    --jobs)
+      shift
+      if [ "${1:-}" = "1" ]; then
+        SERIAL_REQ=1
+        shift
+      elif [[ "${1:-}" =~ ^[1-9][0-9]*$ ]]; then
+        PARALLEL=1
+        PARALLEL_N="$1"
+        shift
+      else
+        echo "run.sh: --jobs needs a positive integer" >&2
+        exit 2
+      fi
+      ;;
     --parallel)
       PARALLEL=1
       shift
@@ -388,7 +413,7 @@ while [ $# -gt 0 ]; do
       ;;
     -*)
       echo "Unknown option: $1" >&2
-      echo "Usage: bash hooks/tests/run.sh [--parallel [N]] [filter]" >&2
+      echo "Usage: bash hooks/tests/run.sh [--parallel [N] | --jobs N | --serial] [--dry-run] [filter]" >&2
       exit 2
       ;;
     *)
@@ -401,6 +426,34 @@ while [ $# -gt 0 ]; do
       ;;
   esac
 done
+
+if [ "$SERIAL_REQ" -eq 1 ]; then
+  PARALLEL=0
+  PARALLEL_N=""
+elif [ "$PARALLEL" -eq 0 ]; then
+  PARALLEL=1
+  DEFAULT_POOL=1
+fi
+
+# --dry-run prints the pool plan and exits before the reaper or any suite.
+if [ "$DRY" -eq 1 ]; then
+  if [ "$PARALLEL" -eq 1 ]; then
+    if [ -z "$PARALLEL_N" ]; then
+      if command -v nproc >/dev/null 2>&1; then PARALLEL_N="$(nproc)"; else PARALLEL_N=4; fi
+      if ! [[ "$PARALLEL_N" =~ ^[1-9][0-9]*$ ]]; then PARALLEL_N=4; fi
+      if [ "$DEFAULT_POOL" -eq 1 ]; then
+        PARALLEL_N=$((PARALLEL_N / 2))
+        if [ "$PARALLEL_N" -lt 2 ]; then PARALLEL_N=2; fi
+      fi
+    fi
+    echo "mode: parallel"
+    echo "jobs: $PARALLEL_N"
+  else
+    echo "mode: serial"
+    echo "jobs: 1"
+  fi
+  exit 0
+fi
 
 # ── Execution-oracle lock: refuse a second concurrent "full parallel suite" ──
 # (docs/BACKLOG.md "Depth-0's exclusive ownership of the execution oracle is
@@ -457,7 +510,7 @@ if [ "$PARALLEL" -eq 1 ]; then
   if [ -n "$PARALLEL_N" ] && [[ "$PARALLEL_N" =~ ^[1-9][0-9]*$ ]]; then
     : # use explicit N
   else
-    # Invalid or missing N → default from nproc; fall back to 4 if unavailable.
+    # Invalid or missing N → nproc, or max(2, floor(nproc/2)) for the no-flag pool.
     if command -v nproc >/dev/null 2>&1; then
       PARALLEL_N="$(nproc)"
     else
@@ -465,6 +518,10 @@ if [ "$PARALLEL" -eq 1 ]; then
     fi
     if ! [[ "$PARALLEL_N" =~ ^[1-9][0-9]*$ ]]; then
       PARALLEL_N=4
+    fi
+    if [ "${DEFAULT_POOL:-0}" -eq 1 ]; then
+      PARALLEL_N=$((PARALLEL_N / 2))
+      if [ "$PARALLEL_N" -lt 2 ]; then PARALLEL_N=2; fi
     fi
   fi
   # Widen load-sensitive timing windows in PROPORTION to the worker count. N concurrent
@@ -485,7 +542,8 @@ fi
 # default; override with AUTOPILOT_TEST_SUITE_TIMEOUT_SECS for a slower box or
 # a deliberately long suite. `timeout` sends TERM at the deadline and
 # escalates to KILL 10s later (--kill-after) so a suite that ignores TERM
-# still cannot hang the runner forever.
+# still cannot hang the runner forever. The per-suite cap below is
+# min(ceiling, max(30, 3 x recorded seconds)), or the ceiling when the suite has no row.
 AUTOPILOT_TEST_SUITE_TIMEOUT_SECS="${AUTOPILOT_TEST_SUITE_TIMEOUT_SECS:-600}"
 if ! [[ "$AUTOPILOT_TEST_SUITE_TIMEOUT_SECS" =~ ^[1-9][0-9]*$ ]]; then
   echo "run.sh: AUTOPILOT_TEST_SUITE_TIMEOUT_SECS must be a positive integer number of seconds; got '$AUTOPILOT_TEST_SUITE_TIMEOUT_SECS' — using 600" >&2
@@ -500,18 +558,41 @@ readonly AUTOPILOT_TEST_SUITE_TIMEOUT_SECS
 # The effective ceiling is the larger of that value and the global one (the directive can only raise, never lower; a
 # malformed line is ignored). The global ceiling, and its env override, stay the default for every other suite.
 suite_limit_secs() { # <suite file> -> effective ceiling in seconds
-  local n
+  local n rel rec cap
+  rel="${1#"$REPO_ROOT"/}"
+  rec=""
+  if [ -r "${TEST_DURATIONS_FILE:-}" ]; then
+    rec="$(awk -F '\t' -v r="$rel" '$1 == r { print $2; exit }' "$TEST_DURATIONS_FILE" 2>/dev/null || true)"
+  fi
+  if [[ "$rec" =~ ^[0-9]+$ ]]; then
+    cap=$((rec * 3))
+    if [ "$cap" -lt 30 ]; then cap=30; fi
+    if [ "$cap" -gt "$AUTOPILOT_TEST_SUITE_TIMEOUT_SECS" ]; then cap="$AUTOPILOT_TEST_SUITE_TIMEOUT_SECS"; fi
+  else
+    cap="$AUTOPILOT_TEST_SUITE_TIMEOUT_SECS"
+  fi
+  # A suite may only raise the cap, never lower it.
   n="$(sed -n '1,40{s/^# suite-timeout-secs: \([1-9][0-9]*\)$/\1/p}' "$1" 2>/dev/null | head -n 1)"
-  if [[ "$n" =~ ^[1-9][0-9]*$ ]] && [ "$n" -gt "$AUTOPILOT_TEST_SUITE_TIMEOUT_SECS" ]; then
+  if [[ "$n" =~ ^[1-9][0-9]*$ ]] && [ "$n" -gt "$cap" ]; then
     printf '%s' "$n"
   else
-    printf '%s' "$AUTOPILOT_TEST_SUITE_TIMEOUT_SECS"
+    printf '%s' "$cap"
   fi
 }
 
 # Per-file durations from the last unfiltered --parallel run, used to start the slowest
 # files first. Machine-local timing history, not repo state.
 TEST_DURATIONS_FILE="${AUTOPILOT_TEST_DURATIONS_FILE:-${XDG_CACHE_HOME:-$HOME/.cache}/autopilot/test-durations.tsv}"
+
+# One TSV row per red suite, beside the durations file: utc TAB path TAB fail|timeout TAB head sha.
+note_suite_red() {
+  local rel="$1" reason="$2" reds sha iso
+  reds="$(dirname "$TEST_DURATIONS_FILE")/test-reds.tsv"
+  mkdir -p "$(dirname "$reds")" 2>/dev/null || return 0
+  sha="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || echo -)"
+  iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  printf '%s\t%s\t%s\t%s\n' "$iso" "$rel" "$reason" "$sha" >>"$reds" || true
+}
 
 # record_test_durations — merge this run's <rel>\t<seconds> rows (from $PARALLEL_TMP/<i>.secs)
 # over the existing file; files not run this time keep their old row. Atomic replace.
@@ -576,7 +657,7 @@ run_suite_guarded() {
     sleep "$limit"
     : >"$marker"
     kill -s TERM -- "-$SUITE_PID" >/dev/null 2>&1 || kill -s TERM "$SUITE_PID" >/dev/null 2>&1
-    sleep 10
+    sleep 5
     kill -s KILL -- "-$SUITE_PID" >/dev/null 2>&1 || kill -s KILL "$SUITE_PID" >/dev/null 2>&1
   ) >/dev/null 2>&1 &
   SUITE_WD_PID=$!
@@ -692,12 +773,15 @@ run_one() {
   if [ "$ec" -eq 0 ]; then
     : # PASS line printed by finalize_test
   elif [ "$SUITE_TIMED_OUT" -eq 1 ]; then
+    echo "timeout: $rel $(suite_limit_secs "$file")s"
     echo "TIMEOUT: $rel exceeded $(suite_limit_secs "$file")s (AUTOPILOT_TEST_SUITE_TIMEOUT_SECS or the suite's own suite-timeout-secs line)" >&2
     FAILED=$((FAILED + 1))
     FAILED_TESTS+=("$rel [TIMEOUT]")
+    note_suite_red "$rel" timeout
   else
     FAILED=$((FAILED + 1))
     FAILED_TESTS+=("$rel")
+    note_suite_red "$rel" fail
   fi
 }
 
@@ -919,12 +1003,15 @@ else
       if [ "$ec" -eq 0 ]; then
         : # PASS
       elif [ -f "$PARALLEL_TMP/$i.timeout" ]; then
+        echo "timeout: $rel $(suite_limit_secs "$file")s"
         echo "TIMEOUT: $rel exceeded $(suite_limit_secs "$file")s (AUTOPILOT_TEST_SUITE_TIMEOUT_SECS or the suite's own suite-timeout-secs line)" >&2
         FAILED=$((FAILED + 1))
         FAILED_TESTS+=("$rel [TIMEOUT]")
+        note_suite_red "$rel" timeout
       else
         FAILED=$((FAILED + 1))
         FAILED_TESTS+=("$rel")
+        note_suite_red "$rel" fail
       fi
     }
 
@@ -1012,12 +1099,15 @@ else
     if [ "$serial_tail_ec" -eq 0 ]; then
       :
     elif [ "$SUITE_TIMED_OUT" -eq 1 ]; then
+      echo "timeout: $rel $(suite_limit_secs "$file")s"
       echo "TIMEOUT: $rel exceeded $(suite_limit_secs "$file")s (AUTOPILOT_TEST_SUITE_TIMEOUT_SECS or the suite's own suite-timeout-secs line)" >&2
       FAILED=$((FAILED + 1))
       FAILED_TESTS+=("$rel [TIMEOUT]")
+      note_suite_red "$rel" timeout
     else
       FAILED=$((FAILED + 1))
       FAILED_TESTS+=("$rel")
+      note_suite_red "$rel" fail
     fi
   done
 fi

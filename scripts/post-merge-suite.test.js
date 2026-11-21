@@ -97,3 +97,29 @@ test('all green: exit 0 and the fleet stub is not called', () => {
     assert.strictEqual(fs.existsSync(log), false);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('wall over 5400s asks the fleet stub for the over-90 line (clock injected)', () => {
+  const dir = repo({
+    'scripts/seed.js': 'v1\n',
+    'hooks/tests/ok.test.sh': '#!/usr/bin/env bash\n: scripts/seed.js\nexit 0\n',
+  });
+  const log = path.join(dir, 'fleet.log');
+  const e = envWithFleet(log);
+  e.AUTOPILOT_TEST_POST_MERGE_WALL_S = '5460';
+  const out = path.join(dir, 'out');
+  try {
+    git(dir, e, ['init', '-q']);
+    git(dir, e, ['add', '-A']);
+    git(dir, e, ['commit', '-qm', 'base']);
+    const base = git(dir, e, ['rev-parse', 'HEAD']);
+    fs.writeFileSync(path.join(dir, 'scripts/seed.js'), 'v2\n');
+    git(dir, e, ['add', '-A']);
+    git(dir, e, ['commit', '-qm', 'merged']);
+    const merged = git(dir, e, ['rev-parse', 'HEAD']);
+    const r = spawnSync('bash', [SH, '--merged', merged, '--base', base, '--notify', 'ns/courier/member', '--out', out], { cwd: dir, env: e, encoding: 'utf8' });
+    assert.strictEqual(r.status, 0, r.stdout + r.stderr);
+    const sent = fs.readFileSync(log, 'utf8').trim().split('\n');
+    assert.strictEqual(sent.length, 1);
+    assert.match(sent[0], /^send ns\/courier\/member post-merge suite took 91 min on [0-9a-f]+, over 90$/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

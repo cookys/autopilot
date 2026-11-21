@@ -137,12 +137,12 @@ mk tmpdir.test.sh 'case "$TMPDIR" in /tmp/sbj.*) echo "Summary: 1 passed, 0 fail
 export FXSTAMPS="$FX/stamps"
 printf '%s\n' hooks/tests/p1.test.sh hooks/tests/p2.test.sh hooks/tests/s1.test.sh hooks/tests/p3.test.sh hooks/tests/s2.test.sh hooks/tests/p4.test.sh > "$T/ids-ovl.txt"
 
-# --jobs 1 (and no --jobs) are byte-identical to the one-at-a-time format
-node "$SB" run-all --root "$FX" --ids "$T/ids-ovl.txt" > "$T/j0.out" 2>/dev/null </dev/null
+# --jobs 1 and --serial are byte-identical to the one-at-a-time format
+node "$SB" run-all --root "$FX" --ids "$T/ids-ovl.txt" --serial > "$T/j0.out" 2>/dev/null </dev/null
 node "$SB" run-all --root "$FX" --ids "$T/ids-ovl.txt" --jobs 1 > "$T/j1.out" 2>/dev/null </dev/null
 { for n in p1 p2; do printf '%s-start\n%s-line-1\n%s-line-2\n%s-line-3\nSummary: 3 passed, 0 failed\n%s-err\n\nrc=0 hooks/tests/%s.test.sh\n' $n $n $n $n $n $n; done; } > "$T/j-exp-head.txt"
 head -c 20 "$T/j1.out" | grep -q '^p1-start' && ok || bad "--jobs 1 starts with the first suite's own output"
-cmp -s "$T/j0.out" "$T/j1.out" && ok || bad "--jobs 1 output differs from no --jobs"
+cmp -s "$T/j0.out" "$T/j1.out" && ok || bad "--jobs 1 output differs from --serial"
 printf 'p1-start\np1-line-1\np1-line-2\np1-line-3\nSummary: 3 passed, 0 failed\np1-err\n\nrc=0 hooks/tests/p1.test.sh\n' > "$T/p1-exp.txt"
 head -n 8 "$T/j1.out" | cmp -s - "$T/p1-exp.txt" && ok || bad "--jobs 1 first block is stdout, stderr, blank line, rc line (old format)"
 [ "$(grep -c '^rc=0 ' "$T/j1.out")" = 6 ] && ok || bad "--jobs 1 prints six rc lines"

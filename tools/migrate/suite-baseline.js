@@ -9,13 +9,17 @@
 //     AUTOPILOT_MODS_REAL_CLAUDE=<real claude path> is set (mods/CLAUDE.md, "Running the mod suites"). scripts/tests/*.test.sh are
 //     NOT listed: no entry point runs them today; they are reported as pending_join "P3" by `record`.
 //
-//   run-all [--root <dir>] [--ids <file>] [--pending] [--entry-timeout <secs>] [--jobs <N>]
-//     Runs every listed suite one at a time (`.test.js` with `node --test`, `.sh` with `bash`, stdin
+//   run-all [--root <dir>] [--ids <file>] [--pending] [--entry-timeout <secs>] [--jobs <N>] [--serial] [--dry-run]
+//     Runs the listed suites (`.test.js` with `node --test`, `.sh` with `bash`, stdin
 //     /dev/null, AUTOPILOT_SESSION_ID and CLAUDE_CODE_SESSION_ID removed) and prints each suite's output
-//     followed by `rc=N <path>` (124 = timed out; default 1800 s). That stream is what `record` reads.
+//     followed by `rc=N <path>` (124 = timed out). Default jobs = max(2, floor(nproc/2)). --serial or
+//     --jobs 1 is one at a time, output byte-for-byte the same as each other. Each suite's wall cap is
+//     min(600, max(30, 3 x recorded seconds)) from the durations file, or 600 with no row; --entry-timeout
+//     overrides that cap for every suite. Expiry sends TERM, then KILL 5s later, prints
+//     `timeout: <path> <cap>s`, records a red row, and continues. That stream is what `record` reads.
 //     --ids: run only the ids in that file (one per line) instead of `list`; --pending: run the
 //     scripts/tests/ suites instead. Use it before AND after a move so both sides are measured the same way.
-//     --jobs N (BL-0353; default 1 = the one-at-a-time run above, output byte-for-byte unchanged; max 6 on this host
+//     --jobs N (BL-0353; default max(2, floor(nproc/2)); --serial or --jobs 1 = the one-at-a-time run above; max 6 on this host
 //     by convention): suites NOT listed in hooks/tests/lib/serial-suites.txt (the file run.sh and
 //     affected-suites --jobs read) run up to N at a time; when the pool has drained, each listed suite runs alone,
 //     one at a time, so nothing ever overlaps it. Every suite gets its own TMPDIR (/tmp/sbj.XXXXXX, removed after)
@@ -57,6 +61,7 @@
 // Exit: 0 consistent, 1 differences (one line each on stdout), 2 bad or missing input.
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const cp = require('child_process');
 
@@ -78,6 +83,8 @@ function parseArgs(argv) {
     if (a === '--json') o.json = true;
     else if (a === '--pending') o.pending = true;
     else if (a === '--flaky-as-green') o['flaky-as-green'] = true;
+    else if (a === '--serial') o.serial = true;
+    else if (a === '--dry-run') o['dry-run'] = true;
     else if (a.startsWith('--')) {
       const v = argv[i + 1];
       if (v === undefined || v.startsWith('--')) throw new InputError(`${a} needs a value`);
@@ -258,29 +265,73 @@ function cmdCompare(o) {
   return diffs.length ? 1 : 0;
 }
 
+function defaultJobs() {
+  const n = typeof os.availableParallelism === 'function' ? os.availableParallelism() : os.cpus().length;
+  return Math.max(2, Math.floor(n / 2));
+}
+function durationsFile() {
+  return process.env.AUTOPILOT_TEST_DURATIONS_FILE || path.join(process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache'), 'autopilot', 'test-durations.tsv');
+}
+function readDurations() {
+  const m = new Map();
+  try {
+    for (const line of fs.readFileSync(durationsFile(), 'utf8').split('\n')) {
+      const [rel, secs] = line.split('\t');
+      if (rel && /^[0-9]+$/.test(secs || '')) m.set(rel, Number(secs));
+    }
+  } catch { /* no history */ }
+  return m;
+}
+function suiteCap(rel, explicit, hist) {
+  if (explicit != null) return explicit;
+  if (!hist.has(rel)) return 600;
+  return Math.min(600, Math.max(30, 3 * hist.get(rel)));
+}
+function recordRed(root, rel, reason) {
+  const pointed = !!(process.env.AUTOPILOT_TEST_DURATIONS_FILE || process.env.AUTOPILOT_TEST_REDS_FILE);
+  const own = path.resolve(root) === path.resolve(__dirname, '..', '..');
+  if (!pointed && !own) return;
+  const file = process.env.AUTOPILOT_TEST_REDS_FILE || path.join(path.dirname(durationsFile()), 'test-reds.tsv');
+  let sha = '-';
+  try { sha = cp.execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim(); } catch { /* no commit */ }
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.appendFileSync(file, `${new Date().toISOString()}\t${rel}\t${reason}\t${sha}\n`);
+  } catch { /* a red row must not hide the suite result */ }
+}
 function cmdRunAll(o) {
   const root = path.resolve(o.root || process.cwd());
+  const explicit = o['entry-timeout'] === undefined ? null : Number(o['entry-timeout']);
+  if (explicit != null && (!Number.isFinite(explicit) || explicit <= 0)) throw new InputError('--entry-timeout must be a positive number');
+  const env = { ...process.env };
+  delete env.AUTOPILOT_SESSION_ID; delete env.CLAUDE_CODE_SESSION_ID;
+  let jobs;
+  if (o.serial) jobs = 1;
+  else if (o.jobs !== undefined) {
+    jobs = Number(o.jobs);
+    if (!Number.isInteger(jobs) || jobs < 1) throw new InputError('--jobs must be a positive integer');
+  } else jobs = defaultJobs();
+  if (o['dry-run']) {
+    process.stdout.write(`mode: ${jobs > 1 ? 'parallel' : 'serial'}\njobs: ${jobs}\n`);
+    return 0;
+  }
   let ids;
   if (o.ids) ids = readText(o.ids, '--ids').split('\n').map((x) => x.trim()).filter(Boolean);
   else ids = o.pending ? pendingSuites(root) : listSuites(root);
-  const secs = o['entry-timeout'] === undefined ? 1800 : Number(o['entry-timeout']);
-  if (!Number.isFinite(secs) || secs <= 0) throw new InputError('--entry-timeout must be a positive number');
-  const env = { ...process.env };
-  delete env.AUTOPILOT_SESSION_ID; delete env.CLAUDE_CODE_SESSION_ID;
-  let jobs = 1;
-  if (o.jobs !== undefined) {
-    jobs = Number(o.jobs);
-    if (!Number.isInteger(jobs) || jobs < 1) throw new InputError('--jobs must be a positive integer');
-  }
-  if (jobs > 1) return runAllParallel(root, ids, secs, jobs, env);
+  const hist = readDurations();
+  const capOf = (id) => suiteCap(id, explicit, hist);
+  if (jobs > 1) return runAllParallel(root, ids, capOf, jobs, env);
+  return runAllSerial(root, ids, capOf, env);
+}
+async function runAllSerial(root, ids, capOf, env) {
   for (const id of ids) {
-    const argv = id.endsWith('.test.js') ? ['--test', id] : [id];
-    const r = cp.spawnSync(id.endsWith('.test.js') ? process.execPath : 'bash', argv,
-      { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', maxBuffer: 256 << 20, timeout: secs * 1000, killSignal: 'SIGKILL' });
+    const cap = capOf(id);
+    const r = await runSeparated(root, id, cap, env);
     if (r.stdout) process.stdout.write(r.stdout);
     if (r.stderr) process.stdout.write(r.stderr);
-    const rc = r.error && r.error.code === 'ETIMEDOUT' ? 124 : (r.status === null ? 1 : r.status);
-    process.stdout.write(`\nrc=${rc} ${id}\n`);
+    if (r.timedOut) process.stdout.write(`timeout: ${id} ${cap}s\n`);
+    if (r.rc !== 0) recordRed(root, id, r.timedOut ? 'timeout' : 'fail');
+    process.stdout.write(`\nrc=${r.rc} ${id}\n`);
   }
   return 0;
 }
@@ -311,11 +362,12 @@ function runOne(root, id, secs, env) {
     let timedOut = false;
     child.stdout.on('data', (d) => so.push(d));
     child.stderr.on('data', (d) => se.push(d));
-    const killGroup = () => { try { process.kill(-child.pid, 'SIGKILL'); } catch { /* gone */ } };
-    const timer = setTimeout(() => { timedOut = true; killGroup(); }, secs * 1000);
+    const killGroup = (sig) => { try { process.kill(-child.pid, sig); } catch { /* gone */ } };
+    let killTimer = null;
+    const timer = setTimeout(() => { timedOut = true; killGroup('SIGTERM'); killTimer = setTimeout(() => killGroup('SIGKILL'), 5000); }, secs * 1000);
     child.on('error', () => { /* surfaces as close with null status */ });
     child.on('close', (code) => {
-      clearTimeout(timer); killGroup(); ACTIVE_PIDS.delete(child.pid);
+      clearTimeout(timer); clearTimeout(killTimer); killGroup('SIGKILL'); ACTIVE_PIDS.delete(child.pid);
       resolve({ rc: timedOut ? 124 : (code === null ? 1 : code), timedOut,
         out: Buffer.concat(so).toString('utf8') + Buffer.concat(se).toString('utf8') });
     });
@@ -324,7 +376,27 @@ function runOne(root, id, secs, env) {
 const ACTIVE_PIDS = new Set();
 const MADE_DIRS = new Set();
 
-async function runAllParallel(root, ids, secs, jobs, baseEnv) {
+function runSeparated(root, id, secs, env) {
+  return new Promise((resolve) => {
+    const isJs = id.endsWith('.test.js');
+    const child = cp.spawn(isJs ? process.execPath : 'bash', isJs ? ['--test', id] : [id],
+      { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+    ACTIVE_PIDS.add(child.pid);
+    const so = []; const se = [];
+    let timedOut = false; let killTimer = null;
+    child.stdout.on('data', (d) => so.push(d));
+    child.stderr.on('data', (d) => se.push(d));
+    const killGroup = (sig) => { try { process.kill(-child.pid, sig); } catch { /* gone */ } };
+    const timer = setTimeout(() => { timedOut = true; killGroup('SIGTERM'); killTimer = setTimeout(() => killGroup('SIGKILL'), 5000); }, secs * 1000);
+    child.on('error', () => { /* close */ });
+    child.on('close', (code) => {
+      clearTimeout(timer); clearTimeout(killTimer); killGroup('SIGKILL'); ACTIVE_PIDS.delete(child.pid);
+      resolve({ rc: timedOut ? 124 : (code === null ? 1 : code), timedOut,
+        stdout: Buffer.concat(so).toString('utf8'), stderr: Buffer.concat(se).toString('utf8') });
+    });
+  });
+}
+async function runAllParallel(root, ids, capOf, jobs, baseEnv) {
   const serial = serialSuites(root);
   const poolIds = ids.filter((i) => !serial.has(i));
   const serialIds = ids.filter((i) => serial.has(i));
@@ -353,11 +425,17 @@ async function runAllParallel(root, ids, secs, jobs, baseEnv) {
       }
     }
     if (callerFactor === undefined) env.AUTOPILOT_TEST_TIMING_FACTOR = String(pool ? jobs : 1);
-    const r = await runOne(root, id, secs, env);
+    const cap = capOf(id);
+    const r = await runOne(root, id, cap, env);
+    r.cap = cap;
     for (const d of [tmp, env.XDG_RUNTIME_DIR]) if (d && MADE_DIRS.has(d)) { try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* best effort */ } MADE_DIRS.delete(d); }
     return r;
   };
-  const emit = (r, extra, id) => process.stdout.write(`${r.out}\n${extra}rc=${r.rc} ${id}\n`);
+  const emit = (r, extra, id) => {
+    if (r.rc !== 0) recordRed(root, id, r.timedOut ? 'timeout' : 'fail');
+    const to = r.timedOut ? `timeout: ${id} ${r.cap}s\n` : '';
+    process.stdout.write(`${r.out}\n${extra}${to}rc=${r.rc} ${id}\n`);
+  };
   const held = [];
   let flaky = 0; let both = 0; let red = 0;
   try {

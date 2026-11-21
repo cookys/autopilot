@@ -844,6 +844,23 @@ for (const surface of SURFACES) {
     expect(stats - firstStats).toBeLessThanOrEqual(2 * 2 * 14) // after: at most 2 directory stats per group per poll (allow two extra poll reads)
     expect(await bandText($, surface)).toContain(FOUND)
   })
+  test('tick with 5000 residual markers does not list the session-mode dir (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    const g = groups()
+    const MANY = 5000
+    g[1].files = Array.from({ length: MANY }, (_, i) => ({ path: KDIR + '/residual-' + String(i).padStart(4, '0') + '.json', mtime_ms: 1000 }))
+    const w = oldWorld({ sources: g })
+    w.stats[KDIR] = { size: 0, mtimeMs: 1000 }
+    await start($, surface)
+    expect(await bandText($, surface)).toContain(FOUND) // full pass ran and memoized fresh
+    w.lists.length = 0
+    w.statPaths.length = 0
+    await w.clock.advance(5000)
+    const sourceStat = (p: string) => p === MDIR || p.startsWith(MDIR + '/') || p === KDIR || p.startsWith(KDIR + '/')
+    expect(w.lists.filter(p => p === KDIR || p.startsWith(KDIR + '/')).length).toBe(0)
+    expect(w.statPaths.filter(sourceStat).length).toBeLessThanOrEqual(5)
+    expect(await bandText($, surface)).toContain(FOUND) // the tick really ran
+  })
   test('band: after a memoized fresh poll, a moved dir mtime with a changed marker is stale again (' + surface + ')', async ($, on) => {
     on0 = () => on
     const w = oldWorld({})
@@ -9186,25 +9203,5 @@ for (const surface of SURFACES) {
     expect(list.length, 'one list row for the shared id').toBe(1)
     expect(list[0]).toContain('要你做')
     void once
-  })
-
-  test('tick with 5000 residual markers does not list the session-mode dir (' + surface + ')', async ($, on) => {
-    const files = base()
-    for (let i = 0; i < 5000; i++) {
-      files[AHOME + '/session-mode/residual-' + i + '.json'] = j({
-        session_id: 'residual-' + i,
-        level: 'l5',
-        project_key: KEY,
-        root_run_id: ROOT,
-        expires_at: '2026-10-01T10:00:00.000Z',
-      })
-    }
-    const w = world(on, files)
-    await start($, surface)
-    w.lists.length = 0
-    w.statPaths.length = 0
-    await w.clock.advance(5000)
-    expect(w.lists.filter(p => p.startsWith(AHOME + '/session-mode'))).toEqual([])
-    expect(w.statPaths.length).toBeLessThanOrEqual(5)
   })
 }

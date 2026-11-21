@@ -12,7 +12,7 @@
 
 ## 1. Problem
 
-要降低的是「白跑輪」：沒有推進任務、只是為了得知正確用法或被攔下而多花的一輪。目標不是少放 guard，而是每個 guard 的拒絕訊息在第一次就讓模型照打就對；沒擋到真問題的 guard 刪掉。
+要降低的是「白跑輪」：沒有推進任務、只是為了得知正確用法或被攔下而多花的一輪。目標是每個 guard 的拒絕訊息在第一次就讓模型照打就對。
 
 ## 2. OKR / KRs
 
@@ -31,12 +31,12 @@
 
 ## 2.6 Change-policy decisions
 
-- **Compatibility impact**: `internal-only`。受影響的是本 repo 的 hook 拒絕訊息文字與新增的量測腳本；不改任何 hook 的 deny/allow 判定。唯一例外是 §4 P2 已點名的 bare-ls spike。P3 動工前先對齊本條：Stop 檢查的每一個破壞性操作 allow/deny 維持不變，並以該檢查的既有測試驗證；刪除只限已證明不保護這類操作的檢查。若 spike 證明 harness 不支援改寫輸入，表上做法維持 (e)，仍是 internal-only。
+- **Compatibility impact**: `internal-only`。受影響的是本 repo 的 hook 拒絕訊息文字與新增的量測腳本；不改任何 hook 的 deny/allow 判定。唯一例外是 §4 P2 已點名的 bare-ls spike。P3 只做做法 (e)：拒絕訊息附可直接照打的指令，Stop 檢查的 allow/deny 維持不變，並以該檢查的既有測試驗證。若 spike 證明 harness 不支援改寫輸入，表上做法維持 (e)，仍是 internal-only。
 - **Dependency decision**: `none`。只用 Node 內建模組，沿用 `hooks/transcript-reader-lib.js` 與 `hooks/cost-tracker-lib.js` 已有的逐字稿解析。
 
 ## 3. 納入範圍與每項選的做法
 
-做法代號：(a) MCP 工具、說明寫必填欄位與拒絕碼；(b) skill，只放一行說明、用時才載入；(c) 腳本；(d) guard 自動修正；(e) 拒絕訊息附可直接照打的正確指令；(f) 刪掉沒在擋真問題的 guard。行號由 worktree 內 grep 取得（2026-11-21）。
+做法代號：(a) MCP 工具、說明寫必填欄位與拒絕碼；(b) skill，只放一行說明、用時才載入；(c) 腳本；(d) guard 自動修正；(e) 拒絕訊息附可直接照打的正確指令。行號由 worktree 內 grep 取得（2026-11-21）。
 
 ### 3.1 本 repo 內（autopilot 負責）
 
@@ -46,19 +46,16 @@
 |---|---|---|---|---|
 | Bash 啟動規則（bare-ls、pkill 自比對、rm 變數目標、rm 包在 -c、偵離無喚醒） | `scripts/lib/bash-launch-rules.js`，由 `hooks/depth0-delegate-gate.js:249` 回 deny | 拒絕訊息已列改寫法，但各規則詳略不一 | (e) | 每條拒絕附一條照打指令，不改判定。bare-ls 的 (d) 只是 §2.6 點名的 spike，不是本列做法；spike 失敗就停在 (e) |
 | foreman-guard | `hooks/foreman-guard.js:531` | context 上限、bash 數量上限、Monitor 規則 | (e) | 拒絕理由已含下一步（寫 handoff）；補上可貼的指令即可，不改判定 |
-| dispatch-model-guard（ask / deny） | `hooks/dispatch-model-guard.js:200`、`:212` | PM 席原文引用 2 次 | (e) | deny 附 `model:` 範例，模型複製即可，不改判定 |
+| dispatch-model-guard（ask / deny、brief 標頭） | `hooks/dispatch-model-guard.js:200`、`:212`、`:342` | PM 席原文引用 2 次；`:342` 缺 Size/Used-by 就 deny | (e) | deny 附 `model:` 範例；`:342` 的拒絕只指向 `scripts/brief-head.sh` 印出的整段標頭。不改判定 |
 | fleet-send-work-order-guard | `hooks/fleet-send-work-order-guard.js:105` | 擋把工單當訊息送 | (e) | 訊息已告知改用 task_comment；補上欄位範例 |
 | pii-read-guard | `hooks/pii-read-guard.js:73` | 擋直接讀含個資的目標 | (e) | 附 `safe-inspect` 的可貼指令 |
 | scheduled-wakeup-guard | `hooks/scheduled-wakeup-guard.js` | 擋以時間點等待 | (e) | 附 `fleet watch` 的可貼寫法，對應 CLAUDE.md「等待要寫可檢查事件」 |
 | 路徑與設定保護（exec-boundary、branch-protection、config-protection） | `hooks/exec-boundary.js:319`、`hooks/branch-protection.js:64`、`hooks/config-protection.js:43`（exit 2） | 多為 opt-in，擋破壞性操作 | (e) | 只補 exit 2 的可貼指令，allow/deny 不變 |
-| Stop：per-turn-gate 訊息 | `hooks/per-turn-gate.js:576`（decision block） | Stop 擋回來源之一 | (e) | 真擋的拒絕附照打指令，不改判定；記在既有單 01M7XQVB |
-| Stop：per-turn-gate 誤擋 | `hooks/per-turn-gate.js:576` | 誤擋與否看新窗口與既有測試，不重測 §0 | (f) | 只刪已證明不保護破壞性操作的檢查；其餘保持 |
-| Stop：owner-question-guard 訊息 | `hooks/owner-question-guard.js:87-90` | 有自報誤擋通道（`:17`） | (e) | 真擋附照打指令，不改判定；記在既有單 01M7XQVB |
-| Stop：owner-question-guard 誤擋 | `hooks/owner-question-guard.js:87-90` | `OWNER-GUARD-FALSE-POSITIVE` | (f) | 只刪自報誤擋且已證明落在破壞性判定之外的檢查 |
+| Stop：per-turn-gate | `hooks/per-turn-gate.js:576`（decision block） | Stop 擋回來源之一 | (e) | 拒絕附照打指令，不改判定；記在既有單 01M7XQVB |
+| Stop：owner-question-guard | `hooks/owner-question-guard.js:87-90` | 有自報誤擋通道（`:17`，`OWNER-GUARD-FALSE-POSITIVE`） | (e) | 拒絕附照打指令，不改判定；記在既有單 01M7XQVB |
 | Stop：askpm-remind | `hooks/askpm-remind.js` | opt-in | (e) | 只補可貼指令，不改判定 |
 | Stop：awaiting-owner | `hooks/awaiting-owner.js` | Stop 包裝 | (e) | 只補可貼指令，不改判定 |
-| brief 標頭腳本 | `hooks/lib/brief-head.js` | 缺標頭時要有機械產出 | (c) | 新增 `scripts/brief-head.sh --role <r> --lane <l> --size <s>`，印合格標頭 |
-| brief 標頭訊息 | `hooks/dispatch-model-guard.js:342` | 缺 Size/Used-by 就 deny | (e) | 拒絕訊息只指向該腳本印出的整段標頭 |
+| brief 標頭腳本 | `scripts/brief-head.sh` | 缺標頭時要有機械產出 | (c) | `--role <r> --lane <l> --size <s>`，印合格標頭 |
 | open-decision.js、decision-ledger.js、request-decision.js | `scripts/open-decision.js` 等 | 參數錯誤時靠 `--help` | (e) | 用法錯誤直接印一條完整範例指令，退出碼固定 |
 | run-ledger.sh（本 repo） | `scripts/run-ledger.sh` | 同上 | (e) | 同上 |
 
@@ -86,9 +83,9 @@
 | P0 | 量測腳本 `scripts/wasted-turns-report.js` 與測試；先跑本席，再發給各席各跑一次；排前 N 名 | M | 2026-11-22 | 待開 | 無 | 見 §5 |
 | P1 | 修前基準：各席對新窗口跑 P0 腳本，JSON 進 `docs/plans/evidence/2026-11-21-wasted-turns/`。只記新窗口，不回寫、不覆蓋 §0 的 511、約 98、19%、15、41、42，也不要求對上 98/511 | S | 2026-11-23 | 待開 | P0 | 每個參加席有一份已接受的基準檔；KR1 修前欄用新窗口 |
 | P2 | 拒絕訊息附可貼指令（做法 (e)）：bash-launch-rules、dispatch-model-guard、fleet-send-work-order-guard、pii-read-guard、scheduled-wakeup-guard、foreman-guard、路徑與設定保護。spike 只試 bare-ls 能否改寫輸入；不能就維持 (e)。此 spike 是唯一可改判定的例外 | M | 2026-11-25 | 待開 | P1 | 該席 P1 基準檔已接受。每個被改的 hook 一個負控制；訊息中的指令被測試照字面執行並通過同一個 guard |
-| P3 | Stop hook 誤擋：訊息走 (e)；刪除只走已證明不保護破壞性操作的 (f)。破壞性操作的 allow/deny 一律不變 | M | 2026-11-26 | 01M7XQVBYG2Q8A4M6RFR8Z4MBR | P1 | 誤擋樣本進測試。既有破壞性操作測試仍為原 allow/deny。PM 只判定邊界外的刪除項 |
+| P3 | Stop hook 拒絕訊息（做法 (e)）：訊息附可直接照打的指令，allow/deny 不變 | M | 2026-11-26 | 01M7XQVBYG2Q8A4M6RFR8Z4MBR | P1 | 該席 P1 基準檔已接受。每個被改的 hook 一個負控制；訊息中的指令被測試照字面執行並通過同一個 guard。既有 allow/deny 測試仍為原判定 |
 | P4 | 查 help 的來源：`scripts/open-decision.js`、`decision-ledger.js`、`request-decision.js`、`run-ledger.sh` 的用法錯誤印完整範例；新增 `scripts/brief-head.sh`（做法 (c)；訊息列為 (e)） | S | 2026-11-27 | 待開 | P1 | 該席 P1 基準檔已接受。缺必填欄位時輸出含完整範例且退出碼固定；測試把該範例照字面執行，須通過剛才拒絕它的同一支腳本並以成功退出碼結束 |
-| P5 | 重複多步 shell 的清單（P0 輸出第五類）→ 逐項腳本化或進既有腳本；超過兩次手跑的才做 | S | 2026-11-30 | 待開 | P1 | 每項附腳本與測試；清單中未做的標明理由 |
+| P5 | 重複多步 shell 的清單（P0 輸出第五類）→ 逐項腳本化或進既有腳本；超過兩次手跑的才做 | S | 2026-11-30 | 待開 | P1 | 每項附腳本與測試。每個新增或修改的腳本有負控制，其拒絕範例照字面跑過同一支腳本。清單中未做的標明理由 |
 | P6 | 外部 lane 對接：把 §3.2 的表和 P1 數字送 fleet lane、hangar lane、PM；MCP 變更在下次 session 開頭生效 | S | 2026-11-24 | 待開 | P0 | 對方回覆單號；autopilot 不改它們的程式 |
 | P7 | 修後量測：全機隊每席跑一次，與 P1 對照；每週自動跑一次 | S | 2026-12-03 | 待開 | P2–P5 合併且新 session 已開 | KR1 的「修後」欄 < 5%；週跑排程上線 |
 
@@ -104,7 +101,7 @@
   1. `stop_block`：Stop hook 回 block 後的下一輪。
   2. `hook_block`：PreToolUse hook 的 deny 或 hook error 結果（用結果文字前綴辨識 hook 名稱）。
   3. `help_lookup`：Bash 指令的最後一個參數為 `--help`、`-h`、`help`，或指令為 `man`。
-  4. `error_retry`：tool_result 為錯誤，且之後三輪內出現同一工具、同一指令首詞的再試。
+  4. `error_retry`：tool_result 為錯誤，且之後三輪內同一工具再試。再試只在整段指令文字（不是只比第一個詞）、經過本段所載正規化（去掉前後空白、連續空白併成一個）之後，與被拒的那條指令相同時才計入。
   5. `repeat_chain`（僅供 P5）：同一串 >= 2 步的 shell 序列（正規化後）在窗口內出現 >= 2 次。
 - 成本：每個被分類的輪，取該輪前一個 assistant 回應的 context 大小（input + cache_read + cache_creation token）。輸出 `ctx_tokens` 原值，另依假設係數估算 `cost_hit` 與 `cost_miss`：命中約為 context 的 0.10 倍、未命中約為 2.0 倍（由 PM 單的 45 萬對 4.6 萬與 90 萬換算，**假設值**，放在檔頭常數，可由 `--hit-factor` `--miss-factor` 覆寫）。命中與否以該回應 cache_read > 0 判定。
 - 輸出 JSON schema（`schema: "autopilot.wasted-turns/1"`）：
@@ -151,7 +148,7 @@
 ## 5. Test / validation
 
 - script-gated：§4.1 全部測試；每個 P2/P3/P4 被改的 hook 或腳本的負控制測試；`bash scripts/sync-all.sh --check`；`node scripts/affected-suites.js` 選出的套件。
-- 人為判定：P3 的「誤擋」與「刪除」由 PM 判；§3.2 外部項目的做法由各 lane 判。
+- 人為判定：§3.2 外部項目的做法由各 lane 判。P3 只改拒絕訊息，不把刪除或收緊交給本計畫判定。
 - 真用驗收（Done = used）：P7 在 live 以實際席位跑 `--self`，貼出該席修前修後同一欄位的對照一行（新窗口對新窗口，不與 §0 的 98/511 核對）。gate 類改動各做一次反向探測（故意違規，確認仍被擋，且訊息的指令照字面貼上後通過同一個 guard）。P4 的 `open-decision.js`、`decision-ledger.js`、`request-decision.js`、`run-ledger.sh`、`brief-head.sh` 同樣：拒絕訊息裡的完整範例照字面執行，通過剛才拒絕不完整指令的同一支腳本。
 
 ## 6. Risks + inversion
@@ -165,7 +162,7 @@
 
 ## 7. Out of scope
 
-- 不改任何 guard 的 deny/allow 判定（除 §2.6 的 bare-ls spike）。P3 不得改破壞性操作的判定；刪除只限已證明在該邊界外的檢查，並以既有測試鎖住原判定。
+- 不改任何 guard 的 deny/allow 判定（除 §2.6 的 bare-ls spike）。哪些 Stop 檢查是誤擋、可以收緊或刪除，是記在既有單 01M7XQVBYG2Q8A4M6RFR8Z4MBR 的另一項決定，由 PM 用 P1 資料判定；本計畫不刪除、不收緊任何檢查。
 - 不改 fleet、hangar、capacity 與其他 repo 的程式。
 - 不建 hosted CI；不 bump 版號。
 - 不分析別席的訊息內容。
@@ -181,3 +178,4 @@
 - R0 author：autopilot planner（本檔）。frozen rubric：`docs/plans/2026-11-21-wasted-turns.rubric.md`。
 - plan-review-manifest：待 PM 決定是否送審；`logical_plan_id: 2026-11-21-wasted-turns`。
 - generation 1（astra + grok，皆 STOP），8 項發現全部接受，已折入本次修訂。
+- generation 2 (astra CONDITIONAL, grok STOP): R8 and R5 blockers folded at the cap (deletions moved out of scope to 01M7XQVB; one row per hook); R3, R7 non-blocking folded.

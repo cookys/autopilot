@@ -571,12 +571,14 @@ function renderV74(ctx: PageCtx): { body: Row[]; actions: Row[] } {
   const nav: DecideNav = { ...NO_NAV, ...(dn ?? {}), cursor: dn?.cursor ?? v.nav.cursor, picks: dn?.picks ?? v.nav.picks, notes: dn?.notes ?? v.nav.notes, textMode: dn?.textMode ?? v.nav.noteMode }
   const cursor = Math.max(0, Math.min(cards.length - 1, nav.cursor))
   const ready = cards.filter(c => decideLine(cardToLive(c), nav) !== null && nav.hold?.[c.id] === undefined).length
-  const actions: Row[] = [[seg('[s] ' + t('v74.d.send_all', { n: ready }), { press: 'key:s' })]]
+  const left = cards.length - ready
+  // `s` sends the picked cards only: say how many go and how many stay (nothing after the `·` when none stay)
+  const sendText = '[s] ' + t('v74.d.send_all', { n: ready }) + (left > 0 ? ' ' + DOT + ' ' + t('v74.d.unpicked', { n: left }) : '')
+  const actions: Row[] = [[seg(sendText, { press: 'key:s' })]]
   if (ctx.box === true) {
     const m = ctx.v74?.sendResult
-    const left = cards.length - ready
     return renderBoxV74(ctx, cards, nav, cursor, [
-      [seg('[s] ' + t('v74.d.send_all', { n: ready }) + (ready > 0 && left > 0 ? '  ' + DOT + ' ' + t('v74.d.unpicked', { n: left }) : ''), { press: 'key:s' })],
+      [seg(sendText, { press: 'key:s' })],
       ...(m === undefined || m === null ? [] : [[dimSeg(GLYPHS.state.done + ' ' + t('v74.d.result', { n: m.n, left: m.left }))] as Row]),
     ])
   }

@@ -1509,6 +1509,16 @@ async function panePagePress($: EngineInterface, id: PageId): Promise<void> {
   void $.ui.scroll({ in: PANE_ID, to: 'start' }).catch(() => undefined)
   decideLocal = { ...decideLocal, textMode: false, textBuf: '' } // a tab press ends a note being typed: the mode must not outlive the page
   $.ui.invalidate('ui.render')
+  // r8-2 keylog: in the band box the tab Buttons keep their keys across pages, so autoFocus does not fire again and the host's ring stays on the
+  // tab of the page left (4 → tab:review). Back on 待決, Down then lands on tab:spend, three tabs away, which v74TabStep reads as the wrap (Up).
+  // Put the ring on the page's own tab, as armNote does for the note.
+  if (v74Open && (id === 'decide' || id === 'todo')) void ringToTab($, id)
+}
+async function ringToTab($: EngineInterface, id: PageId): Promise<void> {
+  await Promise.resolve()
+  await Promise.resolve()
+  if (panePage !== id) return
+  await $.ui.focus({ requestId: ABOVE_PROMPT, key: 'tab:' + id }).catch(() => undefined)
 }
 
 async function paneTabPress($: EngineInterface, t: PaneTab, legacy = false): Promise<void> {

@@ -2987,7 +2987,7 @@ write_manifest() {
     fi
   fi
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "prompt_sha256": %s, "lane": %s, "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "tip_verify": %s, "tip_verify_source": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, "timeout_seconds": %s, "timeout_source": "%s", "timeout_enforced": %s%s%s%s%s%s, %s, "session_id": %s, "child_session_id": %s, "target_precommit": %s }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "prompt_sha256": %s, "lane": %s, "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "tip_verify": %s, "tip_verify_source": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, "timeout_seconds": %s, "timeout_source": "%s", "timeout_enforced": %s%s%s%s%s%s, %s, "session_id": %s, "child_session_id": %s, "local_fallback": %s, "local_slots": %s, "local_lease": %s, "target_precommit": %s }\n' \
       "$(_flat_json_escape "$DISPATCH_RUN_ID")" "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
       "${BASE_SHA:-}" "$(_flat_json_escape "${WT:-}")" "$(_flat_json_escape "${WT:-}/.autopilot-worktree.lock")" "$(_flat_json_escape "${LOG:-}")" \
       "$log_format" "$duplex_json" "$pid_json" "$scope_json" "${MANIFEST_CONTAINMENT:-plain}" \
@@ -3490,35 +3490,8 @@ DISPATCH_LANE_JSON=null # read from the original brief before it is repacked; cr
 declare -F dispatch_lane_json >/dev/null 2>&1 && DISPATCH_LANE_JSON="$(dispatch_lane_json "$PROMPT_FILE")"
 declare -F dispatch_export_attribution >/dev/null 2>&1 && dispatch_export_attribution "$PROMPT_FILE" # the child (its cost-tracker rows) inherits lane + fleet task
 [ -z "${HETERO_FLEET_TASK_ID:-}" ] || export AUTOPILOT_FLEET_TASK="$HETERO_FLEET_TASK_ID"
-# Pace is the default only for an unpinned seat. Strict contracts carry their own tuple.
-_ps_args=(--dispatch --role "${PACE_ROLE:-implementer}")
-[ -z "${PROMPT_FILE:-}" ] || _ps_args+=(--prompt-file "$PROMPT_FILE")
-if [ -n "${RUNNER:-}" ] && [ "$RUNNER" != "auto" ] && { [ "$RUNNER_SUPPLIED" -eq 1 ] || [ "$STRICT_CONTRACT" -eq 1 ]; }; then
-  _ps_args+=(--named-runner "$RUNNER")
-fi
-if [ -n "${MODEL:-}" ] && { [ "$MODEL_SUPPLIED" -eq 1 ] || [ "$STRICT_CONTRACT" -eq 1 ]; }; then
-  _ps_args+=(--named-model "$MODEL")
-fi
-[ -z "${ENDPOINT:-}" ] || _ps_args+=(--named-endpoint "$ENDPOINT")
-_ps_parsed="$(node "$SELF_DIR/pace-select.js" "${_ps_args[@]}")" || die_precondition "pace selection refused"
-if [ -n "$_ps_parsed" ]; then
-  _ps_ep=""
-  { IFS= read -r RUNNER; IFS= read -r MODEL; IFS= read -r _ps_ep; IFS= read -r ENGINE_CHOICE_JSON; IFS= read -r PACE_CHOICE_JSON; } <<< "$_ps_parsed"
-  [ -n "${ENDPOINT:-}" ] || ENDPOINT="$_ps_ep"
-  MODEL_IS_DEFAULT=0
-  if [ "$MODEL_SUPPLIED" -eq 0 ] && printf '%s' "$MODEL" | grep -qiE 'carbon|argon|astra|fable|opus'; then
-    die_precondition "unpinned dispatch never uses an expensive model ($MODEL); pass --model to choose one"
-  fi
-  if [ "$EFFORT_EXPLICIT" -eq 0 ] && [ -n "${ENGINE_CHOICE_JSON:-}" ]; then
-    _ps_effort="$(node -e 'let o; try { o=JSON.parse(process.argv[1]); } catch { process.exit(0); } if (o && typeof o.effort === "string" && o.effort) process.stdout.write(o.effort);' "$ENGINE_CHOICE_JSON" 2>/dev/null || true)"
-    [ -n "${_ps_effort:-}" ] && EFFORT="$_ps_effort"
-    unset _ps_effort
-  fi
-fi
-# Saved before skill-pack / scaffold prepend text, which would hide image magic bytes.
-VISION_PROMPT_FILE="$PROMPT_FILE"
-# Implementer with no --runner is the local qwen seat when qwen_local resolves
-# ready, a gateway lease is granted, the prompt fits local_context_bytes, and the cn
+# An unpinned implementer uses an available local qwen or GLM seat when its endpoint
+# is ready, a gateway lease is granted, the prompt fits local_context_bytes, and the CN
 # gate allows that seat (operator via PM 01M7XHF4). Otherwise the unpinned path
 # stays pace-select / grok-4.7 and records local_fallback. A pin already chose
 # a seat when --pace-role or a pace file returned one, a strict contract is on,
@@ -3546,7 +3519,7 @@ if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_S
     LOCAL_SLOTS_JSON="$(printf '%s\n' "$_slot_parsed" | sed -n '3p')"
     LOCAL_LEASE_HEARTBEAT_FILE="${TMPDIR:-/tmp}/autopilot-local-lease-heartbeats-$$"
     : > "$LOCAL_LEASE_HEARTBEAT_FILE"
-    _gate_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --role implementer --runner cc-shim --model "$_slot_family" --endpoint "$ENDPOINT" --cwd "$(pwd)" --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" && _gate_rc=0 || _gate_rc=$?
+    _gate_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner cc-shim --model "$_slot_family" --endpoint "$ENDPOINT" --cwd "$(pwd)" --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" && _gate_rc=0 || _gate_rc=$?
     if [ "$_gate_rc" -eq 0 ]; then
       local_lease_heartbeat_loop & LOCAL_LEASE_HEARTBEAT_PID=$!
       RUNNER="local"
@@ -3569,6 +3542,36 @@ if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_S
   unset _slot_line _slot_parsed _slot_kind _lease_json _gate_msg _gate_rc
 fi
 unset _impl_role
+
+if [ "${IMPLICIT_LOCAL_DEFAULT:-0}" != "1" ]; then
+# Pace is the default only for an unpinned seat. Strict contracts carry their own tuple.
+_ps_args=(--dispatch --role "${PACE_ROLE:-implementer}")
+[ -z "${PROMPT_FILE:-}" ] || _ps_args+=(--prompt-file "$PROMPT_FILE")
+if [ -n "${RUNNER:-}" ] && [ "$RUNNER" != "auto" ] && { [ "$RUNNER_SUPPLIED" -eq 1 ] || [ "$STRICT_CONTRACT" -eq 1 ]; }; then
+  _ps_args+=(--named-runner "$RUNNER")
+fi
+if [ -n "${MODEL:-}" ] && { [ "$MODEL_SUPPLIED" -eq 1 ] || [ "$STRICT_CONTRACT" -eq 1 ]; }; then
+  _ps_args+=(--named-model "$MODEL")
+fi
+[ -z "${ENDPOINT:-}" ] || _ps_args+=(--named-endpoint "$ENDPOINT")
+_ps_parsed="$(node "$SELF_DIR/pace-select.js" "${_ps_args[@]}")" || die_precondition "pace selection refused"
+if [ -n "$_ps_parsed" ]; then
+  _ps_ep=""
+  { IFS= read -r RUNNER; IFS= read -r MODEL; IFS= read -r _ps_ep; IFS= read -r ENGINE_CHOICE_JSON; IFS= read -r PACE_CHOICE_JSON; } <<< "$_ps_parsed"
+  [ -n "${ENDPOINT:-}" ] || ENDPOINT="$_ps_ep"
+  MODEL_IS_DEFAULT=0
+  if [ "$MODEL_SUPPLIED" -eq 0 ] && printf '%s' "$MODEL" | grep -qiE 'carbon|argon|astra|fable|opus'; then
+    die_precondition "unpinned dispatch never uses an expensive model ($MODEL); pass --model to choose one"
+  fi
+  if [ "$EFFORT_EXPLICIT" -eq 0 ] && [ -n "${ENGINE_CHOICE_JSON:-}" ]; then
+    _ps_effort="$(node -e 'let o; try { o=JSON.parse(process.argv[1]); } catch { process.exit(0); } if (o && typeof o.effort === "string" && o.effort) process.stdout.write(o.effort);' "$ENGINE_CHOICE_JSON" 2>/dev/null || true)"
+    [ -n "${_ps_effort:-}" ] && EFFORT="$_ps_effort"
+    unset _ps_effort
+  fi
+fi
+fi
+# Saved before skill-pack / scaffold prepend text, which would hide image magic bytes.
+VISION_PROMPT_FILE="$PROMPT_FILE"
 if [ "$RUNNER" = "local" ]; then
   apply_runner_local
 fi

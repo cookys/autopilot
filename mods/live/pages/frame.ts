@@ -20,10 +20,11 @@ import { V74_KEY } from '../v74/contract'
 import { WRAP_HANG, brokenRow, decisionCount, poolsNeedLook, sourceMissing, staleBadge, unknownPoolCount, wrapRow } from './rows'
 import type { Row } from './rows'
 import type { Step } from '../speed'
+import type { PoolEta } from './spend'
 import type { V74Ctx } from '../v74/contract'
 
 export type { Row } from './rows'
-export interface PageCtx { room?: readonly { seq: number; from: string; kind: string; text: string }[]; live: LiveSnapshot | null; console: ConsoleSnapshot | null; size: { cols: number; rows: number }; t: T; nowMs: number; shortBody?: boolean; steps?: readonly Step[]; pet?: unknown; v74?: V74Ctx; box?: true } // box: drawn inside the v7.4 band frame (not the host Pane)
+export interface PageCtx { poolEta?: PoolEta | null; room?: readonly { seq: number; from: string; kind: string; text: string }[]; live: LiveSnapshot | null; console: ConsoleSnapshot | null; size: { cols: number; rows: number }; t: T; nowMs: number; shortBody?: boolean; steps?: readonly Step[]; pet?: unknown; v74?: V74Ctx; box?: true } // box: drawn inside the v7.4 band frame (not the host Pane)
 export type PageId = 'now' | 'decide' | 'fleet' | 'quota' | 'dispatch' | 'review' | 'spend' | 'hygiene' | 'pet' | 'room' | 'forge' | 'help' | 'todo'
 // `framed` (optional, additive): true once the page is filled in; pane.tsx draws a framed page through frameRows and an unframed shell the old way, so S0 changes nothing on screen
 export interface Page { id: PageId; key: string; title: string; framed?: true; render(ctx: PageCtx): { body: Row[]; actions: Row[]; overflow?: true } }

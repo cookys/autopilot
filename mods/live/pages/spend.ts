@@ -77,6 +77,59 @@ function poolRows(ctx: PageCtx): Row[] {
   return out
 }
 
+// ---- capacity's pool forecast (schema capacity.pool-eta/1; a file capacity writes, later `fleet seats --by-pool`). Only the feed's own values are drawn: nothing is recomputed from the local clock
+// except the one comparison "is the feed older than its stale_after_s".
+export interface PoolEtaPool { pool: string; state: string; seven_day_pct: number | null; five_hour_pct: number | null; burn_pct_per_h: number | null; burn_reason: string | null; resets_at_ms: number | null; exhaust_at_ms: number | null; early_by_ms: number | null; alerts: readonly unknown[] }
+export interface PoolEta { generated_at_ms: number; stale_after_s: number; pools: readonly PoolEtaPool[]; alerts: readonly unknown[] }
+const numOrNull = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
+// text -> the feed, or null when it is not a capacity.pool-eta/1 document (unreadable, another schema, a missing field): the page then says so, never a guess
+export function parsePoolEta(text: string): PoolEta | null {
+  let j: unknown
+  try { j = JSON.parse(text) } catch (_e) { return null }
+  if (typeof j !== 'object' || j === null) return null
+  const o = j as Record<string, unknown>
+  const gen = numOrNull(o.generated_at_ms)
+  const after = numOrNull(o.stale_after_s)
+  if (o.schema !== 'capacity.pool-eta/1' || gen === null || after === null || !Array.isArray(o.pools)) return null
+  const pools: PoolEtaPool[] = []
+  for (const raw of o.pools) {
+    if (typeof raw !== 'object' || raw === null) return null
+    const p = raw as Record<string, unknown>
+    if (typeof p.pool !== 'string' || typeof p.state !== 'string') return null
+    pools.push({
+      pool: p.pool, state: p.state, seven_day_pct: numOrNull(p.seven_day_pct), five_hour_pct: numOrNull(p.five_hour_pct), burn_pct_per_h: numOrNull(p.burn_pct_per_h),
+      burn_reason: typeof p.burn_reason === 'string' ? p.burn_reason : null, resets_at_ms: numOrNull(p.resets_at_ms), exhaust_at_ms: numOrNull(p.exhaust_at_ms), early_by_ms: numOrNull(p.early_by_ms),
+      alerts: Array.isArray(p.alerts) ? p.alerts : [],
+    })
+  }
+  return { generated_at_ms: gen, stale_after_s: after, pools, alerts: Array.isArray(o.alerts) ? o.alerts : [] }
+}
+
+export function poolEtaRows(eta: PoolEta | null, nowMs: number, t: PageCtx['t']): Row[] {
+  if (eta === null) return [brokenRow(' ' + GLYPHS.state.failed + ' ' + t('v75.eta.none'))]
+  const feedStale = eta.generated_at_ms + eta.stale_after_s * 1000 < nowMs // the only clock comparison on this page
+  const out: Row[] = []
+  if (feedStale) out.push(brokenRow(' ' + GLYPHS.state.failed + ' ' + t('v75.eta.feed_stale')))
+  const labelWidth = Math.max(0, ...eta.pools.map(p => displayWidth(poolLabel(p.pool)))) + 1
+  for (const p of eta.pools) {
+    const label: Seg = { text: padR(poolLabel(p.pool), labelWidth) }
+    if (p.state === 'no_source') { out.push([{ text: ' ' }, { text: GLYPHS.state.unknown + ' ', color: PALETTE.idle }, label, { text: t('v75.eta.unmeasured'), dim: true }]); continue }
+    if (p.state !== 'ok') { out.push([{ text: ' ' }, { text: GLYPHS.state.failed + ' ', color: PALETTE.broken }, label, staleBadge(t('v75.eta.row_stale'))]); continue }
+    const pct = p.five_hour_pct ?? p.seven_day_pct
+    const alert = p.alerts.length > 0
+    const bad = feedStale ? { color: PALETTE.broken } : {}
+    const burn = p.burn_pct_per_h === null ? DASH : p.burn_pct_per_h.toFixed(2).replace(/0$/, '') + '%/h'
+    const exhaust = p.exhaust_at_ms !== null ? t('v75.eta.exhaust', { t: resetIn(p.exhaust_at_ms, nowMs, t) })
+      : p.burn_reason === null ? t('v75.eta.no_exhaust') : t('v75.eta.exhaust_unknown', { why: p.burn_reason })
+    out.push([
+      { text: ' ' }, { text: (alert ? GLYPHS.state.need_you : GLYPHS.state.pending) + ' ', color: alert && !feedStale ? PALETTE.attention : PALETTE.idle }, label,
+      { text: padL(pct === null ? DASH : Math.round(pct) + '%', 4) + '  ', ...bad }, { text: padL(burn, 8) + '  ' + t('page.spend.reset', { t: resetIn(p.resets_at_ms, nowMs, t) }) + '  ', ...bad }, { text: exhaust, ...(alert && !feedStale ? { color: PALETTE.attention } : {}) },
+      ...(feedStale ? [staleBadge(' ' + t('v75.eta.row_stale'))] : []),
+    ])
+  }
+  return out
+}
+
 export function renderSpend(ctx: PageCtx, _view: SpendViewOpts = DEFAULT_VIEW): { body: Row[]; actions: Row[] } {
   const { t, live, console: con, nowMs } = ctx
   const qFeed = seatQuota.view()
@@ -100,7 +153,7 @@ export function renderSpend(ctx: PageCtx, _view: SpendViewOpts = DEFAULT_VIEW): 
   } else {
     body.push(brokenRow(' ' + GLYPHS.state.failed + ' ' + t(qFeed.failed ? 'page.now.q_failed_none' : 'page.now.q_none')))
   }
-  body.push([{ text: '' }], ...poolRows(ctx), [{ text: '' }])
+  body.push([{ text: '' }], ...(ctx.poolEta === undefined ? poolRows(ctx) : poolEtaRows(ctx.poolEta, nowMs, t)), [{ text: '' }])
 
   body.push(openRule(t('v74.f.sec_today')))
   const sp = live?.detail.spend ?? null

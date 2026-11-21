@@ -91,7 +91,8 @@ import { frameHeight } from './pages/frame'
 import type { PageId } from './pages/frame'
 import { FOLD_AT, rowsOf as fleetRowsOf } from './pages/fleet'
 import { DEFAULT_REVIEW_VIEW } from './pages/review'
-import { spendFocusRows } from './pages/spend'
+import { parsePoolEta, spendFocusRows } from './pages/spend'
+import type { PoolEta } from './pages/spend'
 import { FILL_PRESS } from './commandtab'
 import { type ScrollModel, fixedWindow, keyed, newScroll, scrollHook } from './scroll'
 import type { ShowRequest } from '../viewer/model'
@@ -349,6 +350,21 @@ async function readRoomText($: EngineInterface): Promise<string | null> {
     return String(await $.fs.read(path))
   } catch (_e) {
     return '' // no rooms directory, no log: an empty column, not an error
+  }
+}
+// capacity's pool forecast: AUTOPILOT_POOL_ETA names the file, else HOME/projects/capacity/out/pool-eta.v1.json. null = no file / unreadable / not capacity.pool-eta/1 (the spend page says so).
+const MAX_ETA_BYTES = 1_000_000
+async function readPoolEta($: EngineInterface): Promise<PoolEta | null> {
+  try {
+    const over = await $.env.get('AUTOPILOT_POOL_ETA').catch(() => undefined)
+    const home = await $.env.get('HOME').catch(() => undefined)
+    const path = typeof over === 'string' && over.trim() !== '' ? over.trim() : typeof home === 'string' && home.trim() !== '' ? home.replace(/\/$/, '') + '/projects/capacity/out/pool-eta.v1.json' : null
+    if (path === null) return null
+    const st = await $.fs.stat(path)
+    if (st.kind !== 'file' || !(st.size <= MAX_ETA_BYTES)) return null
+    return parsePoolEta(String(await $.fs.read(path)))
+  } catch (_e) {
+    return null
   }
 }
 async function shellTick($: EngineInterface, nowMs: number): Promise<void> {
@@ -2654,7 +2670,7 @@ async function paneTree($: EngineInterface, e: { props: any; surface: string }, 
     folded, boxRows !== null ? null : e.props.scroll ?? null,
     { state: decideState, batch: decideBatch, now: decideNow, inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } },
     decideScroll, fleet, null,
-    legacy ? null : { pages: [...PAGES, ...EXTRA_PAGES], pageId: panePage, onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, others: fleet?.others ?? null, nowMs: frameNow, rows: boxRows ?? frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), ...(boxRows === null ? {} : { v74Box: true as const }), view: pageView, decide: { ...decideState, ...decideLocal }, v74, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { void v74Keylog($, { handler: 'input', component: 'Input', element: 'v74-note', len: [...v].length, page: panePage, cursor: decideLocal.cursor, focusOwner: 'v74-note', noteOpen: true }); decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(panePage === 'forge' ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}), ...(panePage === 'room' ? { room: parseRoom((await readRoomText($)) ?? '') } : {}) },
+    legacy ? null : { pages: [...PAGES, ...EXTRA_PAGES], pageId: panePage, onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, others: fleet?.others ?? null, nowMs: frameNow, rows: boxRows ?? frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), ...(boxRows === null ? {} : { v74Box: true as const }), view: pageView, decide: { ...decideState, ...decideLocal }, v74, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { void v74Keylog($, { handler: 'input', component: 'Input', element: 'v74-note', len: [...v].length, page: panePage, cursor: decideLocal.cursor, focusOwner: 'v74-note', noteOpen: true }); decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(panePage === 'forge' ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}), ...(panePage === 'spend' ? { poolEta: await readPoolEta($) } : {}), ...(panePage === 'room' ? { room: parseRoom((await readRoomText($)) ?? '') } : {}) },
   )
   if (boxRows === null) await probePane($, e as never, tree)
   return tree

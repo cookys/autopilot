@@ -6,6 +6,8 @@ import type { DecideNav } from './pages/decide'
 import { makeT } from './i18n'
 import { V75_PANE_MIN_ROWS, v75BandRows, v75EscStep, v75FocusNext, v75Plan, v75ReopenAfterReload, v75ScrollRoute } from './v75'
 import type { V75BandIn } from './v75'
+import etaFx from './fixtures/v74/pool-eta.fixture'
+import { parsePoolEta, poolEtaRows, renderSpend } from './pages/spend'
 import type { DecideCard, V74Ctx } from './v74/contract'
 import type { Row } from './pages/rows'
 import { V75_MOVED, routeKey } from './pages/keys'
@@ -179,4 +181,39 @@ test('v75 reload: the Pane is reopened only when the owner wanted it, the host c
   expect(v75ReopenAfterReload({ ...base, hostOpen: true })).toBe(false) // the host kept it
   expect(v75ReopenAfterReload({ ...base, paneOn: true })).toBe(false)
   expect(v75ReopenAfterReload({ ...base, open: true })).toBe(false) // an open already asked this load
+})
+
+// capacity's pool forecast on the spend page (fixture: a real read of 2026-11-21 12:30Z, pool names made up)
+const etaNow = etaFx.generated_at_ms + 60_000
+const etaRows = (nowMs: number) => poolEtaRows(parsePoolEta(JSON.stringify(etaFx)), nowMs, t).map(text)
+test('spend eta: an ok pool shows its %, burn rate, reset countdown and run-out time, with the alert marker', () => {
+  const r = etaRows(etaNow).find(x => x.includes('alpha')) as string
+  expect(r).toContain('54%')
+  expect(r).toContain('1.03%/h')
+  expect(r).toContain('重置')
+  expect(r).toContain('用完')
+  expect(r).toContain('▲')
+  expect(etaRows(etaNow).find(x => x.includes('gamma'))).toContain('4%') // a 5h pool shows its 5h figure
+})
+test('spend eta: no_source says 未量 and never a 0; stale / expired say 過期; an empty exhaust is told by burn_reason, not computed', () => {
+  const rows = etaRows(etaNow)
+  const b = rows.find(x => x.includes('beta')) as string
+  expect(b).toContain('未量'); expect(b).not.toContain('0%')
+  expect(rows.find(x => x.includes('epsilon'))).toContain('過期')
+  expect(rows.find(x => x.includes('delta'))).toContain('重置前不會用完') // a burn rate and no run-out
+  expect(rows.find(x => x.includes('gamma'))).toContain('用完時間未知（無讀數') // the feed's own reason
+})
+test('spend eta: the whole page says 過期 only once generated_at_ms + stale_after_s is behind now', () => {
+  expect(etaRows(etaFx.generated_at_ms + 1_199_000).some(x => x.includes('池預估已過期'))).toBe(false)
+  const late = etaRows(etaFx.generated_at_ms + 1_201_000)
+  expect(late.some(x => x.includes('池預估已過期'))).toBe(true)
+  expect(late.find(x => x.includes('alpha'))).toContain('過期')
+})
+test('spend eta: an unreadable file or another schema is the broken row, not numbers; the page draws the feed rows instead of the console pools', () => {
+  expect(parsePoolEta('not json')).toBeNull()
+  expect(parsePoolEta(JSON.stringify({ ...etaFx, schema: 'other/1' }))).toBeNull()
+  expect(parsePoolEta(JSON.stringify({ ...etaFx, pools: [{ pool: 'x' }] }))).toBeNull()
+  expect(poolEtaRows(null, etaNow, t).map(text).join('')).toContain('沒有來源')
+  const body = renderSpend({ live: null, console: null, size: { cols: 100, rows: 30 }, t, nowMs: etaNow, poolEta: parsePoolEta(JSON.stringify(etaFx)) }).body.map(text)
+  expect(body.some(x => x.includes('alpha') && x.includes('54%'))).toBe(true)
 })

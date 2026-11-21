@@ -164,10 +164,15 @@ function stripForLanguage(text) {
   let t = text.replace(/```[\s\S]*?(?:```|$)/g, ' ');
   t = t.replace(/(?:^|\n)[ \t]*~~~[\s\S]*?(?:\n[ \t]*~~~|$)/g, '\n');
   t = t.replace(/(`+)((?:(?!\1)[^\n])*)\1/g, ' ');
+  t = t.replace(/\[[^\]]*\]\([^)]*\)/g, ' ');
+  t = t.replace(/\[[^\]]+\]/g, ' ');
   t = t.replace(/\bhttps?:\/\/[A-Za-z0-9._~:/?#@!$&*+=%-]+/gi, ' ');
   t = t.replace(/\b(?:localhost|(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,})(?::\d+)?\/[A-Za-z0-9._~:/?#@!$&*+=%-]*/gi, ' ');
   t = t.replace(/(?:~|\.{1,2})?\/[A-Za-z0-9._~+:@#/-]+|[A-Za-z0-9._~+@:-]+\/[A-Za-z0-9._~+:@#/-]*/g, ' ');
   t = t.replace(FILE_EXT_RE, ' ');
+  t = t.replace(/\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\b/g, ' ');
+  t = t.replace(/(?<![A-Za-z0-9-])--[a-z][a-z0-9-]*(?![A-Za-z0-9-])/g, ' ');
+  t = t.replace(/(?<![A-Za-z0-9._-])(?=[A-Za-z0-9._-]*\d)(?=[A-Za-z0-9._-]*[.-])[A-Za-z0-9._-]+(?![A-Za-z0-9._-])/g, ' ');
   t = t.replace(/\bd-[0-9a-f]{8}\b/gi, ' ');
   t = t.replace(/\br-[0-9a-f]{8}\b/gi, ' ');
   t = t.replace(/\b[0-9A-HJKMNP-TV-Z]{26}\b/gi, ' ');
@@ -385,9 +390,40 @@ function escapeRecords(text) {
   return lines.map(parseEscape).filter(Boolean);
 }
 
+const TASK_ID_TEST = /(?<!task_id=)\b[0-9A-HJKMNP-TV-Z]{26}\b/;
+
+function splitParagraphs(stripped) {
+  const blocks = stripped.split(/\r?\n[ \t]*\r?\n+/);
+  const out = [];
+  for (const block of blocks) {
+    const lines = block.split(/\r?\n/);
+    let cur = [];
+    for (const line of lines) {
+      if (/^\s*[-*]\s/.test(line) && cur.length) {
+        out.push(cur.join('\n'));
+        cur = [line];
+      } else {
+        cur.push(line);
+      }
+    }
+    if (cur.length) out.push(cur.join('\n'));
+  }
+  return out;
+}
+
+function paragraphHasTaskId(text, sentence) {
+  const normS = sentence.replace(/\s+/g, ' ').trim();
+  if (!normS) return false;
+  for (const p of splitParagraphs(stripCode(text))) {
+    if (TASK_ID_TEST.test(p) && p.replace(/\s+/g, ' ').includes(normS)) return true;
+  }
+  return false;
+}
+
 function unresolvedHits(text, cwd = process.cwd(), excludedIds = null) {
   const escapes = escapeRecords(text);
   return findHits(text).filter(({ sentence, classes }) => !hasLiveCard(sentence, cwd, excludedIds) && !hasDueTask(sentence)
+    && !paragraphHasTaskId(text, sentence)
     && !escapes.some((e) => e.sentence === sentence && e.classes === [...classes].sort().join(',')));
 }
 
@@ -461,12 +497,11 @@ function unresolvedBareIds(text) {
   for (const m of masked.matchAll(/\bd-[0-9a-f]{8}\b/gi)) {
     const id = m[0].toLowerCase();
     if (seen.has(id)) continue;
+    seen.add(id);
     if (bareSubjectOk(text, m.index, m[0].length)) continue;
     if (escapes.some((e) => e.classes.split(',').includes(BARE_CARD_CLASS) && e.sentence.toLowerCase() === id)) {
-      seen.add(id);
       continue;
     }
-    seen.add(id);
     out.push(id);
   }
   return out;

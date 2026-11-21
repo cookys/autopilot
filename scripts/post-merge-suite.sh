@@ -47,7 +47,7 @@ jobs=$(nproc 2>/dev/null || echo 2)
 jobs=$((jobs / 2))
 if [ "$jobs" -lt 1 ]; then jobs=1; fi
 
-tmp=$(mktemp -d)
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/post-merge-suite.XXXXXX")
 wt=$tmp/merged
 basewt=$tmp/base
 cleanup() {

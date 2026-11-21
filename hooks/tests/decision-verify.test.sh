@@ -138,8 +138,9 @@ is_open "$C"; assert_eq "$?" 0 "forged answer_id: card NOT closed"
 assert_contains "$HOUT" "unverified" "forged answer_id: systemMessage says unverified"; assert_contains "$HOUT" "$C" "forged answer_id: names the card"
 # line without any answer_id
 reset ok; C="$(open_card_x)"; hook "$(printf '[待決回覆]\n%s｜Q? → A\n' "$C")"
-is_open "$C"; assert_eq "$?" 0 "no answer_id on a courier host: not closed"; assert_contains "$HOUT" "unverified" "no answer_id: unverified"
-assert_eq "$(count 'decision verify')" 0 "no answer_id: nothing to verify, no call"
+is_open "$C"; assert_eq "$?" 1 "no answer_id: claimed, delivered and closed"
+assert_eq "$(count 'decision claim')" 1 "no answer_id: one claim"
+assert_eq "$(count 'decision verify')" 1 "no answer_id: verified"
 # courier down: one verify call, no retry, not closed
 reset down; C="$(open_card_x)"; hook "$(printf '[待決回覆]\n%s｜Q? → A｜AFORGED000000000000000000X\n' "$C")"
 assert_eq "$(count 'decision verify')" 1 "courier down: one verify call (exit 9 stops, hooks never retry)"; is_open "$C"; assert_eq "$?" 0 "courier down: not closed"

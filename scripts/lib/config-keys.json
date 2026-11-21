@@ -8792,6 +8792,18 @@
       ],
       "doc": null,
       "relates": []
+    },
+    {
+      "name": "AUTOPILOT_BASH_GUARD_BUSY_LOOP_MODE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "hooks/depth0-delegate-gate.js"
+      ],
+      "doc": null,
+      "relates": []
     }
   ]
 }

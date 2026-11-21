@@ -113,6 +113,27 @@ opencard "panel done?" --kind step; PN="$OUT"
 od close --id "$PN" --panel-done --closed-key "做完了"; assert_eq "$RC" 0 "panel done closes with provenance"
 assert_eq "$(field "$PN" closed_via)" "panel_done" "panel done provenance stored"; assert_eq "$(field "$PN" closed_key)" "做完了" "panel done key stored"; assert_eq "$(field "$PN" answer)" "做完了" "panel done answer stored"
 
+opencard "Repeat fixture" --kind step; RP="$OUT"
+od close --id "$RP" --panel-dismiss --closed-key Escape
+opencard "Repeat fixture" --kind step --repeat-of "$RP"; RP2="$OUT"
+assert_eq "$(field "$RP2" question)" "Repeat fixture（第 2 次）" "explicit repeat gets the second-time suffix"
+assert_eq "$(field "$RP2" repeat_of)" "$RP" "explicit repeat source is stored"
+assert_eq "$(field "$RP2" repeat_n)" "2" "explicit repeat number is stored"
+assert_contains "$(field "$RP2" background)" "上一張 $RP 在 " "repeat background names the previous card"
+assert_contains "$(field "$RP2" background)" "被關掉（closed_via panel_dismiss），沒有完成的紀錄。" "repeat background records the closure reason"
+RPBG="$(field "$RP2" background)"
+if [[ ! "$RPBG" =~ ^上一張\ $RP\ 在\ [0-9]{2}:[0-9]{2}\ 台北時間\ 被關掉 ]]; then fail "repeat background uses Taipei wall time"; fi
+od close --id "$RP2" --panel-dismiss --closed-key Escape
+opencard "Repeat fixture" --kind step --repeat-of "$RP2"; RP3="$OUT"
+assert_eq "$(field "$RP3" question)" "Repeat fixture（第 3 次）" "repeat chain increments from the source chain"
+od close --id "$RP3" --panel-dismiss --closed-key Escape
+opencard "Automatic repeat" --kind step; RA="$OUT"
+od close --id "$RA" --panel-dismiss --closed-key Escape
+opencard "Automatic repeat" --kind step; RA2="$OUT"
+assert_contains "$ERR" "repeat-of $RA (第 2 次)" "automatic repeat is reported on stderr"
+assert_eq "$(field "$OUT" question)" "Automatic repeat（第 2 次）" "matching recent unanswered card repeats automatically"
+od close --id "$RA2" --panel-dismiss --closed-key Escape
+
 
 # 6. backfill: dry run by default, status per line
 cat > "$TEST_TMP/bf.jsonl" <<JSON

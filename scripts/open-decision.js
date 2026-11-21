@@ -11,7 +11,7 @@
  *                                       [--operator-step <text>]...   (repeatable, or several steps in one value separated by newlines:
  *                                         what the operator must do himself after answering; stored as operator_steps)
  *                                       [--root-run-id <id>] [--cwd <dir>] [--json]     (prints the new id; --json: {ok,id,file,scope_key})
- *   node scripts/open-decision.js open  --category <c> --kind step --question <step text> [--background <why>] [--blocks <what stalls>] [--attach <path-or-URL>]... [--source <who/where>]
+ *   node scripts/open-decision.js open  --category <c> --kind step --question <step text> [--repeat-of <id>] [--background <why>] [--blocks <what stalls>] [--attach <path-or-URL>]... [--source <who/where>]
  *                                       [--root-run-id <id>] [--cwd <dir>] [--json]     (operator action step: no --option, --executor or --not-authorized needed)
  *   node scripts/open-decision.js open ... --category <money|identity|presence|goal|public-release|unbackable-loss|authority>   (REQUIRED on every CLI open: the only seven kinds of question that go to the operator; anything else -> exit 7 with a 拒絕開卡 message, nothing written)
  *   node scripts/open-decision.js stats [--since <ISO | Nh|Nd|Nw, default 7d>] [--cwd <dir>] [--json]   (cards opened in the window per category: {schema:"decision-stats/1", since, counts:{money,...,uncategorized}}; patrol's weekly line)
@@ -220,7 +220,7 @@ function usage(message) {
   process.stderr.write('usage: open-decision.js open --category <money|identity|presence|goal|public-release|unbackable-loss|authority> --question <q> [--background <why>] [--option <label>[::<description>]]... | --free-text [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>] [--irreversible] [--from-request <r-id>] [--doa-role <role>] [--doa-tier <tier>] [--target <deploy target>] [--source <who/where>] [--kind <decide|go|remind|step|look>] [--due <ISO time | +N(m|h|d|w)>] [--premise-source <file>] [--premise-inferred] [--attach <path-or-URL>]... [--root-run-id <id>]\n'
     + '       --category values: money（錢） identity（身分：操作員本人的登入、憑證、金鑰、scope） presence（到場） goal（改目標） public-release（對外） unbackable-loss（無備份的損失） authority（改授權）\n'
     + '       決定卡（沒有 --kind，或 --kind decide；go/remind/step/look 不在此限）：--question 恰好一個問號（？或?）；--title 本身要是問題（含？或?，或以嗎結尾，仍 <= 20）；--recommendation 必填、以某個 --option 標籤開頭、不可以？或?結尾（--free-text 只在有建議時拒絕問號結尾）。--premise-source <檔> 的內容若含 inferred 或推算（不分大小寫），或帶了 --premise-inferred，則 --question 或 --background 也必須含推算或 inferred。這兩支旗標只用於 open。\n'
-    + '       open-decision.js open --category <c> --kind step --question <step text> [--background <why>] [--blocks <what stalls>] [--attach <path-or-URL>]... [--source <who/where>] [--root-run-id <id>]\n'
+    + '       open-decision.js open --category <c> --kind step --question <step text> [--repeat-of <id>] [--background <why>] [--blocks <what stalls>] [--attach <path-or-URL>]... [--source <who/where>] [--root-run-id <id>]\n'
     + '       open-decision.js stats [--since <ISO|7d>] [--json]\n       open-decision.js close --id <id> [--root-run-id <id>]\n       open-decision.js close --id <id> --answer <text> [--executor <address>] [--asker <address>] [--awaiting-operator <step>] [--reask-after <4h|30m|1d>]\n       open-decision.js close --id <id> --dispatched <task_id>\n       open-decision.js close --id <id> --dispatched-msg <message_id>\n       open-decision.js done --id <id> [--note <evidence>]\n       open-decision.js verify --id <card_id> --answer-id <id> --text-file <file>\n       open-decision.js show [--root-run-id <id>] [--all] [--json]\n       open-decision.js show --id <id> [--json]\n       open-decision.js list [--all] [--json]\n       open-decision.js backfill --from <file.jsonl> [--apply]\n       open-decision.js due-sweep\n       (decision open REQUIRES --executor <address>; it also takes --asker <address> --title <short title, <= 20 characters> --due <ISO time | +N(m|h|d|w)>; a remind card takes no --option/--free-text; --operator-step <text>, repeatable or newline-separated)\n');
   return 2;
 }
@@ -408,6 +408,37 @@ function findBest(cwd, id) {
   return findCard(cwd, id, { all: true });
 }
 
+const repeatBaseQuestion = (question) => String(question || '').trim().replace(/（第\s*\d+\s*次）$/, '').trim();
+const withRepeatSuffix = (question, n) => `${repeatBaseQuestion(question)}（第 ${n} 次）`;
+function repeatNumber(cwd, entry, seen = new Set()) {
+  if (!entry || seen.has(entry.id)) return 1;
+  seen.add(entry.id);
+  if (Number.isInteger(entry.repeat_n) && entry.repeat_n >= 2) return entry.repeat_n;
+  if (typeof entry.repeat_of !== 'string') return 1;
+  const prior = findBest(cwd, entry.repeat_of);
+  return prior ? repeatNumber(cwd, prior.entry, seen) + 1 : 1;
+}
+function repeatDetails(cwd, entry) {
+  const closedMs = Date.parse(entry.closed_at || '');
+  const date = Number.isFinite(closedMs) ? new Date(closedMs) : new Date(0);
+  const hhmm = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Taipei', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(date);
+  return { entry, repeat_n: repeatNumber(cwd, entry) + 1, hhmm };
+}
+function repeatContext(entry, details = null) {
+  const d = details || { hhmm: new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Taipei', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(Date.parse(entry.closed_at || ''))) };
+  return `上一張 ${entry.id} 在 ${d.hhmm} 台北時間 被關掉（closed_via ${entry.closed_via || '未記錄'}），沒有完成的紀錄。`;
+}
+function findRecentRepeat(cwd, question, executor, nowMs) {
+  if (typeof executor !== 'string' || !executor) return null;
+  const wanted = repeatBaseQuestion(question);
+  const cutoff = nowMs - 14 * 24 * 60 * 60 * 1000;
+  return projectScopeFiles(cwd, { all: true }).flatMap((file) => readFile(file, { all: true }))
+    .filter((e) => isClosedEntry(e) && (e.answer === null || e.answer === undefined)
+      && e.executor === executor && repeatBaseQuestion(e.question) === wanted && Number.isFinite(Date.parse(e.closed_at || ''))
+      && Date.parse(e.closed_at) >= cutoff && Date.parse(e.closed_at) <= nowMs)
+    .sort((a, b) => Date.parse(b.closed_at) - Date.parse(a.closed_at))[0] || null;
+}
+
 // After closing the winning record in `winnerFile`, close any stale non-closed copies of `id` in other scope files
 // with the same closing fields (`closed_at`, `closed_via`, etc.) so per-file readers and `show --all` never disagree.
 function closeStaleCopies(cwd, id, winnerFile, patch) {
@@ -576,7 +607,7 @@ function takeFreeText(argv) {
 // BL cardtrail flags are lifted out like --kind/--target (parse()'s valued Set stays byte-identical to the frozen ask stub).
 // -> { rest, extra: { answer, executor, asker, 'awaiting-operator', 'reask-after', from, dispatched, 'dispatched-msg', title, note, 'operator-step', all, apply } } | { error }
 // operator-step is repeatable and may hold several steps separated by newlines. parse()'s valued Set stays untouched (frozen ask stub).
-const EXTRA_VALUED = ['answer', 'executor', 'asker', 'awaiting-operator', 'reask-after', 'from', 'dispatched', 'dispatched-msg', 'title', 'from-request', 'note', 'look-target', 'category', 'since', 'premise-source', 'withdraw', 'by', 'closed-key'];
+const EXTRA_VALUED = ['answer', 'executor', 'asker', 'awaiting-operator', 'reask-after', 'from', 'dispatched', 'dispatched-msg', 'title', 'from-request', 'note', 'look-target', 'category', 'since', 'premise-source', 'withdraw', 'by', 'closed-key', 'repeat-of'];
 const EXTRA_REPEAT = ['operator-step'];
 const EXTRA_SWITCH = ['all', 'apply', 'irreversible', 'premise-inferred', 'panel-done', 'panel-dismiss'];
 // The only seven kinds of question that go to the operator (operator rule 2026-11-15); everything else the PM decides.
@@ -1003,6 +1034,21 @@ function main(argv) {
 
   // open
   if (typeof args.question !== 'string' || !args.question.trim()) return usage('open needs a non-empty --question');
+  if (ex['repeat-of'] !== undefined && !SAFE_ID.test(ex['repeat-of'])) return usage('--repeat-of needs a card id');
+  let repeat = null;
+  if (ex['repeat-of'] !== undefined) {
+    const prior = findBest(args.cwd, ex['repeat-of']);
+    if (!prior || !isClosedEntry(prior.entry) || (prior.entry.answer !== null && prior.entry.answer !== undefined) || !Number.isFinite(Date.parse(prior.entry.closed_at || ''))) return usage(`--repeat-of ${ex['repeat-of']} needs an existing closed card with no answer`);
+    repeat = repeatDetails(args.cwd, prior.entry);
+  } else {
+    const automatic = findRecentRepeat(args.cwd, args.question, ex.executor, Date.now());
+    if (automatic !== null) {
+      repeat = repeatDetails(args.cwd, automatic);
+      process.stderr.write(`repeat-of ${automatic.id} (第 ${repeat.repeat_n} 次)\n`);
+    }
+  }
+  const questionText = repeat === null ? args.question : withRepeatSuffix(args.question, repeat.repeat_n);
+  const backgroundText = repeat === null ? args.background : [repeatContext(repeat.entry, repeat), text(args.background)].filter(Boolean).join('\n');
   if (args.kind !== undefined && !KINDS.includes(args.kind)) { process.stderr.write(`open-decision: refused: --kind must be one of ${KINDS.join(' | ')} (got "${args.kind}"); nothing written\n`); return 7; }
   if (!CATEGORIES.includes(args.extra.category)) { process.stderr.write(`open-decision: ${CATEGORY_REFUSAL}（收到 ${args.extra.category === undefined ? '沒有 --category' : `"${args.extra.category}"`}；沒有寫入任何東西）\n`); return 7; }
   const remind = args.kind === 'remind';
@@ -1059,10 +1105,10 @@ function main(argv) {
   const shapeErr = decideCardShapeError(args, ex, options);
   if (shapeErr) return usage(shapeErr); // DECIDE_CARD_SHAPE
   const r = openDecision({
-    cwd: args.cwd || process.cwd(), root: root || null, session: sess.session, question: args.question, background: args.background,
+    cwd: args.cwd || process.cwd(), root: root || null, session: sess.session, question: questionText, background: backgroundText,
     options, recommendation: args.recommendation, why: args.why, blocks: args.blocks, not_authorized: args['not-authorized'], source: args.source, kind: args.kind, category: ex.category, executor: ex.executor, asker: ex.asker, title: ex.title, due_at: dueAt,
     from_request: ex['from-request'], attachments: args.attachments, look_target: lookTarget,
-    operator_steps: operatorSteps,
+    operator_steps: operatorSteps, repeat_of: repeat === null ? undefined : repeat.entry.id, repeat_n: repeat === null ? undefined : repeat.repeat_n,
   });
   if (r.status === 'ok' && args.cwd === undefined) {
     // No --cwd: the card followed the process cwd. A different live session repo will not show it (BL-0337).
@@ -1122,7 +1168,7 @@ function roleGate({ not_authorized, origin, kind } = {}) {
 // lock + atomic-rename path as `open`; another entry is never touched. `origin` (e.g. "ask_user_question") marks which hook
 // opened it; the CLI never sets it. `options` = [{label, description}] (>= 2) or null.
 // Returns { status: 'ok'|'error', id, file, scope_key, message, code? }.
-function openDecision({ cwd, root, session, question, background, options, recommendation, why, blocks, not_authorized, source, origin, turn_tracked, kind, category, executor, asker, title, from_request, due_at, attachments, look_target, operator_steps }) {
+function openDecision({ cwd, root, session, question, background, options, recommendation, why, blocks, not_authorized, source, origin, turn_tracked, kind, category, executor, asker, title, from_request, due_at, attachments, look_target, operator_steps, repeat_of, repeat_n }) {
   const routed = roleGate({ not_authorized, origin, kind });
   if (routed && routed.code === 4) return { status: 'error', code: 4, message: routed.message };
   const sf = scopeFile(cwd, root);
@@ -1144,6 +1190,7 @@ function openDecision({ cwd, root, session, question, background, options, recom
     if (steps.length) entry.operator_steps = steps;
   }
   if (typeof title === 'string' && title !== '') entry.title = title; // additive: absent = the readers derive one (cardTitle in src/status/decision-input.js)
+  if (typeof repeat_of === 'string' && SAFE_ID.test(repeat_of) && Number.isInteger(repeat_n) && repeat_n >= 2) { entry.repeat_of = repeat_of; entry.repeat_n = repeat_n; }
   if (KINDS.includes(kind)) entry.kind = kind; // additive: absent = unspecified
   if (CATEGORIES.includes(category)) entry.category = category; // additive: set by the CLI `open` (required there); cards from before 2026-11-15 and hook-opened cards have none
   if (typeof due_at === 'string' && Number.isFinite(Date.parse(due_at))) entry.due_at = new Date(Date.parse(due_at)).toISOString(); // additive: absent = no date (dueState 'none')

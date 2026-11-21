@@ -144,6 +144,7 @@ printf 'Fleet-Task: 01ARZ3NDEKTSV4RRFFQ69G5FAV\nSize: S\nRole: implementer\nScop
 run_local a
 [ "$EXIT" -eq 0 ] || printf 'local-default diagnostic (a): %s\n%s\n' "$OUT" "$ERR" >&2
 assert_eq "0" "$EXIT" "a: implementer with no --runner exits 0"
+assert_eq "2" "$(git -C "$SBX" rev-list --parents -n1 feat/local-a | wc -w | tr -d ' ')" "a: non-scratch commit retains its base parent"
 assert_not_contains "$(cat "$TEST_TMP/a.err")" 'engine-preflight:' "a: a free local slot bypasses cloud preflight"
 assert_eq "local" "$(json_get "$OUT" runner)" "a: result runner is local"
 assert_eq "qwen" "$(json_get "$OUT" model)" "a: result model is qwen"

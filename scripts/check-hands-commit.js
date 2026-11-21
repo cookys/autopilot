@@ -84,12 +84,18 @@ function splitNul(buf) {
 
 // base/head are recorded as FULL object ids, not as typed. A receipt that echoes an
 // abbreviated sha can collide across repos (308-db, 2026-09-13); resolving here also
-// turns an unresolvable ref into rc 3 before any check pretends to have run.
-function resolveOid(ref) {
+// turns an unresolvable ref into rc 3 before any check pretends to have run. A base may
+// be a tree object for root/orphan commits; the head must still resolve to a commit.
+function resolveOid(ref, allowTree = false) {
   const r = git(['rev-parse', '--verify', `${ref}^{commit}`]);
-  return r.status === 0 ? display(r.stdout).trim() : null;
+  if (r.status === 0) return display(r.stdout).trim();
+  if (allowTree) {
+    const tree = git(['rev-parse', '--verify', `${ref}^{tree}`]);
+    if (tree.status === 0) return display(tree.stdout).trim();
+  }
+  return null;
 }
-const baseOid = resolveOid(opts.base);
+const baseOid = resolveOid(opts.base, true);
 const headOid = resolveOid(opts.head);
 const out = {
   ok: false, base: baseOid || opts.base, head: headOid || opts.head,

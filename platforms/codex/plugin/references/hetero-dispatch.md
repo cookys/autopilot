@@ -25,6 +25,14 @@ Before dispatching a parallel batch, run `scripts/check-batch-overlap.js` on the
 
 Not for: anything needing autopilot skills inside the executor (unverified — see Unverified below), or tasks too fuzzy for a six-element contract (fix the contract first; that's the planner's job).
 
+### Scratch dispatch results
+
+`dispatch-hetero.sh --scratch` captures worker output on an orphan commit whose tree starts
+empty and contains only the files captured from the worker's scratch directory. The commit
+has no parent from the consuming repository's history, so it cannot be integrated with
+`git merge` because the histories are unrelated. Consumers copy the files they want into
+their own checkout or branch; the unrelated-history result is intentional.
+
 ## Invariants (non-negotiable)
 
 1. **Worktree isolation is mandatory, not advisory.** agy has no `--allowedTools`-grade granular allowlist; `--dangerously-skip-permissions` is all-or-nothing. [`scripts/dispatch-hetero.sh`](../scripts/dispatch-hetero.sh) hard-codes this rail — there is no flag to run in the main checkout.

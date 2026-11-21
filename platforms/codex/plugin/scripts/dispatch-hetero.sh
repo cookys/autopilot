@@ -2538,7 +2538,8 @@ run_target_precommit() {
   out="${tmp}.hook-output"; cfg_path="${tmp}.git-config"
   if ! git -C "$top" worktree add --detach "$tmp" "$base" >"$out" 2>&1; then
     rc=1
-  elif ! git -C "$tmp" read-tree -m -u "$tip" >>"$out" 2>&1; then
+  elif { [ "${SCRATCH:-0}" -eq 1 ] && ! git -C "$tmp" read-tree --reset -u "$tip" >>"$out" 2>&1; } \
+    || { [ "${SCRATCH:-0}" -ne 1 ] && ! git -C "$tmp" read-tree -m -u "$tip" >>"$out" 2>&1; }; then
     rc=1
   else
     git_dir="$(git -C "$tmp" rev-parse --absolute-git-dir 2>/dev/null)"
@@ -2932,7 +2933,7 @@ write_manifest() {
   local strict_manifest_fields=""
   local scratch_manifest_field=""
   if [ "${SCRATCH:-0}" -eq 1 ]; then
-    scratch_manifest_field=", \"scratch\": {\"dir\": \"$(_flat_json_escape "${SCRATCH_DIR:-}")\", \"files\": ${SCRATCH_FILES:-0}, \"gate_result\": \"allowed\", \"rejected_manifest\": \"$(_flat_json_escape "${SCRATCH_REJECTED_FILE:-}")\"}"
+    scratch_manifest_field=", \"scratch\": {\"dir\": \"$(_flat_json_escape "${SCRATCH_DIR:-}")\", \"files\": ${SCRATCH_FILES:-0}, \"gate_result\": \"allowed\", \"base\": \"orphan\", \"rejected_manifest\": \"$(_flat_json_escape "${SCRATCH_REJECTED_FILE:-}")\"}"
   fi
   if [ "${STRICT_CONTRACT_RESULT_FIELDS:-0}" -eq 1 ]; then
     strict_manifest_fields=", \"unit_id\": \"$(_flat_json_escape "$STRICT_UNIT_ID")\", \"contract_sha256\": \"$(_flat_json_escape "$STRICT_CONTRACT_SHA")\", \"go\": \"$(_flat_json_escape "$STRICT_GO")\""
@@ -5374,11 +5375,20 @@ MAIN_CHECKOUT_BEFORE_PARTS="$(MAIN_CHECKOUT_FP_MODE=parts main_checkout_fingerpr
 MAIN_CHECKOUT_BEFORE="$(main_checkout_parts_digest "$MAIN_CHECKOUT_BEFORE_PARTS")"
 build_hands_git_env
 
-if [ "$WORKTREE_REUSED" -eq 0 ] \
+if [ "$WORKTREE_REUSED" -eq 0 ] && [ "$SCRATCH" -eq 1 ]; then
+  if ! git worktree add --quiet --orphan -b "$BRANCH" "$WT"; then
+    _wt_lock_fail "git worktree add failed"
+  fi
+elif [ "$WORKTREE_REUSED" -eq 0 ] \
   && ! git worktree add --quiet "$WT" -b "$BRANCH" "$BASE_SHA"; then
   # `git worktree add -b` creates the branch ref BEFORE the dir, so the ref leaks
   # even when dir creation fails (verified 2026-06-22). Reap it before bailing.
   _wt_lock_fail "git worktree add failed"
+fi
+DIFF_BASE_SHA="$BASE_SHA"
+if [ "$SCRATCH" -eq 1 ]; then
+  DIFF_BASE_SHA="$(git hash-object -t tree -w /dev/null)" \
+    || _wt_lock_fail "cannot resolve empty tree for scratch diff"
 fi
 # Acquire the exclusive lifetime lock IMMEDIATELY after directory creation — BEFORE
 # publishing the branch ledger row or .autopilot-worktree marker — so no external
@@ -6022,9 +6032,9 @@ _supervise_commit_quiet() {
     if [ "$size" != "$last_size" ]; then last_size="$size"; since=-1; continue; fi
     if _worker_has_busy_descendant "$rp"; then since=-1; continue; fi
     wt_gitfile_check || { since=-1; continue; }
-    head="$(_wt_git rev-parse HEAD 2>/dev/null || true)"
-    if [ -z "$head" ] || [ "$head" = "$BASE_SHA" ] \
-       || ! _wt_git merge-base --is-ancestor "$BASE_SHA" "$head" 2>/dev/null \
+    head="$(_wt_git rev-parse --verify HEAD 2>/dev/null || true)"
+    if [ -z "$head" ] || [ "$head" = "$DIFF_BASE_SHA" ] \
+       || { [ "${SCRATCH:-0}" -ne 1 ] && ! _wt_git merge-base --is-ancestor "$BASE_SHA" "$head" 2>/dev/null; } \
        || [ -n "$(_wt_git status --porcelain --ignore-submodules=dirty 2>/dev/null)" ]; then since=-1; continue; fi
     [ "$since" -ge 0 ] || since=$SECONDS
     [ $((SECONDS - since)) -ge "$quiet" ] || continue
@@ -6928,10 +6938,10 @@ compute_artifacts() {
 # (Root cause of the 2026-06-30 agy/cc-shim `status:dirty` runs.)
 if ! wt_gitfile_check; then
   # Fail closed: the gitfile was repointed, so no git runs against $WT; classify_outcome reports it.
-  HEAD_SHA="$BASE_SHA"; DIRTY=""; FILES=0; INS=0; DEL=0
+  HEAD_SHA="$DIFF_BASE_SHA"; DIRTY=""; FILES=0; INS=0; DEL=0
   return 0
 fi
-if [ "$(_wt_git rev-parse HEAD)" = "$BASE_SHA" ] \
+if { [ "$(_wt_git rev-parse --verify HEAD 2>/dev/null || true)" = "$BASE_SHA" ] || { [ "${SCRATCH:-0}" -eq 1 ] && [ -z "$(_wt_git rev-parse --verify HEAD 2>/dev/null || true)" ]; }; } \
    && [ -n "$(_wt_git status --porcelain --ignore-submodules=dirty)" ]; then
   _runner_label="agy"; [ "$IS_CODEX" -eq 1 ] && _runner_label="codex"; [ "$IS_GROK" -eq 1 ] && _runner_label="grok"; [ "$IS_CCSHIM" -eq 1 ] && _runner_label="cc-shim"; [ "$IS_PI" -eq 1 ] && _runner_label="pi"; [ "$IS_CURSOR" -eq 1 ] && _runner_label="cursor"; [ "$IS_OPENCODE" -eq 1 ] && _runner_label="opencode"; [ "$IS_KIMI" -eq 1 ] && _runner_label="kimi"; [ "$IS_QODER" -eq 1 ] && _runner_label="qoderclicn"; [ "$IS_CNATIVE" -eq 1 ] && _runner_label="claude-native"
   _wt_git add -A
@@ -6951,11 +6961,12 @@ if [ "$(_wt_git rev-parse HEAD)" = "$BASE_SHA" ] \
 fi
 
 # --- verify by artifacts, never by self-report ---
-HEAD_SHA="$(_wt_git rev-parse HEAD)"
+HEAD_SHA="$(_wt_git rev-parse --verify HEAD 2>/dev/null || true)"
+if [ -z "$HEAD_SHA" ] && [ "${SCRATCH:-0}" -eq 1 ]; then HEAD_SHA="$DIFF_BASE_SHA"; fi
 DIRTY="$(_wt_git status --porcelain --ignore-submodules=dirty)"
   FILES=0; INS=0; DEL=0
-  if [ "$HEAD_SHA" != "$BASE_SHA" ]; then
-  SHORTSTAT="$(_wt_git diff --ignore-submodules=none --shortstat "$BASE_SHA..$HEAD_SHA")"
+  if [ "$HEAD_SHA" != "$DIFF_BASE_SHA" ]; then
+  SHORTSTAT="$(_wt_git diff --ignore-submodules=none --shortstat "$DIFF_BASE_SHA..$HEAD_SHA")"
   FILES="$(printf '%s' "$SHORTSTAT" | grep -o '[0-9]\+ file' | grep -o '[0-9]\+' || echo 0)"
   INS="$(printf '%s' "$SHORTSTAT" | grep -o '[0-9]\+ insertion' | grep -o '[0-9]\+' || echo 0)"
   DEL="$(printf '%s' "$SHORTSTAT" | grep -o '[0-9]\+ deletion' | grep -o '[0-9]\+' || echo 0)"
@@ -7162,7 +7173,7 @@ check_main_checkout_boundary() {
 # JSON body prints, as a lead for the reviewer.
 run_fixture_literal_advisory() {
   local _fl_out="" _fl_rc=0
-  _fl_out="$(node "$SELF_DIR/scan-fixture-literals.js" --repo "$WT" --base "$BASE_SHA" --head "$HEAD_SHA" 2>/dev/null)" || _fl_rc=$?
+  _fl_out="$(node "$SELF_DIR/scan-fixture-literals.js" --repo "$WT" --base "$DIFF_BASE_SHA" --head "$HEAD_SHA" 2>/dev/null)" || _fl_rc=$?
   if [ "$_fl_rc" -eq 1 ] && [ -n "$_fl_out" ]; then
     printf '[hands-advisory] fixture literals in production code (scan-fixture-literals.js) — review before integrating:\n%s\n' "$_fl_out" >&2
   fi
@@ -7175,7 +7186,7 @@ run_hands_content_gate() {
   # left the tree dirty at BASE_SHA). A worker that commits itself owns its subject.
   local -a _subject_args=()
   [ "${WRAPPER_COMMITTED:-0}" -eq 1 ] && _subject_args=(--expect-wrapper-subject)
-  content_out="$(node "$SELF_DIR/check-hands-commit.js" --repo "$WT" --base "$BASE_SHA" --head "$HEAD_SHA" "${_subject_args[@]}" 2>&1)" && content_rc=0 || content_rc=$?
+  content_out="$(node "$SELF_DIR/check-hands-commit.js" --repo "$WT" --base "$DIFF_BASE_SHA" --head "$HEAD_SHA" "${_subject_args[@]}" 2>&1)" && content_rc=0 || content_rc=$?
   case "$content_rc" in
     0)
       run_fixture_literal_advisory
@@ -7204,12 +7215,12 @@ run_hands_backlog_gate() {
         ;;
     esac
     [ "$bsw_touched" -eq 1 ] && [ "$BACKLOG_VIEW_TOUCHED" -eq 1 ] && break
-  done < <(_wt_git diff --ignore-submodules=none --name-only -z "$BASE_SHA..$HEAD_SHA" 2>/dev/null || true)
+  done < <(_wt_git diff --ignore-submodules=none --name-only -z "$DIFF_BASE_SHA..$HEAD_SHA" 2>/dev/null || true)
   if ! run_hands_backlog_reconcile_gate; then
     return 1
   fi
   [ "$bsw_touched" -eq 1 ] || return 0
-  bsw_out="$(cd "$WT" && node "$SELF_DIR/check-backlog-single-writer.js" --range "$BASE_SHA..$HEAD_SHA" --target "$WT" 2>&1 < /dev/null)" && bsw_rc=0 || bsw_rc=$?
+  bsw_out="$(cd "$WT" && node "$SELF_DIR/check-backlog-single-writer.js" --range "$DIFF_BASE_SHA..$HEAD_SHA" --target "$WT" 2>&1 < /dev/null)" && bsw_rc=0 || bsw_rc=$?
   if [ "$bsw_rc" -ne 0 ]; then
     if [ -n "${LOG:-}" ]; then
       printf '\n[dispatch-hetero: backlog_single_writer]\n%s\n' "$bsw_out" >> "$LOG"
@@ -7337,13 +7348,13 @@ run_strict_boundary_postcheck() {
   fi
 
   if [ -n "$deny_file" ]; then
-    if boundary_out="$( "$SELF_DIR/check-disjointness.sh" validate --range "$BASE_SHA..$HEAD_SHA" --repo "$WT" --no-default-deny --allow-file "$allow_file" --deny-file "$deny_file" 2>&1 )"; then
+    if boundary_out="$( "$SELF_DIR/check-disjointness.sh" validate --range "$DIFF_BASE_SHA..$HEAD_SHA" --repo "$WT" --no-default-deny --allow-file "$allow_file" --deny-file "$deny_file" 2>&1 )"; then
       boundary_rc=0
     else
       boundary_rc=$?
     fi
   else
-    if boundary_out="$( "$SELF_DIR/check-disjointness.sh" validate --range "$BASE_SHA..$HEAD_SHA" --repo "$WT" --no-default-deny --allow-file "$allow_file" 2>&1 )"; then
+    if boundary_out="$( "$SELF_DIR/check-disjointness.sh" validate --range "$DIFF_BASE_SHA..$HEAD_SHA" --repo "$WT" --no-default-deny --allow-file "$allow_file" 2>&1 )"; then
       boundary_rc=0
     else
       boundary_rc=$?
@@ -7383,7 +7394,7 @@ run_strict_boundary_postcheck() {
   # Collect exact changed paths once for output-path role checks.
   while IFS= read -r temp_path; do
     [ -n "$temp_path" ] && changed_paths+=("$temp_path")
-  done < <(_wt_git diff --ignore-submodules=none --name-only "$BASE_SHA..$HEAD_SHA")
+  done < <(_wt_git diff --ignore-submodules=none --name-only "$DIFF_BASE_SHA..$HEAD_SHA")
 
   for temp_path in "${changed_paths[@]}"; do
     changed_set["$temp_path"]=1
@@ -7441,7 +7452,7 @@ run_strict_boundary_postcheck() {
       __noop_verify="$(
         node "$__noop_validator" validate \
           --contract "$CONTRACT_FILE" \
-          --base "$BASE_SHA" \
+          --base "$DIFF_BASE_SHA" \
           --worktree "$WT" \
           --print-ok 2>/dev/null || true
       )"
@@ -7795,19 +7806,19 @@ classify_outcome() {
   elif ! check_main_checkout_boundary; then
     passive_capture "boundary_rejected"
     OUTCOME_STATUS="boundary_rejected"
-    OUTCOME_COMMIT=""; [ "$HEAD_SHA" != "$BASE_SHA" ] && OUTCOME_COMMIT="$HEAD_SHA"
+    OUTCOME_COMMIT=""; [ "$HEAD_SHA" != "$DIFF_BASE_SHA" ] && OUTCOME_COMMIT="$HEAD_SHA"
     OUTCOME_FILES="$FILES"; OUTCOME_INS="$INS"; OUTCOME_DEL="$DEL"; OUTCOME_WT="$WT"
     OUTCOME_ERR="$HANDS_BOUNDARY_ERROR"; OUTCOME_EXIT=1
     # The main-checkout code wins, but the content verdict is still taken so a retained
     # candidate is never left unverified (round 6, 2026-09-13).
-    if [ "$HEAD_SHA" != "$BASE_SHA" ]; then
+    if [ "$HEAD_SHA" != "$DIFF_BASE_SHA" ]; then
       _main_code="$HANDS_BOUNDARY_CODE"; _main_err="$OUTCOME_ERR"
       if ! run_hands_content_gate; then
         OUTCOME_ERR="${_main_err}; ALSO ${HANDS_BOUNDARY_ERROR}"
       fi
       HANDS_BOUNDARY_CODE="$_main_code"
     fi
-  elif [ "$HEAD_SHA" != "$BASE_SHA" ] && ! run_hands_content_gate; then
+  elif [ "$HEAD_SHA" != "$DIFF_BASE_SHA" ] && ! run_hands_content_gate; then
     # --- a new commit exists and its CONTENT is unsafe or unverifiable: authoritative on
     # every committed round, dirty or not, exit code or not (review, 2026-09-13). Precedence:
     # main-checkout mutation > unsafe content > dirty > non-zero exit > strict postchecks.
@@ -7815,7 +7826,7 @@ classify_outcome() {
     OUTCOME_STATUS="boundary_rejected"
     OUTCOME_COMMIT="$HEAD_SHA"; OUTCOME_FILES="$FILES"; OUTCOME_INS="$INS"; OUTCOME_DEL="$DEL"; OUTCOME_WT="$WT"
     OUTCOME_ERR="$HANDS_BOUNDARY_ERROR"; OUTCOME_EXIT=1
-  elif [ "$HEAD_SHA" != "$BASE_SHA" ]; then
+  elif [ "$HEAD_SHA" != "$DIFF_BASE_SHA" ]; then
     # --- a new commit exists ---
     if [ -n "$DIRTY" ]; then
       # committed but left the tree dirty → failure regardless of exit code
@@ -7909,7 +7920,7 @@ classify_outcome() {
         __eq_noop_verify="$(
           node "$__eq_noop_validator" validate \
             --contract "$CONTRACT_FILE" \
-            --base "$BASE_SHA" \
+            --base "$DIFF_BASE_SHA" \
             --worktree "$WT" \
             --print-ok 2>/dev/null || true
         )" || __eq_noop_verify="verify_failed"
@@ -8183,7 +8194,7 @@ dispatch_detached_run() {
   declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN CURSOR_BIN OPENCODE_BIN OPENCODE_VER KIMI_BIN QODER_BIN QODER_CONFIG_DIR KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER ENDPOINT PACE_ROLE ENGINE_CHOICE_JSON PACE_CHOICE_JSON ENGINE_PREFLIGHT_JSON SHED_ROUTE_JSON SHED_ROUTE_MANIFEST_JSON SHED_ROUTE_TARGET EFFORT CLAUDE_EFFORT_ARG \
       SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_CURSOR IS_OPENCODE IS_KIMI IS_QODER IS_CNATIVE CNATIVE_CONFIG_DIR RUNNER_RESOLVED CURSOR_FAST PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT GITCONFIG_SNAPSHOT_FILE GITCONFIG_DRIFT_KEYS EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
       BROKER_TIMEOUT_S BROKER_RESULT BROKER_VERDICT BROKER_REASON BROKER_VERDICT_KIND BROKER_VERDICT_UNKNOWN BROKER_VERDICT_UNKNOWN_SET BROKER_RUNNER BIN_FLAG_KIMI \
-      WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID WORKER_FALLBACK_PGID GROK_PROMPT_FILE EFFORT_SENT CCSHIM_PROMPT_FILE OPENCODE_PROMPT_FILE KIMI_PROMPT_FILE QODER_PROMPT_FILE KIMI_EDIT_ONLY \
+      WT LOG BASE_SHA DIFF_BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID WORKER_FALLBACK_PGID GROK_PROMPT_FILE EFFORT_SENT CCSHIM_PROMPT_FILE OPENCODE_PROMPT_FILE KIMI_PROMPT_FILE QODER_PROMPT_FILE KIMI_EDIT_ONLY \
       AGY_ENVELOPE AGY_STDERR AGY_PARSED AGY_USAGE_JSON CCSHIM_ENVELOPE \
       PROVIDER_ERROR_RUNNER PROVIDER_ERROR_STATUS PROVIDER_ERROR_FIELD \
       PACKED_PROMPT_TEMP LEDGER RUN_ID STAGE RESULTS_DIR RESULT_FILE EXIT_FILE HEARTBEAT_SECS \

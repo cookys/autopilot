@@ -582,10 +582,11 @@ assert_eq "$((c0 + 1))" "$(cards)" "remind opt-in: opens one owner card"
 AUTOPILOT_SUBAGENT_BUDGET_MODE=off fire w3 'Engine: sonnet\nLane: wl3\ngo'; expect_silent "off mode with a runaway count"
 
 # ---- Per-ticket Claude budget ceiling --------------------------------------------------------------------------------
+TICKET_UNDER="01M7ZKZ8D4511JJ451P71J73R1"
 TICKET_ID="01M7ZKZ8D4511JJ451P71J73R3"
 # Under 80%: silent (no ticket advisory)
-mk st1 "[{\"id\":\"t1\",\"brief\":[\"Lane: tlane\",\"Fleet-Task: $TICKET_ID\"],\"turns\":1}]"
-expect_allow st1 "Engine: sonnet\nLane: tlane\nFleet-Task: $TICKET_ID\nClaude-Budget: 100\ngo" "" "ticket under 80% allowed"
+mk st1 "[{\"id\":\"t1\",\"brief\":[\"Lane: tlane\",\"Fleet-Task: $TICKET_UNDER\"],\"turns\":1}]"
+expect_allow st1 "Engine: sonnet\nLane: tlane\nFleet-Task: $TICKET_UNDER\nClaude-Budget: 100\ngo" "" "ticket under 80% allowed"
 assert_not_contains "$__RUN_STDOUT" "Claude 預算" "ticket under 80% is silent"
 # 80-100%: one advisory line
 mk st2 "[{\"id\":\"t1\",\"brief\":[\"Lane: tlane\",\"Fleet-Task: $TICKET_ID\"],\"turns\":5}]"
@@ -610,6 +611,12 @@ mk st_a "[{\"id\":\"ta1\",\"brief\":[\"Lane: tlane\",\"Fleet-Task: $TICKET_CROSS
 AUTOPILOT_SUBAGENT_BUDGET_MODE=warn expect_allow st_a "Engine: sonnet\nLane: tlane\nFleet-Task: $TICKET_CROSS\nClaude-Budget: 100\ngo" "" "(c) session A records spend to ledger"
 AUTOPILOT_SUBAGENT_BUDGET_PER_TICKET_USD="$OVER_BUDGET" AUTOPILOT_SUBAGENT_BUDGET_MODE=warn expect_deny st_b "Engine: sonnet\nLane: tlane\nFleet-Task: $TICKET_CROSS\ngo" "" "(c) session B blocked by session A spend on same ticket"
 assert_contains "$__RUN_STDOUT" "Claude 預算已用盡" "(c) session B deny reason in Traditional Chinese"
+# (c2) Dispatch then session ends (SubagentStop books final dispatch) -> new session sees the spend
+TICKET_LAST="01M7ZKZ8D4511JJ451P71J73R5"
+mk st_last "[{\"id\":\"tl1\",\"brief\":[\"Lane: tlane\",\"Fleet-Task: $TICKET_LAST\"],\"turns\":5}]"
+printf '{"hook_event_name":"SubagentStop","session_id":"st_last","transcript_path":"%s/st_last.jsonl"}\n' "$PROJ" | node "$HOOK" >/dev/null
+AUTOPILOT_SUBAGENT_BUDGET_PER_TICKET_USD="$OVER_BUDGET" AUTOPILOT_SUBAGENT_BUDGET_MODE=warn expect_deny st_next "Engine: sonnet\nLane: tlane\nFleet-Task: $TICKET_LAST\ngo" "" "dispatch then session ends -> new session sees the spend"
+assert_contains "$__RUN_STDOUT" "Claude 預算已用盡" "SubagentStop-booked spend blocks new session"
 # (d) Ticketless brief unaffected
 AUTOPILOT_SUBAGENT_BUDGET_PER_TICKET_USD="$OVER_BUDGET" AUTOPILOT_SUBAGENT_BUDGET_MODE=warn expect_allow st2 "Engine: sonnet\nLane: tlane\ngo" "" "(d) ticketless brief unaffected by per_ticket_usd"
 # Kill switch: AUTOPILOT_TICKET_BUDGET=0 disables ticket ceiling

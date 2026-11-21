@@ -596,6 +596,16 @@ function emit(obj) {
 
 function run(payload) {
   if (!payload || typeof payload !== 'object') return;
+  if (payload.hook_event_name === 'SubagentStop') {
+    const cfg = loadConfig();
+    if (cfg.mode === 'off') return;
+    if (process.env.AUTOPILOT_TICKET_BUDGET === '0') return;
+    if (typeof payload.session_id !== 'string' || !payload.session_id
+      || typeof payload.transcript_path !== 'string' || !payload.transcript_path) return;
+    const raw = collect(payload);
+    if (raw) recordTicketLedger(payload.session_id, raw, nowMs());
+    return;
+  }
   if (payload.tool_name !== 'Agent' && payload.tool_name !== 'Task') return;
   const cfg = loadConfig();
   if (cfg.mode === 'off') return;

@@ -458,7 +458,7 @@ cleanup_test_tmp() {
   [ -n "$__TEST_OWN_LIVE_DIR" ] && rm -rf "$__TEST_OWN_LIVE_DIR"
   rm -rf "$TEST_TMP"
 }
-trap : EXIT
+trap cleanup_test_tmp EXIT
 
 # make_pre_tree <dir>: build a repo-shaped tree under <dir> (inside TEST_TMP) so a pre-change
 # script `git show`n into <dir>/scripts/ resolves its __dirname-relative requires (../src,

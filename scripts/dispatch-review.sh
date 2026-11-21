@@ -962,7 +962,7 @@ timeout_to_ms() {
 # byte-identical. resolve-endpoint.sh emits only the token's env NAME; the value is read
 # via ${!name} (cc-shim, set +x) or by the JS from --token-env — never printed here. ---
 EP_URL=""; EP_TOKEN_ENV=""
-ANTHROPIC_BASE_URL=""; ANTHROPIC_TOKEN_ENV=""; TIMEOUT_MS=""
+ANTHROPIC_BASE_URL="${ANTHROPIC_BASE_URL:-}"; ANTHROPIC_TOKEN_ENV=""; TIMEOUT_MS=""
 if [[ -n "$ENDPOINT" ]]; then
   case "$RUNNER" in
     anthropic-compatible|cc-shim) ;;

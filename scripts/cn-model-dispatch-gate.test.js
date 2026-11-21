@@ -60,3 +60,14 @@ test('(g) an unresolved operator for a Chinese model fails closed', () => fixtur
   const got = check({ runner: 'kimi', model: 'kimi', endpoint: 'mystery', cwd, files: [prompt], env: endpointEnv('mystery', 'https://unlisted.example/v1') });
   assert.equal(got.cls, 'restricted_operator_unknown_endpoint');
 }));
+test('(h) a raw local URL is allowed for a Chinese model', () => fixture((root) => {
+  const cwd = path.join(root, 'repo'); repo(cwd); const prompt = brief(cwd);
+  const got = check({ runner: 'cc-shim', model: 'GLM-5.3', endpoint: 'http://localhost:9876/anthropic', cwd, files: [prompt], env: { AUTOPILOT_LOCAL_GATEWAY_HOSTS: 'localhost' } });
+  assert.equal(got.allowed, true);
+}));
+test('(i) a raw Chinese cloud URL remains barred', () => fixture((root) => {
+  const cwd = path.join(root, 'repo'); repo(cwd); const prompt = brief(cwd);
+  const got = check({ runner: 'cc-shim', model: 'GLM-5.3', endpoint: 'https://api.bigmodel.cn/anthropic', cwd, files: [prompt], env: {} });
+  assert.equal(got.allowed, false);
+  assert.equal(got.cls, 'restricted_operator_private_workdir');
+}));

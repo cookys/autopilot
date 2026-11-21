@@ -116,8 +116,14 @@ function check(opts = {}) {
     if (!host || !isLocalHost(host, env)) return { allowed: false, family, cls: 'local_name_external_host', line: refusalLine(family, 'local_name_external_host') };
     return { allowed: true, family };
   }
-  const resolved = endpoint ? resolveEndpoint(endpoint, env) : null;
+  let rawUrl = '';
+  try {
+    const parsed = new URL(String(endpoint));
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') rawUrl = String(endpoint);
+  } catch { /* endpoint names are resolved through the canonical endpoint resolver */ }
+  const resolved = rawUrl ? { base_url: rawUrl } : (endpoint ? resolveEndpoint(endpoint, env) : null);
   const host = resolved && hostOf(resolved.base_url);
+  if (rawUrl && host && isLocalHost(host, env)) return { allowed: true, family };
   const inventory = readJson(OPERATORS_PATH, null);
   const operator = resolved && inventory && operatorFor(endpoint, host, inventory);
   if (!operator) return { allowed: false, family, cls: 'restricted_operator_unknown_endpoint', line: refusalLine(family, 'restricted_operator_unknown_endpoint') };

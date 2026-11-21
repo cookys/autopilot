@@ -10,6 +10,10 @@ import { makeT } from '../i18n'
 import type { DecideCard, TodoCard, V74Ctx } from '../v74/contract'
 import type { Row } from './rows'
 
+// r10b #2: s previews first, the second s sends
+const sendS = (nav: Parameters<typeof decideReduce>[0], c: Parameters<typeof decideReduce>[2], now: number) => decideReduce(decideReduce(nav, { kind: 'submit' }, c, now).nav, { kind: 'submit' }, c, now)
+
+
 const t = makeT('zh-TW')
 const decide = decideFx as DecideCard[]
 const todo = todoFx as TodoCard[]
@@ -52,14 +56,14 @@ test('v74-d: send-all counts answered cards and a note shows inside the selected
 test('v74-d: reducer on v7.4 cards: j/k move, pick + s holds every answered card (negative: s with no answer sends nothing)', () => {
   const ctx = ctxOf({})
   const t0 = 1794200000000
-  expect(decideReduce(NO_NAV, { kind: 'submit' }, ctx, t0).effect).toBeNull()
+  expect(sendS(NO_NAV, ctx, t0).effect).toBeNull()
   let n = decideReduce(NO_NAV, { kind: 'move', by: 1 }, ctx, t0).nav
   expect(n.cursor).toBe(1)
   expect(decideReduce({ ...n, cursor: 2 }, { kind: 'move', by: 1 }, ctx, t0).nav.cursor).toBe(2) // clamped
   n = decideReduce(n, { kind: 'pick', index: 1 }, ctx, t0).nav
   expect(n.picks['d-a1b2c3e2']).toBe(1)
   const sent = decideReduce({ ...n, cursor: 0 }, { kind: 'pick', index: 0 }, ctx, t0).nav
-  const r = decideReduce(sent, { kind: 'submit' }, ctx, t0)
+  const r = sendS(sent, ctx, t0)
   expect(r.effect?.kind).toBe('send')
   expect(Object.keys(r.nav.hold ?? {}).sort()).toEqual(['d-a1b2c3e1', 'd-a1b2c3e2'])
 })

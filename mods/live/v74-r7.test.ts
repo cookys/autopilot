@@ -10,6 +10,10 @@ import { writeV74Answers } from './decideundo'
 import type { DecideCard } from './v74/contract'
 import decideFx from './fixtures/v74/decide.fixture'
 
+// r10b #2: s previews first, the second s sends
+const sendS = (nav: Parameters<typeof decideReduce>[0], c: Parameters<typeof decideReduce>[2], now: number) => decideReduce(decideReduce(nav, { kind: 'submit' }, c, now).nav, { kind: 'submit' }, c, now)
+
+
 const t = makeT('zh-TW')
 const cards = decideFx as DecideCard[]
 type Node = { kind: string; props: Record<string, any> }
@@ -101,7 +105,7 @@ test('r7 narrow: 100 and 80 columns keep fleet, 待決 and tok/s, and do not lea
 })
 
 test('r7 send: s writes the card store even when the model never answers', async () => {
-  const nav = decideReduce({ ...NO_NAV, picks: { [cards[0].id]: 0 }, notes: { [cards[0].id]: 'test note' } }, { kind: 'submit' }, ctx, 5).nav
+  const nav = sendS({ ...NO_NAV, picks: { [cards[0].id]: 0 }, notes: { [cards[0].id]: 'test note' } }, ctx, 5).nav
   const runs: string[][] = []
   let posted = false
   const next = await writeV74Answers({
@@ -113,7 +117,7 @@ test('r7 send: s writes the card store even when the model never answers', async
   }).then(r => r.state)
   expect(runs.some(a => a[0] === 'close' && a.includes(cards[0].id) && a.includes('--option'))).toBe(true)
   expect(next.sent[cards[0].id]).toBe(5)
-  expect(decideReduce(next, { kind: 'submit' }, ctx, 6).effect).toBeNull()
+  expect(sendS(next, ctx, 6).effect).toBeNull()
   expect(posted).toBe(true)
   await new Promise(r => setTimeout(r, 0))
   expect(next.sent[cards[0].id]).toBe(5)
@@ -139,7 +143,7 @@ test('v74TabStep: the plugin own autoFocus, the current tab, a card and other pa
 
 // r7 review (autopilot 01M7XXB4): a failed close keeps the card open, unsent and out of the reply.
 test('r7 send: a close that fails (exit != 0, timeout, no script) leaves the card unsent and posts nothing for it', async () => {
-  const nav = decideReduce({ ...NO_NAV, picks: { [cards[0].id]: 0 } }, { kind: 'submit' }, ctx, 5).nav
+  const nav = sendS({ ...NO_NAV, picks: { [cards[0].id]: 0 } }, ctx, 5).nav
   let posted: string | null = null
   const r = await writeV74Answers({
     cards: cards.map(cardToLive), state: nav, now: 5,
@@ -154,7 +158,7 @@ test('r7 send: a close that fails (exit != 0, timeout, no script) leaves the car
   expect(thrown.state.sent[cards[0].id]).toBeUndefined()
 })
 test('r7 send: a card with no option and an empty note is never closed', async () => {
-  const nav = decideReduce({ ...NO_NAV, notes: { [cards[0].id]: '' } }, { kind: 'submit' }, ctx, 5).nav
+  const nav = sendS({ ...NO_NAV, notes: { [cards[0].id]: '' } }, ctx, 5).nav
   const runs: string[][] = []
   await writeV74Answers({ cards: cards.map(cardToLive), state: nav, now: 5, run: async (a) => { runs.push(a); return true } })
   expect(runs.some(a => a.includes('--free-text') && a[a.indexOf('--free-text') + 1] === '')).toBe(false)

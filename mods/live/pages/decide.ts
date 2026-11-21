@@ -21,7 +21,7 @@ import type { DecideCard } from '../v74/contract'
 
 // ---- view state and the key reducer ----
 // DecideState (model.ts) carries picks, notes, sent and hold (the 10 s undo window, by card id); the rest is this page's own: which card shows in full, whether the others are folded, the note mode and its buffer, the focused option beyond a)–e)
-export type DecideNav = DecideState & { cursor: number; folded: boolean; textMode: boolean; textBuf: string; opt: number | null; detailOffset?: number }
+export type DecideNav = DecideState & { cursor: number; folded: boolean; textMode: boolean; textBuf: string; opt: number | null; detailOffset?: number; armed?: boolean }
 export const NO_NAV: DecideNav = { ...NO_DECIDE, cursor: 0, folded: false, textMode: false, textBuf: '', opt: null }
 export type DecideCtx = PageCtx & { decide?: DecideNav }
 export type DecideEffect = { kind: 'send'; id: string; line: string } | { kind: 'undo'; id: string } | { kind: 'fill'; text: string } | null
@@ -86,13 +86,16 @@ export function decideReduce(nav: DecideNav, key: KeyAction, ctx: PageCtx, nowMs
   const same = (patch: Partial<DecideNav>): { nav: DecideNav; effect: DecideEffect } => ({ nav: { ...nav, cursor, ...patch }, effect: null })
   const heldNow = d !== null && d.id !== null && nav.hold?.[d.id] !== undefined
   const sentNow = d !== null && d.id !== null && nav.sent[d.id] !== undefined && nav.fixing?.[d.id] === undefined
+  if (key.kind === 'disarm') return same({ armed: false })
+  if (nav.armed === true && key.kind !== 'submit') return decideReduce({ ...nav, armed: false }, key, ctx, nowMs) // any other key cancels the send preview, then does its own work
   if (v74Cards(ctx) !== null && key.kind === 'move') return same({ cursor: Math.min(Math.max(0, m.all.length - 1), Math.max(0, cursor + key.by)), opt: null, detailOffset: 0 })
   if (v74Cards(ctx) !== null && key.kind === 'cursor') return same({ cursor: Math.min(Math.max(0, m.all.length - 1), Math.max(0, key.at)), opt: null, detailOffset: 0 })
   if (v74Cards(ctx) !== null && key.kind === 'submit') { // s sends every answered card that is not already in its window (holdSend); the effect carries the first one
     const ready = m.all.flatMap(it => (it.kind === 'own' && it.d.id !== null && nav.hold?.[it.d.id] === undefined && !(nav.sent[it.d.id] !== undefined && nav.fixing?.[it.d.id] === undefined) ? [it.d] : []))
       .flatMap(c => { const line = decideLine(c, nav); return line === null ? [] : [{ id: c.id as string, line }] })
-    if (ready.length === 0) return same({})
-    return { nav: { ...nav, cursor, hold: { ...(nav.hold ?? {}), ...Object.fromEntries(ready.map(r => [r.id, nowMs])) } }, effect: { kind: 'send', id: ready[0].id, line: ready[0].line } }
+    if (ready.length === 0) return same({ armed: false })
+    if (nav.armed !== true) return same({ armed: true }) // r10b #2: the first s only previews what would go out; the second s sends
+    return { nav: { ...nav, cursor, armed: false, hold: { ...(nav.hold ?? {}), ...Object.fromEntries(ready.map(r => [r.id, nowMs])) } }, effect: { kind: 'send', id: ready[0].id, line: ready[0].line } }
   }
   switch (key.kind) {
     case 'text': {
@@ -577,8 +580,22 @@ function renderV74(ctx: PageCtx): { body: Row[]; actions: Row[] } {
   const actions: Row[] = [[seg(sendText, { press: 'key:s' })]]
   if (ctx.box === true) {
     const m = ctx.v74?.sendResult
+    // r10b #2: after the first s the row names what the second s will send (card number → letter), and how to back out
+    const plan = cards.flatMap((c, i) => {
+      const line = decideLine(cardToLive(c), nav)
+      const at = decidePick(cardToLive(c), nav)
+      return line === null || at === null || nav.hold?.[c.id] !== undefined ? [] : [(i + 1) + GLYPHS.structure.answer + letterOf(at)]
+    })
+    const room = Math.max(8, ctx.size.cols - 4 - displayWidth(t('v74.d.preview', { list: '' })))
+    let list = ''
+    for (const p of plan) {
+      const next = list === '' ? p : list + '、' + p
+      if (displayWidth(next) > room) { list += '…'; break }
+      list = next
+    }
+    const sendRow: Row = nav.armed === true && plan.length > 0 ? [seg(t('v74.d.preview', { list }), { press: 'key:s', color: PALETTE.attention })] : [seg(sendText, { press: 'key:s' })]
     return renderBoxV74(ctx, cards, nav, cursor, [
-      [seg(sendText, { press: 'key:s' })],
+      sendRow,
       ...(m === undefined || m === null ? [] : [[dimSeg(GLYPHS.state.done + ' ' + t('v74.d.result', { n: m.n, left: m.left }))] as Row]),
     ])
   }

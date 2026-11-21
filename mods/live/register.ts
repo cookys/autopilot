@@ -1146,6 +1146,7 @@ async function decidePress($: EngineInterface, id: string): Promise<void> {
     if (m !== null) {
       const k = Number(m[2])
       decideFocus = optKey(m[1], k)
+      decideLocal = { ...decideLocal, armed: false } // a pick changes what `s` would send: the preview is over
       await update($, DECIDE, s => applyPick(s, m[1], k))
     } else if (id === 'submit') await holdDecide($)
     else if (id.startsWith('undo:')) await undoDecide($, id.slice(5))
@@ -1512,7 +1513,7 @@ async function panePagePress($: EngineInterface, id: PageId): Promise<void> {
   paneTab = PAGE_TAB_OF[id] ?? paneTab
   keyed(decideScroll, 'page:' + id) // K1: a different page starts at its first row.
   void $.ui.scroll({ in: PANE_ID, to: 'start' }).catch(() => undefined)
-  decideLocal = { ...decideLocal, textMode: false, textBuf: '' } // a tab press ends a note being typed: the mode must not outlive the page
+  decideLocal = { ...decideLocal, textMode: false, textBuf: '', armed: false } // a tab press ends a note being typed: the mode must not outlive the page
   $.ui.invalidate('ui.render')
   // r8-2 keylog: in the band box the tab Buttons keep their keys across pages, so autoFocus does not fire again and the host's ring stays on the
   // tab of the page left (4 → tab:review). Back on 待決, Down then lands on tab:spend, three tabs away, which v74TabStep reads as the wrap (Up).
@@ -1540,7 +1541,7 @@ async function paneTabPress($: EngineInterface, t: PaneTab, legacy = false): Pro
     }
     paneTab = t
     panePage = pageOfTab(t)
-    decideLocal = { ...decideLocal, textMode: false, textBuf: '' }
+    decideLocal = { ...decideLocal, textMode: false, textBuf: '', armed: false }
     $.ui.invalidate('ui.render')
     return
   }
@@ -1556,7 +1557,7 @@ const focusRows = (id: string, expanded: boolean): number => {
   if (id === 'spend') return spendFocusRows(snapshot)
   return 1
 }
-let decideLocal: Pick<DecideNav, 'cursor' | 'folded' | 'textMode' | 'textBuf' | 'opt' | 'detailOffset'> = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt }
+let decideLocal: Pick<DecideNav, 'cursor' | 'folded' | 'textMode' | 'textBuf' | 'opt' | 'detailOffset' | 'armed'> = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt }
 const framePageId = (): string => panePage
 // B56: crossing the side-dock width threshold unmounts `<Pane placement="dock">` and mounts `<Pane placement="inline">` (or back).
 // On CC 2.1.327 that remount drops the pane's keyboard focus to the prompt and collides on the previous placement's Button keys,
@@ -1694,7 +1695,7 @@ async function frameKeyBody($: EngineInterface, k: KeyAction): Promise<void> {
       }
       const ctx = { live: snapshot, console: consoleSnap, size: { cols: decideCols, rows: 24 }, t: tr, nowMs, v74 }
       const r = decideReduce({ ...st, ...decideLocal }, k, ctx, nowMs)
-      decideLocal = { cursor: r.nav.cursor, folded: r.nav.folded, textMode: r.nav.textMode, textBuf: r.nav.textBuf, opt: r.nav.opt, detailOffset: r.nav.detailOffset }
+      decideLocal = { cursor: r.nav.cursor, folded: r.nav.folded, textMode: r.nav.textMode, textBuf: r.nav.textBuf, opt: r.nav.opt, detailOffset: r.nav.detailOffset, armed: r.nav.armed }
       if (k.kind === 'cursor') {
         void v74Keylog($, {
           handler: 'frameKey', component: 'AbovePrompt', key: 'cursor', event: 'cursor',
@@ -1738,6 +1739,7 @@ export async function paneKey($: EngineInterface, key: string, over: { paneFocus
     paneFocus: over.paneFocus ?? true,
     focusedButton: over.focusedButton ?? false,
     textMode: page === 'decide' && decideLocal.textMode,
+    armed: page === 'decide' && decideLocal.armed === true,
   })
   if (act.kind !== 'none' && act.kind !== 'pass' && act.kind !== 'button') await frameKey($, act)
   return act
@@ -1929,7 +1931,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const pageOpen = async (id: BandPageId, unfold: string | null = null, legacyCon?: ConsoleTab) => {
       const tab = PAGE_TAB_OF[id] ?? 'now'
       consoleTab = legacyCon ?? PAGE_CONSOLE_OF[id] ?? 'command'
-      decideLocal = { ...decideLocal, textMode: false, textBuf: '' }
+      decideLocal = { ...decideLocal, textMode: false, textBuf: '', armed: false }
       await openOn(tab, unfold, id)
     }
     const consoleInfo = async () => {

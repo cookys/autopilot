@@ -10,6 +10,10 @@ import { v74Keylog } from './v74/keylog'
 import type { DecideCard } from './v74/contract'
 import decideFx from './fixtures/v74/decide.fixture'
 
+// r10b #2: s previews first, the second s sends
+const sendS = (nav: Parameters<typeof decideReduce>[0], c: Parameters<typeof decideReduce>[2], now: number) => decideReduce(decideReduce(nav, { kind: 'submit' }, c, now).nav, { kind: 'submit' }, c, now)
+
+
 const t = makeT('zh-TW')
 const cards = decideFx as DecideCard[]
 type Node = { kind: string; props: Record<string, any> }
@@ -98,7 +102,7 @@ test('r6 send: s after the picks is decideReduce submit, which holds the cards',
   let nav = decideReduce({ ...NO_NAV }, { kind: 'pick', index: 0 }, ctx, 1).nav
   nav = decideReduce(nav, { kind: 'move', by: 1 }, ctx, 1).nav
   nav = decideReduce(nav, { kind: 'pick', index: 0 }, ctx, 1).nav
-  const sent = decideReduce(nav, { kind: 'submit' }, ctx, 5)
+  const sent = sendS(nav, ctx, 5)
   expect(sent.effect?.kind).toBe('send')
   expect(sent.nav.hold?.[cards[0].id]).toBe(5)
   expect(cards.filter(c => decideLine(cardToLive(c), sent.nav) !== null && sent.nav.hold?.[c.id] === undefined).length).toBe(0)

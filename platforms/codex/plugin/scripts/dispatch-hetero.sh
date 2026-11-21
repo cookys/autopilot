@@ -1347,7 +1347,7 @@ NODE
   if [ "${BROKER_VERDICT_UNKNOWN_SET:-0}" -eq 1 ]; then
     broker_fields="${broker_fields}, \"broker_verdict_unknown\": \"$(_flat_json_escape "${BROKER_VERDICT_UNKNOWN:-}")\""
   fi
-  tip_verify_fields="$tip_verify_fields$broker_fields, \"local_fallback\": ${LOCAL_FALLBACK_JSON:-null}, \"local_slots\": ${LOCAL_SLOTS_JSON:-null}, \"target_precommit\": $(target_precommit_json)"
+  tip_verify_fields="$tip_verify_fields$broker_fields, \"local_fallback\": ${LOCAL_FALLBACK_JSON:-null}, \"local_slots\": ${LOCAL_SLOTS_JSON:-null}, \"shed\": ${SHED_ROUTE_JSON:-null}, \"target_precommit\": $(target_precommit_json)"
   hetero_log_fallback "$1"
   local _emit_json
   _emit_json="$(printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "num_turns": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s%s%s%s%s%s%s%s }\n' \
@@ -2879,7 +2879,7 @@ write_manifest() {
   if [ "${NO_CAMPAIGN:-0}" -eq 1 ] && [ -n "${MISSION_ENFORCEMENT_MODE_SEEN:-}" ]; then
     campaign_scope_fields=", \"campaign_scope\": \"none_declared\", \"enforcement_mode\": \"$(_flat_json_escape "$MISSION_ENFORCEMENT_MODE_SEEN")\""
   fi
-  campaign_scope_fields="$campaign_scope_fields, \"mount_containment\": \"${MANIFEST_MOUNT_CONTAINMENT:-refused}\""
+  campaign_scope_fields="$campaign_scope_fields, \"mount_containment\": \"${MANIFEST_MOUNT_CONTAINMENT:-refused}\", \"shed\": ${SHED_ROUTE_JSON:-null}"
   # Compact tip_verify for the manifest. The result JSON keeps the command
   # tails; this write (including the finalize that stamps final_status) keeps
   # only the status scalar and the source. Inline so detach's declare -f of
@@ -3471,11 +3471,27 @@ VISION_PROMPT_FILE="$PROMPT_FILE"
 # or AUTOPILOT_QUALIFICATION_OVERRIDE is set. Explicit --runner never falls back.
 LOCAL_FALLBACK_JSON="${AUTOPILOT_LOCAL_FALLBACK_PRESET:-null}"
 LOCAL_SLOTS_JSON=null
+SHED_ROUTE_JSON=null
+SHED_ROUTE_TARGET=""
 IMPLICIT_LOCAL_DEFAULT=0
 _impl_role="${PACE_ROLE:-${AUTOPILOT_DISPATCH_ROLE:-implementer}}"
 if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_SUPPLIED" -eq 0 ] && [ "$RUNNER" = "auto" ] && [ "$STRICT_CONTRACT" -eq 0 ] \
    && [ -z "${ENGINE_CHOICE_JSON:-}" ] && [ -z "${AUTOPILOT_QUALIFICATION_OVERRIDE:-}" ] \
    && [ "$_impl_role" = "implementer" ] && [ -z "${AUTOPILOT_LOCAL_FALLBACK_PRESET:-}" ]; then
+  if [ "${AUTOPILOT_SHED_ROUTE:-1}" != "0" ]; then
+    SHED_ROUTE_JSON="$(node "$SELF_DIR/lib/shed-route.js" --prompt-file "$PROMPT_FILE" 2>/dev/null || printf '{"shed":false,"reason":"no_file"}')"
+    SHED_ROUTE_TARGET="$(node -e 'try { const x=JSON.parse(process.argv[1]); process.stdout.write(x.shed ? String(x.target || "") : ""); } catch (_) {}' "$SHED_ROUTE_JSON")"
+    case "$SHED_ROUTE_TARGET" in
+      minimax)
+        # MiniMax is an Anthropic-compatible endpoint carried by the existing cc-shim rail.
+        RUNNER="cc-shim"; ENDPOINT="minimax"; MODEL="MiniMax-M3"; MODEL_IS_DEFAULT=0 ;;
+      kimi) RUNNER="kimi" ;;
+      codex) RUNNER="codex" ;;
+    esac
+  fi
+  if [ "$RUNNER" != "auto" ]; then
+    : # shed selected a cloud target; the local slot probe is not applicable
+  else
   _slot_line="$(node "$SELF_DIR/lib/local-impl-slot.js" --prompt-file "$PROMPT_FILE" --cwd "$(pwd)")"
   _slot_parsed="$(node -e 'let o; try { o=JSON.parse(process.argv[1]); } catch { o={choose:false,reason:"no_free_slot",detail:"slot_query_failed:malformed"}; } const slots=o.local_slots==null?"null":JSON.stringify(o.local_slots); if (o.choose) process.stdout.write("choose\nnull\n"+slots+"\n"); else process.stdout.write("fallback\n"+JSON.stringify({reason:o.reason||"no_free_slot",detail:String(o.detail||"")})+"\n"+slots+"\n");' "$_slot_line")"
   _slot_kind="$(printf '%s\n' "$_slot_parsed" | sed -n '1p')"
@@ -3494,8 +3510,12 @@ if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_S
   else
     LOCAL_FALLBACK_JSON="$(printf '%s\n' "$_slot_parsed" | sed -n '2p')"
     LOCAL_SLOTS_JSON="$(printf '%s\n' "$_slot_parsed" | sed -n '3p')"
+    if [ "$SHED_ROUTE_TARGET" = "local" ]; then
+      RUNNER="codex"
+    fi
   fi
   unset _slot_line _slot_parsed _slot_kind _gate_msg _gate_rc
+  fi
 fi
 unset _impl_role
 if [ "$RUNNER" = "local" ]; then
@@ -7841,7 +7861,7 @@ dispatch_detached_run() {
   rm -f "$RESULT_FILE" "$EXIT_FILE"
   local state_file; state_file="$(mktemp -t hetero-detach-state-XXXXXX)"
   {
-  declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN CURSOR_BIN OPENCODE_BIN OPENCODE_VER KIMI_BIN QODER_BIN QODER_CONFIG_DIR KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER ENDPOINT PACE_ROLE ENGINE_CHOICE_JSON PACE_CHOICE_JSON EFFORT CLAUDE_EFFORT_ARG \
+    declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN CURSOR_BIN OPENCODE_BIN OPENCODE_VER KIMI_BIN QODER_BIN QODER_CONFIG_DIR KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER ENDPOINT PACE_ROLE ENGINE_CHOICE_JSON PACE_CHOICE_JSON SHED_ROUTE_JSON SHED_ROUTE_TARGET EFFORT CLAUDE_EFFORT_ARG \
       SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_CURSOR IS_OPENCODE IS_KIMI IS_QODER IS_CNATIVE CNATIVE_CONFIG_DIR RUNNER_RESOLVED CURSOR_FAST PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT GITCONFIG_SNAPSHOT_FILE GITCONFIG_DRIFT_KEYS EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
       BROKER_TIMEOUT_S BROKER_RESULT BROKER_VERDICT BROKER_REASON BROKER_VERDICT_KIND BROKER_VERDICT_UNKNOWN BROKER_VERDICT_UNKNOWN_SET BROKER_RUNNER BIN_FLAG_KIMI \
       WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID WORKER_FALLBACK_PGID GROK_PROMPT_FILE EFFORT_SENT CCSHIM_PROMPT_FILE OPENCODE_PROMPT_FILE KIMI_PROMPT_FILE QODER_PROMPT_FILE KIMI_EDIT_ONLY \

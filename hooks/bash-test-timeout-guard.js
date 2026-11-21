@@ -11,6 +11,8 @@
 'use strict';
 
 const fs = require('fs');
+const { enforceFromReached } = require('./lib/enforce-from.js');
+const ENFORCE_FROM = '2026-11-25T00:00:00+08:00';
 
 function readStdin() {
   try {
@@ -135,6 +137,12 @@ function main() {
 
   const offending = checkCommand(command);
   if (offending) {
+    const now = process.env.AUTOPILOT_BASH_TEST_TIMEOUT_NOW;
+    if (!enforceFromReached(ENFORCE_FROM, now ? Date.parse(now) : Date.now())) {
+      const message = `warn (blocking from ${ENFORCE_FROM}): 測試或檢查指令必須加上 timeout 前綴，例如：timeout 120 ${offending}`;
+      process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: message } }));
+      process.exit(0);
+    }
     process.stderr.write(
       `BLOCKED: 測試或檢查指令必須加上 timeout 前綴（請加上 timeout 120，或為已知長測試套件指定更大的明確秒數），例如：timeout 120 ${offending}\n`
     );

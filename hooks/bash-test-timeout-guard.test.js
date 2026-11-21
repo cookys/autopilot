@@ -18,7 +18,7 @@ function runHook(command, extraEnv = {}) {
     input: payload,
     encoding: 'utf8',
     timeout: 5000,
-    env: { ...process.env, ...extraEnv },
+    env: { ...process.env, AUTOPILOT_BASH_TEST_TIMEOUT_NOW: '2026-11-25T00:00:00+08:00', ...extraEnv },
   });
 }
 
@@ -76,4 +76,12 @@ test('allows non-test commands', () => {
 test('AUTOPILOT_BASH_TEST_TIMEOUT=0 disables the guard', () => {
   const res = runHook('node hooks/foo.test.js', { AUTOPILOT_BASH_TEST_TIMEOUT: '0' });
   assert.equal(res.status, 0);
+});
+
+test('warns before cutoff and blocks at cutoff', () => {
+  const before = runHook('node hooks/foo.test.js', { AUTOPILOT_BASH_TEST_TIMEOUT_NOW: '2026-11-24T23:59:59+08:00' });
+  assert.equal(before.status, 0);
+  assert.match(JSON.parse(before.stdout).hookSpecificOutput.additionalContext, /warn \(blocking from 2026-11-25T00:00:00\+08:00\)/);
+  const at = runHook('node hooks/foo.test.js');
+  assert.equal(at.status, 2);
 });

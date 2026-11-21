@@ -3515,7 +3515,7 @@ declare -F dispatch_export_attribution >/dev/null 2>&1 && dispatch_export_attrib
 # An unpinned implementer uses an available local qwen or GLM seat when its endpoint
 # is ready, a gateway lease is granted, the prompt fits local_context_bytes, and the CN
 # gate allows that seat (operator via PM 01M7XHF4). Otherwise the unpinned path
-# stays pace-select / grok-4.7 and records local_fallback. A pin already chose
+# falls through to pace-select (its ranked seat, not a fixed engine) and records local_fallback. A pin already chose
 # a seat when --pace-role or a pace file returned one, a strict contract is on,
 # or AUTOPILOT_QUALIFICATION_OVERRIDE is set. Explicit --runner never falls back.
 LOCAL_FALLBACK_JSON="${AUTOPILOT_LOCAL_FALLBACK_PRESET:-null}"

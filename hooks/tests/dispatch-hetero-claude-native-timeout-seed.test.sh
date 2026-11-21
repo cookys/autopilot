@@ -18,12 +18,24 @@ export HOME="$TEST_TMP/home"; mkdir -p "$HOME"
 unset AUTOPILOT_CONFIG_FILE
 node "$REPO_ROOT/scripts/run-approval.js" confirm-claude-native >/dev/null
 PIDFILE="$TEST_TMP/stub.pid"
+cleanup_stub() {
+  [ "$BASHPID" = "$__TEST_TOP_BASHPID" ] || return 0
+  STUBPID="${STUBPID:-$(cat "$PIDFILE" 2>/dev/null || true)}"
+  [ -z "$STUBPID" ] || kill -KILL "$STUBPID" 2>/dev/null || true
+  cleanup_test_tmp
+}
+trap cleanup_stub EXIT
 BIN_DIR="$TEST_TMP/bin"; mkdir -p "$BIN_DIR"
 cat > "$BIN_DIR/claude" <<EOF2
 #!/usr/bin/env bash
 echo "\$\$" > "$PIDFILE"
 trap '' TERM
-while :; do sleep 1; done
+p=\$PPID
+i=0
+while kill -0 "\$p" 2>/dev/null && [ "\$i" -lt 120 ]; do
+  sleep 1
+  i=\$((i + 1))
+done
 EOF2
 chmod +x "$BIN_DIR/claude"
 export PATH="$BIN_DIR:$PATH"

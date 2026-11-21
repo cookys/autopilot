@@ -203,7 +203,7 @@ describe('owner-question-rules false-block regressions', () => {
     const passCases = [
       {
         name: 'about 41% CJK with seat names and English nouns',
-        text: '請讓這三個分支先過一次檢查，再交給他們處理 agy codex sonnet review pin。',
+        text: '請讓這三個分支先過一次檢查，再交給他們處理 agy codex sonnet review pin canary。',
         min: 0.39,
         max: 0.43,
       },
@@ -221,7 +221,7 @@ describe('owner-question-rules false-block regressions', () => {
       },
       {
         name: 'about 59.9% CJK with seat names and English nouns',
-        text: '這個版本已經完成初步測試，現在就可以準備送出檢查並等待最後確認，接著交給他們處理 agy codex sonnet review merge canary。',
+        text: '這個版本已經完成初步測試，現在就可以準備送出檢查並等待最後確認，接著交給他們處理 agy codex sonnet review canary。',
         min: 0.58,
         max: 0.60,
       },
@@ -250,7 +250,7 @@ describe('owner-question-rules false-block regressions', () => {
     });
 
     it('blocks: mostly Chinese reply containing 这 and 应该', () => {
-      const text = '這個問題這邊已經處理完成，接下来应该可以順利合併。';
+      const text = '這個問題这边已經處理完成，接下来应该可以順利合併。';
       const res = rules.languageCheck(text);
       assert.equal(res && res.decision, 'block');
       assert.match(res.reason, /这/);

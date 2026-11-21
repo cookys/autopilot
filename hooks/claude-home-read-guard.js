@@ -103,16 +103,73 @@ function targetDecision(raw, payload, { write = false } = {}) {
   return p;
 }
 function globCanReachClaude(pattern) { return /(?:^|\/)(?:\.claude|\*\*|\*)/.test(pattern || ''); }
+function shortFlag(arg, flag) { return /^-[A-Za-z]+$/.test(arg) && arg.slice(1).includes(flag); }
+function pathOperands(cmd, args) {
+  const search = ['grep','egrep','rg','ugrep','ag'].includes(cmd);
+  const scripted = ['sed','awk'].includes(cmd);
+  const jq = cmd === 'jq';
+  const out = []; let patternPending = false; let skipScript = false; let patternSeen = false; let endOptions = false;
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (patternPending) { if (arg !== '-f') { patternSeen = true; } else out.push(arg); patternPending = false; continue; }
+    if (!endOptions && arg === '--') { endOptions = true; continue; }
+    if (!endOptions && search && (arg === '-e' || arg === '--regexp')) { patternPending = true; patternSeen = true; continue; }
+    if (!endOptions && search && (arg === '-f' || arg === '--file')) { if (args[i + 1]) out.push(args[++i]); patternSeen = true; continue; }
+    if (!endOptions && search && /^-e.+/.test(arg)) { patternSeen = true; continue; }
+    if (!endOptions && search && /^-f.+/.test(arg)) { out.push(arg.slice(2)); continue; }
+    if (!endOptions && scripted && (arg === '-e' || arg === '-f')) {
+      if (args[i + 1]) { const value = args[++i]; if (arg === '-f') out.push(value); }
+      skipScript = true; continue;
+    }
+    if (!endOptions && search && ['-g','--glob','--include','--exclude','--exclude-dir'].includes(arg)) { i++; continue; }
+    if (!endOptions && search && /^(?:--(?:glob|include|exclude|exclude-dir)=|-g=)/.test(arg)) continue;
+    if (!endOptions && arg.startsWith('-') && arg !== '-') continue;
+    if ((scripted || jq) && !skipScript) { skipScript = true; continue; }
+    if (search && !patternSeen) { patternSeen = true; continue; }
+    out.push(arg);
+  }
+  return out;
+}
 function ancestorOfHome(p, homes) {
   const ancestors = new Set(['/', '/home', '/root']);
   for (const h of homes) { let cur = h; while (true) { ancestors.add(cur); const up = path.dirname(cur); if (up === cur) break; cur = up; } }
   return ancestors.has(p);
 }
-function bashDecision(command, payload) {
+function unwrapCommand(ws, depth = 0) {
+  let i = 0;
+  while (i < ws.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(ws[i])) i++;
+  let cmd = path.basename(ws[i] || '');
+  while (['env','timeout','nice','nohup','command','xargs'].includes(cmd)) {
+    const wrapper = cmd; i++;
+    if (wrapper === 'env') {
+      while (i < ws.length && ws[i].startsWith('-')) { const opt = ws[i++]; if (opt === '-u' || opt === '--unset' || opt === '-C' || opt === '--chdir') i++; }
+      while (i < ws.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(ws[i])) i++;
+    } else if (wrapper === 'timeout') {
+      while (i < ws.length && ws[i].startsWith('-')) { const opt = ws[i++]; if (['-k','--kill-after','-s','--signal','--foreground'].includes(opt) && ws[i]) i++; }
+      if (ws[i]) i++;
+    } else if (wrapper === 'nice') {
+      if (ws[i] === '-n' || ws[i] === '--adjustment') i += 2;
+      else if (ws[i]?.startsWith('-')) i++;
+    } else if (wrapper === 'xargs') {
+      while (i < ws.length && ws[i].startsWith('-')) { const opt = ws[i++]; if (['-a','-E','-I','-L','-n','-P','-s','-d'].includes(opt) && ws[i]) i++; }
+    }
+    while (i < ws.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(ws[i])) i++;
+    cmd = path.basename(ws[i] || '');
+  }
+  return { cmd, args: ws.slice(i + 1), raw: ws[i], depth, commandIndex: i };
+}
+function bashDecision(command, payload, depth = 0) {
   const homes = protectedHomes(); let cwd = payload.cwd || process.cwd(); let entered = null;
   for (const segment of splitCommands(command)) {
-    const ws = words(segment); if (!ws.length) continue;
-    let cmd = path.basename(ws[0]);
+    let ws = words(segment); if (!ws.length) continue;
+    const parsed = unwrapCommand(ws, depth); let cmd = parsed.cmd;
+    if (!cmd) continue;
+    if (depth < 3 && ['bash','sh','zsh'].includes(cmd)) {
+      const cIndex = ws.findIndex((w) => w === '-c' || w === '--command');
+      if (cIndex >= 0 && ws[cIndex + 1]) { const nested = bashDecision(ws[cIndex + 1], { ...payload, cwd }, depth + 1); if (nested) return nested; }
+      continue;
+    }
+    ws = ws.slice(parsed.commandIndex);
     if (cmd === 'cd' && ws[1]) { const p = expand(ws[1], cwd); if (configRoot(p, homes)) entered = p; else cwd = p; continue; }
     if (entered) return entered;
     for (let i = 0; i < ws.length; i++) {
@@ -127,14 +184,16 @@ function bashDecision(command, payload) {
     }
     const read = READ_COMMANDS.has(cmd); const write = WRITE_COMMANDS.has(cmd);
     if (read || write) {
-      for (const arg of ws.slice(1)) {
+      const args = ['grep','egrep','rg','ugrep','ag','sed','awk','jq'].includes(cmd) ? pathOperands(cmd, ws.slice(1)) : ws.slice(1);
+      for (const arg of args) {
         if (/^(?:\d*[<>])/.test(arg)) continue;
         if (arg === '<' || arg === '>' || arg === '>>' || arg === '2>' || arg === '<<<') continue;
         const target = targetDecision(arg, { ...payload, cwd }, { write }); if (target) return target;
       }
     }
-    const recursive = (['grep','egrep','rg','ugrep','ag'].includes(cmd) && ws.some((x) => ['-r','-R','--recursive'].includes(x)))
-      || ['find','fd','du','tree'].includes(cmd) || (cmd === 'ls' && ws.includes('-R'));
+    const recursive = (['grep','egrep'].includes(cmd) && ws.some((x) => shortFlag(x, 'r') || shortFlag(x, 'R') || ['--recursive','--dereference-recursive'].includes(x)))
+      || ['rg','ugrep','ag','fd','find','du','tree'].includes(cmd)
+      || (cmd === 'ls' && ws.some((x) => shortFlag(x, 'R') || x === '--recursive'));
     if (recursive) {
       const excluded = ws.some((x) => x === '--exclude-dir=.claude' || (x === '-g' && ws[ws.indexOf(x) + 1] === '!.claude'))
         || /-not\s+-path\s+['"]?\*\/\.claude\*/.test(segment) || /(?:^|\s)-prune\b/.test(segment) && /\.claude/.test(segment);

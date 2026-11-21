@@ -61,3 +61,41 @@ test('symlink into protected config directory is denied', () => {
 });
 
 test.after(() => fs.rmSync(temp, { recursive: true, force: true }));
+
+test('recursive command variants deny broad home scans and preserve exclusions', () => {
+  for (const command of [
+    'grep -rn SessionStart ~', 'grep -ri SessionStart ~', 'grep -Rl x /home',
+    'rg SessionStart ~', 'ugrep -n x ~', 'ag x ~', 'ls -lR ~', 'ls -Ra ~'
+  ]) denied(call('Bash', { command }));
+  for (const command of [
+    "grep -rn x ~ --exclude-dir=.claude", "rg -g '!.claude' x ~",
+    "find /home -not -path '*/.claude*'", 'find /home/.claude -prune'
+  ]) allowed(call('Bash', { command }));
+});
+
+test('search patterns and scripts are not treated as path operands', () => {
+  for (const command of [
+    'grep "~/.claude" docs/x.md', 'rg "~/.claude" docs',
+    'grep -n "\\$HOME/.claude" README.md', "grep -e '~/.claude' -r docs",
+    "sed -n '/.claude/p' notes.txt", "awk '/~\\/.claude/' f.txt", "jq '.claude' x.json"
+  ]) allowed(call('Bash', { command }));
+  for (const command of [
+    'grep x ~/.claude/settings.json', 'grep -e x ~/.claude/settings.json',
+    'grep -f ~/.claude/patterns docs', 'grep -f patterns ~/.claude/settings.json'
+  ]) denied(call('Bash', { command }));
+});
+
+test('command wrappers and shell command strings retain guard decisions', () => {
+  for (const command of [
+    'env cat ~/.claude/settings.json', 'FOO=1 cat ~/.claude/settings.json',
+    'timeout 5 cat ~/.claude/settings.json', 'bash -c "cat ~/.claude/settings.json"',
+    "sh -c 'grep -rn x ~'", 'env -i FOO=1 cat ~/.claude/settings.json',
+    'nice -n 5 cat ~/.claude/settings.json', 'nohup cat ~/.claude/settings.json',
+    'command cat ~/.claude/settings.json', 'printf x | xargs cat ~/.claude/settings.json',
+    'zsh -c "cat ~/.claude/settings.json"'
+  ]) denied(call('Bash', { command }));
+  for (const command of [
+    'env cat README.md', 'FOO=1 cat README.md', 'timeout 5 cat README.md',
+    'bash -c "cat README.md"', "sh -c 'grep -rn x docs'"
+  ]) allowed(call('Bash', { command }));
+});

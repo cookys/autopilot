@@ -465,7 +465,19 @@ function resolveSeatsWithPolicy(seatsArg, repoRoot) {
     process.exit(2);
   }
 
-  const seats = qcSeats.map((seatObj, idx) => {
+  const exclusion = require('./lib/local-reviewer-exclusion');
+  const implSeat = exclusion.reviewedImplementer(process.env, {
+    runner: fullJson.implementer_runner,
+    endpoint: fullJson.implementer_endpoint,
+    model: fullJson.implementer_engine,
+  });
+  const filteredPanel = exclusion.filterReviewers(qcSeats, implSeat);
+  if (exclusion.implementerIsLocalQwen(implSeat) && filteredPanel.empty) {
+    console.error(exclusion.REFUSAL);
+    process.exit(2);
+  }
+  const qcKept = filteredPanel.seats;
+  const seats = qcKept.map((seatObj, idx) => {
     let endpoint = seatObj.endpoint;
     if (endpoint === null || endpoint === undefined || endpoint === '' || endpoint === '@none') {
       endpoint = undefined;

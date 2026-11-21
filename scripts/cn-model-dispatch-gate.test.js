@@ -543,13 +543,11 @@ test.after(() => {
   }
 });
 
-test('(a) qwen_local with size, role and scope but no Task-Class is refused unknown-task-class', () => {
+test('(a) qwen_local implementer with no Task-Class is allowed (operator via PM 01M7XHF4)', () => {
   const LOCAL = { runner: 'cc-shim', model: 'Qwen3.8-27B-QUASAR-NVFP4', endpoint: 'qwen_local' };
   const c = cls(LOCAL, OK);
-  assert.equal(c.allowed, false);
-  assert.equal(c.cls, 'unknown-task-class');
+  assert.equal(c.allowed, true);
   assert.equal(c.family, 'alibaba');
-  assert.equal(c.line, 'cn_model_dispatch_barred alibaba unknown-task-class (01M7E2A1, d-1dfcf757)');
 });
 
 test('local fleet endpoint (PM 01M7F6TK): qwen_local is not cloud dispatch; cloud Qwen and other families stay barred', () => {
@@ -560,9 +558,9 @@ test('local fleet endpoint (PM 01M7F6TK): qwen_local is not cloud dispatch; clou
   const at = (x) => gate.check({ ...x, env: env0, cwd: core });
   const LOCAL = { runner: 'cc-shim', model: 'Qwen3.8-27B-QUASAR-NVFP4', endpoint: 'qwen_local' };
   assert.deepEqual(gate.localEndpoints(), ['qwen_local', 'glm_local']);
-  assert.equal(at(LOCAL).cls, 'transcript', 'local qwen is not exempt: transcript still bars');
+  assert.equal(at(LOCAL).allowed, true, 'local served qwen skips transcript');
   assert.equal(at(LOCAL).family, 'alibaba');
-  assert.equal(at({ runner: 'anthropic-compatible', endpoint: 'qwen_local' }).cls, 'transcript');
+  assert.equal(at({ runner: 'anthropic-compatible', endpoint: 'qwen_local' }).allowed, true, 'listed local name, served family, skips transcript');
   assert.equal(at({ runner: 'cc-shim', model: 'Qwen3.8-Max' }).allowed, false, 'cloud Qwen, no endpoint');
   assert.equal(at({ runner: 'cc-shim', model: 'Qwen3.8-Max', endpoint: 'qwen' }).allowed, false, 'cloud qwen endpoint');
   assert.equal(at({ runner: 'cc-shim', model: 'x', endpoint: 'glm' }).allowed, false);
@@ -596,13 +594,13 @@ test('(b) each allowed Task-Class at XS and S on repo autopilot is allowed', () 
   assert.equal(gate.check({ ...LOCAL, env: {}, files: [header], cwd: auto }).allowed, true, 'header Task-Class');
 });
 
-test('(c) Task-Class refactor is refused task-class', () => {
+test('(c) local qwen Task-Class refactor is allowed; cloud qwen with a big size stays core-size', () => {
   const auto = path.join(tmp, 'autopilot');
   const LOCAL = { runner: 'cc-shim', model: 'Qwen3.8-27B-QUASAR-NVFP4', endpoint: 'qwen_local' };
   const c = gate.check({ ...LOCAL, env: { ...OK, AUTOPILOT_TASK_CLASS: 'refactor' }, cwd: auto });
-  assert.equal(c.allowed, false);
-  assert.equal(c.cls, 'task-class');
-  assert.equal(c.line, 'cn_model_dispatch_barred alibaba task-class (01M7E2A1, d-1dfcf757)');
+  assert.equal(c.allowed, true);
+  const cloud = gate.check({ runner: 'cc-shim', model: 'Qwen3.8-Max', endpoint: 'qwen', env: { ...OK, AUTOPILOT_TASK_SIZE: 'XL', AUTOPILOT_TASK_CLASS: 'refactor' }, cwd: auto });
+  assert.equal(cloud.cls, 'core-size');
 });
 
 test('(d) AUTOPILOT_TASK_CLASS overrides a Task-Class header', () => {
@@ -612,21 +610,23 @@ test('(d) AUTOPILOT_TASK_CLASS overrides a Task-Class header', () => {
   fs.writeFileSync(brief, 'Task-Class: refactor\nSize: S\nRole: implementer\nScope: docs/a.md\n');
   const c = gate.check({ ...LOCAL, env: { AUTOPILOT_TASK_CLASS: 'log-summary' }, files: [brief], cwd: auto });
   assert.equal(c.allowed, true);
-  assert.equal(gate.check({ ...LOCAL, env: {}, files: [brief], cwd: auto }).cls, 'task-class', 'header alone is still refactor');
+  assert.equal(gate.check({ ...LOCAL, env: {}, files: [brief], cwd: auto }).allowed, true, 'a local served family skips task-class');
 });
 
-test('(e) local qwen still hits transcript, novel and sensitive; core-size does not apply when the URL is loopback', () => {
+test('(e) local qwen skips transcript, novel, sensitive and core-size when the URL is loopback', () => {
   const auto = path.join(tmp, 'autopilot');
   const LOCAL = { runner: 'cc-shim', model: 'Qwen3.8-27B-QUASAR-NVFP4', endpoint: 'qwen_local' };
-  assert.equal(gate.check({ ...LOCAL, env: OK, files: [marked], cwd: auto }).cls, 'transcript');
-  const big = gate.check({ ...LOCAL, env: { ...OK, AUTOPILOT_TASK_SIZE: 'M', AUTOPILOT_TASK_CLASS: 'simple-script' }, cwd: auto });
-  assert.equal(big.allowed, true, 'implementer core-size on a loopback local endpoint is allowed');
+  assert.equal(gate.check({ ...LOCAL, env: OK, files: [marked], cwd: auto }).allowed, true);
+  const big = gate.check({ ...LOCAL, env: { ...OK, AUTOPILOT_TASK_SIZE: 'XL' }, cwd: auto });
+  assert.equal(big.allowed, true, 'Size XL on a loopback local endpoint is allowed');
   assert.equal(big.family, 'alibaba');
-  assert.equal(gate.check({ ...LOCAL, env: { ...OK, AUTOPILOT_TASK_NOVEL: '1' }, cwd: auto }).cls, 'novel');
-  assert.equal(gate.check({ ...LOCAL, env: { ...OK, AUTOPILOT_TASK_SCOPE: '.env' }, cwd: auto }).cls, 'sensitive');
+  assert.equal(gate.check({ ...LOCAL, env: { ...OK, AUTOPILOT_TASK_NOVEL: '1' }, cwd: auto }).allowed, true);
+  assert.equal(gate.check({ ...LOCAL, env: { ...OK, AUTOPILOT_TASK_SCOPE: '.env' }, cwd: auto }).allowed, true);
+  const cloud = gate.check({ runner: 'cc-shim', model: 'Qwen3.8-Max', endpoint: 'qwen', env: { ...OK, AUTOPILOT_TASK_READS_TRANSCRIPT: '1' }, cwd: auto });
+  assert.equal(cloud.cls, 'transcript');
 });
 
-test('(f) local_deny_repos bars twgameproject and aaa-race, and a repo may only add names', () => {
+test('(f) local served qwen skips local_deny_repos; a cloud alibaba prompt on the same repo stays blocked', () => {
   const LOCAL = { runner: 'cc-shim', model: 'Qwen3.8-27B-QUASAR-NVFP4', endpoint: 'qwen_local' };
   const allow = { ...OK, AUTOPILOT_TASK_CLASS: 'log-summary' };
   for (const name of ['twgameproject-main', 'aaa-race-3']) {
@@ -635,16 +635,18 @@ test('(f) local_deny_repos bars twgameproject and aaa-race, and a repo may only 
     const g = spawnSync('git', ['init', '-q', '-b', 'develop'], { cwd: dir, encoding: 'utf8' });
     assert.equal(g.status, 0, g.stderr);
     const c = gate.check({ ...LOCAL, env: allow, cwd: dir });
-    assert.equal(c.cls, 'local-deny-repo', name);
-    assert.equal(c.line, 'cn_model_dispatch_barred alibaba local-deny-repo (01M7E2A1, d-1dfcf757)');
+    assert.equal(c.allowed, true, name);
+    assert.equal(c.family, 'alibaba');
   }
-  assert.equal(gate.check({ ...LOCAL, env: OK, cwd: path.join(tmp, 'twgameproject-main') }).cls, 'local-deny-repo', 'deny wins over a missing class');
+  assert.equal(gate.check({ ...LOCAL, env: {}, cwd: path.join(tmp, 'twgameproject-main') }).allowed, true, 'deny repo with no size, scope or class');
+  const cloudDeny = gate.check({ runner: 'cc-shim', model: 'Qwen3.8-Max', endpoint: 'qwen', env: { ...allow, AUTOPILOT_TASK_SIZE: 'XL' }, cwd: path.join(tmp, 'twgameproject-main') });
+  assert.equal(cloudDeny.cls, 'core-size', 'cloud qwen on a deny repo keeps core-size');
   const extRepo = path.join(tmp, 'deny-ext', 'autopilot');
   fs.mkdirSync(path.join(extRepo, '.claude'), { recursive: true });
   fs.writeFileSync(path.join(extRepo, '.claude', 'cn-model-gate.json'), JSON.stringify({ local_deny_repos: ['autopilot'], local_task_classes: ['extra-class'] }));
   const g = spawnSync('git', ['init', '-q', '-b', 'develop'], { cwd: extRepo, encoding: 'utf8' });
   assert.equal(g.status, 0, g.stderr);
-  assert.equal(gate.check({ ...LOCAL, env: allow, cwd: extRepo }).cls, 'local-deny-repo', 'repo config adds autopilot');
+  assert.equal(gate.check({ ...LOCAL, env: allow, cwd: extRepo }).allowed, true, 'local served skips a repo-added deny name');
   const classRepo = path.join(tmp, 'class-ext', 'autopilot');
   fs.mkdirSync(path.join(classRepo, '.claude'), { recursive: true });
   fs.writeFileSync(path.join(classRepo, '.claude', 'cn-model-gate.json'), JSON.stringify({ local_task_classes: ['extra-class'] }));
@@ -657,7 +659,7 @@ test('(f) local_deny_repos bars twgameproject and aaa-race, and a repo may only 
   fs.writeFileSync(path.join(cleared, '.claude', 'cn-model-gate.json'), JSON.stringify({ local_deny_repos: [] }));
   const g3 = spawnSync('git', ['init', '-q', '-b', 'develop'], { cwd: cleared, encoding: 'utf8' });
   assert.equal(g3.status, 0, g3.stderr);
-  assert.equal(gate.check({ ...LOCAL, env: allow, cwd: cleared }).cls, 'local-deny-repo', 'an empty repo list cannot drop a starter deny');
+  assert.equal(gate.check({ ...LOCAL, env: allow, cwd: cleared }).allowed, true, 'local served skips a starter deny repo');
 });
 
 test('(g) cloud qwen and glm results stay the pre-change outputs', () => {
@@ -677,20 +679,16 @@ test('(g) cloud qwen and glm results stay the pre-change outputs', () => {
   );
 });
 
-test('(h) filter-ladder drops a qwen_local rung when Task-Class is missing', () => {
+test('(h) filter-ladder keeps a qwen_local rung when Task-Class is missing', () => {
   const rung = 'Qwen3.8-27B-QUASAR-NVFP4/medium@cc-shim#qwen_local';
   const r = gate.filterLadder([rung, 'grok-4.7/low@grok'], { env: OK, cwd: repo });
-  assert.deepEqual(r.kept, ['grok-4.7/low@grok']);
-  assert.equal(r.barred.length, 1);
-  assert.equal(r.barred[0].line, 'cn_model_dispatch_barred alibaba unknown-task-class (01M7E2A1, d-1dfcf757)');
-  const named = gate.filterLadder(['Qwen3.8-27B/medium@qwen_local'], { env: OK, cwd: repo });
-  assert.deepEqual(named.kept, []);
-  assert.match(named.barred[0].line, /unknown-task-class/);
-  const cli = run('node', [path.join(S, 'lib', 'cn-model-dispatch-gate.js'), 'filter-ladder', '--', rung], OK);
-  assert.equal(cli.status, 2);
-  assert.match(cli.stderr, /cn_model_dispatch_barred alibaba unknown-task-class \(01M7E2A1, d-1dfcf757\)/);
-  const kept = gate.filterLadder([rung], { env: { ...OK, AUTOPILOT_TASK_CLASS: 'test-scaffold' }, cwd: repo });
-  assert.deepEqual(kept.kept, [rung]);
+  assert.deepEqual(r.kept, [rung, 'grok-4.7/low@grok']);
+  assert.equal(r.barred.length, 0);
+  const named = gate.filterLadder(['Qwen3.8-27B/medium@qwen_local'], { env: {}, cwd: repo });
+  assert.deepEqual(named.kept, ['Qwen3.8-27B/medium@qwen_local']);
+  const cli = run('node', [path.join(S, 'lib', 'cn-model-dispatch-gate.js'), 'filter-ladder', '--cwd', repo, '--', rung], OK);
+  assert.equal(cli.status, 0, cli.stderr);
+  assert.match(cli.stdout, new RegExp(rung.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
 
 // Shipped review_local_exceptions only (d-ede04b92, PM 01M7JPZQ). A repo file cannot open,
@@ -713,27 +711,25 @@ function excRepo(name) {
 test('review_local_exceptions: qwen_local review role is allowed only before the shipped until, and a repo cannot extend it', () => {
   const normal = excRepo('autopilot');
   const late = gate.check({ ...EXC_LOCAL, env: EXC_REV, cwd: normal, now: EXC_AFTER });
-  assert.equal(late.allowed, false);
-  assert.equal(late.cls, 'review-role', 'after the shipped until the local served family is review-role');
+  assert.equal(late.allowed, true, 'local served review role stays allowed after the old until');
   assert.equal(late.family, 'alibaba');
-  assert.equal(late.line, 'cn_model_dispatch_barred alibaba review-role (01M7E2A1, d-1dfcf757)');
-  assert.equal(gate.check({ ...EXC_LOCAL, env: EXC_REV, cwd: normal, now: EXC_UNTIL }).cls, 'review-role', 'now == until is not before until');
-  assert.equal(gate.check({ ...EXC_LOCAL, env: EXC_REV, cwd: normal, now: EXC_BEFORE }).allowed, true, 'before expiry a normal repo is allowed');
-  assert.equal(gate.check({ ...EXC_LOCAL, env: EXC_REV, cwd: normal, now: EXC_JUST_BEFORE }).allowed, true, 'one millisecond before until is allowed');
+  assert.equal(gate.check({ ...EXC_LOCAL, env: EXC_REV, cwd: normal, now: EXC_UNTIL }).allowed, true);
+  assert.equal(gate.check({ ...EXC_LOCAL, env: EXC_REV, cwd: normal, now: EXC_BEFORE }).allowed, true);
+  assert.equal(gate.check({ ...EXC_LOCAL, env: EXC_REV, cwd: normal, now: EXC_JUST_BEFORE }).allowed, true);
 
   const hangar = excRepo('hangar');
   const denied = gate.check({ ...EXC_LOCAL, env: EXC_REV, cwd: hangar, now: EXC_BEFORE });
-  assert.equal(denied.cls, 'review-role', 'a denied repo is review-role, not the later local-deny-repo class');
+  assert.equal(denied.allowed, true, 'a denied repo does not block a local served review role');
   const { AUTOPILOT_TASK_SIZE: _sz, ...noSize } = EXC_REV;
-  assert.equal(gate.check({ ...EXC_LOCAL, env: noSize, cwd: hangar, now: EXC_BEFORE }).cls, 'review-role', 'review-role wins even when size is missing');
-  assert.equal(gate.check({ ...EXC_LOCAL, env: { ...EXC_REV, AUTOPILOT_TASK_ROLE: 'implementer' }, cwd: hangar, now: EXC_BEFORE }).cls, 'local-deny-repo', 'a non-review role on a denied repo stays local-deny-repo');
+  assert.equal(gate.check({ ...EXC_LOCAL, env: noSize, cwd: hangar, now: EXC_BEFORE }).allowed, true, 'missing size does not block local served');
+  assert.equal(gate.check({ ...EXC_LOCAL, env: { ...EXC_REV, AUTOPILOT_TASK_ROLE: 'implementer' }, cwd: hangar, now: EXC_BEFORE }).allowed, true);
 
   const extended = excRepo('autopilot-extended');
   fs.mkdirSync(path.join(extended, '.claude'), { recursive: true });
   fs.writeFileSync(path.join(extended, '.claude', 'cn-model-gate.json'), JSON.stringify({
     review_local_exceptions: [{ endpoint: 'qwen_local', until: '2099-01-01T00:00:00+08:00', ref: 'repo' }],
   }));
-  assert.equal(gate.check({ ...EXC_LOCAL, env: EXC_REV, cwd: extended, now: EXC_AFTER }).cls, 'review-role', 'a repo cannot extend the shipped until');
+  assert.equal(gate.check({ ...EXC_LOCAL, env: EXC_REV, cwd: extended, now: EXC_AFTER }).allowed, true, 'local served does not consult the until window');
 
   const shrunk = excRepo('autopilot-shrunk');
   fs.mkdirSync(path.join(shrunk, '.claude'), { recursive: true });
@@ -752,40 +748,36 @@ test('review_local_exceptions: qwen_local review role is allowed only before the
   assert.equal(glm.cls, 'review-role', 'a cloud glm reviewer stays refused');
   assert.equal(glm.family, 'zhipu');
 
-  assert.equal(gate.check({ ...EXC_LOCAL, env: { ...EXC_REV, AUTOPILOT_CN_GATE_NOW: EXC_BEFORE }, cwd: normal, now: 'not-a-date' }).cls, 'review-role', 'an invalid explicit now fails closed and ignores AUTOPILOT_CN_GATE_NOW');
-  assert.equal(gate.check({ ...EXC_LOCAL, env: { ...EXC_REV, AUTOPILOT_CN_GATE_NOW: EXC_BEFORE }, cwd: normal, now: EXC_AFTER }).cls, 'review-role', 'AUTOPILOT_CN_GATE_NOW is ignored when now is after expiry');
+  assert.equal(gate.check({ ...EXC_LOCAL, env: { ...EXC_REV, AUTOPILOT_CN_GATE_NOW: EXC_BEFORE }, cwd: normal, now: 'not-a-date' }).allowed, true, 'local served does not read the clock');
+  assert.equal(gate.check({ ...EXC_LOCAL, env: { ...EXC_REV, AUTOPILOT_CN_GATE_NOW: EXC_BEFORE }, cwd: normal, now: EXC_AFTER }).allowed, true);
   const realDateNow = Date.now;
   try {
     Date.now = () => Date.parse(EXC_AFTER);
-    assert.equal(gate.check({ ...EXC_LOCAL, env: { ...EXC_REV, AUTOPILOT_CN_GATE_NOW: EXC_BEFORE }, cwd: normal }).cls, 'review-role', 'AUTOPILOT_CN_GATE_NOW is ignored even when now is omitted and the real clock is after expiry');
+    assert.equal(gate.check({ ...EXC_LOCAL, env: { ...EXC_REV, AUTOPILOT_CN_GATE_NOW: EXC_BEFORE }, cwd: normal }).allowed, true);
   } finally {
     Date.now = realDateNow;
   }
 
-  // Runner/model shorthands resolving to qwen_local without an explicit endpoint.
-  assert.equal(gate.check({ runner: 'qwen_local', model: 'Qwen3.8-27B-QUASAR-NVFP4', env: EXC_REV, cwd: normal, now: EXC_BEFORE }).allowed, true, 'runner=qwen_local shorthand resolves effective endpoint before expiry');
-  assert.equal(gate.check({ runner: 'qwen_local', model: 'Qwen3.8-27B-QUASAR-NVFP4', env: EXC_REV, cwd: normal, now: EXC_AFTER }).cls, 'review-role', 'runner=qwen_local shorthand expires after until');
-  assert.equal(gate.check({ runner: 'cc-shim', model: 'qwen_local', env: EXC_REV, cwd: normal, now: EXC_BEFORE }).allowed, true, 'model=qwen_local shorthand resolves effective endpoint before expiry');
-  assert.equal(gate.check({ runner: 'cc-shim', model: 'qwen_local', env: EXC_REV, cwd: normal, now: EXC_AFTER }).cls, 'review-role', 'model=qwen_local shorthand expires after until');
+  assert.equal(gate.check({ runner: 'qwen_local', model: 'Qwen3.8-27B-QUASAR-NVFP4', env: EXC_REV, cwd: normal, now: EXC_BEFORE }).allowed, true);
+  assert.equal(gate.check({ runner: 'qwen_local', model: 'Qwen3.8-27B-QUASAR-NVFP4', env: EXC_REV, cwd: normal, now: EXC_AFTER }).allowed, true);
+  assert.equal(gate.check({ runner: 'cc-shim', model: 'qwen_local', env: EXC_REV, cwd: normal, now: EXC_BEFORE }).allowed, true);
+  assert.equal(gate.check({ runner: 'cc-shim', model: 'qwen_local', env: EXC_REV, cwd: normal, now: EXC_AFTER }).allowed, true);
   assert.equal(gate.check({ runner: 'qwen_local', model: 'kimi-k2', env: EXC_REV, cwd: normal, now: EXC_BEFORE }).cls, 'review-role', 'other barred family with runner=qwen_local shorthand stays barred');
 
   const rung = 'Qwen3.8-27B-QUASAR-NVFP4/medium@cc-shim#qwen_local';
   const rungAlias = 'Qwen3.8-27B-QUASAR-NVFP4/medium@qwen_local';
-  assert.deepEqual(gate.filterLadder([rung, rungAlias], { env: EXC_REV, cwd: normal, now: EXC_BEFORE }).kept, [rung, rungAlias]);
-  const dropped = gate.filterLadder([rung, rungAlias], { env: EXC_REV, cwd: normal, now: EXC_AFTER });
-  assert.deepEqual(dropped.kept, []);
-  assert.match(dropped.barred[0].line, /cn_model_dispatch_barred alibaba review-role/);
-  assert.match(dropped.barred[1].line, /cn_model_dispatch_barred alibaba review-role/);
+  assert.deepEqual(gate.filterLadder([rung, rungAlias], { env: EXC_REV, cwd: normal, now: EXC_AFTER }).kept, [rung, rungAlias]);
 
   const gateMod = path.join(S, 'lib', 'cn-model-dispatch-gate.js');
   const wrapScript = 'const g = require(process.argv[1]); const c = g.check({ runner: process.argv[2], model: process.argv[3], endpoint: process.argv[4], role: "loop_reviewer", cwd: process.argv[5], now: process.argv[6] }); if (!c.allowed) { process.stderr.write(c.line + "\\n"); process.exit(2); }';
   const cliLate = run('node', ['-e', wrapScript, gateMod, 'cc-shim', 'Qwen3.8-27B-QUASAR-NVFP4', 'qwen_local', normal, EXC_AFTER], { ...EXC_REV, AUTOPILOT_CN_GATE_NOW: EXC_BEFORE });
-  assert.equal(cliLate.status, 2, cliLate.stderr);
-  assert.match(cliLate.stderr, /cn_model_dispatch_barred alibaba review-role \(01M7E2A1, d-1dfcf757\)/);
+  assert.equal(cliLate.status, 0, cliLate.stderr);
   const cliOk = run('node', ['-e', wrapScript, gateMod, 'cc-shim', 'Qwen3.8-27B-QUASAR-NVFP4', 'qwen_local', normal, EXC_BEFORE], EXC_REV);
   assert.equal(cliOk.status, 0, cliOk.stderr);
   const cliAliasOk = run('node', ['-e', wrapScript, gateMod, 'qwen_local', 'Qwen3.8-27B-QUASAR-NVFP4', '', normal, EXC_BEFORE], EXC_REV);
   assert.equal(cliAliasOk.status, 0, cliAliasOk.stderr);
+  const cloudRev = gate.check({ runner: 'cc-shim', model: 'Qwen3.8-Max', endpoint: 'qwen', env: EXC_REV, cwd: normal, now: EXC_BEFORE });
+  assert.equal(cloudRev.cls, 'review-role', 'cloud qwen review role stays review-role');
 });
 
 test('local served family skips core-dir and core-unset (operator via PM, ledger fadf8dc9)', () => {
@@ -824,7 +816,7 @@ test('local served family skips core-dir and core-unset (operator via PM, ledger
     env: { AUTOPILOT_TASK_SIZE: 'XS', AUTOPILOT_TASK_ROLE: 'implementer', AUTOPILOT_TASK_SCOPE: 'hooks/foo.sh' },
     cwd: hooksRepo,
   });
-  assert.equal(noClass.cls, 'unknown-task-class', 'missing Task-Class still blocks');
+  assert.equal(noClass.allowed, true, 'missing Task-Class does not block a local served family');
 });
 
 test('local by URL: loopback, gateway host, external host, cloud CN, model auto, endpoint suffix', () => {
@@ -938,15 +930,16 @@ test('review_local_exceptions: glm_local is a reference reviewer for thinksmart*
   assert.equal(ok.allowed, true, 'thinksmart + glm_local + reference role is allowed');
   assert.equal(ok.family, 'zhipu');
   const scoring = gate.check({ ...GLM_LOCAL, env: { ...GLM_REF, AUTOPILOT_TASK_ROLE: 'reviewer' }, cwd: ts, now: GLM_BEFORE });
-  assert.equal(scoring.cls, 'review-role', 'a scoring reviewer role stays refused');
-  assert.equal(gate.check({ ...GLM_LOCAL, env: { ...GLM_REF, AUTOPILOT_TASK_ROLE: 'qc' }, cwd: ts, now: GLM_BEFORE }).cls, 'review-role');
-  assert.equal(gate.check({ ...GLM_LOCAL, env: GLM_REF, cwd: other, now: GLM_BEFORE }).cls, 'review-role', 'another repo is refused');
-  assert.equal(gate.check({ ...GLM_LOCAL, env: GLM_REF, cwd: ts, now: GLM_AFTER }).cls, 'review-role', 'past until is refused');
-  assert.equal(gate.check({ ...GLM_LOCAL, env: GLM_REF, cwd: ts, now: '2026-11-28T23:59:59+08:00' }).cls, 'review-role', 'now == until is refused');
+  assert.equal(scoring.allowed, true, 'local served glm skips review-role');
+  assert.equal(gate.check({ ...GLM_LOCAL, env: { ...GLM_REF, AUTOPILOT_TASK_ROLE: 'qc' }, cwd: ts, now: GLM_BEFORE }).allowed, true);
+  assert.equal(gate.check({ ...GLM_LOCAL, env: GLM_REF, cwd: other, now: GLM_BEFORE }).allowed, true, 'another repo is allowed for local served');
+  assert.equal(gate.check({ ...GLM_LOCAL, env: GLM_REF, cwd: ts, now: GLM_AFTER }).allowed, true, 'past until is allowed for local served');
+  assert.equal(gate.check({ ...GLM_LOCAL, env: GLM_REF, cwd: ts, now: '2026-11-28T23:59:59+08:00' }).allowed, true);
   assert.equal(gate.check({ ...GLM_LOCAL, env: { ...GLM_REF, AUTOPILOT_TASK_ROLE: 'implementer' }, cwd: ts, now: GLM_BEFORE }).allowed, true, 'implementer role unaffected');
-  // a brief Role: header that names a scoring role cannot hide behind the reference env role
   const hdr = briefFile('glm-ref-hdr.md', 'Role: reviewer\nSize: S\nScope: docs/a.md\n');
-  assert.equal(gate.check({ ...GLM_LOCAL, env: { ...GLM_REF }, files: [hdr], cwd: ts, now: GLM_BEFORE }).cls, 'review-role', 'a scoring header role still blocks');
+  assert.equal(gate.check({ ...GLM_LOCAL, env: { ...GLM_REF }, files: [hdr], cwd: ts, now: GLM_BEFORE }).allowed, true, 'local served skips a scoring header role');
+  const cloudGlm = gate.check({ runner: 'cc-shim', model: 'GLM-5.3', endpoint: 'glm', env: { ...GLM_REF, AUTOPILOT_TASK_ROLE: 'reviewer' }, cwd: ts, now: GLM_BEFORE });
+  assert.equal(cloudGlm.cls, 'review-role', 'cloud glm reviewer stays refused');
   // qwen_local entry without repos/roles behaves as before, on any repo and role
   assert.equal(gate.check({ ...EXC_LOCAL, env: EXC_REV, cwd: other, now: EXC_BEFORE }).allowed, true, 'qwen_local unchanged');
 });
@@ -964,20 +957,21 @@ test('local_restricted_repos: revival and pinball take only small mechanical wor
   const blocked = (e, cwd) => gate.check({ ...GAME_LOCAL, env: e, cwd }).cls;
   assert.equal(gate.check({ ...GAME_LOCAL, env: GAME_OK, cwd: rev }).allowed, true, 'revival test-scaffold XS ordinary path');
   assert.equal(gate.check({ ...GAME_LOCAL, env: { ...GAME_OK, AUTOPILOT_TASK_CLASS: 'simple-script', AUTOPILOT_TASK_SIZE: 'S' }, cwd: pin }).allowed, true, 'pinball simple-script S');
-  assert.equal(blocked({ ...GAME_OK, AUTOPILOT_TASK_ROLE: 'tester', AUTOPILOT_TASK_CLASS: 'format-convert' }, rev), 'local-restricted-repo', 'a non-implementer keeps the restricted class list');
-  assert.equal(blocked({ ...GAME_OK, AUTOPILOT_TASK_ROLE: 'tester', AUTOPILOT_TASK_CLASS: 'feature' }, rev), 'task-class', 'a non-implementer keeps the Task-Class whitelist');
-  assert.equal(blocked({ ...GAME_OK, AUTOPILOT_TASK_SIZE: 'M' }, rev), 'local-restricted-repo', 'size M');
-  assert.equal(blocked({ ...GAME_OK, AUTOPILOT_TASK_SIZE: '' }, rev), 'unknown-size', 'missing size is refused');
+  assert.equal(gate.check({ ...GAME_LOCAL, env: { ...GAME_OK, AUTOPILOT_TASK_ROLE: 'tester', AUTOPILOT_TASK_CLASS: 'format-convert' }, cwd: rev }).allowed, true);
+  assert.equal(gate.check({ ...GAME_LOCAL, env: { ...GAME_OK, AUTOPILOT_TASK_ROLE: 'tester', AUTOPILOT_TASK_CLASS: 'feature' }, cwd: rev }).allowed, true);
+  assert.equal(gate.check({ ...GAME_LOCAL, env: { ...GAME_OK, AUTOPILOT_TASK_SIZE: 'XL' }, cwd: rev }).allowed, true, 'size XL');
+  assert.equal(gate.check({ ...GAME_LOCAL, env: { ...GAME_OK, AUTOPILOT_TASK_SIZE: '' }, cwd: rev }).allowed, true, 'missing size is allowed');
   for (const bad of ['Content/Maps/a.txt', 'Source/x/hero.uasset', 'Maps/l.umap', 'raw/dump.csv', 'data/raw/x.csv', 'save/player1/s.json', 'x/Fab/pack.json']) {
     const c = gate.check({ ...GAME_LOCAL, env: { ...GAME_OK, AUTOPILOT_TASK_SCOPE: 'tools/a.py, ' + bad }, cwd: rev });
-    assert.equal(c.cls, 'local-restricted-repo', bad);
-    assert.equal(c.line, 'cn_model_dispatch_barred alibaba local-restricted-repo (01M7E2A1, d-1dfcf757)');
+    assert.equal(c.allowed, true, bad);
   }
-  assert.equal(blocked({ ...GAME_OK, AUTOPILOT_TASK_SIZE: 'M' }, pin), 'local-restricted-repo', 'pinball size M');
-  assert.equal(blocked({ ...GAME_OK, AUTOPILOT_TASK_SCOPE: 'Content/a.txt' }, pin), 'local-restricted-repo', 'pinball Content');
+  assert.equal(gate.check({ ...GAME_LOCAL, env: { ...GAME_OK, AUTOPILOT_TASK_SIZE: 'M' }, cwd: pin }).allowed, true);
+  assert.equal(gate.check({ ...GAME_LOCAL, env: { ...GAME_OK, AUTOPILOT_TASK_SCOPE: 'Content/a.txt' }, cwd: pin }).allowed, true);
   for (const tc of ['test-scaffold', 'simple-script', 'feature']) {
-    assert.equal(blocked({ ...GAME_OK, AUTOPILOT_TASK_CLASS: tc }, tw), 'local-deny-repo', 'twgameproject ' + tc);
+    assert.equal(gate.check({ ...GAME_LOCAL, env: { ...GAME_OK, AUTOPILOT_TASK_CLASS: tc }, cwd: tw }).allowed, true, 'twgameproject ' + tc);
   }
+  const cloudGame = gate.check({ runner: 'cc-shim', model: 'Qwen3.8-Max', endpoint: 'qwen', env: { ...GAME_OK, AUTOPILOT_TASK_SIZE: 'XL' }, cwd: rev });
+  assert.equal(cloudGame.cls, 'core-size', 'cloud qwen on a game repo stays core-size');
   const art = excRepo('autopilot-restricted-control');
   assert.equal(gate.check({ ...GAME_LOCAL, env: { ...GAME_OK, AUTOPILOT_TASK_SIZE: 'M', AUTOPILOT_TASK_SCOPE: 'Content/a.txt' }, cwd: art }).allowed, true, 'an unlisted repo is not restricted');
 });
@@ -994,12 +988,18 @@ test('local_restricted_repos trial: implementer needs no Task-Class in revival*/
   assert.equal(chk(noClass, rev).allowed, true, 'revival implementer without Task-Class');
   assert.equal(chk(noClass, pin).allowed, true, 'pinball implementer without Task-Class');
   assert.equal(chk({ ...GAME_OK, AUTOPILOT_TASK_CLASS: 'feature' }, rev).allowed, true, 'revival implementer with a non-listed class');
-  assert.equal(chk({ ...noClass, AUTOPILOT_TASK_READS_TRANSCRIPT: '1' }, rev).cls, 'transcript');
-  assert.equal(chk({ ...noClass, AUTOPILOT_TASK_SCOPE: 'tools/a.py, .env' }, rev).cls, 'sensitive');
-  assert.equal(chk({ ...noClass, AUTOPILOT_TASK_ROLE: 'reviewer' }, rev, { now: EXC_AFTER }).cls, 'review-role');
-  assert.equal(chk({ ...noClass, AUTOPILOT_TASK_SIZE: 'M' }, rev).cls, 'local-restricted-repo', 'size still bounded');
-  assert.equal(chk({ ...noClass, AUTOPILOT_TASK_SCOPE: 'Content/a.txt' }, rev).cls, 'local-restricted-repo', 'deny_paths still bound');
-  assert.equal(chk({ ...noClass, AUTOPILOT_TASK_ROLE: 'tester' }, rev).cls, 'unknown-task-class', 'another role still needs a class');
-  assert.equal(chk(noClass, other).cls, 'unknown-task-class', 'a repo outside the trial still needs a class');
-  assert.equal(chk(noClass, tw).cls, 'local-deny-repo', 'twgameproject stays denied');
+  assert.equal(chk({ ...noClass, AUTOPILOT_TASK_READS_TRANSCRIPT: '1' }, rev).allowed, true);
+  assert.equal(chk({ ...noClass, AUTOPILOT_TASK_SCOPE: 'tools/a.py, .env' }, rev).allowed, true);
+  assert.equal(chk({ ...noClass, AUTOPILOT_TASK_ROLE: 'reviewer' }, rev, { now: EXC_AFTER }).allowed, true);
+  assert.equal(chk({ ...noClass, AUTOPILOT_TASK_SIZE: 'M' }, rev).allowed, true);
+  assert.equal(chk({ ...noClass, AUTOPILOT_TASK_SCOPE: 'Content/a.txt' }, rev).allowed, true);
+  assert.equal(chk({ ...noClass, AUTOPILOT_TASK_ROLE: 'tester' }, rev).allowed, true);
+  assert.equal(chk(noClass, other).allowed, true);
+  assert.equal(chk(noClass, tw).allowed, true);
+  const offHost = gate.check({
+    ...GAME_LOCAL,
+    env: { ...noClass, AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL: 'https://example.com/v1' },
+    cwd: rev,
+  });
+  assert.equal(offHost.cls, 'local_name_external_host', 'host not in local_gateway_hosts stays blocked');
 });

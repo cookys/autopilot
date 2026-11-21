@@ -59,4 +59,4 @@ sleep 0.3
 LINES_AFTER="$(wc -l < "$STUB_LOG" | tr -d ' ')"
 assert_eq "$LINES_BEFORE" "$LINES_AFTER" "second flush within 60s does nothing"
 
-finish_tests
+finalize_test

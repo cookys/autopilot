@@ -343,6 +343,28 @@
         ]
       },
       {
+        "matcher": "SendMessage",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/native-msg-record.js",
+            "timeout": 5,
+            "onFailure": "continue"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__fleet__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/native-msg-flush.js",
+            "timeout": 5,
+            "onFailure": "continue"
+          }
+        ]
+      },
+      {
         "matcher": "Bash|mcp__fleet__task_progress",
         "hooks": [
           {

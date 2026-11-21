@@ -4361,6 +4361,19 @@
       "relates": []
     },
     {
+      "name": "AUTOPILOT_TEST_RUN_USER_ROOT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/rollout-quota-mirror.sh"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "Test-only replacement for /run/user when rollout-quota-mirror.sh resolves the live dir with XDG_RUNTIME_DIR unset. Not a user knob."
+    },
+    {
       "name": "AUTOPILOT_TEST_RUN_GUARD",
       "kind": "env",
       "audience": "internal",

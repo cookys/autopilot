@@ -230,6 +230,62 @@ run_script --inventory
 [ "$RC" = "3" ] || fail "stale exit $RC out=$OUT"
 assert_verdict stale "inventory stale"
 
+# quota files old, tick-last.json fresh: heartbeat, not the producer files, decides freshness.
+new_sandbox
+seed_fresh
+install_unit_file
+enable_timer
+touch -d '2 hours ago' "$(live)/quota/claude/alias/main.json"
+now_s="$(date +%s)"
+mkdir -p "$(live)/quota"
+printf '{"schema":"autopilot.quota-mirror-tick/1","ts":%s,"ok":1,"total":4,"skipped":[]}\n' "$((now_s - 300))" > "$(live)/quota/tick-last.json"
+run_script --inventory
+[ "$RC" = "0" ] || fail "fresh tick exit $RC out=$OUT err=$ERR"
+assert_verdict ok "inventory fresh tick with old quota files"
+printf '%s\n' "$OUT" | "$REAL_NODE" -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const o=JSON.parse(s.trim().split(/\n/).filter(l=>l.startsWith("{")).pop()); if(!(o.quota_out_newest_age_s>1800)||!(o.tick_last_age_s<1800)||o.tick_last_age_s<0) process.exit(2);});' \
+  || fail "fresh tick ages out=$OUT"
+
+# tick-last.json old: stale even when quota files are fresh.
+new_sandbox
+seed_fresh
+install_unit_file
+enable_timer
+now_s="$(date +%s)"
+printf '{"schema":"autopilot.quota-mirror-tick/1","ts":%s,"ok":1,"total":4,"skipped":[]}\n' "$((now_s - 7200))" > "$(live)/quota/tick-last.json"
+run_script --inventory
+[ "$RC" = "3" ] || fail "old tick exit $RC out=$OUT"
+assert_verdict stale "inventory old tick-last"
+printf '%s\n' "$OUT" | "$REAL_NODE" -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const o=JSON.parse(s.trim().split(/\n/).filter(l=>l.startsWith("{")).pop()); if(!(o.tick_last_age_s>1800)||!(o.quota_out_newest_age_s<1800)) process.exit(2);});' \
+  || fail "old tick ages out=$OUT"
+
+# no tick-last.json, fresh quota files: today's age check.
+new_sandbox
+seed_fresh
+install_unit_file
+enable_timer
+run_script --inventory
+[ "$RC" = "0" ] || fail "no tick file exit $RC out=$OUT"
+assert_verdict ok "inventory no tick-last fresh quota"
+printf '%s\n' "$OUT" | "$REAL_NODE" -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const o=JSON.parse(s.trim().split(/\n/).filter(l=>l.startsWith("{")).pop()); if(o.tick_last_age_s!==null||o.quota_out_newest_age_s===null||o.verdict!=="ok") process.exit(2);});' \
+  || fail "no tick-last field out=$OUT"
+
+# XDG_RUNTIME_DIR unset: AUTOPILOT_TEST_RUN_USER_ROOT/<uid>/autopilot beats $HOME/.autopilot.
+new_sandbox
+unset XDG_RUNTIME_DIR
+RUN_ROOT="$BASE/fake-run-user"
+uid="$(id -u)"
+mkdir -p "$RUN_ROOT/$uid/autopilot/codeforge/usage/quota" "$RUN_ROOT/$uid/autopilot/quota/claude/alias"
+printf '{}\n' > "$RUN_ROOT/$uid/autopilot/codeforge/usage/quota/main.json"
+printf '{}\n' > "$RUN_ROOT/$uid/autopilot/quota/claude/alias/main.json"
+mkdir -p "$HOME_D/.autopilot"
+export AUTOPILOT_TEST_RUN_USER_ROOT="$RUN_ROOT"
+install_unit_file
+enable_timer
+run_script --inventory
+[ "$RC" = "0" ] || fail "run user root exit $RC out=$OUT err=$ERR"
+assert_verdict ok "inventory prefers run-user autopilot"
+unset AUTOPILOT_TEST_RUN_USER_ROOT
+
 # --- nothing_applicable tick is its own verdict, not stale ---
 new_sandbox
 seed_fresh

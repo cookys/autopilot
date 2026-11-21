@@ -49,7 +49,7 @@ function fixture(codes, stderrById) {
   return { root, bin, live, log };
 }
 
-function runTick(codes, stderrById) {
+function runTick(codes, stderrById, keep) {
   const fx = fixture(codes, stderrById);
   const r = spawnSync(process.execPath, [TICK], {
     encoding: 'utf8',
@@ -63,8 +63,8 @@ function runTick(codes, stderrById) {
     },
   });
   const lines = fs.existsSync(fx.log) ? fs.readFileSync(fx.log, 'utf8').split('\n').filter((l) => l !== '') : [];
-  fs.rmSync(fx.root, { recursive: true, force: true });
-  return { r, lines, live: fx.live };
+  if (!keep) fs.rmSync(fx.root, { recursive: true, force: true });
+  return { r, lines, live: fx.live, root: fx.root };
 }
 
 function all(code) {
@@ -72,6 +72,24 @@ function all(code) {
   for (const id of IDS) codes[id] = code;
   return codes;
 }
+
+test('a pass whose producers write nothing still writes tick-last.json', () => {
+  const { r, root, live } = runTick(all(0), null, true);
+  try {
+    assert.strictEqual(r.status, 0, r.stderr);
+    const file = path.join(live, 'quota', 'tick-last.json');
+    const j = JSON.parse(fs.readFileSync(file, 'utf8'));
+    assert.strictEqual(j.schema, 'autopilot.quota-mirror-tick/1');
+    assert.strictEqual(j.ok, 4);
+    assert.strictEqual(j.total, 4);
+    assert.deepStrictEqual(j.skipped, []);
+    assert.strictEqual(typeof j.ts, 'number');
+    const names = fs.readdirSync(path.join(live, 'quota'));
+    assert.deepStrictEqual(names.filter((n) => n !== 'tick-last.json' && !n.startsWith('.tick-last.')), []);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test('all steps ok: exit 0, every stub ran, child output is not relayed', () => {
   const { r, lines, live } = runTick(all(0));

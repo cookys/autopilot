@@ -8,8 +8,8 @@
 #
 # --inventory (default) prints one JSON line and does not write:
 #   host, user, timer_installed, timer_enabled, last_tick, snapshot_dir_exists,
-#   newest_snapshot_age_s, quota_out_newest_age_s, codeforge_on_path, node_path,
-#   verdict.
+#   newest_snapshot_age_s, quota_out_newest_age_s, tick_last_age_s,
+#   codeforge_on_path, node_path, verdict.
 # node_path is the node binary used for every node call, or null when none was
 # found. Search order: $NODE if it is an executable file, else command -v node,
 # else the newest executable $HOME/.nvm/versions/node/*/bin/node (sort -V),
@@ -22,7 +22,12 @@
 # verdict is the first match: no_timer, timer_disabled, no_snapshot,
 # nothing_applicable, stale, ok.
 # A statusline snapshot older than 21600 s (account-quota.js 6 h) is stale.
-# A fleet.quota mirror file older than 1800 s (timer is 10 min) is stale.
+# Quota freshness uses tick_last_age_s against 1800 s (timer is 10 min) when
+# <live>/quota/tick-last.json exists and its "ts" parses as an integer. That
+# age is null when the file is absent or unparsable, and only then does the
+# check fall back to quota_out_newest_age_s (older pinned tick). That field
+# stays the newest mtime of any file under quota/ except tick-last.json and
+# its in-progress temp name.
 # When that age check would say stale, and the last quota-mirror.service journal
 # line that starts with "quota-mirror-tick: " is
 # "quota-mirror-tick: nothing_applicable", the verdict is nothing_applicable.
@@ -148,12 +153,21 @@ unit_dir() {
 }
 
 live_dir() {
+  local run_root inferred
   if [ -n "${AUTOPILOT_LIVE_DIR:-}" ]; then
     printf '%s\n' "$AUTOPILOT_LIVE_DIR"
   elif [ -n "${XDG_RUNTIME_DIR:-}" ]; then
     printf '%s\n' "$XDG_RUNTIME_DIR/autopilot"
   else
-    printf '%s\n' "$HOME/.autopilot"
+    # sudo -u often has no XDG_RUNTIME_DIR. The user runtime dir is still there.
+    # AUTOPILOT_TEST_RUN_USER_ROOT replaces /run/user in tests only.
+    run_root="${AUTOPILOT_TEST_RUN_USER_ROOT:-/run/user}"
+    inferred="${run_root}/$(id -u)/autopilot"
+    if [ -d "$inferred" ]; then
+      printf '%s\n' "$inferred"
+    else
+      printf '%s\n' "$HOME/.autopilot"
+    fi
   fi
 }
 
@@ -174,9 +188,29 @@ newest_mtime() {
     while IFS= read -r -d '' f; do
       m="$(stat -c %Y -- "$f")"
       if [ -z "$newest" ] || [ "$m" -gt "$newest" ]; then newest="$m"; fi
-    done < <(find "$dir" -type f -print0)
+    done < <(find "$dir" -type f ! -name 'tick-last.json' ! -name '.tick-last.*.tmp' -print0)
   fi
   printf '%s' "$newest"
+}
+
+# Age of quota/tick-last.json "ts", or empty when the file is absent or unparsable.
+tick_last_age() {
+  local file="$1" now="$2" ts
+  [ -f "$file" ] || return 0
+  ts="$(sed -n 's/.*"ts"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$file" | head -n 1)"
+  [ -n "$ts" ] || return 0
+  printf '%s' "$((now - ts))"
+}
+
+# 0 when the quota half of the verdict is stale.
+quota_freshness_stale() {
+  local tick_age="$1" quota_age="$2"
+  if [ -n "$tick_age" ]; then
+    if [ "$tick_age" -gt "$QUOTA_OUT_STALE_S" ]; then return 0; fi
+    return 1
+  fi
+  if [ -z "$quota_age" ] || [ "$quota_age" -gt "$QUOTA_OUT_STALE_S" ]; then return 0; fi
+  return 1
 }
 
 age_of() {
@@ -217,7 +251,7 @@ last_tick_marker() {
 
 # Prints verdict on stdout.
 verdict_of() {
-  local snap_dir_exists="$1" snap_age="$2" quota_age="$3" marker
+  local snap_dir_exists="$1" snap_age="$2" quota_age="$3" tick_age="$4" marker
   if ! timer_installed; then
     printf 'no_timer'
     return
@@ -230,7 +264,7 @@ verdict_of() {
     printf 'no_snapshot'
     return
   fi
-  if [ "$snap_age" -gt "$SNAPSHOT_STALE_S" ] || [ -z "$quota_age" ] || [ "$quota_age" -gt "$QUOTA_OUT_STALE_S" ]; then
+  if [ "$snap_age" -gt "$SNAPSHOT_STALE_S" ] || quota_freshness_stale "$tick_age" "$quota_age"; then
     marker="$(last_tick_marker)"
     if [ "$marker" = "quota-mirror-tick: nothing_applicable" ]; then
       printf 'nothing_applicable'
@@ -243,7 +277,7 @@ verdict_of() {
 }
 
 emit_inventory() {
-  local live snap_dir quota_dir now snap_m quota_m snap_age quota_age snap_exists verdict tick host user codeforge
+  local live snap_dir quota_dir now snap_m quota_m snap_age quota_age tick_age snap_exists verdict tick host user codeforge
   live="$(live_dir)"
   snap_dir="$live/codeforge/usage/quota"
   quota_dir="$live/quota"
@@ -253,7 +287,8 @@ emit_inventory() {
   quota_m="$(newest_mtime "$quota_dir" any)"
   snap_age="$(age_of "$snap_m" "$now")"
   quota_age="$(age_of "$quota_m" "$now")"
-  verdict="$(verdict_of "$snap_exists" "$snap_age" "$quota_age")"
+  tick_age="$(tick_last_age "$quota_dir/tick-last.json" "$now")"
+  verdict="$(verdict_of "$snap_exists" "$snap_age" "$quota_age" "$tick_age")"
   tick="$(last_tick)"
   host="$(hostname)"
   user="$(id -un)"
@@ -263,6 +298,7 @@ emit_inventory() {
     I_HOST="$host" I_USER="$user" I_INST="$(timer_installed && echo 1 || echo 0)" \
     I_EN="$(timer_enabled && echo 1 || echo 0)" I_TICK="$tick" \
     I_SNAP_DIR="$snap_exists" I_SNAP_AGE="$snap_age" I_QUOTA_AGE="$quota_age" \
+    I_TICK_AGE="$tick_age" \
     I_CODEFORGE="$codeforge" I_VERDICT="$verdict" I_NODE="$NODE_BIN" \
     "$NODE_BIN" -e '
       const env = process.env;
@@ -276,6 +312,7 @@ emit_inventory() {
         snapshot_dir_exists: env.I_SNAP_DIR === "1",
         newest_snapshot_age_s: num(env.I_SNAP_AGE),
         quota_out_newest_age_s: num(env.I_QUOTA_AGE),
+        tick_last_age_s: num(env.I_TICK_AGE),
         codeforge_on_path: env.I_CODEFORGE === "1",
         node_path: env.I_NODE === "" ? null : env.I_NODE,
         verdict: env.I_VERDICT,
@@ -292,13 +329,13 @@ emit_inventory() {
     }
     json_num() { if [ -z "$1" ]; then printf 'null'; else printf '%s' "$1"; fi; }
     json_bool() { if [ "$1" = "1" ]; then printf 'true'; else printf 'false'; fi; }
-    printf '{"host":%s,"user":%s,"timer_installed":%s,"timer_enabled":%s,"last_tick":%s,"snapshot_dir_exists":%s,"newest_snapshot_age_s":%s,"quota_out_newest_age_s":%s,"codeforge_on_path":%s,"node_path":null,"verdict":%s}\n' \
+    printf '{"host":%s,"user":%s,"timer_installed":%s,"timer_enabled":%s,"last_tick":%s,"snapshot_dir_exists":%s,"newest_snapshot_age_s":%s,"quota_out_newest_age_s":%s,"tick_last_age_s":%s,"codeforge_on_path":%s,"node_path":null,"verdict":%s}\n' \
       "$(json_str "$host")" "$(json_str "$user")" \
       "$(timer_installed && json_bool 1 || json_bool 0)" \
       "$(timer_enabled && json_bool 1 || json_bool 0)" \
       "$([ -z "$tick" ] && printf 'null' || json_str "$tick")" \
       "$(json_bool "$snap_exists")" \
-      "$(json_num "$snap_age")" "$(json_num "$quota_age")" \
+      "$(json_num "$snap_age")" "$(json_num "$quota_age")" "$(json_num "$tick_age")" \
       "$(json_bool "$codeforge")" "$(json_str "$verdict")"
   fi
 

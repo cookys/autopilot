@@ -79,7 +79,7 @@ printf '#!/usr/bin/env bash\nsleep 5\n' > "$F"; chmod +x "$F"
 OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=10 "$SCRIPT" --runner claude-native --model claude-fable-5 \
   --prompt-file "$PROMPT" --bin "$F" --timeout 1s 2>/dev/null)"
 assert_contains "$OUT" '"status": "runner_failed"' "timeout: runner_failed"
-assert_contains "$OUT" '"transport_status": "timeout"' "timeout: classified timeout"
+assert_contains "$OUT" '"transport_status": "idle_timeout"' "timeout: classified idle_timeout"
 
 # 6. no stderr temp residue: precondition_failed, runner_failed and success paths (private TMPDIR)
 LEAK_TMP="$TEST_TMP/leak-tmp"; mkdir -p "$LEAK_TMP"

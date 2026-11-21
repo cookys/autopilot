@@ -3085,6 +3085,32 @@
       "note": "JSON object the cloud-seat re-exec writes as fell_back on the result and the manifest. Empty on the first attempt."
     },
     {
+      "name": "AUTOPILOT_HETERO_HARD_TIMEOUT",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "4h",
+      "readers": [
+        "scripts/dispatch-hetero.sh"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Wall cap for a hetero dispatch when --hard-timeout is not passed. A duration (4h, 60m). The worker is killed even if it is still producing output."
+    },
+    {
+      "name": "AUTOPILOT_HETERO_SAMPLE_S",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": 15,
+      "readers": [
+        "scripts/dispatch-hetero.sh"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "How often a hetero dispatch samples the agent log bytes and process-tree CPU, in seconds. A positive number; tests set 1."
+    },
+    {
       "name": "AUTOPILOT_JSON_EMIT_SH",
       "kind": "env",
       "audience": "internal",
@@ -4630,6 +4656,51 @@
       "summary": "Set to \"off\" to stop recording AskUserQuestion prompts as decisions."
     },
     {
+      "name": "AUTOPILOT_AUTHOR_HARD_S",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-author.sh",
+        "scripts/lib/dispatch-author-codex-transport.sh"
+      ],
+      "doc": null,
+      "relates": [
+        "AUTOPILOT_AUTHOR_HARD_TIMEOUT"
+      ],
+      "note": "Parsed hard-cap seconds dispatch-author exports for the codex supervisor. Not a user knob; set from --hard-timeout or AUTOPILOT_AUTHOR_HARD_TIMEOUT."
+    },
+    {
+      "name": "AUTOPILOT_AUTHOR_HARD_TIMEOUT",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "4h",
+      "readers": [
+        "scripts/dispatch-author.sh"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_AUTHOR_HARD_S"
+      ],
+      "summary": "Wall cap for an author dispatch when --hard-timeout is not passed. A duration (4h, 60m). The run is killed even if it is still producing output."
+    },
+    {
+      "name": "AUTOPILOT_AUTHOR_IDLE_S",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-author.sh",
+        "scripts/lib/dispatch-author-codex-transport.sh"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "Parsed idle-limit seconds dispatch-author exports for the codex supervisor. Not a user knob; set from --timeout."
+    },
+    {
       "name": "AUTOPILOT_AUTHOR_KILL_GRACE_SECS",
       "kind": "env",
       "audience": "user",
@@ -4640,7 +4711,7 @@
       ],
       "doc": "docs/guide/settings-reference.md",
       "relates": [],
-      "summary": "Seconds the agy author runner is given after the outer timeout before it is killed. A positive integer; zero, negatives and non-numbers fall back to 30."
+      "summary": "Seconds after SIGTERM before SIGKILL when an author runner is stopped for idle or the hard cap. A positive integer; zero, negatives and non-numbers fall back to 30."
     },
     {
       "name": "AUTOPILOT_AUTHOR_MAX_TOKENS",
@@ -4655,6 +4726,33 @@
       "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Response cap of an authoring dispatch."
+    },
+    {
+      "name": "AUTOPILOT_AUTHOR_PROC_ROOT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/lib/idle-watch.js"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "Replacement for /proc when sampling process-tree CPU. Tests only."
+    },
+    {
+      "name": "AUTOPILOT_AUTHOR_SAMPLE_S",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": 15,
+      "readers": [
+        "scripts/dispatch-author.sh",
+        "scripts/lib/dispatch-author-codex-transport.sh"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "How often an author dispatch samples output bytes and process-tree CPU, in seconds. A positive number; the codex supervisor rounds up to at least 1."
     },
     {
       "name": "AUTOPILOT_AWAITING_OWNER",

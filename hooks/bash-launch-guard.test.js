@@ -1892,6 +1892,9 @@ test('rules 6 & 7 fail open (no throw) on deeply nested quote/substitution input
 
 // Rule 8: never print secrets into a Bash transcript. Commands are hook input only; never executed.
 const secretDenial = '這個指令會印出秘密。要檢查設定，請用 safe-inspect（自動遮罩），或用 grep -c / -l 只看有沒有、在哪一行。整行指令一起判斷：同一行若也在建檔或寫檔，請把建檔和讀取拆成兩次執行。 (secret-print)';
+// block-mode denial additionally carries the fix+doc tail (hooks/lib/gate-hint.js,
+// Fleet-Task 01M803Z0SF3MQG07WYWH3TH25T); the warn-mode advisory does not.
+const secretDenialBlocked = secretDenial + '修正：改用 node scripts/safe-inspect.js 看秘密（自動遮罩），或 grep -c / -l 只數不讀 參閱：docs/guide/safe-inspect.md';
 const secretDenied = [
   'docker inspect web', 'docker container inspect web',
   "docker inspect --format '{{.Config.Env}}' web",
@@ -1927,7 +1930,7 @@ for (const cmd of secretDenied) {
     const r = run(cmd);
     assert.strictEqual(r.status, 0, 'same exit status as existing guard denials');
     assert.strictEqual(r.deny, true);
-    assert.strictEqual(r.reason, secretDenial, 'one line, without echoing command contents');
+    assert.strictEqual(r.reason, secretDenialBlocked, 'one line, without echoing command contents');
   });
 }
 for (const cmd of [
@@ -1967,7 +1970,7 @@ for (const cmd of [
     const r = run(cmd);
     assert.strictEqual(r.status, 0);
     assert.strictEqual(r.deny, true);
-    assert.strictEqual(r.reason, secretDenial);
+    assert.strictEqual(r.reason, secretDenialBlocked);
   });
 }
 for (const cmd of [
@@ -2045,7 +2048,7 @@ for (const cmd of [
     const r = run(cmd);
     assert.strictEqual(r.status, 0);
     assert.strictEqual(r.deny, true);
-    assert.strictEqual(r.reason, secretDenial);
+    assert.strictEqual(r.reason, secretDenialBlocked);
   });
 }
 for (const cmd of [
@@ -2074,7 +2077,7 @@ for (const cmd of [
     const r = run(cmd);
     assert.strictEqual(r.status, 0);
     assert.strictEqual(r.deny, true);
-    assert.strictEqual(r.reason, secretDenial);
+    assert.strictEqual(r.reason, secretDenialBlocked);
   });
 }
 for (const cmd of [
@@ -2104,7 +2107,7 @@ for (const cmd of [
     const r = run(cmd);
     assert.strictEqual(r.status, 0);
     assert.strictEqual(r.deny, true);
-    assert.strictEqual(r.reason, secretDenial);
+    assert.strictEqual(r.reason, secretDenialBlocked);
   });
 }
 for (const cmd of [

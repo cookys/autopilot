@@ -170,7 +170,8 @@ function warnLine(d) {
 // The deny reason a gated seat sees (names the sanctioned path; hooks/ask-decision.js tests pin the script name).
 function denyReason(d) {
   return `ask-guard: 座位 ${d.seat} 不能直接問操作員（非操作員本機、不在 ask_guard.allow_members、非 PM console）。`
-    + '請改用 scripts/request-decision.js，把問題、選項與建議送給 PM。';
+    + '請改用 scripts/request-decision.js，把問題、選項與建議送給 PM。'
+    + require('./gate-hint.js').gateHint('用 scripts/request-decision.js 把問題、選項與建議送 PM 裁決', 'docs/dev/decision-cli.md');
 }
 
 module.exports = {

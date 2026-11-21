@@ -11,6 +11,7 @@
 'use strict';
 
 const fs = require('fs');
+const { gateHint } = require('./lib/gate-hint.js');
 const { enforceFromReached } = require('./lib/enforce-from.js');
 const ENFORCE_FROM = '2026-11-25T00:00:00+08:00';
 
@@ -160,7 +161,8 @@ function main() {
       process.exit(0);
     }
     process.stderr.write(
-      `BLOCKED: 測試或檢查指令必須加上 timeout 前綴（請加上 timeout 120，或為已知長測試套件指定更大的明確秒數），例如：timeout 120 ${offending}\n`
+      `BLOCKED: 測試或檢查指令必須加上 timeout 前綴（請加上 timeout 120，或為已知長測試套件指定更大的明確秒數），例如：timeout 120 ${offending}`
+      + gateHint('在測試或檢查指令前加上適當秒數的 timeout', 'hooks/README.md') + '\n'
     );
     process.exit(2);
   }

@@ -283,7 +283,8 @@ function bashDecision(command, payload, depth = 0) {
 }
 function deny(p) {
   return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason:
-    `這個操作會讀到真正的 Claude 預設設定目錄（${p}）。依紅線要操作員本人的卡才能讀；自己這席的 session 檔案（~/.claude/projects/<本專案>/）不受限。 [claude-home-read-guard]` } };
+    `這個操作會讀到真正的 Claude 預設設定目錄（${p}）。依紅線要操作員本人的卡才能讀；自己這席的 session 檔案（~/.claude/projects/<本專案>/）不受限。 [claude-home-read-guard]`
+    + require('./lib/gate-hint.js').gateHint('只讀自己專案的 session 檔（~/.claude/projects/<本專案>/）；要看別席設定就開 fleet task 請操作員處理', 'hooks/README.md') } };
 }
 function handle(payload) {
   if (payload?.hook_event_name !== 'PreToolUse') return null;

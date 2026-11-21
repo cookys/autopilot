@@ -68,6 +68,7 @@
 const fs = require('fs');
 const os = require('os');
 const { configPath } = require('../scripts/lib/config-path.js');
+const { gateHint } = require('./lib/gate-hint.js');
 const path = require('path');
 // `require`d lazily inside main(), AFTER the mode check: these two pull in a filesystem
 // probe and the session-mode module (~38ms combined), and the default-off majority pays
@@ -158,7 +159,8 @@ function askReason(marker) {
     + `"should I continue?" checkpoints are skipped until the next run starts (a new `
     + `session-mode marker) or the marker's TTL expires. Still stopping regardless: project `
     + `red lines, irreversible operations outside the DOA boundary, quota death, and the `
-    + `stall fuse. Deny to keep the step-by-step posture for this run.`;
+    + `stall fuse. Deny to keep the step-by-step posture for this run.`
+    + gateHint('同意＝核准整段 run（中途不再逐步問）；要逐步控制就 Deny', 'hooks/README.md');
 }
 
 function emitAsk(reason) {

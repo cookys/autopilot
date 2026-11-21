@@ -23,6 +23,7 @@ const path = require('path');
 const { readContextBudget } = require('../scripts/lib/config-path.js');
 const { resolveLiveDir } = require('../scripts/lib/live-state-dir.js');
 const { lockStateFile, sessionIdOf, stateDirOf, sessionHandoffPath } = require('./context-budget-lib.js');
+const { gateHint } = require('./lib/gate-hint.js');
 
 const MAX_BLOCKS = 2;
 const TIERS = ['t3', 't2']; // highest first
@@ -78,7 +79,8 @@ function main() {
     if (landed) {
       for (const t of pending) fires[t].done = true;
       fs.writeFileSync(stateFile, JSON.stringify(st));
-      block(`handoff 已寫好。請把下面這行原樣轉給操作員，並告訴他：plugin 可以更新、session 可以重啟了。\nread ${landed} 接續`);
+      block(`handoff 已寫好。請把下面這行原樣轉給操作員，並告訴他：plugin 可以更新、session 可以重啟了。\nread ${landed} 接續`
+        + gateHint('把上面一行原樣轉給操作員，然後再結束 turn', 'autopilot:handoff'));
       return;
     }
 
@@ -88,7 +90,8 @@ function main() {
     if ((f.blocks || 0) < MAX_BLOCKS) {
       f.blocks = (f.blocks || 0) + 1;
       fs.writeFileSync(stateFile, JSON.stringify(st));
-      block(`Context ${top.toUpperCase()} 已觸發，但 handoff 檔還沒寫（或比觸發時間舊）。先回答落地清單、把沒寫回 repo 的東西落地，再執行 /handoff（autopilot:handoff skill），handoff 寫到 ${sessionPath}。（第 ${f.blocks}/${MAX_BLOCKS} 次擋停）`);
+      block(`Context ${top.toUpperCase()} 已觸發，但 handoff 檔還沒寫（或比觸發時間舊）。先回答落地清單、把沒寫回 repo 的東西落地，再執行 /handoff（autopilot:handoff skill），handoff 寫到 ${sessionPath}。（第 ${f.blocks}/${MAX_BLOCKS} 次擋停）`
+        + gateHint('先回答落地清單並執行 /handoff（handoff 要新於觸發時間），再結束 turn', 'autopilot:handoff'));
       return;
     }
     for (const t of pending) fires[t].done = true;

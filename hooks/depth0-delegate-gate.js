@@ -106,6 +106,7 @@ const path = require('path');
 const { resolveLiveDir, sanitizeSessionId, readLive, modelFamily } = require('../scripts/lib/live-state-dir.js');
 // Executable-text lexer + foreground-wait rules are shared with foreman-guard.js.
 const { executableText, detectForegroundWait } = require('../scripts/lib/bash-wait-rules.js');
+const { gateHint } = require('./lib/gate-hint.js');
 // Bash-launch hazards (BL-0019): detach-without-wake, pkill -f self-match, bare ls, recursive rm guards, zsh syntax.
 const {
   detectDetachNoWake, detectPkillSelfMatch, detectZshExpansion, detectZshSyntax,
@@ -288,32 +289,34 @@ function classify(tool, input) {
       const secret = cfg.secretMode === 'off' ? null : detectSecretPrint(cmd);
       const secretReason = secret && `${secret.why} (${secret.rule})`;
       if (secret && cfg.secretMode === 'block') {
-        emitDeny(secretReason);
+        emitDeny(secretReason + gateHint('改用 node scripts/safe-inspect.js 看秘密（自動遮罩），或 grep -c / -l 只數不讀', 'docs/guide/safe-inspect.md'));
         process.exit(0);
       }
       if (secret) launchWarns.push(secretReason);
       const detach = detectDetachNoWake(cmd);
       if (detach) {
-        emitDeny(`bash-launch-guard (${detach.rule}): ${detach.why}. ${detach.advice}`);
+        emitDeny(`bash-launch-guard (${detach.rule}): ${detach.why}. ${detach.advice}` + gateHint('用 run_in_background 啟動並等完成通知（或 Monitor 觀測），不要 detach 後沒人等', 'hooks/README.md'));
         process.exit(0);
       }
       const pk = cfg.pkillMode === 'off' ? null : detectPkillSelfMatch(cmd);
       if (pk && cfg.pkillMode === 'deny') {
         emitDeny(`bash-launch-guard (${pk.rule}): ${pk.why}. Set AUTOPILOT_BASH_GUARD_PKILL_MODE=warn|off `
-          + '(or depth0_delegate_gate.pkill_self_match in ~/.autopilot/config.json) to relax.');
+          + '(or depth0_delegate_gate.pkill_self_match in ~/.autopilot/config.json) to relax.'
+          + gateHint('要殺流程改用 pidfile 或直接 PID；放寬此規則才設 AUTOPILOT_BASH_GUARD_PKILL_MODE=warn', 'hooks/README.md'));
         process.exit(0);
       }
       if (pk) launchWarns.push(`bash-launch-guard (${pk.rule}): ${pk.why}`);
       const ls = cfg.lsMode === 'off' ? null : detectBareLs(cmd);
       if (ls && cfg.lsMode === 'deny') {
         emitDeny(`bash-launch-guard (${ls.rule}): ${ls.why}. Set AUTOPILOT_BASH_GUARD_LS_MODE=warn|off `
-          + '(or depth0_delegate_gate.bare_ls in ~/.autopilot/config.json) to relax.');
+          + '(or depth0_delegate_gate.bare_ls in ~/.autopilot/config.json) to relax.'
+          + gateHint('ls 要帶顯式路徑（ls <path>）；要探索目錄改用 Glob/Read 工具', 'hooks/README.md'));
         process.exit(0);
       }
       if (ls) launchWarns.push(`bash-launch-guard (${ls.rule}): ${ls.why}`);
       const rv = cfg.rmVarMode === 'off' ? null : detectRecursiveRmVar(cmd);
       if (rv && cfg.rmVarMode === 'deny') {
-        emitDeny(`bash-launch-guard (${rv.rule}): ${rv.why}`);
+        emitDeny(`bash-launch-guard (${rv.rule}): ${rv.why}` + gateHint('先展開變數確認範圍，再對顯式路徑執行 rm -r', 'hooks/README.md'));
         process.exit(0);
       }
       if (rv) launchWarns.push(`bash-launch-guard (${rv.rule}): ${rv.why}`);
@@ -324,25 +327,25 @@ function classify(tool, input) {
       };
       const sr = cfg.subagentRmMode === 'off' ? null : detectSubagentRmOutsideScratch(cmd, rmOpts);
       if (sr && cfg.subagentRmMode === 'deny') {
-        emitDeny(`bash-launch-guard (${sr.rule}): ${sr.why}`);
+        emitDeny(`bash-launch-guard (${sr.rule}): ${sr.why}` + gateHint('要刪的目錄先建在 session scratchpad（$TMPDIR/claude-*/<sid>/）內再刪', 'hooks/README.md'));
         process.exit(0);
       }
       if (sr) launchWarns.push(`bash-launch-guard (${sr.rule}): ${sr.why}`);
       const sh = cfg.sharedRmMode === 'off' ? null : detectRmSharedDir(cmd, rmOpts);
       if (sh && cfg.sharedRmMode === 'deny') {
-        emitDeny(`bash-launch-guard (${sh.rule}): ${sh.why}`);
+        emitDeny(`bash-launch-guard (${sh.rule}): ${sh.why}` + gateHint('只刪自己擁有且非 world-writable 的目錄；共用目錄先回報操作員', 'hooks/README.md'));
         process.exit(0);
       }
       if (sh) launchWarns.push(`bash-launch-guard (${sh.rule}): ${sh.why}`);
       const rw = cfg.rmWrappedMode === 'off' ? null : detectWrappedRm(cmd);
       if (rw && cfg.rmWrappedMode === 'deny') {
-        emitDeny(`bash-launch-guard (${rw.rule}): ${rw.why}`);
+        emitDeny(`bash-launch-guard (${rw.rule}): ${rw.why}` + gateHint('把 rm -r 從 sh -c / heredoc / 迴圈 / xargs 拉出來，用顯式路徑單獨執行', 'hooks/README.md'));
         process.exit(0);
       }
       if (rw) launchWarns.push(`bash-launch-guard (${rw.rule}): ${rw.why}`);
       const zs = cfg.zshSyntaxMode === 'off' ? null : detectZshSyntax(cmd);
       if (zs && cfg.zshSyntaxMode === 'deny') {
-        emitDeny(`bash-launch-guard (${zs.rule}): ${zs.why}`);
+        emitDeny(`bash-launch-guard (${zs.rule}): ${zs.why}` + gateHint('改用 bash 可解析的語法（zsh 的 = 開頭字元和裸 glob 不支援）', 'hooks/README.md'));
         process.exit(0);
       }
       if (zs) launchWarns.push(`bash-launch-guard (${zs.rule}): ${zs.why}`);
@@ -419,7 +422,8 @@ function classify(tool, input) {
       if (modelId && family !== 'unknown' && cfg.guardedModels.includes(family)) {
         emitDeny(`depth0-delegate-gate: ${verdict.reads} consecutive read-class calls at depth-0 on a `
           + `guarded model (family "${family}") — delegate to an Explore/survey subagent (model: sonnet) `
-          + 'and read only its conclusion.');
+          + 'and read only its conclusion.'
+          + gateHint('改派 Explore/survey subagent（model: sonnet）做大量閱讀，本席只讀其結論', 'hooks/README.md'));
         process.exit(0);
       }
       // unguarded / unknown model past 2x: only the periodic nudge rule applies

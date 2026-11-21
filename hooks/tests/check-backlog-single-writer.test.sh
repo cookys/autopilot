@@ -435,8 +435,9 @@ cp -r "$REPO_ROOT/hooks/tests/fixtures/record-files/base/dot-claude" "$RPC/.clau
 cp "$REPO_ROOT/hooks/tests/lib/suite-residue-reap.sh" "$RPC/hooks/tests/lib/suite-residue-reap.sh"
 cp "$REPO_ROOT/references/blind-dispatch.md" "$RPC/references/blind-dispatch.md"
 git -C "$RPC" config core.hooksPath "$RPC/.githooks"
-# the harness exports a test author (t@t) that the pre-commit test-identity gate refuses; real commits below use a non-test one
-pcommit() { GIT_AUTHOR_NAME="Precommit Lane" GIT_AUTHOR_EMAIL="lane@autopilot-precommit.dev" GIT_COMMITTER_NAME="Precommit Lane" GIT_COMMITTER_EMAIL="lane@autopilot-precommit.dev" git -C "$RPC" commit "$@"; }
+git -C "$RPC" config autopilot.testIdentityGate off
+# the harness exports a test author (t@t) that the pre-commit test-identity gate refuses; the scratch repo disables that gate (config + common dir under TMPDIR) so the commits below exercise the single-writer gate
+pcommit() { TMPDIR="$TEST_TMP" GIT_AUTHOR_NAME="Precommit Lane" GIT_AUTHOR_EMAIL="lane@autopilot-precommit.example.invalid" GIT_COMMITTER_NAME="Precommit Lane" GIT_COMMITTER_EMAIL="lane@autopilot-precommit.example.invalid" git -C "$RPC" commit "$@"; }
 git -C "$RPC" add -A -f >/dev/null && git -C "$RPC" commit -q --no-verify -m "precommit base" || fail "precommit base"
 
 printf '### hand bypass row\n- **Id**: BL-0001\n- **Status**: open\n' >> "$RPC/$RBL"

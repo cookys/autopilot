@@ -14,7 +14,9 @@
  * Matched values are never logged or thrown.
  */
 const patterns = require('./personal-data-patterns');
-const secrets = require('../../hooks/_shared/secret-patterns');
+function secretPatterns() {
+  return require('../../hooks/_shared/secret-patterns').patterns;
+}
 
 const tag = (cls) => `[REDACTED:${cls}]`;
 const isRedacted = (v) => typeof v === 'string' && v.startsWith('[REDACTED');
@@ -92,7 +94,7 @@ function buildRules() {
   // 3. JWT
   rules.push(sub('jwt', /(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}/g, () => tag('jwt')));
   // 4. credential prefixes: the shared list by import, then the gaps
-  const prefixed = secrets.patterns.map(({ name, pattern }) => ({ name, re: new RegExp(pattern.source, 'g') }));
+  const prefixed = secretPatterns().map(({ name, pattern }) => ({ name, re: new RegExp(pattern.source, 'g') }));
   prefixed.push(
     { name: 'xai', re: /(?<![A-Za-z0-9_-])xai-[A-Za-z0-9]{20,}/g },
     { name: 'huggingface', re: /(?<![A-Za-z0-9_])hf_[A-Za-z0-9]{30,}/g },

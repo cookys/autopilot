@@ -14,7 +14,17 @@ describe('owner-question-rules false-block regressions', () => {
     rules.setFleetTaskLookup(null);
   });
 
-  describe('1. paragraph task id allows promise/question without due', () => {
+  describe('1. paragraph task id allows promise/question with due', () => {
+    beforeEach(() => {
+      rules.setFleetTaskLookup((id) => {
+        if (id === '01M7ZV2YKAV1CEYW987P2FW3JE' || id === '01M7ZTYH8VD5TGQHC929KZZ6DA') {
+          return { next_evidence_due: '2099-01-01T00:00:00Z' };
+        }
+        if (id === '01M7ZV2YKAV1CEYW987P2FW3JF') return { next_evidence_due: '-', hard_deadline: '' };
+        return null;
+      });
+    });
+
     const passCases = [
       {
         name: 'PM seat false block: 跟我說一聲 with task id in same paragraph',
@@ -42,6 +52,14 @@ describe('owner-question-rules false-block regressions', () => {
     }
 
     const blockCases = [
+      {
+        name: 'task id without a due does not exempt a promise',
+        text: '已派 01M7ZV2YKAV1CEYW987P2FW3JF。如果要讓 agy 跑別的模型，跟我說一聲。',
+      },
+      {
+        name: 'unknown task id does not exempt a promise',
+        text: '已派 01M7ZV2YKAV1CEYW987P2FW3JG。如果要讓 agy 跑別的模型，跟我說一聲。',
+      },
       {
         name: 'operator question with no task id',
         text: '要選 A 還是 B？',

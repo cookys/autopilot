@@ -22,8 +22,10 @@
 //      `find -delete`. Rule: "To delete files, use one standalone rm command whose targets are literal paths under the
 //      scratchpad or $TMPDIR. Never put rm inside sh -c / bash -c / zsh -c, a heredoc, or a for/while loop. Write briefs and
 //      other text files with the Write tool, not a heredoc inside bash -c."
-//  10. zsh-syntax (DENY by default; knob off|warn|deny) — zsh parameter flags, glob qualifiers, and `=(...)` temp-file
-//      process substitution that Bash cannot parse. Single-quoted spans, comments, and heredoc bodies are ignored.
+//  10. zsh-only-syntax (DENY by default; knob off|warn|deny) — zsh parameter flags `${(...)}`, glob qualifiers such as
+//      `*(.)`, and `=(...)` temp-file process substitution outside quoted text: Claude Code cannot parse them and
+//      would hold the call on a permission prompt that auto-denies. Single-quoted spans, double-quoted data (but NOT
+//      `${(...)}` flags, which zsh still expands inside double quotes), comments, and heredoc bodies are ignored.
 // Rules run on EXECUTABLE text (heredoc bodies / comments stripped by bash-wait-rules.js, except Rule 9's multi-line `-c` scan).
 //
 // scripts/lib/dispatch-detach.sh is NOT a launcher: it is a sourceable helper the read rails
@@ -940,30 +942,44 @@ function detectZshSyntax(cmd) {
   const raw = typeof cmd === 'string' ? cmd : '';
   if (raw.length > ZSH_MAX_TEXT) return null;
   const executable = zshExecutableText(raw);
+  // `text` keeps double-quoted data: zsh still expands parameter flags inside double quotes
+  // (`"${(L)e}"`), so the `${(...)` check runs on it. `uq` also blanks double-quoted data, because
+  // zsh does no globbing and no `=(...)` substitution inside double quotes (`echo "*(note)"` is plain data).
   let text = '';
+  let uq = '';
   let doubleQuoted = false;
   for (let i = 0; i < executable.length; i += 1) {
     if (executable[i] === '\\' && i + 1 < executable.length) {
       text += executable[i] + executable[i + 1];
+      if (!doubleQuoted) uq += executable[i] + executable[i + 1];
       i += 1;
     } else if (executable[i] === '"') {
       doubleQuoted = !doubleQuoted;
       text += executable[i];
+      uq += executable[i];
     } else if (!doubleQuoted && executable[i] === "'") {
       const end = executable.indexOf("'", i + 1);
       i = end < 0 ? executable.length : end;
       text += ' ';
+      uq += ' ';
+    } else if (doubleQuoted) {
+      text += executable[i];
+      uq += ' ';
     } else {
       text += executable[i];
+      uq += executable[i];
     }
   }
+  // The spec reason text: name the match, say why the call would stall, and offer the two rewrites.
+  const why = (m) => `zsh-only syntax (${m}) — Claude Code cannot parse it and will hold the call on a permission prompt `
+    + 'that auto-denies; rewrite in POSIX/bash (e.g. $(printf %s "$e" | tr A-Z a-z)) or wrap the command in bash -c \'...\'.';
   let match = text.match(/\$\{\s*\([^}]*\)\s*[^}]*\}/);
-  if (match) return { rule: 'zsh-syntax', syntax: match[0], why: 'zsh parameter flags (${(...)}) are not valid Bash syntax' };
-  match = text.match(/(?<![A-Za-z0-9_\]<])=\([^)]*\)/);
-  if (match) return { rule: 'zsh-syntax', syntax: match[0], why: 'zsh temp-file process substitution =(…) is not valid Bash syntax' };
+  if (match) return { rule: 'zsh-only-syntax', syntax: match[0], why: why(match[0]) };
+  match = uq.match(/(?<![A-Za-z0-9_\]<])=\([^)]*\)/);
+  if (match) return { rule: 'zsh-only-syntax', syntax: match[0], why: why(match[0]) };
   // A glob metacharacter immediately followed by (...) is a zsh qualifier; function definitions and subshells lack a glob.
-  match = text.match(/(?:\*\*?|\?|\[[^\]\s]+\])(?:[^\s'"`()]*)(\([^()\s]*[./NnOmM][^()\s]*\))/);
-  if (match) return { rule: 'zsh-syntax', syntax: match[0], why: 'zsh glob qualifiers such as *(.) are not valid Bash syntax' };
+  match = uq.match(/(?:\*\*?|\?|\[[^\]\s]+\])(?:[^\s'"`()]*)(\([^()\s]*[./NnOmM][^()\s]*\))/);
+  if (match) return { rule: 'zsh-only-syntax', syntax: match[0], why: why(match[0]) };
   return null;
 }
 

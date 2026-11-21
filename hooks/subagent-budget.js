@@ -304,6 +304,77 @@ function cacheFile(sessionId) {
   return path.join(L.liveBase(), 'subagent-budget', 'cache', `${sanitizeSessionId(sessionId)}.json`);
 }
 
+function ticketLedgerFile() {
+  const L = require('./live-session-lib.js');
+  return path.join(L.liveBase(), 'subagent-budget', 'ticket-usage.jsonl');
+}
+
+function entryUsd(e) {
+  let usd = 0;
+  if (e && Array.isArray(e.t)) {
+    for (let i = 0; i + 1 < e.t.length; i += 2) usd += e.t[i + 1];
+  }
+  return usd;
+}
+
+function readTicketLedgerRows() {
+  const rows = [];
+  try {
+    const raw = fs.readFileSync(ticketLedgerFile(), 'utf8');
+    for (const line of raw.split('\n')) {
+      const s = line.trim();
+      if (!s) continue;
+      try {
+        const row = JSON.parse(s);
+        if (row && typeof row === 'object') rows.push(row);
+      } catch { /* skip malformed line */ }
+    }
+  } catch { /* absent or unreadable ledger */ }
+  return rows;
+}
+
+function recordTicketLedger(sessionId, entries, now) {
+  if (!sessionId || !entries) return;
+  try {
+    const sid = String(sessionId);
+    const existing = new Map();
+    for (const row of readTicketLedgerRows()) {
+      if (row.session === sid && row.subagent) {
+        existing.set(`${row.ticket}\0${row.subagent}`, row.usd);
+      }
+    }
+    const toAppend = [];
+    for (const [name, e] of Object.entries(entries)) {
+      if (!e || !e.ticket) continue;
+      const usd = entryUsd(e);
+      if (!(usd > 0)) continue;
+      const key = `${e.ticket}\0${name}`;
+      const prev = existing.get(key);
+      if (prev !== undefined && Math.abs(prev - usd) <= 1e-9) continue;
+      toAppend.push(JSON.stringify({ ts: now, ticket: e.ticket, session: sid, subagent: name, usd }));
+    }
+    if (toAppend.length > 0) {
+      const file = ticketLedgerFile();
+      fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+      fs.appendFileSync(file, toAppend.join('\n') + '\n', { mode: 0o600 });
+    }
+  } catch { /* fail-open if ledger cannot be written */ }
+}
+
+function ticketLedgerSpend(ticket) {
+  if (!ticket) return 0;
+  const bySubagent = new Map();
+  for (const row of readTicketLedgerRows()) {
+    if (row.ticket !== ticket) continue;
+    if (typeof row.usd !== 'number' || !Number.isFinite(row.usd) || row.usd < 0) continue;
+    const key = `${row.session || ''}\0${row.subagent || ''}`;
+    bySubagent.set(key, row.usd);
+  }
+  let total = 0;
+  for (const v of bySubagent.values()) total += v;
+  return total;
+}
+
 function loadCache(file) {
   try {
     const v = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -544,13 +615,20 @@ function run(payload) {
     payload = { ...payload, transcript_path: '' };
   }
   const now = nowMs();
+  const ticketBudgetEnabled = process.env.AUTOPILOT_TICKET_BUDGET !== '0';
+  let ticket = null;
+  if (ticketBudgetEnabled) {
+    try { ticket = findTaskId(brief); } catch { ticket = null; }
+  }
   const raw = noTranscript ? null : collect(payload);
   if (raw === null) {
     // No subagents dir: nothing to count and no ancestry to inherit from. A depth-0 Engine: brief with no Lane: is
-    // still a format error (the first dispatch of a session is where the lane must start); anything else fails open.
+    // still a format error (the first dispatch of a session is where the lane must start); anything else fails open
+    // unless a Fleet-Task ticket has prior spend in the cross-session ledger.
     const sub = (typeof payload.agent_id === 'string' && payload.agent_id) || OWN_TRANSCRIPT_RE.test(payload.transcript_path);
-    if (!(needLane && !sub && !laneFromBrief(brief))) return;
+    if (!(needLane && !sub && !laneFromBrief(brief)) && !ticket) return;
   }
+  if (raw && ticketBudgetEnabled) recordTicketLedger(payload.session_id, raw, now);
   const entries = withLanes(raw || {});
 
   let lane = laneFromBrief(brief);
@@ -564,11 +642,6 @@ function run(payload) {
   // lane-less (root total only), so a missing Lane: is never billed to, or carded under, a description lane.
   if (!lane && !needLane) lane = laneFromDescription(input.description);
   const reviewer = isReviewer(brief);
-  const ticketBudgetEnabled = process.env.AUTOPILOT_TICKET_BUDGET !== '0';
-  let ticket = null;
-  if (ticketBudgetEnabled) {
-    try { ticket = findTaskId(brief); } catch { ticket = null; }
-  }
   const c = tally(entries, lane, now, COUNT_NESTED_DISPATCHES, ticket);
 
   // Per-ticket Claude budget ceiling (hard deny regardless of mode, no owner card, no Budget-Ack bypass; fail-open on error).
@@ -577,15 +650,16 @@ function run(payload) {
     try {
       const briefBudget = claudeBudgetFromBrief(brief);
       const ticketBudget = briefBudget === null ? cfg.per_ticket_usd : Math.min(briefBudget, cfg.per_ticket_usd);
-      if (c.ticketUsd >= ticketBudget) {
+      const spentUsd = Math.max(c.ticketUsd, ticketLedgerSpend(ticket));
+      if (spentUsd >= ticketBudget) {
         emit({
           permissionDecision: 'deny',
-          permissionDecisionReason: `票務 ${ticket} 的 Claude 預算已用盡（已花費 $${c.ticketUsd.toFixed(2)} / 上限 $${ticketBudget.toFixed(2)}）。請立即回報此票務的進度，並改派便宜的非 Claude 引擎（如 codex / grok / agy）。`,
+          permissionDecisionReason: `票務 ${ticket} 的 Claude 預算已用盡（已花費 $${spentUsd.toFixed(2)} / 上限 $${ticketBudget.toFixed(2)}）。請立即回報此票務的進度，並改派便宜的非 Claude 引擎（如 codex / grok / agy）。`,
         });
         return;
       }
-      if (c.ticketUsd >= 0.8 * ticketBudget) {
-        ticketAdvisory = ` 票務 ${ticket} 的 Claude 預算已使用 ${Math.round((c.ticketUsd / ticketBudget) * 100)}%（$${c.ticketUsd.toFixed(2)} / $${ticketBudget.toFixed(2)}）。`;
+      if (spentUsd >= 0.8 * ticketBudget) {
+        ticketAdvisory = ` 票務 ${ticket} 的 Claude 預算已使用 ${Math.round((spentUsd / ticketBudget) * 100)}%（$${spentUsd.toFixed(2)} / $${ticketBudget.toFixed(2)}）。`;
       }
     } catch { /* fail-open on ticket budget error */ }
   }

@@ -598,8 +598,20 @@ assert_contains "$__RUN_STDOUT" "Claude 預算已使用" "ticket 80-100% emits a
 OVER_BUDGET=$(node -e 'console.log((Number(process.argv[1]) * 0.5).toFixed(4))' "$TICKET_USD")
 AUTOPILOT_SUBAGENT_BUDGET_MODE=warn expect_deny st2 "Engine: sonnet\nLane: tlane\nFleet-Task: $TICKET_ID\nClaude-Budget: $OVER_BUDGET\nBudget-Ack: try to bypass\ngo" "" "ticket over budget denied in warn mode"
 assert_contains "$__RUN_STDOUT" "Claude 預算已用盡" "ticket deny in Traditional Chinese"
-# No Fleet-Task: unaffected
-AUTOPILOT_SUBAGENT_BUDGET_MODE=warn expect_allow st2 "Engine: sonnet\nLane: tlane\nClaude-Budget: $OVER_BUDGET\ngo" "" "no Fleet-Task unaffected"
+# (a) Default per_ticket_usd path with no Claude-Budget line blocks over budget
+AUTOPILOT_SUBAGENT_BUDGET_PER_TICKET_USD="$OVER_BUDGET" AUTOPILOT_SUBAGENT_BUDGET_MODE=warn expect_deny st2 "Engine: sonnet\nLane: tlane\nFleet-Task: $TICKET_ID\ngo" "" "(a) default per_ticket_usd with no Claude-Budget denies over budget"
+assert_contains "$__RUN_STDOUT" "Claude 預算已用盡" "(a) deny reason in Traditional Chinese"
+# (b) Brief Claude-Budget higher than config does NOT raise the cap; lower one does lower it
+AUTOPILOT_SUBAGENT_BUDGET_PER_TICKET_USD="$OVER_BUDGET" AUTOPILOT_SUBAGENT_BUDGET_MODE=warn expect_deny st2 "Engine: sonnet\nLane: tlane\nFleet-Task: $TICKET_ID\nClaude-Budget: 100\ngo" "" "(b) brief Claude-Budget higher than config does not raise cap"
+AUTOPILOT_SUBAGENT_BUDGET_PER_TICKET_USD=100 AUTOPILOT_SUBAGENT_BUDGET_MODE=warn expect_deny st2 "Engine: sonnet\nLane: tlane\nFleet-Task: $TICKET_ID\nClaude-Budget: $OVER_BUDGET\ngo" "" "(b) brief Claude-Budget lower than config lowers cap"
+# (c) Spend written by session A blocks session B on the same ticket (cross-session ledger)
+TICKET_CROSS="01M7ZKZ8D4511JJ451P71J73R4"
+mk st_a "[{\"id\":\"ta1\",\"brief\":[\"Lane: tlane\",\"Fleet-Task: $TICKET_CROSS\"],\"turns\":5}]"
+AUTOPILOT_SUBAGENT_BUDGET_MODE=warn expect_allow st_a "Engine: sonnet\nLane: tlane\nFleet-Task: $TICKET_CROSS\nClaude-Budget: 100\ngo" "" "(c) session A records spend to ledger"
+AUTOPILOT_SUBAGENT_BUDGET_PER_TICKET_USD="$OVER_BUDGET" AUTOPILOT_SUBAGENT_BUDGET_MODE=warn expect_deny st_b "Engine: sonnet\nLane: tlane\nFleet-Task: $TICKET_CROSS\ngo" "" "(c) session B blocked by session A spend on same ticket"
+assert_contains "$__RUN_STDOUT" "Claude 預算已用盡" "(c) session B deny reason in Traditional Chinese"
+# (d) Ticketless brief unaffected
+AUTOPILOT_SUBAGENT_BUDGET_PER_TICKET_USD="$OVER_BUDGET" AUTOPILOT_SUBAGENT_BUDGET_MODE=warn expect_allow st2 "Engine: sonnet\nLane: tlane\ngo" "" "(d) ticketless brief unaffected by per_ticket_usd"
 # Kill switch: AUTOPILOT_TICKET_BUDGET=0 disables ticket ceiling
 AUTOPILOT_TICKET_BUDGET=0 expect_allow st2 "Engine: sonnet\nLane: tlane\nFleet-Task: $TICKET_ID\nClaude-Budget: $OVER_BUDGET\ngo" "" "AUTOPILOT_TICKET_BUDGET=0 disables ticket ceiling"
 

@@ -107,39 +107,90 @@ function shortFlag(arg, flag) { return /^-[A-Za-z]+$/.test(arg) && arg.slice(1).
 const OPERAND_OPTIONS = {
   grep: { value: { e: 'pattern', regexp: 'pattern', f: 'pattern-path', file: 'pattern-path', g: 'glob', glob: 'glob', include: 'glob', exclude: 'glob', 'exclude-dir': 'glob', m: 'value', A: 'value', B: 'value', C: 'value', 'max-count': 'value', 'after-context': 'value', 'before-context': 'value', context: 'value' } },
   egrep: { value: { e: 'pattern', regexp: 'pattern', f: 'pattern-path', file: 'pattern-path', g: 'glob', glob: 'glob', include: 'glob', exclude: 'glob', 'exclude-dir': 'glob', m: 'value', A: 'value', B: 'value', C: 'value', 'max-count': 'value', 'after-context': 'value', 'before-context': 'value', context: 'value' } },
-  rg: { value: { e: 'pattern', regexp: 'pattern', f: 'pattern-path', file: 'pattern-path', g: 'glob', glob: 'glob', include: 'glob', exclude: 'glob', 'max-count': 'value', 'after-context': 'value', 'before-context': 'value', context: 'value', maxdepth: 'value', threads: 'value', type: 'value', 'type-add': 'value', 'type-not': 'value' } },
+  rg: { value: { e: 'pattern', regexp: 'pattern', f: 'pattern-path', file: 'pattern-path', g: 'glob', glob: 'glob', include: 'glob', exclude: 'glob', 'max-count': 'value', 'after-context': 'value', 'before-context': 'value', context: 'value', maxdepth: 'value', threads: 'value', type: 'value', t: 'value', T: 'value', A: 'value', B: 'value', C: 'value', m: 'value', j: 'value', M: 'value', 'type-add': 'value', 'type-not': 'value' } },
   ugrep: { value: { e: 'pattern', regexp: 'pattern', f: 'pattern-path', file: 'pattern-path', g: 'glob', glob: 'glob', include: 'glob', exclude: 'glob', 'exclude-dir': 'glob', m: 'value', A: 'value', B: 'value', C: 'value', 'max-count': 'value', 'after-context': 'value', 'before-context': 'value', context: 'value' } },
   ag: { value: { e: 'pattern', regexp: 'pattern', f: 'pattern-path', file: 'pattern-path', g: 'glob', glob: 'glob', include: 'glob', exclude: 'glob', 'max-count': 'value', after: 'value', before: 'value', context: 'value', depth: 'value' } },
   sed: { value: { e: 'script', f: 'pattern-path', expression: 'script', file: 'pattern-path' } },
   awk: { value: { e: 'script', f: 'pattern-path', F: 'value', v: 'value', 'field-separator': 'value', assign: 'value' } },
-  jq: { value: { f: 'pattern-path', 'from-file': 'pattern-path', arg: 'value', argjson: 'value', rawfile: 'path', slurpfile: 'path', argfile: 'path', 'run-tests': 'path' } },
+  jq: { value: { f: 'pattern-path', 'from-file': 'pattern-path', arg: 'two-values', argjson: 'two-values', rawfile: 'name-path', slurpfile: 'name-path', argfile: 'path', 'run-tests': 'path' } },
 };
 function classifyOperands(program, args) {
   const table = OPERAND_OPTIONS[program]; const paths = []; const patterns = [];
-  let firstNonOption = true; let patternGivingOption = false; let endOptions = false;
+  const takesValue = (kind) => kind === 'pattern' || kind === 'script' || kind === 'pattern-path' || kind === 'path' || kind === 'glob' || kind === 'value' || kind === 'two-values' || kind === 'name-path';
+  const patternKind = (kind) => kind === 'pattern' || kind === 'script' || kind === 'pattern-path';
+  const scanOptions = (onOption) => {
+    let endOptions = false;
+    for (let i = 0; i < args.length; i++) {
+      const arg = args[i];
+      if (!endOptions && arg === '--') { endOptions = true; continue; }
+      if (!endOptions && table && arg.startsWith('--')) {
+        const eq = arg.indexOf('='); const name = arg.slice(2, eq < 0 ? undefined : eq); const kind = table.value[name];
+        if (kind) {
+          onOption(kind);
+          if (eq < 0 && takesValue(kind) && i + 1 < args.length) {
+            i++;
+            if ((kind === 'two-values' || kind === 'name-path') && i + 1 < args.length) i++;
+          }
+          continue;
+        }
+      }
+      if (!endOptions && table && /^-[^-]/.test(arg)) {
+        for (let n = 1; n < arg.length; n++) {
+          const kind = table.value[arg[n]]; if (!kind || !takesValue(kind)) continue;
+          onOption(kind);
+          if (!arg.slice(n + 1) && i + 1 < args.length) {
+            i++;
+            if ((kind === 'two-values' || kind === 'name-path') && i + 1 < args.length) i++;
+          }
+          break;
+        }
+        continue;
+      }
+    }
+  };
+  let patternGivingOption = false;
+  scanOptions((kind) => { if (patternKind(kind)) patternGivingOption = true; });
+  const noPattern = program === 'rg' && args.some((arg, index) => arg === '--files' || arg === '--type-list' || arg.startsWith('--files='));
+  const hasPatternOption = patternGivingOption || noPattern;
+  let firstNonOption = true; let endOptions = false;
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (!endOptions && arg === '--') { endOptions = true; continue; }
     if (!endOptions && table && arg.startsWith('--')) {
       const eq = arg.indexOf('='); const name = arg.slice(2, eq < 0 ? undefined : eq); const kind = table.value[name];
       if (kind) {
-        if (kind === 'pattern' || kind === 'script' || kind === 'pattern-path') patternGivingOption = true;
-        if (eq >= 0) { const value = arg.slice(eq + 1); if (kind === 'path' || kind === 'pattern-path') paths.push(value); else if (kind === 'pattern' || kind === 'script') patterns.push(value); }
-        else if (i + 1 < args.length) { const value = args[++i]; if (kind === 'path' || kind === 'pattern-path') paths.push(value); else if (kind === 'pattern' || kind === 'script') patterns.push(value); }
+        if (eq >= 0) {
+          const value = arg.slice(eq + 1);
+          if (kind === 'path' || kind === 'pattern-path') paths.push(value);
+          else if (kind === 'pattern' || kind === 'script') patterns.push(value);
+          else if (kind === 'name-path') { if (i + 1 < args.length) paths.push(args[++i]); }
+        } else if (takesValue(kind) && i + 1 < args.length) {
+          if (kind === 'path' || kind === 'pattern-path') paths.push(args[++i]);
+          else if (kind === 'pattern' || kind === 'script') patterns.push(args[++i]);
+          else if (kind === 'name-path') { i++; if (i + 1 < args.length) paths.push(args[++i]); }
+          else if (kind === 'two-values') i += Math.min(2, args.length - i - 1);
+          else i++;
+        }
         continue;
       }
     }
     if (!endOptions && table && /^-[^-]/.test(arg)) {
       let consumed = false;
       for (let n = 1; n < arg.length; n++) {
-        const kind = table.value[arg[n]]; if (!kind) continue;
+        const kind = table.value[arg[n]]; if (!kind || !takesValue(kind)) continue;
         const attached = arg.slice(n + 1);
-        if (attached) { if (kind === 'path' || kind === 'pattern-path') paths.push(attached); else if (kind === 'pattern' || kind === 'script') patterns.push(attached); if (kind === 'pattern' || kind === 'script' || kind === 'pattern-path') patternGivingOption = true; consumed = true; break; }
-        if (kind === 'pattern' || kind === 'script' || kind === 'path' || kind === 'pattern-path' || kind === 'glob' || kind === 'value') {
-          if (i + 1 < args.length) { const value = args[++i]; if (kind === 'path' || kind === 'pattern-path') paths.push(value); else if (kind === 'pattern' || kind === 'script') patterns.push(value); }
-          if (kind === 'pattern' || kind === 'script' || kind === 'pattern-path') patternGivingOption = true;
-          consumed = true; break;
+        if (attached) {
+          if (kind === 'path' || kind === 'pattern-path') paths.push(attached);
+          else if (kind === 'pattern' || kind === 'script') patterns.push(attached);
+          else if (kind === 'name-path' && i + 1 < args.length) paths.push(args[++i]);
+        } else if (i + 1 < args.length) {
+          if (kind === 'path' || kind === 'pattern-path') paths.push(args[++i]);
+          else if (kind === 'pattern' || kind === 'script') patterns.push(args[++i]);
+          else if (kind === 'name-path') { i++; if (i + 1 < args.length) paths.push(args[++i]); }
+          else if (kind === 'two-values') i += Math.min(2, args.length - i - 1);
+          else i++;
         }
+        consumed = true; break;
       }
       if (consumed) continue;
       if (arg !== '-') continue;
@@ -147,8 +198,7 @@ function classifyOperands(program, args) {
     if (!endOptions && arg.startsWith('-') && arg !== '-') continue;
     if (firstNonOption) {
       firstNonOption = false;
-      if (['jq', 'sed', 'awk'].includes(program) && !patternGivingOption) { patterns.push(arg); patternGivingOption = true; continue; }
-      if (['grep','egrep','rg','ugrep','ag'].includes(program) && !patternGivingOption) { patterns.push(arg); patternGivingOption = true; continue; }
+      if (!hasPatternOption && !noPattern && ['jq', 'sed', 'awk', 'grep','egrep','rg','ugrep','ag'].includes(program)) { patterns.push(arg); continue; }
     }
     paths.push(arg);
   }
@@ -190,14 +240,14 @@ function bashDecision(command, payload, depth = 0) {
     let ws = words(segment); if (!ws.length) continue;
     const parsed = unwrapCommand(ws, depth); let cmd = parsed.cmd;
     if (!cmd) continue;
+    ws = ws.slice(parsed.commandIndex);
+    if (cmd === 'cd' && ws[1]) { const p = expand(ws[1], cwd); if (configRoot(p, homes)) entered = p; else cwd = p; continue; }
+    if (entered) return entered;
     if (depth < 3 && ['bash','sh','zsh'].includes(cmd)) {
       const cIndex = ws.findIndex((w) => w === '--command' || (/^-[A-Za-z]+$/.test(w) && w.slice(1).includes('c')));
       if (cIndex >= 0 && ws[cIndex + 1]) { const nested = bashDecision(ws[cIndex + 1], { ...payload, cwd }, depth + 1); if (nested) return nested; }
       continue;
     }
-    ws = ws.slice(parsed.commandIndex);
-    if (cmd === 'cd' && ws[1]) { const p = expand(ws[1], cwd); if (configRoot(p, homes)) entered = p; else cwd = p; continue; }
-    if (entered) return entered;
     for (let i = 0; i < ws.length; i++) {
       const token = ws[i];
       if (['<', '>', '>>', '2>', '<<<'].includes(token) && ws[i + 1]) {

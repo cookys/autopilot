@@ -99,6 +99,33 @@ test('table-driven operand classification covers option values and pattern argum
   }
 });
 
+test('pattern-giving options after operands keep every operand as a path', () => {
+  for (const command of [
+    'grep ~/.claude/settings.json -e x', 'grep ~/.claude/settings.json --regexp=x',
+    'grep ~/.claude/settings.json -ex', 'grep ~/.claude/settings.json -f p',
+    'rg ~/.claude/settings.json -e x', 'sed ~/.claude/settings.json -e p',
+    'awk ~/.claude/settings.json -f p', 'jq ~/.claude/settings.json -f p',
+    'rg --files ~/.claude'
+  ]) denied(call('Bash', { command }));
+});
+
+test('jq two-value options classify filenames and skip variable values', () => {
+  for (const command of ['jq --rawfile a ~/.claude/settings.json .', 'jq --slurpfile a ~/.claude/settings.json .']) {
+    denied(call('Bash', { command }));
+  }
+  allowed(call('Bash', { command: 'jq --arg a b . x.json' }));
+});
+
+test('cd into protected config is tracked before nested shell evaluation', () => {
+  denied(call('Bash', { command: 'cd ~/.claude; bash -c "cat settings.json"' }));
+});
+
+test('rg short options with values do not become path operands', () => {
+  for (const command of ['rg -t js "$HOME" docs', 'rg -A 3 "$HOME" docs']) {
+    allowed(call('Bash', { command }));
+  }
+});
+
 test('shell short clusters and sudo wrappers retain guard decisions', () => {
   for (const command of [
     'bash -lc "cat ~/.claude/settings.json"',

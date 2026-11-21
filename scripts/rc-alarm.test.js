@@ -184,3 +184,37 @@ test('XDG runtime directory selects the documented default state path', t => {
   assert.equal(result.status, 1);
   assert.equal(fs.readFileSync(path.join(runtime, 'autopilot', 'rc-alarm', 'default-dir.count'), 'utf8'), '1\n');
 });
+
+test('check with unusable /proc state dir exits non-zero in under 1s', t => {
+  const f = fixture(t);
+  const start = Date.now();
+  const result = f.run(['check', '--label', 'a', '--state-dir', '/proc/x/y'], { timeout: 5000 });
+  const elapsed = Date.now() - start;
+  assert.notEqual(result.status, 0);
+  assert.ok(elapsed < 1000, `expected < 1000ms, got ${elapsed}ms`);
+  assert.match(result.stderr, /rc-alarm: state dir unusable:/);
+});
+
+test('check with read-only state dir exits non-zero in under 1s', t => {
+  const f = fixture(t), roDir = path.join(f.root, 'ro-state');
+  fs.mkdirSync(roDir, { mode: 0o500 });
+  t.after(() => { try { fs.chmodSync(roDir, 0o700); } catch {} });
+  const start = Date.now();
+  const result = f.run(['check', '--label', 'a', '--state-dir', roDir], { timeout: 5000 });
+  const elapsed = Date.now() - start;
+  assert.notEqual(result.status, 0);
+  assert.ok(elapsed < 1000, `expected < 1000ms, got ${elapsed}ms`);
+  assert.match(result.stderr, /rc-alarm: state dir unusable:/);
+});
+
+test('held lock times out after AUTOPILOT_RC_ALARM_LOCK_MS', t => {
+  const f = fixture(t);
+  fs.mkdirSync(f.state, { recursive: true });
+  fs.writeFileSync(path.join(f.state, 'held.lock'), '999999\n');
+  const result = f.run(['check', '--label', 'held', '--state-dir', f.state], {
+    env: { AUTOPILOT_RC_ALARM_LOCK_MS: '150' },
+    timeout: 5000,
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /timed out waiting for lock for held/);
+});

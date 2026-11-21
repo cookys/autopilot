@@ -138,8 +138,10 @@ function compareTree(rel) {
   // deliberately omits the OpenCode installer scripts.
   // BL-0383: the directory entry docs (CLAUDE.md, AGENTS.md) are left out of scripts/ and references/.
   const scriptExcludes = new Set(['install-opencode.sh', 'sync-opencode-plugin.sh', 'CLAUDE.md', 'AGENTS.md']);
+  // tests are not shipped in the package; PM 01M7XRRV
+  const shippedTest = (file) => /\.test\.(js|sh|mjs)$/.test(file);
   const excluded = (file) => (
-    (rel === 'scripts' && scriptExcludes.has(file))
+    (rel === 'scripts' && (scriptExcludes.has(file) || shippedTest(file)))
     || (rel === 'references' && (file === 'CLAUDE.md' || file === 'AGENTS.md'))
     || (rel === 'profiles' && file.startsWith('baselines/'))
   );
@@ -263,6 +265,11 @@ NODE
 EXIT=$?
 assert_eq "$EXIT" "0" "Codex plugin support payload drift check exits 0"
 assert_eq "$SUPPORT_DIFF_OUT" "support_payload_in_sync" "Codex plugin support payload has no file drift"
+
+# Negative control for the scripts mirror: *.test.* is source-only.
+# Red while the mirror still contains them; green after sync excludes them.
+MIRROR_TEST_HITS="$(find "$PLUGIN_DIR/scripts" -type f \( -name '*.test.js' -o -name '*.test.sh' -o -name '*.test.mjs' \) | wc -l | tr -d ' ')"
+assert_eq "$MIRROR_TEST_HITS" "0" "codex scripts mirror ships no *.test.* files after sync"
 
 OUT="$(bash "$REPO_ROOT/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "0" "sync-codex-plugin-skills --check exits 0 on clean payload"

@@ -98,6 +98,10 @@ SCRIPT_EXCLUDES=(
   # would only add text to every consumer's tree.
   "CLAUDE.md"
   "AGENTS.md"
+  # tests are not shipped in the package; PM 01M7XRRV
+  "*.test.js"
+  "*.test.sh"
+  "*.test.mjs"
 )
 
 # Names left out of a mirrored directory. references/ carries the entry-doc names only.
@@ -337,7 +341,11 @@ sync_dir() {
     local tar_args=(-chf -)
     local excluded
     while IFS= read -r excluded; do
-      [ -n "$excluded" ] && tar_args+=(--exclude="./$excluded")
+      [ -n "$excluded" ] || continue
+      case "$excluded" in
+        *'*'*) tar_args+=(--exclude="$excluded") ;;
+        *) tar_args+=(--exclude="./$excluded") ;;
+      esac
     done < <(dir_excludes "$rel")
     (cd "$src" && tar "${tar_args[@]}" .) | (cd "$dst" && tar -xf -)
   fi
@@ -380,10 +388,21 @@ check_dir() {
     done < <(dir_excludes "$rel")
     diff "${args[@]}" "$src" "$dst" || diff_status=$?
     while IFS= read -r excluded; do
-      if [ -e "$dst/$excluded" ]; then
-        echo "drift: excluded file leaked into platforms/codex/plugin/$rel/$excluded"
-        return 1
-      fi
+      [ -n "$excluded" ] || continue
+      case "$excluded" in
+        *'*'*)
+          if find "$dst" -type f -name "$excluded" -print -quit | grep -q .; then
+            echo "drift: excluded file leaked into platforms/codex/plugin/$rel ($excluded)"
+            return 1
+          fi
+          ;;
+        *)
+          if [ -e "$dst/$excluded" ]; then
+            echo "drift: excluded file leaked into platforms/codex/plugin/$rel/$excluded"
+            return 1
+          fi
+          ;;
+      esac
     done < <(dir_excludes "$rel")
     return "$diff_status"
   fi

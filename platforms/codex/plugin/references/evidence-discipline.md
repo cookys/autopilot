@@ -1357,14 +1357,14 @@ Preventing artifact: `findings-batch-v3` preregistration with a content-judged `
 
 ## 65. Acceptance suites come from the selector, and "red before me" needs a run on develop
 
-2026-11-06, test-policy d-a62f4abc plus the PM's addendum. In the 2026-11-06 Z4 batch (six lanes), the full suite on the merged tree found 16 lane-introduced red suites that the lanes' own checks had not run.
+2026-11-06, test-policy d-a62f4abc plus the PM's addendum. In the 2026-11-06 Z4 batch (six lanes), the full suite on the merged tree found 16 lane-introduced red suites that the lanes' own checks had not run. PM ruling 2026-11-21 on task 01M7XRRV (operator 11-21) supersedes d-a62f4abc: a selection of half or more no longer escalates to a pre-merge full suite.
 
 Rules:
 
-- Acceptance and receipts never rest on a hand-picked suite list. Select with `node scripts/affected-suites.js --base <lane base> --head HEAD`, add its `always_run` (repo-audit) suites, and run them one at a time against the list. A hand-picked suite is a supplement only.
-- When the selector returns FULL, cannot compute, or selects at least half of all suites, nobody narrows the set: depth-0 runs the full suite on the merged tree (`tools/migrate/suite-baseline.js run-all --jobs 6`), alone, with nothing else running.
-- A red suite counts as "not caused by this change" only when the same suite, run on develop with the same environment, is also red. "It was already red" from memory is not evidence.
-- The selector is known to miss three dependency kinds: layout copies, whole-tree content scans, and the frozen copies inside eval packs. Keep the repo-audit (`always_run`) suites in every selection for that reason, and treat the at-least-half rule as the net for the rest.
+- Acceptance and receipts never rest on a hand-picked suite list. Pre-merge runs only the fast tier, `node scripts/affected-suites.js --base <lane base> --head HEAD --fast --run` (the changed files' own tests, tests reaching a changed file through require/source edges within two hops whose recorded duration is under 60 s, and the always-run list; parallel). A hand-picked suite is a supplement only. Target under 5 minutes for a one-file change.
+- A selection of half or more no longer escalates to a pre-merge full suite. The full affected run moves to after the merge: start `scripts/post-merge-suite.sh --merged <merge-sha> --base <develop-before> --notify <lane address>` in the background right after pushing; a suite red there and green on the base is a NEW red, and the lane reverts its own merge (`git revert -m 1 <merge-sha>`) and reports. The full suite before a release tag is unchanged.
+- A red suite counts as "not caused by this change" only when the same suite, run on the base with the same environment, is also red. "It was already red" from memory is not evidence.
+- Why: the selector cannot see three kinds of dependency, a suite that copies scripts into its own throwaway layout, a test that reads the contents of a whole directory tree, and an eval pack that keeps a frozen copy of a skill file. Those suites are caught post-merge.
 
 Preventing artifact: `scripts/affected-suites.js` (selector), `tools/migrate/suite-baseline.js run-all` (full run); the l5 acceptance step in `skills/l5/references/hetero-impl-loop.md` points here.
 

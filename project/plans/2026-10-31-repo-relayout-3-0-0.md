@@ -500,7 +500,7 @@ platforms/ 鏡像產物
 ## E1 三項修訂
 **(a) P3 不新增 `.github/workflows/test.yml`**（取代 §3 P3 第三條，原文在 `:100`）
 - 來源：operator 規則（上述）加 PM 裁定 2026-11-05。
-- P3 改成：`tests/run.sh` 仍是唯一入口；驗證在本機跑，合併前用 `node scripts/affected-suites.js` 選套件，選到至少一半就跑全套（`tools/migrate/suite-baseline.js` 的 `record`，依 `skills/quality-pipeline/references/test-policy.md` 的 operator 決定 d-a62f4abc）；付費路徑照現行哨兵擋掉。不新增任何託管 workflow；C 章與 §7 提到「進 CI」的 fixture，一律理解為本機執行。
+- P3 改成：`tests/run.sh` 仍是唯一入口；驗證在本機跑。合併前只跑 fast tier：`node scripts/affected-suites.js --base <develop> --head <merge-sha> --fast --run`（改動檔自己的測試、兩跳 require/source 且紀錄時長低於 60 秒的測試、always-run；平行）。選到一半以上不再升成合併前全套（PM ruling 2026-11-21 on task 01M7XRRV，operator 11-21，superseding d-a62f4abc；見 `skills/quality-pipeline/references/test-policy.md`）。全套受影響結果改到 push 後背景跑 `scripts/post-merge-suite.sh --merged <merge-sha> --base <develop-before> --notify <lane address>`；發版 tag 前的全套不變。付費路徑照現行哨兵擋掉。不新增任何託管 workflow；C 章與 §7 提到「進 CI」的 fixture，一律理解為本機執行。
 
 **(b) 保留頂層 `roles/`（角色套件，3.0.0.x 的工作）**
 - 來源：PM 裁定 2026-11-05。這裡只保留位置，內容與是否出貨由 `project/plans/2026-11-05-rolekit-direction.md` 決定；本修訂不建立 `roles/`。

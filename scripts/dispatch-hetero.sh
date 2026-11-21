@@ -3649,8 +3649,17 @@ if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_S
       export IMPLICIT_LOCAL_DEFAULT
       LOCAL_FALLBACK_JSON="$(node -e 'const o=JSON.parse(process.argv[1]); process.stdout.write(JSON.stringify(o.local_fallback_from||null))' "$_slot_choice")"
     else
-      # A CN-gate refusal of the local seat is a block, not a cloud fallback.
-      die_precondition "${_gate_msg:-cn_model_dispatch_barred alibaba local_name_external_host (01M7E2A1, d-1dfcf757)}"
+      # A CN-gate refusal of an implicit local seat releases its lease before cloud fallback.
+      release_local_lease || true
+      _gate_detail="${_gate_msg%%[[:space:]]*}"
+      _gate_detail="${_gate_detail:-cn_model_dispatch_barred}"
+      RUNNER="codex"
+      MODEL=""
+      ENDPOINT=""
+      LOCAL_CTX_CODEX_FALLBACK=1
+      LOCAL_FALLBACK_JSON="$(node -e 'process.stdout.write(JSON.stringify({reason:"cn_gate_barred",detail:process.argv[1],family:process.argv[2]}))' "$_gate_detail" "$_slot_family")"
+      printf 'local-slot: cn_gate_barred family=%s -> codex\n' "$_slot_family" >&2
+      unset _gate_detail
     fi
   else
     _lease_json="$(printf '%s\n' "$_slot_parsed" | sed -n '2p')"

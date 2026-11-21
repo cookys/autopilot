@@ -75,8 +75,14 @@ chmod +x "$STUB_CLAUDE"
 REAL_NODE="$(command -v node)"
 cat > "$TEST_TMP/bin/node" <<EOF
 #!/usr/bin/env bash
-if [ "\${1:-}" = "$REPO_ROOT/scripts/lib/cn-model-dispatch-gate.js" ] && [ "\${2:-}" = "check" ]; then
+if [[ " \$* " == *"cn-model-dispatch-gate.js check"* ]]; then
   printf '%s\n' "\$*" >> "$GATE_LOG"
+  if { [[ " \$* " == *"--runner cc-shim"*"--model qwen"*"prompt-l2.txt"* ]] \
+       || [[ " \$* " == *"--runner local"*"--model qwen"*"prompt-l2.txt"* ]]; } \
+     || [[ " \$* " == *"--runner cc-shim"*"--model qwen"*"prompt-l3.txt"* ]]; then
+    echo 'cn_model_dispatch_barred alibaba local_name_external_host (01M7E2A1, d-1dfcf757)' >&2
+    exit 3
+  fi
 fi
 exec "$REAL_NODE" "\$@"
 EOF
@@ -110,6 +116,17 @@ json_get() {
   ' "$1" "$2"
 }
 
+manifest_in() {
+  node -e '
+    const fs = require("fs"), path = require("path");
+    const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const file = path.join(dir, entry.name);
+      return entry.isDirectory() ? walk(file) : (entry.name.endsWith(".manifest.json") ? [file] : []);
+    });
+    process.stdout.write(walk(process.argv[1])[0] || "");
+  ' "$1"
+}
+
 run_local() {
   local tag="$1"; shift
   local runs="$TEST_TMP/runs-$tag"
@@ -120,7 +137,7 @@ run_local() {
     --branch "feat/local-$tag" --prompt-file "$PROMPT" "$@" </dev/null 2>"$TEST_TMP/$tag.err")"
   EXIT=$?
   ERR="$(cat "$TEST_TMP/$tag.err" 2>/dev/null || true)"
-  MF="$(find "$runs" -name '*.manifest.json' | head -1)"
+  MF="$(manifest_in "$runs")"
 }
 
 # (a2) A free GLM slot wins before a fixture that otherwise selects codex; gate and manifest carry GLM.
@@ -313,7 +330,7 @@ OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="
 EXIT=$?
 [ "$EXIT" -eq 0 ] || printf "lease-f diagnostic: %s\n%s\n" "$OUT" "$(cat "$TEST_TMP/f.err")" >&2
 assert_eq "$EXIT" "0" "f: lease-backed implicit local run exits 0"
-MF="$(find "$RUNS" -name '*.manifest.json' | head -1)"
+MF="$(manifest_in "$RUNS")"
 assert_eq "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1])).local_lease.id||"")' "$MF")" "test-lease-id" "f: manifest records lease id"
 assert_eq "$(node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1])).local_lease.released))' "$MF")" "true" "f: manifest records release"
 assert_eq "$(node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1])).local_lease.heartbeats>=2))' "$MF")" "true" "f: heartbeat renews during worker run"
@@ -396,7 +413,7 @@ OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="
   LEASE_WORKER_SLEEP=15 "$SCRIPT" --no-verify-tip --context-window off \
   --branch feat/local-f2 --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/f2.err")"
 EXIT=$?
-MF="$(find "$RUNS" -name '*.manifest.json' | head -1)"
+MF="$(manifest_in "$RUNS")"
 assert_file_exists "$MF" "f2: timeout writes a manifest"
 assert_eq "true" "$(json_get "$OUT" timed_out)" "f2: hard timeout kills the sleeping worker"
 assert_eq "$(node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1])).local_lease.released))' "$MF")" "true" "f2: manifest records release after timeout"
@@ -548,6 +565,32 @@ assert_eq "$EXIT" "0" "l: oversized referenced file dispatch exits 0"
 assert_eq "codex" "$(json_get "$OUT" runner)" "l: oversized referenced file uses codex"
 assert_contains "$(cat "$TEST_TMP/l.err")" 'local-slot: local_ctx_over est_tokens=' "l: context fallback is reported"
 assert_not_contains "$(cat "$LEASE_LOG")" '"method":"POST","url":"/v1/local/lease"' "l: context fallback never requests a lease"
+
+# (l2) An implicit local slot refused by the CN gate releases its lease and falls back to codex.
+PROMPT="$TEST_TMP/prompt-l2.txt"
+printf 'Fleet-Task: 01ARZ3NDEKTSV4RRFFQ69G5FAV\nTask-Class: simple-script\nedit impl-defaults-fixture.txt\n' > "$PROMPT"
+: > "$LEASE_LOG"; RUNS="$TEST_TMP/runs-l2"; mkdir -p "$RUNS"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
+  "$SCRIPT" --no-verify-tip --context-window off --branch feat/local-l2 --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/l2.err")"; EXIT=$?
+MF="$(manifest_in "$RUNS")"
+assert_eq "$EXIT" "0" "l2: CN-gate refusal falls back successfully"
+assert_eq "$(json_get "$OUT" runner)" "codex" "l2: CN-gate refusal uses codex"
+assert_eq "$(node -e 'const o=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(o.local_fallback.reason||"")' "$MF")" "cn_gate_barred" "l2: manifest records cn_gate_barred"
+assert_eq "$(node -e 'const o=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(o.local_fallback.detail||"")' "$MF")" "cn_model_dispatch_barred" "l2: manifest records the gate detail token"
+assert_eq "$(node -e 'const o=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(o.local_fallback.family||"")' "$MF")" "qwen" "l2: manifest records the local family"
+assert_eq "$(node -e 'const lines=String(process.argv[1]).split(/\r?\n/).reverse(),line=lines.find(x=>x.trim().startsWith("{"));process.stdout.write(JSON.parse(line).local_fallback.reason||"")' "$OUT")" "cn_gate_barred" "l2: result records cn_gate_barred"
+assert_not_contains "$(cat "$LEASE_LOG")" '"url":"/v1/local/lease/test-lease-id/heartbeat"' "l2: refused gate starts no heartbeat"
+assert_contains "$(cat "$LEASE_LOG")" '"method":"DELETE","url":"/v1/local/lease/test-lease-id"' "l2: acquired lease is released"
+assert_contains "$(cat "$TEST_TMP/l2.err")" 'local-slot: cn_gate_barred family=qwen -> codex' "l2: fallback is reported"
+
+# (l3) Explicitly pinned local runs remain blocked by the same CN gate refusal.
+RUNS="$TEST_TMP/runs-l3"; mkdir -p "$RUNS"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
+  "$SCRIPT" --no-verify-tip --context-window off --runner local --model qwen --endpoint qwen_local \
+  --branch feat/local-l3 --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/l3.err")"; EXIT=$?
+assert_eq "$EXIT" "2" "l3: pinned local CN-gate refusal remains a precondition error"
+assert_contains "$OUT" '"status": "precondition_failed"' "l3: pinned refusal reports precondition_failed"
+assert_contains "$OUT" 'cn_model_dispatch_barred' "l3: pinned refusal preserves gate error"
 
 # (m) a shed local target and local_ctx_over coexist without duplicating the fallback.
 PROMPT="$TEST_TMP/prompt-m.txt"

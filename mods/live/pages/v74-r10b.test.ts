@@ -38,13 +38,13 @@ test('r10b #1: the help legend lists the pending diamond, the answer arrow and t
 
 // ---- #2 s previews first ----
 const picked = { ...NO_NAV, picks: { [decide[0].id]: 1, [decide[1].id]: 0 } }
-test('r10b #2: the first s only arms a preview (no send effect, no hold); the second s sends', () => {
+test('r10b #2: the first s only arms a preview (no send effect, no hold); y sends (r11 #12)', () => {
   const c = ctxOf({})
   const first = decideReduce(picked, { kind: 'submit' }, c, 5)
   expect(first.effect).toBeNull()
   expect(first.nav.armed).toBe(true)
   expect(first.nav.hold).toBeUndefined()
-  const second = decideReduce(first.nav, { kind: 'submit' }, c, 6)
+  const second = decideReduce(first.nav, { kind: 'confirm' }, c, 6)
   expect(second.effect?.kind).toBe('send')
   expect(second.nav.armed).toBe(false)
   expect(Object.keys(second.nav.hold ?? {}).sort()).toEqual([decide[0].id, decide[1].id].sort())
@@ -71,12 +71,14 @@ test('r10b #2: Esc cancels the preview (and only then); any other key cancels it
 
 test('r10b #2: the armed send row lists card→letter and how to confirm or cancel; the unarmed row is unchanged', () => {
   const rows = (nav: object) => decidePage.render({ ...(ctxOf({}) as object), decide: nav } as never).actions.map(text).join('\n')
-  expect(rows(picked)).toContain('[s] 送出已選 2 張')
+  expect(rows(picked)).toContain('[s] 預覽並送出已選 2 張')
   const armed = rows({ ...picked, armed: true })
-  expect(armed).toContain('將送出 1→b、2→a')
-  expect(armed).toContain('再按 s 確認')
-  expect(armed).toContain('Esc 取消')
-  expect(armed).not.toContain('[s] 送出已選')
+  expect(armed).toContain('將送出 2 張')
+  expect(armed).toContain('1. ')
+  expect(armed).toContain('→ b')
+  expect(armed).toContain('y 確認送出')
+  expect(armed).not.toContain('Esc')
+  expect(armed).not.toContain('[s] 預覽並送出')
 })
 
 test('r10b #2: the send feedback after sending stays', () => {

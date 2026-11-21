@@ -11,7 +11,7 @@ import type { DecideCard, TodoCard, V74Ctx } from '../v74/contract'
 import type { Row } from './rows'
 
 // r10b #2: s previews first, the second s sends
-const sendS = (nav: Parameters<typeof decideReduce>[0], c: Parameters<typeof decideReduce>[2], now: number) => decideReduce(decideReduce(nav, { kind: 'submit' }, c, now).nav, { kind: 'submit' }, c, now)
+const sendS = (nav: Parameters<typeof decideReduce>[0], c: Parameters<typeof decideReduce>[2], now: number) => decideReduce(decideReduce(nav, { kind: 'submit' }, c, now).nav, { kind: 'confirm' }, c, now)
 
 
 const t = makeT('zh-TW')
@@ -34,7 +34,7 @@ test('v74-d: 待決 draws every card; only the selected card has a/b/c Buttons (
   expect(all).not.toContain('a: 合併')
   expect(pressed(body).filter(p => /key:[abc]/.test(p))).toEqual(['key:a', 'key:b', 'key:c'])
   expect(pressed(body)).toContain('key:m')
-  expect(text(actions[0])).toBe('[s] 送出已選 0 張 · 另 3 張未選')
+  expect(text(actions[0])).toBe('[s] 預覽並送出已選 0 張 · 另 3 張未選')
 })
 
 test('v74-d: cursor on card 1 moves the Buttons to card 1 (negative: card 3 plain again)', () => {
@@ -49,7 +49,7 @@ test('v74-d: send-all counts answered cards and a note shows inside the selected
   const nav = { ...NO_NAV, cursor: 1, picks: { 'd-a1b2c3e1': 0, 'd-a1b2c3e2': 1 }, notes: { 'd-a1b2c3e2': '今晚太趕' } }
   const ctx = { ...ctxOf({}), decide: nav }
   const { body, actions } = decidePage.render(ctx)
-  expect(text(actions[0])).toBe('[s] 送出已選 2 張 · 另 1 張未選')
+  expect(text(actions[0])).toBe('[s] 預覽並送出已選 2 張 · 另 1 張未選')
   expect(body.map(text).join('\n')).toContain('m 附註：今晚太趕')
 })
 

@@ -10,9 +10,10 @@ import { DECIDE_UNDO_MS, NO_DECIDE, decideDialog, decideFillText, decideLine, de
 import type { DecideState, LiveDecision, Seg } from '../model'
 import { GLYPHS } from '../../tux/glyphs.ts'
 import { PALETTE } from '../../tux/palette.ts'
-import { wrapPlain } from '../ui'
+import { pickedTone, wrapPlain } from '../ui'
 import type { KeyAction } from './keys'
 import type { Page, PageCtx } from './frame'
+import { actionRows as frameActionRows } from './layout'
 import { brokenRow, pendingMissingReason, pendingSourceMissing, wrapRow } from './rows'
 import type { Row } from './rows'
 import { STRIP_SPLIT_COLS } from './layout'
@@ -87,14 +88,15 @@ export function decideReduce(nav: DecideNav, key: KeyAction, ctx: PageCtx, nowMs
   const heldNow = d !== null && d.id !== null && nav.hold?.[d.id] !== undefined
   const sentNow = d !== null && d.id !== null && nav.sent[d.id] !== undefined && nav.fixing?.[d.id] === undefined
   if (key.kind === 'disarm') return same({ armed: false })
-  if (nav.armed === true && key.kind !== 'submit') return decideReduce({ ...nav, armed: false }, key, ctx, nowMs) // any other key cancels the send preview, then does its own work
+  if (nav.armed === true && key.kind !== 'submit' && key.kind !== 'confirm') return decideReduce({ ...nav, armed: false }, key, ctx, nowMs) // any other key cancels the send preview, then does its own work
   if (v74Cards(ctx) !== null && key.kind === 'move') return same({ cursor: Math.min(Math.max(0, m.all.length - 1), Math.max(0, cursor + key.by)), opt: null, detailOffset: 0 })
   if (v74Cards(ctx) !== null && key.kind === 'cursor') return same({ cursor: Math.min(Math.max(0, m.all.length - 1), Math.max(0, key.at)), opt: null, detailOffset: 0 })
-  if (v74Cards(ctx) !== null && key.kind === 'submit') { // s sends every answered card that is not already in its window (holdSend); the effect carries the first one
+  if (v74Cards(ctx) !== null && key.kind === 'confirm' && nav.armed !== true) return same({}) // y means nothing outside the send preview
+  if (v74Cards(ctx) !== null && (key.kind === 'submit' || key.kind === 'confirm')) { // s sends every answered card that is not already in its window (holdSend); the effect carries the first one
     const ready = m.all.flatMap(it => (it.kind === 'own' && it.d.id !== null && nav.hold?.[it.d.id] === undefined && !(nav.sent[it.d.id] !== undefined && nav.fixing?.[it.d.id] === undefined) ? [it.d] : []))
       .flatMap(c => { const line = decideLine(c, nav); return line === null ? [] : [{ id: c.id as string, line }] })
     if (ready.length === 0) return same({ armed: false })
-    if (nav.armed !== true) return same({ armed: true }) // r10b #2: the first s only previews what would go out; the second s sends
+    if (nav.armed !== true || key.kind === 'submit') return same({ armed: true }) // r10b #2: the first s only previews what would go out; the second s sends
     return { nav: { ...nav, cursor, armed: false, hold: { ...(nav.hold ?? {}), ...Object.fromEntries(ready.map(r => [r.id, nowMs])) } }, effect: { kind: 'send', id: ready[0].id, line: ready[0].line } }
   }
   switch (key.kind) {
@@ -193,7 +195,7 @@ function optionSegs(d: LiveDecision, i: number, nav: DecideNav, ctx: PageCtx): S
   const label = i < MAX_OPTS ? d.options[i].label : ctx.t('page.decide.opt_n', { n: i + 1, label: d.options[i].label })
   // G11: the option is a Button (press `key:<letter>`, the pane turns it into the key's action) so it works by click where the pane cannot take the keyboard; the old 6th-and-later options (f6..) keep plain text
   const press = i < MAX_OPTS ? { press: 'key:' + letterOf(i) } : {}
-  const out: Seg[] = [seg('[' + letterOf(i) + '] ' + label, picked ? { color: PALETTE.here, ...press } : press)]
+  const out: Seg[] = [seg('[' + letterOf(i) + '] ' + label, picked ? { ...pickedTone(), ...press } : press)]
   if (rec) out.push(seg(' ' + GLYPHS.structure.recommend, { color: PALETTE.attention, ...press }))
   return out
 }
@@ -465,7 +467,7 @@ function v74Card(c: DecideCard, i: number, selected: boolean, nav: DecideNav, ct
   c.options.forEach((o, k) => {
     const rec = o.recommended ? ' ' + GLYPHS.structure.recommend : ''
     const markPick = picked === k ? ' ' + GLYPHS.structure.answer : ''
-    const tone = picked === k ? { color: PALETTE.here } : o.recommended ? { color: PALETTE.attention } : {}
+    const tone = picked === k ? pickedTone() : o.recommended ? { color: PALETTE.attention } : {}
     if (box && k > 0) out.push([seg('')])
     if (!selected || k >= THREE || box) {
       const text = selected && k < THREE ? PICK_KEYS[k] + ': ' + o.label + rec + markPick : truncateToWidth(o.label, room) + rec + markPick
@@ -533,7 +535,7 @@ function boxOpen(c: DecideCard, i: number, nav: DecideNav, ctx: PageCtx, fit: Fi
   c.options.forEach((o, k) => {
     if (k > 0 && fit.between) out.push([seg('')])
     const mark = picked === k ? ' ' + GLYPHS.structure.answer : ''
-    const tone = picked === k ? { color: PALETTE.here } : o.recommended ? { color: PALETTE.attention } : {}
+    const tone = picked === k ? pickedTone() : o.recommended ? { color: PALETTE.attention } : {}
     const label = (k < THREE ? PICK_KEYS[k] + ': ' : DOT + ' ') + o.label
     const rec = o.recommended ? [seg('  ' + GLYPHS.structure.recommend + ' ' + t('v74.d.rec'), { color: PALETTE.attention })] : []
     out.push([seg('    '), seg(label + mark, tone), ...rec])
@@ -554,7 +556,18 @@ function boxBody(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: numb
     if (hidden.length === 0) return []
     const p = hidden.filter(c => nav.picks[c.id] !== undefined).length
     const ud = GLYPHS.structure.up + GLYPHS.structure.behind
-    return [[seg('   ' + (p === 0 ? ctx.t('v74.d.more', { n: hidden.length, ud }) : ctx.t('v74.d.more_picked', { n: hidden.length, p, ud })))]]
+    const base = '   ' + (p === 0 ? ctx.t('v74.d.more', { n: hidden.length, ud }) : ctx.t('v74.d.more_picked', { n: hidden.length, p, ud }))
+    // r11 #10: name the hidden cards: short code, `→letter` for a picked one, cut to what the row still has
+    let list = ''
+    const room = ctx.size.cols - 4 - displayWidth(base) - 3
+    for (const c of hidden) {
+      const at = nav.picks[c.id]
+      const one = [...c.id].slice(0, 8).join('') + (at === undefined ? '' : GLYPHS.structure.answer + letterOf(at))
+      const next = list === '' ? one : list + ' ' + one
+      if (displayWidth(next) > room) { list += '…'; break }
+      list = next
+    }
+    return [[seg(base), ...(list === '' || room <= 0 ? [] : [dimSeg(' ' + DOT + ' ' + list)])]]
   }
   if (fit.collapse) return [head, ...more(cards.slice(0, cursor)), ...boxOpen(cards[cursor], cursor, nav, ctx, fit), ...more(cards.slice(cursor + 1))]
   return [head, ...cards.flatMap((c, i) => (i === cursor ? boxOpen(c, i, nav, ctx, fit) : [boxSummary(c, i, nav, ctx)]))]
@@ -586,23 +599,28 @@ function renderV74(ctx: PageCtx): { body: Row[]; actions: Row[] } {
   const actions: Row[] = [[seg(sendText, { press: 'key:s' })]]
   if (ctx.box === true) {
     const m = ctx.v74?.sendResult
-    // r10b #2: after the first s the row names what the second s will send (card number → letter), and how to back out
+    // r11 #3: after the first s the preview lists every card that goes out: number, title, letter, option name, note (cut by chars). Rows beyond the action area end in 「…另 N 張」.
     const plan = cards.flatMap((c, i) => {
-      const line = decideLine(cardToLive(c), nav)
       const at = decidePick(cardToLive(c), nav)
-      return line === null || at === null || nav.hold?.[c.id] !== undefined ? [] : [(i + 1) + GLYPHS.structure.answer + letterOf(at)]
+      if (decideLine(cardToLive(c), nav) === null || at === null || nav.hold?.[c.id] !== undefined) return []
+      const cut = (x: string, n: number): string => { const a = [...x]; return a.length > n ? a.slice(0, n - 1).join('') + '…' : x }
+      const note = (nav.notes[c.id] ?? '').trim()
+      const text = (i + 1) + '. ' + cut(c.title, 14) + ' ' + GLYPHS.structure.answer + ' ' + letterOf(at) + ' ' + cut(c.options[at]?.label ?? '', 12) + (note === '' ? '' : ' ' + DOT + ' ' + t('v74.d.pv_note', { note: cut(note, 24) }))
+      return [text]
     })
-    const room = Math.max(8, ctx.size.cols - 4 - displayWidth(t('v74.d.preview', { list: '' })))
-    let list = ''
-    for (const p of plan) {
-      const next = list === '' ? p : list + '、' + p
-      if (displayWidth(next) > room) { list += '…'; break }
-      list = next
-    }
-    const sendRow: Row = nav.armed === true && plan.length > 0 ? [seg(t('v74.d.preview', { list }), { press: 'key:s', color: PALETTE.attention })] : [seg(sendText, { press: 'key:s' })]
+    const resultRow: Row[] = m === undefined || m === null ? [] : [[dimSeg(GLYPHS.state.done + ' ' + t('v74.d.result', { n: m.n, left: m.left }))] as Row]
+    const cap = frameActionRows(ctx.size.rows) - resultRow.length
+    const shown = plan.length + 1 <= cap ? plan : plan.slice(0, Math.max(0, cap - 2))
+    const rest = plan.length - shown.length
+    const previewRows: Row[] = [
+      [seg(t('v74.d.preview', { n: plan.length }), { press: 'key:y', color: PALETTE.attention })],
+      ...shown.map(x => truncateSegs([seg('  ' + x)], cols)),
+      ...(rest > 0 ? [[dimSeg('  ' + t('v74.d.pv_more', { n: rest }))] as Row] : []),
+    ]
+    const sendRows: Row[] = nav.armed === true && plan.length > 0 ? previewRows : [[seg(sendText, { press: 'key:s' })]]
     return renderBoxV74(ctx, cards, nav, cursor, [
-      sendRow,
-      ...(m === undefined || m === null ? [] : [[dimSeg(GLYPHS.state.done + ' ' + t('v74.d.result', { n: m.n, left: m.left }))] as Row]),
+      ...sendRows,
+      ...resultRow,
     ])
   }
   const head = ruleTo(GLYPHS.structure.open + ' ' + t('v74.d.head', { n: cards.length, k: cursor + 1 }), cols)

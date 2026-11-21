@@ -12,7 +12,7 @@ import type { DecideState, LiveSnapshot, PaneLine, PaneTab, Seg } from './model'
 import { dispatchLines, fleetTabLines, headerLines, hygieneTabLines, legendLines, nowLines, reviewTabLines, spendTabLines, stripOf, treeRowCount, withOverflowHint } from './tabs'
 import type { FleetView, OthersView } from './fleet'
 import type { ScrollView } from './tabs'
-import { dimProps, drawSeg, onBandLine } from './ui'
+import { dimProps, drawSeg, heldBorder, onBandLine } from './ui'
 import type { Strip } from '../tux/strip.ts'
 import { consoleStrip } from './consoletabs'
 import { commandView } from './commandtab'
@@ -261,7 +261,7 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
         const texts = run.map((x, n) => <Text key={'g' + (j + n)} {...drawSeg(x)} wrap="truncate">{n === 0 && letter !== null ? stripLead(x.text) : x.text}</Text>)
         const onKeyPress = () => {
           if (cardAt !== null) frame.onKey?.({ kind: 'cursor', at: cardAt })
-          else if (typeof sg.press === 'string' && sg.press.startsWith('key:')) frame.onKey?.(keys[sg.press.slice(4)] ?? { kind: 'none' })
+          else if (typeof sg.press === 'string' && sg.press.startsWith('key:')) frame.onKey?.(keys[sg.press.slice(4)] ?? (sg.press === 'key:y' ? { kind: 'confirm' } : { kind: 'none' }))
           else press(sg.press as string)
         }
         nodes.push(<Button key={(cardAt !== null ? 'card:' + cardAt : 'p:' + i + ':' + j + ep)} plain {...(letter === null ? {} : { hotkey: letter })} {...(focusMark ? { autoFocus: true } : {})} onPress={onKeyPress}>{texts}</Button>)
@@ -290,9 +290,12 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
   const rule = GLYPHS.structure.rule
   const side = GLYPHS.structure.bandSep
   const pad = (n: number) => rule.repeat(Math.max(1, n))
+  // r11 #9: the border changes colour while the pane holds the keyboard, so focus is not only a hint word
+  const held = ctx.v74?.keysHeld === true
+  const bc = held ? heldBorder() : {}
   const titleSegs = fitSegs(v74TitleSegs(page, ctx, (rows[0] ?? [])[0] ?? { text: t('tab.' + page.id) }), Math.max(0, fullCols - 6))
   const titleW = titleSegs.reduce((n, x) => n + displayWidth(x.text), 0)
-  const top = <Box key="v74-top" height={1} width={fullCols} overflow="hidden"><Text>{GLYPHS.structure.frameTL + rule + ' '}</Text>{titleSegs.map((x, j) => <Text key={'tt' + j} {...drawSeg(x)} wrap="truncate">{x.text}</Text>)}<Text>{' ' + pad(fullCols - 5 - titleW) + GLYPHS.structure.frameTR}</Text></Box>
+  const top = <Box key="v74-top" height={1} width={fullCols} overflow="hidden"><Text {...bc}>{GLYPHS.structure.frameTL + rule + ' '}</Text>{titleSegs.map((x, j) => <Text key={'tt' + j} {...drawSeg(x)} wrap="truncate">{x.text}</Text>)}<Text {...bc}>{' ' + pad(fullCols - 5 - titleW) + GLYPHS.structure.frameTR}</Text></Box>
   const inner = rows.slice(1, rows.length - stripN - 1).map((r, k) => (
     <Box key={'v74-row' + k} height={1} width={fullCols} overflow="hidden"><Text>{side + ' '}</Text><Box flexGrow={1} flexDirection="row" overflow="hidden">{drawRow(r, k + 1)}</Box><Text>{' ' + side}</Text></Box>
   ))
@@ -326,7 +329,7 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
   const letters = Button === undefined || typing || page.id !== 'decide' ? [] : (['a', 'b', 'c', 'm'] as const).map(letter => (
     <Box key={'lk' + letter} width={0} height={0} overflow="hidden"><Button key={'letter:' + letter + ep} plain hotkey={letter} onPress={() => frame.onKey?.(keys[letter] ?? { kind: 'none' })}>{letter}</Button></Box>
   ))
-  const bottom = <Box key="v74-bottom" height={1} width={fullCols} overflow="hidden"><Text>{GLYPHS.structure.frameBL + rule + '  ' + fit.hint + '  ' + rule.repeat(padN) + '  '}</Text>{tabs}<Text>{'  ' + rule + GLYPHS.structure.frameBR}</Text>{hidden}{letters}</Box>
+  const bottom = <Box key="v74-bottom" height={1} width={fullCols} overflow="hidden"><Text {...bc}>{GLYPHS.structure.frameBL + rule + '  ' + fit.hint + '  ' + rule.repeat(padN) + '  '}</Text>{tabs}<Text {...bc}>{'  ' + rule + GLYPHS.structure.frameBR}</Text>{hidden}{letters}</Box>
   return <Box {...(epoch > 0 ? { key: 'v74:' + epoch } : {})} flexDirection="column">{top}{inner}{bottom}</Box>
 }
 

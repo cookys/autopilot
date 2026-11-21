@@ -11,7 +11,7 @@ import type { DecideCard } from './v74/contract'
 import decideFx from './fixtures/v74/decide.fixture'
 
 // r10b #2: s previews first, the second s sends
-const sendS = (nav: Parameters<typeof decideReduce>[0], c: Parameters<typeof decideReduce>[2], now: number) => decideReduce(decideReduce(nav, { kind: 'submit' }, c, now).nav, { kind: 'submit' }, c, now)
+const sendS = (nav: Parameters<typeof decideReduce>[0], c: Parameters<typeof decideReduce>[2], now: number) => decideReduce(decideReduce(nav, { kind: 'submit' }, c, now).nav, { kind: 'confirm' }, c, now)
 
 
 const t = makeT('zh-TW')

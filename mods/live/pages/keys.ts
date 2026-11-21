@@ -5,7 +5,7 @@ import { PET_KEY, PICK_KEYS, V74_KEY } from '../v74/contract'
 
 export type KeyState = { page: string; paneFocus: boolean; focusedButton: boolean; textMode: boolean; armed?: boolean }
 export type KeyAction =
-  | { kind: 'page'; to: string } | { kind: 'close' } | { kind: 'pass' } | { kind: 'button' } | { kind: 'submit' } | { kind: 'disarm' }
+  | { kind: 'page'; to: string } | { kind: 'close' } | { kind: 'pass' } | { kind: 'button' } | { kind: 'submit' } | { kind: 'confirm' } | { kind: 'disarm' }
   | { kind: 'pick'; index: number } | { kind: 'text'; ch: string } | { kind: 'text_save' } | { kind: 'text_cancel' }
   | { kind: 'note' } | { kind: 'undo' } | { kind: 'prev' } | { kind: 'next' } | { kind: 'fill' }
   | { kind: 'move'; by: 1 | -1 } | { kind: 'cursor'; at: number } | { kind: 'fold' } | { kind: 'open' } | { kind: 'none' }
@@ -37,6 +37,7 @@ export function routeKey(key: string, st: KeyState): KeyAction {
     if (key === 's' && st.page === 'decide') return { kind: 'submit' }
   }
   if (st.page === 'decide') {
+    if (key === 'y') return st.armed === true ? { kind: 'confirm' } : { kind: 'none' } // r11 #12: y confirms the send preview and means nothing else
     if (key === 'n') return { kind: 'note' }
     if (key === 'u') return { kind: 'undo' }
     if (key === 'h') return { kind: 'prev' }

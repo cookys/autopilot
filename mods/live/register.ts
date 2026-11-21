@@ -1597,6 +1597,8 @@ export function v74KeysHeldAfter(was: boolean, named: string | undefined, origin
   if (!bandElement(named)) return false
   return (origin as { kind?: unknown } | undefined)?.kind === 'person' ? true : was
 }
+// r11 #4: while the send preview is up, a focus event that names no band element is the host's Esc handing the keyboard to the prompt; it cancels the preview instead (one meaning for Esc there).
+export const v74EscCancelsPreview = (armed: boolean | undefined, open: boolean, page: string, named: string | undefined): boolean => open && armed === true && page === 'decide' && !bandElement(named)
 // r11 #2: every change of the border word goes through this one function, so the sequence open -> keys -> send -> Esc is testable without the host.
 // A send posts the [待決回覆] line to the prompt and starts a turn; the host then gives the first Esc to the turn (it stops it) and raises no focus event for it, so the pane cannot tell
 // when the prompt has the keyboard again. After a send the word therefore falls back to `ctrl+x tab` and comes back only on evidence: a key that reached the pane or a focus event of the person.
@@ -2366,6 +2368,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       void frameKey($, { kind: 'text_cancel' })
       return {}
     }
+    if (v74EscCancelsPreview(decideLocal.armed, v74Open, panePage, named)) { void frameKey($, { kind: 'disarm' }); return {} }
     // r8-3: the border word follows the keyboard. It only re-renders when the value really flips, and one tick later (two microtasks, as ringToTab does), never inside the focus event:
     // a render there remounts the tab Buttons and the host's focus lands on a card Button, which wrote the cursor back (r8-1 gate, step 22).
     if (v74Open) { const was = v74KeysHeld; v74KeysHeld = v74KeysHeldNext(was, { kind: 'focus', named, origin: (raw as { origin?: unknown }).origin }); if (was !== v74KeysHeld) void renderLater($) }

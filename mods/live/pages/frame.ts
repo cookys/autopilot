@@ -95,7 +95,7 @@ const HOST_PREFIX = 1
 const V74_BORDER_KEY: Record<string, string> = {
   now: 'v74.b.border.now', decide: 'v74.b.border.decide', dispatch: 'v74.b.border.dispatch', review: 'v74.b.border.review',
   spend: 'v74.b.border.spend', hygiene: 'v74.b.border.hygiene', fleet: 'v74.b.border.fleet', todo: 'v74.b.border.todo',
-  help: 'v74.b.border.help', pet: 'v74.b.border.pet', quota: 'v74.b.border.spend', forge: 'v74.b.border.default',
+  help: 'v74.b.border.help', pet: 'v74.b.border.pet', quota: 'v74.b.border.quota', forge: 'v74.b.border.default',
 }
 
 const TINY_FRAME_ROWS = 3
@@ -109,8 +109,10 @@ const V74_SHORT_KEY: Record<string, string> = {
 const keysWord = (ctx: PageCtx): string => (ctx.v74?.keysHeld === true ? ctx.t('v74.b.keys_held') : ctx.t('v74.b.keys_take'))
 // r8 #10: a card page with no cards (no source, or an empty list) has nothing to pick or send: its hint is the scroll hint, not `a/b/c · s`
 const cardless = (page: Page, ctx: PageCtx): boolean => (page.id === 'decide' || page.id === 'todo') && ctx.v74 !== undefined && (ctx.v74[page.id] ?? []).length === 0
-export const frameHintText = (page: Page, ctx: PageCtx): string => ctx.t(cardless(page, ctx) ? 'v74.b.border.cardless' : V74_BORDER_KEY[page.id] ?? 'v74.b.border.default', { ud: GLYPHS.structure.up + GLYPHS.structure.behind, keys: keysWord(ctx) })
-export const frameHintShort = (page: Page, ctx: PageCtx): string => ctx.t(cardless(page, ctx) ? 'v74.b.short.scroll' : V74_SHORT_KEY[page.id] ?? 'v74.b.short.scroll', { ud: GLYPHS.structure.up + GLYPHS.structure.behind })
+// r11 #4: while the send preview is up, Esc means one thing (cancel the preview), so the border says so and nothing else
+const armed = (page: Page, ctx: PageCtx): boolean => page.id === 'decide' && ctx.decide?.armed === true && !cardless(page, ctx)
+export const frameHintText = (page: Page, ctx: PageCtx): string => armed(page, ctx) ? ctx.t('v74.b.border.armed') : ctx.t(cardless(page, ctx) ? 'v74.b.border.cardless' : V74_BORDER_KEY[page.id] ?? 'v74.b.border.default', { ud: GLYPHS.structure.up + GLYPHS.structure.behind, keys: keysWord(ctx) })
+export const frameHintShort = (page: Page, ctx: PageCtx): string => armed(page, ctx) ? ctx.t('v74.b.short.armed') : ctx.t(cardless(page, ctx) ? 'v74.b.short.scroll' : V74_SHORT_KEY[page.id] ?? 'v74.b.short.scroll', { ud: GLYPHS.structure.up + GLYPHS.structure.behind })
 export function frameBorderRow(page: Page, ctx: PageCtx): Row {
   return [{ text: GLYPHS.structure.frameBL + GLYPHS.structure.rule + ' ' + frameHintText(page, ctx), dim: true }]
 }

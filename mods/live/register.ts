@@ -1582,6 +1582,12 @@ let paneOpened = false
 let v74KeysHeld = false
 // r8 #3: how many cards the last `s` sent, shown under the send row (`已送出 N 張 · 尚有 M 張待決`); a new pane open clears it
 let v74SendResult: { n: number; left: number } | null = null
+// r10 #2: a focus event the program raised itself (the current tab's autoFocus mounting again after a render, or after Esc handed the keyboard back) is not the person taking the keyboard:
+// only an event whose origin is the person sets the word to `keys in pane`; any event that names no band element clears it.
+export function v74KeysHeldAfter(was: boolean, named: string | undefined, origin: unknown): boolean {
+  if (!bandElement(named)) return false
+  return (origin as { kind?: unknown } | undefined)?.kind === 'person' ? true : was
+}
 const bandElement = (named: string | undefined): boolean => named !== undefined && /^(tab:|card:|letter:|hotkey:|opt:|v74-note$)/.test(named)
 function markPaneOpen(): void {
   v74KeysHeld = false
@@ -2333,7 +2339,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
   on('ui.focus', ($, e, next) => {
     const raw = e as { element?: unknown; key?: unknown; component?: string }
     const named = typeof raw.element === 'string' ? raw.element : typeof raw.key === 'string' ? raw.key : undefined
-    void v74Keylog($, { handler: 'ui.focus', component: raw.component, element: named, page: panePage, cursor: decideLocal.cursor, focusOwner: decideLocal.textMode ? 'v74-note' : 'band', noteOpen: decideLocal.textMode })
+    void v74Keylog($, { handler: 'ui.focus', component: raw.component, element: named, origin: ((raw as { origin?: { kind?: unknown } }).origin?.kind as string | undefined), page: panePage, cursor: decideLocal.cursor, focusOwner: decideLocal.textMode ? 'v74-note' : 'band', noteOpen: decideLocal.textMode })
     if (decideLocal.textMode && noteArmed && named !== 'v74-note' && (named === undefined || named === '')) {
       noteArmed = false
       void frameKey($, { kind: 'text_cancel' })
@@ -2341,7 +2347,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     }
     // r8-3: the border word follows the keyboard. It only re-renders when the value really flips, and one tick later (two microtasks, as ringToTab does), never inside the focus event:
     // a render there remounts the tab Buttons and the host's focus lands on a card Button, which wrote the cursor back (r8-1 gate, step 22).
-    if (v74Open) { const was = v74KeysHeld; v74KeysHeld = bandElement(named); if (was !== v74KeysHeld) void renderLater($) }
+    if (v74Open) { const was = v74KeysHeld; v74KeysHeld = v74KeysHeldAfter(was, named, (raw as { origin?: unknown }).origin); if (was !== v74KeysHeld) void renderLater($) }
     const step = decideLocal.textMode || bandLegacy || !v74Open ? null : v74TabStep(panePage, named, (raw as { origin?: unknown }).origin)
     if (step !== null) { void frameKey($, step); return {} } // the ring stays on the current tab
     const at = v74FocusAt(raw)

@@ -5,7 +5,7 @@ import { PAGES } from './pages/index'
 import { NO_NAV, decideReduce, cardToLive } from './pages/decide'
 import { makeT } from './i18n'
 import { BAND_NARROW_STEPS, layoutBandLine, slotFleet, v74FitBand } from './model'
-import { v74FocusCursor, v74TabStep } from './register'
+import { v74FocusCursor, v74KeysHeldAfter, v74TabStep } from './register'
 import { writeV74Answers } from './decideundo'
 import type { DecideCard } from './v74/contract'
 import decideFx from './fixtures/v74/decide.fixture'
@@ -158,4 +158,14 @@ test('r7 send: a card with no option and an empty note is never closed', async (
   const runs: string[][] = []
   await writeV74Answers({ cards: cards.map(cardToLive), state: nav, now: 5, run: async (a) => { runs.push(a); return true } })
   expect(runs.some(a => a.includes('--free-text') && a[a.indexOf('--free-text') + 1] === '')).toBe(false)
+})
+
+test('r10 #2: Esc / a focus event naming no band element clears the keyboard word at once; a program autofocus never sets it', () => {
+  const person = { kind: 'person' }
+  expect(v74KeysHeldAfter(false, 'tab:decide', person)).toBe(true) // ctrl+x tab: the person took the keyboard
+  expect(v74KeysHeldAfter(true, undefined, person)).toBe(false) // Esc: the prompt has it back
+  expect(v74KeysHeldAfter(true, 'prompt', person)).toBe(false)
+  expect(v74KeysHeldAfter(false, 'tab:decide', { kind: 'program' })).toBe(false) // the current tab's autoFocus after the redraw that Esc caused
+  expect(v74KeysHeldAfter(false, 'tab:decide', undefined)).toBe(false)
+  expect(v74KeysHeldAfter(true, 'tab:decide', { kind: 'program' })).toBe(true) // unchanged while held
 })

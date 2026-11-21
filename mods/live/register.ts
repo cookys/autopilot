@@ -1719,6 +1719,8 @@ async function closePane($: EngineInterface): Promise<void> {
 let v75Focus: V75Focus = 'prompt'
 let v75RingRank: number | null = null // screen-order rank of the Pane's last ring stop (the arrow = a ring step)
 let v75PaneOn = false // the host Pane opened for v7.5 is open now
+let v75ReopenActive = false // a reload reopen is still being asked for
+let v75ReopenLeft = 0 // renders that may still ask again
 let v75NotPlaced = false // the host answered isPlaced=false: no Pane, the band falls back to the v7.4 box
 let v75Locked: number | null = null // band height held while the Pane is open (0 -> 1 card never moves the layout)
 let v75LockCount = 0
@@ -2265,18 +2267,23 @@ export function registerLive(on: Parameters<Register>[0]): void {
         const hostOpen = panes.some(p => p.id === PANE_ID && p.isPlaced === true) // a pane the host lists but has not placed is not open
         const reopen = v75ReopenAfterReload({ wanted, hostOpen, paneOn: v75PaneOn, open: v74Open })
         void appendLog($, 'band-reload.log', { step: 'first-render', wanted, panes: panes.map(p => ({ id: p.id, isShown: p.isShown, isFocused: p.isFocused, isPlaced: p.isPlaced })), reopen })
-        if (reopen) { v75OpenQuiet = true; markPaneOpen() }
+        if (reopen) { v75OpenQuiet = true; v75ReopenActive = true; v75ReopenLeft = 3; markPaneOpen() }
       }
       const v75c = await v74CtxOf($)
       const v75cards = v75c.decide ?? []
+      // G3: the host answered isPlaced=false to the reload reopen (m75e: 209 columns, no reason): the surface may not be ready on the first render, so the next renders ask again, up to 3 times
+      if (v75ReopenActive && v75ReopenLeft > 0 && v75NotPlaced && v74Open && !v75PaneOn) { v75ReopenLeft--; v75NotPlaced = false; v75OpenQuiet = true }
       let plan = v75Plan({ maxRows: rows, pending: v75cards.length, paneWanted: v74Open, notPlaced: v75NotPlaced, locked: v75Locked })
       if (v74Open && plan.pane && !v75PaneOn) {
         // open the host Pane; refused (isPlaced=false) -> the v7.4 box band, and the keyboard stays in the band
         const quiet = v75OpenQuiet; v75OpenQuiet = false
         const placed = await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: !quiet }).catch(() => ({ isPlaced: false }) as { isPlaced: boolean })
-        if (quiet) void appendLog($, 'band-reload.log', { step: 'open', result: placed })
-        if (placed.isPlaced === true) { v75PaneOn = true; v75Focus = quiet ? 'prompt' : 'pane'; v75Locked = v75cards.length > 0 ? 5 : 1; v75LockCount = v75cards.length }
-        else { v75NotPlaced = true; v75Focus = 'band'; plan = v75Plan({ maxRows: rows, pending: v75cards.length, paneWanted: v74Open, notPlaced: true, locked: null }) }
+        if (quiet) void appendLog($, 'band-reload.log', { step: 'open', result: placed, retriesLeft: v75ReopenLeft })
+        if (placed.isPlaced === true) { v75ReopenActive = false; v75PaneOn = true; v75Focus = quiet ? 'prompt' : 'pane'; v75Locked = v75cards.length > 0 ? 5 : 1; v75LockCount = v75cards.length }
+        else if (v75ReopenActive && v75ReopenLeft === 0) { // three more asks refused: leave the band closed, one click on its ▴ opens the Pane (a person's press, which the host grants)
+          v75ReopenActive = false; v75Focus = 'band'; markPaneClosed(); void appendLog($, 'band-reload.log', { step: 'gave-up' })
+          plan = v75Plan({ maxRows: rows, pending: v75cards.length, paneWanted: false, notPlaced: false, locked: null })
+        } else { v75NotPlaced = true; v75Focus = 'band'; plan = v75Plan({ maxRows: rows, pending: v75cards.length, paneWanted: v74Open, notPlaced: true, locked: null }) }
       } else if (v75PaneOn && !plan.pane) {
         v75PaneOn = false; v75Locked = null
         try { await $.ui.close({ id: PANE_ID }) } catch (_e) { /* already closed */ }
@@ -2583,12 +2590,14 @@ export function registerLive(on: Parameters<Register>[0]): void {
     void logFocusStop($, { requestId: (raw as { requestId?: unknown }).requestId, component: raw.component, element: named, origin: (raw as { origin?: { kind?: unknown } }).origin?.kind })
     if (v75PaneOn && raw.component === 'Pane' && panePage === 'decide' && !decideLocal.textMode && (raw as { origin?: { kind?: unknown } }).origin?.kind === 'person' && named !== undefined) {
       // the arrow in the Pane walks the host ring over every Button (an option row is one) and sends no ui.scroll: read the walk's direction in screen order as the card arrow
-      const rank = paneRank.get(named)
+      // the anchor and the two zero-size j / k Buttons are ring stops too (gate m75e 14: the first arrows landed on pn:j, pn:k, which had no rank): they come first, in ring order
+      const rank = named.startsWith('focus') ? -3 : named.startsWith('pn:j') ? -2 : named.startsWith('pn:k') ? -1 : paneRank.get(named)
       const prev = v75RingRank
       v75RingRank = rank ?? null
       const by = rank !== undefined && prev !== null ? Math.sign(rank - prev) : 0
       if (by !== 0) { void frameKey($, { kind: 'move', by: by as 1 | -1 }); return {} }
     }
+    if (raw.component === 'Pane' && named !== undefined && named.startsWith('focus')) v75RingRank = -3 // the Pane just took the keyboard: the ring starts at its anchor
     const v75Was = v75Focus
     v75Focus = v75FocusNext(v75Focus, { kind: 'focus', component: raw.component, named })
     // v7.5 §7.3: one Esc, one layer. A cancelled note or preview hands the keyboard back to the band, so the next Esc is the next layer
@@ -2676,7 +2685,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       if (arrow !== null && panePage === 'decide') { void frameKey($, arrow); return {} }
     }
     if (v75PaneOn && panePage === 'decide' && v75ScrollRoute({ component: 'Pane', by: (e as { by?: number }).by }, { paneOpen: true, note: decideLocal.textMode }) === 'pane') {
-      paneBodyOff = Math.min(400, v75DetailOffset(paneBodyOff, (e as { by: number }).by)) // PgUp / PgDn scroll the framed page body (FrameOpts.scroll clamps it to the body)
+      paneBodyOff = Math.min(400, v75DetailOffset(paneBodyOff, (e as { by: number }).by)); void appendLog($, 'band-scroll.log', { step: 'body-offset', paneBodyOff }) // PgUp / PgDn scroll the framed page body (FrameOpts.scroll clamps it to the body)
       void $.ui.invalidate('ui.render')
       return {}
     }

@@ -14,6 +14,7 @@ import type { DecideCard, V74Ctx } from './v74/contract'
 import type { Row } from './pages/rows'
 import { V75_MOVED, routeKey } from './pages/keys'
 import { EXTRA_PAGES, PAGES } from './pages/index'
+import { frameRows } from './pages/frame'
 import { roomPage } from './pages/room'
 
 const t = makeT('zh-TW')
@@ -233,9 +234,10 @@ test('v75 x: cancels the send preview in the Pane (routeKey) and says so in the 
 })
 
 test('v75 pane scroll: PgDn / PgUp move the card detail by a page and never below 0; j / k are card moves in the Pane and the band', () => {
-  expect(v75DetailOffset(0, 42)).toBe(8)
-  expect(v75DetailOffset(8, 42)).toBe(16)
-  expect(v75DetailOffset(8, -42)).toBe(0)
+  expect(v75DetailOffset(0, 42)).toBe(12)
+  expect(v75DetailOffset(12, 42)).toBe(24)
+  expect(v75DetailOffset(12, -42)).toBe(0)
+  expect(v75DetailOffset(0, 5)).toBe(5)
   expect(v75DetailOffset(0, -42)).toBe(0)
   const st = { page: 'decide', paneFocus: true, focusedButton: false, textMode: false }
   expect(routeKey('j', st)).toEqual({ kind: 'move', by: 1 })
@@ -244,3 +246,10 @@ test('v75 pane scroll: PgDn / PgUp move the card detail by a page and never belo
   expect(v75ReopenAfterReload({ wanted: true, hostOpen: false, paneOn: false, open: false })).toBe(true)
 })
 
+
+test('v75 G2: FramePane.scroll moves the rows of a long decide page (PgDn); 0 is the top', () => {
+  const ctx = { ...(ctxOf(decide, { size: { cols: 100, rows: 12 } }) as object), decide: { ...NO_NAV } } as never
+  const top = frameRows(decidePage, ctx, { topAnchor: true, pages: PAGES }).map(text)
+  const down = frameRows(decidePage, ctx, { topAnchor: true, pages: PAGES, scroll: 8 }).map(text)
+  expect(down.join('\n')).not.toBe(top.join('\n'))
+})

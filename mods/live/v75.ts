@@ -48,8 +48,8 @@ export function v75FocusNext(was: V75Focus, ev: V75FocusEvent): V75Focus {
 export const v75ReopenAfterReload = (i: { wanted: boolean; hostOpen: boolean; paneOn: boolean; open: boolean }): boolean => i.wanted && !i.hostOpen && !i.paneOn && !i.open
 
 // PgUp / PgDn in the Pane scroll the open card's detail by this many rows
-export const V75_DETAIL_STEP = 8
-export const v75DetailOffset = (off: number, by: number): number => Math.max(0, off + (by > 0 ? V75_DETAIL_STEP : -V75_DETAIL_STEP))
+export const V75_DETAIL_STEP = 12
+export const v75DetailOffset = (off: number, by: number): number => Math.max(0, off + Math.sign(by) * Math.min(Math.abs(by), V75_DETAIL_STEP))
 
 // §7.3: one Esc, one layer: the note, then the preview, then the keyboard goes back to the input box.
 export type V75EscStep = 'cancel_note' | 'cancel_preview' | 'to_prompt'

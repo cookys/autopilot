@@ -778,4 +778,56 @@ process.stdout.write(s.verdict + "|" + s.reason);
 ')"
 assert_eq "$PAD_V" "effective|null" "seats: trimmed sid is effective, not transcript_missing"
 
+# f) --seats auto: the fleet directory (FLEET_BIN stub) replaces the TSV.
+#    Live claude seats only; host = courier, sid = sub/generation. The stub
+#    reuses the sid-eff transcript so the expected verdict matches case (a).
+FLEET_STUB="$TEST_TMP/fleet-stub.js"
+cat > "$FLEET_STUB" <<STUB
+#!/usr/bin/env node
+process.stdout.write(JSON.stringify({ members: [
+  { member: 'seat-auto-member', namespace: 'ns', courier: '$LOCAL_HOST', state: 'live', harness: 'claude', sub: 'sid-eff' },
+  { member: 'offline-seat', namespace: 'ns', courier: 'other-courier-box', state: 'offline', harness: 'claude', sub: 'sid-off' },
+  { member: 'nonclaude-seat', namespace: 'ns', courier: '$LOCAL_HOST', state: 'live', harness: 'cursor', sub: 'sid-glm' }
+]}));
+STUB
+chmod +x "$FLEET_STUB"
+FLEET_BIN="$FLEET_STUB" run_check --seats auto --rule-repo "$SEATS_REPO" --rule-ref origin/develop \
+  --projects-dir "$SEATS_PROJECTS" --host "$LOCAL_HOST" --json
+assert_exit_code "$RC" 0 "seats auto: live claude seat from the directory is checked -> exit 0"
+AUTO_V="$(printf '%s' "$OUT" | node -e '
+const d = JSON.parse(require("fs").readFileSync(0, "utf8"));
+process.stdout.write(d.seats.length + "|" + d.seats[0].seat + "|" + d.seats[0].verdict);
+')"
+assert_eq "$AUTO_V" "1|ns/$LOCAL_HOST/seat-auto-member|effective" \
+  "seats auto: filters to the one live claude seat and derives seat/host/sid like the TSV"
+
+# g) --seats auto with an unreadable fleet directory -> hard usage error
+#    (this script's usage/CLI errors exit 3, per Case 8; never an empty list)
+FAIL_STUB="$TEST_TMP/fleet-stub-fail.js"
+printf '#!/usr/bin/env node\nprocess.stderr.write("peers: hub unreachable\\n");\nprocess.exit(1);\n' > "$FAIL_STUB"
+chmod +x "$FAIL_STUB"
+FLEET_BIN="$FAIL_STUB" run_check --seats auto --rule-repo "$SEATS_REPO" --rule-ref origin/develop \
+  --projects-dir "$SEATS_PROJECTS" --host "$LOCAL_HOST" --json
+assert_exit_code "$RC" 3 "seats auto: fleet directory failure -> usage error exit 3"
+assert_contains "$ERR" "fleet directory unavailable" "seats auto: directory failure names the cause"
+
+# h) legacy TSV path still works after the auto addition
+run_check --seats "$SEATS_OK" --rule-repo "$SEATS_REPO" --rule-ref origin/develop \
+  --projects-dir "$SEATS_PROJECTS" --host "$LOCAL_HOST" --json
+assert_exit_code "$RC" 0 "seats: legacy TSV file still usable alongside --seats auto"
+
+# negative control: a copy without the auto branch must go red on --seats auto
+# (the TSV loader treats "auto" as a file path and refuses).
+MUTANT="$TEST_TMP/rule-effect-check.noauto.js"
+node -e '
+const fs = require("fs");
+const src = fs.readFileSync(process.argv[1], "utf8");
+const needle = "opts.seats === \x27auto\x27 ? loadSeatsAuto() : loadSeatsTsv(opts.seats)";
+if (!src.includes(needle)) process.exit(3);
+fs.writeFileSync(process.argv[2], src.replace(needle, "loadSeatsTsv(opts.seats)"));
+' "$SRC" "$MUTANT" || fail "negative control: auto branch anchor not found in rule-effect-check.js"
+FLEET_BIN="$FLEET_STUB" run_check_bin "$MUTANT" --seats auto --rule-repo "$SEATS_REPO" --rule-ref origin/develop \
+  --projects-dir "$SEATS_PROJECTS" --host "$LOCAL_HOST" --json
+assert_neq "$RC" 0 "negative control: without the auto branch the auto case goes red"
+
 finalize_test

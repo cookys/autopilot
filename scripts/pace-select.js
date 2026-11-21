@@ -82,7 +82,7 @@
  * stderr. --named-runner/--named-model emit only a fresh over-ceiling warning.
  * Missing/unreadable/invalid pace data emits pace_unknown and exits 0 with no
  * selection so rails retain their existing defaults. No capacity schema changes.
- * Task context: --prompt-file/--diff-file (repeatable) feeds the CN gate before
+ * Task context: --prompt-file (repeatable) feeds the operator-based cloud gate before
  * ranking. --exclude-family and --exclude-model constrain reviewer retreats.
  * EXIT: 0 selected · 2 bad flags/config/schema · 3 no admissible quota reading.
  * Node >= 20.10, built-ins only.
@@ -518,7 +518,6 @@ function selectEngine({
   exclude,
   checkEndpoint,
   files = [],
-  diffFiles = [],
   excludeFamily,
   qualified,
   qualifiedSource,
@@ -666,8 +665,6 @@ function selectEngine({
       runner: entry.runner,
       model: entry.model,
       endpoint: entry.endpoint,
-      diffFiles,
-      role,
       env: resolvedEnv,
       ...(cwd !== undefined ? { cwd } : {}),
     };
@@ -981,7 +978,6 @@ function parseArgs(argv) {
     namedModel: null,
     namedEndpoint: null,
     files: [],
-    diffFiles: [],
     excludeFamily: null,
     excludeModel: null,
     role: null,
@@ -999,7 +995,7 @@ function parseArgs(argv) {
       continue;
     }
     if (a === '--dispatch') { out.dispatch = true; continue; }
-    const extraFlags = { '--named-runner': 'namedRunner', '--named-model': 'namedModel', '--named-endpoint': 'namedEndpoint', '--prompt-file': 'files', '--diff-file': 'diffFiles', '--exclude-family': 'excludeFamily', '--exclude-model': 'excludeModel' };
+    const extraFlags = { '--named-runner': 'namedRunner', '--named-model': 'namedModel', '--named-endpoint': 'namedEndpoint', '--prompt-file': 'files', '--exclude-family': 'excludeFamily', '--exclude-model': 'excludeModel' };
     if (extraFlags[a]) {
       const val = argv[++i];
       if (!val || val.startsWith('--')) throw usageError('flag ' + a + ' requires a value');
@@ -1203,7 +1199,7 @@ function main(argv = process.argv.slice(2), env = process.env) {
         pools,
         roles,
         role: flags.role,
-        files: flags.files, diffFiles: flags.diffFiles, excludeFamily: flags.excludeFamily,
+        files: flags.files, excludeFamily: flags.excludeFamily,
         exclude: flags.exclude,
         checkEndpoint,
         qualified,
@@ -1232,7 +1228,7 @@ function main(argv = process.argv.slice(2), env = process.env) {
       pools,
       roles,
       role: flags.role,
-      files: flags.files, diffFiles: flags.diffFiles, excludeFamily: flags.excludeFamily,
+      files: flags.files, excludeFamily: flags.excludeFamily,
       exclude: flags.exclude,
       checkEndpoint,
       qualified,

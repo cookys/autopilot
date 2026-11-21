@@ -62,15 +62,16 @@ const FIXTURES_DIR = path.join(__dirname, 'fixtures', 'pace-select');
 const MISSING_PACE = path.join(FIXTURES_DIR, '__missing_pace__.json');
 const MISSING_CURSOR_AUDIT = path.join(FIXTURES_DIR, '__missing_cursor_audit__.tsv');
 const MISSING_KIMI_AUDIT = path.join(FIXTURES_DIR, '__missing_kimi_audit__.tsv');
+const MISSING_CURSOR_SOCKET = path.join(os.tmpdir(), `pace-select-missing-cursor-${process.pid}.sock`);
+const MISSING_KIMI_SOCKET = path.join(os.tmpdir(), `pace-select-missing-kimi-${process.pid}.sock`);
+process.env.AUTOPILOT_CURSOR_BROKER_SOCK = MISSING_CURSOR_SOCKET;
+process.env.AUTOPILOT_KIMI_BROKER_SOCK = MISSING_KIMI_SOCKET;
 process.env.AUTOPILOT_CURSOR_BROKER_AUDIT = MISSING_CURSOR_AUDIT;
 process.env.AUTOPILOT_KIMI_BROKER_AUDIT = MISSING_KIMI_AUDIT;
 const allEndpointsReady = () => true;
-// Small public-doc work admits CN seats for non-review roles; review roles are barred by the CN gate.
-// Omit AUTOPILOT_TASK_ROLE so each call uses its own rail role (env wins over rail role in the gate).
-const testTask = { AUTOPILOT_KIMI_LOCAL_ALLOW: '1', AUTOPILOT_TASK_SIZE: 'S', AUTOPILOT_TASK_SCOPE: 'docs/example.md' };
-for (const k of ['AUTOPILOT_TASK_ROLE', 'AUTOPILOT_TASK_NOVEL', 'AUTOPILOT_TASK_READS_TRANSCRIPT', 'AUTOPILOT_TASK_CLASS']) {
-  delete process.env[k];
-}
+// Operator-based cloud eligibility is exercised through endpoint fixtures.
+// Keep fixture routing independent of removed dispatch-gate metadata.
+const testTask = { AUTOPILOT_KIMI_LOCAL_ALLOW: '1' };
 Object.assign(process.env, testTask);
 
 // Every test owns its observer store; explicit env objects must inherit it too.
@@ -93,6 +94,9 @@ test.afterEach(() => {
 
 function selectEngine(options = {}) {
   const env = { ...(options.env || process.env) };
+  if (env.AUTOPILOT_TEST_CN_GATE_OFF === undefined) env.AUTOPILOT_TEST_CN_GATE_OFF = '1';
+  if (env.AUTOPILOT_CURSOR_BROKER_SOCK === undefined) env.AUTOPILOT_CURSOR_BROKER_SOCK = MISSING_CURSOR_SOCKET;
+  if (env.AUTOPILOT_KIMI_BROKER_SOCK === undefined) env.AUTOPILOT_KIMI_BROKER_SOCK = MISSING_KIMI_SOCKET;
   env.AUTOPILOT_LIVE_DIR = options.env?.AUTOPILOT_LIVE_DIR || testLiveDir;
   if (!options.env || !Object.prototype.hasOwnProperty.call(options.env, 'AUTOPILOT_CURSOR_BROKER_AUDIT')) {
     env.AUTOPILOT_CURSOR_BROKER_AUDIT = MISSING_CURSOR_AUDIT;
@@ -161,6 +165,9 @@ function cli(args, envExtra = {}) {
   env.AUTOPILOT_QUALIFIED_FILE = path.join(FIXTURES_DIR, '__missing_qualified__.json');
   env.AUTOPILOT_CURSOR_BROKER_AUDIT = MISSING_CURSOR_AUDIT;
   env.AUTOPILOT_KIMI_BROKER_AUDIT = MISSING_KIMI_AUDIT;
+  env.AUTOPILOT_CURSOR_BROKER_SOCK = MISSING_CURSOR_SOCKET;
+  env.AUTOPILOT_KIMI_BROKER_SOCK = MISSING_KIMI_SOCKET;
+  env.AUTOPILOT_TEST_CN_GATE_OFF = '1';
   env.AUTOPILOT_ENDPOINTS_ENV = '/nonexistent';
   env.AUTOPILOT_ENDPOINT_GLM_URL = 'https://glm.example.invalid/v1';
   env.AUTOPILOT_ENDPOINT_GLM_TOKEN = 'test-glm-token';
@@ -568,7 +575,7 @@ test('(d) all unknown -> exit 3 with engine: null and reason: pace_unknown', () 
   assert.equal(out.pace_generated_at, '2026-11-13T02:15:00Z');
   assert.deepEqual(out.candidates, [
     { engine: 'agy', reason: 'unknown' },
-    { engine: 'glm', reason: 'cn_model_dispatch_barred' },
+    { engine: 'glm', reason: 'unknown' },
     { engine: 'codex', reason: 'unknown' },
     { engine: 'grok', reason: 'unknown' },
     { engine: 'agyclaude', reason: 'unknown' },
@@ -1659,7 +1666,7 @@ const dsSelect = (extra) => selectEngine({
   checkEndpoint: allEndpointsReady,
   env: dsSeamEnv,
   ...extra,
-  // CN gate bars cloud review_roles unconditionally; scope the test seam to these unit tests of cn_gate/seam-day logic.
+  // Use the gate test seam only for unrelated pace-selection fixture checks.
   env: { ...testTask, AUTOPILOT_TEST_CN_GATE_OFF: '1', ...(extra?.env || dsSeamEnv) },
   // only the deepseek seat is under test: take the other pools out of the walk unless the case wants them
 });
@@ -1998,21 +2005,21 @@ test('quota stale: recent codex loses to every fresh row but beats over-ceiling 
   assert.equal(run().engine, 'codex');
 });
 
-test('quota gates: CN review gate, qualification and disabled keys precede ranking', () => {
+test('quota gates: endpoint readiness, qualification and disabled keys precede ranking', () => {
   const pace = readFixture('quota-default.json');
   pace.rows.push({ ...pace.rows[0], pool: 'glm', used_pct: 0, hours_to_reset: 1 });
-  const run = (extra = {}) => selectEngine({ pace, role: 'reviewer', env: { AUTOPILOT_TASK_SIZE: 'M', AUTOPILOT_TASK_SCOPE: 'scripts/pace-select.js' },
-    checkEndpoint: () => { throw Error('barred endpoint must not be probed'); }, ...extra });
+  const run = (extra = {}) => selectEngine({ pace, role: 'reviewer', env: { AUTOPILOT_TEST_CN_GATE_OFF: '1' },
+    checkEndpoint: () => false, ...extra });
   assert.equal(run().engine, 'codex');
-  assert.equal(run().candidates.find(c => c.engine === 'glm').reason, 'cn_model_dispatch_barred');
-  // Even at Size S / public docs, reviewer role bars glm and deepseek via CN gate, while author/implementer allows glm.
+  assert.equal(run().candidates.find(c => c.engine === 'glm').reason, 'endpoint_not_ready');
+  // Endpoint failures are recorded before quota ranking.
   const revSmall = selectEngine({
     pace, role: 'reviewer', scope: 'mechanical', now: DS_IN_WINDOW,
-    env: { ...dsSeamEnv },
-    checkEndpoint: (ep) => { if (ep === 'glm' || ep === 'deepseek') throw Error('barred endpoint must not be probed'); return true; },
+    env: { ...dsSeamEnv, AUTOPILOT_TEST_CN_GATE_OFF: '1' },
+    checkEndpoint: (ep) => ep !== 'glm' && ep !== 'deepseek',
   });
-  assert.equal(revSmall.candidates.find(c => c.engine === 'glm').reason, 'cn_model_dispatch_barred');
-  assert.equal(revSmall.candidates.find(c => c.engine === 'deepseek').reason, 'cn_model_dispatch_barred');
+  assert.equal(revSmall.candidates.find(c => c.engine === 'glm').reason, 'endpoint_not_ready');
+  assert.equal(revSmall.candidates.find(c => c.engine === 'deepseek').reason, 'endpoint_not_ready');
   assert.equal(run({ roles: { ...loadRoles(), _disabled: ['codex'] } }).engine, 'agy');
   const qualified = { schema: QUALIFIED_SCHEMA, rows: [
     { runner: 'codex', engine: 'gpt-6.1-terra', role: 'reviewer', result: 'fail' },
@@ -2245,87 +2252,6 @@ test('behind-pace (2): cursor proxy ahead (12 runs at 15:00 Taipei) -> choice un
   );
 });
 
-test('behind-pace (3): kimi behind but prompt file fails cn gate (no Size line, or Size M) -> kimi not chosen, reason starts cn_gate:', async () => {
-  const sockDir = makeLiveDir();
-  const socket = path.join(sockDir, 'broker.sock');
-  const server = require('net').createServer((conn) => conn.destroy());
-  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(socket, resolve); });
-  try {
-    const pace = priorityPace([paceRow('agy', 10, 50, { hours_to_reset: 4 })]);
-    const baseEnv = {
-      ...process.env,
-      AUTOPILOT_LIVE_DIR: testLiveDir,
-      AUTOPILOT_KIMI_BROKER_SOCK: socket,
-      AUTOPILOT_KIMI_BROKER_AUDIT: fixturePath('kimi-audit-behind.tsv'),
-      AUTOPILOT_TASK_SIZE: '',
-      AUTOPILOT_TASK_SCOPE: '',
-    };
-
-    const noSize = selectEngine({
-      pace,
-      role: 'implementer',
-      files: [fixturePath('prompt-no-size.md')],
-      now: TAIPEI_1500_DATE,
-      env: baseEnv,
-      checkEndpoint: allEndpointsReady,
-    });
-    assert.equal(noSize.engine, 'agy');
-    const noSizeKimi = noSize.candidates.find((c) => c.engine === 'kimi');
-    assert.ok(noSizeKimi, 'kimi should appear in candidates with gate reason');
-    assert.match(noSizeKimi.reason, /^cn_gate:/);
-    assert.equal(noSizeKimi.reason, 'cn_gate:unknown-size');
-    assert.equal(noSizeKimi.basis, 'proxy_runs');
-    assert.equal(noSizeKimi.runs_today, 2);
-    assert.equal(noSizeKimi.daily_target, 12);
-    assert.equal(noSizeKimi.expected_runs, 7.5);
-    assert.equal(noSizeKimi.note, 'runs per day, not quota percent');
-
-    const sizeM = selectEngine({
-      pace,
-      role: 'implementer',
-      files: [fixturePath('prompt-size-m.md')],
-      now: TAIPEI_1500_DATE,
-      env: baseEnv,
-      checkEndpoint: allEndpointsReady,
-    });
-    assert.equal(sizeM.engine, 'agy');
-    const sizeMKimi = sizeM.candidates.find((c) => c.engine === 'kimi');
-    assert.ok(sizeMKimi);
-    assert.match(sizeMKimi.reason, /^cn_gate:/);
-    assert.equal(sizeMKimi.reason, 'cn_gate:core-size');
-
-    // Every --prompt-file must pass: [passing, failing] still blocks kimi with cn_gate:core-size.
-    const mixedFiles = selectEngine({
-      pace,
-      role: 'implementer',
-      files: [fixturePath('prompt-size-s.md'), fixturePath('prompt-size-m.md')],
-      now: TAIPEI_1500_DATE,
-      env: baseEnv,
-      checkEndpoint: allEndpointsReady,
-    });
-    assert.equal(mixedFiles.engine, 'agy');
-    assert.equal(mixedFiles.candidates.find((c) => c.engine === 'kimi')?.reason, 'cn_gate:core-size');
-
-    // No prompt file -> kimi is not preferred even when env admits CN tasks.
-    const noPrompt = selectEngine({
-      pace,
-      role: 'implementer',
-      files: [],
-      now: TAIPEI_1500_DATE,
-      env: {
-        ...baseEnv,
-        AUTOPILOT_TASK_SIZE: 'S',
-        AUTOPILOT_TASK_SCOPE: 'docs/example.md',
-      },
-      checkEndpoint: allEndpointsReady,
-    });
-    assert.equal(noPrompt.engine, 'agy');
-  } finally {
-    await new Promise((resolve) => server.close(resolve));
-    fs.rmSync(sockDir, { recursive: true, force: true });
-  }
-});
-
 test('behind-pace (4): kimi behind, prompt passes gate, broker available -> kimi chosen; model from noncq-pools.json & exclusions respected', async () => {
   const sockDir = makeLiveDir();
   const socket = path.join(sockDir, 'broker.sock');
@@ -2342,8 +2268,6 @@ test('behind-pace (4): kimi behind, prompt passes gate, broker available -> kimi
       AUTOPILOT_LIVE_DIR: testLiveDir,
       AUTOPILOT_KIMI_BROKER_SOCK: socket,
       AUTOPILOT_KIMI_BROKER_AUDIT: fixturePath('kimi-audit-behind.tsv'),
-      AUTOPILOT_TASK_SIZE: '',
-      AUTOPILOT_TASK_SCOPE: '',
     };
     const res = selectEngine({
       pace,
@@ -2357,6 +2281,7 @@ test('behind-pace (4): kimi behind, prompt passes gate, broker available -> kimi
     assert.equal(typeof expectedKimiModel, 'string');
     assert.notEqual(expectedKimiModel, '');
     assert.equal(res.engine, 'kimi');
+    assert.ok(res.candidates.some((candidate) => candidate.engine === 'kimi'), 'kimi remains in the pool while its broker socket is listening');
     assert.equal(res.runner, 'kimi');
     assert.equal(res.model, expectedKimiModel);
     assert.equal(res.basis, 'proxy_runs');
@@ -2380,8 +2305,6 @@ test('behind-pace (4): kimi behind, prompt passes gate, broker available -> kimi
       {
         AUTOPILOT_KIMI_BROKER_SOCK: socket,
         AUTOPILOT_KIMI_BROKER_AUDIT: fixturePath('kimi-audit-behind.tsv'),
-        AUTOPILOT_TASK_SIZE: '',
-        AUTOPILOT_TASK_SCOPE: '',
       },
     );
     assert.equal(cliRes.status, 0, cliRes.stderr);
@@ -2496,8 +2419,6 @@ test('behind-pace (5): real pace row for kimi with finite used/expected wins -> 
       AUTOPILOT_LIVE_DIR: testLiveDir,
       AUTOPILOT_KIMI_BROKER_SOCK: socket,
       AUTOPILOT_KIMI_BROKER_AUDIT: fixturePath('kimi-audit-behind.tsv'),
-      AUTOPILOT_TASK_SIZE: '',
-      AUTOPILOT_TASK_SCOPE: '',
     };
 
     // Real pace row has status "ok" (not ALERT_behind / behind_early) -> proxy audit (2 runs) is ignored; agy wins by quota_score.
@@ -2585,8 +2506,6 @@ test('behind-pace (6): missing audit file -> no throw, basis none, old behaviour
       AUTOPILOT_KIMI_BROKER_SOCK: socket,
       AUTOPILOT_CURSOR_BROKER_AUDIT: MISSING_CURSOR_AUDIT,
       AUTOPILOT_KIMI_BROKER_AUDIT: MISSING_KIMI_AUDIT,
-      AUTOPILOT_TASK_SIZE: '',
-      AUTOPILOT_TASK_SCOPE: '',
     };
 
     const withAgy = selectEngine({
@@ -2642,8 +2561,6 @@ test('behind-pace (2a): fresh pace row counts as behind iff status is ALERT_behi
       AUTOPILOT_KIMI_BROKER_SOCK: socket,
       AUTOPILOT_CURSOR_BROKER_AUDIT: fixturePath('cursor-audit-behind.tsv'),
       AUTOPILOT_KIMI_BROKER_AUDIT: fixturePath('kimi-audit-behind.tsv'),
-      AUTOPILOT_TASK_SIZE: '',
-      AUTOPILOT_TASK_SCOPE: '',
     };
 
     // Positive: both ALERT_behind and behind_early count as behind for cursor and kimi.
@@ -2739,8 +2656,6 @@ test('behind-pace (2b): kimi reading freshness is judged by row seen_at, not res
       AUTOPILOT_LIVE_DIR: testLiveDir,
       AUTOPILOT_KIMI_BROKER_SOCK: socket,
       AUTOPILOT_KIMI_BROKER_AUDIT: MISSING_KIMI_AUDIT,
-      AUTOPILOT_TASK_SIZE: '',
-      AUTOPILOT_TASK_SCOPE: '',
     };
 
     // 1. Fresh seen_at (30 min ago at TAIPEI_1500_DATE = 2026-11-18T07:00:00Z) counts as fresh even when
@@ -2789,8 +2704,6 @@ test('behind-pace (2b): kimi reading freshness is judged by row seen_at, not res
       {
         AUTOPILOT_KIMI_BROKER_SOCK: socket,
         AUTOPILOT_KIMI_BROKER_AUDIT: MISSING_KIMI_AUDIT,
-        AUTOPILOT_TASK_SIZE: '',
-        AUTOPILOT_TASK_SCOPE: '',
       },
     );
     assert.equal(freshCli.status, 0, freshCli.stderr);
@@ -2878,8 +2791,6 @@ test('behind-pace (2b): kimi reading freshness is judged by row seen_at, not res
         {
           AUTOPILOT_KIMI_BROKER_SOCK: socket,
           AUTOPILOT_KIMI_BROKER_AUDIT: MISSING_KIMI_AUDIT,
-          AUTOPILOT_TASK_SIZE: '',
-          AUTOPILOT_TASK_SCOPE: '',
         },
       );
       assert.equal(staleCli.status, 0, staleCli.stderr);
@@ -2940,8 +2851,6 @@ test('behind-pace (2c): behind signal is a yes/no preference only with no propor
       AUTOPILOT_KIMI_BROKER_SOCK: socket,
       AUTOPILOT_CURSOR_BROKER_AUDIT: MISSING_CURSOR_AUDIT,
       AUTOPILOT_KIMI_BROKER_AUDIT: MISSING_KIMI_AUDIT,
-      AUTOPILOT_TASK_SIZE: '',
-      AUTOPILOT_TASK_SCOPE: '',
     };
 
     // 1. Both behind on pace rows: cursor is only 5 pts behind (score 20) while kimi is 70 pts behind (score 0.9).

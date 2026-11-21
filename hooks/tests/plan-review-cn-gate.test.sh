@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Plan review goes through the Chinese-model dispatch gate with role plan_review (01M7E2A1, d-1dfcf757):
-# plan_review is a review role, so a barred-family seat is skipped before anything spawns
-# (stderr names review-role), exit 2.
+# Plan review refuses a Chinese-family seat whose cloud operator endpoint is not resolved.
+# The fail-closed endpoint decision happens before anything spawns (exit 2).
 # Negative control: the clean (non-Chinese) panel in the same harness is unchanged (exit 0).
 . "$(dirname "$0")/lib.sh"
 
@@ -31,14 +30,9 @@ run_plan() {
 
 run_plan cn-panel kimi kimi-code/kimi-for-coding; EXIT=$?
 assert_exit_code "$EXIT" "2" "panel with a Chinese-family seat exits 2"
-assert_contains "$(cat "$TEST_TMP/cn-panel.err")" "cn_model_dispatch_barred moonshot review-role" "stderr names family and the review-role class"
+assert_contains "$(cat "$TEST_TMP/cn-panel.err")" "cn_model_dispatch_barred moonshot restricted_operator_unknown_endpoint" "stderr names unresolved endpoint refusal"
 assert_contains "$(cat "$TEST_TMP/cn-panel.err")" "kimi/kimi-code/kimi-for-coding" "stderr names the seat's runner/model"
 assert_eq "$(cat "$RECORD")" "" "the barred seat's runner was never spawned"
-
-# an operator-style env claiming a non-novel implementer task cannot widen the gate for a plan review
-AUTOPILOT_TASK_SIZE=S AUTOPILOT_TASK_ROLE=implementer AUTOPILOT_TASK_SCOPE=docs/a.md \
-  run_plan cn-env kimi kimi-code/kimi-for-coding; EXIT=$?
-assert_exit_code "$EXIT" "2" "env claiming S/implementer still refused for plan review"
 
 run_plan clean claude-native claude-fixture-2 >/dev/null; EXIT=$?
 assert_exit_code "$EXIT" "0" "panel without a Chinese-family seat is unchanged"

@@ -637,8 +637,8 @@ function runGitDiff(base, head, repoRoot, excludes = []) {
 // on the seat artifact as `format_retry` and on stderr.
 const FORMAT_RETRY_LIMIT = 1;
 async function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, implementerFamily) {
-  // d-1dfcf757: a seat in a family barred from transcript content is skipped (no spawn) for a marked task.
-  const tfg = require('./lib/cn-model-dispatch-gate').check({ runner: seat.runner, model: seat.engine, endpoint: seat.endpoint, role: 'reviewer', files: [specFile], diffFiles: [path.join(ledgerPhaseGDir, 'diff.txt')], cwd: repoRoot });
+  // A restricted cloud operator cannot receive this repository review payload.
+  const tfg = require('./lib/cn-model-dispatch-gate').check({ runner: seat.runner, model: seat.engine, endpoint: seat.endpoint || seat.runner, files: [specFile], cwd: repoRoot });
   if (!tfg.allowed) {
     console.error(`INFO: seat ${seat.id} skipped: ${tfg.line}`);
     return { seat, status: 'no_verdict', exitCode: null, stderr: tfg.line, rawOutput: { status: 'no_verdict', error: tfg.line } };

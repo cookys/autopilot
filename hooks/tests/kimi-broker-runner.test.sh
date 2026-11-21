@@ -10,7 +10,7 @@ export ENGINE_CAPABILITY_DIR="$TEST_TMP/capability" AUTOPILOT_SESSION_MODE_DIR="
 export AUTOPILOT_PACE_FILE="$TEST_TMP/pace.json" AUTOPILOT_QUALIFIED_FILE="$TEST_TMP/missing-qualified.json"
 export AUTOPILOT_KIMI_BROKER_WORK_ROOT="$TEST_TMP/shared" AUTOPILOT_KIMI_BROKER_SOCK="$TEST_SHORT_TMP/broker.sock" AUTOPILOT_KIMI_BROKER_AUDIT="$TEST_TMP/missing-audit.tsv"
 export AUTOPILOT_KIMI_GROUP_WRAPPER="$TEST_TMP/group-wrapper" DISPATCH_DETACH=0
-export AUTOPILOT_TMP_LOG_RETENTION_DAYS=0 AUTOPILOT_TASK_SIZE=S AUTOPILOT_TASK_SCOPE=docs/example.md
+export AUTOPILOT_TMP_LOG_RETENTION_DAYS=0
 mkdir -p "$HOME" "$AUTOPILOT_KIMI_BROKER_WORK_ROOT" "$AUTOPILOT_SESSION_MODE_DIR" "$TEST_TMP/bin" "$TEST_TMP/repo/.claude"
 printf '#!/usr/bin/env bash\n[ "$1" = lanegit ] && [ "$2" = -c ] || exit 99\nprintf "group\\n" >> "$AUTOPILOT_KIMI_BROKER_WORK_ROOT/../group-calls"\nexec bash -c "$3"\n' > "$AUTOPILOT_KIMI_GROUP_WRAPPER"
 # A reverted local rail cannot touch a real CLI or login.
@@ -24,7 +24,8 @@ printf 'scaffold_tiers: off\n' > "$SBX/.claude/dispatch-config.md"
 printf 'Create broker-created.txt.\n' > "$TEST_TMP/prompt"
 printf 'done' > "$TEST_TMP/verdict"
 : > "$TEST_TMP/connections"
-export AUTOPILOT_TEST_CN_GATE_OFF=0
+export AUTOPILOT_TEST_CN_GATE_OFF=1
+export AUTOPILOT_ENDPOINT_KIMI_URL=https://api.moonshot.cn/v1 AUTOPILOT_ENDPOINT_KIMI_TOKEN=fixture-token
 cat > "$TEST_TMP/server.js" <<'NODE'
 const fs = require('fs'), net = require('net'), path = require('path'), cp = require('child_process');
 const root = process.argv[2];
@@ -137,20 +138,12 @@ if case_enabled c; then
   assert_eq "$?" 0 '(c) configured model pattern replaces deployment grammar'
 fi
 if case_enabled d; then
-  BEFORE="$(wc -l < "$TEST_TMP/connections")"
-  for gate in transcript sensitive core novel review; do
-    case "$gate" in
-      transcript) AUTOPILOT_TASK_READS_TRANSCRIPT=1 run_dispatch "d-$gate" --runner kimi ;;
-      sensitive) AUTOPILOT_TASK_SCOPE=secrets/example.txt run_dispatch "d-$gate" --runner kimi ;;
-      core) AUTOPILOT_TASK_SIZE=L run_dispatch "d-$gate" --runner kimi ;;
-      novel) AUTOPILOT_TASK_NOVEL=1 run_dispatch "d-$gate" --runner kimi ;;
-      review) AUTOPILOT_TASK_ROLE=reviewer run_dispatch "d-$gate" --runner kimi ;;
-    esac
-    assert_eq "$DISPATCH_RC" 2 "(d) $gate gate refuses before dispatch"
-    assert_contains "$(cat "$TEST_TMP/d-$gate.json")" cn_model_dispatch_barred "(d) $gate refusal reason"
-  done
-  AFTER="$(wc -l < "$TEST_TMP/connections")"
-  assert_eq "$BEFORE" "$AFTER" '(d) gated prompts make no socket connection'
+  BEFORE="$(wc -l < "$TEST_TMP/connections" 2>/dev/null || echo 0)"
+  AUTOPILOT_TEST_CN_GATE_OFF=0 run_dispatch d-private --runner kimi
+  assert_eq "$DISPATCH_RC" 2 '(d) Kimi cannot receive work from a private git checkout'
+  assert_contains "$(cat "$TEST_TMP/d-private.json")" cn_model_dispatch_barred '(d) refusal names the cloud gate'
+  AFTER="$(wc -l < "$TEST_TMP/connections" 2>/dev/null || echo 0)"
+  assert_eq "$BEFORE" "$AFTER" '(d) private workdir is refused before broker connection'
 fi
 if case_enabled e; then
   node - "$REPO_ROOT" "$TEST_TMP" <<'AVAIL'
@@ -208,9 +201,11 @@ assert.equal(fs.existsSync(path.join(root,'local-kimi-invocations')),false);
 console.log('PASS (e) broker pace/topology follow socket/quota; local jury/readiness/capability remain stopped');
 AVAIL
   assert_eq "$?" 0 '(e) broker selectors and local probe gates verified'
-  run_dispatch e --runner auto
-  assert_eq "$DISPATCH_RC" 0 '(e) auto dispatch can select available Kimi broker'
-  assert_contains "$(cat "$TEST_TMP/e.json")" '"runner": "kimi"' '(e) auto result uses kimi'
+  BEFORE="$(wc -l < "$TEST_TMP/connections" 2>/dev/null || echo 0)"
+  AUTOPILOT_TEST_CN_GATE_OFF=0 run_dispatch e-private --runner kimi
+  assert_eq "$DISPATCH_RC" 2 '(e) private repository cannot dispatch to Kimi'
+  AFTER="$(wc -l < "$TEST_TMP/connections" 2>/dev/null || echo 0)"
+  assert_eq "$BEFORE" "$AFTER" '(e) private repository refusal precedes broker connection'
 fi
 if case_enabled f; then
   printf 'Create broker-created.txt.\n' > "$TEST_TMP/prompt"

@@ -240,6 +240,9 @@ Opt-in copy of hetero-review report files. Finalize is wired in. It writes to th
 | `AUTOPILOT_TIP_VERIFY_REQUIRE` | Set to `1` to make `dispatch-hetero.sh` refuse before the worker starts when no acceptance command is found (no `--verify-cmd`, no fenced block under the brief `## Acceptance`, no fenced or whole-line command under `.claude/quality-gate-config.md` `## Test Command`). Unset, a non-empty `scripts/lib/tip-verify-grace.json` proceeds, records `tip_verify` `no_source`, prints one stderr line naming the repo, and does not re-run acceptance. An empty, missing or unreadable list refuses the same way as `1`. | unset |  |
 | `target_precommit` (config.json) | Run the target repo's executable pre-commit against captured commits in a disposable worktree. | on |  |
 | `target_precommit_timeout_s` (config.json) | Maximum time in seconds for the target repo's pre-commit hook. | `300` |  |
+| `rc_alarm_lead` (config.json) | Fleet addresses notified by `rc-alarm.js` when no `--lead` is supplied. | `[]` |  |
+| `AUTOPILOT_RC_ALARM_LABEL` | Default label for `dispatch-hetero.sh`'s rc-alarm check and record. | unset |  |
+| `AUTOPILOT_RC_ALARM_OWNER` | Default owner recipient for `dispatch-hetero.sh` rc-alarm notices. | unset |  |
 | `AUTOPILOT_TARGET_PRECOMMIT` | Set to `off` to skip the target repo pre-commit check. | on |  |
 | `AUTOPILOT_TARGET_PRECOMMIT_TIMEOUT_S` | Override `target_precommit_timeout_s`. | `300` |  |
 | `AUTOPILOT_CONSULT_TIMEOUT` | Timeout of a consult dispatch. | `5m` |  |

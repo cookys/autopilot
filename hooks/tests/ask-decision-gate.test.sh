@@ -9,6 +9,13 @@
 # sandbox, so the hits file lands under $HOOK_HOME.
 . "$(dirname "$0")/lib.sh"
 
+# Isolate from parent fleet/session env and never reach the real fleet binary.
+unset CLAUDE_CODE_SESSION_ID FLEET_ADDRESS AUTOPILOT_FLEET_ADDRESS FLEET_BIN
+DEFAULT_FLEET_STUB="$TEST_TMP/fleet-default-stub"
+printf '#!/usr/bin/env bash\nexit 2\n' > "$DEFAULT_FLEET_STUB"
+chmod +x "$DEFAULT_FLEET_STUB"
+export FLEET_BIN="$DEFAULT_FLEET_STUB"
+
 REPO="$TEST_TMP/repo"
 mkdir -p "$REPO"
 git -C "$REPO" init -q

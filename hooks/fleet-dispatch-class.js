@@ -2,11 +2,11 @@
 /**
  * fleet-dispatch-class — PreToolUse, matcher mcp__fleet__dispatch only.
  *
- * Stamps optional `class` (plan-review | code-review | implement | chat) onto
+ * Stamps optional `class` (plan-review | code-review | implement | chat | review | summary | inventory | test-gen | subagent | author) onto
  * mcp__fleet__dispatch calls from the brief's `Role:` header when `class` is
  * omitted:
  *   1. Explicit valid `class` -> allow untouched (exit 0, no stdout).
- *   2. Explicit invalid `class` -> deny with a zh-TW reason listing the four values.
+ *   2. Explicit invalid `class` -> deny with a zh-TW reason listing the valid values.
  *   3. Missing `class` -> parse `Role:` in the first 15 lines of `tool_input.task`
  *      (case-insensitive key, trimmed value) and map via ROLE_CLASS_MAP; on match,
  *      allow with `updatedInput` preserving all original `tool_input` fields plus `class`.
@@ -40,7 +40,7 @@ const ROLE_CLASS_MAP = Object.freeze({
   report: 'chat',
 });
 
-const VALID_CLASSES = Object.freeze(['plan-review', 'code-review', 'implement', 'chat']);
+const VALID_CLASSES = Object.freeze(['plan-review', 'code-review', 'implement', 'chat', 'review', 'summary', 'inventory', 'test-gen', 'subagent', 'author']);
 const HEAD_LINE_LIMIT = 15;
 const ROLE_LINE_RE = /^\s*(?:[-*]\s+)?(?:\*\*)?role(?:\*\*)?\s*:\s*(.*)$/i;
 const PLAN_WORD_RE = /(?:^|[^a-z])plan(?:[^a-z]|$)/i;
@@ -123,21 +123,21 @@ function decide(input) {
     }
     const shown = typeof toolInput.class === 'string' ? toolInput.class : JSON.stringify(toolInput.class);
     return preToolDeny(
-      `mcp__fleet__dispatch 的 class 值「${oneLine(shown)}」無效；允許的值僅限 ${ALLOWED_CLASSES_TEXT} 四種。`,
+      `mcp__fleet__dispatch 的 class 值「${oneLine(shown)}」無效；允許的值僅限 ${ALLOWED_CLASSES_TEXT} 十種。`,
     );
   }
 
   const roleHeader = extractRoleHeader(toolInput.task);
   if (!roleHeader) {
     return preToolDeny(
-      `mcp__fleet__dispatch 缺少 Role: 標頭；請在 task 前 15 行加上「Role: <角色>」，或明確傳入 class（${ALLOWED_CLASSES_TEXT} 四擇一）。`,
+      `mcp__fleet__dispatch 缺少 Role: 標頭；請在 task 前 15 行加上「Role: <角色>」，或明確傳入 class（${ALLOWED_CLASSES_TEXT} 十擇一）。`,
     );
   }
 
   const mappedClass = resolveClassFromRole(roleHeader);
   if (!mappedClass) {
     return preToolDeny(
-      `mcp__fleet__dispatch 的 Role:「${oneLine(roleHeader)}」不在支援的角色表內；請改用支援的 Role: 標頭（如 plan-reviewer、reviewer、implementer、chat），或明確傳入 class（${ALLOWED_CLASSES_TEXT} 四擇一）。`,
+      `mcp__fleet__dispatch 的 Role:「${oneLine(roleHeader)}」不在支援的角色表內；請改用支援的 Role: 標頭（如 plan-reviewer、reviewer、implementer、chat），或明確傳入 class（${ALLOWED_CLASSES_TEXT} 十擇一）。`,
     );
   }
 

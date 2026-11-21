@@ -33,7 +33,7 @@ const ROOT = path.join(__dirname, '..');
 const CLI = path.join(ROOT, 'scripts', 'session-mode.js');
 const OPEN_DECISION = path.join(ROOT, 'scripts', 'open-decision.js');
 const AUTOSTART = path.join(__dirname, 'runs-watch-autostart.js');
-const { createWatcher, unexpiredMarkers } = require(path.join(ROOT, 'src', 'status', 'runs-watch'));
+const { createWatcher, readLiveMarkers } = require(path.join(ROOT, 'src', 'status', 'runs-watch'));
 const { scopeFromCwd } = require(path.join(ROOT, 'src', 'status', 'project-key'));
 const { readWatchInputs } = require(path.join(ROOT, 'src', 'status', 'watch-inputs'));
 
@@ -126,7 +126,7 @@ test('mint: ensure creates a plain marker with a minted root (env root honoured)
   assert.strictEqual(readJson(g.marker()).root_run_id, 'job-campaign-7');
 });
 
-test('mint: an expired marker is replaced by a plain one with a NEW root; an l5 marker is never touched', () => {
+test('mint: an expired marker gets a NEW root; an l5 marker retains its fields', () => {
   const f = fx(); optIn(f);
   startHook(f, 'startup');
   const oldRoot = readJson(f.marker()).root_run_id;
@@ -137,9 +137,11 @@ test('mint: an expired marker is replaced by a plain one with a NEW root; an l5 
   assert.match(m.root_run_id, JOB);
   assert.notStrictEqual(m.root_run_id, oldRoot, 'a new session record = a new job root');
   writeMarker(f, 'spr-l5', { level: 'l5', root_run_id: 'job-l5-root' });
-  const before = fs.readFileSync(f.marker('spr-l5'), 'utf8');
+  const before = readJson(f.marker('spr-l5'));
   startHook(f, 'compact', {}, 'spr-l5');
-  assert.strictEqual(fs.readFileSync(f.marker('spr-l5'), 'utf8'), before);
+  const after = readJson(f.marker('spr-l5'));
+  assert.ok(Date.parse(after.expires_at) >= Date.parse(before.expires_at));
+  assert.deepStrictEqual({ ...after, expires_at: before.expires_at }, before);
 });
 
 // ---------------------------------------------------------------- 2. read back
@@ -380,7 +382,7 @@ test('inputs: with a root on the plain marker the session tasks and phase belong
   writeMarker(f, 'sess-i', { root_run_id: 'job-r6', size: 'M', stage: 'implement', stage_set_at: iso(now) });
   fs.mkdirSync(path.join(f.live, 'tasks'), { recursive: true });
   fs.writeFileSync(path.join(f.live, 'tasks', 'sess-i.json'), JSON.stringify({ schema: 'autopilot.session-tasks/1', session_id: 'sess-i', project_key: f.key, updated_at: iso(now), first_created_at: iso(now), tasks: [{ id: '1', subject: 'do it', status: 'pending' }] }));
-  const markers = unexpiredMarkers(f.env, f.key, now);
+  const markers = readLiveMarkers(f.markers, f.key, now).records;
   const read = (root) => readWatchInputs({ env: f.env, key: f.key, identity: f.identity, root, nowMs: now, liveBase: f.live, autopilotHome: path.join(f.home, '.autopilot'), markers, progressReceipt: null });
   const rooted = read('job-r6').assemble;
   assert.deepStrictEqual(rooted.planned.value.map((t) => t.title), ['do it']);

@@ -242,20 +242,8 @@ function openDecisionCount(identity, key) {
   return n;
 }
 
-// Roots whose session left a tasks/attention file of this project updated within `windowS`. The session -> root map
-// reads this project's markers of ANY expiry (an expired marker still says which root its session worked on).
-function recentSessionRoots(env, key, nowMs, windowS) {
-  const rootOf = new Map();
-  try {
-    const dir = markerDirOf(env);
-    for (const name of fs.readdirSync(dir)) {
-      if (!name.endsWith('.json')) continue;
-      try {
-        const m = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'));
-        if (m && m.project_key === key && typeof m.root_run_id === 'string' && m.root_run_id) rootOf.set(name.replace(/\.json$/, ''), m.root_run_id);
-      } catch (_error) { /* unreadable marker: no root */ }
-    }
-  } catch (_error) { return new Set(); }
+// Remember live session-to-root associations while the root remains retained, even after expiry cleanup.
+function recentSessionRoots(env, key, nowMs, windowS, rootOf) {
   const base = liveBaseOf(env);
   const out = new Set();
   for (const sub of ['tasks', 'attention']) {
@@ -515,7 +503,7 @@ function createWatcher({
     lastSources: null, lastSignature: null, lastPublishMs: null, lastRuns: null, lastObservedAt: null, lastPaths: null,
     roots: new Set(), lastCounts: new Map(), lastCost: { sessions: {}, host_today_usd: null, host_today_as_of: null, host_today_brain_usd: null, brain_cap_usd: brainSpend.read().brain_cap_usd },
     idleSince: null, lastPathsWhy: null, // lastPathsWhy: the last logged reason `git worktree list` failed (log again only when it changes)
-    rootActiveAt: new Map(), droppedRoots: new Set(), // root retention (ROOT_RETENTION_S)
+    rootActiveAt: new Map(), droppedRoots: new Set(), sessionRoots: new Map(), // root retention (ROOT_RETENTION_S)
     // --render: last-seen signature per root, roots awaiting a publish, the debounce deadline, cached task receipts
     render: { seen: new Map(), dirty: new Set(), dueAt: null, task: new Map(), dates: new Map() },
   };
@@ -760,7 +748,10 @@ function createWatcher({
         if (scopeFileHasLive(path.join(common, 'autopilot', 'decisions', `${key}--${safeSegment(root)}.json`))) active.add(root); // a kept closed card does not make its root active
       }
     }
-    for (const root of recentSessionRoots(env, key, nowMs, windowS)) active.add(root);
+    for (const m of allMarkers) {
+      if (typeof m.session_id === 'string' && typeof m.root_run_id === 'string' && m.root_run_id) state.sessionRoots.set(m.session_id.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64), m.root_run_id);
+    }
+    for (const root of recentSessionRoots(env, key, nowMs, windowS, state.sessionRoots)) active.add(root);
     return active;
   }
 
@@ -874,6 +865,7 @@ function createWatcher({
       } else roots.add(root);
     }
     if (dropped.length) {
+      for (const [sid, root] of state.sessionRoots) if (dropped.includes(root)) state.sessionRoots.delete(sid);
       state.roots = new Set([...state.roots].filter((r) => !dropped.includes(r)));
       for (const root of dropped) { removeRootFiles(root); state.render.seen.delete(root); state.render.dirty.delete(root); state.render.task.delete(root); }
     }

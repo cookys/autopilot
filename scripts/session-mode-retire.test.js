@@ -47,6 +47,11 @@ test('dispatch-hetero.sh check_session_mode_gate Node heredoc passes node --chec
   const bodyEnd = content.indexOf('\nNODE\n', bodyStart);
   assert.notEqual(bodyEnd, -1, 'closing NODE delimiter not found');
   const jsBody = content.slice(bodyStart, bodyEnd);
+  const sweep = /node "\$SELF_DIR\/session-mode\.js" sweep --max 0 --grace-ms 0/;
+  assert.doesNotMatch(jsBody, sweep, 'sweep must not run inside JavaScript');
+  const shellBody = content.slice(bodyEnd + '\nNODE\n'.length, content.indexOf('\n}', bodyEnd));
+  assert.match(shellBody, sweep, 'sweep must run in the shell after validation');
+  assert.match(`${jsBody}\nnode "$SELF_DIR/session-mode.js" sweep --max 0 --grace-ms 0`, sweep, 'negative control catches a misplaced sweep');
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'heredoc-check-'));
   try {

@@ -88,7 +88,7 @@ test('sourceFingerprint: an unparsable expires_at falls back to the mtime rule l
   } finally { t.cleanup(); }
 });
 
-test('markerFilesOf: the same live-only rule, and an unreadable marker is not ours', () => {
+test('readLiveMarkers: the same live-only rule, and an unreadable marker is not ours', () => {
   const t = mk();
   try {
     t.w('live.json', { session_id: 'live', project_key: KEY, expires_at: iso(NOW + H) });

@@ -162,7 +162,7 @@ function optedIn(cwd, scope, root, sid) {
   try { if (require(path.join(root, 'src/status/decision-input')).hasOpenDecision({ identity: scope.repo_identity, key })) return true; } catch (_error) { /* unreadable: not a card */ }
   try {
     const rw = require(path.join(root, 'src/status/runs-watch'));
-    return rw.unexpiredMarkers(process.env, key, Date.now()).filter(rw.isOrchestratorMarker).length > 0;
+    return rw.readLiveMarkers(process.env.AUTOPILOT_SESSION_MODE_DIR || path.join(os.homedir(), '.autopilot', 'session-mode'), key, Date.now()).records.filter(rw.isOrchestratorMarker).length > 0;
   } catch (_error) {
     return false;
   }
@@ -507,7 +507,7 @@ function run(payload) {
   return report;
 }
 
-module.exports = { run, inspectWatcher, reapStale };
+module.exports = { run, inspectWatcher, reapStale, optedIn };
 
 if (require.main === module) {
   try {

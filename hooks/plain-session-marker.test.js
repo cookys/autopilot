@@ -436,24 +436,20 @@ test('validateManagedDevFlowAdmission: a plain marker is rejected as "session ma
 test('dispatch-author gate: a plain marker does not block non-strict dispatch (same as l3 / absent)', () => {
   const f = fx();
   const src = fs.readFileSync(path.join(ROOT, 'scripts', 'dispatch-author.sh'), 'utf8');
-  assert.match(src, /data\.level !== "l5" && data\.level !== "l6"\) process\.exit\(1\)/);
-  // the one-liner exits 1 (not active) for any level other than l5/l6 — run it as the script does
-  const m = src.match(/node -e '(const fs = require\("fs"\);[^']*)'/);
-  assert.ok(m, 'gate one-liner located');
-  const probe = (marker) => {
-    const file = path.join(f.base, 'author-marker.json');
-    fs.writeFileSync(file, JSON.stringify(marker));
-    return spawnSync('node', ['-e', m[1], file, f.repo], { encoding: 'utf8' }).status;
+  const body = src.match(/check_session_mode_gate\(\) \{[\s\S]*?<<'NODE'\n([\s\S]*?)\nNODE/);
+  assert.ok(body, 'batch gate heredoc located');
+  const probe = (level) => {
+    fs.writeFileSync(path.join(f.markers, 'author-marker.json'), JSON.stringify({ session_id: 'a', repo_root: f.repo, started_at: iso(Date.now()), expires_at: iso(Date.now() + 36e5), level }));
+    return spawnSync('node', ['-', CLI, f.markers, f.repo], { input: body[1], encoding: 'utf8' }).stdout;
   };
-  const base = { session_id: 'a', repo_root: f.repo, started_at: iso(Date.now()), expires_at: iso(Date.now() + 36e5) };
-  assert.strictEqual(probe({ ...base, level: null }), 1);
-  assert.strictEqual(probe({ ...base, level: 'l3' }), 1);
-  assert.strictEqual(probe({ ...base, level: 'l5' }), 0, 'control: l5 blocks');
+  assert.strictEqual(probe(null), '');
+  assert.strictEqual(probe('l3'), '');
+  assert.strictEqual(probe('l5'), 'l5');
 });
 
 // ---------------------------------------------------------------- readers: watcher
 
-const { createWatcher, unexpiredMarkers } = require(path.join(ROOT, 'src', 'status', 'runs-watch'));
+const { createWatcher, readLiveMarkers } = require(path.join(ROOT, 'src', 'status', 'runs-watch'));
 const { scopeFromCwd } = require(path.join(ROOT, 'src', 'status', 'project-key'));
 const { readWatchInputs } = require(path.join(ROOT, 'src', 'status', 'watch-inputs'));
 
@@ -499,7 +495,7 @@ test('dev-flow plain marker: the watcher inputs resolve the session project and 
   assert.strictEqual(r.status, 0, r.stderr);
   const mk = readJson(f.marker);
   fs.writeFileSync(f.marker, JSON.stringify({ ...mk, stage: 'implement', stage_set_at: iso(Date.now()), unit: { kind: 'phase', index: 2, total: 3, label: 'W1' } }));
-  const markers = unexpiredMarkers(watcherEnv(f), key, Date.now());
+  const markers = readLiveMarkers(watcherEnv(f).AUTOPILOT_SESSION_MODE_DIR, key, Date.now()).records;
   assert.strictEqual(markers.length, 1, 'the plain marker carries this project key');
   assert.strictEqual(markers[0].project_key, key);
   const inputs = readWatchInputs({
@@ -544,14 +540,16 @@ test('ensure: startup in an opted-in repo creates a plain marker (level null, mi
   assert.strictEqual(m.repo_root, fs.realpathSync(f.repo));
 });
 
-test('ensure: compact and resume never overwrite a live l5 marker (bytes unchanged)', () => {
+test('ensure: compact and resume preserve live l5 marker fields while renewing expiry', () => {
   const f = fx(); optIn(f);
   setLevel(f, 'l5');
-  const before = fs.readFileSync(f.marker);
+  const before = readJson(f.marker);
   for (const source of ['compact', 'resume', 'startup', 'clear']) {
     const r = startHook(f, 'SessionStart', source, quiet);
     assert.strictEqual(r.status, 0, r.stderr);
-    assert.ok(before.equals(fs.readFileSync(f.marker)), `${source}: marker bytes changed`);
+    const after = readJson(f.marker);
+    assert.ok(Date.parse(after.expires_at) >= Date.parse(before.expires_at));
+    assert.deepStrictEqual({ ...after, expires_at: before.expires_at }, before);
   }
 });
 
@@ -779,14 +777,16 @@ test('ensure replaces a legacy watcher record without plugin_code_version instea
   }
 });
 
-test('ensure on the fast path: an active l5 marker is kept byte-for-byte on startup/resume/compact', () => {
+test('ensure on the fast path: an active l5 marker retains fields on startup/resume/compact', () => {
   const x = fastPathFixture();
   try {
     setLevel(x.f, 'l5');
-    const before = fs.readFileSync(x.f.marker);
+    const before = readJson(x.f.marker);
     for (const source of ['startup', 'resume', 'compact']) {
       startHook(x.f, 'SessionStart', source, { cwd: x.cwd, env: x.env });
-      assert.ok(before.equals(fs.readFileSync(x.f.marker)), source);
+      const after = readJson(x.f.marker);
+      assert.ok(Date.parse(after.expires_at) >= Date.parse(before.expires_at), source);
+      assert.deepStrictEqual({ ...after, expires_at: before.expires_at }, before);
     }
   } finally { try { process.kill(x.w.pid, 'SIGKILL'); } catch (_e) { /* gone */ } }
 });
@@ -866,4 +866,26 @@ test('context-budget, transcript-reader-lib, merge/cli, repair-lineage-cleanup d
   // their "marker" is something else: git operation markers (merge/cli) and the .autopilot-worktree file (cleanup)
   assert.match(fs.readFileSync(path.join(ROOT, 'src/merge/cli.js'), 'utf8'), /--git-path/);
   assert.match(fs.readFileSync(path.join(ROOT, 'src/engine/repair-lineage-cleanup.js'), 'utf8'), /\.autopilot-worktree/);
+});
+
+
+test('orchestrator marker opts in only while live', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'autostart-marker-'));
+  const oldDir = process.env.AUTOPILOT_SESSION_MODE_DIR;
+  const oldAuto = process.env.AUTOPILOT_RUNS_WATCH_AUTOSTART;
+  try {
+    process.env.AUTOPILOT_SESSION_MODE_DIR = dir;
+    delete process.env.AUTOPILOT_RUNS_WATCH_AUTOSTART;
+    const marker = path.join(dir, 'other.json');
+    const write = (expires_at) => fs.writeFileSync(marker, JSON.stringify({ level: 'l5', project_key: 'test-key', expires_at }));
+    const decide = () => require('./runs-watch-autostart').optedIn(dir, { project_key: 'test-key' }, ROOT, 'different');
+    write(new Date(Date.now() + 60000).toISOString());
+    assert.strictEqual(decide(), true);
+    write(new Date(Date.now() - 60000).toISOString());
+    assert.strictEqual(decide(), false);
+  } finally {
+    if (oldDir === undefined) delete process.env.AUTOPILOT_SESSION_MODE_DIR; else process.env.AUTOPILOT_SESSION_MODE_DIR = oldDir;
+    if (oldAuto === undefined) delete process.env.AUTOPILOT_RUNS_WATCH_AUTOSTART; else process.env.AUTOPILOT_RUNS_WATCH_AUTOSTART = oldAuto;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

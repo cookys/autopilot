@@ -32,11 +32,11 @@ Role: implementer | Lane: autopilot | Size: S
 Problem: long-running Claude seats burn CPU because the live mod stats every session-mode marker on each poll. On real hosts ~/.autopilot/session-mode/ holds 2,615 files (oldest from July, never cleaned); a seat does 468–765 statx/s (11–22% of one core).
 
 Confirmed path:
-- `src/status/runs-watch.js:441` `sourceFingerprint` records, in the published envelope's `sources`, a `marker` group whose `files` are ALL markers of this project (`markerFilesOf(markerDir, key)`), expired ones included.
+- `src/status/runs-watch.js:441` `sourceFingerprint` records, in the published envelope's `sources`, a `marker` group whose `files` are ALL markers of this project (`readLiveMarkers(markerDir, key, nowMs).paths`), expired ones included.
 - `mods/live/register.ts:552` `judgeByChange` runs on every poll (called from `findEnvelope` ~line 603, twice per scope: tmpfs path then SSD copy) and does `$.fs.stat(f.path)` for every listed file (lines ~558-561), then stats the dir.
 
 Fix all three:
-1) runs-watch.js: `markerFilesOf` / `sourceFingerprint` lists only markers that are still live (marker `expires_at` in the future, or no expires_at and mtime within 24 h). Expired markers cannot change anything the snapshot shows.
+1) runs-watch.js: `readLiveMarkers` / `sourceFingerprint` lists only markers that are still live (marker `expires_at` in the future, or no expires_at and mtime within 24 h). Expired markers cannot change anything the snapshot shows.
 2) register.ts `judgeByChange`: memoize per envelope. Keep a module-level map keyed by envelope identity (path + envelope generated_at/sequence, whatever uniquely identifies one publish) holding the last `fresh` verdict and the dir mtimes seen. On the next poll, stat each group's DIR first; if every dir mtime equals the memoized one, return the memoized fresh verdict without per-file stats. Only when a dir mtime moved (writers use tmp+rename, so any create/replace/delete moves it) run the full per-file check as today. Keep every existing semantics in the long comment above judgeByChange (absent dir, EACCES, unreadable new files, notOurs). Bound the map (e.g. clear above 256 entries).
 3) Cleanup: in `scripts/session-mode.js` where a marker is written (set), also remove, best-effort, markers in the same dir whose expires_at is more than 24 h in the past (or, if unparsable/no expires_at, mtime older than 7 days). At most 500 removals per call; never remove the marker being written or any file not ending in .json; ignore errors. Removal only via fs.unlinkSync on paths built from readdir of that one directory.
 

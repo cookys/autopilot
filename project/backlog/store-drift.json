@@ -1,6 +1,3 @@
 {
-  "records": {
-    "01M789516CY1AC3Q3FM950E6Q7": "BL-0337 shipped (46bff1873) and its row was removed by hand, but the reporter (hangar) was never answered, so project-record.js backlog close refuses (peer_closed_unanswered); answer the reporter, then close the record and delete this line",
-    "01M78955KX503RM4MG4XNEKGZC": "BL-0433 shipped (30d83f3a5) and its row was removed by hand, but the reporter (PM via hangar) was never answered, so project-record.js backlog close refuses (peer_closed_unanswered); answer the reporter, then close the record and delete this line"
-  }
+  "records": {}
 }

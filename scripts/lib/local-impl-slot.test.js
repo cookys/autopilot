@@ -59,6 +59,7 @@ function readyEnv(extra = {}) {
   };
   delete env.AUTOPILOT_LOCAL_SLOTS_CMD;
   delete env.AUTOPILOT_LOCAL_SLOTS_URL;
+  delete env.AUTOPILOT_TOKEN_SEAT;
   return { ...env, ...extra };
 }
 
@@ -131,6 +132,15 @@ test('lease HTTP error detail includes a bounded response message', async () => 
   try {
     const result = await require('./local-impl-slot').acquireLocalLease({ env: leaseEnv(srv.address().port, { AUTOPILOT_FLEET_TASK: '01ARZ3NDEKTSV4RRFFQ69G5FAV' }), cfg: {}, endpoint: { ready: true, baseUrl: `http://127.0.0.1:${srv.address().port}/v1`, tokenEnv: 'AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN' } });
     assert.equal(result.detail, 'lease_query_failed:http_400:bad fleet task');
+  } finally { srv.close(); }
+});
+
+test('lease HTTP error detail reads nested error.message', async () => {
+  const message = 'gateway rejected lease';
+  const { srv } = await leaseServer(400, JSON.stringify({ error: { message } }));
+  try {
+    const result = await require('./local-impl-slot').acquireLocalLease({ env: leaseEnv(srv.address().port), cfg: {}, endpoint: { ready: true, baseUrl: `http://127.0.0.1:${srv.address().port}/v1`, tokenEnv: 'AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN' } });
+    assert.equal(result.detail, `lease_query_failed:http_400:${message}`);
   } finally { srv.close(); }
 });
 

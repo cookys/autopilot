@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+unset AUTOPILOT_TOKEN_SEAT
 # Implementer dispatch defaults to the local qwen seat.
 # Red on a dispatch-hetero.sh that still sends an omitted --runner to grok.
 # Stub claude / stub grok only. No live CLI and no HTTP endpoint.
@@ -165,6 +166,15 @@ EXIT=$?
 assert_neq "0" "$EXIT" "a3: explicit local high effort fails precondition"
 assert_contains "$OUT" "low|medium|xhigh" "a3: error names supported local effort set"
 assert_contains "$OUT" '"status": "precondition_failed"' "a3: high effort fails before runner dispatch"
+# (a3b) An unpinned high-effort request releases its acquired lease before refusal.
+printf '201\n' > "$LEASE_STATUS_FILE"; : > "$LEASE_LOG"; RUNS="$TEST_TMP/runs-a3b"; mkdir -p "$RUNS"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
+  "$SCRIPT" --no-verify-tip --context-window off --effort high \
+  --branch feat/local-a3b --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/a3b.err")"
+EXIT=$?
+assert_eq "2" "$EXIT" "a3b: unpinned explicit high effort exits precondition"
+assert_contains "$OUT" "low|medium|xhigh" "a3b: error names supported local effort set"
+assert_contains "$(cat "$LEASE_LOG")" '"method":"DELETE","url":"/v1/local/lease/test-lease-id"' "a3b: acquired lease is released"
 RUNS="$TEST_TMP/runs-a3max"; mkdir -p "$RUNS"
 OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
   "$SCRIPT" --no-verify-tip --context-window off --runner local --model qwen --effort max \

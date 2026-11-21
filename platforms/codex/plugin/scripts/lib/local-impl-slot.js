@@ -19,6 +19,12 @@ const { configPath } = require('./config-path');
 const DEFAULT_BYTES = 400000;
 const HTTP_TIMEOUT_MS = 2000;
 
+function childEnv(env) {
+  const result = { ...process.env, ...env };
+  delete result.AUTOPILOT_TOKEN_SEAT;
+  return result;
+}
+
 function readConfig(env) {
   const file = configPath({ env });
   try {
@@ -58,7 +64,7 @@ function contextBytes(promptFile, cwd) {
 
 function endpointInfo(env, endpoint = 'qwen_local') {
   const r = spawnSync('bash', [path.join(__dirname, '..', 'resolve-endpoint.sh'), endpoint], {
-    env: { ...process.env, ...env }, encoding: 'utf8', timeout: 15000,
+    env: childEnv(env), encoding: 'utf8', timeout: 15000,
   });
   const line = String(r.stdout || '').split('\n').find((l) => l.startsWith('{'));
   if (!line) return { ready: false, baseUrl: '', tokenEnv: '' };
@@ -120,7 +126,9 @@ async function acquireLocalLease(opts = {}) {
     let message = '';
     try {
       const doc = JSON.parse(res.body);
-      const value = doc && (doc.error || doc.message || doc.detail);
+      const value = doc && (typeof doc.error === 'string' ? doc.error
+        : doc.error && typeof doc.error.message === 'string' ? doc.error.message
+          : doc.message || doc.detail);
       if (typeof value === 'string') message = value.slice(0, 200);
     } catch { /* response body may not be JSON */ }
     return fail(`lease_query_failed:http_${Number.isInteger(res.status) ? res.status : 'unknown'}${message ? `:${message}` : ''}`, res.status || null);
@@ -235,7 +243,7 @@ function interpretPayload(o, source) {
 
 function slotsFromCmd(cmd, env) {
   const r = spawnSync('timeout', ['--signal=KILL', '3', 'bash', '-c', cmd], {
-    env: { ...process.env, ...env }, encoding: 'utf8', timeout: 5000,
+    env: childEnv(env), encoding: 'utf8', timeout: 5000,
   });
   if (r.error || r.signal || r.status === 124 || r.status === 137 || r.status == null) return queryFailed('cmd', 'timeout');
   if (r.status !== 0) return queryFailed('cmd', 'unreachable');

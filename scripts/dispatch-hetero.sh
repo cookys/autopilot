@@ -3542,6 +3542,10 @@ if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_S
     LOCAL_LEASE_GRANTED=1
     LOCAL_LEASE_URL="$(printf '%s\n' "$_slot_parsed" | sed -n '4p')"
     LOCAL_LEASE_TOKEN_ENV="$(printf '%s\n' "$_slot_parsed" | sed -n '5p')"
+    if [ "$EFFORT_EXPLICIT" -eq 1 ] && { [ "$EFFORT" = "high" ] || [ "$EFFORT" = "max" ]; }; then
+      release_local_lease || true
+      die_precondition "--runner local supports --effort low|medium|xhigh (got: $EFFORT)"
+    fi
     _slot_choice="$(printf '%s\n' "$_slot_parsed" | sed -n '6p')"
     _slot_family="$(node -e 'const o=JSON.parse(process.argv[1]); process.stdout.write(o.family||"qwen")' "$_slot_choice")"
     ENDPOINT="$(node -e 'const o=JSON.parse(process.argv[1]); process.stdout.write(o.endpoint||"qwen_local")' "$_slot_choice")"

@@ -1,5 +1,6 @@
 # autopilot repo 全面整理（3.0.0）v3 定稿：乾淨、可開源、好擴充好維護
 
+> 稽核（2026-11-21，PM 01M7XQRV）：仍要做。P2-P5 與匯出工具；前置：PM 排程；建議執行者 hydrogen/grok 分 worktree。證據：CLAUDE.md Goal 里程碑；BACKLOG L1011、L1364。
 審查紀錄：四席 plan review（astra 主審，GLM、MiniMax、Qwen 深審）兩代，第一代 19 條、第二代 15 條全部採納。第二代修補寫在文末「定稿修補」，與正文衝突時以該節為準。
 
 依據：盤點報告（develop @ 05704640d）。數字出處以【盤點】標示，來源是 scratchpad/layout/ 下的 docs-、repo-、code-inventory.md；各階段的產生器會用實際掃描重算引用數，不依賴盤點快照。

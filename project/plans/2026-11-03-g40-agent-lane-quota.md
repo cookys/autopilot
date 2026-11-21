@@ -1,5 +1,6 @@
 # Plan — G40-data: the agent lane gets its own live quota for every alias
 > Status: design only (no code in this plan's authoring commit); P4/P5 parked. Owner: PM program. Branch: `hands/g40data/1`. Size: S (design); implementation phases below. Frame: builds on G37 (`project/plans/2026-11-03-g37-account-switching.md`) and the codeforge G40 design (codeforge `feature/g40-usage-accounts` @ `98c7a8b`, `doc/plans/2026-11-03-g40-usage-accounts.md`).
+> 稽核（2026-11-21，PM 01M7XQRV）：仍要做。P4/P5 parked；前置：g40 資料階段結論；建議執行者 hydrogen。證據：BACKLOG.md L1502 Pointer；板頭「P4/P5 parked」。
 >
 > 2026-11-20 schedule (PM 01M7V31A): P4/P5 parked — P5 waits on fleet F4; the 2026-11-10 freeze date lapsed.
 

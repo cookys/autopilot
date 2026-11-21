@@ -1,5 +1,6 @@
 # Plan — BL-0372 measurement: are the claude `--output-format json` and `stream-json --verbose` results byte-identical?
 > Status: scheduled. Tasks 0–3 merged in 05a70bf82; Tasks 4–5 go-live 2026-11-22. Task 4 live run pending check of cards d-74c79fc4 / d-2a19fdb5. Tracked by the PM as bl-ap-sj45. Backlog row: BL-0372 (`project/backlog/bl-ap-streamjson-result-bytes.md`). Owner: PM program. Size: S (instrument and measurement; no change to dispatch behaviour). Frame: baseline autopilot develop `a44ea9a6a`; this plan was written by reading the repo only, no claude call was made. Upstream: `project/plans/2026-11-03-g40-agent-lane-quota.md` section 5.1 (C1/C2/C3), section 18.6, section 19.4 step E7, and N9 in section 14.
+> 稽核（2026-11-21，PM 01M7XQRV）：仍要做。Task 4-5 live 量測；前置：卡片 d-74c79fc4 / d-2a19fdb5 與 2026-11-22 go-live；建議執行者 autopilot lane。證據：05a70bf82（Task 0-3 已併）。上線日：板頭「Tasks 4–5 go-live 2026-11-22. Task 4 live run pending check of cards d-74c79fc4 / d-2a19fdb5」（L3）。
 >
 > 2026-11-20 schedule (PM 01M7V31A): status scheduled; Tasks 4-5 go-live 2026-11-22; Task 4 live run pending check of cards d-74c79fc4 / d-2a19fdb5.
 

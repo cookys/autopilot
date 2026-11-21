@@ -1,5 +1,6 @@
 # `--runner opencode` implementer rail (dispatch-hetero) + first administration: muse-spark-1.3 (OpenCode Go)
 
+> 稽核（2026-11-21，PM 01M7XQRV）：已完成。已實作，計畫檔頭狀態過時（建議改標已出貨或歸檔）。證據：3949e2ab；11f6cc9cf（v2.35.12）。
 **Date**: 2026-09-03 · **Target**: v2.35.12 · **Size**: L (new runner across 5 modules)
 **狀態**: ✅ Shipped in v2.35.12 — merged as `3949e2ab`
 **Trigger**: Board asked to examine `muse-spark-1.3` as implementer through OpenCode. The only

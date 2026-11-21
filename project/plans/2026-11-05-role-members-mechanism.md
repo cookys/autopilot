@@ -1,6 +1,7 @@
 # Plan — 角色成員的機制側：role kit 版本、帶入、升版
 
 > Status: parked — waits on the rolekit pilot result.（凍結 rubric，最多兩代）。Owner: autopilot depth-0，回覆 PM。Branch: 無（只有計畫，不含程式、不改測試）。Size: M（設計＋一個小的實作 phase，P2 之前不出貨）。Frame: autopilot develop `8c0d36273`。Related: `project/plans/2026-11-05-rolekit-direction.md`（決定 d-c76529c3）、`evals/rolekit/README.md`、PM 草稿 role-members.md v0.1 的 §3、§4、§5，章程 v1 §8。
+> 稽核（2026-11-21，PM 01M7XQRV）：仍要做。parked，等 rolekit pilot 結果；前置：rolekit pilot 過門檻；建議執行者 PM 判定後 hydrogen。證據：板頭「parked — waits on the rolekit pilot result」。
 >
 > 2026-11-20 schedule (PM 01M7V31A): status parked — waits on the rolekit pilot result.
 

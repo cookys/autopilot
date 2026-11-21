@@ -1,6 +1,7 @@
 # 方向提案：角色套件（role kit）讓弱模型也做得好
 
 > Status: scheduled (frozen rubric, at most two generations). Owner: PM program (operator decides budget and go). Branch: none yet (plan only, no code). Size: L (direction plus spikes plus a gated A/B; nothing ships by default). Frame: autopilot develop `63308bd8f`, read-only investigation "rolekit-probe 2026-11-05" (facts and sources in the Appendix of this plan). Related: `project/plans/2026-10-31-repo-relayout-3-0-0.md`, `project/backlog/consumer-rules-in-claude-md.md` (BL-0388).
+> 稽核（2026-11-21，PM 01M7XQRV）：仍要做。spikes 與 pilot；前置：operator 預算與 go；建議執行者 hydrogen/grok。證據：板頭「scheduled」；CLAUDE.md Goal；BACKLOG L1443。
 >
 > 2026-11-20 schedule (PM 01M7V31A): status scheduled; pilot result due 2026-11-23; subscription models only; the real-model part follows the pool-switch path (g37 superseded).
 

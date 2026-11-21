@@ -1,6 +1,7 @@
 # Plan — G37: account aliases and automatic account switching for headless and lane `claude`
 
 > Status: superseded (PM ruling 01M7V36W) | Owner: PM (the PM session) | Author: hands lane `g37plan` | Branch: `hands/g37plan/1` (base `2893b37b0`) | Frame: plan only; implementers are dispatched after review.
+> 稽核（2026-11-21，PM 01M7XQRV）：已被取代。由 lane-switch（scripts/lane-switch.js）與 profile-switch-advice 取代，該板頭已寫 PM ruling 01M7V36W。證據：板頭「superseded (PM ruling 01M7V36W)」；9bcde4483。
 >
 > 2026-11-20 schedule (PM 01M7V31A): status superseded — superseded by hangar's pool-switch script plus capacity's rebalance (operator standing go, reuses tokens already on the host); PM ruling 01M7V36W.
 

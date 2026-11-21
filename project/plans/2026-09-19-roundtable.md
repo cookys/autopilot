@@ -1,6 +1,7 @@
 # Plan — roundtable: a room log both windows only read
 
 > Status: **Phase 0 done 2026-09-19 (worth it). Redesign 2026-10-19: room log is the record; windows A and B are shipped (`scripts/lib/room-log.js`, `scripts/roundtable-window.js`, `mods/roundtable`); skill still waits on BL-0216.** · Owner: cookys (depth-0) · Branch: implementation landed ·
+> 稽核（2026-11-21，PM 01M7XQRV）：仍要做。Phase 1 的 /roundtable skill 尚未做（BL-0216 該列仍 open）；前置：owner 要不要 skill；建議執行者 grok/hydrogen。證據：BACKLOG.md L502-513 Pointer 指向本計畫；room-log.js 與 roundtable-window.js 已出貨。
 > Size: S (Phase 0, done) + M (Phase 1 room log + window A) + M (Phase 2 window B) + L (Phase 3 skill, BL-0216) + S (Phase 4 hangar) · Frame: plan, not review.
 > Raised 2026-09-19: the hetero plan loop fits review, not a discussion the operator sits in. Revised 2026-10-19 around a room log file.
 

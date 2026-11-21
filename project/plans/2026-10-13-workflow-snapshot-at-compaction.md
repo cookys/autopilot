@@ -1,6 +1,7 @@
 # Plan — workflow snapshot at compaction and /clear (replace the transcript tail)
 
 > Status: **active, size L (P1-P2 and P4 landed on branch `feat/workflow-snapshot-at-compaction`; P3 deferred)** · Owner: depth-0 · Source: BACKLOG row "Workflow snapshot at compaction and /clear (replace the transcript tail)"; evidence `docs/plans/evidence/2026-10-12-context-reset-cost/README.md`.
+> 稽核（2026-11-21，PM 01M7XQRV）：仍要做。P3：handoff 讀 snapshot、dev-flow 呼叫 task-card；前置：無；建議執行者 grok。證據：BACKLOG.md L575-586；ac5b4c36d 已併 P1-P2、P4。
 
 ## 0. Context / thesis
 

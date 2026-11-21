@@ -1,6 +1,7 @@
 # Plan — hook test harness determinism
 
 > Status: FROZEN FOR EXECUTION
+> 稽核（2026-11-21，PM 01M7XQRV）：已完成。已實作並歸檔，計畫檔頭狀態過時，建議改標 shipped/歸檔。證據：archive 2026/08/2026-08-02-hook-test-harness-determinism README。
 > Owner: depth-0 CEO with one worktree-isolated L4 foreman
 > Size: L (one grouped Fix batch)
 > Source: `docs/BACKLOG.md` output-quiescence flake trigger plus live finish-flow evidence on 2026-08-02

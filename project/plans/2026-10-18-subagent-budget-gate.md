@@ -1,6 +1,7 @@
 # Plan — subagent budget gate: per-lane relay and turn ceilings on Agent dispatch
 
 > Status: active · Owner: cookys · Branch: lane/budget · Frame: L, one deliverable
+> 稽核（2026-11-21，PM 01M7XQRV）：已完成。已實作，計畫檔頭狀態過時（建議改標已出貨或歸檔）。證據：c2a21424a；hooks/subagent-budget.js。
 > Decisions: panel cards d-5b4415c1 (build the hook) and d-bdd886cb (lane key, escalation, thresholds), 2026-10-18.
 > Proposal page: https://claude.ai/artifact/B3YBhb2FqpEVJ8Jd6mLN7g
 

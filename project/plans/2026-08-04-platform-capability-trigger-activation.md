@@ -9,6 +9,7 @@ logical_plan_id: platform-capability-trigger-activation-2026-08-04-r4
 
 # Plan — Platform capability trigger activation and strict-L5 bootstrap
 
+> 稽核（2026-11-21，PM 01M7XQRV）：已完成。已實作並歸檔，計畫檔頭狀態過時，建議改標 shipped/歸檔。證據：312a41c58（v2.34.2 出貨並歸檔）。
 > Owner: CEO controller · Planned branch: `feat/platform-capability-trigger-activation` ·
 > Frame: one cumulative Mission deliverable with four ordered internal gates (D1–D4)
 

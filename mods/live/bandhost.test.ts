@@ -128,7 +128,9 @@ for (const cols of [120, 80]) {
     expect(rows[rows.length - 1].startsWith('╰─')).toBe(true)
     expect(rows[rows.length - 1].endsWith('╯')).toBe(true)
     expect(rows[rows.length - 1]).toContain('1 現況')
-    expect(rows[rows.length - 1]).toContain('9 說明')
+    // design (narrow sheet): at 80 the border keeps the current page's name only, the other tabs are digits; from 120 every name shows
+    if (cols >= 120) expect(rows[rows.length - 1]).toContain('9 說明')
+    else expect(rows[rows.length - 1]).not.toContain('9 說明')
     expect(text(tree)).not.toContain('圓桌')
     await band.unmount()
     await $.session.end({ reason: 'exit' })

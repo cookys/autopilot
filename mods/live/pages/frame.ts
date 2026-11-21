@@ -118,12 +118,14 @@ export function frameBorderRow(page: Page, ctx: PageCtx): Row {
 // PM 01M7XB0B: one bottom border. Hints on the left, page tabs on the right, the current page marked.
 // Short width: shorten the hint first, then tabs become digits (the current page keeps its name). Never a second row.
 export type BorderTab = { key: string; id: string; text: string }
+export const TAB_GAP = 2 // blanks between two tabs of the bottom border (design)
 export function frameBottomFit(cols: number, hintFull: string, hintShort: string, tabs: readonly BorderTab[], active: string): { hint: string; tabs: BorderTab[] } {
   const digits = tabs.map(x => ({ ...x, text: x.id === active ? x.key + ' ' + x.text.replace(/^\d+\s+/, '') : x.key }))
   const fullTabs = tabs.map(x => ({ ...x, text: x.text }))
-  const chrome = 2 + 2 + 1 + 1 // ╰─, two spaces, the gap before the tabs, ╯
-  const tabW = (list: readonly BorderTab[]): number => list.reduce((n, x, i) => n + (i === 0 ? 0 : 1) + displayWidth(x.text), 0)
-  const fits = (hint: string, list: readonly BorderTab[]): boolean => chrome + displayWidth(hint) + 1 + tabW(list) <= cols
+  // design (narrow sheet): `╰─  <hint>  ────  1 現況  2 待決 … 9 說明  ─╯`: two blanks around the hint, at least two dashes, two blanks between tabs and at both ends of them
+  const chrome = 2 + 2 + 2 + 2 + 2 + 2 + 2 // ╰─, blanks, blanks, two dashes, blanks, blanks, ─╯
+  const tabW = (list: readonly BorderTab[]): number => list.reduce((n, x, i) => n + (i === 0 ? 0 : TAB_GAP) + displayWidth(x.text), 0)
+  const fits = (hint: string, list: readonly BorderTab[]): boolean => chrome + displayWidth(hint) + tabW(list) <= cols
   // Short width: shorten the hint first. Only after the shortest hint still does not fit do the tabs become digits.
   for (const hint of [hintFull, hintShort, '']) {
     if (fits(hint, fullTabs)) return { hint, tabs: fullTabs }

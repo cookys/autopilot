@@ -201,6 +201,23 @@ const HOST_OFFLINE_RE = /主機.*離線|離線.*主機|\bhosts?\b.*\boffline\b|\
 const isOfflineHostExc = (i: ConsoleItem): boolean =>
   i.kind === 'exception' && i.to_console === true && !i.id.startsWith('quota:') && i.line_id === null
   && (/^exc:host[_:-]?offline\b/i.test(i.id) || HOST_OFFLINE_RE.test(i.title) || HOST_OFFLINE_RE.test(i.text))
+// r8-3 #5: pools with the same verdict text share one row that names them all (`✗ 額度 a、b、c 沒有額度資料`), so five identical errors do not push the lines down
+export function mergedPoolRows(ctx: PageCtx, con: ConsoleSnapshot, wide: boolean): Row[] {
+  const pools = normalizedPools(con)
+  if (pools === null) return []
+  const groups = new Map<string, { v: Verdict; names: string[] }>()
+  for (const v of rankPools(pools, ctx.nowMs, ctx.t).filter(x => x.role === 'broken' || isUnknownPool(x) || x.role === ROLE_WARNING)) {
+    const key = v.role + '|' + v.text
+    const g = groups.get(key)
+    if (g === undefined) groups.set(key, { v, names: [poolLabel(v.pool)] })
+    else g.names.push(poolLabel(v.pool))
+  }
+  return [...groups.values()].map(({ v, names }) => {
+    const red = v.role === 'broken'
+    const icon = red ? GLYPHS.state.failed : isUnknownPool(v) ? GLYPHS.state.unknown : GLYPHS.state.need_you
+    return [dim(wide ? '  ' : ''), { text: icon + ' ' + ctx.t('page.now.quota') + ' ' + names.join('、') + ' ' + v.text, color: red ? PALETTE.broken : PALETTE.attention }]
+  })
+}
 function exceptionRows(ctx: PageCtx, con: ConsoleSnapshot, wide: boolean): Row[] {
   const { t, nowMs, size } = ctx
   const pools = normalizedPools(con)
@@ -703,10 +720,11 @@ function v74FleetSection(ctx: PageCtx, wide: boolean): Row[] {
   const rows: Row[] = [head, summary]
   // r8 #13: failures first, then the quota exception (it is a ✗ too), then the parked and unknown lines
   const parked: Row[] = []
+  let quotaDone = false
   const quotaFirst = (): void => {
-    if (con === null) return
-    const quotaExc = exceptionRows(ctx, con, wide).filter(r => rowText(r).includes(t('page.now.quota')))
-    for (const r of quotaExc) if (!rows.some(x => rowText(x) === rowText(r))) rows.push(r)
+    if (con === null || quotaDone) return
+    quotaDone = true
+    for (const r of mergedPoolRows(ctx, con, wide)) rows.push(r)
   }
   const lines = fleetLines(pm).filter(l => l.mark !== 'ok')
   for (const line of [...lines.filter(l => l.mark === 'fail'), ...lines.filter(l => l.mark !== 'fail')]) {
@@ -725,8 +743,7 @@ function v74FleetSection(ctx: PageCtx, wide: boolean): Row[] {
     if (line.mark !== 'fail') parked.push(row)
     rows.push(row)
   }
-  if (parked.length === 0) quotaFirst()
-  if (con !== null) for (const pr of poolRows(ctx, con, wide)) rows.push(pr)
+  quotaFirst()
   return rows
 }
 

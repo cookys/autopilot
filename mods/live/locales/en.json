@@ -819,7 +819,7 @@
   "v74.b.help.symbol_title": "Symbols",
   "v74.b.help.keys_title": "Keys",
   "v74.b.help.keys_1": "ctrl+x then Tab gives the pane keyboard   Esc returns to input",
-  "v74.b.help.keys_2": "1 to 9 only switch pages   {arrows} scroll   Enter folds",
+  "v74.b.help.keys_2": "1 to 9 only switch pages (input empty: press directly; text in it: ctrl+x then Tab first)   {arrows} scroll   Enter folds",
   "v74.b.help.keys_3": "{arrows} change card   a b c pick that card’s option   m note   p n alternate card navigation",
   "v74.b.help.keys_s": "s send all (decide and todo pages)",
   "v74.b.help.keys_4": "a hotkey accepts only one key; “card number then a/b/c” needs two keys and conflicts with page numbers; cursor plus letter takes one key at a time",

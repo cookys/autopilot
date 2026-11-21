@@ -161,3 +161,36 @@ test('r8-1: in a short frame the other cards collapse before the blank row betwe
   expect(lines.some(l => l.includes('另有 3 張'))).toBe(true)
   expect(lines.length).toBeLessThanOrEqual(17 - 1 - 2 - 1)
 })
+
+// ---- r8-3 ----
+import { frameBottomFit, TAB_GAP } from './frame'
+import { mergedPoolRows } from './now'
+import { NOW, consoleOf } from './quota.fixture'
+
+const tabsOf = [['1', 'now', '1 現況'], ['2', 'decide', '2 待決'], ['3', 'work', '3 派工']].map(([key, id, tx]) => ({ key, id, text: tx }))
+
+test('r8-3 #4: at a narrow width only the current tab keeps its name', () => {
+  const fit = frameBottomFit(30, '↑↓ 換張 · a/b/c 選 · s 送出全部 · Esc 還給輸入框', '↑↓ · s · Esc', tabsOf, 'decide')
+  expect(fit.tabs.map(x => x.text)).toEqual(['1', '2 待決', '3'])
+})
+
+test('r8-3 #4: tabs are two blanks apart on the border (design)', () => {
+  expect(TAB_GAP).toBe(2)
+  const fit = frameBottomFit(200, 'h', 'h', tabsOf, 'decide')
+  expect(fit.tabs.map(x => x.text)).toEqual(['1 現況', '2 待決', '3 派工'])
+})
+
+test('r8-3 #2: the first screen of help states when the digits switch pages', () => {
+  const first = helpLines().slice(0, 14).join('\n')
+  expect(first).toContain('輸入框空白時')
+  expect(first).toContain('ctrl+x')
+})
+
+test('r8-3 #5: pools with the same error share one row naming all of them', () => {
+  const mk = (pool: string) => ({ pool, limit_hit: true, stranded_seats: null, seven_day_pct: 100, five_hour_pct: 100, stale: false, observed_at_ms: NOW - 40_000 })
+  const fx = consoleOf(['alpha', 'beta', 'gamma'].map(mk))
+  const ctx = { live: null, console: fx, size: { cols: 120, rows: 40 }, t, nowMs: NOW } as never
+  const rows = mergedPoolRows(ctx, fx, true).map(text)
+  expect(rows.length).toBe(1)
+  for (const n of ['alpha', 'beta', 'gamma']) expect(rows[0]).toContain(n)
+})

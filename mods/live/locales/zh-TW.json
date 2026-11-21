@@ -819,7 +819,7 @@
   "v74.b.help.symbol_title": "符號",
   "v74.b.help.keys_title": "按鍵",
   "v74.b.help.keys_1": "ctrl+x 再按 Tab 把鍵盤交給 pane   Esc 還給輸入框",
-  "v74.b.help.keys_2": "1 到 9 只管切頁   {arrows} 捲動   Enter 摺疊",
+  "v74.b.help.keys_2": "1 到 9 只管切頁（輸入框空白時直接按；有字時先按 ctrl+x 再按 Tab）   {arrows} 捲動   Enter 摺疊",
   "v74.b.help.keys_3": "{arrows} 換張   a b c 選那張的選項   m 附註   p n 備用換張",
   "v74.b.help.keys_s": "s 送出全部（待決頁和待辦頁）",
   "v74.b.help.keys_4": "hotkey 只接受一個鍵，「第幾張加 a/b/c」要按兩個鍵，也會和數字切頁衝突；游標加字母，一次只按一個鍵",

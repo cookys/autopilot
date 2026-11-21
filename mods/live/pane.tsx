@@ -19,7 +19,7 @@ import { commandView } from './commandtab'
 import { consolePage } from './consolepages'
 import type { ConsoleNav, ConsoleTab } from './consoletabs'
 import { keyed, scrollFrame } from './scroll'
-import { actionRows, frameBottomFit, frameHintShort, frameHintText, frameRows, stripRows, STRIP_SPLIT_COLS, v74TitleSegs } from './pages/frame'
+import { TAB_GAP, actionRows, frameBottomFit, frameHintShort, frameHintText, frameRows, stripRows, STRIP_SPLIT_COLS, v74TitleSegs } from './pages/frame'
 import { displayWidth, truncateToWidth } from './model'
 import { fleetView as fleetPageView } from './pages/fleet'
 import { renderQuota } from './pages/quota'
@@ -304,8 +304,8 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
     return m === null ? [] : [{ key: m[1], id: m[2], text: sg.text }]
   })
   const fit = frameBottomFit(fullCols, frameHintText(page, ctx), frameHintShort(page, ctx), tabItems, page.id)
-  const tabW = fit.tabs.reduce((n, x, i) => n + (i === 0 ? 0 : 1) + displayWidth(x.text), 0)
-  const padN = Math.max(1, fullCols - (2 + 2 + displayWidth(fit.hint) + tabW + 1))
+  const tabW = fit.tabs.reduce((n, x, i) => n + (i === 0 ? 0 : TAB_GAP) + displayWidth(x.text), 0)
+  const padN = Math.max(1, fullCols - (2 + 2 + displayWidth(fit.hint) + 2 + 2 + tabW + 2 + 2))
   const tabs = fit.tabs.map((tb, j) => {
     const draw = <Text key={'tl' + j} wrap="truncate">{tb.text}</Text>
     const choose = () => (frame.onPage !== undefined ? frame.onPage(tb.id as PageId) : onTab(PAGE_TAB[tb.id]))
@@ -316,7 +316,7 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
     // ctrl+x Tab still lands: the current tab is the visible autoFocus button.
     const land = on && !typing && (page.id === 'decide' || page.id === 'todo')
     const btn = Button === undefined ? label : <Button key={'tab:' + tb.id + ep} plain {...(V74_TAB_HOTKEYS ? { hotkey: tb.key } : {})} {...(land ? { autoFocus: true } : {})} onPress={choose}>{label}</Button>
-    return <Box key={'tb' + j}>{j === 0 ? null : <Text>{' '}</Text>}{btn}</Box>
+    return <Box key={'tb' + j}>{j === 0 ? null : <Text>{' '.repeat(TAB_GAP)}</Text>}{btn}</Box>
   })
   const hidden = Button === undefined || frame.decide?.textMode === true ? [] : tabItems.map((tb, j) => {
     const choose = () => (frame.onPage !== undefined ? frame.onPage(tb.id as PageId) : onTab(PAGE_TAB[tb.id]))
@@ -326,7 +326,7 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
   const letters = Button === undefined || typing || page.id !== 'decide' ? [] : (['a', 'b', 'c', 'm'] as const).map(letter => (
     <Box key={'lk' + letter} width={0} height={0} overflow="hidden"><Button key={'letter:' + letter + ep} plain hotkey={letter} onPress={() => frame.onKey?.(keys[letter] ?? { kind: 'none' })}>{letter}</Button></Box>
   ))
-  const bottom = <Box key="v74-bottom" height={1} width={fullCols} overflow="hidden"><Text>{GLYPHS.structure.frameBL + rule + '  ' + fit.hint + rule.repeat(padN)}</Text>{tabs}<Text>{GLYPHS.structure.frameBR}</Text>{hidden}{letters}</Box>
+  const bottom = <Box key="v74-bottom" height={1} width={fullCols} overflow="hidden"><Text>{GLYPHS.structure.frameBL + rule + '  ' + fit.hint + '  ' + rule.repeat(padN) + '  '}</Text>{tabs}<Text>{'  ' + rule + GLYPHS.structure.frameBR}</Text>{hidden}{letters}</Box>
   return <Box {...(epoch > 0 ? { key: 'v74:' + epoch } : {})} flexDirection="column">{top}{inner}{bottom}</Box>
 }
 

@@ -490,7 +490,7 @@ function v74Card(c: DecideCard, i: number, selected: boolean, nav: DecideNav, ct
 
 // ---- r8: the band frame's 待決 (design S3). The cards other than the one at the cursor are one summary row each (the answer picked, else the one suggested); the card at the cursor is open
 // in full: background on a hanging indent, then each option with its description, then the note. Spare rows keep the design's blank lines; a short frame drops them (then the descriptions) before it cuts.
-const BOX_LABEL_HANG = 15 // `    背景` (4 + the label's cells) + 7 blanks: the text of a labelled row starts here and every continuation row lines up under it
+const BOX_LABEL_HANG = 11 // `    背景   `: 4 blanks + the label (2 wide chars = 4 cells) + 3 blanks. The text of the first row starts here and every continuation row starts on the same cell (r8-3 #3)
 const labelledBox = (label: string, text: string, width: number): Row[] => wrapRow([seg('    '), dimSeg(label), seg('   ' + text)], width, BOX_LABEL_HANG)
 function boxSummary(c: DecideCard, i: number, nav: DecideNav, ctx: PageCtx): Row {
   const { t } = ctx

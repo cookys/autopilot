@@ -1514,6 +1514,11 @@ async function panePagePress($: EngineInterface, id: PageId): Promise<void> {
   // Put the ring on the page's own tab, as armNote does for the note.
   if (v74Open && (id === 'decide' || id === 'todo')) void ringToTab($, id)
 }
+async function renderLater($: EngineInterface): Promise<void> {
+  await Promise.resolve()
+  await Promise.resolve()
+  await $.ui.invalidate('ui.render').catch(() => undefined)
+}
 async function ringToTab($: EngineInterface, id: PageId): Promise<void> {
   await Promise.resolve()
   await Promise.resolve()
@@ -2334,7 +2339,9 @@ export function registerLive(on: Parameters<Register>[0]): void {
       void frameKey($, { kind: 'text_cancel' })
       return {}
     }
-    if (v74Open) v74KeysHeld = bandElement(named) // no invalidate here: a re-render in a focus event remounts the tab Buttons and the host's focus lands on a card Button, which writes the cursor back (r8-1 gate, step 22)
+    // r8-3: the border word follows the keyboard. It only re-renders when the value really flips, and one tick later (two microtasks, as ringToTab does), never inside the focus event:
+    // a render there remounts the tab Buttons and the host's focus lands on a card Button, which wrote the cursor back (r8-1 gate, step 22).
+    if (v74Open) { const was = v74KeysHeld; v74KeysHeld = bandElement(named); if (was !== v74KeysHeld) void renderLater($) }
     const step = decideLocal.textMode || bandLegacy || !v74Open ? null : v74TabStep(panePage, named, (raw as { origin?: unknown }).origin)
     if (step !== null) { void frameKey($, step); return {} } // the ring stays on the current tab
     const at = v74FocusAt(raw)

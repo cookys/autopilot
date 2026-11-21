@@ -358,3 +358,17 @@ test('measure-streamjson claudeVersion and profile-runtime invokeClaude pass the
   });
   assert.equal(shaOf(s), EMPTY);
 });
+
+test('refusal tells a Claude Code session to use the Agent tool instead of a claude-native runner', () => {
+  const GUIDE = 'inside a Claude Code session, use the Agent tool with model: fable (or the needed model) instead of a claude-native runner';
+  assert.ok(REFUSAL.includes(GUIDE), 'js REFUSAL carries the Agent-tool guidance');
+  const s = scratch();
+  const guardSh = path.join(REPO, 'scripts/lib/token-seat.sh');
+  const shRun = spawnSync('bash', ['-c', '. "$1" && token_seat_guard', '_', guardSh], {
+    env: baseEnv(s, { AUTOPILOT_TOKEN_SEAT: '1' }),
+    encoding: 'utf8',
+  });
+  assert.equal(shRun.status, 78);
+  assert.ok(shRun.stdout.includes(GUIDE), 'token-seat.sh refusal carries the Agent-tool guidance');
+  assert.ok(!shRun.stdout.includes(TOKEN), 'refusal never carries a token');
+});

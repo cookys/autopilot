@@ -9,7 +9,7 @@
  *
  * Node >= 20.10, built-ins only.
  */
-const REFUSAL = 'token seat refused: AUTOPILOT_TOKEN_SEAT=1 but CLAUDE_CODE_OAUTH_TOKEN is missing; refusing to spawn claude (would fall back to the host login)';
+const REFUSAL = 'token seat refused: AUTOPILOT_TOKEN_SEAT=1 but CLAUDE_CODE_OAUTH_TOKEN is missing; refusing to spawn claude (would fall back to the host login); inside a Claude Code session, use the Agent tool with model: fable (or the needed model) instead of a claude-native runner';
 
 function nonEmpty(value) {
   return typeof value === 'string' && value.length > 0;

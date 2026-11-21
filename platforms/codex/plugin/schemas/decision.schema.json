@@ -148,6 +148,16 @@
               "authority"
             ]
           },
+          "not_duplicate_of": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "not_duplicate_reason": {
+            "type": "string",
+            "minLength": 1
+          },
           "kind": {
             "enum": [
               "decide",

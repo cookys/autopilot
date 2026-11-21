@@ -2355,6 +2355,24 @@ sandbox_setup() {
     mkdir -p "$_gemini_real" || return 1
     SANDBOX_ARGV+=(--bind "$_gemini_real" "$_gemini_real")
   fi
+  if [ "$(current_runner_name)" = "cursor" ]; then
+    # cursor writes its refreshed login token under $HOME/.config/cursor.
+    # Only bind $HOME/.config/cursor writable for the cursor runner when it exists.
+    [ -n "${HOME:-}" ] || return 1
+    local _home_real _cursor_cfg_real
+    _home_real="$(readlink -m -- "$HOME")" || return 1
+    _cursor_cfg_real="$(readlink -m -- "$HOME/.config/cursor")" || return 1
+    case "$_cursor_cfg_real" in
+      "$_home_real/.config/cursor") ;;
+      *) return 1 ;;
+    esac
+    if [ -e "$_cursor_cfg_real" ] && [ ! -d "$_cursor_cfg_real" ]; then
+      return 1
+    fi
+    if [ -d "$_cursor_cfg_real" ]; then
+      SANDBOX_ARGV+=(--bind "$_cursor_cfg_real" "$_cursor_cfg_real")
+    fi
+  fi
   SANDBOX_ARGV+=(--setenv TMPDIR "$SANDBOX_TMP/tmp" --setenv CLAUDE_CONFIG_DIR "$SANDBOX_TMP/claude-config"
     --setenv XDG_CACHE_HOME "$SANDBOX_TMP/cache" --chdir "$WT" --)
   return 0

@@ -526,4 +526,44 @@ OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="
 assert_neq "$EXIT" "97" "k: explicit codex path is stubbed"
 assert_not_contains "$(cat "$LEASE_LOG")" '"method":"POST","url":"/v1/local/lease"' "k: explicit runner sends no grant"
 
+# (l) an implicit prompt naming an oversized repository file skips the local lease.
+mkdir -p "$SBX/big"
+dd if=/dev/zero of="$SBX/big/generated.ts" bs=1000 count=900 status=none
+PROMPT="$TEST_TMP/prompt-l.txt"
+printf 'Fleet-Task: 01ARZ3NDEKTSV4RRFFQ69G5FAV\nReview `big/generated.ts` and update the implementation.\n' > "$PROMPT"
+cat > "$TEST_TMP/bin/codex" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = exec ] && [ "${2:-}" = --help ]; then echo '--dangerously-bypass-hook-trust'; exit 0; fi
+if [ "${1:-}" = --version ]; then echo 'codex-cli 0.146.0 (test stub)'; exit 0; fi
+printf 'codex fixture\n' >> impl-defaults-fixture.txt
+git add impl-defaults-fixture.txt
+git -c user.email=t@t -c user.name=t commit -m 'test: context fallback codex stub' >/dev/null
+printf '%s\n' '{"type":"result","is_error":false,"result":"ok"}'
+EOF
+chmod +x "$TEST_TMP/bin/codex"
+: > "$LEASE_LOG"; RUNS="$TEST_TMP/runs-l"; mkdir -p "$RUNS"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
+  "$SCRIPT" --no-verify-tip --context-window off --branch feat/local-l --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/l.err")"; EXIT=$?
+assert_eq "$EXIT" "0" "l: oversized referenced file dispatch exits 0"
+assert_eq "codex" "$(json_get "$OUT" runner)" "l: oversized referenced file uses codex"
+assert_contains "$(cat "$TEST_TMP/l.err")" 'local-slot: local_ctx_over est_tokens=' "l: context fallback is reported"
+assert_not_contains "$(cat "$LEASE_LOG")" '"method":"POST","url":"/v1/local/lease"' "l: context fallback never requests a lease"
+
+# (m) a shed local target and local_ctx_over coexist without duplicating the fallback.
+PROMPT="$TEST_TMP/prompt-m.txt"
+printf 'Fleet-Task: 01ARZ3NDEKTSV4RRFFQ69G5FAV\nTask-Class: simple-script\nWork-Class: simple-script\nTask-Shape: from-scratch\nedit impl-defaults-fixture.txt\n' > "$PROMPT"
+CFG="$TEST_TMP/ctx-config-m.json"
+printf '%s\n' '{"local_context_tokens":1,"local_output_reserve_tokens":0}' > "$CFG"
+BURN_MORE="$TEST_TMP/burn-more-m.json"
+node -e 'const fs=require("fs");fs.writeFileSync(process.argv[1],JSON.stringify({schema:"capacity.burn_more/1",run_id:"test-m",generated_at:new Date().toISOString(),shed:{pools:[{pool:"test-pool",seats:["test-lane--claude"]}],rules:{mechanical_classes:["simple-script"],targets_in_order:["local-27b"]}}}))' "$BURN_MORE"
+: > "$LEASE_LOG"; RUNS="$TEST_TMP/runs-m"; mkdir -p "$RUNS"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_CONFIG_FILE="$CFG" \
+  AUTOPILOT_BURN_MORE="$BURN_MORE" AUTOPILOT_LANE=test-lane AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
+  "$SCRIPT" --no-verify-tip --context-window off --branch feat/local-m --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/m.err")"; EXIT=$?
+assert_eq "0" "$EXIT" "m: shed local with oversized context exits 0"
+assert_eq "codex" "$(json_get "$OUT" runner)" "m: shed local with local_ctx_over uses codex"
+FALLBACK_LINES="$(awk '/^local-slot: local_ctx_over / { count++ } END { print count+0 }' "$TEST_TMP/m.err")"
+assert_eq "1" "$FALLBACK_LINES" "m: exactly one local context fallback line"
+assert_not_contains "$(cat "$LEASE_LOG")" '"method":"POST","url":"/v1/local/lease"' "m: shed/local context fallback never requests a lease"
+
 finalize_test

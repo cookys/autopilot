@@ -3,9 +3,10 @@
 // local-impl-slot.js — free-slot and context-fit decision for the implicit local implementer.
 // operator via PM 01M7XHF4. Prints one JSON line:
 //   {"choose":true,"local_slots":{...}} or {"choose":false,"reason":"...","detail":"...","local_slots":...}
-// Cloud fallback reasons: no_free_slot | draining | context_too_large.
+// Cloud fallback reasons: no_free_slot | draining | context_too_large | local_ctx_over.
 // A failed slot query falls back to cloud (slot_query_failed:*). It does not stop the dispatch.
-// Config: local_slots_cmd, local_slots_url, local_context_bytes (default 400000) via configPath.
+// Config: local_slots_cmd, local_slots_url, local_context_bytes, local_context_tokens and
+// local_output_reserve_tokens via configPath.
 // AUTOPILOT_LOCAL_SLOTS_CMD, including an empty string, replaces the config command.
 // AUTOPILOT_LOCAL_SLOTS_URL, including an empty string, replaces config local_slots_url.
 // No command: HTTP GET <origin>/v1/local/slots (origin from qwen_local), 2s, no token.
@@ -17,6 +18,8 @@ const { spawnSync } = require('child_process');
 const { configPath } = require('./config-path');
 
 const DEFAULT_BYTES = 400000;
+const DEFAULT_CONTEXT_TOKENS = 262144;
+const DEFAULT_OUTPUT_RESERVE_TOKENS = 32000;
 const HTTP_TIMEOUT_MS = 2000;
 
 function childEnv(env) {
@@ -60,6 +63,57 @@ function contextBytes(promptFile, cwd) {
     try { n += fs.statSync(target).size; } catch { /* absent scope file counts 0 */ }
   }
   return n;
+}
+
+function estimateLocalContext(promptFile, cwd) {
+  let prompt = '';
+  let promptBytes = 0;
+  try {
+    const data = fs.readFileSync(promptFile);
+    prompt = data.toString('utf8');
+    promptBytes = data.length;
+  } catch { /* missing prompt is zero */ }
+  const files = new Map();
+  const candidates = prompt.match(/[^\s`"'<>()[\]{}|,;]+/g) || [];
+  const directories = new Set();
+  const bareNames = new Set();
+  for (let candidate of candidates) {
+    candidate = candidate.replace(/^[`"']+|[`"'.,;!?]+$/g, '');
+    const match = candidate.match(/^(.+\/[^/]+\.[A-Za-z0-9]+)(?::\d+(?::\d+)?)?$/);
+    if (!match) {
+      if (/^[^/]+\.[A-Za-z0-9]+$/.test(candidate)) bareNames.add(candidate);
+      else if (candidate.includes('/')) directories.add(candidate.replace(/^\.\//, '').replace(/\/$/, ''));
+      continue;
+    }
+    const rel = match[1].replace(/^\.\//, '');
+    if (path.isAbsolute(rel)) continue;
+    const target = path.resolve(cwd, rel);
+    const relative = path.relative(path.resolve(cwd), target);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) continue;
+    try {
+      const stat = fs.statSync(target);
+      if (stat.isFile()) files.set(relative, { path: relative, bytes: stat.size });
+    } catch { /* missing references do not contribute */ }
+  }
+  // Resolve a basename only when the prompt also names one directory that contains it.
+  // This handles prose such as "mods/live ... live.test.ts" without searching the tree.
+  for (const basename of bareNames) {
+    const matches = [];
+    for (const directory of directories) {
+      const rel = path.join(directory, basename);
+      const target = path.resolve(cwd, rel);
+      const relative = path.relative(path.resolve(cwd), target);
+      if (relative.startsWith('..') || path.isAbsolute(relative)) continue;
+      try { if (fs.statSync(target).isFile()) matches.push(relative); } catch { /* absent pair */ }
+    }
+    if (matches.length === 1) {
+      const target = path.resolve(cwd, matches[0]);
+      files.set(matches[0], { path: matches[0], bytes: fs.statSync(target).size });
+    }
+  }
+  const ordered = [...files.values()].sort((a, b) => b.bytes - a.bytes || a.path.localeCompare(b.path));
+  const totalBytes = promptBytes + ordered.reduce((sum, file) => sum + file.bytes, 0);
+  return { est_tokens: Math.ceil(totalBytes / 3.5), total_bytes: totalBytes, files: ordered.slice(0, 5) };
 }
 
 function endpointInfo(env, endpoint = 'qwen_local') {
@@ -356,6 +410,16 @@ async function decide(opts = {}) {
   const promptFile = opts.promptFile;
   const info = endpointInfo(env);
   const cfg = readConfig(env);
+  const contextTokens = Number.isFinite(Number(cfg.local_context_tokens)) && Number(cfg.local_context_tokens) > 0
+    ? Number(cfg.local_context_tokens) : DEFAULT_CONTEXT_TOKENS;
+  const outputReserve = Number.isFinite(Number(cfg.local_output_reserve_tokens)) && Number(cfg.local_output_reserve_tokens) >= 0
+    ? Number(cfg.local_output_reserve_tokens) : DEFAULT_OUTPUT_RESERVE_TOKENS;
+  const tokenLimit = Math.max(0, contextTokens - outputReserve);
+  const estimate = estimateLocalContext(promptFile, cwd);
+  if (estimate.est_tokens > tokenLimit) {
+    return { choose: false, reason: 'local_ctx_over', detail: `est_tokens=${estimate.est_tokens} limit=${tokenLimit}`,
+      est_tokens: estimate.est_tokens, limit: tokenLimit, files: estimate.files, local_slots: null };
+  }
   const limit = Number.isFinite(Number(cfg.local_context_bytes)) && Number(cfg.local_context_bytes) > 0
     ? Number(cfg.local_context_bytes) : DEFAULT_BYTES;
   const bytes = contextBytes(promptFile, cwd);
@@ -399,4 +463,4 @@ async function main() {
 
 if (require.main === module) main();
 
-module.exports = { decide, contextBytes, acquireLocalSlot, acquireLocalLease, leaseRequest, DEFAULT_BYTES };
+module.exports = { decide, contextBytes, estimateLocalContext, acquireLocalSlot, acquireLocalLease, leaseRequest, DEFAULT_BYTES };

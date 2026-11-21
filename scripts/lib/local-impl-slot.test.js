@@ -5,7 +5,47 @@ const fs = require('fs');
 const http = require('http');
 const os = require('os');
 const path = require('path');
-const { decide, contextBytes, acquireLocalSlot } = require('./local-impl-slot');
+const { execFileSync } = require('child_process');
+const { decide, contextBytes, estimateLocalContext, acquireLocalSlot } = require('./local-impl-slot');
+
+function commonRepoRoot() {
+  const commonDir = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'],
+    { cwd: path.resolve(__dirname, '../..'), encoding: 'utf8' }).trim();
+  return path.dirname(commonDir);
+}
+
+test('f53c prompt is rejected by the token-window estimate before slot acquisition', async () => {
+  const promptFile = path.join(__dirname, 'fixtures/local-ctx/f53c-prompt.md');
+  const d = await decide({ env: readyEnv(), promptFile, cwd: commonRepoRoot() });
+  assert.equal(d.choose, false);
+  assert.equal(d.reason, 'local_ctx_over');
+  assert.ok(d.est_tokens > 230144, `estimated ${d.est_tokens}`);
+  assert.equal(d.limit, 230144);
+  assert.ok(Array.isArray(d.files));
+});
+
+test('context estimator counts a small named file and ignores missing paths', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'local-ctx-'));
+  fs.mkdirSync(path.join(dir, 'src'));
+  fs.writeFileSync(path.join(dir, 'src/small.ts'), 'small file');
+  const prompt = path.join(dir, 'prompt.md');
+  fs.writeFileSync(prompt, 'Inspect `src/small.ts:12` and src/missing.ts.');
+  const estimate = estimateLocalContext(prompt, dir);
+  assert.equal(estimate.files.length, 1);
+  assert.equal(estimate.files[0].path, 'src/small.ts');
+  assert.ok(estimate.est_tokens < 230144);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('raising local_context_tokens lets the f53c prompt pass the estimate', async () => {
+  const config = path.join(os.tmpdir(), `local-ctx-config-${process.pid}.json`);
+  fs.writeFileSync(config, JSON.stringify({ local_context_tokens: 1000000 }));
+  try {
+    const d = await decide({ env: readyEnv({ AUTOPILOT_CONFIG_FILE: config }),
+      promptFile: path.join(__dirname, 'fixtures/local-ctx/f53c-prompt.md'), cwd: commonRepoRoot() });
+    assert.notEqual(d.reason, 'local_ctx_over');
+  } finally { fs.unlinkSync(config); }
+});
 
 function fixtureDecision(endpoints) {
   const env = readyEnv({ AUTOPILOT_LOCAL_SLOTS_CMD: `printf '%s\\n' '${JSON.stringify({ endpoints })}'` });

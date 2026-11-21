@@ -56,6 +56,7 @@ function isLocalHost(host, env) {
 }
 function operatorFor(endpoint, host, inventory) {
   const name = String(endpoint || '').toLowerCase();
+  host = String(host || '');
   const entries = Array.isArray(inventory.operators) ? inventory.operators : [];
   for (const row of entries) {
     if ((row.endpoints || []).some((x) => String(x).toLowerCase() === name)) return row;
@@ -125,7 +126,7 @@ function check(opts = {}) {
   const host = resolved && hostOf(resolved.base_url);
   if (rawUrl && host && isLocalHost(host, env)) return { allowed: true, family };
   const inventory = readJson(OPERATORS_PATH, null);
-  const operator = resolved && inventory && operatorFor(endpoint, host, inventory);
+  const operator = inventory && operatorFor(endpoint, host, inventory);
   if (!operator) return { allowed: false, family, cls: 'restricted_operator_unknown_endpoint', line: refusalLine(family, 'restricted_operator_unknown_endpoint') };
   if (!operator.restricted) return { allowed: true, family };
   const block = (cls) => ({ allowed: false, family, cls, line: refusalLine(family, cls) });

@@ -101,6 +101,7 @@ hooks/
   cost-tracker.js          # Tier A (default-on since v2.35.15) — transcript-sum (v2.25.2)
   dirty-protected-paths.js # Tier A (default-on, v2.36.11) — turn-end uncommitted-work reminder under protected_paths (Stop; Codex Stop+SessionEnd)
   owner-question-guard.js  # Tier A (default-on) — Stop: each ask, operator step or promise needs a same-sentence live card or dated fleet task; a bare card id needs a subject (AUTOPILOT_BARE_CARD_ID_LINT=off)
+  bash-test-timeout-guard.js # Tier A (default-on) — PreToolUse Bash: denies test/check commands missing a `timeout <n>` prefix (`AUTOPILOT_BASH_TEST_TIMEOUT=0` disables)
   fleet-send-work-order-guard.js # Tier A (default-on) — PreToolUse mcp__fleet__send|mcp__fleet__reply|mcp__fleet__dispatch|mcp__fleet__task_comment: denies a work-order send, including one hidden under fyi=true, and a work-order reply without task context (AUTOPILOT_SEND_WORK_ORDER_GUARD=off); denies reply to a courier wake (use task_comment); denies a real ~/.claude path except .claude/projects/; and, when opt-in pm-dispatch-plan-guard + PM console are active, denies fleet dispatch missing a valid Size marker or an M+ Plan marker
   fleet-dispatch-class.js  # Tier A (default-on) — PreToolUse mcp__fleet__dispatch: stamps class from Role: header when omitted; denies missing/unknown Role: or invalid explicit class
   subagent-budget.js       # Tier A (default-on) — PreToolUse Task|Agent: denies a dispatch past the per-lane relay/turn ceilings or the root last-hour turn ceiling; `Budget-Ack:` lets it through

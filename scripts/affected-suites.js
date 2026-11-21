@@ -278,6 +278,7 @@ const ALWAYS_RUN = [
   [`${HOOK_TESTS_DIR}/skill-count-metadata.test.sh`, 'counts the skills/ directories against the documented count (a new skill dir changes it)'],
   [`${HOOK_TESTS_DIR}/qualify-recipe-credential-staging.test.sh`, `greps every ${PLANS_EVIDENCE_DIR}/*/administration/*/run.sh for staging variables`],
   ['scripts/check-claude-spawn-sites.test.js', 'walks scripts/ src/ hooks/ bin/ evals/ for any new claude spawn (G37 N8): the changed file IS the spawn, so no reference graph reaches this suite'],
+  ['scripts/check-test-cli-timeout.test.js', 'scans *.test.js and *.test.sh under hooks/ and scripts/ for missing timeouts'],
 ];
 // A repo file that an evaluation pack copies (pack manifest entry `<pack id>/<relative path>`) is compared against the
 // repo by the pack's content suite, and no source reference shows it. [pack id regex, suite]

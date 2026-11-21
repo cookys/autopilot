@@ -2,7 +2,7 @@
 
 Every hook knob (config.json keys and environment variables) is indexed in [docs/guide/settings-reference.md](../docs/guide/settings-reference.md).
 
-54 Claude Code hooks for runtime enforcement of development discipline: **35 default-on** (Tier A) + **19 opt-in** (Tier B) — zero disabled as of v2.25.2. Since v2.26.2 **all hooks are wired in `hooks.json`** (37 as of residue auto-reap R3) (the only place `${CLAUDE_PLUGIN_ROOT}` expands and where the path auto-tracks plugin updates); the 19 opt-in ones **self-gate default-OFF** via `_shared/opt-in.js` and do nothing until enabled in `~/.autopilot/config.json`. (Two Tier-A hooks are also inert by default: `session-handoff` needs handoff enabled; `version-drift-check` is silent outside a behind-upstream dev clone.) The canonical tally is derived from `hooks.json` (all wired hooks) + `opt-in-manifest.json` (which are opt-in) by [`../scripts/check-hook-inventory.js`](../scripts/check-hook-inventory.js) — run it to regenerate these tables, `--check` gates drift.
+55 Claude Code hooks for runtime enforcement of development discipline: **36 default-on** (Tier A) + **19 opt-in** (Tier B) — zero disabled as of v2.25.2. Since v2.26.2 **all hooks are wired in `hooks.json`** (37 as of residue auto-reap R3) (the only place `${CLAUDE_PLUGIN_ROOT}` expands and where the path auto-tracks plugin updates); the 19 opt-in ones **self-gate default-OFF** via `_shared/opt-in.js` and do nothing until enabled in `~/.autopilot/config.json`. (Two Tier-A hooks are also inert by default: `session-handoff` needs handoff enabled; `version-drift-check` is silent outside a behind-upstream dev clone.) The canonical tally is derived from `hooks.json` (all wired hooks) + `opt-in-manifest.json` (which are opt-in) by [`../scripts/check-hook-inventory.js`](../scripts/check-hook-inventory.js) — run it to regenerate these tables, `--check` gates drift.
 
 ## Tool-event stdin: the `/dev/stdin` path is broken, but **fd 0 works** (fd-0 fix)
 
@@ -175,7 +175,7 @@ The queue/relay path uses `additionalContext` on UserPromptSubmit: it is the sam
 
 **Wording rule:** a model-facing advisory must name what it counted (a cumulative sum is not a level) and carry the contradicting-axis number when it is cheaply available (e.g. cost-tracker's cache-read sum prints the real context % from the live file) — a bare proxy gets relayed to the operator as fact.
 
-## Tier A — Default-On (35 hooks)
+## Tier A — Default-On (36 hooks)
 
 Registered in `hooks.json`. Active for all autopilot users. All are non-destructive and safe for any project. (Three are wired here but **inert by default** — `session-handoff` no-ops unless handoff is enabled, `version-drift-check` is silent outside a behind-upstream dev clone, `run-approval-gate` does nothing until `run_approval.mode` is set — yet they MUST be wired in `hooks.json` because `${CLAUDE_PLUGIN_ROOT}` does not expand in a user's `settings.json`.)
 

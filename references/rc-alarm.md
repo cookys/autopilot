@@ -12,4 +12,4 @@ Use `--lead <address>` one or more times to override configured leads. Without a
 
 Callers that already ran the command use `record --label <label> --owner <address> --rc <exit-code> [--last-line <text>]` to update the same counter and send the same notices. `check --label <label>` returns 75 and prints the blocked warning when the label is blocked, otherwise 0.
 
-`dispatch-hetero.sh` opts in with `--rc-alarm-label <label>` and optionally `--rc-alarm-owner <address>`. `AUTOPILOT_RC_ALARM_LABEL` and `AUTOPILOT_RC_ALARM_OWNER` provide fallbacks. A blocked label stops before engine work; the final dispatch result is recorded under that label.
+`dispatch-hetero.sh` opts in with `--rc-alarm-label <label>` and optionally `--rc-alarm-owner <address>`. `AUTOPILOT_RC_ALARM_LABEL` and `AUTOPILOT_RC_ALARM_OWNER` provide fallbacks. A blocked label stops before engine work; the final dispatch result is recorded under that label. Only this final result path is counted as a failure; early precondition or boundary exits are not counted.

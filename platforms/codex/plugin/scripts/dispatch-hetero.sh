@@ -3159,9 +3159,13 @@ done
 if [ -n "$RC_ALARM_LABEL" ]; then
   _rc_alarm_args=(check --label "$RC_ALARM_LABEL")
   [ -z "$RC_ALARM_OWNER" ] || _rc_alarm_args+=(--owner "$RC_ALARM_OWNER")
-  node "$SELF_DIR/rc-alarm.js" "${_rc_alarm_args[@]}"
-  _rc_alarm_check_rc=$?
-  [ "$_rc_alarm_check_rc" -eq 0 ] || exit "$_rc_alarm_check_rc"
+  if node "$SELF_DIR/rc-alarm.js" "${_rc_alarm_args[@]}"; then
+    :
+  else
+    _rc_alarm_check_rc=$?
+    if [ "$_rc_alarm_check_rc" -eq 75 ]; then exit 75; fi
+    echo "rc-alarm: check failed rc=$_rc_alarm_check_rc, continuing" >&2
+  fi
 fi
 
 if [ "$NO_VERIFY_TIP" -eq 1 ] && [ "${#VERIFY_CMDS[@]}" -gt 0 ]; then

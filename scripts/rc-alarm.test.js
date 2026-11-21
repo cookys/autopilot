@@ -16,7 +16,7 @@ function fixture(t) {
   const fake = path.join(root, 'fake-fleet');
   fs.writeFileSync(fake, '#!/usr/bin/env node\nconst fs=require("fs"); fs.appendFileSync(process.env.FLEET_CALLS, JSON.stringify(process.argv.slice(2))+"\\n"); process.exit(Number(process.env.FLEET_RC||0));\n', { mode: 0o755 });
   const env = { ...process.env, FLEET_BIN: fake, FLEET_CALLS: calls, AUTOPILOT_CONFIG_FILE: path.join(root, 'config.json') };
-  const run = (args, opts = {}) => spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8', env: { ...env, ...opts.env }, input: opts.input, timeout: 35000 });
+  const run = (args, opts = {}) => spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8', env: { ...env, ...opts.env }, input: opts.input, timeout: opts.timeout ?? 35000 });
   const messages = () => fs.existsSync(calls) ? fs.readFileSync(calls, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : [];
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   return { root, state, calls, env, run, messages };
@@ -136,6 +136,20 @@ test('fleet send failures warn for every recipient and preserve command status',
   for (const address of [LEAD, OWNER]) assert.match(failed.stderr, new RegExp(`warning: fleet send to ${address} failed rc=23`));
   const recovered = wrap(f, ['true'], 'fleet-error', ['--lead', LEAD, '--owner', OWNER], { env: { FLEET_RC: '23' } });
   assert.equal(recovered.status, 0); assert.equal((recovered.stderr.match(/warning:/g) || []).length, 2);
+});
+
+test('slow fleet sends time out while recording consecutive failures', t => {
+  const f = fixture(t), slowFleet = path.join(f.root, 'slow-fleet');
+  fs.writeFileSync(slowFleet, '#!/usr/bin/env node\nsetTimeout(() => {}, 30000);\n', { mode: 0o755 });
+  const args = ['record', '--label', 'slow-fleet', '--lead', LEAD, '--rc', '1', '--state-dir', f.state];
+  const start = Date.now();
+  for (let i = 0; i < 2; i++) {
+    const result = f.run(args, { env: { FLEET_BIN: slowFleet }, timeout: 14000 });
+    assert.equal(result.status, 0, result.stderr);
+    if (i === 1) assert.equal((result.stderr.match(/warning:/g) || []).length, 1);
+  }
+  assert.ok(Date.now() - start < 15000, 'two records should finish well under 15 seconds');
+  assert.equal(fs.readFileSync(path.join(f.state, 'slow-fleet.count'), 'utf8'), '2\n');
 });
 
 test('reset rejects a supplied command with usage exit 2', t => {

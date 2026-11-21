@@ -75,8 +75,9 @@ function recipients(o) {
 }
 function notify(o, message) {
   for (const addr of recipients(o)) {
-    const result = spawnSync(process.env.FLEET_BIN || 'fleet', ['send', addr, message], { encoding: 'utf8' });
-    if (result.error || result.status !== 0) warn(`fleet send to ${addr} failed rc=${result.status ?? result.error?.code ?? 'unknown'}`);
+    const result = spawnSync(process.env.FLEET_BIN || 'fleet', ['send', addr, message], { encoding: 'utf8', timeout: 10000, killSignal: 'SIGKILL' });
+    if (result.error) { warn(`fleet send failed rc=${result.error.code ?? 'unknown'}; continuing`); return; }
+    if (result.status !== 0) warn(`fleet send to ${addr} failed rc=${result.status ?? 'unknown'}`);
   }
 }
 function stamp() { return `host=${os.hostname()} time=${new Date().toISOString()}`; }

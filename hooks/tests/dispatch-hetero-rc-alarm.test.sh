@@ -74,10 +74,18 @@ before="$(fleet_lines)"
 run_dispatch no-label
 assert_eq "$before" "$(fleet_lines)" 'dispatch without label never calls fake fleet'
 
+printf 'regular file\n' > "$TEST_TMP/not-a-directory"
+export XDG_RUNTIME_DIR="$TEST_TMP/not-a-directory/sub"
+before_runner="$(runner_lines)"
+run_dispatch broken-state-dir --rc-alarm-label broken-state-dir
+assert_eq "$((before_runner + 1))" "$(runner_lines)" 'state directory failure still starts engine'
+assert_contains "$(cat "$TEST_TMP/broken-state-dir.err")" 'rc-alarm: check failed rc=1, continuing' 'state directory failure warns and continues'
+export XDG_RUNTIME_DIR="$TEST_TMP/runtime"
+
 export AUTOPILOT_RC_ALARM_LABEL=env-label AUTOPILOT_RC_ALARM_OWNER="$OWNER"
 run_dispatch env-first
 assert_eq "$before" "$(fleet_lines)" 'env label first failure sends no notice'
 run_dispatch env-second
 assert_eq "$((before + 2))" "$(fleet_lines)" 'environment fallbacks enable alarm notifications'
 assert_contains "$(tail -n 2 "$FLEET_CALLS")" 'env-label 連續 2 次' 'environment label appears in notice'
-printf 'PASS [dispatch-hetero-rc-alarm] 16 assertions\n'
+printf 'PASS [dispatch-hetero-rc-alarm] 18 assertions\n'

@@ -306,7 +306,12 @@ const MECHANICAL_READONLY_ROLES = new Set([
   'log', 'logs', 'log-reading', 'stats', 'statistics', 'inventory',
 ]);
 
+// Never break a normal Agent call: any throw inside the reroute check allows.
 function checkMechanicalReroute(input, toolInput, prompt) {
+  try { mechanicalReroute(input, toolInput, prompt); } catch { /* fail-open */ }
+}
+
+function mechanicalReroute(input, toolInput, prompt) {
   const modeRaw = String(process.env.AUTOPILOT_MECHANICAL_REROUTE || 'shadow').trim().toLowerCase();
   const mode = (modeRaw === 'off' || modeRaw === 'shadow' || modeRaw === 'enforce') ? modeRaw : 'shadow';
   if (mode === 'off') return;
@@ -329,7 +334,7 @@ function checkMechanicalReroute(input, toolInput, prompt) {
   const head = headLines(prompt, 6);
   let matchedRole = '';
   for (const line of head) {
-    const m = line.match(/^Role:\s*(\S+)/i);
+    const m = line.match(/^Role:\s*([A-Za-z][\w-]*)/i);
     if (m) {
       const candidate = m[1].toLowerCase();
       if (MECHANICAL_ROLES.has(candidate)) {
@@ -352,14 +357,15 @@ function checkMechanicalReroute(input, toolInput, prompt) {
       role: matchedRole,
     };
     const laneLine = head.find((l) => /^Lane:\s*\S/i.test(l.trim()));
-    if (laneLine) entry.Lane = laneLine.replace(/^Lane:\s*/i, '').trim();
+    if (laneLine) entry.Lane = laneLine.replace(/^Lane:\s*/i, '').trim().slice(0, 120);
     const taskId = findTaskId(head.join('\n'));
     if (taskId) entry['Fleet-Task'] = taskId;
     if (intentional) entry.intentional = true;
 
     try {
       const base = userRuntimeBase(process.env);
-      const ensured = ensurePrivateDir(base);
+      // tmpfs only: the helper falls back to /tmp/autopilot-<uid> when XDG_RUNTIME_DIR is unusable; skip then.
+      const ensured = base.startsWith('/tmp/') ? { ok: false } : ensurePrivateDir(base);
       if (ensured.ok) {
         fs.appendFileSync(path.join(ensured.path, 'mechanical-reroute-shadow.jsonl'), JSON.stringify(entry) + '\n');
       }
@@ -372,9 +378,8 @@ function checkMechanicalReroute(input, toolInput, prompt) {
   if (intentional) return;
 
   const isReadOnly = MECHANICAL_READONLY_ROLES.has(matchedRole);
-  const cmd = isReadOnly
-    ? 'scripts/dispatch-hetero.sh --runner local --sandbox bwrap --prompt-file <file>  (備援: --runner grok)'
-    : 'scripts/dispatch-hetero.sh --runner local --branch <branch> --prompt-file <file>  (備援: --runner grok)';
+  const cmd = 'scripts/dispatch-hetero.sh --runner local --branch <branch> --prompt-file <file>（備援：--runner grok）'
+    + (isReadOnly ? '；此為唯讀類工作，brief 內寫明「不得修改檔案，結果寫在回覆」，並用拋棄式分支' : '');
   emitDeny(
     `PM / Lead 席位機械性工作轉派阻擋：偵測到 ${seat} 席位以 Claude subagent 執行機械性任務（Role: ${matchedRole}）。請改用低成本引擎派工：${cmd}；若確有必要使用 Claude subagent，請在 brief 的 Engine: 行加上 (intentional: <原因>)。`
   );

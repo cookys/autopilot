@@ -8344,6 +8344,28 @@
       "doc": "docs/guide/settings-reference.md",
       "relates": ["ask_guard"],
       "summary": "Environment override for ask_guard.enforce_from (ISO date-time when ask-guard switches from warn to deny after a 1-hour warn window)."
+    },
+    {
+      "name": "AUTOPILOT_SEAT_ROLE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": "",
+      "readers": ["hooks/dispatch-model-guard.js"],
+      "doc": "references/hetero-dispatch.md",
+      "relates": ["AUTOPILOT_MECHANICAL_REROUTE"],
+      "note": "Seat role (pm|lead) used by dispatch-model-guard to scope mechanical subagent rerouting."
+    },
+    {
+      "name": "AUTOPILOT_MECHANICAL_REROUTE",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": "shadow",
+      "readers": ["hooks/dispatch-model-guard.js"],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": ["AUTOPILOT_SEAT_ROLE"],
+      "summary": "Mechanical subagent reroute mode on PM and lead seats: off, shadow (default, logs to runtime dir), or enforce (denies with cheap-engine re-dispatch command)."
     }
   ]
 }

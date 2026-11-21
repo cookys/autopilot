@@ -919,6 +919,7 @@
   "v74.f.rs_hm": "{h}時{m}分",
   "v74.f.rs_m": "{n}分",
   "v74.f.tok_unknown": "token 數未知",
+  "v74.f.q_unwired": "未接通",
   "v74.f.col_pool": "池",
   "v74.f.col_state": "狀況",
   "v74.f.need_kind": "要你處理 {n} 個 {kind}",

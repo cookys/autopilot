@@ -38,7 +38,8 @@ function meterRow(label: string, pct: number | null, reset: string, stale: boole
   const lbl = padR(label, 10)
   const tail: Seg[] = [...(stale ? [staleBadge(' ' + GLYPHS.state.failed)] : []), { text: '  ' + t('page.spend.reset', { t: reset }) }]
   if (pct === null) {
-    return [{ text: ' ' + lbl }, { text: padL(DASH, 4) + '  ', color: PALETTE.idle }, { text: GLYPHS.chart.meterOff.repeat(cells), color: PALETTE.idle }, ...tail]
+    // r10b #6: an unknown value draws no bar (an empty bar reads as 0%); it says the feed is not connected
+    return [{ text: ' ' + lbl }, { text: DASH + ' ' + t('v74.f.q_unwired'), color: PALETTE.idle }, ...(reset === DASH ? [] : tail)]
   }
   const clamped = Math.max(0, Math.min(100, pct))
   const on = Math.max(0, Math.min(cells, Math.round((clamped / 100) * cells)))

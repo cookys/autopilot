@@ -919,6 +919,7 @@
   "v74.f.rs_hm": "{h}h{m}m",
   "v74.f.rs_m": "{n}m",
   "v74.f.tok_unknown": "tokens unknown",
+  "v74.f.q_unwired": "not connected",
   "v74.f.col_pool": "Pool",
   "v74.f.col_state": "State",
   "v74.f.need_kind": "Needs you: {n} {kind}",

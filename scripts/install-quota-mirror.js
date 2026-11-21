@@ -15,6 +15,8 @@
 // existing file without the marker `autopilot:quota-mirror/1`, is refused.
 // uninstall removes only files that carry that marker.
 // A checkout path that contains whitespace is refused (a unit line would split).
+// QUOTA_MIRROR_NODE, when set, replaces `/usr/bin/env node` in ExecStart with that
+// absolute path. Unset keeps the template's PATH lookup.
 //
 // Exit 0 done, 1 refused or unreadable, 2 usage.
 
@@ -79,7 +81,13 @@ function readTemplate(name) {
 
 function renderService(text, repo) {
   if (!text.includes('<repo>')) fail('service template has no <repo> placeholder');
-  return text.split('<repo>').join(repo);
+  let rendered = text.split('<repo>').join(repo);
+  const nodeBin = process.env.QUOTA_MIRROR_NODE || '';
+  if (nodeBin !== '') {
+    if (/\s/.test(nodeBin)) fail('node path contains whitespace; refusing to write a unit');
+    rendered = rendered.split('/usr/bin/env node').join(nodeBin);
+  }
+  return rendered;
 }
 
 function destination(dir, name) {

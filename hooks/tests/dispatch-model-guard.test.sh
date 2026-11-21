@@ -5,8 +5,15 @@
 . "$(dirname "$0")/lib.sh"
 
 # Exact fable/opus Cost line. Existing fable/opus fixtures include it so they
-# still reach the guarded-engine check; the costline cases below omit it.
+# still reach the Model-Reason / guarded-engine checks; the costline cases below omit it.
 COST_FABLE_OPUS="$(node -e 'process.stdout.write(require(process.argv[1]).costLineFor("opus"))' "$REPO_ROOT/hooks/lib/brief-header-template.js")"
+
+# Brain-tier dispatch ledger (opus/fable Model-Reason gate) — sandboxed, never the real state dir.
+export AUTOPILOT_STATE_DIR="$TEST_TMP/btr-state"
+# No real fleet binary in any seat resolution (whoamiSession) this suite may trigger.
+printf '#!/bin/sh\nexit 0\n' > "$TEST_TMP/fleet-noop"
+chmod +x "$TEST_TMP/fleet-noop"
+export FLEET_BIN="$TEST_TMP/fleet-noop"
 
 # Case 1: default-on since v2.35.15 — the opt-OUT env silences it; without it the guard fires
 PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable@agy effort=low\n'"$COST_FABLE_OPUS"'\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
@@ -15,7 +22,7 @@ assert_eq 0 "$__RUN_EXIT" "case1-exit"
 assert_eq "" "$__RUN_STDOUT" "case1-silent (opt-out env)"
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case1b-default-on fires without any enable flag (remind = deny with reminder, v2.36.9)"
-assert_contains "$__RUN_STDOUT" "intentional" "case1b-reminder names the acknowledgement path"
+assert_contains "$__RUN_STDOUT" "Model-Reason:" "case1b-reminder names the Model-Reason justification line"
 
 # Case 2: Enabled, model fable → remind (deny carrying the reminder; v2.36.9, was ask)
 PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable@agy effort=low\n'"$COST_FABLE_OPUS"'\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
@@ -44,60 +51,86 @@ run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case5-exit"
 assert_eq "" "$__RUN_STDOUT" "case5-silent"
 
-# Case 6: Enabled, model absent → DENY (v2.36.2; was ask) with "no model specified" — the
-# model re-dispatches on its own; no permission dialog for the owner to click through.
-printf '%s\n' "- require_engine_header: off" > "$TEST_TMP/config6.md"
-export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config6.md"
+# Case 6: Enabled, model absent → ALLOWED with the worker-level default:
+# hookSpecificOutput.updatedInput sets model "sonnet" (every other tool_input field
+# verbatim) and one advisory line 預設 worker 等級 sonnet reaches stderr. No dialog, no deny.
 PAYLOAD='{"tool_name":"Agent","tool_input":{},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case6-exit"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case6-deny (missing model is self-correctable, never a dialog)"
-assert_contains "$__RUN_STDOUT" "no model specified" "case6-reason"
-assert_contains "$__RUN_STDOUT" "re-dispatch" "case6-reason names the corrective action"
-unset DISPATCH_GUARD_CONFIG_OVERRIDE
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"allow"' "case6-allow (missing model defaults to the worker level, never a dialog)"
+assert_contains "$__RUN_STDOUT" '"updatedInput"' "case6-updatedInput present"
+assert_contains "$__RUN_STDOUT" '"model":"sonnet"' "case6-updatedInput sets model sonnet"
+assert_contains "$__RUN_STDERR" "預設 worker 等級 sonnet" "case6-advisory line"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"ask"' "case6-never ask"
 
-# Case 6b: on_missing_model: ask keeps the pre-v2.36.2 dialog
-printf '%s\n' "- on_missing_model: ask" "- require_engine_header: off" > "$TEST_TMP/config6b.md"
-export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config6b.md"
+# Case 6b: model absent with other tool_input fields → updatedInput keeps them verbatim.
+PAYLOAD='{"tool_name":"Agent","tool_input":{"subagent_type":"general-purpose","description":"check the tests","prompt":"Engine: sonnet\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"ask"' "case6b-ask (opt back into the dialog)"
-unset DISPATCH_GUARD_CONFIG_OVERRIDE
+node -e '
+const o = JSON.parse(require("fs").readFileSync(0, "utf8"));
+const h = o.hookSpecificOutput;
+const ui = h.updatedInput;
+if (h.permissionDecision !== "allow") process.exit(2);
+if (ui.model !== "sonnet") process.exit(3);
+if (ui.subagent_type !== "general-purpose") process.exit(4);
+if (ui.description !== "check the tests") process.exit(5);
+if (ui.prompt !== "Engine: sonnet\nDo work.") process.exit(6);
+if (ui.model === undefined && Object.keys(ui).length !== 4) process.exit(7);
+' <<< "$__RUN_STDOUT"
+assert_eq 0 "$?" "case6b-updatedInput keeps every other tool_input field verbatim"
+assert_contains "$__RUN_STDERR" "預設 worker 等級 sonnet" "case6b-advisory line"
 
-# Case 6c: garbage on_missing_model → deny (fail-closed to the self-correcting decision)
-printf '%s\n' "- on_missing_model: maybe" "- require_engine_header: off" > "$TEST_TMP/config6c.md"
+# Case 6c: mode: warn + missing model → the default still applies (it is not a block);
+# the advisory line rides additionalContext.
+printf '%s\n' "- mode: warn" > "$TEST_TMP/config6c.md"
 export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config6c.md"
 run_hook dispatch-model-guard.js "$PAYLOAD"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case6c-deny (garbage → deny)"
+assert_eq 0 "$__RUN_EXIT" "case6c-exit"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"allow"' "case6c-warn mode still defaults to sonnet"
+assert_contains "$__RUN_STDOUT" '"model":"sonnet"' "case6c-updatedInput sonnet"
+assert_contains "$__RUN_STDOUT" '"additionalContext"' "case6c-advisory on stdout"
+assert_contains "$__RUN_STDERR" "預設 worker 等級 sonnet" "case6c-stderr line"
 unset DISPATCH_GUARD_CONFIG_OVERRIDE
 
-# Case 6d: mode: warn + missing model → stderr only, no decision
-printf '%s\n' "- mode: warn" "- require_engine_header: off" > "$TEST_TMP/config6d.md"
+# Case 6d: an old on_missing_model knob is dead config — it no longer changes the default.
+printf '%s\n' "- on_missing_model: ask" > "$TEST_TMP/config6d.md"
 export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config6d.md"
 run_hook dispatch-model-guard.js "$PAYLOAD"
-assert_contains "$__RUN_STDOUT" '"hookEventName":"PreToolUse"' "case6d-stdout advisory envelope"
-assert_contains "$__RUN_STDOUT" '"additionalContext"' "case6d-stdout additionalContext"
-assert_not_contains "$__RUN_STDOUT" '"permissionDecision"' "case6d-warn never permissionDecision"
-assert_contains "$__RUN_STDERR" "no model specified" "case6d-stderr warning"
+assert_eq 0 "$__RUN_EXIT" "case6d-exit"
+assert_contains "$__RUN_STDOUT" '"model":"sonnet"' "case6d-on_missing_model is no longer honoured"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"ask"' "case6d-no dialog"
 unset DISPATCH_GUARD_CONFIG_OVERRIDE
 
-# Case 6e (v2.36.9): guarded engine ACKNOWLEDGED on the Engine header → allowed silently
-# (stderr note only). The agent judged; no dialog, no deny.
-PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable (intentional: plan critique needs the strongest reader)\n'"$COST_FABLE_OPUS"'\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+# Case 6e: opus/fable is acknowledged by the Model-Reason line (2026-11) — allowed
+# silently (stderr note only). The (intentional:) Engine header ALONE no longer suffices
+# for a brain tier (see case 6f).
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable\n'"$COST_FABLE_OPUS"'\nModel-Reason: plan critique needs the strongest reader\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case6e-exit"
-assert_eq "" "$__RUN_STDOUT" "case6e-silent stdout (acknowledged expensive dispatch proceeds)"
+assert_eq "" "$__RUN_STDOUT" "case6e-silent stdout (Model-Reason acknowledged brain dispatch proceeds)"
 assert_contains "$__RUN_STDERR" "acknowledged as intentional" "case6e-stderr note"
 
-# Case 6f (v2.36.9): the acknowledgement must sit on the Engine header line — an
-# "intentional" further down the prompt does not count.
-PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable\n'"$COST_FABLE_OPUS"'\nThis is (intentional: really).\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+# Case 6f: the (intentional:) Engine header without a Model-Reason line no longer
+# acknowledges a brain tier → deny naming the Model-Reason line.
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable (intentional: plan critique needs the strongest reader)\n'"$COST_FABLE_OPUS"'\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case6f-deny (ack not on line 1)"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case6f-deny ((intentional:) alone no longer suffices for a brain tier)"
+assert_contains "$__RUN_STDOUT" "Model-Reason:" "case6f-denial names the Model-Reason line"
 
-# Case 6g (v2.36.9): mode: ask opts back into the interactive dialog for guarded engines
+# Case 6g: a Model-Reason further down the prompt does not count (first 8 lines only),
+# and an empty Model-Reason: does not count.
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable\n'"$COST_FABLE_OPUS"'\n1\n2\n3\n4\n5\n6\nModel-Reason: too late\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case6g-deny (Model-Reason on line 9 is outside the first 8 lines)"
+assert_contains "$__RUN_STDOUT" "first 8 lines" "case6g-denial names the 8-line window"
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable\n'"$COST_FABLE_OPUS"'\nModel-Reason:\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case6h-deny (empty Model-Reason is no justification)"
+
+# Case 6g (v2.36.9): mode: ask opts back into the interactive dialog for guarded engines (with Model-Reason present)
 printf '%s\n' "- mode: ask" > "$TEST_TMP/config6g.md"
 export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config6g.md"
-PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable@agy effort=low\n'"$COST_FABLE_OPUS"'\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable@agy effort=low\n'"$COST_FABLE_OPUS"'\nModel-Reason: needs strongest reader\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_contains "$__RUN_STDOUT" '"permissionDecision":"ask"' "case6g-ask (opt back into the dialog)"
 unset DISPATCH_GUARD_CONFIG_OVERRIDE
@@ -128,27 +161,23 @@ assert_eq 0 "$__RUN_EXIT" "case9b-exit"
 assert_eq "" "$__RUN_STDOUT" "case9b-silent"
 unset DISPATCH_GUARD_CONFIG_OVERRIDE
 
-# Case 10: Config on_missing_model: allow (require_engine_header left at its "on" default)
-# → absent model silent. Missing model must be decided by on_missing_model BEFORE the
-# header check runs — a header check on an empty model would otherwise deny first and
-# make on_missing_model: allow dead config (regression this case guards against).
+# Case 10: absent model defaults to sonnet via updatedInput regardless of on_missing_model
 printf '%s\n' "- on_missing_model: allow" "- require_engine_header: off" > "$TEST_TMP/config10.md"
 export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config10.md"
 PAYLOAD='{"tool_name":"Agent","tool_input":{},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case10-exit"
-assert_eq "" "$__RUN_STDOUT" "case10-silent"
+assert_contains "$__RUN_STDOUT" '"model":"sonnet"' "case10-sonnet-default"
+assert_contains "$__RUN_STDOUT" "預設 worker 等級 sonnet" "case10-advisory"
 unset DISPATCH_GUARD_CONFIG_OVERRIDE
 
-# Case 10b: on_missing_model: allow with require_engine_header: on (default, not switched off)
-# + no model ⇒ allow. This is the precedence regression test: the header check must be
-# skipped entirely when model is absent, not run-then-denied ahead of on_missing_model.
+# Case 10b: absent model defaults to sonnet even with require_engine_header: on
 printf '%s\n' "- on_missing_model: allow" > "$TEST_TMP/config10b.md"
 export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config10b.md"
 PAYLOAD='{"tool_name":"Agent","tool_input":{},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case10b-exit"
-assert_eq "" "$__RUN_STDOUT" "case10b-silent (on_missing_model: allow wins over header check when model absent)"
+assert_contains "$__RUN_STDOUT" '"model":"sonnet"' "case10b-sonnet-default (worker default wins over header check when model absent)"
 unset DISPATCH_GUARD_CONFIG_OVERRIDE
 
 # Case 11: Config mode: off → model fable silent
@@ -180,9 +209,9 @@ assert_eq 0 "$__RUN_EXIT" "case13-exit"
 assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case13-remind (deny with reminder, never a dialog)"
 unset DISPATCH_GUARD_CONFIG_OVERRIDE
 
-# Case 14: mode: "plan", model: "opus" → allowed (no ask/deny)
-# Plan-mode opus is a reviewer/debugger dispatch and must NOT be guarded by the new guarded_models_implementing default.
-PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","mode":"plan","prompt":"Engine: opus@agy effort=low\n'"$COST_FABLE_OPUS"'\nReview this code."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+# Case 14: mode: "plan", model: "opus" with Model-Reason → allowed (no ask/deny)
+# Plan-mode opus is a reviewer/debugger dispatch and must NOT be guarded by guarded_models_implementing.
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","mode":"plan","prompt":"Engine: opus@agy effort=low\n'"$COST_FABLE_OPUS"'\nModel-Reason: plan-mode review\nReview this code."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case14-exit"
 assert_eq "" "$__RUN_STDOUT" "case14-silent (plan-mode opus allowed)"
@@ -331,8 +360,8 @@ assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "costline-opus-mis
 assert_contains "$__RUN_STDOUT" "require_cost_line" "costline-opus-missing names the rule"
 assert_contains "$__RUN_STDOUT" "add this line within the first 6 lines: ${COST_FABLE_OPUS}" "costline-opus-missing gives the exact line"
 
-# opus with the Cost line and an intentional Engine header → allowed (other checks allow).
-PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","prompt":"Engine: opus (intentional: hardest judgment only)\nRole: worker\nLane: alpha\n'"$COST_FABLE_OPUS"'\nSize: S\nUsed-by: e2e\nStages: build,review,merged\nDo the hard judgment."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+# opus with the Cost line, Model-Reason, and an intentional Engine header → allowed (other checks allow).
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","prompt":"Engine: opus (intentional: hardest judgment only)\nRole: worker\nLane: alpha\n'"$COST_FABLE_OPUS"'\nModel-Reason: hardest judgment only\nSize: S\nUsed-by: e2e\nStages: build,review,merged\nDo the hard judgment."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "costline-opus-present-exit"
 assert_eq "" "$__RUN_STDOUT" "costline-opus-present allowed when other checks allow"
@@ -363,10 +392,10 @@ run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "costline-haiku-exit"
 assert_eq "" "$__RUN_STDOUT" "costline-haiku no deny"
 
-# require_cost_line: off → no deny, even for intentional fable without a Cost line.
+# require_cost_line: off → no deny, even for intentional fable with Model-Reason and without a Cost line.
 printf '%s\n' "- require_cost_line: off" > "$TEST_TMP/config-cost-off.md"
 export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config-cost-off.md"
-PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable (intentional: x)\nRole: worker\nLane: alpha\nSize: S\nUsed-by: e2e\nStages: build,review,merged\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable (intentional: x)\nRole: worker\nLane: alpha\nModel-Reason: intentional\nSize: S\nUsed-by: e2e\nStages: build,review,merged\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "costline-off-exit"
 assert_eq "" "$__RUN_STDOUT" "costline-off no deny"
@@ -382,60 +411,41 @@ assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "costline-garbage 
 assert_contains "$__RUN_STDOUT" "add this line within the first 6 lines: ${COST_FABLE_OPUS}" "costline-garbage gives the exact line"
 unset DISPATCH_GUARD_CONFIG_OVERRIDE
 
-# model absent, on_missing_model allow: the Engine token is the effective model.
-printf '%s\n' "- on_missing_model: allow" > "$TEST_TMP/config-cost-engine.md"
-export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config-cost-engine.md"
-PAYLOAD='{"tool_name":"Agent","tool_input":{"prompt":"Engine: claude-fable-5-2\nRole: worker\nLane: alpha\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+# model absent → worker-level sonnet default applies, so no fable/opus costline deny.
+PAYLOAD='{"tool_name":"Agent","tool_input":{"prompt":"Engine: claude-fable-5-2\nRole: worker\nLane: alpha\nSize: S\nUsed-by: e2e\nStages: build,review,merged\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "costline-engine-token denies fable full id with no model field"
-assert_contains "$__RUN_STDOUT" "add this line within the first 6 lines: ${COST_FABLE_OPUS}" "costline-engine-token gives the exact line"
-PAYLOAD='{"tool_name":"Agent","tool_input":{"prompt":"Engine: opus\nRole: worker\nLane: alpha\n'"$COST_FABLE_OPUS"'\nSize: S\nUsed-by: e2e\nStages: build,review,merged\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
-run_hook dispatch-model-guard.js "$PAYLOAD"
-assert_eq "" "$__RUN_STDOUT" "costline-engine-token with the line is allowed when model is absent"
-PAYLOAD='{"tool_name":"Agent","tool_input":{"prompt":"Engine: sonnet\nRole: worker\nLane: alpha\nSize: S\nUsed-by: e2e\nStages: build,review,merged\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
-run_hook dispatch-model-guard.js "$PAYLOAD"
-assert_eq "" "$__RUN_STDOUT" "costline-engine-token sonnet is not denied"
-unset DISPATCH_GUARD_CONFIG_OVERRIDE
+assert_contains "$__RUN_STDOUT" '"model":"sonnet"' "costline-engine-token defaults absent model to sonnet"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "costline-engine-token does not deny absent model"
 
-# model omitted + Engine: opus + no Cost line, on_missing_model: ask → deny, not ask.
-printf '%s\n' "- on_missing_model: ask" > "$TEST_TMP/config-cost-ask.md"
-export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config-cost-ask.md"
-PAYLOAD='{"tool_name":"Agent","tool_input":{"prompt":"Engine: opus\nRole: worker\nLane: alpha\nDo the hard judgment."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
-run_hook dispatch-model-guard.js "$PAYLOAD"
-assert_eq 0 "$__RUN_EXIT" "costline-absent-ask-exit"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "costline-absent-ask denies"
-assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"ask"' "costline-absent-ask is not an ask"
-assert_contains "$__RUN_STDOUT" "add this line within the first 6 lines: ${COST_FABLE_OPUS}" "costline-absent-ask gives the exact line"
-unset DISPATCH_GUARD_CONFIG_OVERRIDE
-
-# model omitted + Engine: opus + no Cost line, default on_missing_model deny → exact Cost line.
+# model omitted + Engine: opus + no Cost line → worker-level sonnet default applies (allow + updatedInput.model "sonnet").
 PAYLOAD='{"tool_name":"Agent","tool_input":{"prompt":"Engine: opus\nRole: worker\nLane: alpha\nDo the hard judgment."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "costline-absent-deny-exit"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "costline-absent-deny denies"
-assert_contains "$__RUN_STDOUT" "add this line within the first 6 lines: ${COST_FABLE_OPUS}" "costline-absent-deny gives the exact line"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"allow"' "costline-absent-deny allows with sonnet default"
+assert_contains "$__RUN_STDOUT" '"model":"sonnet"' "costline-absent-deny sets model sonnet"
+assert_not_contains "$__RUN_STDOUT" "require_cost_line" "costline-absent-deny is not a cost deny"
 
-# model omitted + Engine: sonnet + no Cost line stays the missing-model policy
-# (default deny names "no model specified"; ask stays ask). Not a cost deny.
+# model omitted + Engine: sonnet + no Cost line → worker-level sonnet default applies, even with dead on_missing_model: ask.
 PAYLOAD='{"tool_name":"Agent","tool_input":{"prompt":"Engine: sonnet\nRole: worker\nLane: alpha\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "costline-absent-sonnet-exit"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "costline-absent-sonnet still denies for a missing model"
-assert_contains "$__RUN_STDOUT" "no model specified" "costline-absent-sonnet keeps the missing-model reason"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"allow"' "costline-absent-sonnet allows with sonnet default"
+assert_contains "$__RUN_STDOUT" '"model":"sonnet"' "costline-absent-sonnet sets model sonnet"
 assert_not_contains "$__RUN_STDOUT" "require_cost_line" "costline-absent-sonnet is not a cost deny"
 printf '%s\n' "- on_missing_model: ask" > "$TEST_TMP/config-cost-ask-sonnet.md"
 export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config-cost-ask-sonnet.md"
 run_hook dispatch-model-guard.js "$PAYLOAD"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"ask"' "costline-absent-sonnet-ask stays ask"
-assert_contains "$__RUN_STDOUT" "no model specified" "costline-absent-sonnet-ask keeps the missing-model reason"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"allow"' "costline-absent-sonnet-ask allows with sonnet default"
+assert_contains "$__RUN_STDOUT" '"model":"sonnet"' "costline-absent-sonnet-ask sets model sonnet"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"ask"' "costline-absent-sonnet-ask never asks"
 assert_not_contains "$__RUN_STDOUT" "require_cost_line" "costline-absent-sonnet-ask is not a cost deny"
 unset DISPATCH_GUARD_CONFIG_OVERRIDE
 
-# A Cost line on line 7 does not count. Line 6 does. Intentional would otherwise allow.
-PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","mode":"plan","prompt":"Engine: opus\nRole: worker\nLane: alpha\nSize: S\nUsed-by: e2e\nStages: build,review,merged\n'"$COST_FABLE_OPUS"'"},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+# A Cost line on line 7 does not count. Line 6 does. Model-Reason would otherwise allow.
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","mode":"plan","prompt":"Engine: opus\nRole: worker\nLane: alpha\nSize: S\nUsed-by: e2e\nStages: build,review,merged\n'"$COST_FABLE_OPUS"'\nModel-Reason: plan-mode review"},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "costline-line7 does not count"
-PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","mode":"plan","prompt":"Engine: opus\nRole: worker\nLane: alpha\nSize: S\nUsed-by: e2e\n'"$COST_FABLE_OPUS"'\nStages: build,review,merged"},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","mode":"plan","prompt":"Engine: opus\nRole: worker\nLane: alpha\nSize: S\nUsed-by: e2e\n'"$COST_FABLE_OPUS"'\nStages: build,review,merged\nModel-Reason: plan-mode review"},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq "" "$__RUN_STDOUT" "costline-line6 counts"
 
@@ -583,5 +593,25 @@ assert_contains "$__RUN_STDERR" "unavailable" "pm-fleet-unavailable logs stderr 
 PAYLOAD_NONPM='{"tool_name":"Agent","tool_input":{"model":"haiku","subagent_type":"general-purpose","prompt":"Engine: haiku\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$NON_PM_REPO"'"}'
 FLEET_BIN="$FLEET_STUB_OPEN" run_hook dispatch-model-guard.js "$PAYLOAD_NONPM"
 assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "non-pm-console allows without id"
+
+# 8. Brain-tier dispatch JSONL ledger: opus with Model-Reason appends allowed:true; without Model-Reason appends allowed:false
+STATE_DIR_LEDGER="$TEST_TMP/ledger-state"
+mkdir -p "$STATE_DIR_LEDGER"
+PAYLOAD_OPUS_OK='{"session_id":"sess-ledger-1","tool_name":"Agent","tool_input":{"model":"opus","prompt":"Engine: opus\nRole: architect\nLane: core\n'"$COST_FABLE_OPUS"'\nModel-Reason: architecture decision\nSize: S\nUsed-by: e2e\nStages: build,review,merged\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+AUTOPILOT_STATE_DIR="$STATE_DIR_LEDGER" run_hook dispatch-model-guard.js "$PAYLOAD_OPUS_OK"
+assert_eq 0 "$__RUN_EXIT" "ledger-opus-ok-exit"
+assert_eq "" "$__RUN_STDOUT" "ledger-opus-ok-silent"
+PAYLOAD_OPUS_NO='{"session_id":"sess-ledger-1","tool_name":"Agent","tool_input":{"model":"opus","prompt":"Engine: opus\nRole: architect\nLane: core\n'"$COST_FABLE_OPUS"'\nSize: S\nUsed-by: e2e\nStages: build,review,merged\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+AUTOPILOT_STATE_DIR="$STATE_DIR_LEDGER" run_hook dispatch-model-guard.js "$PAYLOAD_OPUS_NO"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "ledger-opus-no-deny"
+LEDGER_CHECK="$(node -e '
+  const fs = require("fs");
+  const lines = fs.readFileSync(process.argv[1], "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  if (lines.length !== 2) process.exit(2);
+  if (lines[0].lane !== "core" || lines[0].model !== "opus" || lines[0].reason !== "architecture decision" || lines[0].allowed !== true) process.exit(3);
+  if (lines[1].lane !== "core" || lines[1].model !== "opus" || lines[1].reason !== null || lines[1].allowed !== false) process.exit(4);
+  process.stdout.write("ledger_ok");
+' "$STATE_DIR_LEDGER/brain-tier-dispatch.jsonl")"
+assert_eq "ledger_ok" "$LEDGER_CHECK" "ledger-jsonl-entries"
 
 finalize_test

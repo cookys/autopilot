@@ -186,6 +186,14 @@ assert.strictEqual(fleetErr.status, 0);
 assert.strictEqual(decision(fleetErr), undefined);
 assert.strictEqual(logLines().length, beforeFleetOther);
 
+// 10d2. a failed whoami is not cached: the same session answering later is covered
+const errCounter = path.join(stubDir, 'err-calls.txt');
+runHook(fleetCall('sess-err-2'), { FLEET_BIN: stubBin, STUB_EXIT: '3', STUB_COUNTER: errCounter });
+const beforeRetry = logLines().length;
+runHook(fleetCall('sess-err-2'), { FLEET_BIN: stubBin, STUB_ADDR: 'cookys/aimax395/pm--claude', STUB_COUNTER: errCounter });
+assert.strictEqual(fs.readFileSync(errCounter, 'utf8').trim().split('\n').length, 2, 'failed whoami must be retried');
+assert.strictEqual(logLines().length, beforeRetry + 1);
+
 // 10e. second call with same session id uses cache, does not call stub again
 const beforeCache = logLines().length;
 runHook(fleetCall('sess-cache-1'), { FLEET_BIN: stubBin, STUB_ADDR: 'cookys/aimax395/pm--claude', STUB_COUNTER: stubCounter });

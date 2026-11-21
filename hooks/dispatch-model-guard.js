@@ -351,16 +351,19 @@ function resolveFleetSeat(input) {
   }
 
   let seat = '';
+  let answered = false;
   try {
     const res = whoamiSession(sessionId, { timeoutMs: 1500 });
     if (res.ok && res.address) {
       seat = seatFromFleetAddress(res.address);
+      answered = true;
     }
   } catch {
     seat = '';
   }
 
-  if (cacheFile) {
+  // Cache only a real answer: a courier hiccup must not pin a PM session as "not covered" for its whole life.
+  if (cacheFile && answered) {
     try {
       cache[sessionId] = seat || 'none';
       fs.writeFileSync(cacheFile, JSON.stringify(cache));

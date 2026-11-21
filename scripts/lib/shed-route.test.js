@@ -25,6 +25,15 @@ test('routes only fresh listed mechanical work', (t) => {
   assert.equal(decide({ env, briefText: 'Work-Class: 測試\n', now }).target, 'local');
   assert.equal(decide({ env: { ...env, AUTOPILOT_FLEET_ADDRESS: 'ns/host/other@session' }, briefText, now }).reason, 'not_listed');
   assert.equal(decide({ env, briefText: 'Work-Class: 判斷類工作\n', now }).reason, 'not_mechanical');
+  write({ shed: { pools: [{ pool: 'stranity-personal', seats: ['capacity--claude'] }], rules: {
+    mechanical_classes: ['文件'], targets_in_order: ['minimax', 'kimi'], keep_on_origin: []
+  } } });
+  assert.equal(decide({ env, briefText: 'Work-Class: 文件\nTask-Shape: patch\n', now }).reason, 'no_eligible_target');
+  assert.deepEqual(decide({ env, briefText, now, skippedTargets: [
+    { target: 'minimax', reason: 'blocked-minimax' }, { target: 'kimi', reason: 'blocked-kimi' }
+  ] }), { shed: false, reason: 'no_eligible_target', skipped_targets: [
+    { target: 'minimax', reason: 'blocked-minimax' }, { target: 'kimi', reason: 'blocked-kimi' }
+  ] });
   write({ generated_at: '2026-11-20T23:00:00Z' });
   assert.equal(decide({ env, briefText, now }).reason, 'stale');
   fs.rmSync(file);

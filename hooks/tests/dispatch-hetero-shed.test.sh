@@ -40,4 +40,59 @@ node -e 'const o=JSON.parse(process.argv[1]); if(o.runner!=="codex"||!o.shed||o.
 MF="$(node -e 'const fs=require("fs"),p=process.argv[1]; const f=fs.readdirSync(p).find(x=>x.endsWith(".manifest.json")); process.stdout.write(f?`${p}/${f}`:"")' "$AUTOPILOT_DISPATCH_RUNS_DIR")"
 assert_file_exists "$MF" 'dispatch manifest written'
 node -e 'const o=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); if(o.shed?.run_id!=="bm-hook-fixture") process.exit(1)' "$MF" || fail 'manifest carries shed decision'
+
+REAL_NODE="$(command -v node)"
+cat > "$TEST_TMP/bin/node" <<'EOF_NODE'
+#!/usr/bin/bash
+if [[ "${1:-}" == *"cn-model-dispatch-gate.js" ]]; then
+  case "${SHED_TEST_GATE:-} $*" in
+    *"--runner cc-shim"*) echo 'cn_model_dispatch_barred minimax restricted_operator_private_workdir' >&2; exit 2 ;;
+    *"--runner kimi"*) echo 'cn_model_dispatch_barred moonshot restricted_operator_unknown_endpoint' >&2; exit 2 ;;
+  esac
+fi
+exec "$SHED_TEST_REAL_NODE" "$@"
+EOF_NODE
+chmod +x "$TEST_TMP/bin/node"
+cat > "$TEST_TMP/bin/bash" <<'EOF_BASH'
+#!/usr/bin/bash
+case "${1:-}" in
+  */resolve-endpoint.sh) exit 0 ;;
+esac
+exec "$SHED_TEST_REAL_BASH" "$@"
+EOF_BASH
+chmod +x "$TEST_TMP/bin/bash"
+cat > "$TEST_TMP/bin/grok" <<'EOF_GROK'
+#!/usr/bin/bash
+printf 'normal route fixture\n' > normal-result.txt
+git add normal-result.txt
+git -c user.email=t@t -c user.name=t commit -q -m 'stub normal route'
+EOF_GROK
+chmod +x "$TEST_TMP/bin/grok"
+export SHED_TEST_REAL_NODE="$REAL_NODE" SHED_TEST_REAL_BASH="/usr/bin/bash"
+cat > "$TEST_TMP/burn-more.json" <<EOF_JSON
+{"schema":"capacity.burn_more/1","run_id":"bm-hook-fixture","generated_at":"$NOW","shed":{"pools":[{"pool":"fixture-pool","seats":["capacity--claude"]}],"rules":{"mechanical_classes":["文件"],"targets_in_order":["minimax","kimi","codex"],"keep_on_origin":[],"prefer":"from scratch"}}}
+EOF_JSON
+rm -f "$AUTOPILOT_DISPATCH_RUNS_DIR"/*
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" SHED_TEST_GATE=reject-restricted "$SCRIPT" --no-verify-tip --context-window off --codex-bin "$TEST_TMP/bin/codex" --grok-bin "$TEST_TMP/bin/grok" --branch feat/shed-skip --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/skip.err")"
+EXIT=$?
+assert_eq 0 "$EXIT" 'refused shed targets fall through to codex'
+JSON="$(printf '%s\n' "$OUT" | "$REAL_NODE" -e 'let s="";process.stdin.on("data",x=>s+=x).on("end",()=>{const o=s.trim().split(/\r?\n/).filter(x=>x.startsWith("{")).map(JSON.parse).pop();process.stdout.write(JSON.stringify(o||{}))})')"
+"$REAL_NODE" -e 'const o=JSON.parse(process.argv[1]),s=o.shed?.skipped_targets||[]; if(o.runner!=="codex"||s.length!==2||!s[0].reason.includes("restricted_operator_private_workdir")||!s[1].reason.includes("restricted_operator_unknown_endpoint")) process.exit(1)' "$JSON" || fail 'status records skipped targets and reasons, then selects codex'
+
+sed -i 's/"targets_in_order":\["minimax","kimi","codex"\]/"targets_in_order":["minimax","kimi"]/' "$TEST_TMP/burn-more.json"
+rm -f "$AUTOPILOT_DISPATCH_RUNS_DIR"/*
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" SHED_TEST_GATE=reject-restricted "$SCRIPT" --no-verify-tip --context-window off --grok-bin "$TEST_TMP/bin/grok" --branch feat/shed-all-refused --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/all-refused.err")"
+EXIT=$?
+assert_eq 0 "$EXIT" 'all refused shed targets preserve ordinary routing'
+JSON="$(printf '%s\n' "$OUT" | "$REAL_NODE" -e 'let s="";process.stdin.on("data",x=>s+=x).on("end",()=>{const o=s.trim().split(/\r?\n/).filter(x=>x.startsWith("{")).map(JSON.parse).pop();process.stdout.write(JSON.stringify(o||{}))})')"
+"$REAL_NODE" -e 'const o=JSON.parse(process.argv[1]); if(o.runner!=="grok"||o.shed?.reason!=="no_eligible_target") process.exit(1)' "$JSON" || fail 'all-refused status reports normal route and no_eligible_target'
+MF="$(node -e 'const fs=require("fs"),p=process.argv[1]; const f=fs.readdirSync(p).find(x=>x.endsWith(".manifest.json")); process.stdout.write(f?`${p}/${f}`:"")' "$AUTOPILOT_DISPATCH_RUNS_DIR")"
+node -e 'const o=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); if(o.shed!==null) process.exit(1)' "$MF" || fail 'all-refused manifest records shed null'
+rm -f "$AUTOPILOT_DISPATCH_RUNS_DIR"/*
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_SHED_ROUTE=0 "$SCRIPT" --no-verify-tip --context-window off --grok-bin "$TEST_TMP/bin/grok" --branch feat/shed-off --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/off.err")"
+EXIT=$?
+assert_eq 0 "$EXIT" 'disabled shedding preserves ordinary routing'
+MF="$(node -e 'const fs=require("fs"),p=process.argv[1]; const f=fs.readdirSync(p).find(x=>x.endsWith(".manifest.json")); process.stdout.write(f?`${p}/${f}`:"" )' "$AUTOPILOT_DISPATCH_RUNS_DIR")"
+node -e 'const o=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); if(o.shed!==null) process.exit(1)' "$MF" || fail 'not-applied manifest records shed null'
+unset SHED_TEST_REAL_NODE SHED_TEST_REAL_BASH
 finalize_test

@@ -48,6 +48,7 @@ const {
 const { BRIEF_HEAD_WINDOW, headLines, findHeadMatch } = require('./lib/brief-head.js');
 const { isPmConsole } = require('./_shared/pm-console.js');
 const { findTaskId, checkTaskOpen } = require('../scripts/lib/fleet-task-ref.js');
+const { ownerAddress, whoamiSession } = require('../scripts/lib/fleet-task.js');
 const { userRuntimeBase, ensurePrivateDir } = require('../scripts/lib/runtime-paths.js');
 // default-on since v2.35.15 (was opt-in). Opt out: AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=off
 // (or `- mode: off` in .claude/dispatch-guard-config.md). The 2026-09-04 cuda quota digest:
@@ -311,6 +312,65 @@ function checkMechanicalReroute(input, toolInput, prompt) {
   try { mechanicalReroute(input, toolInput, prompt); } catch { /* fail-open */ }
 }
 
+function seatFromFleetAddress(addr) {
+  if (!addr || typeof addr !== 'string') return '';
+  const member = addr.split('/').pop().replace(/@.*$/, '');
+  if (member === 'pm--claude') return 'pm';
+  if (member.endsWith('-lead--claude') || member === 'hangar--claude') return 'lead';
+  return '';
+}
+
+function resolveFleetSeat(input) {
+  if (process.env.FLEET_ADDRESS) {
+    const addr = ownerAddress();
+    if (addr) return seatFromFleetAddress(addr);
+  }
+  const sessionId = String(process.env.CLAUDE_CODE_SESSION_ID || (input && input.session_id) || '').trim();
+  if (!sessionId) return '';
+
+  let cacheFile = null;
+  let cache = {};
+  try {
+    const base = userRuntimeBase(process.env);
+    const ensured = base.startsWith('/tmp/') ? { ok: false } : ensurePrivateDir(base);
+    if (ensured.ok) {
+      cacheFile = path.join(ensured.path, 'mechanical-reroute-seat-cache.json');
+      if (fs.existsSync(cacheFile)) {
+        const parsed = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          cache = parsed;
+          if (Object.prototype.hasOwnProperty.call(cache, sessionId)) {
+            const cached = cache[sessionId];
+            return cached === 'pm' || cached === 'lead' ? cached : '';
+          }
+        }
+      }
+    }
+  } catch {
+    // fail-open on cache read
+  }
+
+  let seat = '';
+  try {
+    const res = whoamiSession(sessionId, { timeoutMs: 1500 });
+    if (res.ok && res.address) {
+      seat = seatFromFleetAddress(res.address);
+    }
+  } catch {
+    seat = '';
+  }
+
+  if (cacheFile) {
+    try {
+      cache[sessionId] = seat || 'none';
+      fs.writeFileSync(cacheFile, JSON.stringify(cache));
+    } catch {
+      // fail-open on cache write
+    }
+  }
+  return seat;
+}
+
 function mechanicalReroute(input, toolInput, prompt) {
   const modeRaw = String(process.env.AUTOPILOT_MECHANICAL_REROUTE || 'shadow').trim().toLowerCase();
   const mode = (modeRaw === 'off' || modeRaw === 'shadow' || modeRaw === 'enforce') ? modeRaw : 'shadow';
@@ -318,10 +378,19 @@ function mechanicalReroute(input, toolInput, prompt) {
 
   const envSeat = String(process.env.AUTOPILOT_SEAT_ROLE || '').trim().toLowerCase();
   let seat = '';
-  if (isPmConsole(input)) {
-    seat = 'pm';
-  } else if (envSeat === 'pm' || envSeat === 'lead') {
+  let seatSource = '';
+  if (envSeat === 'pm' || envSeat === 'lead') {
     seat = envSeat;
+    seatSource = 'env';
+  } else if (isPmConsole(input)) {
+    seat = 'pm';
+    seatSource = 'console';
+  } else {
+    const fleetSeat = resolveFleetSeat(input);
+    if (fleetSeat) {
+      seat = fleetSeat;
+      seatSource = 'fleet';
+    }
   }
   if (!seat) return;
 
@@ -353,6 +422,7 @@ function mechanicalReroute(input, toolInput, prompt) {
     const entry = {
       ts: new Date().toISOString(),
       seat,
+      seat_source: seatSource,
       subagent_type: subagentType,
       model,
       role: matchedRole,

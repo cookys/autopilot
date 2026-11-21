@@ -18,7 +18,7 @@ const logPath = path.join(fakeRuntime, 'autopilot', 'mechanical-reroute-shadow.j
 
 function baseEnv(extra) {
   const env = { ...process.env, XDG_RUNTIME_DIR: fakeRuntime, AUTOPILOT_DISPATCH_MODEL_GUARD_MODE: 'remind' };
-  for (const k of ['AUTOPILOT_SEAT_ROLE', 'AUTOPILOT_MECHANICAL_REROUTE', 'CLAUDE_CODE_SESSION_ID', 'AUTOPILOT_SESSION_ID']) delete env[k];
+  for (const k of ['AUTOPILOT_SEAT_ROLE', 'AUTOPILOT_MECHANICAL_REROUTE', 'CLAUDE_CODE_SESSION_ID', 'AUTOPILOT_SESSION_ID', 'FLEET_ADDRESS']) delete env[k];
   return { ...env, ...extra };
 }
 function runHook(payload, extraEnv = {}) {
@@ -127,6 +127,81 @@ assert.strictEqual(decision(runHook(call('Engine: sonnet | Role: reviewer | Lane
 assert.strictEqual(decision(runHook(call('Engine: sonnet | Role: reviewer | Lane: pm | Size: XS\nx'), LEAD('enforce'))), undefined);
 assert.strictEqual(logLines().length, beforeSingle + 1);
 assert.strictEqual(decision(runHook(call('Engine: sonnet (intentional: needs judgment) | Role: stats | Lane: pm | Size: XS\nx'), LEAD('enforce'))), undefined);
+
+// 10. fleet seat resolution via FLEET_BIN stub + per-session cache
+const stubDir = path.join(tmpRoot, 'fleet-stub');
+fs.mkdirSync(stubDir, { recursive: true });
+const stubBin = path.join(stubDir, 'fleet');
+const stubCounter = path.join(stubDir, 'calls.txt');
+fs.writeFileSync(
+  stubBin,
+  `#!/usr/bin/env node
+const fs = require('fs');
+if (process.env.STUB_COUNTER) fs.appendFileSync(process.env.STUB_COUNTER, '1\\n');
+if (process.env.STUB_EXIT) process.exit(Number(process.env.STUB_EXIT));
+if (process.argv[2] === 'whoami' && process.argv[3] === '--session') {
+  process.stdout.write((process.env.STUB_ADDR || '') + '\\n');
+  process.exit(0);
+}
+process.exit(1);
+`,
+  { mode: 0o755 }
+);
+
+const fleetCall = (sessionId, prompt = 'Engine: sonnet\nRole: stats\nx') => ({
+  ...call(prompt),
+  session_id: sessionId,
+});
+
+// 10a. pm--claude -> seat pm, seat_source fleet
+const beforeFleetPm = logLines().length;
+const fleetPm = runHook(fleetCall('sess-pm-1'), { FLEET_BIN: stubBin, STUB_ADDR: 'cookys/aimax395/pm--claude' });
+assert.strictEqual(fleetPm.status, 0);
+assert.strictEqual(decision(fleetPm), undefined);
+assert.strictEqual(logLines().length, beforeFleetPm + 1);
+const fleetPmRow = JSON.parse(logLines().pop());
+assert.strictEqual(fleetPmRow.seat, 'pm');
+assert.strictEqual(fleetPmRow.seat_source, 'fleet');
+
+// 10b. *-lead--claude -> seat lead
+const beforeFleetLead = logLines().length;
+const fleetLead = runHook(fleetCall('sess-lead-1'), { FLEET_BIN: stubBin, STUB_ADDR: 'cookys/cuda/game-lead--claude' });
+assert.strictEqual(fleetLead.status, 0);
+assert.strictEqual(decision(fleetLead), undefined);
+assert.strictEqual(logLines().length, beforeFleetLead + 1);
+const fleetLeadRow = JSON.parse(logLines().pop());
+assert.strictEqual(fleetLeadRow.seat, 'lead');
+assert.strictEqual(fleetLeadRow.seat_source, 'fleet');
+
+// 10c. other member (autopilot--claude) -> not covered, no log line
+const beforeFleetOther = logLines().length;
+const fleetOther = runHook(fleetCall('sess-other-1'), { FLEET_BIN: stubBin, STUB_ADDR: 'cookys/aimax395-team/autopilot--claude' });
+assert.strictEqual(fleetOther.status, 0);
+assert.strictEqual(decision(fleetOther), undefined);
+assert.strictEqual(logLines().length, beforeFleetOther);
+
+// 10d. stub exits 3 -> allowed, no log line
+const fleetErr = runHook(fleetCall('sess-err-1'), { FLEET_BIN: stubBin, STUB_EXIT: '3' });
+assert.strictEqual(fleetErr.status, 0);
+assert.strictEqual(decision(fleetErr), undefined);
+assert.strictEqual(logLines().length, beforeFleetOther);
+
+// 10e. second call with same session id uses cache, does not call stub again
+const beforeCache = logLines().length;
+runHook(fleetCall('sess-cache-1'), { FLEET_BIN: stubBin, STUB_ADDR: 'cookys/aimax395/pm--claude', STUB_COUNTER: stubCounter });
+runHook(fleetCall('sess-cache-1'), { FLEET_BIN: stubBin, STUB_ADDR: 'cookys/aimax395/pm--claude', STUB_COUNTER: stubCounter });
+const callCount = fs.readFileSync(stubCounter, 'utf8').trim().split('\n').filter(Boolean).length;
+assert.strictEqual(callCount, 1, 'whoami stub must be called only once per session');
+assert.strictEqual(logLines().length, beforeCache + 2);
+
+// 10f. env AUTOPILOT_SEAT_ROLE=lead still wins, with seat_source env
+const beforeEnvWin = logLines().length;
+const envWin = runHook(fleetCall('sess-pm-1'), { AUTOPILOT_SEAT_ROLE: 'lead', FLEET_BIN: stubBin, STUB_ADDR: 'cookys/aimax395/pm--claude' });
+assert.strictEqual(envWin.status, 0);
+assert.strictEqual(logLines().length, beforeEnvWin + 1);
+const envWinRow = JSON.parse(logLines().pop());
+assert.strictEqual(envWinRow.seat, 'lead');
+assert.strictEqual(envWinRow.seat_source, 'env');
 
 fs.rmSync(tmpRoot, { recursive: true, force: true });
 console.log('PASS: dispatch-model-guard-mechanical-reroute.test.js');

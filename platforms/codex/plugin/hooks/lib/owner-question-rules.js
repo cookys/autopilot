@@ -49,7 +49,7 @@ const HIT_PATTERNS = {
   /等(?:待|候)?\s*(?:owner|你|您)/i,
   /(?:須|必須|需)經(?:過)?\s*(?:owner|你|您)/i,
   // "after you approve I will ..."
-  /[你您](?:批准|核准|同意|授權|確認|決定|點頭)(?:之後|後|才|再)/,
+  /[你您](?:批准|核准|同意|授權|確認|決定|點頭|拍板)(?:之後|後|才|再)/,
   // "should I / may I ...嗎": a yes-no question put to the reader, with or without the question mark
   /(?:要我|讓我|需要我|是否要我|我可以|我能|我要不要|我該不該|我應不應該)[^。？?！\n]{0,40}嗎/,
   /(?:可以|能不能|能否|行不行|好不好|對不對|同意|批准|核准|沒問題|ok)\s*嗎/i,
@@ -61,12 +61,12 @@ const HIT_PATTERNS = {
   /\b(?:may I|can I (?:go ahead|proceed|push|merge)|ok(?:ay)? to (?:push|merge|proceed))\b/i,
   // Additional asks from the retired PM Stop hook (bare 要不要 is only a question with ?).
   /你覺得(?:可以|如何|呢|怎樣)|請你(?:看|回)|你(?:同意|決定|選)(?:嗎|哪)/,
-  /跟我說一聲|告訴我你|你看(?:要|是)|等你(?:回|選)|你希望.{0,20}(?:就|再)|你點頭|你拍板|由你決定/,
+  /跟我說一聲|告訴我你|你看(?:要|是)|等你(?:回|選)|你希望.{0,20}(?:就|再)|你點頭|由你決定/,
   ],
   'operator-step': [
     /要[你您]本人|[你您]自己(?:執行|做|登入|操作)|有空時照做|[你您]要做的事|[你您]只要(?:貼|輸入|執行)/,
     /(?:輸入|打)\s*\/login\b|下次(?:到場|到公司)|登入[^。？！\n]{0,30}一次/,
-    /(?:需要|要|等)[你您](?:重新)?登入|[你您](?:親手|親自)(?:執行|登入|操作)/,
+    /(?:需要|要|等|請)[你您](?:重新)?登入|[你您](?:親手|親自)(?:執行|登入|操作)/,
     /\b(?:you|please)\s+(?:run|execute|log\s*in|sign\s*in|enter|type|click|install)\b/i,
   ],
   promise: [
@@ -92,6 +92,23 @@ const CONDITION_ON_OWNER = /(?:沒有|沒|未經|未獲|未得到|缺少)[你您
 // Explicit negators only. A bare 不 is NOT one: "能不能請你確認", "是不是要你批准" are A-not-A questions, not denials.
 const NEGATED = /(?:沒有|沒|無需|不需要|不用|不必|毋須|不會|不要)[^，。,；;、]{0,6}[你您]|\b(?:no|not|nothing|don'?t|doesn'?t|isn'?t)\b[^.,;]{0,24}\b(?:you|your)\b|\bno (?:approval|decision|confirmation)\b/i;
 const CLAUSE_SPLIT = /[，,；;：:、]|但是|但|不過|而是|\bbut\b|\bhowever\b/i;
+// Bare 你拍板 is an ask. The same words inside a habitual or past role split
+// (一直是 / 大多是 … 我起草，你拍板，之後由我維護) describe how the roles worked, not a forward promise.
+const BARE_PAIBAN = /(?<![等請要待需會得])你拍板(?!後|再|才)/;
+const HABITUAL_ROLE_FRAME = /一直是|一向是|向來是|大多是/;
+const ROLE_SPLIT_WORK = /我起草|提方案|由我維護|是我在維護|我在維護|討論出來/;
+// A statement that says who set a rule and that changing it changes their standard, closing with the bare
+// tail 要你決定, explains the rule; it does not ask for a decision now. Both markers are required and only that
+// final clause is exempt, so "換掉評審的事，要你決定。" (no ownership statement) still blocks.
+const RULE_OWNERSHIP = /[是由][你您](?:指定|制定|訂|定)的/;
+const RULE_CONSEQUENCE = /等於(?:改|換|動)[你您]的/;
+const BARE_DECIDE_TAIL = /^要[你您]決定[。.！]?$/;
+function explainsOwnerRule(sentence, clause) {
+  return RULE_OWNERSHIP.test(sentence) && RULE_CONSEQUENCE.test(sentence) && BARE_DECIDE_TAIL.test(clause.trim());
+}
+function habitualPastRole(sentence) {
+  return HABITUAL_ROLE_FRAME.test(sentence) && ROLE_SPLIT_WORK.test(sentence);
+}
 
 function offValue(v) {
   return typeof v === 'string' && ['off', 'false', '0', 'no'].includes(v.trim().toLowerCase());
@@ -213,8 +230,20 @@ function stripCode(text) {
 // ASCII ? ! . end a sentence before whitespace, the end of text, or a CJK / full-width character ("嗎?如果"); a URL query "a?b=1" and "v1.2" are not sentence ends.
 function sentences(text) {
   const body = stripCode(text).split('\n').filter((line) => !parseEscape(line.trim())).join('\n');
-  return body.split(/(?<=[。？！])\s*|(?<=[?!.])(?=\s|$|[\u3000-\u9fff\uff00-\uffef])\s*|\n+/).map((s) => s.trim()).filter(Boolean);
+  const parts = body.split(/(?<=[。？！])\s*|(?<=[?!.])(?=\s|$|[\u3000-\u9fff\uff00-\uffef])\s*|\n+/).map((s) => s.trim()).filter(Boolean);
+  // A line ending in a colon (bold allowed) and the bullet lines right under it are one sentence.
+  const out = [];
+  for (let i = 0; i < parts.length; i += 1) {
+    let cur = parts[i];
+    if (COLON_HEADER.test(cur)) {
+      while (i + 1 < parts.length && BULLET_START.test(parts[i + 1])) { cur += ' ' + parts[i + 1]; i += 1; }
+    }
+    out.push(cur);
+  }
+  return out;
 }
+const COLON_HEADER = /[：:][\s*_~]*$/;
+const BULLET_START = /^[-*]\s/;
 
 // One hit per sentence, with every matching class. Exemptions are evaluated separately.
 function findHits(text) {
@@ -228,9 +257,11 @@ function findHits(text) {
     for (const clause of s.split(CLAUSE_SPLIT)) {
       if (CONDITION_ON_OWNER.test(clause)) classes.add('question');
       if (NEGATED.test(clause)) continue;
+      if (explainsOwnerRule(s, clause)) continue;
       for (const [kind, patterns] of Object.entries(HIT_PATTERNS)) {
         if (patterns.some((re) => re.test(clause))) classes.add(kind);
       }
+      if (BARE_PAIBAN.test(clause) && !habitualPastRole(s)) classes.add('question');
     }
     if (classes.size) hits.push({ sentence: s, classes: [...classes] });
   }
@@ -246,7 +277,7 @@ function findOwnerQuestion(text) { return findHits(text)[0]?.sentence || null; }
 function defaultFleetTaskLookup(id) {
   const r = spawnSync('fleet', ['task', 'show', id, '--json'], {
     encoding: 'utf8',
-    timeout: 5000,
+    timeout: 2000,
     stdio: ['ignore', 'pipe', 'ignore'],
   });
   if (r.error || r.status !== 0) return null;
@@ -257,17 +288,40 @@ function defaultFleetTaskLookup(id) {
 }
 
 let fleetTaskLookup = defaultFleetTaskLookup;
+// One lookup per task id per run; swapping the lookup (tests) starts a fresh cache.
+let taskCache = new Map();
 
 function setFleetTaskLookup(fn) {
   fleetTaskLookup = typeof fn === 'function' ? fn : defaultFleetTaskLookup;
+  taskCache = new Map();
+}
+
+function lookupTask(id) {
+  if (!taskCache.has(id)) taskCache.set(id, fleetTaskLookup(id));
+  return taskCache.get(id);
+}
+
+// A due field counts only when it is a non-empty value other than the fleet placeholder "-".
+function realDues(task) {
+  return [task.next_evidence_due, task.hard_deadline].filter((v) => typeof v === 'string' && v !== '' && v !== '-');
+}
+
+// An id written as task_id=<id> is judged with its quoted due (quotedDueIsReal), not here.
+const TASK_ID = /(?<!task_id=)\b[0-9A-HJKMNP-TV-Z]{26}\b/g;
+// A 26-char fleet task id written in the sentence counts when that task really has a due.
+function namesTaskWithDue(sentence) {
+  return [...sentence.matchAll(TASK_ID)].some(([id]) => {
+    const task = lookupTask(id);
+    return Boolean(task) && typeof task === 'object' && realDues(task).length > 0;
+  });
 }
 
 // A quoted `task_id=<ID> due=<T>` is real only when the task exists, <T> is not later than the
 // task's earliest fleet due, and that due is not already past at `now` (opts.now, ms; Date.now()).
 function quotedDueIsReal(taskId, due, now) {
-  const task = fleetTaskLookup(taskId);
+  const task = lookupTask(taskId);
   if (!task || typeof task !== 'object') return false; // unknown task
-  const fleet = [task.next_evidence_due, task.hard_deadline].filter((v) => typeof v === 'string' && v !== '');
+  const fleet = realDues(task);
   if (!fleet.length) return false; // the task has no due
   let earliest = null;
   for (const v of fleet) {
@@ -281,6 +335,7 @@ function quotedDueIsReal(taskId, due, now) {
 
 function hasDueTask(sentence, opts = {}) {
   const now = typeof opts.now === 'number' ? opts.now : Date.now();
+  if (namesTaskWithDue(sentence)) return true;
   return [...sentence.matchAll(FLEET_DUE)].some(([, taskId, due]) => {
     const day = due.slice(0, 10);
     const date = new Date(`${day}T00:00:00Z`);

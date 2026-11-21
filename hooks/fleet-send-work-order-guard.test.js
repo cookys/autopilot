@@ -2,6 +2,8 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const guard = require('./fleet-send-work-order-guard');
@@ -111,6 +113,116 @@ test('broadcast to @channel is allowed', () => {
 
 test('off switch allows the work order', () => {
   assert.equal(call('mcp__fleet__send', WORK, {}, { AUTOPILOT_SEND_WORK_ORDER_GUARD: 'off' }), null);
+});
+
+function transcriptWith(channel) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fleet-guard-tx-'));
+  const transcript_path = path.join(dir, 'turn.jsonl');
+  const line = JSON.stringify({ type: 'user', message: { role: 'user', content: channel } });
+  fs.writeFileSync(transcript_path, `${line}\n`);
+  return transcript_path;
+}
+
+test('reply to a courier wake is denied and names the task_id', () => {
+  const messageId = '01FAKEWAKE0000000000000001';
+  const taskId = '01M7XM2E0WF2NDPPHQ5KA3KBZS';
+  const transcript_path = transcriptWith(
+    `<channel source="fleet" from="cookys/aimax395/courier@gen1" message_id="${messageId}" kind="chat">\nwake\ntask_id: ${taskId}\n</channel>`,
+  );
+  const out = guard.decide({
+    tool_name: 'mcp__fleet__reply',
+    transcript_path,
+    tool_input: { message_id: messageId, content: '收到' },
+  });
+  assert.equal(out.hookSpecificOutput.permissionDecision, 'deny');
+  const reason = out.hookSpecificOutput.permissionDecisionReason;
+  assert.match(reason, /不能回 courier/);
+  assert.match(reason, /task_comment/);
+  assert.match(reason, new RegExp(taskId));
+});
+
+test('reply to a member message is allowed', () => {
+  const messageId = '01FAKEMEMBERMSG00000000001';
+  const transcript_path = transcriptWith(
+    `<channel source="fleet" from="cookys/aimax395/pm--claude" message_id="${messageId}" kind="chat">\nhello\n</channel>`,
+  );
+  assert.equal(guard.decide({
+    tool_name: 'mcp__fleet__reply',
+    transcript_path,
+    tool_input: { message_id: messageId, content: '收到' },
+  }), null);
+});
+
+test('reply to an unknown message id is allowed', () => {
+  const transcript_path = transcriptWith(
+    '<channel source="fleet" from="cookys/aimax395/courier" message_id="01FAKEOTHER0000000000000001" kind="chat">\ntask_id: 01M7XM2E0WF2NDPPHQ5KA3KBZS\n</channel>',
+  );
+  assert.equal(guard.decide({
+    tool_name: 'mcp__fleet__reply',
+    transcript_path,
+    tool_input: { message_id: '01FAKEMISSING0000000000001', content: '收到' },
+  }), null);
+});
+
+const BRIEF = '請各席回報：讀 ~/.claude/settings.json 的 model 與 effort 欄位，並算 ~/.claude/CLAUDE.md 的 sha256';
+
+test('a brief that tells seats to read ~/.claude is denied', () => {
+  for (const tool of ['mcp__fleet__dispatch', 'mcp__fleet__send', 'mcp__fleet__task_comment']) {
+    const field = tool.endsWith('dispatch') ? 'task' : tool.endsWith('task_comment') ? 'text' : 'content';
+    const out = guard.decide({ tool_name: tool, tool_input: { to: 'ns/h/peer', [field]: BRIEF } });
+    assert.equal(out && out.hookSpecificOutput.permissionDecision, 'deny', tool);
+    assert.match(out.hookSpecificOutput.permissionDecisionReason, /~\/\.claude|operator|操作員/);
+  }
+});
+
+test('$HOME/.claude outside projects is denied', () => {
+  for (const content of [
+    '請讀 $HOME/.claude/settings.json',
+    '請讀 /home/someone/.claude/settings.json',
+    '請讀 /Users/someone/.claude/settings.json',
+  ]) {
+    const out = guard.decide({
+      tool_name: 'mcp__fleet__send',
+      tool_input: { to: 'ns/h/peer', content },
+    });
+    assert.equal(out && out.hookSpecificOutput.permissionDecision, 'deny', content);
+  }
+});
+
+test('a seat memory path under .claude/projects is allowed', () => {
+  assert.equal(guard.decide({
+    tool_name: 'mcp__fleet__send',
+    tool_input: { to: 'ns/h/peer', content: '~/.claude/projects/abc123/memory 是各席自己的記憶' },
+  }), null);
+});
+
+test('a clause that forbids reading ~/.claude is allowed', () => {
+  assert.equal(guard.decide({
+    tool_name: 'mcp__fleet__dispatch',
+    tool_input: { task: '不需要讀 ~/.claude；用你自己 context 的版本' },
+  }), null);
+});
+
+test('an English do-not-read line covering ~/.claude is allowed', () => {
+  assert.equal(guard.decide({
+    tool_name: 'mcp__fleet__send',
+    tool_input: { to: 'ns/h/peer', content: 'Do not read ~/.claude, ~/.codex, ~/.autopilot' },
+  }), null);
+});
+
+test('a negated other home then a bare ~/.claude read is denied', () => {
+  const out = guard.decide({
+    tool_name: 'mcp__fleet__send',
+    tool_input: { to: 'ns/h/peer', content: '不要讀 ~/.codex。請讀 ~/.claude/settings.json' },
+  });
+  assert.equal(out && out.hookSpecificOutput.permissionDecision, 'deny');
+});
+
+test('text with no .claude path is allowed', () => {
+  assert.equal(guard.decide({
+    tool_name: 'mcp__fleet__task_comment',
+    tool_input: { task_id: '01M7XM2E0WF2NDPPHQ5KA3KBZS', text: '這則沒有家目錄設定路徑。' },
+  }), null);
 });
 
 test('cli denies the work order and the off switch allows it', () => {

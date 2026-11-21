@@ -189,7 +189,7 @@
         ]
       },
       {
-        "matcher": "mcp__fleet__send|mcp__fleet__reply|mcp__fleet__dispatch",
+        "matcher": "mcp__fleet__send|mcp__fleet__reply|mcp__fleet__dispatch|mcp__fleet__task_comment",
         "hooks": [
           {
             "type": "command",

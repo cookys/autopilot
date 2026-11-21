@@ -118,15 +118,15 @@ assert.ok(/total=/.test(spawnSync(process.execPath, [REPORT], { encoding: 'utf8'
 
 // 9. single-line header format
 const beforeSingle = logLines().length;
-const singleShadow = runHook(call('Engine: haiku | Role: stats | Lane: pm | Size: XS\nx'), LEAD('shadow'));
+const singleShadow = runHook(call('Engine: sonnet | Role: stats | Lane: pm | Size: XS\nx'), LEAD('shadow'));
 assert.strictEqual(decision(singleShadow), undefined);
 assert.strictEqual(logLines().length, beforeSingle + 1);
 assert.strictEqual(JSON.parse(logLines().pop()).Lane, 'pm');
-assert.strictEqual(decision(runHook(call('Engine: haiku | Role: stats | Lane: pm | Size: XS\nx'), LEAD('enforce'))), 'deny');
-assert.strictEqual(decision(runHook(call('Engine: haiku | Role: reviewer | Lane: pm | Size: XS\nx'), LEAD('shadow'))), undefined);
-assert.strictEqual(decision(runHook(call('Engine: haiku | Role: reviewer | Lane: pm | Size: XS\nx'), LEAD('enforce'))), undefined);
+assert.strictEqual(decision(runHook(call('Engine: sonnet | Role: stats | Lane: pm | Size: XS\nx'), LEAD('enforce'))), 'deny');
+assert.strictEqual(decision(runHook(call('Engine: sonnet | Role: reviewer | Lane: pm | Size: XS\nx'), LEAD('shadow'))), undefined);
+assert.strictEqual(decision(runHook(call('Engine: sonnet | Role: reviewer | Lane: pm | Size: XS\nx'), LEAD('enforce'))), undefined);
 assert.strictEqual(logLines().length, beforeSingle + 1);
-assert.strictEqual(decision(runHook(call('Engine: haiku (intentional: needs judgment) | Role: stats | Lane: pm | Size: XS\nx'), LEAD('enforce'))), undefined);
+assert.strictEqual(decision(runHook(call('Engine: sonnet (intentional: needs judgment) | Role: stats | Lane: pm | Size: XS\nx'), LEAD('enforce'))), undefined);
 
 fs.rmSync(tmpRoot, { recursive: true, force: true });
 console.log('PASS: dispatch-model-guard-mechanical-reroute.test.js');

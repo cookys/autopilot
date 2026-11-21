@@ -892,6 +892,38 @@ test('local by URL: a listed RFC1918 address is local-served; unlisted, public a
   assert.equal(out172.cls, 'local_name_external_host', 'listed address outside 172.16/12 is refused');
 });
 
+test('local by URL: RFC1918 in ~/.autopilot config local_gateway_hosts is local-served; absent, public and unparsable stay refused', () => {
+  const auto = path.join(tmp, 'autopilot');
+  const cfgFile = path.join(tmp, 'user-gateway-config.json');
+  const impl = { AUTOPILOT_TASK_SIZE: 'M', AUTOPILOT_TASK_ROLE: 'implementer', AUTOPILOT_TASK_SCOPE: 'docs/a.md', AUTOPILOT_TASK_CLASS: 'simple-script' };
+  const rfc1918 = [10, 1, 2, 3].join('.');
+  const publicIp = [198, 51, 100, 7].join('.');
+  const qwen = (host, body) => {
+    fs.writeFileSync(cfgFile, body);
+    return gate.check({
+      runner: 'cc-shim', model: 'Qwen3.8-27B-QUASAR-NVFP4', endpoint: 'qwen_local',
+      env: {
+        ...impl,
+        AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL: `http://${host}:9/v1`,
+        AUTOPILOT_CONFIG: cfgFile,
+      },
+      cwd: auto,
+    });
+  };
+  const listed = qwen(rfc1918, JSON.stringify({ local_gateway_hosts: [rfc1918] }));
+  assert.equal(listed.allowed, true, 'RFC1918 address listed in the user config is local-served');
+  assert.equal(listed.family, 'alibaba');
+  const absent = qwen(rfc1918, JSON.stringify({ local_gateway_hosts: [] }));
+  assert.equal(absent.allowed, false);
+  assert.equal(absent.cls, 'local_name_external_host', 'same address absent from the user config is refused');
+  const pub = qwen(publicIp, JSON.stringify({ local_gateway_hosts: [publicIp] }));
+  assert.equal(pub.allowed, false);
+  assert.equal(pub.cls, 'local_name_external_host', 'public address listed in the user config is refused');
+  const bad = qwen(rfc1918, '{');
+  assert.equal(bad.allowed, false);
+  assert.equal(bad.cls, 'local_name_external_host', 'unparsable user config adds nothing and is refused');
+});
+
 // Scoped review exception (PM 01M7XP968Q66): glm_local may act as the non-scoring ThinkSmart UX
 // reference reviewer only. repos/roles on an entry narrow it; an entry without them is unchanged.
 const GLM_BEFORE = '2026-11-25T12:00:00+08:00';

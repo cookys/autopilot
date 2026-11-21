@@ -442,6 +442,13 @@ An orchestrator handing off a long unit starts its dead-man timer before ending 
 `/l4`–`/l6` keep their stricter no-polling clause: the dead-man timer is itself a background task — never
 foreground `sleep`, never `Monitor`.
 
+### 長時間工作（超過 15 分鐘）
+
+預期超過 15 分鐘的工作在背景起跑,並綁定到對應的 fleet 任務:開跑後用
+`fleet watch --pid <pid> --log <abs log> --task <fleet task id>`(session 內用 fleet MCP 的
+`watch` tool,傳 pid、log 路徑與 task id),讓 courier 在程序結束、檔案出現、指令 exit 0 或
+timeout 時喚醒席位;絕不 sleep、不輪詢。完整參數與用法以 fleet plugin 的 `fleet-usage` skill 為準。
+
 ### Urgent
 
 - Smallest possible diff, fastest path to stable; the size stays what Sizing says. A DB migration ⇒ STOP:

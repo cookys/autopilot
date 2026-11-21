@@ -10,6 +10,13 @@ description: >
 
 Scope: applies to a session that dispatched or coordinates other members. A stuck member sends nothing, so the lead detects and responds on a fixed rule, not on good intentions.
 
+## Patrol (the first step once you go)
+
+`fleet pm status` prints one line per project. For any project shown stuck or overdue, drill down with
+`fleet pm <project> status` (a project name, or a task id / 8+ char prefix): every unfinished task of
+that project, stuck or overdue first. This is what the lead runs once a trigger fires — when you go is
+still event-driven (Work orders, Detection), this is what you do there.
+
 ## Detection
 
 | Condition (mechanical) | Verdict |

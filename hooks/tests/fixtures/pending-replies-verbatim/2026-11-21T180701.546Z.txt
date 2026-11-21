@@ -1,0 +1,9 @@
+The autopilot plugin sent a message:
+[待決回覆]
+d-2d8fc809｜twgs 上的 codepower 帳號在 docker 群… → 是
+d-e7073a6d｜要不要在 aimax395 team 帳號產生一把只能寫 N… → A
+d-78a8193e｜入口搬到 twgs 時，NPM 那 14 條轉發規則要改成區… → A
+d-7de34d1f｜codepower（公司員工補助申請站）要把最新版部署到正式… → A
+d-afedfaf0｜要不要規定每條線已合併還沒上線最多 2 張，超過就停止合併、… → A
+
+This is how Claude Code surfaces a prompt a plugin submits between turns — it starts this turn in the user's place. Address the message above.

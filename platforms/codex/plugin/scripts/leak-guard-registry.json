@@ -185,6 +185,26 @@
       "path": "project/backlog/BACKLOG.md",
       "category": "host",
       "reason": "backlog rows reference internal host labels as facts; not credentials"
+    },
+    {
+      "path": "hooks/tests/fixtures/pending-replies-verbatim/2026-11-21T201802.776Z.txt",
+      "category": "host",
+      "reason": "verbatim transcript fixture: internal host labels inside the operator panel excerpts are the subject under test"
+    },
+    {
+      "path": "hooks/tests/fixtures/pending-replies-verbatim/2026-11-21T184537.564Z.txt",
+      "category": "host",
+      "reason": "verbatim transcript fixture: internal host labels inside the operator panel excerpts are the subject under test"
+    },
+    {
+      "path": "hooks/tests/fixtures/pending-replies-verbatim/2026-11-21T180701.546Z.txt",
+      "category": "host",
+      "reason": "verbatim transcript fixture: internal host labels inside the operator panel excerpts are the subject under test"
+    },
+    {
+      "path": "hooks/tests/fixtures/pending-replies-verbatim/2026-11-21T040111.553Z.txt",
+      "category": "host",
+      "reason": "verbatim transcript fixture: internal host labels inside the operator panel excerpts are the subject under test"
     }
   ]
 }

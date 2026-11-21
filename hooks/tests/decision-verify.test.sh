@@ -151,6 +151,75 @@ is_open "$C1"; assert_eq "$?" 0 "two unreachable answers: option card stays open
 is_open "$C2"; assert_eq "$?" 0 "two unreachable answers: free-text card stays open"
 assert_contains "$HOUT" "claim_failed (unreachable" "two unreachable answers: claim failure reported"
 assert_eq "$(count 'decision verify')" 0 "two unreachable answers: no verifies"
+# --- verbatim multi-card replies from the real transcript (2026-11-21, fleet task 01M7ZRVW).
+# The fixture files are byte-identical to the operator's panel messages (fullwidth ｜ and …
+# untouched); card ids — and on the 04:01Z block the answer ids — are substituted with fresh
+# test cards. Every card must be claimed and closed.
+FIXDIR="$REPO_ROOT/hooks/tests/fixtures/pending-replies-verbatim"
+open_card_q() { node -e 'process.stdout.write(require(process.argv[1]).openDecision({cwd:process.argv[2],root:"root-t",session:null,question:process.argv[3],options:[{label:"A",description:"a"},{label:"B",description:"b"}],not_authorized:"irreversible"}).id)' "$OD" "$R" "$1"; }
+run_verbatim() { # run_verbatim <file> <real_id>... ; PRECLAIM_A=1 pre-claims option A and
+  # substitutes the stored answer ids (for the block that carries them)
+  local file="$1"; shift
+  local sedscript="$TEST_TMP/sed-verbatim.$$.sed"; : > "$sedscript"
+  FRESH=()
+  for real in "$@"; do
+    local excerpt; excerpt="$(awk -F'｜' -v id="$real" '$1 == id { sub(" → .*", "", $2); print $2 }' "$file")"
+    assert_contains "$excerpt" "…" "verbatim fixture: excerpt extracted for $real"
+    local c; c="$(open_card_q "$excerpt")"
+    FRESH+=("$c")
+    printf 's/%s/%s/g\n' "$real" "$c" >> "$sedscript"
+    if [ "${PRECLAIM_A:-0}" = 1 ]; then
+      local aid realaid
+      realaid="$(awk -F'｜' -v id="$real" '$1 == id { print $NF }' "$file")"
+      aid="$(node -e 'const{claim}=require(process.argv[1]);console.log(claim(process.argv[2],{option:"A"}).answer_id)' "$REPO_ROOT/scripts/lib/fleet-decision.js" "$c")"
+      printf 's/%s/%s/g\n' "$realaid" "$aid" >> "$sedscript"
+    fi
+  done
+  # The hook payload starts at the [待決回覆] marker (the panel message's prefix line stays
+  # in the fixture verbatim; the relay requires the marker as the first line).
+  REPLACED="$(sed -f "$sedscript" "$file" | sed -n '/^\[待決回覆\]/,$p')"
+}
+verbatim_ok() { # verbatim_ok <n_claims> <label> — every fresh card closed
+  local i=0
+  for c in "${FRESH[@]}"; do
+    is_open "$c"; assert_eq "$?" 1 "verbatim $2: card $i closed"
+    i=$((i + 1))
+  done
+  assert_eq "$(count 'decision claim')" "$1" "verbatim $2: $1 claims"
+}
+reset ok; : > "$STUB/calls"
+run_verbatim "$FIXDIR/2026-11-21T201802.776Z.txt" d-22abf53f d-54cf7c0f
+hook "$REPLACED"
+verbatim_ok 2 "20:18Z"
+assert_eq "$(count 'decision verify')" 2 "verbatim 20:18Z: two verifies"
+reset ok; : > "$STUB/calls"
+run_verbatim "$FIXDIR/2026-11-21T184537.564Z.txt" d-c2bfda0e d-6b28c37c d-cf2bbabf
+hook "$REPLACED"
+verbatim_ok 3 "18:45Z"
+reset ok; : > "$STUB/calls"
+run_verbatim "$FIXDIR/2026-11-21T180701.546Z.txt" d-2d8fc809 d-e7073a6d d-78a8193e d-7de34d1f d-afedfaf0
+hook "$REPLACED"
+verbatim_ok 5 "18:07Z"
+reset ok; : > "$STUB/calls"
+PRECLAIM_A=1 run_verbatim "$FIXDIR/2026-11-21T040111.553Z.txt" d-4723aa10 d-99ab5782
+hook "$REPLACED"
+verbatim_ok 2 "04:01Z (answer ids carried: the 2 claims are the pre-claims)"
+assert_eq "$(count 'decision verify')" 2 "verbatim 04:01Z: two verifies, no new claims"
+# negative control: a relay copy that skips the missing-answer-id claim path leaves the
+# 20:18Z block's cards open — the case goes red on this mutant.
+MUT_RELAY="$TEST_TMP/advisory-relay.noid.js"
+node -e '
+const fs = require("fs");
+const src = fs.readFileSync(process.argv[1], "utf8");
+const needle = "if (!/^[0-9A-Za-z]{20,40}$/.test(aid)) {";
+if (!src.includes(needle)) process.exit(3);
+fs.writeFileSync(process.argv[2], src.replace(needle, "if (false) {"));
+' "$REPO_ROOT/hooks/advisory-relay.js" "$MUT_RELAY" || fail "negative control: missing-id anchor not found in advisory-relay.js"
+reset ok; : > "$STUB/calls"
+run_verbatim "$FIXDIR/2026-11-21T201802.776Z.txt" d-22abf53f d-54cf7c0f
+MUT_OUT="$(printf '%s' "$REPLACED" | node "$MUT_RELAY" 2>/dev/null)"
+assert_not_contains "$(cat "$STUB/calls")" "decision claim" "negative control: mutant without the missing-id claim path makes no claim"
+is_open "${FRESH[0]}"; assert_eq "$?" 0 "negative control: mutant leaves the verbatim card open (case is red)"
 # line without any answer_id
 reset ok; C="$(open_card_x)"; hook "$(printf '[待決回覆]\n%s｜Q? → A\n' "$C")"
 is_open "$C"; assert_eq "$?" 1 "no answer_id: claimed, delivered and closed"

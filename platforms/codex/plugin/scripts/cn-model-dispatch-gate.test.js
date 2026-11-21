@@ -626,10 +626,10 @@ test('(e) local qwen still hits transcript, novel and sensitive; core-size does 
   assert.equal(gate.check({ ...LOCAL, env: { ...OK, AUTOPILOT_TASK_SCOPE: '.env' }, cwd: auto }).cls, 'sensitive');
 });
 
-test('(f) local_deny_repos bars revival and aaa-race, and a repo may only add names', () => {
+test('(f) local_deny_repos bars twgameproject and aaa-race, and a repo may only add names', () => {
   const LOCAL = { runner: 'cc-shim', model: 'Qwen3.8-27B-QUASAR-NVFP4', endpoint: 'qwen_local' };
   const allow = { ...OK, AUTOPILOT_TASK_CLASS: 'log-summary' };
-  for (const name of ['revival-world-city-war', 'aaa-race-3']) {
+  for (const name of ['twgameproject-main', 'aaa-race-3']) {
     const dir = path.join(tmp, name);
     fs.mkdirSync(dir, { recursive: true });
     const g = spawnSync('git', ['init', '-q', '-b', 'develop'], { cwd: dir, encoding: 'utf8' });
@@ -638,7 +638,7 @@ test('(f) local_deny_repos bars revival and aaa-race, and a repo may only add na
     assert.equal(c.cls, 'local-deny-repo', name);
     assert.equal(c.line, 'cn_model_dispatch_barred alibaba local-deny-repo (01M7E2A1, d-1dfcf757)');
   }
-  assert.equal(gate.check({ ...LOCAL, env: OK, cwd: path.join(tmp, 'revival-world-city-war') }).cls, 'local-deny-repo', 'deny wins over a missing class');
+  assert.equal(gate.check({ ...LOCAL, env: OK, cwd: path.join(tmp, 'twgameproject-main') }).cls, 'local-deny-repo', 'deny wins over a missing class');
   const extRepo = path.join(tmp, 'deny-ext', 'autopilot');
   fs.mkdirSync(path.join(extRepo, '.claude'), { recursive: true });
   fs.writeFileSync(path.join(extRepo, '.claude', 'cn-model-gate.json'), JSON.stringify({ local_deny_repos: ['autopilot'], local_task_classes: ['extra-class'] }));
@@ -652,7 +652,7 @@ test('(f) local_deny_repos bars revival and aaa-race, and a repo may only add na
   assert.equal(g2.status, 0, g2.stderr);
   assert.equal(gate.check({ ...LOCAL, env: { ...OK, AUTOPILOT_TASK_CLASS: 'extra-class' }, cwd: classRepo }).allowed, true, 'repo may add a class');
   assert.equal(gate.check({ ...LOCAL, env: { ...OK, AUTOPILOT_TASK_CLASS: 'format-convert' }, cwd: classRepo }).allowed, true, 'a starter class cannot be removed');
-  const cleared = path.join(tmp, 'revival-cleared');
+  const cleared = path.join(tmp, 'aaa-race-cleared');
   fs.mkdirSync(path.join(cleared, '.claude'), { recursive: true });
   fs.writeFileSync(path.join(cleared, '.claude', 'cn-model-gate.json'), JSON.stringify({ local_deny_repos: [] }));
   const g3 = spawnSync('git', ['init', '-q', '-b', 'develop'], { cwd: cleared, encoding: 'utf8' });
@@ -861,4 +861,62 @@ test('local by URL: loopback, gateway host, external host, cloud CN, model auto,
     runner: 'cc-shim', model: 'auto', endpoint: 'Qwen_Local/Qwen3.8-27B-QUASAR-NVFP4', env: impl, cwd: auto,
   });
   assert.equal(suffixed.allowed, true, 'case and a model suffix still name the local endpoint');
+});
+
+// Scoped review exception (PM 01M7XP968Q66): glm_local may act as the non-scoring ThinkSmart UX
+// reference reviewer only. repos/roles on an entry narrow it; an entry without them is unchanged.
+const GLM_BEFORE = '2026-11-25T12:00:00+08:00';
+const GLM_AFTER = '2026-11-29T00:00:00+08:00';
+const GLM_LOCAL = { runner: 'cc-shim', model: 'GLM-5.3', endpoint: 'glm_local' };
+const GLM_REF = { AUTOPILOT_TASK_SIZE: 'S', AUTOPILOT_TASK_ROLE: 'ux-reference-reviewer', AUTOPILOT_TASK_SCOPE: 'docs/a.md', AUTOPILOT_TASK_CLASS: 'test-scaffold' };
+
+test('review_local_exceptions: glm_local is a reference reviewer for thinksmart* only, in the shipped window', () => {
+  const ts = excRepo('thinksmart-web');
+  const other = excRepo('autopilot-glm-ref');
+  const ok = gate.check({ ...GLM_LOCAL, env: GLM_REF, cwd: ts, now: GLM_BEFORE });
+  assert.equal(ok.allowed, true, 'thinksmart + glm_local + reference role is allowed');
+  assert.equal(ok.family, 'zhipu');
+  const scoring = gate.check({ ...GLM_LOCAL, env: { ...GLM_REF, AUTOPILOT_TASK_ROLE: 'reviewer' }, cwd: ts, now: GLM_BEFORE });
+  assert.equal(scoring.cls, 'review-role', 'a scoring reviewer role stays refused');
+  assert.equal(gate.check({ ...GLM_LOCAL, env: { ...GLM_REF, AUTOPILOT_TASK_ROLE: 'qc' }, cwd: ts, now: GLM_BEFORE }).cls, 'review-role');
+  assert.equal(gate.check({ ...GLM_LOCAL, env: GLM_REF, cwd: other, now: GLM_BEFORE }).cls, 'review-role', 'another repo is refused');
+  assert.equal(gate.check({ ...GLM_LOCAL, env: GLM_REF, cwd: ts, now: GLM_AFTER }).cls, 'review-role', 'past until is refused');
+  assert.equal(gate.check({ ...GLM_LOCAL, env: GLM_REF, cwd: ts, now: '2026-11-28T23:59:59+08:00' }).cls, 'review-role', 'now == until is refused');
+  assert.equal(gate.check({ ...GLM_LOCAL, env: { ...GLM_REF, AUTOPILOT_TASK_ROLE: 'implementer' }, cwd: ts, now: GLM_BEFORE }).allowed, true, 'implementer role unaffected');
+  // a brief Role: header that names a scoring role cannot hide behind the reference env role
+  const hdr = briefFile('glm-ref-hdr.md', 'Role: reviewer\nSize: S\nScope: docs/a.md\n');
+  assert.equal(gate.check({ ...GLM_LOCAL, env: { ...GLM_REF }, files: [hdr], cwd: ts, now: GLM_BEFORE }).cls, 'review-role', 'a scoring header role still blocks');
+  // qwen_local entry without repos/roles behaves as before, on any repo and role
+  assert.equal(gate.check({ ...EXC_LOCAL, env: EXC_REV, cwd: other, now: EXC_BEFORE }).allowed, true, 'qwen_local unchanged');
+});
+
+// Game repos (operator 2026-11-15 rule: CN models only small mechanical tested work, docs, deps; no
+// sensitive data, core code or novel work). revival* and pinball* leave local_deny_repos and sit behind
+// local_restricted_repos: Task-Class, Size and no touch of deny_paths, else local-restricted-repo.
+const GAME_LOCAL = { runner: 'cc-shim', model: 'Qwen3.8-27B-QUASAR-NVFP4', endpoint: 'qwen_local' };
+const GAME_OK = { AUTOPILOT_TASK_SIZE: 'XS', AUTOPILOT_TASK_ROLE: 'implementer', AUTOPILOT_TASK_SCOPE: 'tools/check_names.py', AUTOPILOT_TASK_CLASS: 'test-scaffold' };
+
+test('local_restricted_repos: revival and pinball take only small mechanical work off protected paths', () => {
+  const rev = excRepo('revival-world-city-war');
+  const pin = excRepo('pinball-table');
+  const tw = excRepo('twgameproject-main');
+  const blocked = (e, cwd) => gate.check({ ...GAME_LOCAL, env: e, cwd }).cls;
+  assert.equal(gate.check({ ...GAME_LOCAL, env: GAME_OK, cwd: rev }).allowed, true, 'revival test-scaffold XS ordinary path');
+  assert.equal(gate.check({ ...GAME_LOCAL, env: { ...GAME_OK, AUTOPILOT_TASK_CLASS: 'simple-script', AUTOPILOT_TASK_SIZE: 'S' }, cwd: pin }).allowed, true, 'pinball simple-script S');
+  assert.equal(blocked({ ...GAME_OK, AUTOPILOT_TASK_CLASS: 'format-convert' }, rev), 'local-restricted-repo', 'class outside the restricted list');
+  assert.equal(blocked({ ...GAME_OK, AUTOPILOT_TASK_CLASS: 'feature' }, rev), 'task-class', 'feature is no local class at all');
+  assert.equal(blocked({ ...GAME_OK, AUTOPILOT_TASK_SIZE: 'M' }, rev), 'local-restricted-repo', 'size M');
+  assert.equal(blocked({ ...GAME_OK, AUTOPILOT_TASK_SIZE: '' }, rev), 'unknown-size', 'missing size is refused');
+  for (const bad of ['Content/Maps/a.txt', 'Source/x/hero.uasset', 'Maps/l.umap', 'raw/dump.csv', 'data/raw/x.csv', 'save/player1/s.json', 'x/Fab/pack.json']) {
+    const c = gate.check({ ...GAME_LOCAL, env: { ...GAME_OK, AUTOPILOT_TASK_SCOPE: 'tools/a.py, ' + bad }, cwd: rev });
+    assert.equal(c.cls, 'local-restricted-repo', bad);
+    assert.equal(c.line, 'cn_model_dispatch_barred alibaba local-restricted-repo (01M7E2A1, d-1dfcf757)');
+  }
+  assert.equal(blocked({ ...GAME_OK, AUTOPILOT_TASK_SIZE: 'M' }, pin), 'local-restricted-repo', 'pinball size M');
+  assert.equal(blocked({ ...GAME_OK, AUTOPILOT_TASK_SCOPE: 'Content/a.txt' }, pin), 'local-restricted-repo', 'pinball Content');
+  for (const tc of ['test-scaffold', 'simple-script', 'feature']) {
+    assert.equal(blocked({ ...GAME_OK, AUTOPILOT_TASK_CLASS: tc }, tw), 'local-deny-repo', 'twgameproject ' + tc);
+  }
+  const art = excRepo('autopilot-restricted-control');
+  assert.equal(gate.check({ ...GAME_LOCAL, env: { ...GAME_OK, AUTOPILOT_TASK_SIZE: 'M', AUTOPILOT_TASK_SCOPE: 'Content/a.txt' }, cwd: art }).allowed, true, 'an unlisted repo is not restricted');
 });

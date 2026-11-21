@@ -63,6 +63,10 @@
 //   local_deny_repos, and [core-dir] and [core-unset] (operator via PM, ledger fadf8dc9). A different
 //   barred family named on the endpoint, and every cloud endpoint, keep [core-size], [core-dir] and
 //   [core-unset]. Past the review window, [review-role] applies and is decided before the later local checks.
+//   [local-restricted-repo] (shipped-only local_restricted_repos; game repos revival* and pinball*, operator
+//   2026-11-15 rule: small mechanical tested work only): a repo matching an entry passes only with Task-Class in
+//   its task_classes, Size in its sizes, and no Scope/New-Files path matching its deny_paths (assets, Content,
+//   raw and player data); else this class, after [task-class]. twgameproject* stays in local_deny_repos.
 //   Two further checks then apply, and only then: [local-deny-repo] the repo directory name matches local_deny_repos; [unknown-task-class]
 //   Task-Class is missing; [task-class] it is not in local_task_classes (format-convert, log-summary,
 //   simple-script, test-scaffold). A different barred family on that endpoint (a kimi model on qwen_local)
@@ -84,7 +88,7 @@
 // Config: scripts/lib/cn-model-gate-defaults.json (starter lists) extended by <repo>/.claude/cn-model-gate.json
 //   (union of every list; a repo can add entries and cannot remove a starter). Fields: sensitive_paths,
 //   sensitive_repos, core_dirs, novel_roles, review_roles, local_task_classes, local_deny_repos.
-//   review_local_exceptions, core_unset_allow and core_unset_fixture_exts are read only from the shipped defaults (not unioned).
+//   review_local_exceptions, local_restricted_repos, core_unset_allow and core_unset_fixture_exts are read only from the shipped defaults (not unioned).
 //   Clock: check(..., { now })
 //   with an ISO string. An explicit now that does not parse fails closed and is not replaced by the real
 //   clock. When now is omitted, Date.now() is used (no env override).
@@ -226,6 +230,26 @@ function loadConfig(root) {
 function shippedReviewExceptions() {
   const raw = loadList(DEFAULTS_PATH).review_local_exceptions;
   return Array.isArray(raw) ? raw : [];
+}
+
+// Shipped defaults only (a repo file cannot loosen it). A repo directory matching an entry's repos globs
+// passes only when Task-Class and Size are in that entry's lists and no scope or New-Files path matches
+// its deny_paths. A missing size never matches the list, so it is refused too.
+function shippedRestrictedRepos() {
+  const raw = loadList(DEFAULTS_PATH).local_restricted_repos;
+  return Array.isArray(raw) ? raw : [];
+}
+
+function restrictedRepoBlocks(repoName, f) {
+  const lower = (a) => (Array.isArray(a) ? a.map((x) => String(x).toLowerCase()) : []);
+  const upper = (a) => (Array.isArray(a) ? a.map((x) => String(x).toUpperCase()) : []);
+  return shippedRestrictedRepos().some((e) => {
+    if (!e || typeof e !== 'object' || !Array.isArray(e.repos) || !matchesAny(repoName, e.repos.map(String))) return false;
+    if (!lower(e.task_classes).includes(f.taskClass)) return true;
+    if (!upper(e.sizes).includes(f.size)) return true;
+    const deny = Array.isArray(e.deny_paths) ? e.deny_paths.map(String) : [];
+    return [...f.scope, ...f.newFiles].some((p) => matchesAny(p, deny));
+  });
 }
 
 // Shipped defaults only. A repo file is not consulted: an empty core_dirs must not be widened
@@ -553,6 +577,7 @@ function check(opts = {}) {
     if (matchesAny(path.basename(root), cfg.local_deny_repos)) return block('local-deny-repo');
     if (!f.taskClass) return block('unknown-task-class');
     if (!cfg.local_task_classes.includes(f.taskClass)) return block('task-class');
+    if (restrictedRepoBlocks(path.basename(root), f)) return block('local-restricted-repo');
   }
   return { allowed: true, family };
 }

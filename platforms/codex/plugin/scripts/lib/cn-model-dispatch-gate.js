@@ -10,11 +10,15 @@
 //                 `Reads-Transcript: yes` header line in the first 8 lines of the brief/spec)
 //   [sensitive]   the repo name or any path in the task's read/write scope matches the sensitive list
 //                 (money/payments, PII, private-home data, keys/credentials, customer data)
-//   [review-role] role is in review_roles (reviewer, review, qc, qc_panel, plan_review, loop_reviewer,
+//   [review-role] role is in review_roles (reviewer, review, qc, qc_panel, plan_review, loop_reviewer, ux-reference-reviewer,
 //                 verifier), regardless of size, including a missing size. The local served family on a
 //                 local-sandbox endpoint is exempt from THIS class only when review_local_exceptions in
 //                 the shipped defaults names that endpoint, now < until, and the repo is not in
 //                 local_deny_repos (d-ede04b92, PM 01M7JPZQ; today qwen_local until 2026-11-21T23:59:59+08:00).
+//                 An entry may carry optional repos (globs on the repo directory name) and roles (every review
+//                 role the task names must be listed); an entry without them applies to any repo and role.
+//                 Today's second entry: glm_local, repos thinksmart*, role ux-reference-reviewer only (a
+//                 non-scoring UX reference reviewer), until 2026-11-28T23:59:59+08:00 (PM 01M7XP968Q66).
 //                 Past until, with no entry, or on a denied repo, the class is review-role. A repo
 //                 .claude/cn-model-gate.json cannot add, extend, or shrink an entry: the window is the
 //                 operator's decision, not a repo's. Every other check still applies. A cloud endpoint
@@ -59,6 +63,10 @@
 //   local_deny_repos, and [core-dir] and [core-unset] (operator via PM, ledger fadf8dc9). A different
 //   barred family named on the endpoint, and every cloud endpoint, keep [core-size], [core-dir] and
 //   [core-unset]. Past the review window, [review-role] applies and is decided before the later local checks.
+//   [local-restricted-repo] (shipped-only local_restricted_repos; game repos revival* and pinball*, operator
+//   2026-11-15 rule: small mechanical tested work only): a repo matching an entry passes only with Task-Class in
+//   its task_classes, Size in its sizes, and no Scope/New-Files path matching its deny_paths (assets, Content,
+//   raw and player data); else this class, after [task-class]. twgameproject* stays in local_deny_repos.
 //   Two further checks then apply, and only then: [local-deny-repo] the repo directory name matches local_deny_repos; [unknown-task-class]
 //   Task-Class is missing; [task-class] it is not in local_task_classes (format-convert, log-summary,
 //   simple-script, test-scaffold). A different barred family on that endpoint (a kimi model on qwen_local)
@@ -80,7 +88,7 @@
 // Config: scripts/lib/cn-model-gate-defaults.json (starter lists) extended by <repo>/.claude/cn-model-gate.json
 //   (union of every list; a repo can add entries and cannot remove a starter). Fields: sensitive_paths,
 //   sensitive_repos, core_dirs, novel_roles, review_roles, local_task_classes, local_deny_repos.
-//   review_local_exceptions, core_unset_allow and core_unset_fixture_exts are read only from the shipped defaults (not unioned).
+//   review_local_exceptions, local_restricted_repos, core_unset_allow and core_unset_fixture_exts are read only from the shipped defaults (not unioned).
 //   Clock: check(..., { now })
 //   with an ISO string. An explicit now that does not parse fails closed and is not replaced by the real
 //   clock. When now is omitted, Date.now() is used (no env override).
@@ -224,6 +232,26 @@ function shippedReviewExceptions() {
   return Array.isArray(raw) ? raw : [];
 }
 
+// Shipped defaults only (a repo file cannot loosen it). A repo directory matching an entry's repos globs
+// passes only when Task-Class and Size are in that entry's lists and no scope or New-Files path matches
+// its deny_paths. A missing size never matches the list, so it is refused too.
+function shippedRestrictedRepos() {
+  const raw = loadList(DEFAULTS_PATH).local_restricted_repos;
+  return Array.isArray(raw) ? raw : [];
+}
+
+function restrictedRepoBlocks(repoName, f) {
+  const lower = (a) => (Array.isArray(a) ? a.map((x) => String(x).toLowerCase()) : []);
+  const upper = (a) => (Array.isArray(a) ? a.map((x) => String(x).toUpperCase()) : []);
+  return shippedRestrictedRepos().some((e) => {
+    if (!e || typeof e !== 'object' || !Array.isArray(e.repos) || !matchesAny(repoName, e.repos.map(String))) return false;
+    if (!lower(e.task_classes).includes(f.taskClass)) return true;
+    if (!upper(e.sizes).includes(f.size)) return true;
+    const deny = Array.isArray(e.deny_paths) ? e.deny_paths.map(String) : [];
+    return [...f.scope, ...f.newFiles].some((p) => matchesAny(p, deny));
+  });
+}
+
 // Shipped defaults only. A repo file is not consulted: an empty core_dirs must not be widened
 // by a repo adding source globs to the allow list (01M7S88YZPPZKVARP0F2SYMRGS).
 function shippedCoreUnsetAllow() {
@@ -337,13 +365,21 @@ function gateNow(opts) {
   return Date.now();
 }
 
-function reviewLocalExempt(endpoint, nowMs, root, denyGlobs) {
+// An entry may narrow itself with repos (globs on the repo directory name) and roles (every review
+// role the task names must be in the list). An entry without them applies to any repo and role.
+function reviewLocalExempt(endpoint, nowMs, root, denyGlobs, reviewHits = []) {
   if (nowMs == null) return false;
-  if (matchesAny(path.basename(root), denyGlobs)) return false;
+  const repoName = path.basename(root);
+  if (matchesAny(repoName, denyGlobs)) return false;
   const ep = String(endpoint || '');
   return shippedReviewExceptions().some((e) => {
     if (!e || typeof e !== 'object') return false;
     if (String(e.endpoint || '') !== ep) return false;
+    if (e.repos !== undefined && !(Array.isArray(e.repos) && matchesAny(repoName, e.repos.map(String)))) return false;
+    if (e.roles !== undefined) {
+      const roles = Array.isArray(e.roles) ? e.roles.map((r) => String(r).toLowerCase()) : [];
+      if (!reviewHits.every((r) => roles.includes(r))) return false;
+    }
     const until = Date.parse(String(e.until || ''));
     return Number.isFinite(until) && nowMs < until;
   });
@@ -506,8 +542,9 @@ function check(opts = {}) {
   // env/header Role: implementer cannot lower. The local served family skips this class only
   // inside a shipped review_local_exceptions window on a repo outside local_deny_repos.
   const reviewRolesToCheck = [f.role, f.railRole, f.headerRole].filter(Boolean);
-  if (reviewRolesToCheck.some((r) => cfg.review_roles.includes(r))) {
-    const exempt = localServed && reviewLocalExempt(effectiveEndpoint, gateNow(opts), root, cfg.local_deny_repos);
+  const reviewHits = reviewRolesToCheck.filter((r) => cfg.review_roles.includes(r));
+  if (reviewHits.length) {
+    const exempt = localServed && reviewLocalExempt(effectiveEndpoint, gateNow(opts), root, cfg.local_deny_repos, reviewHits);
     if (!exempt) return block('review-role');
   }
   // Proven-local served family: size above S is not a CN core-size bar (gpu-lead 27B). A missing size still fails closed below.
@@ -540,6 +577,7 @@ function check(opts = {}) {
     if (matchesAny(path.basename(root), cfg.local_deny_repos)) return block('local-deny-repo');
     if (!f.taskClass) return block('unknown-task-class');
     if (!cfg.local_task_classes.includes(f.taskClass)) return block('task-class');
+    if (restrictedRepoBlocks(path.basename(root), f)) return block('local-restricted-repo');
   }
   return { allowed: true, family };
 }

@@ -77,7 +77,7 @@ for (const cols of [209, 120, 80]) {
     expect(all).not.toContain('d: 待決')
     expect(all).not.toContain('送出')
     expect(all).not.toContain('1: 現況')
-    expect(all.endsWith('▴ 展開')).toBe(true)
+    expect(all.endsWith('▴')).toBe(true)
     expect(displayWidth(all)).toBeLessThanOrEqual(cols)
     expect(h.isOpen(), 'the host Pane is never opened').toBe(false)
     await band.unmount()
@@ -107,7 +107,7 @@ test('v74 host: /live-pane opens the full-width page at 209 columns: title in th
   for (const r of [rows[0], rows[rows.length - 1]]) expect(displayWidth(r), r).toBe(209) // the borders; a body row's right `│` is pushed to the edge by the engine (flexGrow)
   for (const r of rows.slice(1, -1)) { expect(r.startsWith('│ ')).toBe(true); expect(r.endsWith(' │')).toBe(true) }
   const bandRow = text(tree.children![1])
-  expect(bandRow.endsWith('▾ 收起')).toBe(true)
+  expect(bandRow.endsWith('▾')).toBe(true)
   expect(bandRow).not.toContain('圓桌')
   expect(displayWidth(bandRow)).toBeLessThanOrEqual(209)
   await band.unmount()

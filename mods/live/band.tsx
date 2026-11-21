@@ -10,6 +10,7 @@ import { PICK_MARK, QUICK_SEP, SHELL_MENUS } from './shell'
 import type { LeftItem, ShellMenuId, ShellPlan } from './shell'
 import type { DecideState, LiveSnapshot, PaneLine, PaneTab, Seg, SlotId } from './model'
 import { GLYPHS } from '../tux/glyphs.ts'
+import { v75On } from './v75'
 import { PALETTE } from '../tux/palette.ts'
 import { actionSeg, cardParas, dimProps, drawSeg, forgeBar, moreSeg, wrapPlain } from './ui'
 import { fixedWindow, followsTail, thumbOf } from './scrollmath'
@@ -268,7 +269,7 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
   const qnode = quota === null || qpad < 2 ? [] : [<Text key="[REDACTED]">{' '.repeat(qpad)}</Text>, <Text key="[REDACTED]" {...drawSeg(quota)} wrap="truncate">{quota.text}</Text>]
   // v7.4 S1: with `onTogglePane` the cell just left of the host's `[-]` is a pressable ▴ (pane closed) / ▾ (pane open); the glyph is the row's last cell (BAND_TOGGLE_ROOM)
   const toggleNode = onTogglePane === undefined ? [] : (() => {
-    const glyph = t(paneOpen ? 'v75.toggle_close' : 'v75.toggle_open', { open: GLYPHS.structure.open, closed: PANE_TOGGLE_CLOSED })
+    const glyph = v75On() ? t(paneOpen ? 'v75.toggle_close' : 'v75.toggle_open', { open: GLYPHS.structure.open, closed: PANE_TOGGLE_CLOSED }) : paneOpen ? GLYPHS.structure.open : PANE_TOGGLE_CLOSED
     const used = left.width + forgeW + (qnode.length === 0 ? 0 : qpad + qw)
     const pad = Math.max(0, columns - BAND_TOGGLE_ROOM - used)
     const draw = <Text key="[REDACTED]" {...drawSeg(moreSeg())} wrap="truncate">{glyph}</Text>

@@ -18,6 +18,7 @@ import { brokenRow, pendingMissingReason, pendingSourceMissing, wrapRow } from '
 import type { Row } from './rows'
 import { STRIP_SPLIT_COLS } from './layout'
 import { PICK_KEYS } from '../v74/contract'
+import { v75On } from '../v75'
 import type { DecideCard } from '../v74/contract'
 
 // ---- view state and the key reducer ----
@@ -484,7 +485,7 @@ function v74Card(c: DecideCard, i: number, selected: boolean, nav: DecideNav, ct
   // with its own card:N, so the cursor event writes the index the ▸ already has.
   const head = box
     ? [seg(mark + '  ' + String(i + 1) + '. ', selected ? {} : { press: 'card:' + i }), title, seg('：' + c.question)]
-    : [seg(mark + '  ' + String(i + 1) + '. ', selected ? {} : { press: 'card:' + i }), title, seg('：' + c.question)] // v7.5: the card number on the Pane's left edge is the click target (fullscreen only; elsewhere a label)
+    : [seg(mark + '  ' + String(i + 1) + '. ', selected || !v75On() ? {} : { press: 'card:' + i }), title, seg('：' + c.question)] // v7.5: the card number on the Pane's left edge is the click target (fullscreen only; elsewhere a label)
   out.push(box ? head : truncateSegs(head, cols))
   const bg = c.background ?? t('v74.d.bg_none')
   // J1: the real Pane draws cards through this path (not boxOpen): the open card's background is shown in full (one row per line, wrapped on the label's hanging indent, never cut), the frame scrolls it; the other cards keep one cut row

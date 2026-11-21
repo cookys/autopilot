@@ -4,7 +4,8 @@ import decideFx from './fixtures/v74/decide.fixture'
 import { decidePage, decideReduce, NO_NAV, previewItems, previewStale } from './pages/decide'
 import type { DecideNav } from './pages/decide'
 import { makeT } from './i18n'
-import { v75DetailOffset, v75Hint } from './v75'
+import { setV75On, v75DetailOffset, v75Hint, v75SingleFlight } from './v75'
+import { pageHotkeys } from './pane'
 import { paneRank } from './pane'
 import { V75_PANE_MIN_ROWS, v75BandRows, v75EscStep, v75FocusNext, v75Plan, v75ReopenAfterReload, v75ScrollRoute } from './v75'
 import type { V75BandIn } from './v75'
@@ -265,4 +266,29 @@ test('v75 I2: a background with line breaks is one Pane row per line (the Pane i
   const rows = decidePage.render(ctx).body.map(text).join('\n')
   expect(rows).toContain('第 1 行')
   expect(rows).toContain('第 80 行')
+})
+
+test('v75 K1: two presses back to back run one action; the second is dropped and logged, the state ends consistent', async () => {
+  let open = false
+  const log: string[] = []
+  const toggle = v75SingleFlight(async () => { const was = open; await new Promise(r => setTimeout(r, 5)); open = !was }, () => { log.push('toggle-busy') })
+  await Promise.all([toggle(), toggle()])
+  expect(open).toBe(true) // one open, not open-then-close
+  expect(log).toEqual(['toggle-busy'])
+  await toggle()
+  expect(open).toBe(false) // after the first settled a press works again
+})
+
+test('v75 K2: AUTOPILOT_LIVE_V75=0 (the switch) takes j / k off the decide page and the card number off the click targets; on brings them back', () => {
+  const pressOf = () => JSON.stringify(decidePage.render({ ...(ctxOf() as object), decide: { ...nav0, cursor: 0 } } as never))
+  setV75On(true)
+  const onN = (pressOf().match(/card:/g) ?? []).length
+  expect(onN).toBeGreaterThan(0)
+  setV75On(false)
+  expect((pressOf().match(/card:/g) ?? []).length).toBeLessThan(onN)
+  expect(pageHotkeys('decide')).not.toContain('j')
+  expect(pageHotkeys('decide')).not.toContain('k')
+  setV75On(true)
+  expect(pageHotkeys('decide')).toContain('j')
+  expect(pageHotkeys('decide')).toContain('k')
 })

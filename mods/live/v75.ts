@@ -8,6 +8,10 @@ import { displayWidth, truncateToWidth } from './model'
 import type { Seg } from './model'
 import type { DecideCard } from './v74/contract'
 
+// K2: AUTOPILOT_LIVE_V75=0 puts every v7.5 behaviour behind this one switch (register.ts reads the env at each draw and sets it)
+let v75Switch = true
+export const v75On = (): boolean => v75Switch
+export const setV75On = (on: boolean): void => { v75Switch = on }
 export const V75_BAND_ROWS = 5 // a band with a pending card: card head, options, note / preview, hint, status row
 export const V75_PANE_MIN_CONTENT = 8 // the Pane needs this many content rows ...
 export const V75_PANE_CHROME = 2 // ... plus its title row and its tab border
@@ -155,4 +159,14 @@ export function v75BandRows(i: V75BandIn): V75Row[] {
   }
   const hint = v75Hint({ note: i.noteMode, armed: i.armed && i.preview.length > 0, stale: i.stale, sending: i.sending, pane: i.pane }, t)
   return [head, opts, third, [seg(hint, { dim: true })]].map(r => fitRow(r, cols))
+}
+
+// K1: one action at a time. A press that arrives while the previous one is still awaiting is dropped (onBusy tells the log), never read as the opposite action.
+export function v75SingleFlight(run: () => Promise<void>, onBusy: () => void): () => Promise<void> {
+  let busy = false
+  return async () => {
+    if (busy) { onBusy(); return }
+    busy = true
+    try { await run() } finally { busy = false }
+  }
 }

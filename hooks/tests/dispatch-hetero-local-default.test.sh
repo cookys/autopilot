@@ -257,7 +257,7 @@ assert_eq "grok-4.7" "$(json_get "$OUT" model)" "h: cloud default model"
 FB_H="$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\n/).reverse().find(l=>l.trim().startsWith("{"))); process.stdout.write(JSON.stringify(o.local_fallback))' "$OUT")"
 assert_eq '{"reason":"no_free_slot","detail":"busy_at_run"}' "$FB_H" "h: busy_at_run detail"
 
-# (i) a failed slot command is engine_unavailable, not a cloud fallback.
+# (i) a failed slot command falls back to the cloud default.
 PROMPT="$TEST_TMP/prompt-i.txt"
 printf 'edit impl-defaults-fixture.txt\n' > "$PROMPT"
 : > "$GROK_ARGV"
@@ -267,11 +267,11 @@ OUT="$(cd "$SBX" && env AUTOPILOT_LOCAL_SLOTS_CMD='echo nope; exit 1' AUTOPILOT_
   "$SCRIPT" --no-verify-tip --context-window off --grok-bin "$STUB_GROK" \
   --branch feat/local-i --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/i.err")"
 EXIT=$?
-assert_eq "1" "$EXIT" "i: bad slot command exits 1"
-assert_eq "engine_unavailable" "$(json_get "$OUT" status)" "i: status engine_unavailable"
-assert_eq "slot_signal_unavailable" "$(json_get "$OUT" reason)" "i: reason slot_signal_unavailable"
-assert_eq "<null>" "$(json_get "$OUT" local_fallback)" "i: no cloud fallback object"
-assert_eq "" "$(cat "$GROK_ARGV")" "i: grok was not started"
+assert_eq "0" "$EXIT" "i: bad slot command exits 0"
+assert_eq "grok" "$(json_get "$OUT" runner)" "i: bad slot command uses grok"
+FB_I="$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\n/).reverse().find(l=>l.trim().startsWith("{"))); process.stdout.write(JSON.stringify(o.local_fallback))' "$OUT")"
+assert_eq '{"reason":"no_free_slot","detail":"slot_query_failed:unreachable"}' "$FB_I" "i: slot_query_failed fallback"
+assert_contains "$(cat "$GROK_ARGV")" "grok-4.7" "i: grok was started"
 
 # (j) runtime endpoint_busy after a worktree exists reuses that worktree on the cloud retry.
 BUSY_CLAUDE="$TEST_TMP/bin/claude"

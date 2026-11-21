@@ -2,13 +2,14 @@
 'use strict';
 // local-impl-slot.js — free-slot and context-fit decision for the implicit local implementer.
 // operator via PM 01M7XHF4. Prints one JSON line:
-//   {"choose":true} or {"choose":false,"reason":"...","detail":"..."}
+//   {"choose":true,"local_slots":{...}} or {"choose":false,"reason":"...","detail":"...","local_slots":...}
 // Cloud fallback reasons: no_free_slot | draining | context_too_large.
-// A failed, timed-out, malformed, or unreachable slot signal is NOT a capacity
-// report: signalUnavailable reason slot_signal_unavailable (no cloud fallback).
-// Config: local_slots_cmd, local_context_bytes (default 400000) via configPath.
+// A failed slot query falls back to cloud (slot_query_failed:*). It does not stop the dispatch.
+// Config: local_slots_cmd, local_slots_url, local_context_bytes (default 400000) via configPath.
 // AUTOPILOT_LOCAL_SLOTS_CMD, including an empty string, replaces the config command.
-// No command: endpoint-probe.js on qwen_local.
+// AUTOPILOT_LOCAL_SLOTS_URL, including an empty string, replaces config local_slots_url.
+// No command: HTTP GET <origin>/v1/local/slots (origin from qwen_local), 2s, no token.
+// acquireLocalSlot is the only slot query. A later lease API replaces that function.
 
 const fs = require('fs');
 const path = require('path');
@@ -16,6 +17,7 @@ const { spawnSync } = require('child_process');
 const { configPath } = require('./config-path');
 
 const DEFAULT_BYTES = 400000;
+const HTTP_TIMEOUT_MS = 2000;
 
 function readConfig(env) {
   const file = configPath({ env });
@@ -27,8 +29,6 @@ function readConfig(env) {
   }
 }
 
-// Same header grammar as cn-model-dispatch-gate headerValues: first 8 lines,
-// field value stops at the next pipe. Absolute paths and names containing ".." count.
 function scopePaths(promptFile) {
   let text = '';
   try { text = fs.readFileSync(promptFile, 'utf8'); } catch { return []; }
@@ -56,87 +56,280 @@ function contextBytes(promptFile, cwd) {
   return n;
 }
 
-function endpointReady(env) {
+function endpointInfo(env) {
   const r = spawnSync('bash', [path.join(__dirname, '..', 'resolve-endpoint.sh'), 'qwen_local'], {
     env: { ...process.env, ...env }, encoding: 'utf8', timeout: 15000,
   });
   const line = String(r.stdout || '').split('\n').find((l) => l.startsWith('{'));
-  if (!line) return false;
+  if (!line) return { ready: false, baseUrl: '' };
   try {
     const o = JSON.parse(line);
-    return o && o.ready === true;
-  } catch { return false; }
+    return { ready: !!(o && o.ready === true), baseUrl: o && typeof o.base_url === 'string' ? o.base_url : '' };
+  } catch { return { ready: false, baseUrl: '' }; }
 }
 
-function signalUnavailable(detail) {
-  return { signalUnavailable: true, detail };
+function queryFailed(source, why) {
+  const detail = `slot_query_failed:${why}`;
+  return {
+    local: false,
+    backend: null,
+    free: null,
+    fallback: { reason: 'no_free_slot', detail },
+    source,
+    detail,
+  };
 }
 
-// timeout(1) --signal=KILL puts the command in its own process group and SIGKILLs
-// that group at the deadline, including a child that ignores SIGTERM.
+function namesQwen(ep) {
+  if (!ep || typeof ep !== 'object') return false;
+  const models = ep.models;
+  if (models && typeof models === 'object' && !Array.isArray(models)) {
+    for (const k of Object.keys(models)) {
+      if (/qwen/i.test(k)) return true;
+    }
+  }
+  if (Array.isArray(models)) {
+    for (const m of models) {
+      if (typeof m === 'string' && /qwen/i.test(m)) return true;
+      if (m && typeof m === 'object') {
+        const id = m.id || m.name || m.alias;
+        if (typeof id === 'string' && /qwen/i.test(id)) return true;
+      }
+    }
+  }
+  if (typeof ep.id === 'string' && /qwen/i.test(ep.id)) return true;
+  return false;
+}
+
+function integerFree(v) {
+  return typeof v === 'number' && Number.isInteger(v) && v >= 0 ? v : null;
+}
+
+function freeOf(ep) {
+  if (Object.prototype.hasOwnProperty.call(ep, 'free_for_caller')
+    && ep.free_for_caller !== undefined && ep.free_for_caller !== null) {
+    return integerFree(ep.free_for_caller);
+  }
+  return integerFree(ep.free);
+}
+
+function interpretGateway(o, source) {
+  const endpoints = Array.isArray(o.endpoints) ? o.endpoints : null;
+  if (!endpoints) return null;
+  const named = endpoints.filter(namesQwen);
+  const ups = [];
+  for (const ep of named) {
+    if (ep.state !== 'up') continue;
+    const free = freeOf(ep);
+    if (free === null) continue;
+    ups.push({ id: typeof ep.id === 'string' ? ep.id : null, free });
+  }
+  if (ups.length) {
+    ups.sort((a, b) => b.free - a.free);
+    const best = ups[0];
+    if (best.free > 0) {
+      return {
+        local: true, backend: best.id, free: best.free, fallback: null, source, detail: 'free',
+      };
+    }
+    return {
+      local: false,
+      backend: best.id,
+      free: 0,
+      fallback: { reason: 'no_free_slot', detail: 'all_full' },
+      source,
+      detail: 'all_full',
+    };
+  }
+  if (named.length && named.every((ep) => ep.state === 'draining')) {
+    return {
+      local: false,
+      backend: null,
+      free: null,
+      fallback: { reason: 'draining', detail: 'draining' },
+      source,
+      detail: 'draining',
+    };
+  }
+  return queryFailed(source, 'no_backend');
+}
+
+function interpretPayload(o, source) {
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
+  if (Array.isArray(o.endpoints) || Array.isArray(o.models)) return interpretGateway(o, source);
+  const free = o.free;
+  if (typeof free === 'number' && Number.isInteger(free) && typeof o.draining === 'boolean') {
+    if (o.draining) {
+      return {
+        local: false,
+        backend: null,
+        free,
+        fallback: { reason: 'draining', detail: 'draining' },
+        source,
+        detail: 'draining',
+      };
+    }
+    if (free > 0) {
+      return { local: true, backend: null, free, fallback: null, source, detail: 'free' };
+    }
+    return {
+      local: false,
+      backend: null,
+      free: 0,
+      fallback: { reason: 'no_free_slot', detail: 'all_full' },
+      source,
+      detail: 'all_full',
+    };
+  }
+  return null;
+}
+
 function slotsFromCmd(cmd, env) {
   const r = spawnSync('timeout', ['--signal=KILL', '3', 'bash', '-c', cmd], {
     env: { ...process.env, ...env }, encoding: 'utf8', timeout: 5000,
   });
-  if (r.error || r.signal || r.status === 124 || r.status == null) {
-    return signalUnavailable('slots_cmd_failed');
-  }
+  if (r.error || r.signal || r.status === 124 || r.status === 137 || r.status == null) return queryFailed('cmd', 'timeout');
+  if (r.status !== 0) return queryFailed('cmd', 'unreachable');
   const line = String(r.stdout || '').split(/\r?\n/).map((s) => s.trim()).find((s) => s.startsWith('{'));
-  if (!line) return signalUnavailable('slots_cmd_failed');
+  if (!line) return queryFailed('cmd', 'malformed');
   let o;
-  try { o = JSON.parse(line); } catch { return signalUnavailable('slots_cmd_bad_json'); }
-  const free = o.free;
-  if (typeof free !== 'number' || !Number.isInteger(free) || typeof o.draining !== 'boolean') {
-    return signalUnavailable('slots_cmd_bad_json');
-  }
-  if (o.draining) return { ok: false, reason: 'draining', detail: 'draining' };
-  if (free > 0) return { ok: true };
-  return { ok: false, reason: 'no_free_slot', detail: 'free_0' };
+  try { o = JSON.parse(line); } catch { return queryFailed('cmd', 'malformed'); }
+  return interpretPayload(o, 'cmd') || queryFailed('cmd', 'malformed');
 }
 
-function probeSlot(env) {
-  const r = spawnSync(process.execPath, [
-    path.join(__dirname, 'endpoint-probe.js'), '--endpoint', 'qwen_local', '--model', 'qwen',
-  ], { env: { ...process.env, ...env }, encoding: 'utf8', timeout: 8000 });
-  const line = String(r.stdout || '').split('\n').find((l) => l.startsWith('{'));
-  let decision = 'unreachable';
-  if (line) {
-    try { decision = JSON.parse(line).decision || decision; } catch { /* keep */ }
+// In-process HTTP would deadlock if this thread blocked the event loop. The worker
+// thread owns the socket timer and the overall timer; this thread waits on a flag.
+function httpGet(urlStr, timeoutMs) {
+  const { Worker } = require('worker_threads');
+  const sab = new SharedArrayBuffer(4);
+  const flag = new Int32Array(sab);
+  const outPath = path.join(require('os').tmpdir(), `local-slots-${process.pid}-${Date.now()}.json`);
+  const worker = new Worker(`
+    'use strict';
+    const fs = require('fs');
+    const http = require('http');
+    const https = require('https');
+    const { URL } = require('url');
+    const { workerData } = require('worker_threads');
+    const flag = new Int32Array(workerData.sab);
+    function finish(obj) {
+      try { fs.writeFileSync(workerData.outPath, JSON.stringify(obj)); } catch { /* parent times out */ }
+      Atomics.store(flag, 0, 1);
+      Atomics.notify(flag, 0);
+    }
+    let u = null;
+    try { u = new URL(workerData.url); } catch { /* finish below */ }
+    if (!u || (u.protocol !== 'http:' && u.protocol !== 'https:')) {
+      finish({ error: 'unreachable' });
+    } else {
+    const lib = u.protocol === 'https:' ? https : http;
+    let done = false;
+    function once(obj) { if (done) return; done = true; finish(obj); }
+    const req = lib.request({
+      protocol: u.protocol,
+      hostname: u.hostname,
+      port: u.port || (u.protocol === 'https:' ? 443 : 80),
+      path: (u.pathname || '/') + u.search,
+      method: 'GET',
+      headers: { accept: 'application/json' },
+    }, (res) => {
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => once({ status: res.statusCode, body: Buffer.concat(chunks).toString('utf8') }));
+    });
+    const timer = setTimeout(() => { req.destroy(); once({ error: 'timeout' }); }, workerData.timeoutMs);
+    req.on('socket', (sock) => {
+      sock.setTimeout(workerData.timeoutMs);
+      sock.on('timeout', () => { req.destroy(); once({ error: 'timeout' }); });
+    });
+    req.on('error', () => { clearTimeout(timer); once({ error: 'unreachable' }); });
+    req.end();
+    }
+  `, { eval: true, workerData: { url: urlStr, timeoutMs, outPath, sab } });
+  Atomics.wait(flag, 0, 0, timeoutMs + 500);
+  worker.terminate();
+  if (Atomics.load(flag, 0) !== 1) {
+    try { fs.unlinkSync(outPath); } catch { /* absent */ }
+    return { error: 'timeout' };
   }
-  if (r.error || !line) return signalUnavailable('probe_unreachable');
-  if (decision === 'ok') return { ok: true };
-  if (decision === 'busy') return { ok: false, reason: 'no_free_slot', detail: 'probe_busy' };
-  return signalUnavailable(`probe_${decision}`);
+  try {
+    const raw = fs.readFileSync(outPath, 'utf8');
+    fs.unlinkSync(outPath);
+    return JSON.parse(raw);
+  } catch {
+    try { fs.unlinkSync(outPath); } catch { /* absent */ }
+    return { error: 'unreachable' };
+  }
+}
+
+function slotsFromHttp(urlStr) {
+  const res = httpGet(urlStr, HTTP_TIMEOUT_MS);
+  if (!res || res.error === 'timeout') return queryFailed('gateway', 'timeout');
+  if (res.error) return queryFailed('gateway', 'unreachable');
+  if (res.status !== 200) {
+    const code = Number.isInteger(res.status) ? res.status : 0;
+    return queryFailed('gateway', `http_${code}`);
+  }
+  let o;
+  try { o = JSON.parse(res.body); } catch { return queryFailed('gateway', 'malformed'); }
+  return interpretPayload(o, 'gateway') || queryFailed('gateway', 'malformed');
+}
+
+function slotsUrl(cfg, env, baseUrl) {
+  const fromEnv = Object.prototype.hasOwnProperty.call(env, 'AUTOPILOT_LOCAL_SLOTS_URL');
+  const raw = fromEnv ? String(env.AUTOPILOT_LOCAL_SLOTS_URL) : String(cfg.local_slots_url || '');
+  const trimmed = raw.trim();
+  if (trimmed) return trimmed;
+  if (!baseUrl) return '';
+  try {
+    const u = new URL(baseUrl);
+    return `${u.protocol}//${u.host}/v1/local/slots`;
+  } catch { return ''; }
+}
+
+// One place a later lease (reserve / heartbeat / release) can replace the query.
+function acquireLocalSlot(opts = {}) {
+  const env = opts.env || process.env;
+  const cfg = opts.cfg || readConfig(env);
+  const cmd = (Object.prototype.hasOwnProperty.call(env, 'AUTOPILOT_LOCAL_SLOTS_CMD')
+    ? String(env.AUTOPILOT_LOCAL_SLOTS_CMD)
+    : String(cfg.local_slots_cmd || '')).trim();
+  if (cmd) return slotsFromCmd(cmd, env);
+  const info = opts.endpoint || endpointInfo(env);
+  const url = slotsUrl(cfg, env, info.baseUrl);
+  if (!url) return queryFailed('gateway', 'unreachable');
+  return slotsFromHttp(url);
+}
+
+function slotView(slot) {
+  return {
+    source: slot.source,
+    free: slot.free == null ? null : slot.free,
+    backend: slot.backend || null,
+    detail: slot.detail,
+  };
 }
 
 function decide(opts = {}) {
   const env = opts.env || process.env;
   const cwd = opts.cwd || process.cwd();
   const promptFile = opts.promptFile;
-  if (!endpointReady(env)) {
-    return { choose: false, reason: 'no_free_slot', detail: 'endpoint_not_ready' };
+  const info = endpointInfo(env);
+  if (!info.ready) {
+    return { choose: false, reason: 'no_free_slot', detail: 'endpoint_not_ready', local_slots: null };
   }
   const cfg = readConfig(env);
   const limit = Number.isFinite(Number(cfg.local_context_bytes)) && Number(cfg.local_context_bytes) > 0
     ? Number(cfg.local_context_bytes) : DEFAULT_BYTES;
   const bytes = contextBytes(promptFile, cwd);
   if (bytes > limit) {
-    return { choose: false, reason: 'context_too_large', detail: String(bytes) };
+    return { choose: false, reason: 'context_too_large', detail: String(bytes), local_slots: null };
   }
-  const cmd = (Object.prototype.hasOwnProperty.call(env, 'AUTOPILOT_LOCAL_SLOTS_CMD')
-    ? String(env.AUTOPILOT_LOCAL_SLOTS_CMD)
-    : String(cfg.local_slots_cmd || '')).trim();
-  const slot = cmd ? slotsFromCmd(cmd, env) : probeSlot(env);
-  if (slot.signalUnavailable) {
-    return {
-      choose: false,
-      signalUnavailable: true,
-      reason: 'slot_signal_unavailable',
-      detail: slot.detail || 'slot_signal_unavailable',
-    };
-  }
-  if (slot.ok) return { choose: true };
-  return { choose: false, reason: slot.reason || 'no_free_slot', detail: slot.detail || 'no_slot' };
+  const slot = acquireLocalSlot({ env, cfg, endpoint: info });
+  const view = slotView(slot);
+  if (slot.local) return { choose: true, local_slots: view };
+  const fb = slot.fallback || { reason: 'no_free_slot', detail: 'slot_query_failed:malformed' };
+  return { choose: false, reason: fb.reason, detail: fb.detail, local_slots: view };
 }
 
 function main() {
@@ -149,4 +342,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { decide, contextBytes, DEFAULT_BYTES };
+module.exports = { decide, contextBytes, acquireLocalSlot, DEFAULT_BYTES };

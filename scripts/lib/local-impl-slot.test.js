@@ -2,18 +2,21 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
+const http = require('http');
 const os = require('os');
 const path = require('path');
 const { decide, contextBytes } = require('./local-impl-slot');
 
 function readyEnv(extra = {}) {
-  return {
+  const env = {
     ...process.env,
     AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL: 'http://127.0.0.1:9/v1',
     AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN: 'fake-test-token',
     AUTOPILOT_CONFIG_FILE: path.join(os.tmpdir(), 'local-impl-slot-missing-config.json'),
-    ...extra,
   };
+  delete env.AUTOPILOT_LOCAL_SLOTS_CMD;
+  delete env.AUTOPILOT_LOCAL_SLOTS_URL;
+  return { ...env, ...extra };
 }
 
 test('scope header stops at the next pipe and counts absolute and dotdot names', () => {
@@ -34,25 +37,28 @@ test('scope header stops at the next pipe and counts absolute and dotdot names',
 test('slot JSON must carry an integer free and a boolean draining', () => {
   const env = readyEnv({ AUTOPILOT_LOCAL_SLOTS_CMD: 'printf %s \'{"free":1}\'' });
   const missing = decide({ env, promptFile: '', cwd: os.tmpdir() });
-  assert.equal(missing.signalUnavailable, true);
-  assert.equal(missing.reason, 'slot_signal_unavailable');
+  assert.equal(missing.choose, false);
+  assert.equal(missing.reason, 'no_free_slot');
+  assert.equal(missing.detail, 'slot_query_failed:malformed');
   const typed = decide({
     env: readyEnv({ AUTOPILOT_LOCAL_SLOTS_CMD: 'printf %s \'{"free":1,"draining":"true"}\'' }),
     promptFile: '',
     cwd: os.tmpdir(),
   });
-  assert.equal(typed.signalUnavailable, true);
-  assert.notEqual(typed.reason, 'no_free_slot');
+  assert.equal(typed.detail, 'slot_query_failed:malformed');
+  assert.equal(typed.reason, 'no_free_slot');
 });
 
-test('a failing or malformed slot command is not a capacity report', () => {
+test('a failing slot command falls back to cloud', () => {
   const failed = decide({
     env: readyEnv({ AUTOPILOT_LOCAL_SLOTS_CMD: 'echo nope; exit 1' }),
     promptFile: '',
     cwd: os.tmpdir(),
   });
-  assert.equal(failed.reason, 'slot_signal_unavailable');
+  assert.equal(failed.reason, 'no_free_slot');
+  assert.equal(failed.detail, 'slot_query_failed:unreachable');
   assert.equal(failed.choose, false);
+  assert.equal(failed.local_slots.source, 'cmd');
 });
 
 test('an empty AUTOPILOT_LOCAL_SLOTS_CMD selects the probe, not config.local_slots_cmd', () => {
@@ -67,8 +73,9 @@ test('an empty AUTOPILOT_LOCAL_SLOTS_CMD selects the probe, not config.local_slo
     promptFile: '',
     cwd: os.tmpdir(),
   });
-  assert.equal(decided.reason, 'slot_signal_unavailable');
-  assert.notEqual(decided.detail, 'free_0');
+  assert.equal(decided.reason, 'no_free_slot');
+  assert.equal(decided.detail, 'slot_query_failed:unreachable');
+  assert.equal(decided.local_slots.source, 'gateway');
   fs.unlinkSync(cfg);
 });
 
@@ -80,7 +87,8 @@ test('a slot command that ignores SIGTERM still dies inside the deadline', { tim
     cwd: os.tmpdir(),
   });
   const elapsed = Date.now() - started;
-  assert.equal(decided.reason, 'slot_signal_unavailable');
+  assert.equal(decided.reason, 'no_free_slot');
+  assert.equal(decided.detail, 'slot_query_failed:timeout');
   assert.ok(elapsed < 7000, `elapsed ${elapsed}`);
 });
 
@@ -91,11 +99,135 @@ test('free 0 and draining true stay capacity fallbacks', () => {
     cwd: os.tmpdir(),
   });
   assert.equal(free0.reason, 'no_free_slot');
-  assert.equal(free0.signalUnavailable, undefined);
+  assert.equal(free0.detail, 'all_full');
+  assert.equal(free0.local_slots.source, 'cmd');
   const draining = decide({
     env: readyEnv({ AUTOPILOT_LOCAL_SLOTS_CMD: 'printf %s \'{"free":2,"draining":true}\'' }),
     promptFile: '',
     cwd: os.tmpdir(),
   });
   assert.equal(draining.reason, 'draining');
+});
+
+function serve(status, body, delayMs) {
+  return new Promise((resolve) => {
+    const srv = http.createServer((req, res) => {
+      if (delayMs) {
+        setTimeout(() => {
+          res.writeHead(status, { 'content-type': 'application/json' });
+          res.end(body);
+        }, delayMs);
+        return;
+      }
+      res.writeHead(status, { 'content-type': 'application/json' });
+      res.end(body);
+    });
+    srv.listen(0, '127.0.0.1', () => resolve(srv));
+  });
+}
+
+function envAt(srv, extra = {}) {
+  const port = srv.address().port;
+  return readyEnv({
+    AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL: `http://127.0.0.1:${port}/v1`,
+    ...extra,
+  });
+}
+
+test('one up backend with free_for_caller 2 chooses local', async () => {
+  const body = JSON.stringify({
+    models: [{ alias: 'qwen' }],
+    endpoints: [{
+      id: 'gpu-a', state: 'up', cap: { effective: 2 }, in_flight: 0, queued: 0,
+      free: 2, free_for_caller: 2, models: { qwen: {} },
+    }],
+  });
+  const srv = await serve(200, body);
+  try {
+    const decided = decide({ env: envAt(srv), promptFile: '', cwd: os.tmpdir() });
+    assert.equal(decided.choose, true);
+    assert.equal(decided.local_slots.backend, 'gpu-a');
+    assert.equal(decided.local_slots.free, 2);
+    assert.equal(decided.local_slots.source, 'gateway');
+  } finally { srv.close(); }
+});
+
+test('all up backends full fall back all_full', async () => {
+  const body = JSON.stringify({
+    endpoints: [
+      { id: 'gpu-a', state: 'up', free_for_caller: 0, models: { qwen: {} } },
+      { id: 'gpu-b', state: 'up', free_for_caller: 0, models: { qwen: {} } },
+    ],
+  });
+  const srv = await serve(200, body);
+  try {
+    const decided = decide({ env: envAt(srv), promptFile: '', cwd: os.tmpdir() });
+    assert.equal(decided.choose, false);
+    assert.equal(decided.reason, 'no_free_slot');
+    assert.equal(decided.detail, 'all_full');
+  } finally { srv.close(); }
+});
+
+test('a slow slots server falls back within 3s', async () => {
+  const srv = await serve(200, '{"endpoints":[]}', 5000);
+  try {
+    const started = Date.now();
+    const decided = decide({ env: envAt(srv), promptFile: '', cwd: os.tmpdir() });
+    const elapsed = Date.now() - started;
+    assert.ok(elapsed < 3000, `elapsed ${elapsed}`);
+    assert.equal(decided.reason, 'no_free_slot');
+    assert.equal(decided.detail, 'slot_query_failed:timeout');
+    assert.equal(decided.local_slots.source, 'gateway');
+  } finally { srv.close(); }
+});
+
+test('malformed body and HTTP 500 are slot query failures', async () => {
+  const bad = await serve(200, 'not-json');
+  try {
+    const decided = decide({ env: envAt(bad), promptFile: '', cwd: os.tmpdir() });
+    assert.equal(decided.detail, 'slot_query_failed:malformed');
+  } finally { bad.close(); }
+  const err = await serve(500, '{"endpoints":[]}');
+  try {
+    const decided = decide({ env: envAt(err), promptFile: '', cwd: os.tmpdir() });
+    assert.equal(decided.detail, 'slot_query_failed:http_500');
+    assert.equal(decided.reason, 'no_free_slot');
+  } finally { err.close(); }
+});
+
+test('only draining backends fall back draining', async () => {
+  const body = JSON.stringify({
+    endpoints: [{ id: 'gpu-a', state: 'draining', free_for_caller: 2, models: { qwen: {} } }],
+  });
+  const srv = await serve(200, body);
+  try {
+    const decided = decide({ env: envAt(srv), promptFile: '', cwd: os.tmpdir() });
+    assert.equal(decided.reason, 'draining');
+    assert.equal(decided.choose, false);
+  } finally { srv.close(); }
+});
+
+test('a string free_for_caller is not eligible', async () => {
+  const body = JSON.stringify({
+    endpoints: [{ id: 'gpu-a', state: 'up', free_for_caller: '2', models: { qwen: {} } }],
+  });
+  const srv = await serve(200, body);
+  try {
+    const decided = decide({ env: envAt(srv), promptFile: '', cwd: os.tmpdir() });
+    assert.equal(decided.detail, 'slot_query_failed:no_backend');
+  } finally { srv.close(); }
+});
+
+test('local_slots_cmd may print the gateway JSON', () => {
+  const payload = JSON.stringify({
+    endpoints: [{ id: 'gpu-cmd', state: 'up', free_for_caller: 1, models: { qwen: {} } }],
+  });
+  const decided = decide({
+    env: readyEnv({ AUTOPILOT_LOCAL_SLOTS_CMD: `printf %s '${payload}'` }),
+    promptFile: '',
+    cwd: os.tmpdir(),
+  });
+  assert.equal(decided.choose, true);
+  assert.equal(decided.local_slots.source, 'cmd');
+  assert.equal(decided.local_slots.backend, 'gpu-cmd');
 });

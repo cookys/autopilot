@@ -87,6 +87,7 @@ function report(dir, sinceMs) {
     mean_queue_wait_s: null,
     fallbacks: 0,
     fallback_reasons: {},
+    backends: {},
   };
   let names = [];
   try { names = fs.readdirSync(dir); } catch { return out; }
@@ -104,8 +105,15 @@ function report(dir, sinceMs) {
     const fb = m.local_fallback;
     if (fb && typeof fb === 'object' && fb.reason) {
       out.fallbacks += 1;
-      const reason = String(fb.reason);
-      out.fallback_reasons[reason] = (out.fallback_reasons[reason] || 0) + 1;
+      const detail = fb.detail == null ? '' : String(fb.detail);
+      const prefix = detail.split(':')[0];
+      const key = prefix ? `${fb.reason}:${prefix}` : String(fb.reason);
+      out.fallback_reasons[key] = (out.fallback_reasons[key] || 0) + 1;
+    }
+    const slots = m.local_slots;
+    if (slots && typeof slots === 'object' && slots.backend) {
+      const id = String(slots.backend);
+      out.backends[id] = (out.backends[id] || 0) + 1;
     }
     if (!isLocal(m)) continue;
     out.local_runs += 1;

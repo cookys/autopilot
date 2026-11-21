@@ -38,6 +38,8 @@ export function renderHelp(ctx: PageCtx): { body: Row[]; actions: Row[] } {
       ...labelled(ctx, 'v74.b.help.l_digits', 'v74.b.help.keys_5', {}),
       ...(ctx.v74 !== undefined && ctx.v74.todo === null ? labelled(ctx, 'v74.b.help.l_todo', 'v74.b.help.todo_off', {}) : []),
       ...labelled(ctx, 'v74.b.help.l_click', 'v74.b.help.keys_6', { fold: g.open + g.foldUp }),
+      ...wrapRow(row(ctx.t('v75.help.moved')), Math.max(20, ctx.size.cols - 4), 2), // v7.5: the old shell's menus, as keys
+      ...wrapRow(row(ctx.t('v75.help.click')), Math.max(20, ctx.size.cols - 4), 2), // v7.5: the card numbers on the Pane's left edge are clickable only in a fullscreen terminal
       row(''),
     ],
     actions: [],

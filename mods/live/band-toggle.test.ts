@@ -17,14 +17,14 @@ const draw = (cols: number, tog?: () => void, open = false) => BandBar(EL as nev
 test('v74.a: toggle draws ▴ closed and fires onTogglePane', () => {
   let n = 0
   const btn = walk(draw(120, () => { n++ })).find(b => b.kind === 'Button' && b.props.key === 'pane-toggle')!
-  expect(flat(btn)).toBe(PANE_TOGGLE_CLOSED)
+  expect(flat(btn)).toBe(PANE_TOGGLE_CLOSED + ' 展開') // v7.5: a labelled button, same 6 cells as the open form
   btn.props.onPress()
   expect(n).toBe(1)
 })
 
 test('v74.a: toggle draws ▾ when the pane is open', () => {
   const btn = walk(draw(120, () => {}, true)).find(b => b.kind === 'Button' && b.props.key === 'pane-toggle')!
-  expect(flat(btn)).toBe(GLYPHS.structure.open)
+  expect(flat(btn)).toBe(GLYPHS.structure.open + ' 收起')
 })
 
 test('v74.a: negative control — no prop draws no toggle', () => {
@@ -38,6 +38,6 @@ test('r10b #4: the toggle is the last cell of the band width (the host draws its
     const text = flat(row1(draw(cols, () => {})))
     expect(displayWidth(text)).toBe(cols)
     expect(text.includes('\n')).toBe(false)
-    expect(text.endsWith(PANE_TOGGLE_CLOSED)).toBe(true)
+    expect(text.endsWith(PANE_TOGGLE_CLOSED + ' 展開')).toBe(true)
   }
 })

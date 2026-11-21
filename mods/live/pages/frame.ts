@@ -23,8 +23,8 @@ import type { Step } from '../speed'
 import type { V74Ctx } from '../v74/contract'
 
 export type { Row } from './rows'
-export interface PageCtx { live: LiveSnapshot | null; console: ConsoleSnapshot | null; size: { cols: number; rows: number }; t: T; nowMs: number; shortBody?: boolean; steps?: readonly Step[]; pet?: unknown; v74?: V74Ctx; box?: true } // box: drawn inside the v7.4 band frame (not the host Pane)
-export type PageId = 'now' | 'decide' | 'fleet' | 'quota' | 'dispatch' | 'review' | 'spend' | 'hygiene' | 'pet' | 'forge' | 'help' | 'todo'
+export interface PageCtx { room?: readonly { seq: number; from: string; kind: string; text: string }[]; live: LiveSnapshot | null; console: ConsoleSnapshot | null; size: { cols: number; rows: number }; t: T; nowMs: number; shortBody?: boolean; steps?: readonly Step[]; pet?: unknown; v74?: V74Ctx; box?: true } // box: drawn inside the v7.4 band frame (not the host Pane)
+export type PageId = 'now' | 'decide' | 'fleet' | 'quota' | 'dispatch' | 'review' | 'spend' | 'hygiene' | 'pet' | 'room' | 'forge' | 'help' | 'todo'
 // `framed` (optional, additive): true once the page is filled in; pane.tsx draws a framed page through frameRows and an unframed shell the old way, so S0 changes nothing on screen
 export interface Page { id: PageId; key: string; title: string; framed?: true; render(ctx: PageCtx): { body: Row[]; actions: Row[]; overflow?: true } }
 // a tab the frame's strip shows next to the pages (the old tabs that still draw the old way): `key` is its digit

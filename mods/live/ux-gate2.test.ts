@@ -9,6 +9,7 @@ import { makeT } from './i18n'
 import full from './fixtures/console/console-full.fixture'
 import { FOLD_KEY } from './band'
 
+
 const HOME = '/fake/ux-home'
 const LIVE = '/fake/ux-live'
 const REPO = '/work/ux-repo'
@@ -33,7 +34,7 @@ function host(on: On, now = NOW, expiredConsole = false, consoleMode = expiredCo
   let open = false
   const scrolls: any[] = []
   const clock = mock.clock(on, { now })
-  on('env.get', (_, e) => ({ value: e.name === 'HOME' ? HOME : e.name === 'AUTOPILOT_LOCALE' ? 'zh-TW' : undefined }))
+  on('env.get', (_, e) => ({ value: e.name === 'HOME' ? HOME : e.name === 'AUTOPILOT_LOCALE' ? 'zh-TW' : e.name === 'AUTOPILOT_LIVE_V75' ? '0' : undefined }))
   on('fs.read', (_, e) => { if (!(e.path in files)) throw new Error('ENOENT'); return { value: files[e.path] } })
   on('fs.exists', (_, e) => ({ value: e.path in files }))
   on('fs.write', () => ({ value: undefined }))
@@ -70,7 +71,7 @@ for (const cols of [120, 160]) for (const mode of [false, true]) test(`X4: ${col
   const summary = text(tree)
   expect(summary).not.toContain('視窗高度不足')
   expect(summary).toContain('ⓘ')
-  expect(summary.endsWith('▴')).toBe(true)
+  expect(summary.endsWith('▴ 展開')).toBe(true)
   expect(summary).not.toContain('1 現況')
   expect(displayWidth(summary)).toBeLessThanOrEqual(cols)
   await band.unmount()
@@ -88,7 +89,7 @@ for (const [cols, rows] of [[120, 30], [160, 40]]) for (const open of [false, tr
     expect(summary).not.toContain('視窗高度不足')
     expect(summary).toContain('資料過舊') // v7.4: the stale reason stays on the one band row
     expect(summary).not.toContain('1 現況') // maxRows 2: no frame and no tab row, whatever the pane state
-    expect(summary.endsWith(open ? '▾' : '▴')).toBe(true)
+    expect(summary.endsWith(open ? '▾ 收起' : '▴ 展開')).toBe(true)
     expect(displayWidth(summary)).toBeLessThanOrEqual(cols)
     await band.unmount()
     await $.session.end({ reason: 'exit' })
@@ -234,20 +235,20 @@ test('B2-7: the band toggle opens the page when closed and closes it when open (
   const closed = await mountTallBand($, 50, 12)
   const t1 = await toggleOf(closed)
   expect(t1, 'the closed band draws the toggle').toBeDefined()
-  expect(text(t1)).toBe('▴')
+  expect(text(t1)).toBe('▴ 展開')
   await closed.press({ key: 'pane-toggle' })
   await h.clock.advance(0)
   expect(h.isOpen(), 'v7.4 opens no host pane').toBe(false)
   await closed.unmount()
   const open = await mountTallBand($, 50, 12)
   const t2 = await toggleOf(open)
-  expect(text(t2), 'the open band draws ▾').toBe('▾')
+  expect(text(t2), 'the open band draws ▾').toBe('▾ 收起')
   expect(text(await open.drawn()), 'pressed while closed: the frame is drawn').toContain('╭─')
   await open.press({ key: 'pane-toggle' })
   await h.clock.advance(0)
   await open.unmount()
   const again = await mountTallBand($, 50, 12)
-  expect(text(await toggleOf(again)), 'pressed while open: closed again').toBe('▴')
+  expect(text(await toggleOf(again)), 'pressed while open: closed again').toBe('▴ 展開')
   expect(text(await again.drawn())).not.toContain('╭─')
   await again.unmount()
   await $.session.end({ reason: 'exit' })

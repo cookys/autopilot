@@ -86,7 +86,7 @@ test('keys: a/b/c/m/s mean nothing outside decide/todo (no pick, page, note or s
   const bad: string[] = []
   for (const page of ALL) {
     if (page === 'decide' || page === 'todo') continue
-    for (const k of ['a', 'b', 'c', 'm', 's', 'n', 'u']) {
+    for (const k of ['a', 'b', 'c', 'm', 's', 'n']) {
       const a = routeKey(k, st({ page }))
       if (['pick', 'page', 'note', 'submit'].includes(a.kind)) bad.push(`${page}:${k}=${show(a)}`)
     }

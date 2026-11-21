@@ -12,6 +12,7 @@ import { petPage } from '../pettab'
 import { quotaPage } from './quota'
 import { forgePage } from './forge'
 import { todoPage } from './todo'
+import { roomPage } from './room'
 
 const pet = (): Page => petPage
 
@@ -29,7 +30,7 @@ export const PAGES: Page[] = [
 ]
 
 // Pages reachable by digit but not listed on the strip (quota → spend tab; forge legacy).
-export const EXTRA_PAGES: Page[] = [quotaPage, forgePage]
+export const EXTRA_PAGES: Page[] = [quotaPage, forgePage, roomPage]
 
 // gen-locales reads this file: anchor v74.b.help.* ids used by pages/help.ts
 void [

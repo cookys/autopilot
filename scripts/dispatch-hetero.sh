@@ -447,6 +447,11 @@ KIMI_BIN="kimi"            # Local CLI fixture seam only; default Kimi seat uses
 KEEP=0
 SCRATCH=0
 SCRATCH_DIR=""
+SCRATCH_WORK_DIR=""
+SCRATCH_REJECTED_FILE=""
+SCRATCH_FINAL_PROMPT=""
+SCRATCH_HOME=""
+SCRATCH_CONFIG_DIR=""
 WORKER_CWD=""
 MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES=()  # --sibling-ref-prefix; read by main_checkout_fingerprint (lib/main-checkout-boundary.sh)
 MAIN_CHECKOUT_FP_EXCLUDE_PATHS=()     # --sibling-path-prefix; pruned from the fingerprint's stat walk
@@ -797,8 +802,11 @@ cleanup() {
   [ -n "${AGY_STDERR:-}" ] && rm -f "$AGY_STDERR"
   [ -n "${AGY_PARSED:-}" ] && rm -f "$AGY_PARSED"
   [ -n "${CCSHIM_ENVELOPE:-}" ] && rm -f "$CCSHIM_ENVELOPE"
+  [ -n "${SCRATCH_DIR:-}" ] && rm -rf -- "$SCRATCH_DIR"
   declare -F _reap_ccshim_env_dir >/dev/null 2>&1 && _reap_ccshim_env_dir
   reap_cnative_config_dir || true
+  [ -n "${SCRATCH_CONFIG_DIR:-}" ] && rm -rf -- "$SCRATCH_CONFIG_DIR"
+  [ -n "${SCRATCH_HOME:-}" ] && rm -rf -- "$SCRATCH_HOME"
   reap_sandbox_config_dir || true
   [ -n "${GATE_ARMED_SESSION:-}" ] && node "$SELF_DIR/per-turn-gate-arm.js" disarm --session "$GATE_ARMED_SESSION" >/dev/null 2>&1
   [ -n "${GATE_SETTINGS_FILE:-}" ] && rm -f "$GATE_SETTINGS_FILE"
@@ -1354,7 +1362,7 @@ NODE
   fi
   tip_verify_fields="$tip_verify_fields$broker_fields, \"local_fallback\": ${LOCAL_FALLBACK_JSON:-null}, \"local_slots\": ${LOCAL_SLOTS_JSON:-null}, \"target_precommit\": $(target_precommit_json)"
   if [ "${SCRATCH:-0}" -eq 1 ]; then
-    tip_verify_fields="$tip_verify_fields, \"scratch\": {\"dir\": \"$(_flat_json_escape "${SCRATCH_DIR:-}")\", \"files\": ${SCRATCH_FILES:-0}, \"gate_result\": \"allowed\"}"
+    tip_verify_fields="$tip_verify_fields, \"scratch\": {\"dir\": \"$(_flat_json_escape "${SCRATCH_DIR:-}")\", \"files\": ${SCRATCH_FILES:-0}, \"gate_result\": \"allowed\", \"rejected_manifest\": \"$(_flat_json_escape "${SCRATCH_REJECTED_FILE:-}")\"}"
   fi
   hetero_log_fallback "$1"
   local _emit_json
@@ -2849,7 +2857,7 @@ write_manifest() {
   local strict_manifest_fields=""
   local scratch_manifest_field=""
   if [ "${SCRATCH:-0}" -eq 1 ]; then
-    scratch_manifest_field=", \"scratch\": {\"dir\": \"$(_flat_json_escape "${SCRATCH_DIR:-}")\", \"files\": ${SCRATCH_FILES:-0}, \"gate_result\": \"allowed\"}"
+    scratch_manifest_field=", \"scratch\": {\"dir\": \"$(_flat_json_escape "${SCRATCH_DIR:-}")\", \"files\": ${SCRATCH_FILES:-0}, \"gate_result\": \"allowed\", \"rejected_manifest\": \"$(_flat_json_escape "${SCRATCH_REJECTED_FILE:-}")\"}"
   fi
   if [ "${STRICT_CONTRACT_RESULT_FIELDS:-0}" -eq 1 ]; then
     strict_manifest_fields=", \"unit_id\": \"$(_flat_json_escape "$STRICT_UNIT_ID")\", \"contract_sha256\": \"$(_flat_json_escape "$STRICT_CONTRACT_SHA")\", \"go\": \"$(_flat_json_escape "$STRICT_GO")\""
@@ -3538,17 +3546,32 @@ if [ "$LOCAL_RUNNER" -eq 1 ] && [ -z "$WORKTREE_PARENT" ] && [ -z "$REUSE_WORKTR
 fi
 # Restricted cloud operators need a clean brief in a fresh non-repo sandbox; local endpoint names must resolve locally.
 if [ "$SCRATCH" -eq 1 ]; then
+  case "$RUNNER" in
+    cc-shim|claude-native) ;;
+    kimi) [ "${BIN_FLAG_KIMI:-0}" -eq 1 ] || die_precondition "--scratch requires a runner that honors WORKER_CWD; broker kimi is refused" ;;
+    *) die_precondition "--scratch is supported only by runners that honor WORKER_CWD (cc-shim, claude-native, kimi-bin); runner $RUNNER is refused" ;;
+  esac
   _scratch_parent="$(node "$SELF_DIR/lib/local-sandbox-parent.js" "${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}")" \
     || die_precondition "--scratch could not create a private parent outside git work trees"
   SCRATCH_DIR="$(umask 077; mktemp -d "${_scratch_parent}/dispatch-hetero-scratch-XXXXXX")" \
     || die_precondition "--scratch could not create a fresh directory"
   chmod 700 "$SCRATCH_DIR" || die_precondition "--scratch could not secure its directory"
-  cp -- "$PROMPT_FILE" "$SCRATCH_DIR/brief.md" || die_precondition "--scratch could not copy the brief"
-  chmod 600 "$SCRATCH_DIR/brief.md" || die_precondition "--scratch could not secure the brief"
-  WORKER_CWD="$SCRATCH_DIR"
+  SCRATCH_WORK_DIR="$SCRATCH_DIR/work"
+  mkdir -m 700 -- "$SCRATCH_WORK_DIR" || die_precondition "--scratch could not create worker directory"
+  SCRATCH_HOME="$SCRATCH_DIR/home"
+  mkdir -m 700 -- "$SCRATCH_HOME" || die_precondition "--scratch could not create isolated HOME"
+  if [ "$RUNNER" = "cc-shim" ] || [ "$RUNNER" = "claude-native" ]; then
+    SCRATCH_CONFIG_DIR="$(node "$SELF_DIR/lib/seed-claude-config.js" --parent "$SCRATCH_DIR")" \
+      || die_precondition "--scratch could not seed credentials-only Claude config"
+    case "$SCRATCH_CONFIG_DIR" in "$SCRATCH_DIR"/claude-config-*) ;; *) die_precondition "--scratch config seed escaped its private parent" ;; esac
+  fi
+  SCRATCH_REJECTED_FILE="${AUTOPILOT_DISPATCH_RUNS_DIR:-${MANIFEST_DIR_PATH:-${TMPDIR:-/tmp}}}/scratch-${DISPATCH_RUN_ID}.rejected"
+  cp -- "$PROMPT_FILE" "$SCRATCH_WORK_DIR/brief.md" || die_precondition "--scratch could not copy the brief"
+  chmod 600 "$SCRATCH_WORK_DIR/brief.md" || die_precondition "--scratch could not secure the brief"
+  WORKER_CWD="$SCRATCH_WORK_DIR"
 fi
-_gate_cwd="${SCRATCH_DIR:-$(pwd)}"
-_gate_prompt="${SCRATCH_DIR:+$SCRATCH_DIR/brief.md}"
+_gate_cwd="${SCRATCH_WORK_DIR:-$(pwd)}"
+_gate_prompt="${SCRATCH_WORK_DIR:+$SCRATCH_WORK_DIR/brief.md}"
 _gate_prompt="${_gate_prompt:-$PROMPT_FILE}"
 _tfg_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner "$RUNNER" --model "$MODEL" --endpoint "${ENDPOINT:-$RUNNER}" --cwd "$_gate_cwd" --prompt-file "$_gate_prompt" 2>&1 >/dev/null)" \
   || die_precondition "${_tfg_msg:-cn_model_dispatch_barred unknown restricted_operator_unknown_endpoint (01M7E2A1, d-1dfcf757)}"
@@ -4654,6 +4677,19 @@ _vg_args=(--runner "$_vg_runner" --model "$MODEL")
 if [ -n "${PROMPT_FILE:-}" ] && [ "$PROMPT_FILE" != "$VISION_PROMPT_FILE" ]; then
   _vg_args+=(--file "$PROMPT_FILE")
 fi
+if [ "${SCRATCH:-0}" -eq 1 ]; then
+  SCRATCH_FINAL_PROMPT="$SCRATCH_WORK_DIR/final-prompt.md"
+  cp -- "$PROMPT_FILE" "$SCRATCH_FINAL_PROMPT" || die_precondition "--scratch could not copy the final assembled prompt"
+  chmod 600 "$SCRATCH_FINAL_PROMPT" || die_precondition "--scratch could not secure the final assembled prompt"
+  rm -f -- "$SCRATCH_WORK_DIR/brief.md"
+  _tfg_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner "$RUNNER" --model "$MODEL" --endpoint "${ENDPOINT:-$RUNNER}" --cwd "$SCRATCH_WORK_DIR" --prompt-file "$SCRATCH_FINAL_PROMPT" 2>&1 >/dev/null)" \
+    || die_precondition "${_tfg_msg:-cn_model_dispatch_barred final_prompt_scan_failed (01M7E2A1, d-1dfcf757)}"
+  rm -f -- "$SCRATCH_FINAL_PROMPT"
+  SCRATCH_FINAL_PROMPT=""
+  cp -- "$VISION_PROMPT_FILE" "$SCRATCH_WORK_DIR/brief.md"
+  chmod 600 "$SCRATCH_WORK_DIR/brief.md"
+  unset _tfg_msg
+fi
 _vg_msg="$(node "$SELF_DIR/lib/vision-guard.js" "${_vg_args[@]}" 2>&1 >/dev/null)" \
   || die_precondition "${_vg_msg:-vision-guard refused an image for engine ${_vg_runner}/${MODEL} file ${VISION_PROMPT_FILE}}"
 
@@ -5324,6 +5360,9 @@ abort_dispatch() {
   [ -n "$GROK_PROMPT_FILE" ] && rm -f "$GROK_PROMPT_FILE"
   [ -n "$CCSHIM_PROMPT_FILE" ] && rm -f "$CCSHIM_PROMPT_FILE"
   [ -n "${SCRATCH_DIR:-}" ] && rm -rf -- "$SCRATCH_DIR"
+  [ -n "${SCRATCH_HOME:-}" ] && rm -rf -- "$SCRATCH_HOME"
+  [ -n "${SCRATCH_CONFIG_DIR:-}" ] && rm -rf -- "$SCRATCH_CONFIG_DIR"
+  [ -n "${SCRATCH_FINAL_PROMPT:-}" ] && rm -f -- "$SCRATCH_FINAL_PROMPT"
   _reap_ccshim_env_dir
   [ -n "$OPENCODE_PROMPT_FILE" ] && rm -f "$OPENCODE_PROMPT_FILE"
   [ -n "$KIMI_PROMPT_FILE" ] && rm -f "$KIMI_PROMPT_FILE"
@@ -6035,7 +6074,7 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
         --strict-mcp-config --dangerously-skip-permissions ${CLAUDE_EFFORT_ARG:+--effort "$CLAUDE_EFFORT_ARG"}
         ${GATE_ARGV[@]+--settings "${GATE_ARGV[0]}"} --output-format json
         ${ROLE_KIT_ARGV[@]+"${ROLE_KIT_ARGV[@]}"})
-      run_worker node "$SELF_DIR/claude-account.js" run --pin-default --purpose hetero-impl --cwd "${WORKER_CWD:-$WT}" \
+      run_worker env HOME="${SCRATCH_HOME:-$HOME}" CLAUDE_CONFIG_DIR="${SCRATCH_CONFIG_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}}" node "$SELF_DIR/claude-account.js" run --pin-default --purpose hetero-impl --cwd "${WORKER_CWD:-$WT}" \
         --stdin "$CCSHIM_PROMPT_FILE" --stdout "$CCSHIM_ENVELOPE" -- "${CNATIVE_ARGV[@]}"
     else
       echo "claude-native: account registry not usable; worker not started" > "$LOG"
@@ -6048,7 +6087,12 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
     _CN_TAIL=()
     if [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ]; then _CN_TAIL=("${GATE_ARGV[0]-}" "${ROLE_KIT_ARGV[@]}"); else _CN_TAIL=(${GATE_ARGV[@]+"${GATE_ARGV[0]}"}); fi
     _ts_msg="$(token_seat_guard)" || die_precondition "$_ts_msg"
-    if CNATIVE_CONFIG_DIR="$(node "$SELF_DIR/lib/seed-claude-config.js" --parent "${TMPDIR:-/tmp}")"; then
+    if [ -n "${SCRATCH_CONFIG_DIR:-}" ]; then
+      CNATIVE_CONFIG_DIR="$SCRATCH_CONFIG_DIR"
+    elif CNATIVE_CONFIG_DIR="$(node "$SELF_DIR/lib/seed-claude-config.js" --parent "${TMPDIR:-/tmp}")"; then
+      :
+    fi
+    if [ -n "${CNATIVE_CONFIG_DIR:-}" ]; then
       # Scrub every alternate provider / credential selector so the seeded .credentials.json is the SOLE auth.
       # Names verified by strings(1) on the installed claude 2.1.309 binary (none invented). Cleared: provider
       # switches (BEDROCK/VERTEX/FOUNDRY/MANTLE/ANTHROPIC_AWS/ANTHROPIC_GOOGLE_CLOUD/GATEWAY), alternate keys and
@@ -6058,9 +6102,9 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
       # inject auth). NOT cleared: CLAUDE_CODE_OAUTH_TOKEN (PM 01M7975S: a seat token must reach the child;
       # the seeded dir is still the only config dir), CLAUDE_CODE_SKIP_*_AUTH (only meaningful once a provider is selected) and
       # region/project tuning vars (inert without a selector).
-      run_worker bash -c 'cd "$1" && for v in CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY CLAUDE_CODE_USE_MANTLE CLAUDE_CODE_USE_ANTHROPIC_AWS CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD CLAUDE_CODE_USE_GATEWAY ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_FOUNDRY_API_KEY ANTHROPIC_FOUNDRY_AUTH_TOKEN AWS_BEARER_TOKEN_BEDROCK ANTHROPIC_BASE_URL ANTHROPIC_BEDROCK_BASE_URL ANTHROPIC_BEDROCK_MANTLE_BASE_URL ANTHROPIC_VERTEX_BASE_URL ANTHROPIC_FOUNDRY_BASE_URL ANTHROPIC_FOUNDRY_RESOURCE ANTHROPIC_CUSTOM_HEADERS; do unset "$v"; done && exec env CLAUDE_CONFIG_DIR="$7" claude -p ${4:+--session-id "$4"} --model "$2" \
+      run_worker bash -c 'cd "$1" && for v in CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY CLAUDE_CODE_USE_MANTLE CLAUDE_CODE_USE_ANTHROPIC_AWS CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD CLAUDE_CODE_USE_GATEWAY ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_FOUNDRY_API_KEY ANTHROPIC_FOUNDRY_AUTH_TOKEN AWS_BEARER_TOKEN_BEDROCK ANTHROPIC_BASE_URL ANTHROPIC_BEDROCK_BASE_URL ANTHROPIC_BEDROCK_MANTLE_BASE_URL ANTHROPIC_VERTEX_BASE_URL ANTHROPIC_FOUNDRY_BASE_URL ANTHROPIC_FOUNDRY_RESOURCE ANTHROPIC_CUSTOM_HEADERS; do unset "$v"; done && exec env HOME="$10" CLAUDE_CONFIG_DIR="$7" claude -p ${4:+--session-id "$4"} --model "$2" \
           --strict-mcp-config --dangerously-skip-permissions ${5:+--effort "$5"} ${8:+--settings "$8"} --output-format json "${@:9}" < "$3" >"$6"' \
-          _ "${WORKER_CWD:-$WT}" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE" "$CNATIVE_CONFIG_DIR" ${_CN_TAIL[@]+"${_CN_TAIL[@]}"}
+          _ "${WORKER_CWD:-$WT}" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE" "$CNATIVE_CONFIG_DIR" ${_CN_TAIL[@]+"${_CN_TAIL[@]}"} "${SCRATCH_HOME:-$HOME}"
     else
       CNATIVE_CONFIG_DIR=""
       echo "claude-native: could not seed config dir; worker not started" > "$LOG"
@@ -6141,10 +6185,10 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
         _ccshim_env_probe="${ANTHROPIC_BASE_URL:+1}"
         [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ] && [ "$_ccshim_env_probe" = "1" ] || { printf "%s\n" "cc-shim 拒絕啟動：mount 隔離前綴不會保留環境變數，端點環境變數（ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN）將被清空" >&2; exit 2; }
         # ccshim-env-load-end
-        exec env -u ANTHROPIC_API_KEY -u ANTHROPIC_CUSTOM_HEADERS ${8:+ANTHROPIC_CUSTOM_HEADERS="$8"} ${10:+ENABLE_TOOL_SEARCH=false} claude -p ${4:+--session-id "$4"} --model "$2" \
+        exec env -u ANTHROPIC_API_KEY -u ANTHROPIC_CUSTOM_HEADERS HOME="${11:-$HOME}" CLAUDE_CONFIG_DIR="${12:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}}" ${8:+ANTHROPIC_CUSTOM_HEADERS="$8"} ${10:+ENABLE_TOOL_SEARCH=false} claude -p ${4:+--session-id "$4"} --model "$2" \
         --strict-mcp-config --dangerously-skip-permissions --disallowedTools TaskCreate,TaskUpdate,TaskGet,TaskList \
         ${5:+--effort "$5"} ${7:+--settings "$7"} --output-format json < "$3" >"$6"' \
-        _ "${WORKER_CWD:-$WT}" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE" "${GATE_ARGV[0]-}" "$FLEET_TASK_HEADER" "$CCSHIM_ENV_FILE" "$([ "${LOCAL_RUNNER:-0}" -eq 1 ] && printf 1)"
+        _ "${WORKER_CWD:-$WT}" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE" "${GATE_ARGV[0]-}" "$FLEET_TASK_HEADER" "$CCSHIM_ENV_FILE" "$([ "${LOCAL_RUNNER:-0}" -eq 1 ] && printf 1)" "${SCRATCH_HOME:-$HOME}" "${SCRATCH_CONFIG_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}}"
   fi
   # The worker is done (success, failure or timeout): the gate file and the settings file go now.
   if [ -n "${GATE_ARMED_SESSION:-}" ]; then
@@ -6717,10 +6761,54 @@ fi
 capture_scratch_files() {
   [ "${SCRATCH:-0}" -eq 1 ] || return 0
   [ -n "${SCRATCH_DIR:-}" ] && [ -d "$SCRATCH_DIR" ] || return 1
-  rm -f -- "$SCRATCH_DIR/brief.md"
-  cp -a -- "$SCRATCH_DIR/." "$WT/" || return 1
+  if [ -n "${MANIFEST_DIR_PATH:-}" ]; then mkdir -p -- "$MANIFEST_DIR_PATH" || return 1; fi
+  node - "$SCRATCH_WORK_DIR" "$WT" "${SCRATCH_REJECTED_FILE:-$SCRATCH_DIR/scratch.rejected}" <<'NODE' || return 1
+const fs = require('node:fs');
+const path = require('node:path');
+const src = path.resolve(process.argv[2]);
+const dst = path.resolve(process.argv[3]);
+const rejected = process.argv[4];
+const lines = [];
+function walk(dir, rel = '') {
+  for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+    const name = ent.name;
+    const childRel = rel ? `${rel}/${name}` : name;
+    if (childRel === 'brief.md' || childRel === 'final-prompt.md') continue;
+    const from = path.join(dir, name);
+    const to = path.join(dst, childRel);
+    let st;
+    try { st = fs.lstatSync(from); } catch { lines.push(`${childRel}\tstat_failed`); continue; }
+    const reason = name === '.git' ? 'git_metadata'
+      : name === '.autopilot-worktree.lock' ? 'worktree_lock'
+        : childRel.includes('..') ? 'dotdot_path'
+          : st.isSymbolicLink() ? 'symlink'
+            : (!st.isDirectory() && !st.isFile()) ? 'unsupported_type' : '';
+    if (reason) { lines.push(`${childRel}\t${reason}`); continue; }
+    if (st.isDirectory()) {
+      try {
+        const dstStat = fs.lstatSync(to);
+        if (!dstStat.isDirectory() || dstStat.isSymbolicLink()) { lines.push(`${childRel}\tdestination_type`); continue; }
+      } catch (e) { if (!e || e.code !== 'ENOENT') { lines.push(`${childRel}\tdestination_stat_failed`); continue; } }
+      try { fs.mkdirSync(to, { recursive: true, mode: 0o755 }); } catch { lines.push(`${childRel}\tmkdir_failed`); continue; }
+      walk(from, childRel);
+    } else {
+      try {
+        fs.mkdirSync(path.dirname(to), { recursive: true, mode: 0o755 });
+        try {
+          const dstStat = fs.lstatSync(to);
+          if (!dstStat.isFile() || dstStat.isSymbolicLink()) { lines.push(`${childRel}\tdestination_type`); continue; }
+        } catch (e) { if (!e || e.code !== 'ENOENT') { lines.push(`${childRel}\tdestination_stat_failed`); continue; } }
+        fs.copyFileSync(from, to);
+      }
+      catch { lines.push(`${childRel}\tcopy_failed`); }
+    }
+  }
+}
+walk(src);
+fs.writeFileSync(rejected, lines.length ? `${lines.join('\n')}\n` : '', { mode: 0o600 });
+if (lines.length) process.stderr.write(`dispatch-hetero: scratch rejected ${lines.length} path(s); see scratch.rejected\n`);
+NODE
   SCRATCH_FILES="$(_wt_git status --porcelain --untracked-files=all | wc -l | tr -d ' ')"
-  rm -rf -- "$SCRATCH_DIR"
   return 0
 }
 
@@ -7909,7 +7997,7 @@ dispatch_detached_run() {
     declare -p MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES 2>/dev/null || true
     declare -p MAIN_CHECKOUT_FP_EXCLUDE_PATHS 2>/dev/null || true
     declare -p WRAPPER_COMMITTED 2>/dev/null || true
-    declare -p SCRATCH SCRATCH_DIR SCRATCH_FILES WORKER_CWD 2>/dev/null || true
+    declare -p SCRATCH SCRATCH_DIR SCRATCH_WORK_DIR SCRATCH_REJECTED_FILE SCRATCH_FINAL_PROMPT SCRATCH_HOME SCRATCH_CONFIG_DIR SCRATCH_FILES WORKER_CWD 2>/dev/null || true
     declare -p DETACH_PRECLAIM_GEN DETACH_PRECLAIM_NONCE 2>/dev/null
     declare -p _CONT_WO_CLAIMED_ROOT _CONT_WO_CLAIMED_STAGE _CONT_WO_PARENT_TRANSFERRED 2>/dev/null
     declare -p CAMPAIGN_PROMPT_FILE 2>/dev/null

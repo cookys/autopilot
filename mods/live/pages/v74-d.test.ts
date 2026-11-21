@@ -104,7 +104,7 @@ test('v74-d: 待辦 shows due dates and Buttons only for the selected card', () 
 test('v74-d: 待辦 with a null source draws the broken row, never fixture data (negative control)', () => {
   const { body, actions } = todoPage.render(ctxOf({ todo: null }))
   expect(body.length).toBe(1)
-  expect(text(body[0])).toContain('沒有待辦來源')
+  expect(text(body[0])).toContain('無來源：fleet todo 尚未接線')
   expect(body.map(text).join('')).not.toContain('金鑰')
   expect(actions).toEqual([])
 })

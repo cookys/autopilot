@@ -7,7 +7,7 @@ import { routeKey } from './keys'
 import { renderHelp } from './help'
 import { makeT } from '../i18n'
 import type { DecideCard, V74Ctx } from '../v74/contract'
-import { v74TitleSegs } from './frame'
+import { v74TitleSegs, frameHintText } from './frame'
 import { PAGES } from './index'
 import type { Row } from './rows'
 import { renderReview } from './review'
@@ -102,10 +102,9 @@ const titleOf = (id: string, over: Record<string, unknown> = {}, console: unknow
   const c = { ...(ctxOf({ ages: { todo: 1794200000000 - 9_000 } }) as object), console, ...over } as never
   return v74TitleSegs(page, c, { text: '頁' }).map(s => s.text).join('')
 }
-test('r10b #5: 花費 and 待辦 titles end in 「· N 秒前」 like the other pages', () => {
-  expect(titleOf('spend')).toMatch(/· 42 秒前$/)
-  expect(titleOf('quota')).toMatch(/· 42 秒前$/)
-  expect(titleOf('todo', { v74: v74({ todo: [], ages: { todo: 1794200000000 - 9_000 } }) })).toMatch(/· 9 秒前$/)
+test('r10b #5: 花費 and 待辦 titles end in the age like the other pages', () => {
+  expect(titleOf('spend')).toMatch(/· 42 秒$/)
+  expect(titleOf('todo', { v74: v74({ todo: [], ages: { todo: 1794200000000 - 9_000 } }) })).toMatch(/· 9 秒$/)
   expect(titleOf('review', {}, null)).not.toContain('讀取失敗')
 })
 test('r10b #5: a source that failed writes 「· 讀取失敗」 in the title (negative: a working one does not)', () => {
@@ -129,4 +128,20 @@ test('r10b #7: a code review row names the branch and not the sha when the produ
 test('r10b #7: without a branch name the row falls back to the sha (negative)', () => {
   const out = reviewText({ phase: null, generation: 1, base: 'a1b2c3d4', head: 'e5f60718', seats, converged: true, at: null })
   expect(out).toContain('e5f60718')
+})
+
+// ---- #8 todo with no source: cause and fix on the page, border lists only usable keys ----
+test('r10b #8: the todo page names the cause and the fix itself and does not send the reader to another page to look', () => {
+  const c = ctxOf({ todo: null }) as never
+  const out = PAGES.find(p => p.id === 'todo')!.render(c).body.map(text).join('\n')
+  expect(out).toContain('無來源：fleet todo 尚未接線')
+  expect(out).toContain('fleet todo --json')
+  expect(out).not.toContain('按 1')
+})
+test('r10b #8: the border of a todo page without cards lists no pick or fold key (negative: with cards it keeps a/b/c)', () => {
+  const page = PAGES.find(p => p.id === 'todo')!
+  const none = frameHintText(page, ctxOf({ todo: null }) as never)
+  expect(none).toContain('捲動')
+  expect(none).not.toMatch(/a\/b\/c|Enter 摺疊/)
+  expect(frameHintText(page, ctxOf({ todo: [decide[0]] as never }) as never)).toContain('a/b/c')
 })

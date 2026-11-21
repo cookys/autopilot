@@ -109,7 +109,7 @@ const V74_SHORT_KEY: Record<string, string> = {
 const keysWord = (ctx: PageCtx): string => (ctx.v74?.keysHeld === true ? ctx.t('v74.b.keys_held') : ctx.t('v74.b.keys_take'))
 // r8 #10: a card page with no cards (no source, or an empty list) has nothing to pick or send: its hint is the scroll hint, not `a/b/c · s`
 const cardless = (page: Page, ctx: PageCtx): boolean => (page.id === 'decide' || page.id === 'todo') && ctx.v74 !== undefined && (ctx.v74[page.id] ?? []).length === 0
-export const frameHintText = (page: Page, ctx: PageCtx): string => ctx.t(cardless(page, ctx) ? 'v74.b.border.now' : V74_BORDER_KEY[page.id] ?? 'v74.b.border.default', { ud: GLYPHS.structure.up + GLYPHS.structure.behind, keys: keysWord(ctx) })
+export const frameHintText = (page: Page, ctx: PageCtx): string => ctx.t(cardless(page, ctx) ? 'v74.b.border.cardless' : V74_BORDER_KEY[page.id] ?? 'v74.b.border.default', { ud: GLYPHS.structure.up + GLYPHS.structure.behind, keys: keysWord(ctx) })
 export const frameHintShort = (page: Page, ctx: PageCtx): string => ctx.t(cardless(page, ctx) ? 'v74.b.short.scroll' : V74_SHORT_KEY[page.id] ?? 'v74.b.short.scroll', { ud: GLYPHS.structure.up + GLYPHS.structure.behind })
 export function frameBorderRow(page: Page, ctx: PageCtx): Row {
   return [{ text: GLYPHS.structure.frameBL + GLYPHS.structure.rule + ' ' + frameHintText(page, ctx), dim: true }]

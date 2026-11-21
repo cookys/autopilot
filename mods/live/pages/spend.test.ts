@@ -388,6 +388,7 @@ test('spend: every state is exactly H rows at 160x40, 120x30, 80x24 and short 80
 })
 
 test('r10b #6: an unknown 5h value draws no empty bar, it says 未接通 (negative: a known value keeps its bar)', () => {
+  seatQuota.reset()
   const live = liveOf(HOURLY_WIDE, { account: { account: undefined, quota: [{ kind: 'five_hour', pct: null, resetsAtMs: null }, { kind: 'seven_day', pct: 68.2, resetsAtMs: RESET_7D }] } })
   const rows = renderSpend(ctxOf(120, 40, calmConsole(), live)).body.map(text)
   const five = rows.find(r => r.includes('5 小時') || r.includes('5時'))!

@@ -121,7 +121,7 @@ test('r8 #5: the legend names ⋯ and says what ◆ ▸ ▲ mean on the decide p
 
 test('r8 #10: an empty 待辦 says how to recover, and its border hint offers no a/b/c', () => {
   const nul = todoPage.render(ctxOf({ todo: null })).body.map(text).join('\n')
-  expect(nul).toContain('沒有待辦來源')
+  expect(nul).toContain('無來源：fleet todo 尚未接線')
   expect(nul).toContain('按 2 回待決頁')
   const none = todoPage.render(ctxOf({ todo: [] })).body.map(text).join('\n')
   expect(none).toContain('目前沒有待辦卡')

@@ -65,3 +65,66 @@ test('r8 #11: the background wraps on a hanging indent under its own text', () =
   expect(next.startsWith(' '.repeat(Math.min(hang, 7)))).toBe(true)
   expect(next.length - next.trimStart().length).toBeGreaterThanOrEqual(7)
 })
+
+// ---- band (r8 #12) ----
+import { slotFleet } from '../model'
+import { v74BareBandSlots } from '../register'
+const segText = (s: { segs: { text: string }[] } | null): string => (s === null ? '' : s.segs.map(x => x.text).join(''))
+
+test('r8 #12: the v7.4 fleet chips read stalled, running, failed (design S1), the older order stays for the legacy band', () => {
+  const c = { stuck: 4, running: 3, waiting: 0, failed: 2 }
+  const v = segText(slotFleet(c, t, true))
+  expect(v.indexOf('⊘')).toBeLessThan(v.indexOf('●'))
+  expect(v.indexOf('●')).toBeLessThan(v.indexOf('✗'))
+  const old = segText(slotFleet(c, t))
+  expect(old.indexOf('✗')).toBeLessThan(old.indexOf('⊘'))
+})
+
+test('r8 #12: the bare v7.4 band orders 艦隊, 來源 (with its label), 待決', () => {
+  const row = v74BareBandSlots('x', { stuck: 1, running: 1, waiting: 0 }, 3, t).map(segText).join('|')
+  expect(row.indexOf('艦隊')).toBeLessThan(row.indexOf('來源'))
+  expect(row.indexOf('來源')).toBeLessThan(row.indexOf('待決'))
+})
+
+// ---- help, todo, empty card pages (r8 #5, #9, #10) ----
+import { helpPage } from './help'
+import { todoPage } from './todo'
+const helpLines = (cols = 120): string[] => helpPage.render({ live: null, console: null, size: { cols, rows: 40 }, t, nowMs: 0 } as never).body.map(text)
+
+test('r8 #9: help keys follow S10 — the send key has its own row, and the digit condition is a labelled row after the blank line', () => {
+  const l = helpLines()
+  const k = l.findIndex(x => x.includes('a b c 選那張的選項'))
+  expect(l[k]).toContain('p n 備用換張')
+  expect(l[k]).not.toContain('送出全部')
+  expect(l[k + 1]).toContain('s 送出全部（待決頁和待辦頁）')
+  expect(l[k + 2].trim()).toBe('')
+  expect(l[k + 3]).toMatch(/^ {2}為什麼 +hotkey/)
+  expect(l[k + 4]).toMatch(/^ {2}數字與字母 +數字鍵/)
+  expect(l.slice(0, k + 2).some(x => x.includes('輸入框空著'))).toBe(false)
+})
+
+test('r8 #9: a wrapped labelled help row hangs under its own text', () => {
+  const l = helpLines(60)
+  const i = l.findIndex(x => x.startsWith('  為什麼'))
+  expect(l[i + 1].startsWith(' '.repeat(14))).toBe(true)
+})
+
+test('r8 #5: the legend names ⋯ and says what ◆ ▸ ▲ mean on the decide page and in the band', () => {
+  const all = helpLines().join('\n')
+  expect(all).toContain('⋯ 等待中')
+  expect(all).toContain('◆ 等你決定 · 你選的答案')
+  expect(all).toContain('▸ 已摺疊 · 目前這張')
+  expect(all).toContain('▲ 要你處理')
+})
+
+test('r8 #10: an empty 待辦 says how to recover, and its border hint offers no a/b/c', () => {
+  const nul = todoPage.render(ctxOf({ todo: null })).body.map(text).join('\n')
+  expect(nul).toContain('沒有待辦來源')
+  expect(nul).toContain('按 2 回待決頁')
+  const none = todoPage.render(ctxOf({ todo: [] })).body.map(text).join('\n')
+  expect(none).toContain('目前沒有待辦卡')
+  expect(none).toContain('延後的卡')
+  expect(frameHintText(todoPage, ctxOf({ todo: null }))).not.toContain('a/b/c')
+  expect(frameHintShort(todoPage, ctxOf({ todo: [] }))).not.toContain('a/b/c')
+  expect(frameHintShort(todoPage, ctxOf({ todo: [{ ...decide[0], due: null } as never] }))).toContain('a/b/c')
+})

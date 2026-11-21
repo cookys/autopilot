@@ -1495,16 +1495,16 @@ export function slotVerdict(v: { mark: string; word: string; key: ThemeKey | und
 // The fleet summary on the band's own line, right after the verdict: `艦隊 ⊘ N  ● N  ⋯ N`. The word is dim; each count is a chip whose glyph carries the
 // theme key (stuck broken, running running, waiting idle) and whose number is plain. Both the glyph and the number carry the drop tag, so a width step
 // that removes a count removes the number with it. Zeros stay (a fetched summary always names all three). Null hides the slot: nothing has been fetched.
-export function slotFleet(c: { stuck: number; running: number; waiting: number; failed?: number; normal?: number } | null | undefined, t: T = T_EN): Slot | null {
+export function slotFleet(c: { stuck: number; running: number; waiting: number; failed?: number; normal?: number } | null | undefined, t: T = T_EN, v74Order = false): Slot | null {
   if (c == null) return null
   const chip = (glyph: string, n: number, color: ThemeKey, tag: SegTag): Seg[] => ui.chipSegs([sp(glyph, { color, tag })], [sp(String(n), { tag })])
-  const chips = ui.chipsJoin([
-    ...((c.failed ?? 0) > 0 ? [chip(GS.failed, c.failed!, PALETTE.broken, 'fleetStuck')] : []),
-    chip(GS.stalled, c.stuck, PALETTE.broken, 'fleetStuck'),
-    ...((c.normal ?? 0) > 0 ? [chip(GS.pending, c.normal!, PALETTE.idle, 'fleetWait')] : []),
-    chip(GS.running, c.running, PALETTE.running, 'fleetRun'),
-    chip(GS.waiting, c.waiting, PALETTE.idle, 'fleetWait'),
-  ], 'next')
+  const failed = (c.failed ?? 0) > 0 ? [chip(GS.failed, c.failed!, PALETTE.broken, 'fleetStuck')] : []
+  const normal = (c.normal ?? 0) > 0 ? [chip(GS.pending, c.normal!, PALETTE.idle, 'fleetWait')] : []
+  const stuck = chip(GS.stalled, c.stuck, PALETTE.broken, 'fleetStuck')
+  const run = chip(GS.running, c.running, PALETTE.running, 'fleetRun')
+  const wait = chip(GS.waiting, c.waiting, PALETTE.idle, 'fleetWait')
+  // r8 #12: design S1/S2 read `⊘ stalled  ● running  ✗ failed`, then the idle counts; the older order (✗ first) stays for the pane and the legacy band
+  const chips = ui.chipsJoin(v74Order ? [stuck, run, ...failed, ...normal, wait] : [...failed, stuck, ...normal, run, wait], 'next')
   return { id: 'fleet', segs: [sp(t('shell.fleet'), { dim: true, tag: 'fleetWord' }), ui.gapSeg(ui.CHIP_LEAD, 'fleetWord'), ...chips] }
 }
 

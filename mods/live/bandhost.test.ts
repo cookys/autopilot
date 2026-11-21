@@ -95,7 +95,7 @@ test('v74 host: /live-pane opens the full-width page at 209 columns: title in th
   expect(tree.children?.length, 'page tree + band row').toBe(2)
   const page = tree.children![0] as Node
   const rows = lines(page)
-  expect(rows.length, 'top + body + the bottom border that also carries the tabs (27, the design cap)').toBe(27)
+  expect(rows.length, 'top + body + the bottom border that also carries the tabs (28, the design cap: S2..S10 are 28 rows from ╭ to ╰)').toBe(28)
   expect(rows[0].startsWith('╭─ 現況')).toBe(true)
   expect(rows[0].endsWith('╮')).toBe(true)
   expect(rows[rows.length - 1].startsWith('╰─  ↑↓ 捲動 · Enter 摺疊 · ctrl+x tab 拿鍵盤 · Esc 還給輸入框')).toBe(true)

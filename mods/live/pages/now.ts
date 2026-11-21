@@ -701,8 +701,16 @@ function v74FleetSection(ctx: PageCtx, wide: boolean): Row[] {
     }
   }
   const rows: Row[] = [head, summary]
-  for (const line of fleetLines(pm)) {
-    if (line.mark === 'ok') continue
+  // r8 #13: failures first, then the quota exception (it is a ✗ too), then the parked and unknown lines
+  const parked: Row[] = []
+  const quotaFirst = (): void => {
+    if (con === null) return
+    const quotaExc = exceptionRows(ctx, con, wide).filter(r => rowText(r).includes(t('page.now.quota')))
+    for (const r of quotaExc) if (!rows.some(x => rowText(x) === rowText(r))) rows.push(r)
+  }
+  const lines = fleetLines(pm).filter(l => l.mark !== 'ok')
+  for (const line of [...lines.filter(l => l.mark === 'fail'), ...lines.filter(l => l.mark !== 'fail')]) {
+    if (line.mark !== 'fail' && parked.length === 0) quotaFirst()
     const g = line.mark === 'fail' ? GLYPHS.state.failed : line.mark === 'unknown' ? GLYPHS.structure.empty : GLYPHS.state.stalled
     const n = (v: number | null): number | string => v ?? GLYPHS.structure.empty
     const body = line.mark === 'fail'
@@ -710,18 +718,15 @@ function v74FleetSection(ctx: PageCtx, wide: boolean): Row[] {
       : line.mark === 'unknown'
         ? t('v74.c.line_unknown', { project: line.project })
         : t('v74.c.line_parked', { project: line.project, waiting: n(line.counts.waiting) })
-    rows.push(truncateSegs([
+    const row = truncateSegs([
       dim(wide ? ' ' : ''),
       { text: g + ' ' + body, ...(line.mark === 'fail' ? { color: PALETTE.broken } : {}) },
-    ], size.cols))
+    ], size.cols)
+    if (line.mark !== 'fail') parked.push(row)
+    rows.push(row)
   }
-  if (con !== null) {
-    for (const pr of poolRows(ctx, con, wide)) rows.push(pr)
-    const quotaExc = exceptionRows(ctx, con, wide).filter(r => rowText(r).includes(t('page.now.quota')))
-    for (const r of quotaExc) {
-      if (!rows.some(x => rowText(x) === rowText(r))) rows.push(r)
-    }
-  }
+  if (parked.length === 0) quotaFirst()
+  if (con !== null) for (const pr of poolRows(ctx, con, wide)) rows.push(pr)
   return rows
 }
 

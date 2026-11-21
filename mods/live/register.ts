@@ -105,7 +105,7 @@ const FACTS_PRUNE_MS = 60_000
 const FACTS_TMP_STALE_MS = 5 * 60 * 1000
 const PANE_ID = 'autopilot-live'
 const V74_FRAME_MIN = 6
-const V74_FRAME_MAX = 27 // design S2: 25 body rows + both borders. V74_FRAME_MIN: the smallest v7.4 page frame (two borders and four rows); under it only the band row draws
+const V74_FRAME_MAX = 28 // design S2..S10 measure 28 rows from ╭ to ╰ (26 body rows + both borders; r8 #6 had 27). V74_FRAME_MIN: the smallest v7.4 page frame (two borders and four rows); under it only the band row draws
 const MAX_PATH_FILES = 256
 const MAX_RECEIPT_FILES = 64
 const MAX_CAMPAIGN_ROOTS = 8 // session-mode.js CAMPAIGN_ROOTS_MAX
@@ -196,11 +196,11 @@ export function v74TabStep(page: string, element: unknown, origin: unknown): { k
   return { kind: 'move', by: by > 0 ? 1 : -1 }
 }
 export function v74BareBandSlots(own: string, fleet: { stuck: number; running: number; waiting: number } | null, decideN: number, t: T): Slot[] {
-  const fleetSlot = slotFleet(fleet ?? { stuck: 0, running: 0, waiting: 0 }, t)
+  const fleetSlot = slotFleet(fleet ?? { stuck: 0, running: 0, waiting: 0 }, t, true)
   return [
     { id: 'verdict', segs: [{ text: own.split(' · ')[0], bold: true }] },
     ...(fleetSlot === null ? [] : [fleetSlot]),
-    { id: 'hygiene', segs: [{ text: t('band.src_unknown'), dim: true, tag: 'chip' }] },
+    { id: 'hygiene', segs: [{ text: t('v74.b.source_word'), dim: true, tag: 'chip' }, { text: ' ', tag: 'chip' }, { text: t('band.src_unknown'), dim: true, tag: 'chip' }] },
     { id: 'decide', segs: [{ text: t('v74.b.decide_word'), dim: true, tag: 'chip' }, { text: ' ', tag: 'chip' }, { text: String(decideN), tag: 'chip' }] },
   ]
 }
@@ -1967,14 +1967,23 @@ export function registerLive(on: Parameters<Register>[0]): void {
     // task-only band when no console snapshot has ever been available.
     const fleetCounts = consoleSnap !== null ? consoleFleetCounts(consoleSnap, t) : fleetNow.fetchedMs !== null
       ? { stuck: fleetNow.totals.stuck, running: fleetNow.totals.running, waiting: fleetNow.totals.waiting } : null
-    const fleetSlot = snap !== null && snap.band !== null && (!consoleOn || v74) ? slotFleet(fleetCounts, t) : null // v7.4: the band row carries the fleet counts in console mode too (design S1)
+    const fleetSlot = snap !== null && snap.band !== null && (!consoleOn || v74) ? slotFleet(fleetCounts, t, v74) : null // v7.4: the band row carries the fleet counts in console mode too (design S1)
     if (fleetSlot !== null && snap !== null && snap.band !== null) {
       const base = snap.band.slots
       const atV = base.findIndex(s => s.id === 'verdict')
       // v7.4 (design S1): `待決 N` after the fleet counts, N = the cards `fleet decision list` returned; a click opens the 待決 page
       const decideN = v74 ? mergedDecide()?.length ?? 0 : 0
       const decideSlot: Slot | null = decideN > 0 && !base.some(s => s.id === 'decide') ? { id: 'decide', segs: [{ text: t('v74.b.decide_word'), dim: true, tag: 'chip' }, { text: ' ', tag: 'chip' }, { text: String(decideN), tag: 'chip' }] } : null
-      const withFleet = [...base.slice(0, atV + 1), fleetSlot, ...(decideSlot === null ? [] : [decideSlot]), ...base.slice(atV + 1)]
+      // r8 #12 (design S1): `艦隊 … │ 來源 <load source> ⚑ n │ 待決 N`. The hygiene slot moves up to sit right after the fleet counts and carries the 來源 label; v7.4 only.
+      const hyg = v74 ? base.find(s => s.id === 'hygiene') ?? null : null
+      const sourceSlot: Slot | null = hyg === null ? null : { ...hyg, segs: [{ text: t('v74.b.source_word'), dim: true, tag: 'chip' }, { text: ' ', tag: 'chip' }, ...hyg.segs] }
+      // r8 #4: the band names the question of the card the 待決 page has at its cursor, not the first pending one
+      const feedCards = v74 ? mergedDecide() : null
+      const cur = feedCards === null || feedCards.length === 0 ? null : feedCards[Math.max(0, Math.min(feedCards.length - 1, decideLocal.cursor))]
+      const baseQ = cur === null ? base : base.map(s => s.id !== 'verdict' || !s.segs.some(x => x.tag === 'reason') ? s : { ...s, segs: s.segs.map(x => x.tag === 'reason' ? { ...x, text: cur.question } : x) })
+      const rest = hyg === null ? baseQ : baseQ.filter(s => s.id !== 'hygiene')
+      const atV2 = rest.findIndex(s => s.id === 'verdict')
+      const withFleet = [...rest.slice(0, atV2 + 1), fleetSlot, ...(sourceSlot === null ? [] : [sourceSlot]), ...(decideSlot === null ? [] : [decideSlot]), ...rest.slice(atV2 + 1)]
       const parts = rows >= 1 ? v74SpeedParts(steps, petText) : null
       // room is the cells left after the strip and the one-cell gap. The › is not subtracted here: fittedBandWidth counts it when `more` is set.
       // Row 2 owns the tab strip. Subtracting it here left row 1 about 40 cells at 100 columns,
@@ -2036,7 +2045,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge, usageOn, moreTo, con, bandPreset, consoleOn && consoleSnap !== null ? bandQuotaSeg(normalizedPools(consoleSnap), bandNow, t, qSrc) : null, paneOpen || v74, legacyTabs, forgeRow !== null, legacyTabs ? undefined : () => { void togglePane() }, paneOpen)
     // v7.4: the O4 shell and the two-row band never draw. Closed: the one-line BandBar. Open: the page as a full-width framed tree (title in the top border, hint in the bottom border), the tab row, then the BandBar row.
     if (v74) {
-      const height = Math.min(rows - 1, V74_FRAME_MAX) // the band row stays; the tab row is the frame's bottom border. Never more than the design's 27 rows.
+      const height = Math.min(rows - 1, V74_FRAME_MAX) // the band row stays; the tab row is the frame's bottom border. Never more than the design's 28 rows.
       if (!v74Open || height < V74_FRAME_MIN) return stackRows(el, [bar.row1])
       const page = await paneTree($, e as never, false, height)
       await logBandGeometry($, rows, columns, height + 2)

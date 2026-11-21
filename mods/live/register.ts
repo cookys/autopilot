@@ -76,6 +76,7 @@ import type { FleetLaneSum, RoomRow } from './shell'
 import { focusAnchorKey, Pane, noteInputKey, paneRank, resetNoteInputs } from './pane'
 import { routeKey } from './pages/keys'
 import { V75Band } from './band75'
+import type { FlightState } from './v75'
 import { setV75On, v75On, v75SingleFlight, V75_PANE_MIN_ROWS, v75BandRows, v75DetailOffset, v75FocusNext, v75ReopenAfterReload, v75Plan, v75ScrollRoute } from './v75'
 import type { V75Focus } from './v75'
 import type { KeyAction } from './pages/keys'
@@ -1722,14 +1723,8 @@ let v75Focus: V75Focus = 'prompt'
 let v75RingRank: number | null = null // screen-order rank of the Pane's last ring stop (the arrow = a ring step)
 let v75PaneOn = false // the host Pane opened for v7.5 is open now
 // K1: module level (a re-render must not reset the in-flight flag): one open / close at a time
-let toggleFlightRun: (() => Promise<void>) | null = null
-let toggleFlightBusy: (() => void) | null = null
-let toggleFlightBound: (() => Promise<void>) | null = null
-const toggleFlight = (run: () => Promise<void>, onBusy: () => void): (() => Promise<void>) => {
-  toggleFlightRun = run; toggleFlightBusy = onBusy
-  toggleFlightBound ??= v75SingleFlight(() => toggleFlightRun!(), () => toggleFlightBusy!())
-  return toggleFlightBound
-}
+const toggleFlightState: FlightState = { since: null } // the flag is the only thing shared between draws; every draw builds its own closure over ITS $ (a press never runs a closure of an older engine)
+const toggleFlight = (run: () => Promise<void>, onBusy: (ageMs: number) => void): (() => Promise<void>) => v75SingleFlight(run, onBusy, 2500, Date.now, toggleFlightState)
 let v75NotPlaced = false // the host answered isPlaced=false: no Pane, the band falls back to the v7.4 box
 let v75Locked: number | null = null // band height held while the Pane is open (0 -> 1 card never moves the layout)
 let v75LockCount = 0
@@ -2160,7 +2155,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       $.ui.invalidate('ui.render')
       void refocusBand($)
     }
-    const togglePane = toggleFlight(togglePaneRun, () => { void appendLog($, 'band-reload.log', { step: 'toggle-busy' }) })
+    const togglePane = toggleFlight(togglePaneRun, (age) => { void appendLog($, 'band-reload.log', { step: 'toggle-busy', ageMs: age }) })
     const slot = (id: SlotId) => (consoleOn ? pageOpen(SLOT_PAGE_OF[id] ?? 'now', slotUnfolds(id), consoleSlotTab(id)) : openOn(slotTab(id), slotUnfolds(id), id === 'spend' ? 'spend' : undefined))
     // a tab of the band row: the open tab is a memory state; pressing it again closes it. In the console mode a page tab opens the pane on that page (the forge tab keeps its band behaviour)
     const onTab = (id: BarTabId | ConsoleTab | BandPageId) => {

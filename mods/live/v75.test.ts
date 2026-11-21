@@ -292,3 +292,21 @@ test('v75 K2: AUTOPILOT_LIVE_V75=0 (the switch) takes j / k off the decide page 
   expect(pageHotkeys('decide')).toContain('j')
   expect(pageHotkeys('decide')).toContain('k')
 })
+
+test('v75 L1: a press whose predecessor never settled (reload tore it down) runs after the ttl; inside the ttl it is dropped and logged', async () => {
+  let clock = 1000
+  const ran: string[] = []
+  const busy: number[] = []
+  let first = true
+  const toggle = v75SingleFlight(async () => { ran.push('run'); if (first) { first = false; await new Promise(() => {}) } }, a => busy.push(a), 2500, () => clock)
+  void toggle() // never settles: the engine went away mid-call
+  await Promise.resolve()
+  clock += 500
+  await toggle()
+  expect(ran).toEqual(['run']) // inside the ttl: dropped
+  expect(busy).toEqual([500])
+  clock += 3000 // the reload happened; the next press is the person's
+  await toggle()
+  expect(ran).toEqual(['run', 'run'])
+  expect(busy.length).toBe(1)
+})

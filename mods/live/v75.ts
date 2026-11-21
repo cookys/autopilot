@@ -162,11 +162,14 @@ export function v75BandRows(i: V75BandIn): V75Row[] {
 }
 
 // K1: one action at a time. A press that arrives while the previous one is still awaiting is dropped (onBusy tells the log), never read as the opposite action.
-export function v75SingleFlight(run: () => Promise<void>, onBusy: () => void): () => Promise<void> {
-  let busy = false
+// L1 (gate m75m 45/46): a call that never settles (an open or close in flight when /reload-plugins tore the engine down) must not wedge the toggle for good: after ttlMs the
+// flag is treated as free and the press runs. The module-level flag survives a reload; the promise it waited on does not.
+export type FlightState = { since: number | null }
+export function v75SingleFlight(run: () => Promise<void>, onBusy: (ageMs: number) => void, ttlMs = 2500, now: () => number = Date.now, st: FlightState = { since: null }): () => Promise<void> {
   return async () => {
-    if (busy) { onBusy(); return }
-    busy = true
-    try { await run() } finally { busy = false }
+    const t0 = now()
+    if (st.since !== null && t0 - st.since < ttlMs) { onBusy(t0 - st.since); return }
+    st.since = t0
+    try { await run() } finally { if (st.since === t0) st.since = null }
   }
 }

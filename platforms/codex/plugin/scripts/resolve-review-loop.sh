@@ -808,6 +808,41 @@ done
 QC_PANEL_JSON+="]"
 [[ ${#QC_PANEL[@]} -eq 0 ]] && QC_PANEL_JSON="[]"
 
+# operator via PM 01M7XHF4: a local/qwen implementer cannot be reviewed by the same family.
+_excl="$SCRIPT_DIR/lib/local-reviewer-exclusion.js"
+if [[ -f "$_excl" ]] && node "$_excl" implementer-is-local --runner "$IMPL_RUNNER" --endpoint "$IMPL_ENDPOINT" --model "$IMPL_ENGINE"; then
+  _kept_panel=()
+  for _m in "${QC_PANEL[@]}"; do
+    if node "$_excl" seat-dropped --runner "$IMPL_RUNNER" --endpoint "$IMPL_ENDPOINT" --model "$IMPL_ENGINE" --seat-model "$_m"; then
+      continue
+    fi
+    _kept_panel+=("$_m")
+  done
+  if [[ ${#QC_PANEL[@]} -gt 0 && ${#_kept_panel[@]} -eq 0 ]]; then
+    node "$_excl" refusal >&2
+    exit 3
+  fi
+  if [[ ${#_kept_panel[@]} -ne ${#QC_PANEL[@]} ]]; then
+    QC_PANEL=("${_kept_panel[@]}")
+    QC_PANEL_JSON="["
+    _first=1
+    for _m in "${QC_PANEL[@]}"; do
+      [[ $_first -eq 0 ]] && QC_PANEL_JSON+=", "
+      QC_PANEL_JSON+="\"$(json_escape "$_m")\""
+      _first=0
+    done
+    QC_PANEL_JSON+="]"
+    [[ ${#QC_PANEL[@]} -eq 0 ]] && QC_PANEL_JSON="[]"
+  fi
+  if node "$_excl" seat-dropped --runner "$IMPL_RUNNER" --endpoint "$IMPL_ENDPOINT" --model "$IMPL_ENGINE" --seat-model "$REV_ENGINE" --seat-runner "$REV_RUNNER" --seat-endpoint "$REV_ENDPOINT"; then
+    if [[ ${#QC_PANEL[@]} -eq 0 ]]; then
+      node "$_excl" refusal >&2
+      exit 3
+    fi
+  fi
+fi
+unset _excl _kept_panel
+
 # Exact QC companion metadata is positional and fail-closed. A model-only
 # qc_panel remains valid for the legacy review controller, but readiness cannot
 # invent its runner/effort/endpoint and therefore emits complete=false.

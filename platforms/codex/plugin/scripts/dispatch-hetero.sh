@@ -1018,6 +1018,9 @@ process.exit(2);
 }
 
 emit() { # status commit files ins del worktree error
+  if [ "$1" = "engine_unavailable" ] && [ "${CLASSIFIED_ERROR:-}" = "endpoint_busy" ]; then
+    redispatch_cloud_default_busy || true
+  fi
   # Identity containment rail (shared emit path — every outcome): compare post-run
   # consuming-repo user.name/email to the pre-run snapshot; restore + flag on drift.
   # A bare `git config user.*` inside a worktree writes through the shared .git/config.
@@ -1315,7 +1318,7 @@ NODE
   if [ "${BROKER_VERDICT_UNKNOWN_SET:-0}" -eq 1 ]; then
     broker_fields="${broker_fields}, \"broker_verdict_unknown\": \"$(_flat_json_escape "${BROKER_VERDICT_UNKNOWN:-}")\""
   fi
-  tip_verify_fields="$tip_verify_fields$broker_fields"
+  tip_verify_fields="$tip_verify_fields$broker_fields, \"local_fallback\": ${LOCAL_FALLBACK_JSON:-null}"
   hetero_log_fallback "$1"
   local _emit_json
   _emit_json="$(printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "num_turns": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s%s%s%s%s%s%s%s }\n' \
@@ -2522,6 +2525,31 @@ process.stdout.write(JSON.stringify({
   return 1
 }
 
+# Implicit local default only: the slot was taken between the free-slot check and
+# the call. One re-exec onto the cloud default (grok-4.7). Explicit --runner local
+# never takes this path (IMPLICIT_LOCAL_DEFAULT stays 0).
+redispatch_cloud_default_busy() {
+  [ "${IMPLICIT_LOCAL_DEFAULT:-0}" = "1" ] || return 1
+  [ "${LOCAL_BUSY_REDISPATCH:-}" = "1" ] && return 1
+  [ "${RUNNER_SUPPLIED:-0}" = "0" ] || return 1
+  local -a args=()
+  local i=0 a
+  while [ "$i" -lt "${#ORIG_ARGS[@]}" ]; do
+    a="${ORIG_ARGS[$i]}"
+    case "$a" in
+      --runner|--model|--endpoint|--effort) i=$((i + 2)) ;;
+      --runner=*|--model=*|--endpoint=*|--effort=*) i=$((i + 1)) ;;
+      *) args+=("$a"); i=$((i + 1)) ;;
+    esac
+  done
+  args+=(--runner grok --model grok-4.7)
+  unset ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN
+  export LOCAL_BUSY_REDISPATCH=1
+  export AUTOPILOT_LOCAL_FALLBACK_PRESET='{"reason":"no_free_slot","detail":"busy_at_run"}'
+  exec "$0" "${args[@]}" < /dev/null
+  return 1
+}
+
 die_dev_flow_admission() {
   printf '{ "status": "blocked", "phase": "dev_flow_admission", "rejection_code": "DEV_FLOW_ADMISSION_REQUIRED_OR_STALE", "reason": "%s", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "resources_created": 0 }\n' \
     "$(_flat_json_escape "$1")"
@@ -2762,7 +2790,7 @@ write_manifest() {
       "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$tip_verify_json" "$tip_verify_source_json" "$parent_json" "$root_json" "$depth_json" \
       "$mf_timeout_secs" "$(_flat_json_escape "$mf_timeout_source")" "$mf_timeout_enforced" "$strict_manifest_fields" "$strike_suppressed_fields" "$capability_suppressed_fields" "$effort_manifest_fields$role_kit_manifest_fields" "$campaign_scope_fields" "$REPO_IDENTITY_FIELDS$(declare -F dispatch_attr_fields >/dev/null 2>&1 && dispatch_attr_fields "${PROMPT_FILE:-}" "$runner" "${ENDPOINT:-}" "${MANIFEST_FINAL_STATUS:+${OUTCOME_COMMIT:-}}")" \
       "$(declare -F manifest_session_id_json >/dev/null 2>&1 && manifest_session_id_json || printf null)" \
-      "$(declare -F manifest_child_session_json >/dev/null 2>&1 && manifest_child_session_json || printf null)" > "$tmp"
+      "$(declare -F manifest_child_session_json >/dev/null 2>&1 && manifest_child_session_json || printf null), \"local_fallback\": ${LOCAL_FALLBACK_JSON:-null}" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
   return 0
 }
@@ -3281,35 +3309,29 @@ if [ -n "$_ps_parsed" ]; then
 fi
 # Saved before skill-pack / scaffold prepend text, which would hide image magic bytes.
 VISION_PROMPT_FILE="$PROMPT_FILE"
-# Implementer with no --runner is the local qwen seat only when qwen_local
-# resolves ready and the cn gate allows that seat (same prompt the local path
-# will dispatch, including the Task-Class line it would add). Otherwise the
-# unpinned path stays pace-select / grok-4.7 and the checks below keep their
-# previous order. A pin already chose a seat when --pace-role or a pace file
-# returned one, a strict contract is on, or AUTOPILOT_QUALIFICATION_OVERRIDE
-# is set. Explicit --runner is already RUNNER_SUPPLIED.
+# Implementer with no --runner is the local qwen seat when qwen_local resolves
+# ready, a free slot is open, the prompt fits local_context_bytes, and the cn
+# gate allows that seat (operator via PM 01M7XHF4). Otherwise the unpinned path
+# stays pace-select / grok-4.7 and records local_fallback. A pin already chose
+# a seat when --pace-role or a pace file returned one, a strict contract is on,
+# or AUTOPILOT_QUALIFICATION_OVERRIDE is set. Explicit --runner never falls back.
+LOCAL_FALLBACK_JSON="${AUTOPILOT_LOCAL_FALLBACK_PRESET:-null}"
+IMPLICIT_LOCAL_DEFAULT=0
 _impl_role="${PACE_ROLE:-${AUTOPILOT_DISPATCH_ROLE:-implementer}}"
 if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_SUPPLIED" -eq 0 ] && [ "$RUNNER" = "auto" ] && [ "$STRICT_CONTRACT" -eq 0 ] \
    && [ -z "${ENGINE_CHOICE_JSON:-}" ] && [ -z "${AUTOPILOT_QUALIFICATION_OVERRIDE:-}" ] \
-   && [ "$_impl_role" = "implementer" ] \
-   && "$SELF_DIR/resolve-endpoint.sh" qwen_local >/dev/null 2>&1; then
-  _local_gate_prompt="$PROMPT_FILE"
-  _local_gate_tmp=""
-  if ! node -e '
-    const g = require(process.argv[1]);
-    process.exit(g.headerValue([process.argv[2]], "Task-Class") ? 0 : 1);
-  ' "$SELF_DIR/lib/cn-model-dispatch-gate.js" "$PROMPT_FILE"; then
-    _local_gate_tmp="$(mktemp -t 'dispatch-hetero-local-gate-XX''XX''XX')" && \
-      { printf '%s\n' 'Task-Class: simple-script'; cat "$PROMPT_FILE"; } > "$_local_gate_tmp" && \
-      _local_gate_prompt="$_local_gate_tmp"
+   && [ "$_impl_role" = "implementer" ] && [ -z "${AUTOPILOT_LOCAL_FALLBACK_PRESET:-}" ]; then
+  _slot_line="$(node "$SELF_DIR/lib/local-impl-slot.js" --prompt-file "$PROMPT_FILE" --cwd "$(pwd)")"
+  _slot_choose="$(node -e 'let o; try { o=JSON.parse(process.argv[1]); } catch { o={}; } process.stdout.write(o.choose?"1":"0");' "$_slot_line")"
+  if [ "$_slot_choose" = "1" ] \
+     && node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --role implementer --runner cc-shim --model qwen --endpoint qwen_local --prompt-file "$PROMPT_FILE" >/dev/null 2>&1; then
+    RUNNER="local"
+    IMPLICIT_LOCAL_DEFAULT=1
+    LOCAL_FALLBACK_JSON=null
+  else
+    LOCAL_FALLBACK_JSON="$(node -e 'let o; try { o=JSON.parse(process.argv[1]); } catch { o={}; } if (o.choose) o={reason:"no_free_slot",detail:"gate"}; process.stdout.write(JSON.stringify({reason:o.reason||"no_free_slot",detail:String(o.detail||"")}));' "$_slot_line")"
   fi
-  if [ "$_local_gate_prompt" = "$PROMPT_FILE" ] || [ -n "$_local_gate_tmp" ]; then
-    if node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --role implementer --runner cc-shim --model qwen --endpoint qwen_local --prompt-file "$_local_gate_prompt" >/dev/null 2>&1; then
-      RUNNER="local"
-    fi
-  fi
-  [ -n "$_local_gate_tmp" ] && rm -f "$_local_gate_tmp"
-  unset _local_gate_prompt _local_gate_tmp
+  unset _slot_line _slot_choose
 fi
 unset _impl_role
 if [ "$RUNNER" = "local" ]; then
@@ -3630,6 +3652,9 @@ if [ -n "$ENDPOINT" ]; then
   endpoint_preprobe "$ENDPOINT" "$MODEL"
   case "$PROBE_DECISION" in
     unreachable|busy)
+      if [ "$PROBE_DECISION" = "busy" ]; then
+        redispatch_cloud_default_busy
+      fi
       hetero_endpoint_cloud_fallback
       echo "dispatch-hetero: endpoint pre-probe ${ENDPOINT}: ${PROBE_DECISION} (status ${PROBE_STATUS:-none}, ${PROBE_MS:-0} ms, ${PROBE_REASON}); no worker started" >&2
       die_probe_unavailable ;;

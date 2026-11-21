@@ -23,16 +23,12 @@
 //                 .claude/cn-model-gate.json cannot add, extend, or shrink an entry: the window is the
 //                 operator's decision, not a repo's. Every other check still applies. A cloud endpoint
 //                 of the same family, and any other barred family on that endpoint, stay barred.
-//   [core-size]   size is above XS/S (M, L, XL). Skipped when resolution() returns localServed:
-//                 the name is a local-sandbox endpoint AND resolve-endpoint.sh shows a loopback or
-//                 fleet-gateway host (operator rule: the CN gate covers external China-hosted
-//                 services only). A name in that list whose host is not local is not this skip; it
-//                 is [local_name_external_host] and the cloud rules do not run.
-//   [core-dir]    the scope touches a directory the config marks `core`. Skipped when resolution()
-//                 returns localServed (operator via PM, ledger fadf8dc9). A different barred family
-//                 named on a local endpoint, and every cloud endpoint, keep this check.
+//   [core-size]   size is above XS/S (M, L, XL). Not applied when resolution() returns localServed
+//                 (the whole localServed path returns allowed before these classes).
+//   [core-dir]    the scope touches a directory the config marks `core`. Not applied for localServed.
+//                 A different barred family named on a local endpoint, and every cloud endpoint, keep this check.
 //   [core-unset]  effective core_dirs (shipped list union the repo file) is empty, so every scope path
-//                 counts as core. Skipped for the same localServed case (operator via PM, ledger fadf8dc9).
+//                 counts as core. Not applied for localServed.
 //                 Otherwise allowed only when every path matches the shipped core_unset_allow list,
 //                 or is named in New-Files: and does not exist under the repo root yet. A repo file cannot change
 //                 that list. A path allowed only by **/fixtures/**, **/testdata/** or **/__fixtures__/** also needs a basename extension in the shipped core_unset_fixture_exts list (lower-cased); docs/**, doc/** and an absent New-Files path do not, and a repo file cannot change that list. An empty core list must not fail open onto source edits (01M7S88YZPPZKVARP0F2SYMRGS).
@@ -47,40 +43,21 @@
 //   [novel]       role is plan, design, brainstorm, architecture, plan_review or research, or the task is
 //                 marked novel (env AUTOPILOT_TASK_NOVEL=1, or `Novel: yes` header)
 //   [unknown-size|unknown-role|unknown-scope]  FAIL CLOSED: size, role or scope is missing
-// Local endpoint (interim, PM 01M7HQ92; operator rule: CN bars cover external China-hosted services only):
-//   a name in scripts/lib/local-sandbox-endpoints.json (today qwen_local and glm_local) is local only when
-//   `scripts/resolve-endpoint.sh <name>` (the same resolver dispatch uses; this file does not read
-//   endpoints.env) returns a base_url whose host is loopback (localhost, 127.0.0.0/8, ::1) or a host
-//   in local_gateway_hosts (a hostname, or an IPv4 literal only when it is RFC1918 and equals a list
-//   entry exactly). Per-host entries go in ~/.autopilot/config.json local_gateway_hosts; RFC1918 IPv4
-//   is allowed. The tracked repo list stays empty. Public IPv4, IPv6 literals, loopback-as-a-gateway-name
-//   and anything unlisted stay refused. Tests pass the resolver URL/token via
-//   AUTOPILOT_ENDPOINT_<NAME>_URL/_TOKEN and may add gateway hosts via
-//   AUTOPILOT_LOCAL_GATEWAY_HOSTS (comma-separated). Model `auto` is the gateway's own routing, not a
-//   second family. A listed name plus a separator and a model suffix (`qwen_local/Qwen…`, `#`, `:`, `@`)
-//   is still that endpoint. When the name is listed but the host is not local, the dispatch is external:
-//   [local_name_external_host], before the other classes. When the host is local and the family is the
-//   one that endpoint serves, every check above applies as for a cloud endpoint of that family, except
-//   [core-size] (a big size stays a known size, not unknown-size), [review-role] when a shipped
-//   review_local_exceptions entry names that endpoint, now < until, and the repo is outside
-//   local_deny_repos, and [core-dir] and [core-unset] (operator via PM, ledger fadf8dc9). A different
-//   barred family named on the endpoint, and every cloud endpoint, keep [core-size], [core-dir] and
-//   [core-unset]. Past the review window, [review-role] applies and is decided before the later local checks.
-//   [local-restricted-repo] (shipped-only local_restricted_repos; game repos revival* and pinball*, operator
-//   2026-11-15 rule: small mechanical tested work only): a repo matching an entry passes only with Task-Class in
-//   its task_classes, Size in its sizes, and no Scope/New-Files path matching its deny_paths (assets, Content,
-//   raw and player data); else this class, after [task-class]. Trial scope (PM ruling): when role is implementer
-//   and the repo matches such an entry, [unknown-task-class], [task-class] and the entry's task_classes are
-//   skipped (Size, deny_paths, transcript, sensitive and review-role still apply); other roles and repos unchanged. twgameproject* stays in local_deny_repos.
-//   Two further checks then apply, and only then: [local-deny-repo] the repo directory name matches local_deny_repos; [unknown-task-class]
-//   Task-Class is missing; [task-class] it is not in local_task_classes (format-convert, log-summary,
-//   simple-script, test-scaffold). A different barred family on that endpoint (a kimi model on qwen_local)
-//   stays on the cloud checks only. Cloud endpoints are unchanged. filter-ladder applies the same rule to a
-//   rung that names the local endpoint (engine/effort@runner#endpoint, or a runner/model equal to that name).
-// Allowed only when none match: XS/S mechanical edit with tests, formatting, docs, open-source dependency bumps,
-//   and the role is not a review role (cloud). A local served-family review role passes this class only inside
-//   a shipped review_local_exceptions window, and that dispatch also needs an allowed Task-Class and a repo
-//   outside local_deny_repos.
+// Local endpoint (operator via PM 01M7XHF4): a name in scripts/lib/local-sandbox-endpoints.json
+//   (today qwen_local and glm_local) is localServed only when `scripts/resolve-endpoint.sh <name>`
+//   returns a base_url whose host is loopback or a host in local_gateway_hosts, and no OTHER barred
+//   family is named. When resolution() returns localServed, check() allows immediately. It skips
+//   unknown-size, unknown-role, unknown-scope, unknown-task-class, task-class, transcript, sensitive,
+//   novel, review-role, local-deny-repo, local-restricted-repo, core-size, core-dir and core-unset.
+//   The only remaining local check is that the endpoint really resolves to a local host. A listed
+//   name whose host is not local is [local_name_external_host], before the cloud classes, and the
+//   cloud rules do not run. A different barred family named on that endpoint, and every cloud
+//   endpoint, keep every cloud class. Model `auto` is the gateway's own routing, not a second family.
+//   Tests pass the resolver URL/token via AUTOPILOT_ENDPOINT_<NAME>_URL/_TOKEN and may add gateway
+//   hosts via AUTOPILOT_LOCAL_GATEWAY_HOSTS. filter-ladder applies the same rule to a rung that names
+//   the local endpoint.
+// Allowed on a cloud barred family only when none of the classes match: XS/S mechanical edit with
+//   tests, formatting, docs, open-source dependency bumps, and the role is not a review role.
 //
 // Task facts (env wins over header; header = first 8 lines of the brief/spec, `Key: v` alone or as a `| Key: v` field):
 //   size   AUTOPILOT_TASK_SIZE  / `Size: XS|S|M|L|XL`
@@ -578,6 +555,9 @@ function check(opts = {}) {
   const block = (cls) => ({ allowed: false, family, cls, line: refusalLine(family, cls) });
   // Listed local name, host is not the fleet's own gateway: external, before size/role.
   if (localNameExternal) return block('local_name_external_host');
+  // operator via PM 01M7XHF4: a proven-local served family leaves the machine room.
+  // The host check above is the only CN check that still applies.
+  if (localServed) return { allowed: true, family };
   if (f.transcript) return block('transcript');
   if (matchesAny(path.basename(root), gateLists.sensitive_repos) || f.scope.some((p) => matchesAny(p, gateLists.sensitive_paths))) return block('sensitive');
   // Review roles are refused at every size. A review rail role (or brief Role:) is a floor that
@@ -612,19 +592,9 @@ function check(opts = {}) {
     if (unset) return block('core-unset');
   } else if (!localServed && f.scope.some((p) => matchesAny(p, gateLists.core_dirs))) return block('core-dir');
   if (f.novel || gateLists.novel_roles.includes(f.role) || gateLists.novel_roles.includes(f.railRole)) return block('novel');
-  if (!SMALL_SIZES.includes(f.size) && !(localServed && BIG_SIZES.includes(f.size))) return block('unknown-size');
+  if (!SMALL_SIZES.includes(f.size)) return block('unknown-size');
   if (!f.role) return block('unknown-role');
   if (!f.scope.length) return block('unknown-scope');
-  if (localServed) {
-    if (matchesAny(path.basename(root), gateLists.local_deny_repos)) return block('local-deny-repo');
-    // Trial scope (PM ruling): an implementer in a local_restricted_repos repo needs no Task-Class.
-    const trial = f.role === 'implementer' && inRestrictedTrial(path.basename(root));
-    if (!trial) {
-      if (!f.taskClass) return block('unknown-task-class');
-      if (!gateLists.local_task_classes.includes(f.taskClass)) return block('task-class');
-    }
-    if (restrictedRepoBlocks(path.basename(root), f, trial)) return block('local-restricted-repo');
-  }
   return { allowed: true, family };
 }
 

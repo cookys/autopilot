@@ -3272,6 +3272,61 @@
       "summary": "Comma-separated hostnames added to local_gateway_hosts for tests. Per-host entries go in ~/.autopilot/config.json local_gateway_hosts; RFC1918 IPv4 is allowed."
     },
     {
+      "name": "AUTOPILOT_LOCAL_FALLBACK_PRESET",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": ["scripts/dispatch-hetero.sh"],
+      "doc": null,
+      "relates": [],
+      "summary": "JSON local_fallback object a busy re-dispatch child prints. Set only by dispatch-hetero.sh itself."
+    },
+    {
+      "name": "AUTOPILOT_LOCAL_SLOTS_CMD",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "",
+      "readers": ["scripts/lib/local-impl-slot.js"],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": ["local_slots_cmd"],
+      "summary": "Overrides config local_slots_cmd. The command prints one JSON line {\"free\":<int>,\"draining\":<bool>} and is killed after 3 seconds."
+    },
+    {
+      "name": "AUTOPILOT_REVIEWED_IMPLEMENTER_ENDPOINT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": ["scripts/resolve-dispatch-topology.js"],
+      "doc": null,
+      "relates": ["AUTOPILOT_REVIEWED_IMPLEMENTER_RUNNER", "AUTOPILOT_REVIEWED_IMPLEMENTER_MODEL"],
+      "summary": "Endpoint of the implementer whose review panel is being built. With the runner and model, a local qwen implementer drops same-family reviewer rungs."
+    },
+    {
+      "name": "AUTOPILOT_REVIEWED_IMPLEMENTER_MODEL",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": ["scripts/resolve-dispatch-topology.js"],
+      "doc": null,
+      "relates": ["AUTOPILOT_REVIEWED_IMPLEMENTER_RUNNER", "AUTOPILOT_REVIEWED_IMPLEMENTER_ENDPOINT"],
+      "summary": "Model of the implementer whose review panel is being built."
+    },
+    {
+      "name": "AUTOPILOT_REVIEWED_IMPLEMENTER_RUNNER",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": ["scripts/resolve-dispatch-topology.js"],
+      "doc": null,
+      "relates": ["AUTOPILOT_REVIEWED_IMPLEMENTER_ENDPOINT", "AUTOPILOT_REVIEWED_IMPLEMENTER_MODEL"],
+      "summary": "Runner of the implementer whose review panel is being built."
+    },
+    {
       "name": "AUTOPILOT_LOCAL_LEASE_DIR",
       "kind": "env",
       "audience": "internal",
@@ -7347,6 +7402,30 @@
       ],
       "summary": "Per-host gateway hostnames, or RFC1918 IPv4 addresses, unioned with the tracked list. A missing or unparsable config adds nothing. Public IPv4 stays refused.",
       "type": "array"
+    },
+    {
+      "name": "local_context_bytes",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "dispatch",
+      "default": 400000,
+      "readers": ["scripts/lib/local-impl-slot.js"],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Byte cap for an implicit local implementer: prompt file plus existing relative Scope files. Above this, dispatch stays on the cloud default.",
+      "type": "number"
+    },
+    {
+      "name": "local_slots_cmd",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "",
+      "readers": ["scripts/lib/local-impl-slot.js"],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": ["AUTOPILOT_LOCAL_SLOTS_CMD"],
+      "summary": "Command that prints one JSON line {\"free\":<int>,\"draining\":<bool>} for the local implementer slot. Empty means probe qwen_local instead. Timeout is 3 seconds.",
+      "type": "string"
     },
     {
       "name": "AUTOPILOT_FLEET_GATEWAY_ENDPOINTS",

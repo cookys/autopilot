@@ -373,10 +373,19 @@ test('bare card ids need a plain-language subject', (t) => {
   assert.equal(f.check('見\n```\nd-47602dd8\n```\n。'), null);
   assert.equal(f.check('他寫「d-47602dd8 開著」。'), null);
   assert.equal(f.check('d-47602dd8 開著。\nOWNER-GUARD-FALSE-POSITIVE [bare_card_id] d-47602dd8 :: 範例編號'), null);
-  const team = require('../scripts/lib/team.js');
-  const origResolve = team.resolve;
-  team.resolve = () => ({ role: 'lane', source: 'test', pm: null });
-  t.after(() => { team.resolve = origResolve; });
+  const hadFleet = Object.hasOwn(process.env, 'FLEET_ADDRESS');
+  const savedFleet = process.env.FLEET_ADDRESS;
+  const savedCfg = fs.existsSync(f.configFile) ? fs.readFileSync(f.configFile, 'utf8') : null;
+  // A gated seat (the ask-guard decision: fleet address, deny window) gets the lane treatment.
+  // The decision never reads team.json, so the old team.resolve monkeypatch is gone.
+  process.env.FLEET_ADDRESS = 'ns/host/lane-x--claude';
+  fs.writeFileSync(f.configFile, JSON.stringify({ ask_guard: { enforce_from: new Date(Date.now() - 2 * 3600e3).toISOString() } }));
+  t.after(() => {
+    if (hadFleet) process.env.FLEET_ADDRESS = savedFleet;
+    else delete process.env.FLEET_ADDRESS;
+    if (savedCfg === null) { try { fs.unlinkSync(f.configFile); } catch { /* gone */ } }
+    else fs.writeFileSync(f.configFile, savedCfg);
+  });
   const laneBare = f.check('d-47602dd8 開著。');
   assert.equal(laneBare?.decision, 'block');
   assert.match(laneBare.reason, /d-47602dd8（週一手機重連 Wi-Fi）/);
@@ -745,4 +754,54 @@ test('a colon heading and its bullets are one sentence: a card in the bullet cou
   const f = fixture(t), id = f.card();
   assert.equal(f.check(`**新開一張卡要你決定：**\n- ${id}（合成待決）…`), null);
   assert.equal(f.check('**新開一張卡要你決定：**\n- 合成待決的事項…')?.decision, 'block');
+});
+
+// c4140 regression: the seat is the session's fleet address, never team.json. A gated lane
+// seat (no team.json, fleet address not in the allow list) is routed to the PM (denied) after
+// the ask_guard window and only warned (not blocked + one hits.jsonl line) inside it; the
+// operator's own session (no fleet address) keeps the operator-card path and writes no hits.
+test('c4140: gated lane seat denied after the window, warned inside it; operator seat keeps the card path', (t) => {
+  const f = fixture(t);
+  // Isolate the autopilot state dir: hits.jsonl lands under $HOME/.autopilot/ask-guard/.
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'ask-guard-home-'));
+  const savedHome = process.env.HOME;
+  process.env.HOME = home;
+  const savedFleet = process.env.FLEET_ADDRESS;
+  delete process.env.FLEET_ADDRESS;
+  const askText = '請你決定要不要合併。';
+  const hitsFile = path.join(home, '.autopilot', 'ask-guard', 'hits.jsonl');
+  t.after(() => {
+    process.env.HOME = savedHome;
+    if (savedFleet === undefined) delete process.env.FLEET_ADDRESS;
+    else process.env.FLEET_ADDRESS = savedFleet;
+    fs.rmSync(home, { recursive: true, force: true });
+  });
+
+  // Operator's own session (no fleet address): the operator-card path, never the PM route, no hits.
+  fs.writeFileSync(f.configFile, JSON.stringify({}));
+  const own = f.check(askText);
+  assert.equal(own?.decision, 'block', 'operator seat still asks for a live card');
+  assert.match(own.reason, /open-decision\.js/);
+  assert.doesNotMatch(own.reason, /request-decision\.js/);
+  assert.equal(fs.existsSync(hitsFile), false, 'allowed seat writes no hits line');
+
+  // Gated seat (c4140 gpu-lead, no team.json) inside the warn window: not blocked, one hits line.
+  process.env.FLEET_ADDRESS = 'cookys/c4140/gpu-lead--claude';
+  fs.writeFileSync(f.configFile, JSON.stringify({
+    ask_guard: { enforce_from: new Date(Date.now() - 30 * 60 * 1000).toISOString() },
+  }));
+  assert.equal(f.check(askText), null, 'inside the warn window the gated seat is not blocked');
+  const warnLines = fs.readFileSync(hitsFile, 'utf8').trim().split('\n');
+  assert.equal(warnLines.length, 1, 'exactly one hits.jsonl line for the warn');
+  assert.equal(JSON.parse(warnLines[0]).seat, 'cookys/c4140/gpu-lead--claude');
+  assert.equal(JSON.parse(warnLines[0]).mode, 'warn');
+
+  // Same gated seat after the window: denied -> blocked and routed to the PM; no new hits line.
+  fs.writeFileSync(f.configFile, JSON.stringify({
+    ask_guard: { enforce_from: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() },
+  }));
+  const denied = f.check(askText);
+  assert.equal(denied?.decision, 'block', 'after the window the gated seat is denied');
+  assert.match(denied.reason, /request-decision\.js/, 'denied seat is routed to the PM');
+  assert.equal(fs.readFileSync(hitsFile, 'utf8').trim().split('\n').length, 1, 'deny appends no new hits line');
 });

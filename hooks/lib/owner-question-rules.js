@@ -28,9 +28,13 @@ const OPEN_DECISION_CMD = shellQuotePath(OPEN_DECISION_JS);
 
 const REQUEST_ID = /\br-[0-9a-f]{8}\b/i;
 
-function teamRole() {
-  try { return require('../../scripts/lib/team.js').resolve().role; } catch { return 'lane'; }
-}
+// The PM question-gate seat decision (hooks/lib/ask-guard.js): the seat is the session's fleet
+// address, never team.json (the c4140 incident). 'allow' seats keep today's solo/pm treatment;
+// every other seat is gated — blocked after the ask_guard.enforce_from + 1 h warn window.
+const askGuard = require('./ask-guard.js');
+// Problems that are NOT the owner-question gate itself (they keep applying to a gated seat
+// inside the warn window): reply-language, root-scope and card-format lints.
+const NON_GATE_RULES = new Set(['reply_language', 'unbound_card', 'bare_card_id']);
 const CARD_ID = /\bd-[0-9a-f]{8}\b/gi;
 // A textual scheduling reference, not a claim that this hook queried the fleet.
 // ISO calendar day, optionally a UTC/offset timestamp; invalid calendar days do not qualify.
@@ -556,8 +560,10 @@ function collectProblems(text, input = {}) {
     const lang = languageCheck(text);
     if (lang) problems.push({ rule: 'reply_language', sentence: oneLine(text).slice(0, 120), fix: lang.reason });
   }
-  const role = teamRole();
-  const lane = !namedUnbound.length && role !== 'solo' && role !== 'pm';
+  // ask-guard seat decision (never team.json): a gated seat gets the lane treatment (LANE_FIX),
+  // an allowed seat keeps the solo/pm treatment.
+  const seat = askGuard.decide({ env: envBag(), cwd });
+  const lane = !namedUnbound.length && seat.verdict !== 'allow';
   const silenced = lane && (REQUEST_ID.test(text) || /\bd-[0-9a-f]{8}\b/i.test(text));
   if (!silenced) {
     if (lane) {
@@ -645,6 +651,20 @@ function reasonForTurn(input, text, prev) {
   if (prev && text.length <= SHORT_CORRECTION_MAX) {
     const prevRun = collectProblems(prev, input);
     if (prevRun.problems.length) problems = applyShortCorrection(prevRun.problems, text, problems, input.cwd || process.cwd());
+  }
+  // Inside the ask_guard warn window a gated seat's owner question is not blocked: the gate
+  // records one hits.jsonl line and one stderr line, and lets the reply stand (rule 3 rollout,
+  // same shape as foreman_guard.poll_enforce_from). After the window the same problems block.
+  if (problems.length) {
+    const seat = askGuard.decide({ env: envBag(), cwd: input.cwd || process.cwd() });
+    if (seat.verdict === 'warn') {
+      const gated = problems.filter((p) => !NON_GATE_RULES.has(p.rule));
+      if (gated.length) {
+        askGuard.recordHit(seat, { env: envBag(), sessionId: input.session_id });
+        process.stderr.write(`${askGuard.warnLine(seat)}\n`);
+        problems = problems.filter((p) => NON_GATE_RULES.has(p.rule));
+      }
+    }
   }
   return formatReason(problems);
 }

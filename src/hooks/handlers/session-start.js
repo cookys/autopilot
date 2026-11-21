@@ -29,13 +29,12 @@ function shellQuotePath(p) {
 const OPEN_DECISION_CMD = shellQuotePath(OPEN_DECISION_JS);
 const OPEN_CARD_LINE = `Anything that needs the owner's decision or answer: open a card with node ${OPEN_DECISION_CMD} open --category <money|identity|presence|goal|public-release|unbackable-loss|authority> --executor <address> --question <q> --option <label>::<desc> --option <label>::<desc> --recommendation <label> --why <reason> --not-authorized <boundary>[:<why>] (at least two options, or --free-text when the owner answers in typed text; --category (only those six kinds of question reach the operator), --executor (who carries out the answer) and --not-authorized are required and refused when the DOA lets you decide it) and write the card id (d- + 8 hex) in the reply.`;
 
-function teamRole() {
-  try { return require('../../../scripts/lib/team.js').resolve().role; } catch { return 'lane'; }
-}
-
+// The same PM question-gate seat decision the hooks use (hooks/lib/ask-guard.js): the seat is
+// the session's fleet address, never team.json. An allowed seat is told to open cards; a gated
+// seat is told to send the question to the PM.
 function ownerQuestionLine() {
-  const role = teamRole();
-  if (role === 'solo' || role === 'pm') return OPEN_CARD_LINE;
+  const seat = require('../../../hooks/lib/ask-guard.js').decide({ env: process.env, cwd: process.cwd() });
+  if (seat.verdict === 'allow') return OPEN_CARD_LINE;
   const req = shellQuotePath(path.join(__dirname, '..', '..', '..', 'scripts', 'request-decision.js'));
   return `Anything that needs the owner's decision or answer: send it to the PM with node ${req} send --question <q> --option <label>::<desc> --option <label>::<desc> --recommendation <label> --boundary <boundary> (an irreversible request also needs --snapshot and --blast-radius) and write the request id (r- + 8 hex) in the reply.`;
 }

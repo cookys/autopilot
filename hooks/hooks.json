@@ -105,6 +105,12 @@
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/scheduled-wakeup-guard.js",
             "timeout": 5,
             "onFailure": "continue"
+          },
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/bg-quiet-sweep.js",
+            "timeout": 5,
+            "onFailure": "continue"
           }
         ]
       },
@@ -219,6 +225,12 @@
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/scheduled-wakeup-guard.js",
             "timeout": 5,
             "onFailure": "continue"
+          },
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/bg-quiet-sweep.js",
+            "timeout": 5,
+            "onFailure": "continue"
           }
         ]
       },
@@ -326,6 +338,12 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/subagent-fleet-task.js",
+            "timeout": 5,
+            "onFailure": "continue"
+          },
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/bg-quiet-sweep.js",
             "timeout": 5,
             "onFailure": "continue"
           }
@@ -479,6 +497,12 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/subagent-fleet-task.js",
+            "timeout": 5,
+            "onFailure": "continue"
+          },
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/bg-quiet-sweep.js",
             "timeout": 5,
             "onFailure": "continue"
           }

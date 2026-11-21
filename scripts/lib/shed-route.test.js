@@ -34,6 +34,14 @@ test('routes only fresh listed mechanical work', (t) => {
   ] }), { shed: false, reason: 'no_eligible_target', skipped_targets: [
     { target: 'minimax', reason: 'blocked-minimax' }, { target: 'kimi', reason: 'blocked-kimi' }
   ] });
+  write({ shed: { pools: [{ pool: 'stranity-personal', seats: ['capacity--claude'] }], rules: {
+    mechanical_classes: ['文件'], targets_in_order: ['codex'], keep_on_origin: []
+  } } });
+  assert.deepEqual(decide({ env, briefText, now, skippedTargets: [
+    { target: 'codex', reason: 'blocked-codex' }
+  ] }), { shed: false, reason: 'no_eligible_target', skipped_targets: [
+    { target: 'codex', reason: 'blocked-codex' }
+  ] });
   write({ generated_at: '2026-11-20T23:00:00Z' });
   assert.equal(decide({ env, briefText, now }).reason, 'stale');
   fs.rmSync(file);

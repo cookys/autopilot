@@ -44,10 +44,15 @@ node -e 'const o=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
 REAL_NODE="$(command -v node)"
 cat > "$TEST_TMP/bin/node" <<'EOF_NODE'
 #!/usr/bin/bash
+if [[ "${SHED_TEST_GATE:-}" == reject-all && "${1:-}" == *"shed-route.js" ]]; then
+  printf '%s\n' '{"shed":true,"run_id":"bm-hook-fixture","pool":"fixture-pool","target":"codex","reason":"listed_mechanical"}'
+  exit 0
+fi
 if [[ "${1:-}" == *"cn-model-dispatch-gate.js" ]]; then
   case "${SHED_TEST_GATE:-} $*" in
     *"--runner cc-shim"*) echo 'cn_model_dispatch_barred minimax restricted_operator_private_workdir' >&2; exit 2 ;;
     *"--runner kimi"*) echo 'cn_model_dispatch_barred moonshot restricted_operator_unknown_endpoint' >&2; exit 2 ;;
+    reject-all*"--runner codex"*) echo 'cn_model_dispatch_barred codex restricted_operator_unknown_endpoint' >&2; exit 2 ;;
   esac
 fi
 exec "$SHED_TEST_REAL_NODE" "$@"
@@ -88,6 +93,18 @@ JSON="$(printf '%s\n' "$OUT" | "$REAL_NODE" -e 'let s="";process.stdin.on("data"
 "$REAL_NODE" -e 'const o=JSON.parse(process.argv[1]); if(o.runner!=="grok"||o.shed?.reason!=="no_eligible_target") process.exit(1)' "$JSON" || fail 'all-refused status reports normal route and no_eligible_target'
 MF="$(node -e 'const fs=require("fs"),p=process.argv[1]; const f=fs.readdirSync(p).find(x=>x.endsWith(".manifest.json")); process.stdout.write(f?`${p}/${f}`:"")' "$AUTOPILOT_DISPATCH_RUNS_DIR")"
 node -e 'const o=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); if(o.shed!==null) process.exit(1)' "$MF" || fail 'all-refused manifest records shed null'
+
+sed -i 's/"targets_in_order":\["minimax","kimi"\]/"targets_in_order":["minimax","kimi","codex"]/' "$TEST_TMP/burn-more.json"
+rm -f "$AUTOPILOT_DISPATCH_RUNS_DIR"/*
+OUT="$(cd "$SBX" && timeout 60 env PATH="$TEST_TMP/bin:$PATH" SHED_TEST_GATE=reject-all "$SCRIPT" --no-verify-tip --context-window off --codex-bin "$TEST_TMP/bin/codex" --grok-bin "$TEST_TMP/bin/grok" --branch feat/shed-codex-refused --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/codex-refused.err")"
+EXIT=$?
+assert_eq 0 "$EXIT" 'refused codex shed target terminates within 60 seconds'
+JSON="$(printf '%s\n' "$OUT" | "$REAL_NODE" -e 'let s="";process.stdin.on("data",x=>s+=x).on("end",()=>{const o=s.trim().split(/\r?\n/).filter(x=>x.startsWith("{")).map(JSON.parse).pop();process.stdout.write(JSON.stringify(o||{}))})')"
+"$REAL_NODE" -e 'const o=JSON.parse(process.argv[1]); if(o.runner!=="grok") process.exit(1)' "$JSON" || fail 'refused codex status falls back to normal routing'
+MF="$(node -e 'const fs=require("fs"),p=process.argv[1]; const f=fs.readdirSync(p).find(x=>x.endsWith(".manifest.json")); process.stdout.write(f?`${p}/${f}`:"")' "$AUTOPILOT_DISPATCH_RUNS_DIR")"
+node -e 'const o=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); if(o.shed!==null) process.exit(1)' "$MF" || fail 'refused codex manifest records shed null'
+if ! node -e 'const s=require("fs").readFileSync(process.argv[1],"utf8"); if(!s.includes("shed route pre-check exceeded target limit; falling back to normal routing")) process.exit(1)' "$TEST_TMP/codex-refused.err"; then fail 'refused codex emits iteration-limit warning'; fi
+
 rm -f "$AUTOPILOT_DISPATCH_RUNS_DIR"/*
 OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_SHED_ROUTE=0 "$SCRIPT" --no-verify-tip --context-window off --grok-bin "$TEST_TMP/bin/grok" --branch feat/shed-off --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/off.err")"
 EXIT=$?

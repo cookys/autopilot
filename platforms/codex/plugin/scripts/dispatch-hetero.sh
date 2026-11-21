@@ -2879,7 +2879,7 @@ write_manifest() {
   if [ "${NO_CAMPAIGN:-0}" -eq 1 ] && [ -n "${MISSION_ENFORCEMENT_MODE_SEEN:-}" ]; then
     campaign_scope_fields=", \"campaign_scope\": \"none_declared\", \"enforcement_mode\": \"$(_flat_json_escape "$MISSION_ENFORCEMENT_MODE_SEEN")\""
   fi
-  campaign_scope_fields="$campaign_scope_fields, \"mount_containment\": \"${MANIFEST_MOUNT_CONTAINMENT:-refused}\", \"shed\": ${SHED_ROUTE_JSON:-null}"
+  campaign_scope_fields="$campaign_scope_fields, \"mount_containment\": \"${MANIFEST_MOUNT_CONTAINMENT:-refused}\", \"shed\": ${SHED_ROUTE_MANIFEST_JSON:-null}"
   # Compact tip_verify for the manifest. The result JSON keeps the command
   # tails; this write (including the finalize that stamps final_status) keeps
   # only the status scalar and the source. Inline so detach's declare -f of
@@ -3472,6 +3472,7 @@ VISION_PROMPT_FILE="$PROMPT_FILE"
 LOCAL_FALLBACK_JSON="${AUTOPILOT_LOCAL_FALLBACK_PRESET:-null}"
 LOCAL_SLOTS_JSON=null
 SHED_ROUTE_JSON=null
+SHED_ROUTE_MANIFEST_JSON=null
 SHED_ROUTE_TARGET=""
 IMPLICIT_LOCAL_DEFAULT=0
 _impl_role="${PACE_ROLE:-${AUTOPILOT_DISPATCH_ROLE:-implementer}}"
@@ -3479,7 +3480,51 @@ if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_S
    && [ -z "${ENGINE_CHOICE_JSON:-}" ] && [ -z "${AUTOPILOT_QUALIFICATION_OVERRIDE:-}" ] \
    && [ "$_impl_role" = "implementer" ] && [ -z "${AUTOPILOT_LOCAL_FALLBACK_PRESET:-}" ]; then
   if [ "${AUTOPILOT_SHED_ROUTE:-1}" != "0" ]; then
-    SHED_ROUTE_JSON="$(node "$SELF_DIR/lib/shed-route.js" --prompt-file "$PROMPT_FILE" 2>/dev/null || printf '{"shed":false,"reason":"no_file"}')"
+    _shed_skips=()
+    _shed_iterations=0
+    _shed_iteration_limit=5
+    while :; do
+      _shed_iterations=$((_shed_iterations + 1))
+      if [ "$_shed_iterations" -gt "$_shed_iteration_limit" ]; then
+        printf '%s\n' 'dispatch-hetero: warn: shed route pre-check exceeded target limit; falling back to normal routing' >&2
+        SHED_ROUTE_JSON='{"shed":false,"reason":"iteration_limit"}'
+        SHED_ROUTE_TARGET=""
+        break
+      fi
+      _shed_args=(--prompt-file "$PROMPT_FILE")
+      for _shed_skip in "${_shed_skips[@]}"; do _shed_args+=(--skip-target "$_shed_skip"); done
+      SHED_ROUTE_JSON="$(node "$SELF_DIR/lib/shed-route.js" "${_shed_args[@]}" 2>/dev/null || printf '{"shed":false,"reason":"no_file"}')"
+      SHED_ROUTE_TARGET="$(node -e 'try { const x=JSON.parse(process.argv[1]); process.stdout.write(x.shed ? String(x.target || "") : ""); } catch (_) {}' "$SHED_ROUTE_JSON")"
+      [ -n "$SHED_ROUTE_TARGET" ] || break
+      case "$SHED_ROUTE_TARGET" in
+        minimax) _shed_runner=cc-shim; _shed_model=MiniMax-M3; _shed_endpoint=minimax ;;
+        kimi)
+          _shed_runner=kimi
+          _shed_model="${MODEL:-$(node -e 'process.stdout.write(require(process.argv[1]).brokerConfig("kimi").defaultModel)' "$SELF_DIR/lib/cursor-broker-client.js")}"; [ "$MODEL_IS_DEFAULT" -eq 1 ] || _shed_model="$MODEL"
+          _shed_endpoint="${ENDPOINT:-kimi}" ;;
+        codex)
+          _shed_runner=codex; _shed_model="${MODEL:-gpt-6.1-terra}"; [ "$MODEL_IS_DEFAULT" -eq 1 ] || _shed_model="$MODEL"
+          _shed_endpoint="${ENDPOINT:-codex}" ;;
+        local) _shed_runner=cc-shim; _shed_model=qwen; _shed_endpoint=qwen_local ;;
+      esac
+      _shed_reason=""
+      if [ "$SHED_ROUTE_TARGET" = "minimax" ] && ! bash "$SELF_DIR/resolve-endpoint.sh" minimax >/dev/null 2>&1; then
+        _shed_reason="resolve_endpoint_failed"
+      else
+        _shed_gate_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner "$_shed_runner" --model "$_shed_model" --endpoint "$_shed_endpoint" --cwd "$(pwd)" --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" && _shed_gate_rc=0 || _shed_gate_rc=$?
+        if [ "$_shed_gate_rc" -ne 0 ]; then _shed_reason="${_shed_gate_msg:-cn_model_dispatch_gate_rc_${_shed_gate_rc}}"; fi
+      fi
+      if [ -z "$_shed_reason" ]; then
+        SHED_ROUTE_MANIFEST_JSON="$SHED_ROUTE_JSON"
+        break
+      fi
+      _shed_skip_target="$SHED_ROUTE_TARGET"
+      [ "$SHED_ROUTE_TARGET" != "local" ] || _shed_skip_target=local-27b
+      _shed_skips+=("$_shed_skip_target=$_shed_reason")
+    done
+    if [ -z "$SHED_ROUTE_TARGET" ] && [[ "$SHED_ROUTE_JSON" == *'"reason":"no_eligible_target"'* ]]; then
+      printf '%s\n' 'dispatch-hetero: warn: shed route skipped: no_eligible_target' >&2
+    fi
     SHED_ROUTE_TARGET="$(node -e 'try { const x=JSON.parse(process.argv[1]); process.stdout.write(x.shed ? String(x.target || "") : ""); } catch (_) {}' "$SHED_ROUTE_JSON")"
     case "$SHED_ROUTE_TARGET" in
       minimax)
@@ -3489,6 +3534,7 @@ if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_S
       codex) RUNNER="codex" ;;
     esac
   fi
+  unset _shed_args _shed_skips _shed_skip _shed_skip_target _shed_runner _shed_model _shed_endpoint _shed_reason _shed_gate_msg _shed_gate_rc _shed_iterations _shed_iteration_limit
   if [ "$RUNNER" != "auto" ]; then
     : # shed selected a cloud target; the local slot probe is not applicable
   else
@@ -7861,7 +7907,7 @@ dispatch_detached_run() {
   rm -f "$RESULT_FILE" "$EXIT_FILE"
   local state_file; state_file="$(mktemp -t hetero-detach-state-XXXXXX)"
   {
-    declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN CURSOR_BIN OPENCODE_BIN OPENCODE_VER KIMI_BIN QODER_BIN QODER_CONFIG_DIR KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER ENDPOINT PACE_ROLE ENGINE_CHOICE_JSON PACE_CHOICE_JSON SHED_ROUTE_JSON SHED_ROUTE_TARGET EFFORT CLAUDE_EFFORT_ARG \
+    declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN CURSOR_BIN OPENCODE_BIN OPENCODE_VER KIMI_BIN QODER_BIN QODER_CONFIG_DIR KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER ENDPOINT PACE_ROLE ENGINE_CHOICE_JSON PACE_CHOICE_JSON SHED_ROUTE_JSON SHED_ROUTE_MANIFEST_JSON SHED_ROUTE_TARGET EFFORT CLAUDE_EFFORT_ARG \
       SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_CURSOR IS_OPENCODE IS_KIMI IS_QODER IS_CNATIVE CNATIVE_CONFIG_DIR RUNNER_RESOLVED CURSOR_FAST PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT GITCONFIG_SNAPSHOT_FILE GITCONFIG_DRIFT_KEYS EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
       BROKER_TIMEOUT_S BROKER_RESULT BROKER_VERDICT BROKER_REASON BROKER_VERDICT_KIND BROKER_VERDICT_UNKNOWN BROKER_VERDICT_UNKNOWN_SET BROKER_RUNNER BIN_FLAG_KIMI \
       WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID WORKER_FALLBACK_PGID GROK_PROMPT_FILE EFFORT_SENT CCSHIM_PROMPT_FILE OPENCODE_PROMPT_FILE KIMI_PROMPT_FILE QODER_PROMPT_FILE KIMI_EDIT_ONLY \

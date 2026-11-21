@@ -3481,7 +3481,16 @@ if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_S
    && [ "$_impl_role" = "implementer" ] && [ -z "${AUTOPILOT_LOCAL_FALLBACK_PRESET:-}" ]; then
   if [ "${AUTOPILOT_SHED_ROUTE:-1}" != "0" ]; then
     _shed_skips=()
+    _shed_iterations=0
+    _shed_iteration_limit=5
     while :; do
+      _shed_iterations=$((_shed_iterations + 1))
+      if [ "$_shed_iterations" -gt "$_shed_iteration_limit" ]; then
+        printf '%s\n' 'dispatch-hetero: warn: shed route pre-check exceeded target limit; falling back to normal routing' >&2
+        SHED_ROUTE_JSON='{"shed":false,"reason":"iteration_limit"}'
+        SHED_ROUTE_TARGET=""
+        break
+      fi
       _shed_args=(--prompt-file "$PROMPT_FILE")
       for _shed_skip in "${_shed_skips[@]}"; do _shed_args+=(--skip-target "$_shed_skip"); done
       SHED_ROUTE_JSON="$(node "$SELF_DIR/lib/shed-route.js" "${_shed_args[@]}" 2>/dev/null || printf '{"shed":false,"reason":"no_file"}')"
@@ -3525,7 +3534,7 @@ if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_S
       codex) RUNNER="codex" ;;
     esac
   fi
-  unset _shed_args _shed_skips _shed_skip _shed_skip_target _shed_runner _shed_model _shed_endpoint _shed_reason _shed_gate_msg _shed_gate_rc
+  unset _shed_args _shed_skips _shed_skip _shed_skip_target _shed_runner _shed_model _shed_endpoint _shed_reason _shed_gate_msg _shed_gate_rc _shed_iterations _shed_iteration_limit
   if [ "$RUNNER" != "auto" ]; then
     : # shed selected a cloud target; the local slot probe is not applicable
   else

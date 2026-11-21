@@ -62,7 +62,10 @@ function decide({ env = process.env, briefText = '', now = new Date(), skippedTa
       if (skipped.has(target)) continue;
       return { shed: true, run_id: data.run_id, pool: pool.pool, target: 'local', reason: 'listed_mechanical', ...(skipped.size ? { skipped_targets: [...skipped].map(([name, reason]) => ({ target: name, reason })) } : {}) };
     }
-    if (target === 'codex') return { shed: true, run_id: data.run_id, pool: pool.pool, target: 'codex', reason: 'listed_mechanical', ...(skipped.size ? { skipped_targets: [...skipped].map(([name, reason]) => ({ target: name, reason })) } : {}) };
+    if (target === 'codex') {
+      if (skipped.has(target)) continue;
+      return { shed: true, run_id: data.run_id, pool: pool.pool, target: 'codex', reason: 'listed_mechanical', ...(skipped.size ? { skipped_targets: [...skipped].map(([name, reason]) => ({ target: name, reason })) } : {}) };
+    }
   }
   return { ...no(restrictedEligible || skipped.size > 0 || (data.shed.rules.targets_in_order.some((t) => t === 'minimax' || t === 'kimi') && headers['Task-Shape'] !== 'from-scratch') ? 'no_eligible_target' : 'bad_schema'), ...(skipped.size ? { skipped_targets: [...skipped].map(([target, reason]) => ({ target, reason })) } : {}) };
 }

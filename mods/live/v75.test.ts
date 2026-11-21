@@ -243,3 +243,4 @@ test('v75 pane scroll: PgDn / PgUp move the card detail by a page and never belo
   expect(paneRank).toBeInstanceOf(Map) // the ring-walk direction table (filled while the framed page draws)
   expect(v75ReopenAfterReload({ wanted: true, hostOpen: false, paneOn: false, open: false })).toBe(true)
 })
+

@@ -194,7 +194,8 @@ test('keys: fleet binds no letter (v7.4 plain list), row 2 of quota opens its se
     const tree = drawn(tab, 0).tree
     expect(hot(tree, '9'), 'the help tab 9 is a Button with a visible label').toBeDefined()
     expect(flat(hot(tree, '9') as Node)).toBe('說明')
-    expect(hot(tree, 'j') ?? hot(tree, 'k'), 'no j / k').toBeUndefined()
+    if (tab === 'decide') { expect(hot(tree, 'j'), 'F1: decide always carries j').toBeDefined(); expect(hot(tree, 'k'), 'F1: decide always carries k').toBeDefined() }
+    else expect(hot(tree, 'j') ?? hot(tree, 'k'), 'no j / k off the decide page').toBeUndefined()
     const id = tab === 'spend' ? 'quota' : tab
     const letters = tree.filter(n => n.kind === 'Button' && /^[a-z]$/.test(n.props.hotkey ?? '')).map(n => n.props.hotkey as string)
     expect(letters.filter(h => !pageHotkeys(id).includes(h)), id + ' draws a hotkey it does not list').toEqual([])

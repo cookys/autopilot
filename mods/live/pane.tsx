@@ -288,7 +288,11 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
       }
       nodes.push(text(sg.text, 'g' + j))
     }
-    return <Box key={'f' + i}>{nodes}{i === rows.length - 1 ? focusAnchor(el, epoch) : null}</Box>
+    // F1: j / k (next / previous card) are always carried by a zero-size Button on 待決 and 待辦, whatever the action row says: a letter with no Button in the Pane is handed to the prompt and takes the keyboard with it (gate m75d 12, 14)
+    const navHot = i === rows.length - 1 && !typing && Button !== undefined && (page.id === 'decide' || page.id === 'todo')
+      ? [['j', 1], ['k', -1]].filter(([l]) => !used.has(l as string)).map(([l, by]) => <Box key={'hk:' + l} width={0} height={0} overflow="hidden"><Button key={'pn:' + l + ep} plain hotkey={l as string} onPress={() => frame.onKey?.({ kind: 'move', by: by as 1 | -1 })}>{l as string}</Button></Box>)
+      : []
+    return <Box key={'f' + i}>{nodes}{i === rows.length - 1 ? [focusAnchor(el, epoch), ...navHot] : null}</Box>
   }
   if (!box) return <Box {...(epoch > 0 ? { key: 'frame:' + epoch } : {})} flexDirection="column" height={frame.rows}>{rows.map(drawRow)}</Box>
   const rule = GLYPHS.structure.rule

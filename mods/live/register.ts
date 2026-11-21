@@ -838,6 +838,7 @@ async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{
   }
   const liveBase = parsed.value.live_base.replace(/\/+$/, '')
   liveBaseSeen = liveBase
+  void flushPendingLogs($)
   const autopilotHome = typeof parsed.value.autopilot_home === 'string' && parsed.value.autopilot_home ? parsed.value.autopilot_home.replace(/\/+$/, '') : home + '/.autopilot'
 
   const sid = await $.session.id()
@@ -1591,8 +1592,12 @@ async function logBandGeometry($: EngineInterface, maxRows: number, bodyColumns:
 
 // every focus move the host reports (ctrl+x tab stops, clicks, our own focus calls), next to band-geometry.log: requestId (the site), element, origin, component. The last 200 lines. D (ctrl+x tab dwell): which element is each stop.
 const appendLogs = new Map<string, string[]>()
+const pendingLogs: { name: string; row: Record<string, unknown> }[] = []
+async function flushPendingLogs($: EngineInterface): Promise<void> {
+  while (liveBaseSeen !== null && pendingLogs.length > 0) { const p = pendingLogs.shift() as { name: string; row: Record<string, unknown> }; await appendLog($, p.name, p.row) }
+}
 async function appendLog($: EngineInterface, name: string, row: Record<string, unknown>): Promise<void> {
-  if (liveBaseSeen === null) return
+  if (liveBaseSeen === null) { pendingLogs.push({ name, row }); return } // before the first snapshot names the live base: kept, written by flushPendingLogs
   const path = liveBaseSeen + '/' + name
   let lines = appendLogs.get(name)
   if (lines === undefined) { lines = ((await readText($, path)) ?? '').split('\n').filter(l => l !== ''); appendLogs.set(name, lines) }
@@ -1634,6 +1639,7 @@ async function panePagePress($: EngineInterface, id: PageId): Promise<void> {
   if (id === panePage) return
   panePage = id
   paneTab = PAGE_TAB_OF[id] ?? paneTab
+  paneBodyOff = 0
   keyed(decideScroll, 'page:' + id) // K1: a different page starts at its first row.
   void $.ui.scroll({ in: PANE_ID, to: 'start' }).catch(() => undefined)
   decideLocal = { ...decideLocal, textMode: false, textBuf: '', armed: false } // a tab press ends a note being typed: the mode must not outlive the page
@@ -1836,6 +1842,7 @@ export async function frameKey($: EngineInterface, k: KeyAction): Promise<void> 
 }
 async function frameKeyBody($: EngineInterface, k: KeyAction): Promise<void> {
   const cursorBefore = decideLocal.cursor
+  if (k.kind === 'move' || k.kind === 'cursor') paneBodyOff = 0
   void v74Keylog($, {
     handler: 'frameKey', component: 'AbovePrompt', key: k.kind, event: k.kind,
     len: k.kind === 'text' ? [...k.ch].length : undefined,
@@ -2669,7 +2676,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       if (arrow !== null && panePage === 'decide') { void frameKey($, arrow); return {} }
     }
     if (v75PaneOn && panePage === 'decide' && v75ScrollRoute({ component: 'Pane', by: (e as { by?: number }).by }, { paneOpen: true, note: decideLocal.textMode }) === 'pane') {
-      decideLocal = { ...decideLocal, detailOffset: v75DetailOffset(decideLocal.detailOffset ?? 0, (e as { by: number }).by) } // PgUp / PgDn scroll the open card's detail
+      paneBodyOff = Math.min(400, v75DetailOffset(paneBodyOff, (e as { by: number }).by)) // PgUp / PgDn scroll the framed page body (FrameOpts.scroll clamps it to the body)
       void $.ui.invalidate('ui.render')
       return {}
     }
@@ -2699,12 +2706,13 @@ async function paneTree($: EngineInterface, e: { props: any; surface: string }, 
     folded, boxRows !== null ? null : e.props.scroll ?? null,
     { state: decideState, batch: decideBatch, now: decideNow, inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } },
     decideScroll, fleet, null,
-    legacy ? null : { pages: [...PAGES, ...EXTRA_PAGES], pageId: panePage, onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, others: fleet?.others ?? null, nowMs: frameNow, rows: boxRows ?? frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), ...(boxRows === null ? {} : { v74Box: true as const }), view: pageView, decide: { ...decideState, ...decideLocal }, v74, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { void v74Keylog($, { handler: 'input', component: 'Input', element: 'v74-note', len: [...v].length, page: panePage, cursor: decideLocal.cursor, focusOwner: 'v74-note', noteOpen: true }); decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(panePage === 'forge' ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}), ...(panePage === 'spend' ? { poolEta: await readPoolEta($) } : {}), ...(panePage === 'room' ? { room: parseRoom((await readRoomText($)) ?? '') } : {}) },
+    legacy ? null : { pages: [...PAGES, ...EXTRA_PAGES], pageId: panePage, onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, others: fleet?.others ?? null, nowMs: frameNow, rows: boxRows ?? frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), ...(boxRows === null ? {} : { v74Box: true as const }), view: pageView, decide: { ...decideState, ...decideLocal }, v74, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { void v74Keylog($, { handler: 'input', component: 'Input', element: 'v74-note', len: [...v].length, page: panePage, cursor: decideLocal.cursor, focusOwner: 'v74-note', noteOpen: true }); decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(panePage === 'forge' ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}), ...(paneBodyOff > 0 ? { scroll: paneBodyOff } : {}), ...(panePage === 'spend' ? { poolEta: await readPoolEta($) } : {}), ...(panePage === 'room' ? { room: parseRoom((await readRoomText($)) ?? '') } : {}) },
   )
   if (boxRows === null) await probePane($, e as never, tree)
   return tree
 }
 
+let paneBodyOff = 0 // first body row of the framed page the Pane shows (PgUp / PgDn); 0 on a page or card change
 const decideScroll = newScroll()
 // The band's own scroll models, one per tab (bandlayout, guideline §13.4): leaving a tab keeps its offset, coming back finds the same row. Only the 待決 card view scrolls so far.
 const bandScroll: Record<string, ScrollModel> = {}

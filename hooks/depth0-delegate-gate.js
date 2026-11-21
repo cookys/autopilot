@@ -81,9 +81,11 @@
  *            loop. Write briefs and other text files with the Write tool, not a heredoc inside bash -c." Knob:
  *            depth0_delegate_gate.rm_wrapped or env AUTOPILOT_BASH_GUARD_RM_WRAPPED_MODE = off|warn|deny (default deny;
  *            garbage ⇒ deny). Runs at every depth, subagents included.
- *   2h. DENY zsh-only parameter flags `${(...)}`, glob qualifiers such as `*(.)`, and temp-file process substitution `=(...)`.
- *            Single-quoted text is ignored. Knob: depth0_delegate_gate.zsh_syntax or AUTOPILOT_BASH_GUARD_ZSH_SYNTAX_MODE =
- *            off|warn|deny (default deny; garbage ⇒ deny). Rewrite in POSIX/Bash syntax or use bash -c with a single-quoted command.
+ *   2h. DENY zsh-only syntax (rule `zsh-only-syntax`): parameter flags `${(...)}`, glob qualifiers such as `*(.)`, and
+ *            temp-file process substitution `=(...)` outside single-quoted text — Claude Code cannot parse these and would
+ *            hold the call on a permission prompt that auto-denies. Knob: depth0_delegate_gate.zsh_syntax or
+ *            AUTOPILOT_BASH_GUARD_ZSH_MODE = off|warn|deny (default deny; garbage ⇒ deny). Rewrite in POSIX/Bash syntax
+ *            or use bash -c with a single-quoted command.
  *   3. WARN  (only when the shell is zsh; never a deny, by owner ruling) a word starting with `=`
  *            or an unquoted glob that matches nothing — zsh aborts the whole line.
  * Gate mode `off` silences all rules. Per-rule blocks apply in both gate `warn` and `block` modes.
@@ -180,7 +182,7 @@ function loadConfig() {
   if (envSh !== undefined && envSh !== '') cfg.sharedRmMode = ['off', 'warn', 'deny'].includes(envSh) ? envSh : 'warn';
   const envRw = process.env.AUTOPILOT_BASH_GUARD_RM_WRAPPED_MODE;
   if (envRw !== undefined && envRw !== '') cfg.rmWrappedMode = ['off', 'warn', 'deny'].includes(envRw) ? envRw : 'deny';
-  const envZsh = process.env.AUTOPILOT_BASH_GUARD_ZSH_SYNTAX_MODE;
+  const envZsh = process.env.AUTOPILOT_BASH_GUARD_ZSH_MODE;
   if (envZsh !== undefined && envZsh !== '') cfg.zshSyntaxMode = ['off', 'warn', 'deny'].includes(envZsh) ? envZsh : 'deny';
   const envEvery = process.env.AUTOPILOT_DEPTH0_WAIT_ADVICE_EVERY;
   const envSecret = process.env.AUTOPILOT_BASH_GUARD_SECRET_MODE;
@@ -339,10 +341,10 @@ function classify(tool, input) {
       if (rw) launchWarns.push(`bash-launch-guard (${rw.rule}): ${rw.why}`);
       const zs = cfg.zshSyntaxMode === 'off' ? null : detectZshSyntax(cmd);
       if (zs && cfg.zshSyntaxMode === 'deny') {
-        emitDeny(`bash-launch-guard (${zs.rule}): ${zs.why}. Rewrite the command in POSIX/Bash syntax, or wrap it in bash -c '...'.`);
+        emitDeny(`bash-launch-guard (${zs.rule}): ${zs.why}`);
         process.exit(0);
       }
-      if (zs) launchWarns.push(`bash-launch-guard (${zs.rule}): ${zs.why}. Rewrite the command in POSIX/Bash syntax, or wrap it in bash -c '...'.`);
+      if (zs) launchWarns.push(`bash-launch-guard (${zs.rule}): ${zs.why}`);
       const shellName = path.basename(process.env.AUTOPILOT_BASH_GUARD_SHELL || process.env.SHELL || '');
       if (shellName === 'zsh') {
         const z = detectZshExpansion(cmd, typeof payload.cwd === 'string' ? payload.cwd : process.cwd());

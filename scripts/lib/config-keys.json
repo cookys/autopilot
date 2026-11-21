@@ -746,7 +746,7 @@
       ],
       "doc": "docs/guide/settings-reference.md",
       "relates": [
-        "AUTOPILOT_BASH_GUARD_ZSH_SYNTAX_MODE"
+        "AUTOPILOT_BASH_GUARD_ZSH_MODE"
       ],
       "summary": "What to do when a Bash command contains zsh-only parameter flags, glob qualifiers or =(...) temp-file process substitution; single-quoted text is ignored: values are deny, warn, off; default deny.",
       "type": "enum",
@@ -4995,7 +4995,7 @@
       "summary": "Environment override of depth0_delegate_gate.rm_wrapped; values are off, warn, deny (default deny); a garbage value maps to deny."
     },
     {
-      "name": "AUTOPILOT_BASH_GUARD_ZSH_SYNTAX_MODE",
+      "name": "AUTOPILOT_BASH_GUARD_ZSH_MODE",
       "kind": "env",
       "audience": "user",
       "group": "hooks",

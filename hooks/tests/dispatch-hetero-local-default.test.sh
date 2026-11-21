@@ -211,6 +211,25 @@ assert_contains "$(cat "$GROK_ARGV")" "grok-4.7" "e: grok stub received grok-4.7
 FB_E="$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\n/).reverse().find(l=>l.trim().startsWith("{"))); process.stdout.write(JSON.stringify(o.local_fallback))' "$OUT")"
 assert_eq '{"reason":"no_free_slot","detail":"endpoint_not_ready"}' "$FB_E" "e: missing endpoint records endpoint_not_ready"
 
+# (f-develop) the old draining slot result cannot override a granted reserve-first lease.
+PROMPT="$TEST_TMP/prompt-f-develop.txt"; printf 'edit impl-defaults-fixture.txt\n' > "$PROMPT"
+printf '201\n' > "$LEASE_STATUS_FILE"; : > "$LEASE_LOG"
+export AUTOPILOT_LOCAL_SLOTS_CMD='printf %s '"'"'{"free":2,"draining":true}'"'"''
+run_local f-develop
+assert_eq "0" "$EXIT" "f-develop: draining slot command with granted lease exits 0"
+assert_eq "local" "$(json_get "$OUT" runner)" "f-develop: granted lease keeps the local runner"
+assert_eq "true" "$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).local_lease.granted))' "$OUT")" "f-develop: local result carries its granted lease"
+
+# (i-develop) a failed old-style slot command also cannot replace a lease grant.
+PROMPT="$TEST_TMP/prompt-i-develop.txt"; printf 'edit impl-defaults-fixture.txt\n' > "$PROMPT"
+: > "$LEASE_LOG"
+export AUTOPILOT_LOCAL_SLOTS_CMD='echo nope; exit 1'
+run_local i-develop
+assert_eq "0" "$EXIT" "i-develop: failed slot command with granted lease exits 0"
+assert_eq "local" "$(json_get "$OUT" runner)" "i-develop: granted lease keeps the local runner"
+assert_eq "true" "$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).local_lease.granted))' "$OUT")" "i-develop: local result carries its granted lease"
+export AUTOPILOT_LOCAL_SLOTS_CMD='printf %s '"'"'{"free":1,"draining":false}'"'"''
+
 # (f) successful implicit local run holds a lease and releases it after the worker.
 PROMPT="$TEST_TMP/prompt-f.txt"
 printf 'Task-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
@@ -349,4 +368,6 @@ OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="
 assert_neq "$EXIT" "97" "k: explicit codex path is stubbed"
 assert_not_contains "$(cat "$LEASE_LOG")" '"method":"POST","url":"/v1/local/lease"' "k: explicit runner sends no grant"
 
+kill "$LEASE_SERVER_PID" 2>/dev/null || true
+wait "$LEASE_SERVER_PID" 2>/dev/null || true
 finalize_test

@@ -47,12 +47,23 @@ function closeDecideReply(payload) {
   const ids = [];
   const seen = new Set();
   const idLine = new Map();
+  const idBlockLines = new Map();
+  let currentId = null;
   for (const line of lines.slice(1)) {
     const m = DECIDE_ID.exec(line);
-    if (!m || seen.has(m[0])) continue;
-    seen.add(m[0]);
-    ids.push(m[0]);
-    idLine.set(m[0], line);
+    if (m) {
+      if (seen.has(m[0])) {
+        currentId = null;
+        continue;
+      }
+      seen.add(m[0]);
+      ids.push(m[0]);
+      idLine.set(m[0], line);
+      currentId = m[0];
+      idBlockLines.set(currentId, [line]);
+    } else if (currentId) {
+      idBlockLines.get(currentId).push(line);
+    }
   }
   if (ids.length === 0) return;
   let closePanelAnswer;
@@ -103,9 +114,10 @@ function closeDecideReply(payload) {
     if (probeState === 'probe_error') { if (!parkExecutorCard(id, 'probe_error')) unverified.push(`${id} (probe_error)`); continue; } // not "no courier": nothing is acted on
     if (fd) {
       const line = idLine.get(id);
+      const block = (idBlockLines.get(id) || [line]).join('\n');
       const aid = line.split('｜').pop().trim();
-      const v = /^[0-9A-Za-z]{20,40}$/.test(aid) ? fd.verify(id, aid, line) : { ok: false, outcome: 'unverified' };
-      if (!v.ok) { if (!parkExecutorCard(id, `verify_failed (${v.outcome})`)) unverified.push(`${id} (${v.outcome})`); continue; }
+      const v = /^[0-9A-Za-z]{20,40}$/.test(aid) ? fd.verify(id, aid, block) : { ok: false, outcome: 'unverified' };
+      if (!v.ok) { if (!parkExecutorCard(id, `verify_failed (${v.detail || v.outcome})`)) unverified.push(`${id} (${v.detail || v.outcome})`); continue; }
       // the verified STORED answer is the only authority: the line's own text must say that same answer
       // strict, field-wise (scripts/lib/decide-line.js): the question comes from the ledger card, the answer must EQUAL the stored one
       let question = null;

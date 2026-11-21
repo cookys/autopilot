@@ -65,6 +65,6 @@ autopilot 開發 session 換帳號續做（PM 01M6QT6WVY：Z3 不推，排查回
 - receipt 的 base 用 phase-base（chain 第一代的 base）；前一代沒 finalize，下一代 collect 會報錯；已處置的 Minor 不能在 finalize 再列。
 - G14 合併前，finalize 在有已核實未處置 Major 時仍可能印 SHIP-AS-IS，要手動擋。
 - 平行跑長套件會互相干擾：一次一支、`< /dev/null`、nice；測試用哨兵 PATH、mktemp 的 ENGINE_CAPABILITY_DIR／AUTOPILOT_ACCOUNTS_DIR、AUTOPILOT_STRIKE_WRITER=off，不帶 AUTOPILOT_SESSION_ID。
-- rm 目標只寫字面路徑或 mv 進 scratch 的 trash，不用 `$(...)`／`$VAR`；含 rm 的腳本先寫檔再跑。
+- rm 目標只寫字面路徑（先確認在 scratchpad 或 repo build 目錄下再刪；cargo 用 `cargo clean`），不要 mv 進 trash（不會釋放空間；hangar 掃除器只是最後一道防線），不用 `$(...)`／`$VAR`；含 rm 的腳本先寫檔再跑。
 - dispatch-author-kill-after、dispatch-author-codex-transport 在 develop 上本來就紅（已在 backlog）。
 - 主 checkout 的 8 個 untracked 檔留在舊帳號（PM：不要動），不屬於本交接。

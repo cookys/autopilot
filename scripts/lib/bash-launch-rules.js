@@ -1190,6 +1190,8 @@ function detectBareLsUnguarded(cmd) {
 // a backtick. The deletion then depends on state the reader of the command cannot see. Rules run on EXECUTABLE
 // text: quoted-heredoc bodies, comments, single-quoted and ANSI-C words are inert and never count; `$(…)` bodies,
 // `bash -c` strings and function-less segments are scanned like any other segment. Non-recursive `rm $F` passes.
+// The advice never says to mv a target into a trash dir: moving frees no disk. A hangar sweeper clears scratchpad trash
+// dirs, but that is a last line of defence, not a normal way to delete.
 function wordExpands(raw) {
   // Drop what the shell never expands: `\$`, `\``, single-quoted spans, ANSI-C `$'…'`; what is left is live text.
   const live = raw.replace(/\\[\s\S]/g, '').replace(/\$'[^']*'/g, '').replace(/'[^']*'/g, '');

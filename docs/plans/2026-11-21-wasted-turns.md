@@ -6,12 +6,7 @@
 
 每多一輪 tool call，整段 context 就重讀一次。PM 席約 45 萬 token：快取命中時一輪約 4.6 萬 token，沒命中約 90 萬；一個工具的說明每輪只要幾十 token。所以「多一輪白跑」比「多一行工具說明」貴上千倍。便宜的解法是把「報錯後才知道正確指令」改成「第一次就拿到正確指令」。
 
-量測（出處：PM 單 01M7XSVA，原文引用，本計畫不重測）：PM 席 511 次 tool call 中約 98 輪白跑，佔 19%。
-- 查 `--help`：15 次。
-- 工具報錯：41 次。依次數排：bash-footgun-guard（zsh glob）12、time_in_content 7、command hook 5（原文寫「5 共 4」，兩個數字不一致，待 P0 腳本重算）、bash-launch-guard 3、dispatch-model-guard 2、其他 13。
-- Stop hook 擋回：42 次。
-
-15 + 41 + 42 = 98，與原文總數相符。
+量測（出處：PM 單 01M7XSVA，原文引用，只引用、不重測、不重算、不與真實 PM 席核對）：511 次 tool call、約 98 輪白跑、19%、查 `--help` 15、工具報錯 41、Stop hook 擋回 42。工具報錯原文依次數排：bash-footgun-guard（zsh glob）12、time_in_content 7、command hook（原文寫「5 共 4」，兩數不一致，維持未解，不重算、不覆蓋）、bash-launch-guard 3、dispatch-model-guard 2、其他 13。新窗口的腳本輸出另記，不要求對上 98/511。
 
 旁證（本席撰寫此計畫時，4 次 Bash 呼叫就被擋 4 次：bare-ls、zsh glob、`=====` 被 zsh 展開、secret-print；各一輪白跑）。這只是旁證，不當量測。
 
@@ -36,7 +31,7 @@
 
 ## 2.6 Change-policy decisions
 
-- **Compatibility impact**: `internal-only`。受影響的是本 repo 的 hook 拒絕訊息文字與新增的量測腳本；不改任何 hook 的 deny/allow 判定（P2 的 (d) 自動修正除外，見 §4 P2 的 spike 條件）。若 spike 證明 harness 不支援改寫輸入，就退回 (e)，仍是 internal-only。
+- **Compatibility impact**: `internal-only`。受影響的是本 repo 的 hook 拒絕訊息文字與新增的量測腳本；不改任何 hook 的 deny/allow 判定。唯一例外是 §4 P2 已點名的 bare-ls spike。P3 動工前先對齊本條：Stop 檢查的每一個破壞性操作 allow/deny 維持不變，並以該檢查的既有測試驗證；刪除只限已證明不保護這類操作的檢查。若 spike 證明 harness 不支援改寫輸入，表上做法維持 (e)，仍是 internal-only。
 - **Dependency decision**: `none`。只用 Node 內建模組，沿用 `hooks/transcript-reader-lib.js` 與 `hooks/cost-tracker-lib.js` 已有的逐字稿解析。
 
 ## 3. 納入範圍與每項選的做法
@@ -49,22 +44,25 @@
 
 | 項目 | 位置 | 現況 | 做法 | 一行理由 |
 |---|---|---|---|---|
-| Bash 啟動規則（bare-ls、pkill 自比對、rm 變數目標、rm 包在 -c、偵離無喚醒） | `scripts/lib/bash-launch-rules.js`，由 `hooks/depth0-delegate-gate.js:249` 回 deny | 拒絕訊息已列改寫法，但各規則詳略不一 | (e)，其中 bare-ls 在 P2 spike 通過後升 (d) | bare-ls 的正確指令唯一（`command ls`），自動改寫比讓模型重打省一輪 |
-| zsh 展開規則（`=` 開頭字、未匹配 glob） | `scripts/lib/bash-launch-rules.js:11-12`（warn only） | 本 repo 只警告；PM 席實測擋人的 `bash-footgun-guard` 在本 repo 搜不到 | 本 repo：維持；擋人那條歸外部（見 3.2） | 同一種錯有兩處檢查會互相矛盾；先查出 footgun-guard 來源再決定 (d) 或 (f) |
+| Bash 啟動規則（bare-ls、pkill 自比對、rm 變數目標、rm 包在 -c、偵離無喚醒） | `scripts/lib/bash-launch-rules.js`，由 `hooks/depth0-delegate-gate.js:249` 回 deny | 拒絕訊息已列改寫法，但各規則詳略不一 | (e) | 每條拒絕附一條照打指令，不改判定。bare-ls 的 (d) 只是 §2.6 點名的 spike，不是本列做法；spike 失敗就停在 (e) |
 | foreman-guard | `hooks/foreman-guard.js:531` | context 上限、bash 數量上限、Monitor 規則 | (e) | 拒絕理由已含下一步（寫 handoff）；補上可貼的指令即可，不改判定 |
-| dispatch-model-guard | `hooks/dispatch-model-guard.js:200`（ask）、`:212`（deny）、`:342`（brief 缺 Size/Used-by） | PM 席實測 2 次 | (e) | deny 訊息直接附完整三行標頭（Engine / Role / Lane）與 `model:` 範例，模型複製即可 |
+| dispatch-model-guard（ask / deny） | `hooks/dispatch-model-guard.js:200`、`:212` | PM 席原文引用 2 次 | (e) | deny 附 `model:` 範例，模型複製即可，不改判定 |
 | fleet-send-work-order-guard | `hooks/fleet-send-work-order-guard.js:105` | 擋把工單當訊息送 | (e) | 訊息已告知改用 task_comment；補上欄位範例 |
 | pii-read-guard | `hooks/pii-read-guard.js:73` | 擋直接讀含個資的目標 | (e) | 附 `safe-inspect` 的可貼指令 |
 | scheduled-wakeup-guard | `hooks/scheduled-wakeup-guard.js` | 擋以時間點等待 | (e) | 附 `fleet watch` 的可貼寫法，對應 CLAUDE.md「等待要寫可檢查事件」 |
-| run-approval-gate | `hooks/run-approval-gate.js:168`（ask） | 派工前詢問 | 保留 | 是權限提示不是白跑；量測腳本只記次數 |
-| 路徑與設定保護（exec-boundary、branch-protection、config-protection） | `hooks/exec-boundary.js:319`、`hooks/branch-protection.js:64`、`hooks/config-protection.js:43`（exit 2） | 多為 opt-in | 保留 | 擋破壞性操作，屬 Global Constraints 禁放寬；exit 2 的訊息只補指令 |
-| Stop：per-turn-gate | `hooks/per-turn-gate.js:576`（decision block） | PM 席 Stop 擋回的主要來源之一，待 P0 分攤 | 與 01M7XQVB 合併處理，主做法 (e)，誤擋類 (f) | 先用 P0 算出各 Stop hook 的擋回次數與誤擋比，誤擋的收緊或刪，真擋的訊息附照打指令 |
-| Stop：owner-question-guard | `hooks/owner-question-guard.js:87-90`（block） | 有 `OWNER-GUARD-FALSE-POSITIVE` 自報誤擋通道（`:17`） | 與 01M7XQVB 合併處理 (e)+(f) | 自報誤擋紀錄就是 (f) 的證據來源，直接餵 P0 |
-| Stop：askpm-remind、fleet-stop、awaiting-owner | `hooks/askpm-remind.js`；`hooks/fleet-stop.js`（只是呼叫 `fleet hook stop` 的包裝，判定在 fleet） | askpm-remind 為 opt-in | 與 01M7XQVB 合併；fleet-stop 的判定歸外部 | 包裝層沒有判定可改 |
-| dispatch brief 標頭規則（Engine/Role/Lane、Size、Used-by） | `hooks/dispatch-model-guard.js:342`、`hooks/lib/brief-head.js` | 缺標頭 deny | (c)：新增 `scripts/brief-head.sh --role <r> --lane <l> --size <s>` 印出合格標頭；(e) 訊息指向它 | 標頭是固定樣板，機械步驟要腳本化（全域「Mechanize repeats」） |
-| open-decision.js、decision-ledger.js、request-decision.js | `scripts/open-decision.js` 等 | 參數錯誤時靠 `--help` | (e)：參數錯誤的 usage 錯誤直接印一條完整可貼的範例指令，退出碼固定 | 查 --help 15 次的主因是不知道必填欄位；錯誤訊息即說明，不用多一輪 |
+| 路徑與設定保護（exec-boundary、branch-protection、config-protection） | `hooks/exec-boundary.js:319`、`hooks/branch-protection.js:64`、`hooks/config-protection.js:43`（exit 2） | 多為 opt-in，擋破壞性操作 | (e) | 只補 exit 2 的可貼指令，allow/deny 不變 |
+| Stop：per-turn-gate 訊息 | `hooks/per-turn-gate.js:576`（decision block） | Stop 擋回來源之一 | (e) | 真擋的拒絕附照打指令，不改判定；記在既有單 01M7XQVB |
+| Stop：per-turn-gate 誤擋 | `hooks/per-turn-gate.js:576` | 誤擋與否看新窗口與既有測試，不重測 §0 | (f) | 只刪已證明不保護破壞性操作的檢查；其餘保持 |
+| Stop：owner-question-guard 訊息 | `hooks/owner-question-guard.js:87-90` | 有自報誤擋通道（`:17`） | (e) | 真擋附照打指令，不改判定；記在既有單 01M7XQVB |
+| Stop：owner-question-guard 誤擋 | `hooks/owner-question-guard.js:87-90` | `OWNER-GUARD-FALSE-POSITIVE` | (f) | 只刪自報誤擋且已證明落在破壞性判定之外的檢查 |
+| Stop：askpm-remind | `hooks/askpm-remind.js` | opt-in | (e) | 只補可貼指令，不改判定 |
+| Stop：awaiting-owner | `hooks/awaiting-owner.js` | Stop 包裝 | (e) | 只補可貼指令，不改判定 |
+| brief 標頭腳本 | `hooks/lib/brief-head.js` | 缺標頭時要有機械產出 | (c) | 新增 `scripts/brief-head.sh --role <r> --lane <l> --size <s>`，印合格標頭 |
+| brief 標頭訊息 | `hooks/dispatch-model-guard.js:342` | 缺 Size/Used-by 就 deny | (e) | 拒絕訊息只指向該腳本印出的整段標頭 |
+| open-decision.js、decision-ledger.js、request-decision.js | `scripts/open-decision.js` 等 | 參數錯誤時靠 `--help` | (e) | 用法錯誤直接印一條完整範例指令，退出碼固定 |
 | run-ledger.sh（本 repo） | `scripts/run-ledger.sh` | 同上 | (e) | 同上 |
-| scripts/ 下其他 guard 類（leak-guard、root-scan-guard、disk-guard、seat-id-guard、vision-guard、replay-stop-guard、agy-shell-guard.zsh；hooks/tests 下的 *-guard 檔是測試） | `scripts/leak-guard.js`、`scripts/lib/root-scan-guard.js`、`scripts/lib/disk-guard.js` 等 | 非 hook 路徑，多為 dispatch 或 CI 時才跑 | 保留，不在白跑範圍 | 不在每輪 tool call 路徑上；P0 如發現它們出現在逐字稿錯誤中再補 |
+
+不入上表（不是做法列）：`hooks/run-approval-gate.js` 是派工前權限詢問，不改訊息、不改判定，P0 只計次數。`scripts/lib/bash-launch-rules.js:11-12` 的 zsh 警告只警告、不擋，不在拒絕路徑；擋人的 bash-footgun-guard 見 §3.2。`hooks/fleet-stop.js` 只包裝 `fleet hook stop`，判定見 §3.2。`scripts/leak-guard.js`、`scripts/lib/root-scan-guard.js`、`scripts/lib/disk-guard.js`、seat-id-guard、vision-guard、replay-stop-guard、`agy-shell-guard.zsh` 與 `hooks/tests` 的 `*-guard` 不在每輪 tool call 路徑。
 
 ### 3.2 不在本 repo（標「外部 lane 負責」，autopilot 只提供介面）
 
@@ -72,7 +70,7 @@
 |---|---|---|---|
 | bash-footgun-guard（zsh glob，12 次，最大單項） | 外部 lane，來源待查（本 repo `git grep` 無此名稱） | (d)：自動給 glob 加引號；做不到則 (e) | 規則 3 的拒絕訊息已含正確寫法，等於已經知道答案卻要模型重打一輪 |
 | time_in_content（7 次） | fleet lane（`due_reason` 規則，本 repo 無此檢查） | (e)：訊息附合格的 `依據:` 單行範例 | 規則已寫在使用者記憶 fleet-evidence-due-reason-basis，應由拒絕訊息攜帶 |
-| command hook（原文 5 或 4 次） | 待 P0 辨識 | 待 P0 | 來源不明，不亂指派 |
+| command hook（原文「5 共 4」，未解，不重測） | hangar lane（主機側 command hook；不在本 repo） | (e) | 小計矛盾只保留引用；autopilot 不重算、不改該 hook |
 | fleet CLI 與 MCP | fleet lane | (a)：MCP 工具說明寫必填欄位與拒絕碼；requester 四個（task_status、task_accept、task_progress、task_comment）已在 fleet 單 01M7XSNQ | 工具說明每輪只幾十 token，勝過每次查 help |
 | inbox-cli | fleet lane | (a) 或 (e) | 同上 |
 | 各 repo 的 ledger.sh（本 repo 以外） | 各 repo 的 lane | (e) | 各自的用法錯誤印可貼範例 |
@@ -81,15 +79,15 @@
 
 ## 4. 分段與上線
 
-時間為台北時間。fleet 單號欄先填「待開」，開單後回填。依賴欄寫前置段。
+時間為台北時間。除 P3 外，fleet 單號欄先填「待開」，開單後回填。P3 只記在既有單 01M7XQVBYG2Q8A4M6RFR8Z4MBR（01M7XQVB），不開第二張、不回填另一張。依賴欄寫前置段。改程式的段（P2、P3、P4、P5）必須排在 P1 之後：該席的基準檔被接受之前不得改碼。P1 與 P7 仍用同一支腳本、同一窗口天數，每席至少 300 輪；P7 只在變更過的 session 重開後才跑。
 
 | 段 | 內容 | 大小 | 上線日 | fleet 單號 | 依賴 | 驗收 |
 |---|---|---|---|---|---|---|
 | P0 | 量測腳本 `scripts/wasted-turns-report.js` 與測試；先跑本席，再發給各席各跑一次；排前 N 名 | M | 2026-11-22 | 待開 | 無 | 見 §5 |
-| P1 | 修前基準：全機隊每席跑一次，結果 JSON 進 `docs/plans/evidence/2026-11-21-wasted-turns/`；確認 PM 席重算結果對得上 98/511 | S | 2026-11-23 | 待開 | P0 | KR1 的「修前」欄有數 |
-| P2 | 拒絕訊息附可貼指令（做法 (e)）：bash-launch-rules、dispatch-model-guard、fleet-send-work-order-guard、pii-read-guard、scheduled-wakeup-guard、foreman-guard；spike：在沙箱確認 PreToolUse hook 能否回傳改寫後的輸入以支援 (d)，不能就維持 (e) | M | 2026-11-25 | 待開 | P0 | 每個被改的 hook 一個負控制測試；訊息中的指令被測試直接執行並通過同一個 guard |
-| P3 | Stop hook 誤擋：以 P1 的各 Stop hook 擋回次數與 `OWNER-GUARD-FALSE-POSITIVE` 紀錄決定收緊或刪（做法 (e)/(f)） | M | 2026-11-26 | 待開（與 01M7XQVB 合併） | P1、01M7XQVB | 誤擋樣本進測試；PM 判定刪除項 |
-| P4 | 查 help 的來源：`scripts/open-decision.js`、`decision-ledger.js`、`request-decision.js`、`run-ledger.sh` 的用法錯誤印完整範例；新增 `scripts/brief-head.sh`（做法 (c)） | S | 2026-11-27 | 待開 | P0 | 對應腳本的負控制：缺必填欄位時輸出含可貼指令且退出碼固定 |
+| P1 | 修前基準：各席對新窗口跑 P0 腳本，JSON 進 `docs/plans/evidence/2026-11-21-wasted-turns/`。只記新窗口，不回寫、不覆蓋 §0 的 511、約 98、19%、15、41、42，也不要求對上 98/511 | S | 2026-11-23 | 待開 | P0 | 每個參加席有一份已接受的基準檔；KR1 修前欄用新窗口 |
+| P2 | 拒絕訊息附可貼指令（做法 (e)）：bash-launch-rules、dispatch-model-guard、fleet-send-work-order-guard、pii-read-guard、scheduled-wakeup-guard、foreman-guard、路徑與設定保護。spike 只試 bare-ls 能否改寫輸入；不能就維持 (e)。此 spike 是唯一可改判定的例外 | M | 2026-11-25 | 待開 | P1 | 該席 P1 基準檔已接受。每個被改的 hook 一個負控制；訊息中的指令被測試照字面執行並通過同一個 guard |
+| P3 | Stop hook 誤擋：訊息走 (e)；刪除只走已證明不保護破壞性操作的 (f)。破壞性操作的 allow/deny 一律不變 | M | 2026-11-26 | 01M7XQVBYG2Q8A4M6RFR8Z4MBR | P1 | 誤擋樣本進測試。既有破壞性操作測試仍為原 allow/deny。PM 只判定邊界外的刪除項 |
+| P4 | 查 help 的來源：`scripts/open-decision.js`、`decision-ledger.js`、`request-decision.js`、`run-ledger.sh` 的用法錯誤印完整範例；新增 `scripts/brief-head.sh`（做法 (c)；訊息列為 (e)） | S | 2026-11-27 | 待開 | P1 | 該席 P1 基準檔已接受。缺必填欄位時輸出含完整範例且退出碼固定；測試把該範例照字面執行，須通過剛才拒絕它的同一支腳本並以成功退出碼結束 |
 | P5 | 重複多步 shell 的清單（P0 輸出第五類）→ 逐項腳本化或進既有腳本；超過兩次手跑的才做 | S | 2026-11-30 | 待開 | P1 | 每項附腳本與測試；清單中未做的標明理由 |
 | P6 | 外部 lane 對接：把 §3.2 的表和 P1 數字送 fleet lane、hangar lane、PM；MCP 變更在下次 session 開頭生效 | S | 2026-11-24 | 待開 | P0 | 對方回覆單號；autopilot 不改它們的程式 |
 | P7 | 修後量測：全機隊每席跑一次，與 P1 對照；每週自動跑一次 | S | 2026-12-03 | 待開 | P2–P5 合併且新 session 已開 | KR1 的「修後」欄 < 5%；週跑排程上線 |
@@ -148,13 +146,13 @@
   1. autopilot 交 `autopilot.wasted-turns/1` JSON 與 `hook_block.by_hook` 排行；fleet 依排行決定先改哪個工具的說明。
   2. fleet 的拒絕碼表以 `docs/` 內一份純文字清單交給 autopilot；autopilot 的拒絕訊息只引用拒絕碼，不複製說明（單一正本）。
   3. 工具清單前段凍結：fleet 新增或改說明的 MCP 工具，在 fleet 單上寫明「下次 session 開頭生效」；autopilot 的 P7 修後量測要等這些 session 重開後才跑。
-  4. Stop hook：hook 側歸 autopilot，判定側歸 fleet，雙方都記在 01M7XQVB 單上，不另開第二張。
+  4. Stop hook：hook 側歸 autopilot，判定側歸 fleet，雙方只記在既有單 01M7XQVBYG2Q8A4M6RFR8Z4MBR，不另開第二張。
 
 ## 5. Test / validation
 
 - script-gated：§4.1 全部測試；每個 P2/P3/P4 被改的 hook 或腳本的負控制測試；`bash scripts/sync-all.sh --check`；`node scripts/affected-suites.js` 選出的套件。
 - 人為判定：P3 的「誤擋」與「刪除」由 PM 判；§3.2 外部項目的做法由各 lane 判。
-- 真用驗收（Done = used）：P7 在 live 以實際席位跑 `--self`，貼出該席修前修後同一欄位的對照一行；gate 類改動各做一次反向探測（故意違規，確認仍被擋，且訊息的指令貼上後通過）。
+- 真用驗收（Done = used）：P7 在 live 以實際席位跑 `--self`，貼出該席修前修後同一欄位的對照一行（新窗口對新窗口，不與 §0 的 98/511 核對）。gate 類改動各做一次反向探測（故意違規，確認仍被擋，且訊息的指令照字面貼上後通過同一個 guard）。P4 的 `open-decision.js`、`decision-ledger.js`、`request-decision.js`、`run-ledger.sh`、`brief-head.sh` 同樣：拒絕訊息裡的完整範例照字面執行，通過剛才拒絕不完整指令的同一支腳本。
 
 ## 6. Risks + inversion
 
@@ -163,11 +161,11 @@
 - (d) 自動修正改變模型原意（例如改寫後的指令與原本意圖不同）。緩解：P2 spike 只允許 bare-ls 這類改寫唯一的規則；其餘維持 (e)。
 - 工具清單中途變動使快取整段重寫，反而增加成本。緩解：所有工具類變更只在 session 開頭生效。
 - 拒絕訊息變長，每次被擋多吃 token。緩解：訊息只附一條指令，不附說明段。
-- 保證失敗的情況：修前基準沒量就開改。P1 為所有改動段的前置。
+- 保證失敗的情況：修前基準沒量就開改。P1 是 P2、P3、P4、P5 的前置；該席基準檔未接受不得改碼。修前修後同一支腳本、同一窗口，每席至少 300 輪，修後只在 session 重開後採計。
 
 ## 7. Out of scope
 
-- 不改任何 guard 的 deny/allow 判定（除 §2.6 所述 spike）。
+- 不改任何 guard 的 deny/allow 判定（除 §2.6 的 bare-ls spike）。P3 不得改破壞性操作的判定；刪除只限已證明在該邊界外的檢查，並以既有測試鎖住原判定。
 - 不改 fleet、hangar、capacity 與其他 repo 的程式。
 - 不建 hosted CI；不 bump 版號。
 - 不分析別席的訊息內容。
@@ -175,11 +173,11 @@
 
 ## 8. Open questions
 
-1. `bash-footgun-guard` 與 `command hook` 的來源 hook 在哪個外部 repo 或 plugin？（本 repo 搜不到；請 PM 指派查證，影響單項最大的 12 次。）
-2. PM 單「command hook 5 共 4」是 5 還是 4？P0 重算後以腳本為準，需 PM 確認是否接受。
-3. PreToolUse hook 回傳改寫後輸入是否被 harness 支援？由 P2 spike 在沙箱回答，不需 PM 決定，列出只為透明。
+1. `bash-footgun-guard` 的來源 hook 在哪個外部 repo？（本 repo 搜不到；請 PM 指派查證。command hook 的「5 共 4」維持原文未解，不重算。）
+2. PreToolUse hook 回傳改寫後輸入是否被 harness 支援？由 P2 spike 在沙箱回答，不需 PM 決定，列出只為透明。表上做法仍是 (e)。
 
 ## Review log
 
 - R0 author：autopilot planner（本檔）。frozen rubric：`docs/plans/2026-11-21-wasted-turns.rubric.md`。
 - plan-review-manifest：待 PM 決定是否送審；`logical_plan_id: 2026-11-21-wasted-turns`。
+- generation 1（astra + grok，皆 STOP），8 項發現全部接受，已折入本次修訂。

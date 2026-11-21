@@ -9,12 +9,17 @@ function norm(v) {
   return String(v || '').trim().toLowerCase();
 }
 
+function qwenModel(model) {
+  const m = norm(model);
+  return m === 'qwen' || m === 'qwen_local' || m.startsWith('qwen');
+}
+
 function implementerIsLocalQwen(impl = {}) {
   const runner = norm(impl.runner);
   const endpoint = norm(impl.endpoint);
   const model = norm(impl.model || impl.engine);
   if (runner === 'local' || runner === 'qwen_local' || endpoint === 'qwen_local' || model === 'qwen_local') return true;
-  if (model === 'qwen' && (runner === 'local' || runner === 'cc-shim' || runner === '')) return true;
+  if (qwenModel(model)) return true;
   return false;
 }
 
@@ -24,9 +29,34 @@ function reviewerSameAsLocalQwen(seat = {}) {
   const endpoint = norm(seat.endpoint);
   const model = norm(seat.model || seat.engine);
   if (family === 'alibaba' || family === 'qwen') return true;
-  if (runner === 'qwen_local' || endpoint === 'qwen_local' || model === 'qwen_local') return true;
-  if (runner === 'cc-shim' && (endpoint === 'qwen_local' || model === 'qwen' || model.startsWith('qwen'))) return true;
+  if (runner === 'qwen_local' || endpoint === 'qwen_local') return true;
+  // Model-only QC entries carry no runner. A Qwen model name is the family.
+  if (qwenModel(model)) return true;
   return false;
+}
+
+function reviewedImplementer(env, fallback = {}) {
+  const e = env || {};
+  const pick = (key, fb) => (Object.prototype.hasOwnProperty.call(e, key) ? e[key] : fb);
+  return {
+    runner: pick('AUTOPILOT_REVIEWED_IMPLEMENTER_RUNNER', fallback.runner || ''),
+    endpoint: pick('AUTOPILOT_REVIEWED_IMPLEMENTER_ENDPOINT', fallback.endpoint || ''),
+    model: pick('AUTOPILOT_REVIEWED_IMPLEMENTER_MODEL', fallback.model || fallback.engine || ''),
+  };
+}
+
+// When the primary reviewer is the same family, replace it with the first kept
+// panel member. Refuse only when nothing eligible remains.
+function choosePrimary(primary, panel) {
+  const seat = typeof primary === 'string' ? { model: primary } : (primary || {});
+  const list = Array.isArray(panel) ? panel : [];
+  if (!reviewerSameAsLocalQwen(seat)) {
+    return { engine: seat.model || seat.engine || '', replaced: false, refused: false };
+  }
+  const next = list.find((s) => !reviewerSameAsLocalQwen(typeof s === 'string' ? { model: s } : s));
+  if (!next) return { engine: '', replaced: true, refused: true };
+  const engine = typeof next === 'string' ? next : (next.model || next.engine || '');
+  return { engine, replaced: true, refused: false };
 }
 
 function filterReviewers(seats, impl) {
@@ -63,7 +93,17 @@ function main() {
     process.stdout.write(`${REFUSAL}\n`);
     return;
   }
-  process.stderr.write('usage: local-reviewer-exclusion.js implementer-is-local|seat-dropped|refusal\n');
+  if (cmd === 'choose-primary') {
+    const panel = String(arg('panel') || '').split(',').map((s) => s.trim()).filter(Boolean);
+    const picked = choosePrimary({ model: arg('seat-model'), runner: arg('seat-runner'), endpoint: arg('seat-endpoint'), family: arg('seat-family') }, panel);
+    if (picked.refused) {
+      process.stdout.write(`${REFUSAL}\n`);
+      process.exit(3);
+    }
+    process.stdout.write(`${picked.engine}\n`);
+    process.exit(picked.replaced ? 0 : 1);
+  }
+  process.stderr.write('usage: local-reviewer-exclusion.js implementer-is-local|seat-dropped|refusal|choose-primary\n');
   process.exit(2);
 }
 
@@ -73,5 +113,7 @@ module.exports = {
   implementerIsLocalQwen,
   reviewerSameAsLocalQwen,
   filterReviewers,
+  reviewedImplementer,
+  choosePrimary,
   REFUSAL,
 };

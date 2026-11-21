@@ -14,8 +14,17 @@ function arg(name) {
   return i >= 0 ? process.argv[i + 1] : undefined;
 }
 
+function isImplementerManifest(m) {
+  const role = m.role == null || m.role === '' ? 'implementer' : String(m.role);
+  if (role !== 'implementer') return false;
+  const rail = String(m.dispatch_rail || m.rail || '');
+  if (/review/i.test(rail)) return false;
+  return true;
+}
+
 function isLocal(m) {
   if (!m || typeof m !== 'object') return false;
+  if (!isImplementerManifest(m)) return false;
   if (m.runner === 'local') return true;
   const ep = String(m.endpoint || '');
   if (ep === 'qwen_local') return true;
@@ -28,14 +37,19 @@ function startedMs(m) {
   return Number.isFinite(t) ? t : null;
 }
 
+function presentNumber(v) {
+  if (v === null || v === undefined || v === '' || typeof v === 'boolean') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
 function reviewPass(m) {
+  if (typeof m.first_review_pass === 'boolean') return m.first_review_pass;
   const r = m.review_receipt || m.review || null;
   if (r && typeof r === 'object') {
-    if (typeof r.first_pass === 'boolean') return r.first_pass;
-    if (typeof r.pass === 'boolean') return r.pass;
     if (typeof r.first_review_pass === 'boolean') return r.first_review_pass;
+    if (typeof r.first_pass === 'boolean') return r.first_pass;
   }
-  if (typeof m.first_review_pass === 'boolean') return m.first_review_pass;
   return null;
 }
 
@@ -43,13 +57,20 @@ function reworked(m) {
   if (typeof m.reworked === 'boolean') return m.reworked;
   const r = m.review_receipt || m.review || null;
   if (r && typeof r === 'object' && typeof r.reworked === 'boolean') return r.reworked;
-  if (Number.isFinite(Number(m.rework_count)) && Number(m.rework_count) > 0) return true;
+  const count = presentNumber(m.rework_count);
+  if (count !== null) return count > 0;
+  if (r && typeof r === 'object') {
+    const nested = presentNumber(r.rework_count);
+    if (nested !== null) return nested > 0;
+  }
   return null;
 }
 
 function queueWait(m) {
-  if (Number.isFinite(Number(m.queue_wait_s))) return Number(m.queue_wait_s);
-  if (Number.isFinite(Number(m.queue_wait_ms))) return Number(m.queue_wait_ms) / 1000;
+  const seconds = presentNumber(m.queue_wait_s);
+  if (seconds !== null) return seconds;
+  const ms = presentNumber(m.queue_wait_ms);
+  if (ms !== null) return ms / 1000;
   return null;
 }
 
@@ -66,6 +87,7 @@ function report(dir, sinceMs) {
     mean_queue_wait_s: null,
     fallbacks: 0,
     fallback_reasons: {},
+    backends: {},
   };
   let names = [];
   try { names = fs.readdirSync(dir); } catch { return out; }
@@ -83,8 +105,15 @@ function report(dir, sinceMs) {
     const fb = m.local_fallback;
     if (fb && typeof fb === 'object' && fb.reason) {
       out.fallbacks += 1;
-      const reason = String(fb.reason);
-      out.fallback_reasons[reason] = (out.fallback_reasons[reason] || 0) + 1;
+      const detail = fb.detail == null ? '' : String(fb.detail);
+      const prefix = detail.split(':')[0];
+      const key = prefix ? `${fb.reason}:${prefix}` : String(fb.reason);
+      out.fallback_reasons[key] = (out.fallback_reasons[key] || 0) + 1;
+    }
+    const slots = m.local_slots;
+    if (slots && typeof slots === 'object' && slots.backend) {
+      const id = String(slots.backend);
+      out.backends[id] = (out.backends[id] || 0) + 1;
     }
     if (!isLocal(m)) continue;
     out.local_runs += 1;

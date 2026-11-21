@@ -809,11 +809,15 @@ QC_PANEL_JSON+="]"
 [[ ${#QC_PANEL[@]} -eq 0 ]] && QC_PANEL_JSON="[]"
 
 # operator via PM 01M7XHF4: a local/qwen implementer cannot be reviewed by the same family.
+# The completed run's seat wins over the configured implementer fields when dispatch exported it.
 _excl="$SCRIPT_DIR/lib/local-reviewer-exclusion.js"
-if [[ -f "$_excl" ]] && node "$_excl" implementer-is-local --runner "$IMPL_RUNNER" --endpoint "$IMPL_ENDPOINT" --model "$IMPL_ENGINE"; then
+if [ -n "${AUTOPILOT_REVIEWED_IMPLEMENTER_RUNNER+x}" ]; then _impl_ex_runner="$AUTOPILOT_REVIEWED_IMPLEMENTER_RUNNER"; else _impl_ex_runner="$IMPL_RUNNER"; fi
+if [ -n "${AUTOPILOT_REVIEWED_IMPLEMENTER_ENDPOINT+x}" ]; then _impl_ex_endpoint="$AUTOPILOT_REVIEWED_IMPLEMENTER_ENDPOINT"; else _impl_ex_endpoint="$IMPL_ENDPOINT"; fi
+if [ -n "${AUTOPILOT_REVIEWED_IMPLEMENTER_MODEL+x}" ]; then _impl_ex_model="$AUTOPILOT_REVIEWED_IMPLEMENTER_MODEL"; else _impl_ex_model="$IMPL_ENGINE"; fi
+if [[ -f "$_excl" ]] && node "$_excl" implementer-is-local --runner "$_impl_ex_runner" --endpoint "$_impl_ex_endpoint" --model "$_impl_ex_model"; then
   _kept_panel=()
   for _m in "${QC_PANEL[@]}"; do
-    if node "$_excl" seat-dropped --runner "$IMPL_RUNNER" --endpoint "$IMPL_ENDPOINT" --model "$IMPL_ENGINE" --seat-model "$_m"; then
+    if node "$_excl" seat-dropped --runner "$_impl_ex_runner" --endpoint "$_impl_ex_endpoint" --model "$_impl_ex_model" --seat-model "$_m"; then
       continue
     fi
     _kept_panel+=("$_m")
@@ -834,14 +838,24 @@ if [[ -f "$_excl" ]] && node "$_excl" implementer-is-local --runner "$IMPL_RUNNE
     QC_PANEL_JSON+="]"
     [[ ${#QC_PANEL[@]} -eq 0 ]] && QC_PANEL_JSON="[]"
   fi
-  if node "$_excl" seat-dropped --runner "$IMPL_RUNNER" --endpoint "$IMPL_ENDPOINT" --model "$IMPL_ENGINE" --seat-model "$REV_ENGINE" --seat-runner "$REV_RUNNER" --seat-endpoint "$REV_ENDPOINT"; then
-    if [[ ${#QC_PANEL[@]} -eq 0 ]]; then
-      node "$_excl" refusal >&2
-      exit 3
-    fi
+  _panel_csv=""
+  for _m in "${QC_PANEL[@]}"; do
+    [[ -n "$_panel_csv" ]] && _panel_csv+=","
+    _panel_csv+="$_m"
+  done
+  _primary_rc=0
+  _primary_out="$(node "$_excl" choose-primary --runner "$_impl_ex_runner" --endpoint "$_impl_ex_endpoint" --model "$_impl_ex_model" --seat-model "$REV_ENGINE" --seat-runner "$REV_RUNNER" --seat-endpoint "$REV_ENDPOINT" --panel "$_panel_csv")" || _primary_rc=$?
+  if [[ "$_primary_rc" -eq 3 ]]; then
+    printf '%s\n' "$_primary_out" >&2
+    exit 3
+  fi
+  if [[ "$_primary_rc" -eq 0 && -n "$_primary_out" ]]; then
+    REV_ENGINE="${_primary_out%%$'\n'*}"
+    REV_RUNNER="auto"
+    REV_ENDPOINT=""
   fi
 fi
-unset _excl _kept_panel
+unset _excl _kept_panel _impl_ex_runner _impl_ex_endpoint _impl_ex_model _panel_csv _primary_out _primary_rc
 
 # Exact QC companion metadata is positional and fail-closed. A model-only
 # qc_panel remains valid for the legacy review controller, but readiness cannot

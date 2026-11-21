@@ -21,6 +21,27 @@ test('local qwen implementer drops same-family reviewers and refuses an empty pa
   assert.equal(ex.filterReviewers(seats, { runner: 'grok', model: 'grok-4.7' }).dropped, 0);
 });
 
+test('a model-only Qwen seat is the same family, and the primary is replaced', () => {
+  const impl = { model: 'Qwen3.8-27B' };
+  assert.equal(ex.implementerIsLocalQwen(impl), true);
+  assert.equal(ex.reviewerSameAsLocalQwen({ model: 'Qwen3.8-27B' }), true);
+  const filtered = ex.filterReviewers([{ model: 'Qwen3.8-27B' }, { model: 'grok-4.7', family: 'xai' }], impl);
+  assert.equal(filtered.seats.length, 1);
+  assert.equal(filtered.seats[0].model, 'grok-4.7');
+  const replaced = ex.choosePrimary({ model: 'Qwen3.8-27B' }, ['Qwen3.8-27B', 'grok-4.7']);
+  assert.equal(replaced.refused, false);
+  assert.equal(replaced.engine, 'grok-4.7');
+  const none = ex.choosePrimary({ model: 'Qwen3.8-27B' }, ['Qwen3.8-27B']);
+  assert.equal(none.refused, true);
+  const fromRun = ex.reviewedImplementer({
+    AUTOPILOT_REVIEWED_IMPLEMENTER_RUNNER: 'local',
+    AUTOPILOT_REVIEWED_IMPLEMENTER_ENDPOINT: 'qwen_local',
+    AUTOPILOT_REVIEWED_IMPLEMENTER_MODEL: 'qwen',
+  }, { runner: 'grok', model: 'grok-4.7' });
+  assert.equal(fromRun.runner, 'local');
+  assert.equal(fromRun.model, 'qwen');
+});
+
 test('CLI refusal is one line when the panel would be empty', () => {
   const script = path.join(__dirname, 'lib', 'local-reviewer-exclusion.js');
   const local = spawnSync(process.execPath, [script, 'implementer-is-local', '--runner', 'cc-shim', '--model', 'qwen', '--endpoint', 'qwen_local'], { encoding: 'utf8' });

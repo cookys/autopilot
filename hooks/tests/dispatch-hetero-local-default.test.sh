@@ -44,10 +44,12 @@ case " $* " in
 esac
 if [ "${1:-}" = "--version" ]; then echo "grok-cli 0.2.111 (test stub)"; exit 0; fi
 printf '%s\n' "$@" > "$GROK_ARGV"
+pwd > "${GROK_WT_PWD:-/tmp/grok-wt-pwd}"
 printf 'grok fixture\n' >> impl-defaults-fixture.txt
 EOF
 chmod +x "$STUB_GROK"
 export GROK_ARGV="$TEST_TMP/grok.argv"
+export GROK_WT_PWD="$TEST_TMP/grok-wt-pwd"
 
 json_get() {
   node -e '
@@ -254,5 +256,63 @@ assert_eq "grok" "$(json_get "$OUT" runner)" "h: busy_at_run lands on grok"
 assert_eq "grok-4.7" "$(json_get "$OUT" model)" "h: cloud default model"
 FB_H="$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\n/).reverse().find(l=>l.trim().startsWith("{"))); process.stdout.write(JSON.stringify(o.local_fallback))' "$OUT")"
 assert_eq '{"reason":"no_free_slot","detail":"busy_at_run"}' "$FB_H" "h: busy_at_run detail"
+
+# (i) a failed slot command falls back to the cloud default.
+PROMPT="$TEST_TMP/prompt-i.txt"
+printf 'edit impl-defaults-fixture.txt\n' > "$PROMPT"
+: > "$GROK_ARGV"
+RUNS="$TEST_TMP/runs-i"
+mkdir -p "$RUNS"
+OUT="$(cd "$SBX" && env AUTOPILOT_LOCAL_SLOTS_CMD='echo nope; exit 1' AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
+  "$SCRIPT" --no-verify-tip --context-window off --grok-bin "$STUB_GROK" \
+  --branch feat/local-i --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/i.err")"
+EXIT=$?
+assert_eq "0" "$EXIT" "i: bad slot command exits 0"
+assert_eq "grok" "$(json_get "$OUT" runner)" "i: bad slot command uses grok"
+FB_I="$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\n/).reverse().find(l=>l.trim().startsWith("{"))); process.stdout.write(JSON.stringify(o.local_fallback))' "$OUT")"
+assert_eq '{"reason":"no_free_slot","detail":"slot_query_failed:unreachable"}' "$FB_I" "i: slot_query_failed fallback"
+assert_contains "$(cat "$GROK_ARGV")" "grok-4.7" "i: grok was started"
+
+# (j) runtime endpoint_busy after a worktree exists reuses that worktree on the cloud retry.
+BUSY_CLAUDE="$TEST_TMP/bin/claude"
+cat > "$BUSY_CLAUDE" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' '{"type":"result","is_error":true,"terminal_reason":"api_error","result":"API Error: 503 Service Unavailable"}'
+exit 1
+EOF
+chmod +x "$BUSY_CLAUDE"
+PROMPT="$TEST_TMP/prompt-j.txt"
+printf 'Task-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
+: > "$GROK_ARGV"
+RUNS="$TEST_TMP/runs-j"
+mkdir -p "$RUNS"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_ENDPOINT_PREPROBE=off \
+  AUTOPILOT_LOCAL_SLOTS_CMD='printf %s '"'"'{"free":1,"draining":false}'"'"'' \
+  AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
+  "$SCRIPT" --no-verify-tip --context-window off --grok-bin "$STUB_GROK" \
+  --branch feat/local-j --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/j.err")"
+EXIT=$?
+[ "$EXIT" -eq 0 ] || printf 'local-default diagnostic (j): %s\n%s\n' "$OUT" "$(cat "$TEST_TMP/j.err")" >&2
+assert_eq "0" "$EXIT" "j: runtime busy_at_run exits 0"
+assert_eq "grok" "$(json_get "$OUT" runner)" "j: lands on grok"
+FB_J="$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\n/).reverse().find(l=>l.trim().startsWith("{"))); process.stdout.write(JSON.stringify(o.local_fallback))' "$OUT")"
+assert_eq '{"reason":"no_free_slot","detail":"busy_at_run"}' "$FB_J" "j: busy_at_run detail"
+WT_SAME="$(node -e '
+const lines = String(process.argv[1]).split(/\n/).map(l=>l.trim()).filter(l=>l.startsWith("{")).map(l=>JSON.parse(l));
+const local = lines.find(o=>o.status==="engine_unavailable");
+const cloud = lines[lines.length-1];
+process.stdout.write(local && local.worktree && cloud && cloud.worktree_reused===true ? "yes" : "no");
+' "$OUT")"
+assert_eq "yes" "$WT_SAME" "j: cloud retry reused the prepared worktree"
+
+# Restore the successful local stub for any later case.
+cat > "$STUB_CLAUDE" <<'EOF'
+#!/usr/bin/env bash
+cat > got-prompt.txt
+pwd > worktree-pwd.txt
+printf '%s\n' "$@" > local-argv.txt
+printf '%s' '{"type":"result","is_error":false,"result":"ok"}'
+EOF
+chmod +x "$STUB_CLAUDE"
 
 finalize_test

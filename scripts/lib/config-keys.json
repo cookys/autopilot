@@ -3291,7 +3291,18 @@
       "readers": ["scripts/lib/local-impl-slot.js"],
       "doc": "docs/guide/settings-reference.md",
       "relates": ["local_slots_cmd"],
-      "summary": "Overrides config local_slots_cmd. The command prints one JSON line {\"free\":<int>,\"draining\":<bool>} and is killed after 3 seconds."
+      "summary": "Overrides config local_slots_cmd, even when empty. The command prints {\"free\":<int>,\"draining\":<bool>} or the gateway slots JSON and is killed after 3 seconds."
+    },
+    {
+      "name": "AUTOPILOT_LOCAL_SLOTS_URL",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "",
+      "readers": ["scripts/lib/local-impl-slot.js"],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": ["local_slots_url"],
+      "summary": "Overrides config local_slots_url, even when empty. Full URL of the gateway slot query. Empty uses the qwen_local origin plus /v1/local/slots."
     },
     {
       "name": "AUTOPILOT_REVIEWED_IMPLEMENTER_ENDPOINT",
@@ -7424,7 +7435,19 @@
       "readers": ["scripts/lib/local-impl-slot.js"],
       "doc": "docs/guide/settings-reference.md",
       "relates": ["AUTOPILOT_LOCAL_SLOTS_CMD"],
-      "summary": "Command that prints one JSON line {\"free\":<int>,\"draining\":<bool>} for the local implementer slot. Empty means probe qwen_local instead. Timeout is 3 seconds.",
+      "summary": "Command that replaces the gateway slot query. Prints {\"free\":<int>,\"draining\":<bool>} or the gateway slots JSON. Empty means HTTP GET the slot endpoint. Timeout is 3 seconds.",
+      "type": "string"
+    },
+    {
+      "name": "local_slots_url",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "",
+      "readers": ["scripts/lib/local-impl-slot.js"],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": ["AUTOPILOT_LOCAL_SLOTS_URL"],
+      "summary": "Full URL for the gateway slot query. Empty uses the qwen_local origin plus /v1/local/slots. No token. Timeout is 2 seconds. A failure falls back to cloud.",
       "type": "string"
     },
     {

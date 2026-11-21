@@ -291,7 +291,7 @@ assert_contains "$OUT" "STUCK80-0" "stuck head present"
 assert_contains "$OUT" "STUCK80-79" "stuck tail present"
 assert_not_contains "$OUT" "TREE80-119" "tree cap still drops its tail"
 
-# --- 11. open fleet tasks (reserved, never cut): 55 open + finished, 01M7DQ66 oldest last, full-list file, <=10000 ---
+# --- 11. open fleet tasks: 55 open + finished, full-list pointer and count-based readable selection ---
 cat > "$STUB/init-short.sh" <<'EOF'
 #!/bin/sh
 printf 'RED\tinit-1\t01M7DGY0000000000000000000\trunning\t2026-11-14T10:00:00Z\t-\tstale_24h\n'
@@ -344,7 +344,7 @@ else
   assert_eq "$init_at<$open_at<$stuck_at" "init<open<stuck" "55 open tasks: section order"
 fi
 open_sec=$(printf '%s\n' "$OUT" | awk '/^### Open fleet tasks/{f=1;next} /^### /{f=0} f')
-assert_not_contains "$open_sec" "... " "55 open tasks: no '... more' truncation in open tasks"
+assert_contains "$open_sec" "... " "55 open tasks: omitted rows have a count marker"
 
 FULL_LIST_PATH=$(printf '%s\n' "$open_sec" | sed -n 's/^full list (55): //p' | head -1)
 assert_file_exists "$FULL_LIST_PATH" "55 open tasks: full-list file exists under live dir"
@@ -368,22 +368,16 @@ assert_exit_code "$__RUN_EXIT" 0 "55 open tasks: session-start exits 0"
 CTX="$(node -e 'const j=JSON.parse(require("fs").readFileSync(0,"utf8"));process.stdout.write((j.hookSpecificOutput&&j.hookSpecificOutput.additionalContext)||"")' <<< "$__RUN_STDOUT")"
 if [ "${#CTX}" -le 10000 ]; then assert_eq 1 1 "55 open tasks: SessionStart injection ${#CTX} chars <= 10000"; else assert_eq "${#CTX}" "<=10000" "55 open tasks: injection over limit"; fi
 assert_contains "$CTX" "</autopilot-restored-state>" "55 open tasks: closing wrapper tag intact"
-miss_ctx=0
-i=0
-while [ "$i" -lt 54 ]; do
-  tid=$(printf '01M7AAA00000000000000000%02d' "$i")
-  printf '%s\n' "$CTX" | grep -F -q "$tid" || miss_ctx=$((miss_ctx+1))
-  i=$((i+1))
-done
-assert_eq "$miss_ctx" 0 "55 open tasks: injected context contains all 54 numbered ids"
-assert_contains "$CTX" "01M7DQ66000000000000000000" "55 open tasks: oldest open task (last in output) survives in injected context"
+assert_contains "$CTX" "full list (55):" "55 open tasks: injected context keeps full-list pointer"
+selected_ctx=$(printf '%s\n' "$CTX" | grep -E '^01M7[A-Z0-9]+ (running|waiting|open) .{70}' | wc -l | tr -d ' ')
+if [ "$selected_ctx" -gt 0 ]; then assert_eq 1 1 "55 open tasks: injected context selects readable task titles"; else assert_eq "$selected_ctx" ">0" "55 open tasks: no readable task title selected"; fi
 assert_not_contains "$CTX" "01M7D0NE000000000000000001" "55 open tasks: done task excluded"
 assert_not_contains "$CTX" "01M7FA99000000000000000002" "55 open tasks: failed task excluded"
 assert_not_contains "$CTX" "01M7DEC9000000000000000003" "55 open tasks: declined task excluded"
 assert_not_contains "$CTX" "01M7CANC000000000000000004" "55 open tasks: cancelled task excluded"
 assert_not_contains "$CTX" "01M7C90S000000000000000005" "55 open tasks: closed task excluded"
 
-# --- 12. 100 open tasks: titles dropped, <id> <state> kept for every task; 3 short tasks keep full titles ---
+# --- 12. 100 open tasks: count-based selection keeps readable titles and the full-list pointer ---
 unset AUTOPILOT_INITIATIVES_CMD
 cat > "$STUB/fleet-open100" <<'EOF'
 #!/usr/bin/env node
@@ -409,14 +403,9 @@ checkpoint
 run_hook session-start.js "{\"source\":\"compact\",\"session_id\":\"$SID\",\"cwd\":\"$REPO\"}"
 CTX100="$(node -e 'const j=JSON.parse(require("fs").readFileSync(0,"utf8"));process.stdout.write((j.hookSpecificOutput&&j.hookSpecificOutput.additionalContext)||"")' <<< "$__RUN_STDOUT")"
 if [ "${#CTX100}" -le 10000 ]; then assert_eq 1 1 "100 open tasks: injection ${#CTX100} <= 10000"; else assert_eq "${#CTX100}" "<=10000" "100 open tasks: injection over limit"; fi
-miss100=0
-i=0
-while [ "$i" -lt 100 ]; do
-  tid=$(printf '01M7BBB0000000000000000%03d' "$i")
-  printf '%s\n' "$CTX100" | grep -F -q "$tid open" || miss100=$((miss100+1))
-  i=$((i+1))
-done
-assert_eq "$miss100" 0 "100 open tasks: all 100 <id> <state> lines present, none dropped"
+assert_contains "$CTX100" "full list (100):" "100 open tasks: injected context keeps full-list pointer"
+selected100=$(printf '%s\n' "$CTX100" | grep -E '^01M7BBB[0-9]+ open .{70}' | wc -l | tr -d ' ')
+if [ "$selected100" -gt 0 ]; then assert_eq 1 1 "100 open tasks: selected titles remain readable"; else assert_eq "$selected100" ">0" "100 open tasks: no readable title selected"; fi
 
 cat > "$STUB/fleet-open3" <<'EOF'
 #!/usr/bin/env node

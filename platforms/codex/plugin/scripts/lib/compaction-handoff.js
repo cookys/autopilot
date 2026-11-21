@@ -39,7 +39,8 @@ const DEFAULT_T2_TOKENS = 150_000;
 
 // Body budget (bytes) for the sections below plus the tail. SessionStart injects at most 10000
 // characters in total (base context + wrapper ~1.9k), so this stays well inside it.
-// The model's own handoff note is the most valuable part after a compaction, the transcript tail is auxiliary: the model
+// At most 40% of BODY_CAP (2760 B) is reserved for inbound + Fleet State, leaving about 4.1 KB for git, dispatch, marker,
+// the model note and transcript tail. The model's own handoff note is the most valuable part after a compaction, the transcript tail is auxiliary: the model
 // section gets at least MODEL_MIN bytes (SECTION_CAPS.model) and takes whatever git / dispatch / marker leave unused;
 // when it needs more than is left, those three shrink (never below SECTION_FLOOR) instead. The tail gets the remainder.
 // 6900 + the checkpoint wrapper (~2.9k) stays under SessionStart's 10000-character injection limit.
@@ -50,6 +51,7 @@ const MODEL_ROOM_MIN = 1800; // below this much room for the model note the flee
 // Unanswered fleet messages (opts.inbound): a reserved section the size cap never cuts. Its bytes come off the top of
 // BODY_CAP before any other section is sized. When more are unanswered than fit, the newest are kept and the count of
 // older ones is written. Bodies are data: every field is escaped (the restore block is wrapped in a tag).
+const RESERVED_CAP = Math.floor(BODY_CAP * 0.4);
 const INBOUND_BUDGET = 1024;
 const INBOUND_REREAD_PLACEHOLDER = 'compaction 前可能有 fleet 訊息沒讀到：呼叫 `recent` 並設 `unseen_only=true`，或執行 `fleet recent --unseen`（待上線）';
 // A note written within this long ago, or whose size/mtime moves while it is read, may be mid-write (the model writes
@@ -322,7 +324,7 @@ function escapeText(s) {
 
 // items: oldest first, {message_id, from, kind, disposition, reply_to, first_line}. Returns '' for none, else the
 // section text (header, newest items that fit INBOUND_BUDGET in arrival order, omitted count, re-read placeholder).
-function inboundSection(items) {
+function inboundSection(items, budget = INBOUND_BUDGET) {
   if (!Array.isArray(items) || !items.length) return '';
   const e = (v, n = 80) => escapeText(String(v == null ? '' : v).slice(0, n));
   const lines = (it) => {
@@ -333,16 +335,19 @@ function inboundSection(items) {
     if (it.kind === 'dispatch') t += `  fleet task show ${e(it.message_id)}\n`;
     return t;
   };
-  const render = (kept, omitted) => `## Unanswered Fleet Messages (reserved, never cut)\n這 ${kept.length} 則在壓縮前到達，請重讀：\n`
-    + kept.map(lines).join('') + (omitted ? `省略 ${omitted} 則較舊的\n` : '') + `${INBOUND_REREAD_PLACEHOLDER}\n\n`;
+  const isPatrol = (it) => it.kind === 'wake' && /(?:^|\/)courier(?:\/|$)/.test(String(it.from || ''));
+  const chats = items.filter((it) => !isPatrol(it));
+  const wakes = items.filter(isPatrol);
+  const wakeLine = wakes.length ? `${wakes.length} patrol wakes (oldest ${e(wakes[0].message_id)}, newest ${e(wakes[wakes.length - 1].message_id)})\n` : '';
+  const render = (kept, omitted) => `## Unanswered Fleet Messages (reserved, never cut)\n這 ${kept.length + wakes.length} 則在壓縮前到達，請重讀：\n`
+    + kept.map(lines).join('') + wakeLine + (omitted ? `省略 ${omitted} 則較舊的\n` : '') + `${INBOUND_REREAD_PLACEHOLDER}\n\n`;
   let kept = [];
-  for (let i = items.length - 1; i >= 0; i--) {
-    const next = [items[i], ...kept];
-    if (Buffer.byteLength(render(next, items.length - next.length)) > INBOUND_BUDGET) break;
+  for (let i = chats.length - 1; i >= 0; i--) {
+    const next = [chats[i], ...kept];
+    if (Buffer.byteLength(render(next, chats.length - next.length)) > budget) break;
     kept = next;
   }
-  if (!kept.length) kept = [items[items.length - 1]];
-  return render(kept, items.length - kept.length);
+  return render(kept, chats.length - kept.length);
 }
 
 // --- fleet task state + PM ledger tail + capacity ar-gate + operator initiatives ---------------
@@ -368,7 +373,7 @@ const AR_GATE_FIELDS = ['overdue_open', 'unaccepted', 'decided_no_task', 'closed
 const INITIATIVE_REASONS = new Set(['no_task', 'waiting', 'blocked', 'stale_24h', 'evidence_overdue']);
 const RFC3339_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 const OPEN_TASKS_TITLE = 'Open fleet tasks (reserved, never cut)';
-const OPEN_TASKS_BUDGET = 3500;
+const OPEN_TASKS_BUDGET = 1150;
 const FINISHED_TASK_STATES = new Set(['done', 'failed', 'declined', 'cancelled', 'canceled', 'closed']);
 
 function fleetBinResolved() {
@@ -611,31 +616,22 @@ function writeOpenTasksFile(tasks, sessionId, dirs) {
   }
 }
 
-// Fit all open tasks within `avail` bytes: full titles first, then binary-searched title clip, else `<id> <state>` only.
-// Task IDs are never dropped.
+// Fit open tasks by reducing the number of rows. A shown title remains readable; full task data is in the pointer file.
 function fitOpenTaskLines(tasks, avail) {
   if (!tasks.length) return 'none';
-  const render = (cap) => tasks.map((t) => {
-    if (cap === 0 || !t.rawTitle) return `${t.id} ${t.state}`;
-    const shown = Number.isFinite(cap) ? clip(t.rawTitle, cap) : t.rawTitle;
-    return `${t.id} ${t.state} ${escapeText(shown)}`;
-  }).join('\n');
-  const full = render(Infinity);
-  if (Buffer.byteLength(full) <= avail) return full;
-  const maxLen = Math.max(0, ...tasks.map((t) => t.rawTitle.length));
-  let lo = 4;
-  let hi = maxLen;
-  let best = 0;
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1;
-    if (Buffer.byteLength(render(mid)) <= avail) {
-      best = mid;
-      lo = mid + 1;
-    } else {
-      hi = mid - 1;
-    }
+  const all = tasks.map((t) => `${t.id} ${t.state}${t.rawTitle ? ` ${escapeText(t.rawTitle)}` : ''}`);
+  if (Buffer.byteLength(all.join('\n')) <= avail) return all.join('\n');
+  const kept = [];
+  let used = 0;
+  for (const t of tasks) {
+    const line = `${t.id} ${t.state}${t.rawTitle ? ` ${escapeText(t.rawTitle)}` : ''}`;
+    const cost = Buffer.byteLength(line) + (kept.length ? 1 : 0);
+    if (used + cost > avail) break;
+    kept.push(line); used += cost;
   }
-  return render(best);
+  const omitted = tasks.length - kept.length;
+  if (omitted) kept.push(`... ${omitted} more (full list above)`);
+  return kept.length ? kept.join('\n') : `... ${tasks.length} more (full list above)`;
 }
 
 function openTasksPart({ sessionId, dirs, deadlineAt } = {}) {
@@ -659,8 +655,22 @@ function openTasksPart({ sessionId, dirs, deadlineAt } = {}) {
       const state = escapeText(stateNorm);
       const raw = typeof row.title === 'string' && row.title.trim() ? row.title : (typeof row.progress === 'string' ? row.progress : '');
       const rawTitle = raw.replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim();
-      tasks.push({ id, state, rawTitle });
+      const evidenceRaw = row.next_evidence_due || row.evidence_at || row.evidence_due_at;
+      const evidence = typeof evidenceRaw === 'string' ? Date.parse(evidenceRaw) : NaN;
+      const createdRaw = row.created_at || row.created || row.updated_at;
+      const created = typeof createdRaw === 'string' ? Date.parse(createdRaw) : NaN;
+      tasks.push({ id, state, rawTitle, evidence, created, order: tasks.length });
     }
+    tasks.sort((a, b) => {
+      const nonRunning = (t) => t.state === 'running' ? 1 : 0;
+      const ar = nonRunning(a) - nonRunning(b);
+      if (ar) return ar;
+      const overdue = (t) => Number.isFinite(t.evidence) && t.evidence < Date.now();
+      const ao = Number(overdue(a)); const bo = Number(overdue(b));
+      if (ao !== bo) return bo - ao;
+      const newest = (t) => Number.isFinite(t.created) ? t.created : -t.order;
+      return newest(b) - newest(a);
+    });
     const fileRes = writeOpenTasksFile(tasks, sessionId, dirs);
     const pathLine = fileRes.ok
       ? `full list (${tasks.length}): ${escapeText(fileRes.file)}`
@@ -776,6 +786,25 @@ function buildHandoff(opts = {}) {
   const inboundText = inboundSection(opts.inbound);
   const fleetRaw = safe(() => collectFleetState({ cwd: opts.cwd, sessionId, dirs, deadlineAt }));
   let fleetText = typeof fleetRaw === 'string' ? fleetRaw : renderFleetState(fleetRaw, 1);
+  if (Buffer.byteLength(inboundText) + Buffer.byteLength(fleetText) > RESERVED_CAP && fleetRaw && typeof fleetRaw === 'object') {
+    const allowance = RESERVED_CAP - Buffer.byteLength(inboundText);
+    const p = fleetRaw.openPart;
+    if (p && p.rendered) {
+      const [pointer, ...bodyLines] = p.body.split('\n');
+      const rows = bodyLines.filter((line) => /^\S+ \S+ /.test(line));
+      p.body = pointer;
+      const baseBytes = Buffer.byteLength(renderFleetState(fleetRaw, 1));
+      let used = Math.max(0, allowance - baseBytes - 48);
+      const keep = [];
+      for (const line of rows) {
+        if (Buffer.byteLength(line) + (keep.length ? 1 : 0) > used) break;
+        keep.push(line); used += Buffer.byteLength(line) + 1;
+      }
+      const omitted = rows.length - keep.length;
+      p.body = [pointer, ...keep, ...(omitted ? [`... ${omitted} more`] : [])].join('\n');
+    }
+    fleetText = safe(() => renderFleetState(fleetRaw, 1));
+  }
   const frame = (t) => Buffer.byteLength(`## ${t}\n\n\n`);
   // the "tail omitted" line (~115 bytes) is reserved too, so a full body never overshoots BODY_CAP
   const fixed = (opts.tail ? 120 : 0) + Buffer.byteLength(machine) + frame(modelTitle) + frame(titles.git) + frame(titles.dispatch) + frame(titles.marker);

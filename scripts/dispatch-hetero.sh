@@ -1537,8 +1537,12 @@ NODE
   node "$SELF_DIR/session-mode.js" sweep --max 0 --grace-ms 0 >/dev/null 2>&1 || true
   local idx=0 marker_status
   for marker in "${markers[@]}"; do
-    [ -f "$marker" ] \
-      || die_precondition "authoritative session-mode marker is not a regular file: $marker"
+    # The sweep above already unlinked expired/dead markers, so an absent path is a swept
+    # record whose classification below still stands; only a path that still exists (or is a
+    # dangling symlink) and is not a regular file is a non-file offender.
+    if [ ! -f "$marker" ] && { [ -e "$marker" ] || [ -L "$marker" ]; }; then
+      die_precondition "authoritative session-mode marker is not a regular file: $marker"
+    fi
     marker_status="${marker_results[$((idx * 2))]-}"
     marker_state="${marker_results[$((idx * 2 + 1))]-}"
     idx=$((idx + 1))

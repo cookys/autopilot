@@ -52,6 +52,14 @@ if (sub === 'claim') {
 if (sub === 'verify') {
   const r = rows().find((x) => x.card_id === card && x.answer_id === a[3]);
   if (!r) process.exit(7);
+  if (r.via === 'console') {
+    const idx = a.indexOf('--content-sha256');
+    const got = idx >= 0 ? a[idx + 1] : '';
+    if (got !== r.expected_sha256) {
+      process.stderr.write('content_mismatch\n');
+      process.exit(7);
+    }
+  }
   process.stdout.write(JSON.stringify(shape(r, 'verified')) + '\n'); process.exit(0);
 }
 process.exit(1);
@@ -435,5 +443,26 @@ assert_eq "$DCOUR" "$COURIER14" "(c) delivery carries the courier answer_digest 
 assert_eq "$(cf "$CD14" answer_digest)" "$COURIER14" "(c) stored digest is the courier value"
 LOCAL14="$(node -e 'const [aid,cid]=process.argv.slice(1);process.stdout.write(require("crypto").createHash("sha256").update(JSON.stringify({answer_id:aid,card_id:cid,free_text:null,option:"A"})).digest("hex"))' "$AD14" "$CD14")"
 assert_neq "$DCOUR" "$LOCAL14" "(c) the courier value is not the local fallback"
+
+# 15. via=console two-line block: sha256("L1\nL2") closes the card and sends the answer; mismatch exits 7 with content_mismatch in dispatch_error
+setmode ok; Q15="Console 兩行？"; C15="$(mkcard "$Q15" --option "A::a" --option "B::b")"; AID15="$(claim "$C15" o A)"
+L1_15="${C15}｜${Q15} → A｜${AID15}"
+L2_15="answered on the console by operator"
+SHA15="$(node -e 'process.stdout.write(require("crypto").createHash("sha256").update(process.argv[1]).digest("hex"))' "${L1_15}"$'\n'"${L2_15}")"
+node -e 'const fs=require("fs");const p=process.argv[1],card=process.argv[2],sha=process.argv[3];const lines=fs.readFileSync(p,"utf8").split("\n").filter(Boolean).map((l)=>JSON.parse(l));for(const r of lines)if(r.card_id===card){r.via="console";r.expected_sha256=sha;}fs.writeFileSync(p,lines.map((r)=>JSON.stringify(r)).join("\n")+"\n")' "$STUB/answers" "$C15" "$SHA15"
+RB="$(nsends)"
+hook "$(printf '[待決回覆]\n%s\n%s\n' "$L1_15" "$L2_15")"
+assert_eq "$(( $(nsends) - RB ))" 1 "console two-line block: one send"
+assert_eq "$(cf "$C15" status)" closed "console two-line block: card closed"
+
+Q16="Console 雜湊不符？"; C16="$(mkcard "$Q16" --option "A::a" --option "B::b")"; AID16="$(claim "$C16" o A)"
+L1_16="${C16}｜${Q16} → A｜${AID16}"
+L2_16="answered on the console by operator"
+node -e 'const fs=require("fs");const p=process.argv[1],card=process.argv[2];const lines=fs.readFileSync(p,"utf8").split("\n").filter(Boolean).map((l)=>JSON.parse(l));for(const r of lines)if(r.card_id===card){r.via="console";r.expected_sha256="0000000000000000000000000000000000000000000000000000000000000000";}fs.writeFileSync(p,lines.map((r)=>JSON.stringify(r)).join("\n")+"\n")' "$STUB/answers" "$C16"
+RB="$(nsends)"
+hook "$(printf '[待決回覆]\n%s\n%s\n' "$L1_16" "$L2_16")"
+assert_eq "$(nsends)" "$RB" "console mismatch: nothing sent"
+assert_eq "$(cf "$C16" status)" pending_dispatch "console mismatch: card stays pending_dispatch"
+assert_contains "$(cf "$C16" dispatch_error)" content_mismatch "console mismatch: dispatch_error contains content_mismatch"
 
 finalize_test

@@ -104,7 +104,7 @@ function verifyOnce(cardId, answerId, sha256) {
   if (sha256) args.push('--content-sha256', sha256);
   const r = run(args);
   if (r.status === 0) return { ok: true, outcome: 'verified', answer: parseJson(r.stdout) };
-  if (r.status === 7) return { ok: false, outcome: 'unverified' };
+  if (r.status === 7) return { ok: false, outcome: 'unverified', detail: (r.stderr || '').trim() || undefined };
   if (r.status === 9) return { ok: false, outcome: 'unreachable' };
   return { ok: false, outcome: 'error', detail: (r.stderr || r.error || `verify exit ${r.status}`).trim() };
 }

@@ -46,6 +46,11 @@
 //            pin-evidence-anchors.js apply --exclude-ref <each>, then
 //            `git update-ref -d refs/heads/<branch> <tip>` (compare-and-swap).
 //            Without the flag the branch stays in branches_kept (why delete_branches_off, plus tip).
+//            main, master, develop, the integration ref, the main checkout's current branch,
+//            and any branch checked out in a live worktree are never deleted. That report is
+//            written when the branch is excluded, including when it is already checked out:
+//            one stderr line `reap: keep protected branch <b>` and a JSON entry
+//            { branch, skipped: "protected" }.
 //   never    live worktrees, unintegrated branches, unpreserved dirty worktrees
 //   --older-than-days narrows the candidate set (age from the marker's created_at, else the
 //   branch's last commit date, else the directory mtime); it never widens it.
@@ -894,7 +899,38 @@ function archiveRefLeaf(wtPath, head) {
 function branchDeleteOn(o, cfg) {
   return o.deleteBranches === true || cfg.delete_branches === true;
 }
-function deleteHeadCas(mainPath, branch, tip) {
+// Exact short name only. refs/heads/develop and develop match; develop-x and feat/develop do not.
+const PROTECTED_BRANCH_NAMES = Object.freeze(['main', 'master', 'develop']);
+function shortBranchName(ref) {
+  if (typeof ref !== 'string') return '';
+  const trimmed = ref.trim();
+  return trimmed.startsWith('refs/heads/') ? trimmed.slice('refs/heads/'.length) : trimmed;
+}
+function protectedBranchNames(mainPath, extraRefs) {
+  const names = new Set(PROTECTED_BRANCH_NAMES);
+  const add = (ref) => {
+    const short = shortBranchName(ref);
+    if (!short || short === 'HEAD') return;
+    names.add(short);
+  };
+  for (const ref of extraRefs || []) add(ref);
+  const cur = git(mainPath, ['rev-parse', '--abbrev-ref', 'HEAD']);
+  if (cur.ok) add(cur.out);
+  for (const w of listWorktrees(mainPath)) if (w.branch) add(w.branch);
+  return names;
+}
+function branchIsProtected(branch, names) {
+  return names.has(shortBranchName(branch));
+}
+function protectedSkip(branch) {
+  const short = shortBranchName(branch);
+  process.stderr.write(`reap: keep protected branch ${short}\n`);
+  return { branch: short, skipped: 'protected' };
+}
+function deleteHeadCas(mainPath, branch, tip, extraRefs) {
+  if (branchIsProtected(branch, protectedBranchNames(mainPath, extraRefs))) {
+    return { ok: false, protected: true, entry: protectedSkip(branch) };
+  }
   return git(mainPath, ['update-ref', '-d', `refs/heads/${branch}`, tip]);
 }
 function printBranchTips(branches) {
@@ -1212,7 +1248,12 @@ function runAuto(o, mainPath, integrationSha, integrationBranch, common) {
     }
     const prepared = part.doomedIntegrated.map((b) => ({ b, ref: null })).concat(archiveReady);
     const ready = [];
+    const protectRefs = [integrationBranch, o.integrationRef];
     for (const item of prepared) {
+      if (branchIsProtected(item.b.branch, protectedBranchNames(mainPath, protectRefs))) {
+        kept.push(protectedSkip(item.b.branch));
+        continue;
+      }
       const nowTip = git(mainPath, ['rev-parse', '--verify', '--quiet', `refs/heads/${item.b.branch}`]);
       if (!nowTip.ok || nowTip.out.trim() !== item.b.tip) { kept.push({ kind: 'branch', branch: item.b.branch, class: item.b.class, why: 'tip_changed' }); continue; }
       if (listWorktrees(mainPath).some((w) => w.branch === item.b.branch)) { kept.push({ kind: 'branch', branch: item.b.branch, class: item.b.class, why: 'checked_out_late' }); continue; }
@@ -1235,7 +1276,8 @@ function runAuto(o, mainPath, integrationSha, integrationBranch, common) {
         }
         printBranchTips(final.map((item) => item.b));
         for (const { b, ref } of final) {
-          const d = deleteHeadCas(mainPath, b.branch, b.tip);
+          const d = deleteHeadCas(mainPath, b.branch, b.tip, protectRefs);
+          if (d.protected) { kept.push(d.entry); continue; }
           if (!d.ok) { kept.push({ kind: 'branch', branch: b.branch, class: b.class, why: d.err.trim().slice(0, 200) }); failedBranches.add(b.branch); continue; }
           if (ref) archived.push({ kind: 'branch', branch: b.branch, tip: b.tip, ref });
           else removed.push({ kind: 'branch', branch: b.branch, class: b.class, reason: 'integrated', tip: b.tip });
@@ -1421,7 +1463,12 @@ function runCloseSession(o, mainPath, integrationSha, integrationBranch, common)
   }
 
   // one anchor pass over everything to delete, then delete (no archive ref: owner ruling 2026-10-10)
-  const toDelete = planDelete.map((b) => ({ b }));
+  const protectRefs = [integrationBranch, o.integrationRef];
+  const toDelete = [];
+  for (const b of planDelete) {
+    if (branchIsProtected(b.branch, protectedBranchNames(mainPath, protectRefs))) { report.kept.push(protectedSkip(b.branch)); continue; }
+    toDelete.push({ b });
+  }
   if (toDelete.length > 0) {
     const args = [path.join(__dirname, 'pin-evidence-anchors.js'), 'apply', '--repo-root', mainPath, '--json'];
     for (const { b } of toDelete) args.push('--exclude-ref', `refs/heads/${b.branch}`);
@@ -1443,7 +1490,8 @@ function runCloseSession(o, mainPath, integrationSha, integrationBranch, common)
         if (!nowTip.ok || nowTip.out.trim() !== b.tip) { report.kept.push({ branch: b.branch, why: 'tip_changed', failed: true }); continue; }
         if (listWorktrees(mainPath).some((w) => w.branch === b.branch)) { report.kept.push({ branch: b.branch, why: 'checked_out_late' }); continue; }
         // compare-and-swap: refuses if the branch moved since classification
-        const d = deleteHeadCas(mainPath, b.branch, b.tip);
+        const d = deleteHeadCas(mainPath, b.branch, b.tip, protectRefs);
+        if (d.protected) { report.kept.push(d.entry); continue; }
         if (!d.ok) { report.kept.push({ branch: b.branch, why: d.err.trim().slice(0, 200) || 'branch_delete_failed', failed: true }); continue; }
         const integrated = b.class === 'integrated';
         report.deleted.push({ branch: b.branch, tip: b.tip, integrated });
@@ -1618,14 +1666,27 @@ function main() {
   }
   // branches: only integrated + not checked out (re-read checkouts after the removals above)
   const stillCheckedOut = new Set(listWorktrees(mainPath).map((x) => x.branch).filter(Boolean));
-  const candidates = onlyWt.length > 0 ? [] : branches.filter((b) => b.class === 'integrated' && !stillCheckedOut.has(b.branch) && !tooYoung(b.last_commit_unix ? (Date.now() / 1000 - b.last_commit_unix) / 86400 : null));
-  if (onlyWt.length === 0) for (const b of branches) if (!candidates.includes(b) && b.class !== 'integration-ref') actions.branches_kept.push({ branch: b.branch, class: b.class, ahead: b.ahead });
+  const protectRefs = [integrationBranch, o.integrationRef];
+  const protectedNames = protectedBranchNames(mainPath, protectRefs);
+  const candidates = onlyWt.length > 0 ? [] : branches.filter((b) => (b.class === 'integrated' || b.class === 'integration-ref') && !stillCheckedOut.has(b.branch) && !tooYoung(b.last_commit_unix ? (Date.now() / 1000 - b.last_commit_unix) / 86400 : null));
+  // Protected wins over the checked-out exclusion. A branch filtered out here never reaches the
+  // candidate predicate below, so record skipped:"protected" at this gate too. Checked-out branches
+  // stay out of candidates.
+  if (onlyWt.length === 0) for (const b of branches) {
+    if (candidates.includes(b)) continue;
+    if (branchIsProtected(b.branch, protectedNames)) { actions.branches_kept.push(protectedSkip(b.branch)); continue; }
+    if (b.class !== 'integration-ref') actions.branches_kept.push({ branch: b.branch, class: b.class, ahead: b.ahead });
+  }
   const branchDelete = branchDeleteOn(o, loadResidueConfig());
   if (candidates.length > 0 && !branchDelete) {
     for (const b of candidates) actions.branches_kept.push({ branch: b.branch, class: b.class, why: 'delete_branches_off', tip: b.tip });
   } else if (candidates.length > 0) {
     const ready = [];
     for (const b of candidates) {
+      if (branchIsProtected(b.branch, protectedBranchNames(mainPath, protectRefs))) {
+        actions.branches_kept.push(protectedSkip(b.branch));
+        continue;
+      }
       const nowTip = git(mainPath, ['rev-parse', '--verify', '--quiet', `refs/heads/${b.branch}`]);
       if (!nowTip.ok || nowTip.out.trim() !== b.tip) { actions.branches_kept.push({ branch: b.branch, class: b.class, why: 'tip_changed' }); continue; }
       if (listWorktrees(mainPath).some((w) => w.branch === b.branch)) { actions.branches_kept.push({ branch: b.branch, class: b.class, why: 'checked_out_late' }); continue; }
@@ -1645,7 +1706,8 @@ function main() {
           const nowTip = git(mainPath, ['rev-parse', '--verify', '--quiet', `refs/heads/${b.branch}`]);
           if (!nowTip.ok || nowTip.out.trim() !== b.tip) { actions.branches_kept.push({ branch: b.branch, class: b.class, why: 'tip_changed' }); continue; }
           if (listWorktrees(mainPath).some((w) => w.branch === b.branch)) { actions.branches_kept.push({ branch: b.branch, class: b.class, why: 'checked_out_late' }); continue; }
-          const d = deleteHeadCas(mainPath, b.branch, b.tip);
+          const d = deleteHeadCas(mainPath, b.branch, b.tip, protectRefs);
+          if (d.protected) { actions.branches_kept.push(d.entry); continue; }
           if (d.ok) actions.branches_deleted.push({ branch: b.branch, tip: b.tip }); else actions.branches_kept.push({ branch: b.branch, class: b.class, why: d.err.trim() });
         }
       }

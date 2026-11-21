@@ -6245,7 +6245,7 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
     # Isolate the systemd-run job so its pgid can be a safe fallback if
     # systemctl --user kill fails (must not share the dispatcher group).
     _job_control_on
-    systemd-run --user --scope --quiet --unit="$SCOPE_UNIT" -- env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_CLAUDE_ENV[@]+"${CHILD_SESSION_CLAUDE_ENV[@]}"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >>"$LOG" 2>&1 </dev/null &
+    systemd-run --user --scope --quiet --expand-environment=no --unit="$SCOPE_UNIT" -- env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_CLAUDE_ENV[@]+"${CHILD_SESSION_CLAUDE_ENV[@]}"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >>"$LOG" 2>&1 </dev/null &
     rp=$!
     local selfpg="" pg=""
     selfpg="$(_self_pgid)" || selfpg=""
@@ -6845,8 +6845,8 @@ else
   # shape of the old `--output-format json` envelope, so dispatch-status.js --agy-envelope below is
   # unchanged. A `result` of status ERROR (or none at all) makes the helper exit 1 → the normal
   # non-zero-agent path (agent_log gets stderr, status from git artifacts).
-  # NOTE: no positional parameter above $9 — systemd-run (the scope branch of run_worker) expands
-  # `${10}` in the command line, so the script `shift`s the worktree off instead.
+  # NOTE: systemd-run environment expansion is disabled (--expand-environment=no);
+  # the script still `shift`s the worktree off before using positional parameters.
   # agy-stream-json concatenates --prefix and the prompt file. Write that once and
   # pass it with an empty prefix so the sealed file is what agy is given.
   AGY_FINAL_PROMPT="$(mktemp -t dispatch-hetero-agy-prompt-XXXXXX)"

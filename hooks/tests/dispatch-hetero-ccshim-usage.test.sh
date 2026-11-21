@@ -48,6 +48,9 @@ export CCSHIM_STUB_ENV_FILE="$TEST_TMP/claude-env.txt"     # @UNSET@ | the ANTHR
 cat > "$BINDIR/claude" <<'EOS'
 #!/usr/bin/env bash
 printf '%s\n' "$@" > "${CCSHIM_STUB_ARGV_FILE:-/dev/null}"
+if [ -n "${CCSHIM_SCOPE_ENV_FILE:-}" ]; then
+  printf '%s\n%s\n%s\n' "$HOME" "$CLAUDE_CONFIG_DIR" "${ANTHROPIC_BASE_URL:+set}" > "$CCSHIM_SCOPE_ENV_FILE"
+fi
 printf '%s' "${ANTHROPIC_CUSTOM_HEADERS-@UNSET@}" > "${CCSHIM_STUB_ENV_FILE:-/dev/null}"
 cat >/dev/null
 echo edited > ccshim-usage-edit.txt
@@ -137,6 +140,43 @@ argv_value() {
 }
 
 EXP1='{"input_tokens":120,"output_tokens":45,"cache_read_input_tokens":7,"cache_creation_input_tokens":0}'
+
+# Emulate systemd's argv expansion, including its scope capability probe.
+SCOPE_BIN="$TEST_TMP/scope-bin"; mkdir -p "$SCOPE_BIN"
+cat > "$SCOPE_BIN/systemd-run" <<'EOS'
+#!/usr/bin/env bash
+expand=1
+args=()
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --expand-environment=no) expand=0 ;;
+    --) shift; break ;;
+  esac
+  shift
+done
+for arg in "$@"; do
+  if [ "$expand" -eq 1 ] && [[ "$arg" == *'${'* ]]; then
+    printf '%s\n' 'Invalid environment variable name evaluates to an empty string' >&2
+    arg="$(printf '%s' "$arg" | sed 's/\${[^}]*}//g')"
+  fi
+  args+=("$arg")
+done
+exec "${args[@]}"
+EOS
+chmod +x "$SCOPE_BIN/systemd-run"
+ln -s "$BINDIR/claude" "$SCOPE_BIN/claude"
+ORIGINAL_BINDIR="$BINDIR"; BINDIR="$SCOPE_BIN"
+export CCSHIM_SCOPE_ENV_FILE="$TEST_TMP/scope-env"
+unset WORKER_CONTAINMENT_FORCE_NO_CGROUP
+run_case '{"type":"result","is_error":false,"result":"ok"}'
+assert_eq "$RC" "0" "scope: dispatch exits successfully"
+SCOPE_HOME="$(sed -n '1p' "$CCSHIM_SCOPE_ENV_FILE" 2>/dev/null)"
+SCOPE_CONFIG="$(sed -n '2p' "$CCSHIM_SCOPE_ENV_FILE" 2>/dev/null)"
+SCOPE_ENDPOINT="$(sed -n '3p' "$CCSHIM_SCOPE_ENV_FILE" 2>/dev/null)"
+assert_eq "$SCOPE_HOME" "$HOME" "scope: worker HOME is preserved"
+assert_eq "$SCOPE_CONFIG" "$CLAUDE_CONFIG_DIR" "scope: worker config is preserved"
+assert_eq "$SCOPE_ENDPOINT" "set" "scope: worker endpoint is present"
+BINDIR="$ORIGINAL_BINDIR"; unset CCSHIM_SCOPE_ENV_FILE
 
 # case 1: a result envelope WITH usage -> the result JSON carries exactly that object.
 EN1='{"type":"result","is_error":false,"result":"ok","usage":{"input_tokens":120,"output_tokens":45,"cache_read_input_tokens":7,"cache_creation_input_tokens":0}}'

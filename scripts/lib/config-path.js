@@ -112,7 +112,7 @@ function applyPerModel(cfg, modelId) {
 function readContextBudget(opts) {
   const o = opts || {};
   const env = o.env || process.env;
-  const cfg = { t1: 100_000, t2: 150_000, gap: 50_000, mode: 'warn', explicitT1: false, explicitT2: false, envT1: false, envT2: false, perModel: [], liveWrite: true, step: 50_000, warnings: [] };
+  const cfg = { t1: 100_000, t2: 150_000, t3: 0, explicitT3: false, gap: 50_000, mode: 'warn', explicitT1: false, explicitT2: false, envT1: false, envT2: false, perModel: [], liveWrite: true, step: 50_000, warnings: [] };
   try {
     const user = JSON.parse(fs.readFileSync(configPath({ env, home: o.home }), 'utf8'));
     const cb = user && user.context_budget;
@@ -121,6 +121,7 @@ function readContextBudget(opts) {
     if (cb && typeof cb === 'object') {
       if (Number.isFinite(cb.t1)) { cfg.t1 = cb.t1; cfg.explicitT1 = true; }
       if (Number.isFinite(cb.t2)) { cfg.t2 = cb.t2; cfg.explicitT2 = true; }
+      if (Number.isFinite(cb.t3) && cb.t3 > 0) { cfg.t3 = cb.t3; cfg.explicitT3 = true; }
       if (Number.isFinite(cb.step) && cb.step >= 0) cfg.step = cb.step;
       if (Number.isFinite(cb.gap) && cb.gap >= 0) cfg.gap = cb.gap;
       const cm = normMode(cb.mode, 'config', cfg.warnings);
@@ -134,6 +135,8 @@ function readContextBudget(opts) {
   const envT2 = envTier(env.AUTOPILOT_CONTEXT_BUDGET_T2);
   if (Number.isFinite(envT1)) { cfg.t1 = envT1; cfg.explicitT1 = true; cfg.envT1 = true; }
   if (Number.isFinite(envT2)) { cfg.t2 = envT2; cfg.explicitT2 = true; cfg.envT2 = true; }
+  const envT3 = envTier(env.AUTOPILOT_CONTEXT_BUDGET_T3);
+  if (Number.isFinite(envT3) && envT3 > 0) { cfg.t3 = envT3; cfg.explicitT3 = true; }
   const envStepRaw = env.AUTOPILOT_CONTEXT_BUDGET_STEP;
   const envStep = envStepRaw === undefined || envStepRaw === '' ? NaN : Number(envStepRaw);
   if (Number.isFinite(envStep) && envStep >= 0) cfg.step = envStep; // env beats config; 0 = remind on every call

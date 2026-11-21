@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # context-budget-t2-autocompact (BL-0124) — hook-level T2 wording: every session says
-# "Keep working" and never STOP, /clear, or a new-session wait.
+# the land checklist (/handoff) and never STOP, /clear, or a new-session wait.
 # Covers both call sites in hooks/context-budget.js: fresh status-line file (statusline path) and a
 # stale one (session-window path). HOME and the Claude config dir are scratch dirs.
 set -u
@@ -50,14 +50,14 @@ run_case() {  # $1 = fresh|stale; prints stderr
 
 expect() {  # $1 label, $2 ignored (kept so each old case stays), $3 stderr
   case "$3" in *"Context budget T2"*) ;; *) bad "$1: no T2 message: $3"; return ;; esac
-  case "$3" in *'Keep working'*) ok "$1: keep working" ;; *) bad "$1: expected 'Keep working': $3" ;; esac
+  case "$3" in *'/handoff'*) ok "$1: land checklist ends in /handoff" ;; *) bad "$1: expected the /handoff land checklist: $3" ;; esac
   case "$3" in *'Directive: STOP'*|*'/clear'*|*'next session'*|*'new session'*|*'wait'*) bad "$1: stop wording present: $3" ;; *) ok "$1: no stop wording" ;; esac
 }
 
 # negative control: the old /clear sentence fails the same predicate (revert -> red)
 node -e '
 const old = "Directive: STOP taking on new work. tell the user to /clear or restart the session";
-const rejected = /\/clear|next session|new session|wait/.test(old) || !/[Kk]eep working/.test(old);
+const rejected = /\/clear|next session|new session|wait/.test(old) || !/\/handoff/.test(old);
 if (!rejected) { console.error("negative control accepted the old wording"); process.exit(1); }
 ' || { bad "negative control: old /clear wording must be rejected"; }
 
@@ -99,7 +99,7 @@ cat > "$LIVE/context/$SID.json" <<JSON
 JSON
 rm -rf "$TMP/state"
 printf '%s' "$PAYLOAD" | node "$HOOK" >/dev/null 2>"$TMP/err.txt"
-expect "90% lane" keep "$(cat "$TMP/err.txt")"
+case "$(cat "$TMP/err.txt")" in *"Context budget T3"*"/handoff"*) ok "90% lane: T3 (70% of the 1M window) carries the land checklist" ;; *) bad "90% lane: expected T3 checklist: $(cat "$TMP/err.txt")" ;; esac
 case "$(cat "$TMP/err.txt")" in *'90%'*) ok "90% lane: names 90%" ;; *) bad "90% lane: pct missing: $(cat "$TMP/err.txt")" ;; esac
 
 printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"

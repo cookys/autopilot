@@ -20,11 +20,13 @@
  *  - T1 (100k): stderr nudge, exit 0 (user-visible). On a known 1M window with no auto-compact
  *    window set and compaction on (scripts/lib/autocompact-window.js), it adds one line telling
  *    the owner to set autoCompactWindow.
- *  - T2 (150k): escalated advisory, exit 2 (stderr fed to the MODEL): keep working.
- *    Claude Code auto-compacts at the window; write a handoff file as a backup and continue
- *    the task. The same wording for every session, whether or not an auto-compact window is
- *    set (BL-0124). For T2 to remind BEFORE compaction, t2 + gap <= window - 33000
- *    (session-start warns otherwise).
+ *  - T2 (150k) and T3 (default 70% of an exactly known window, only above t2; config t3 / env
+ *    AUTOPILOT_CONTEXT_BUDGET_T3): exit 2 (stderr fed to the MODEL) with a fixed land checklist
+ *    (what the session holds that is not yet in the repo, where it goes, then /handoff). The first fire
+ *    per tier and cycle is recorded in the state file (`landFire`); hooks/context-land-gate.js (Stop)
+ *    blocks stopping, at most twice per fire, until a handoff newer than the fire exists. The resident
+ *    seat keeps the state-file wording and is never gated. For T2 to remind BEFORE compaction,
+ *    t2 + gap <= window - 33000 (session-start warns otherwise).
  *  - Re-reminder throttle is per TOKEN STEP, not per call: a tier refires only after context
  *    grew >= step (default 50000; config context_budget.step / env AUTOPILOT_CONTEXT_BUDGET_STEP)
  *    since that tier's last fire; the context at last fire lives in the state file
@@ -76,7 +78,7 @@ const fs = require('fs');
 const { readContextBudget, applyPerModel } = require('../scripts/lib/config-path.js');
 const path = require('path');
 const {
-  lockStateFile, readContextTokens, readContextUsage, budgetDecision, inferWindowTokens, scaleTiers, tiersForKnownWindow, unreachableT2Warning, BASE_WINDOW,
+  lockStateFile, sessionIdOf, stateDirOf, sessionHandoffPath, readContextTokens, readContextUsage, budgetDecision, inferWindowTokens, scaleTiers, tiersForKnownWindow, unreachableT2Warning, BASE_WINDOW,
 } = require('./context-budget-lib.js');
 const { resolveLiveDir, sanitizeSessionId, readLive } = require('../scripts/lib/live-state-dir.js');
 const { writeLiveRecord } = require('../scripts/statusline-live-tee.js');
@@ -93,15 +95,8 @@ function warnOnce(st, text) {
   process.stderr.write(`context-budget config: ${text}\n`);
 }
 
-// Writer/reader parity (plan §2.5): session_id from the hook payload first, env second,
-// cwd last — the SAME sanitiser used by every live-file consumer.
-function getSessionId(payload) {
-  const raw = (payload && typeof payload.session_id === 'string' && payload.session_id)
-    || process.env.CLAUDE_CODE_SESSION_ID
-    || process.env.CLAUDE_SESSION_ID
-    || process.cwd();
-  return sanitizeSessionId(raw);
-}
+// Writer/reader parity (plan §2.5): session id via sessionIdOf (context-budget-lib.js), shared with the land gate.
+const getSessionId = sessionIdOf;
 
 // session (default) or resident. Unknown values are ignored, same as an unknown mode.
 // Env AUTOPILOT_CONTEXT_BUDGET_SEAT beats the config. FLEET_LIFETIME is not consulted.
@@ -220,14 +215,28 @@ function loadState(file) {
     const st = JSON.parse(fs.readFileSync(file, 'utf8'));
     if (st && typeof st === 'object' && Number.isFinite(st.calls)) return st;
   } catch { /* corrupt/absent ⇒ reset-and-continue */ }
-  return { calls: 0, lastT1Context: 0, lastT2Context: 0, lastContext: 0, observedMax: 0 };
+  return { calls: 0, lastT1Context: 0, lastT2Context: 0, lastT3Context: 0, lastContext: 0, observedMax: 0 };
 }
 
 // A tier's step throttle restarts when context falls back under that tier's threshold
 // (compaction / clear): the next climb past it is a NEW cycle and must remind at once.
 function resetBelowTiers(st, contextTokens, cfg) {
   if (contextTokens < cfg.t1) st.lastT1Context = 0;
-  if (contextTokens < cfg.t2) st.lastT2Context = 0;
+  if (contextTokens < cfg.t2) { st.lastT2Context = 0; clearLandFire(st, 't2'); }
+  if (contextTokens < cfg.t3) { st.lastT3Context = 0; clearLandFire(st, 't3'); }
+}
+
+// Land gate (hooks/context-land-gate.js): the first directive fire of a tier in a cycle records its time here;
+// the Stop hook compares it with the handoff file's mtime. A refire inside the same cycle never re-arms the gate
+// (the tier's fire stays until a handoff is seen or the context falls back under the threshold).
+function recordLandFire(st, d, contextTokens) {
+  if (!d || !d.land) return;
+  if (!st.landFire || typeof st.landFire !== 'object') st.landFire = {};
+  if (st.landFire[d.tier]) return;
+  st.landFire[d.tier] = { at: Date.now(), ctx: contextTokens, blocks: 0, done: false };
+}
+function clearLandFire(st, tier) {
+  if (st.landFire && st.landFire[tier]) delete st.landFire[tier];
 }
 
 // context_budget.mode "once" (BL-0309 gap 6): each tier speaks at most once per session. The flags live in the
@@ -237,12 +246,12 @@ function resetBelowTiers(st, contextTokens, cfg) {
 // tier's one reminder. Any other mode returns the decision untouched / marks nothing.
 function onceFilter(st, cfg, d) {
   if (cfg.mode !== 'once' || !d || !d.tier) return d;
-  const key = d.tier === 't2' ? 'onceT2Fired' : 'onceT1Fired';
+  const key = d.tier === 't3' ? 'onceT3Fired' : d.tier === 't2' ? 'onceT2Fired' : 'onceT1Fired';
   return st[key] === true ? { tier: null, message: null } : d;
 }
 function onceMark(st, cfg, d) {
   if (cfg.mode !== 'once' || !d || !d.tier) return;
-  st[d.tier === 't2' ? 'onceT2Fired' : 'onceT1Fired'] = true;
+  st[d.tier === 't3' ? 'onceT3Fired' : d.tier === 't2' ? 'onceT2Fired' : 'onceT1Fired'] = true;
 }
 
 function saveState(file, st) {
@@ -328,7 +337,8 @@ function advisePostCompact(st, sid, liveTokens, cfg) {
 
     const sid = getSessionId(payload);
     const live = resolveLiveDir();
-    const stDir = process.env.AUTOPILOT_CONTEXT_BUDGET_DIR || path.join(live.base, 'context-budget');
+    const stDir = stateDirOf(live.base);
+    const handoffPath = sessionHandoffPath(sid);
     fs.mkdirSync(stDir, { recursive: true });
     const stateFile = path.join(stDir, `${sid}.json`);
     // Serialise the load-modify-save of the state file with the PostCompact arm (state-checkpoint.js).
@@ -412,8 +422,8 @@ function advisePostCompact(st, sid, liveTokens, cfg) {
       st.observedMax = Math.max(Number.isFinite(st.observedMax) ? st.observedMax : 0, contextTokens);
       resetBelowTiers(st, contextTokens, liveCfg);
       const d = onceFilter(st, cfg, budgetDecision(
-        { contextTokens, calls: st.calls, lastT1Context: st.lastT1Context, lastT2Context: st.lastT2Context },
-        { ...liveCfg, windowSource: 'statusline', autocompactWindow: autocompactForT2(contextTokens, liveCfg.t2, payload, st.knownModel) },
+        { contextTokens, calls: st.calls, lastT1Context: st.lastT1Context, lastT2Context: st.lastT2Context, lastT3Context: st.lastT3Context },
+        { ...liveCfg, handoffPath, windowSource: 'statusline', autocompactWindow: autocompactForT2(contextTokens, liveCfg.t2, payload, st.knownModel) },
       ));
       if (d.tier === 't1') {
         st.lastT1Context = contextTokens;
@@ -421,10 +431,11 @@ function advisePostCompact(st, sid, liveTokens, cfg) {
         process.stderr.write(`${message}\n`);
         onceMark(st, cfg, d);
         emitT1(sid, message);
-      } else if (d.tier === 't2') {
-        st.lastT2Context = contextTokens;
+      } else if (d.tier === 't2' || d.tier === 't3') {
+        st[d.tier === 't3' ? 'lastT3Context' : 'lastT2Context'] = contextTokens;
         process.stderr.write(`${d.message}\n`);
         onceMark(st, cfg, d);
+        recordLandFire(st, d, contextTokens);
         exitCode = 2; // PostToolUse exit 2 ⇒ stderr reaches the model
       }
     } else {
@@ -471,12 +482,12 @@ function advisePostCompact(st, sid, liveTokens, cfg) {
             : scaleTiers(cfg, inferWindowTokens(st.observedMax));
           resetBelowTiers(st, tokens, liveCfg);
           const d = onceFilter(st, cfg, budgetDecision(
-            { contextTokens: tokens, calls: st.calls, lastT1Context: st.lastT1Context, lastT2Context: st.lastT2Context },
+            { contextTokens: tokens, calls: st.calls, lastT1Context: st.lastT1Context, lastT2Context: st.lastT2Context, lastT3Context: st.lastT3Context },
             rememberedWindow !== null
-              ? { ...liveCfg, windowSource: 'session-window', autocompactWindow: autocompactForT2(tokens, liveCfg.t2, payload, st.knownModel) }
+              ? { ...liveCfg, handoffPath, windowSource: 'session-window', autocompactWindow: autocompactForT2(tokens, liveCfg.t2, payload, st.knownModel) }
               // Unknown window: no live file, nothing remembered, and observedMax < 200K (200K and
               // 1M are indistinguishable). A user-explicit T2 keeps today's directive behaviour.
-              : { ...liveCfg, windowUnknown: !cfg.explicitT2 && st.observedMax < BASE_WINDOW },
+              : { ...liveCfg, handoffPath, windowUnknown: !cfg.explicitT2 && st.observedMax < BASE_WINDOW },
           ));
           if (d.tier === 't1' || (d.tier === 't2' && d.advisory)) {
             if (d.tier === 't2') { st.lastT2Context = tokens; }
@@ -487,10 +498,11 @@ function advisePostCompact(st, sid, liveTokens, cfg) {
             onceMark(st, cfg, d);
             if (d.tier === 't1') emitT1(sid, message);
             else emitInjected(message); // the unknown-window T2 advisory stays model-facing
-          } else if (d.tier === 't2') {
-            st.lastT2Context = tokens;
+          } else if (d.tier === 't2' || d.tier === 't3') {
+            st[d.tier === 't3' ? 'lastT3Context' : 'lastT2Context'] = tokens;
             process.stderr.write(`${d.message}\n`);
             onceMark(st, cfg, d);
+            recordLandFire(st, d, tokens);
             exitCode = 2; // PostToolUse exit 2 ⇒ stderr reaches the model
           }
         }

@@ -532,6 +532,7 @@
 
 ### Settings changes
 
+- **New `AUTOPILOT_SHED_ROUTE`** (env; default `on`). Set to `0` to disable seat-scoped mechanical-work shed routing from fresh `capacity.burn_more/1` data.
 - **New `AUTOPILOT_PM_SWITCHBOARD`** (env; `on` or `off`; default `on`). Set to `off` to disable `scripts/pm-switchboard.js run` (exits 0 doing nothing).
 - **New `AUTOPILOT_FLEET_REPO`** (env; directory path; default unset). Path to the fleet checkout whose `plugins/claude/src/inbox-cli.ts` backs `scripts/lib/pm-inbox-adapter.js` in `fleet` mode.
 - **New `AUTOPILOT_PM_INBOX_MEMBER`** (env; member handle; default `pm--claude`). Fleet member handle passed as `--member` to `inbox-cli.ts` by `scripts/lib/pm-inbox-adapter.js`.

@@ -31,7 +31,14 @@ function fixture(t) {
   const savedCfgFile = process.env.AUTOPILOT_CONFIG_FILE;
   const hadReplyLang = Object.hasOwn(process.env, 'AUTOPILOT_REPLY_LANGUAGE');
   const savedReplyLang = process.env.AUTOPILOT_REPLY_LANGUAGE;
+  const fleetVars = ['CLAUDE_CODE_SESSION_ID', 'FLEET_ADDRESS', 'AUTOPILOT_FLEET_ADDRESS', 'FLEET_BIN'];
+  const savedFleet = fleetVars.map((k) => [k, Object.hasOwn(process.env, k), process.env[k]]);
   for (const [k] of savedGit) delete process.env[k];
+  for (const k of fleetVars) delete process.env[k];
+  const fleetStub = path.join(cwd, 'fleet-stub.sh');
+  fs.writeFileSync(fleetStub, '#!/usr/bin/env bash\nexit 2\n');
+  fs.chmodSync(fleetStub, 0o755);
+  process.env.FLEET_BIN = fleetStub;
   process.env.GIT_CONFIG_GLOBAL = TEST_GITCONFIG;
   process.env.GIT_CONFIG_NOSYSTEM = '1';
   process.env.AUTOPILOT_SESSION_MODE_DIR = modes;
@@ -40,6 +47,10 @@ function fixture(t) {
   t.after(() => {
     for (const k of Object.keys(process.env)) if (k.startsWith('GIT_')) delete process.env[k];
     for (const [k, v] of savedGit) process.env[k] = v;
+    for (const [k, had, v] of savedFleet) {
+      if (had) process.env[k] = v;
+      else delete process.env[k];
+    }
     if (hadModeDir) process.env.AUTOPILOT_SESSION_MODE_DIR = savedModeDir;
     else delete process.env.AUTOPILOT_SESSION_MODE_DIR;
     if (hadCfgFile) process.env.AUTOPILOT_CONFIG_FILE = savedCfgFile;

@@ -92,15 +92,33 @@ function blocked(taskId, blockedOn, note) {
 
 const ADDR_RE = /^[^/\s]+\/[^/\s]+\/[^/\s]+$/;
 
+function whoamiSession(sid, { binPath = bin(), timeoutMs = 3000, env = process.env } = {}) {
+  const s = String(sid || '').trim();
+  if (!s) return { ok: false, reason: 'no_session', address: null };
+  const r = spawnSync(binPath, ['whoami', '--session', s], {
+    encoding: 'utf8',
+    timeout: timeoutMs,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env,
+  });
+  if (r.error) {
+    return { ok: false, reason: 'error', address: null };
+  }
+  if (r.signal || r.status !== 0) {
+    return { ok: false, reason: r.status === 2 ? 'session_unknown' : 'unresolved', status: r.status, address: null };
+  }
+  const first = (r.stdout || '').split('\n')[0].trim().replace(/@.*$/, '');
+  if (ADDR_RE.test(first)) {
+    return { ok: true, reason: 'ok', address: first };
+  }
+  return { ok: false, reason: 'unresolved', status: 0, address: null };
+}
+
 function ownerAddress() {
   const env = (process.env.FLEET_ADDRESS || '').trim().replace(/@.*$/, '');
   if (ADDR_RE.test(env)) return env;
-  const sid = (process.env.CLAUDE_CODE_SESSION_ID || '').trim();
-  if (!sid) return null;
-  const r = run(['whoami', '--session', sid]);
-  if (!r.ok) return null;
-  const first = (r.stdout || '').split('\n')[0].trim();
-  return ADDR_RE.test(first) ? first : null;
+  const r = whoamiSession(process.env.CLAUDE_CODE_SESSION_ID);
+  return r.ok ? r.address : null;
 }
 
-module.exports = { show, progress, dispatchEnding, blocked, ownerAddress, bin };
+module.exports = { show, progress, dispatchEnding, blocked, ownerAddress, whoamiSession, bin };

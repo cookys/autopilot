@@ -28,6 +28,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { configPath, globToRegExp } = require('../../scripts/lib/config-path.js');
+const { whoamiSession } = require('../../scripts/lib/fleet-task.js');
 const { isPmConsole } = require('../_shared/pm-console.js');
 const { enforceFromReached } = require('./enforce-from.js');
 
@@ -37,10 +38,26 @@ const WARN_WINDOW_MS = 60 * 60 * 1000; // rule 3: the first hour after enforce-f
 
 // The session's fleet member address, or '' when the session has no fleet address
 // (the operator's own session). An @<session> suffix is stripped, same as
-// scripts/lib/fleet-task.js ownerAddress().
-function seatAddressOf(env) {
+// scripts/lib/fleet-task.js ownerAddress(). When neither env var is set and
+// CLAUDE_CODE_SESSION_ID is set, falls back to `fleet whoami --session <id>`.
+function resolveSeat(env) {
   const raw = String(env.FLEET_ADDRESS || env.AUTOPILOT_FLEET_ADDRESS || '');
-  return raw.replace(/@.*$/, '').trim();
+  const fromEnv = raw.replace(/@.*$/, '').trim();
+  if (fromEnv) return { address: fromEnv, unresolved: false };
+  const sid = String(env.CLAUDE_CODE_SESSION_ID || '').trim();
+  if (!sid) return { address: '', unresolved: false };
+  const r = whoamiSession(sid, {
+    binPath: env.FLEET_BIN || 'fleet',
+    timeoutMs: 3000,
+    env,
+  });
+  if (r.ok) return { address: r.address, unresolved: false };
+  const unresolved = r.reason !== 'session_unknown' && r.reason !== 'no_session';
+  return { address: '', unresolved };
+}
+
+function seatAddressOf(env) {
+  return resolveSeat(env).address;
 }
 
 // The member part of the address: the last '/'-separated segment (the whole string when
@@ -90,9 +107,15 @@ function loadGuardConfig(env) {
 function decide(opts = {}) {
   const env = opts.env || process.env;
   const nowMs = Number.isFinite(opts.nowMs) ? opts.nowMs : Date.now();
-  const address = seatAddressOf(env);
+  const { address, unresolved } = resolveSeat(env);
   const member = memberOf(address);
-  if (!address) return { verdict: 'allow', why: 'no-fleet-address', seat: null, member: null };
+  if (!address) {
+    if (unresolved) {
+      recordHit({ seat: null, member: null, denyFrom: null, reason: 'seat_unresolved' }, { env });
+      process.stderr.write('ask-guard: warn: seat_unresolved (fleet whoami failed); allowing as operator session.\n');
+    }
+    return { verdict: 'allow', why: 'no-fleet-address', seat: null, member: null };
+  }
   let allowMembers = DEFAULT_ALLOW_MEMBERS;
   let enforceFrom = DEFAULT_ENFORCE_FROM;
   try {
@@ -132,6 +155,7 @@ function recordHit(d, { env, sessionId } = {}) {
       member: d.member || null,
       mode: 'warn',
       deny_from: d.denyFrom || null,
+      ...(d.reason ? { reason: d.reason } : {}),
     };
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.appendFileSync(file, `${JSON.stringify(row)}\n`);

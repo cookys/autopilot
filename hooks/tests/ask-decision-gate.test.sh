@@ -9,6 +9,13 @@
 # sandbox, so the hits file lands under $HOOK_HOME.
 . "$(dirname "$0")/lib.sh"
 
+# Isolate from parent fleet/session env and never reach the real fleet binary.
+unset CLAUDE_CODE_SESSION_ID FLEET_ADDRESS AUTOPILOT_FLEET_ADDRESS FLEET_BIN
+DEFAULT_FLEET_STUB="$TEST_TMP/fleet-default-stub"
+printf '#!/usr/bin/env bash\nexit 2\n' > "$DEFAULT_FLEET_STUB"
+chmod +x "$DEFAULT_FLEET_STUB"
+export FLEET_BIN="$DEFAULT_FLEET_STUB"
+
 REPO="$TEST_TMP/repo"
 mkdir -p "$REPO"
 git -C "$REPO" init -q
@@ -166,5 +173,80 @@ MUT2_OUT="$(HOME="$HOOK_HOME" TMPDIR="$HOOK_TMPDIR" CLAUDE_PLUGIN_ROOT="$REPO_RO
   node "$MUT2/hooks/ask-decision.js" 2>/dev/null <<< "$(payload "$REPO")")"
 assert_contains "$MUT2_OUT" '"permissionDecision":"deny"' \
   "control (allow list dropped): pm--claude is denied, so the allow test is red"
+
+# --- whoami fallback when FLEET_ADDRESS and AUTOPILOT_FLEET_ADDRESS are unset
+unset FLEET_ADDRESS
+unset AUTOPILOT_FLEET_ADDRESS
+STUB_BIN="$TEST_TMP/fleet-stub"
+STUB_MARKER="$TEST_TMP/fleet-stub-called"
+cat > "$STUB_BIN" <<'SH'
+#!/usr/bin/env bash
+[ -n "${STUB_MARKER:-}" ] && touch "$STUB_MARKER"
+printf '%s\n' "${STUB_OUT:-}"
+exit "${STUB_EXIT:-0}"
+SH
+chmod +x "$STUB_BIN"
+export FLEET_BIN="$STUB_BIN"
+export STUB_MARKER
+
+# (a) no env address + stub prints cookys/c4140/gpu-lead--claude exit 0 + enforce_from in the past -> deny
+export CLAUDE_CODE_SESSION_ID="sess-whoami-a"
+export STUB_OUT="cookys/c4140/gpu-lead--claude"
+export STUB_EXIT="0"
+set_cfg "$PAST"
+expect_deny "whoami fallback: gpu-lead--claude is denied"
+
+# (b) same with stub printing cookys/aimax395/pm--claude -> allow
+export STUB_OUT="cookys/aimax395/pm--claude"
+export STUB_EXIT="0"
+expect_allow "whoami fallback: pm--claude is allowed"
+
+# (c) stub exit 2 -> allow
+export STUB_OUT=""
+export STUB_EXIT="2"
+rm -f "$HITS"
+expect_allow "whoami fallback: exit 2 (session_unknown) is allowed"
+
+# (d) stub exit 3 -> allow + hits line seat_unresolved
+export STUB_OUT=""
+export STUB_EXIT="3"
+rm -f "$HITS"
+expect_allow "whoami fallback: exit 3 (unresolved) is allowed"
+assert_contains "$__RUN_STDERR" "seat_unresolved" "whoami fallback: exit 3 writes stderr warn"
+assert_file_exists "$HITS" "whoami fallback: exit 3 creates hits.jsonl"
+assert_contains "$(cat "$HITS")" '"reason":"seat_unresolved"' "whoami fallback: hits line has reason seat_unresolved"
+
+# (e) no CLAUDE_CODE_SESSION_ID -> stub never called
+unset CLAUDE_CODE_SESSION_ID
+rm -f "$STUB_MARKER"
+export STUB_OUT="cookys/c4140/gpu-lead--claude"
+export STUB_EXIT="0"
+expect_allow "whoami fallback: no CLAUDE_CODE_SESSION_ID allows without calling stub"
+if [ -e "$STUB_MARKER" ]; then
+  echo "FAIL: stub was called without CLAUDE_CODE_SESSION_ID" >&2
+  exit 1
+fi
+
+# --- negative control 3: remove whoami fallback -> case (a) goes red
+MUT3="$TEST_TMP/mut-nowhoami"
+mkdir -p "$MUT3/hooks/lib"
+ln -s "$REPO_ROOT/scripts" "$MUT3/scripts"
+ln -s "$REPO_ROOT/src" "$MUT3/src"
+ln -s "$REPO_ROOT/hooks/_shared" "$MUT3/hooks/_shared"
+for f in "$REPO_ROOT"/hooks/*.js; do [ "$(basename "$f")" = ask-decision.js ] || ln -s "$f" "$MUT3/hooks/$(basename "$f")"; done
+cp "$REPO_ROOT/hooks/ask-decision.js" "$MUT3/hooks/ask-decision.js"
+for f in "$REPO_ROOT"/hooks/lib/*.js; do [ "$(basename "$f")" = ask-guard.js ] || ln -s "$f" "$MUT3/hooks/lib/$(basename "$f")"; done
+sed_mutant "$REPO_ROOT/hooks/lib/ask-guard.js" "$MUT3/hooks/lib/ask-guard.js" \
+  's#if (fromEnv) return { address: fromEnv, unresolved: false };#return { address: fromEnv, unresolved: false };#'
+export CLAUDE_CODE_SESSION_ID="sess-whoami-a"
+export STUB_OUT="cookys/c4140/gpu-lead--claude"
+export STUB_EXIT="0"
+set_cfg "$PAST"
+MUT3_OUT="$(HOME="$HOOK_HOME" TMPDIR="$HOOK_TMPDIR" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" \
+  node "$MUT3/hooks/ask-decision.js" 2>/dev/null <<< "$(payload "$REPO")")"
+assert_not_contains "$MUT3_OUT" '"permissionDecision":"deny"' \
+  "control (whoami fallback removed): gpu-lead is NOT denied, so case (a) is red"
+
+unset CLAUDE_CODE_SESSION_ID FLEET_BIN STUB_OUT STUB_EXIT STUB_MARKER
 
 finalize_test

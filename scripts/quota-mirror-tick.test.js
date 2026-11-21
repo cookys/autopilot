@@ -124,6 +124,40 @@ test('every step fails: exit non-zero after all of them ran', () => {
   assert.match(r.stdout, /quota-mirror-tick: 0\/4 ok/);
 });
 
+test('every non-skipped producer fails writes no tick-last.json and leaves an old one', () => {
+  const fresh = runTick(all(1), null, true);
+  try {
+    assert.notStrictEqual(fresh.r.status, 0);
+    assert.strictEqual(fs.existsSync(path.join(fresh.live, 'quota', 'tick-last.json')), false);
+  } finally {
+    fs.rmSync(fresh.root, { recursive: true, force: true });
+  }
+
+  const fx = fixture(all(1));
+  const dir = path.join(fx.live, 'quota');
+  fs.mkdirSync(dir, { mode: 0o700 });
+  const file = path.join(dir, 'tick-last.json');
+  const prior = '{"schema":"autopilot.quota-mirror-tick/1","ts":1,"ok":4,"total":4,"skipped":[]}\n';
+  fs.writeFileSync(file, prior, { mode: 0o600 });
+  const r = spawnSync(process.execPath, [TICK], {
+    encoding: 'utf8',
+    env: {
+      PATH: process.env.PATH,
+      HOME: fx.root,
+      AUTOPILOT_ACCOUNTS_DIR: path.join(fx.root, 'accounts'),
+      TMPDIR: fx.root,
+      AUTOPILOT_LIVE_DIR: fx.live,
+      QUOTA_MIRROR_BIN: fx.bin,
+    },
+  });
+  try {
+    assert.notStrictEqual(r.status, 0);
+    assert.strictEqual(fs.readFileSync(file, 'utf8'), prior);
+  } finally {
+    fs.rmSync(fx.root, { recursive: true, force: true });
+  }
+});
+
 test('exit 1 with token_missing is a skip, not a failure', () => {
   const codes = all(0);
   codes['sync-provider-minimax'] = 1;

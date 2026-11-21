@@ -25,8 +25,10 @@
 // has no attempt for that alias in the last 5.5 h. The same label is not repeated unless activity
 // happened after that line (an audit attempt with ts after the line's observed_at, or rolling_5h
 // resets_at after it). The line is <live_dir>/quota/idle-alias.jsonl.
-// A completed pass then writes <live_dir>/quota/tick-last.json atomically (temp file plus rename),
-// including when every producer wrote nothing. A pass that throws writes no heartbeat.
+// A pass that exits 0 writes <live_dir>/quota/tick-last.json atomically (temp file plus rename),
+// including when every producer wrote nothing and when every producer skipped (nothing_applicable).
+// A pass whose non-skipped producers all failed (exit 1) leaves any existing heartbeat unchanged.
+// A pass that throws writes no heartbeat.
 // One summary line per step. Child stdout is discarded. Child stderr is read only to attach
 // one reason on failure: the last non-empty line, chars outside [A-Za-z0-9_ .:=()/-] removed,
 // capped at 120. A credential a child printed cannot pass that filter as a token blob.
@@ -305,10 +307,10 @@ function run(opts) {
   if (!allSkip) process.stdout.write(`quota-mirror-tick: ${ok}/${producers} ok\n`);
   if (allSkip) process.stdout.write('quota-mirror-tick: nothing_applicable\n');
   try { appendIdleAliases({ env: process.env, nowMs: o.nowMs }); } catch (_) { /* idle never changes the producer exit */ }
-  writeTickHeartbeat(results);
-  if (allSkip) return 0;
-  if (results.length > 0 && ok === 0) return 1;
-  return 0;
+  const exitCode = allSkip || ok > 0 || results.length === 0 ? 0 : 1;
+  // A failed pass must not look fresh to --inventory. all-skip is exit 0.
+  if (exitCode === 0) writeTickHeartbeat(results);
+  return exitCode;
 }
 
 function parseArgs(argv) {

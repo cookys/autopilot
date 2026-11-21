@@ -13,8 +13,12 @@
 # node_path is the node binary used for every node call, or null when none was
 # found. Search order: $NODE if it is an executable file, else command -v node,
 # else the newest executable $HOME/.nvm/versions/node/*/bin/node (sort -V),
-# else /usr/local/bin/node, else /usr/bin/node. With no node, the verdict is
-# unchanged and --apply / --rollback exit 3.
+# else /usr/local/bin/node, else /usr/bin/node. A candidate whose --version is
+# below 20.10 (major below 20, or 20 with minor below 10) is skipped and the
+# search continues. With no qualifying node, the verdict is unchanged and
+# --apply / --rollback exit 3. When candidates exist but all are too old, the
+# refusal line names node_path and the minimum version, and no unit is written.
+# --apply writes that absolute node_path into the unit ExecStart.
 # Fed on stdin (`bash -s`), there is no script path. SCRIPT_DIR is then
 # $AUTOPILOT_PLUGIN_ROOT/scripts, else $HOME/projects/autopilot/scripts, when
 # that directory exists. Inventory still runs when neither exists; --apply and
@@ -75,14 +79,35 @@ resolve_script_dir() {
   printf ''
 }
 
+# 0 when --version is 20.10 or newer. Sets NODE_TOO_OLD when a binary is too old
+# or its version line cannot be parsed.
+node_meets_minimum() {
+  local bin="$1" line major minor
+  [ -n "$bin" ] && [ -f "$bin" ] && [ -x "$bin" ] || return 1
+  line="$("$bin" --version 2>/dev/null | head -n 1 || true)"
+  if [[ "$line" =~ ([0-9]+)\.([0-9]+) ]]; then
+    major="${BASH_REMATCH[1]}"
+    minor="${BASH_REMATCH[2]}"
+  else
+    NODE_TOO_OLD=1
+    return 1
+  fi
+  if [ "$major" -gt 20 ] || { [ "$major" -eq 20 ] && [ "$minor" -ge 10 ]; }; then
+    return 0
+  fi
+  NODE_TOO_OLD=1
+  return 1
+}
+
 resolve_node() {
   local cand newest ng
-  if [ -n "${NODE:-}" ] && [ -f "$NODE" ] && [ -x "$NODE" ]; then
+  NODE_TOO_OLD=0
+  if node_meets_minimum "${NODE:-}"; then
     printf '%s' "$NODE"
     return 0
   fi
   cand="$(command -v node 2>/dev/null || true)"
-  if [ -n "$cand" ] && [ -f "$cand" ] && [ -x "$cand" ]; then
+  if node_meets_minimum "$cand"; then
     printf '%s' "$cand"
     return 0
   fi
@@ -93,7 +118,7 @@ resolve_node() {
   eval "$ng"
   if [ "${#cands[@]}" -gt 0 ]; then
     while IFS= read -r cand; do
-      if [ -n "$cand" ] && [ -f "$cand" ] && [ -x "$cand" ]; then
+      if node_meets_minimum "$cand"; then
         newest="$cand"
       fi
     done < <(printf '%s\n' "${cands[@]}" | sort -V)
@@ -103,11 +128,15 @@ resolve_node() {
     return 0
   fi
   for cand in /usr/local/bin/node /usr/bin/node; do
-    if [ -f "$cand" ] && [ -x "$cand" ]; then
+    if node_meets_minimum "$cand"; then
       printf '%s' "$cand"
       return 0
     fi
   done
+  # Command substitution cannot see NODE_TOO_OLD. "old" is not a path.
+  if [ "$NODE_TOO_OLD" = "1" ]; then
+    printf 'old'
+  fi
   return 1
 }
 
@@ -142,6 +171,11 @@ systemctl_apply() {
   fi
 }
 NODE_BIN="$(resolve_node || true)"
+NODE_TOO_OLD=0
+if [ "$NODE_BIN" = "old" ]; then
+  NODE_BIN=""
+  NODE_TOO_OLD=1
+fi
 UNITS=(quota-mirror.service quota-mirror.timer)
 SNAPSHOT_STALE_S=21600
 QUOTA_OUT_STALE_S=1800
@@ -353,7 +387,11 @@ emit_inventory() {
 
 require_node_and_installer() {
   if [ -z "$NODE_BIN" ]; then
-    printf 'rollout-quota-mirror: node not found\n' >&2
+    if [ "${NODE_TOO_OLD:-0}" = "1" ]; then
+      printf 'rollout-quota-mirror: node_path below minimum 20.10\n' >&2
+    else
+      printf 'rollout-quota-mirror: node not found\n' >&2
+    fi
     return 3
   fi
   if [ -z "$INSTALLER" ] || [ ! -f "$INSTALLER" ]; then
@@ -363,7 +401,7 @@ require_node_and_installer() {
 }
 
 installer_dry_out() {
-  "$NODE_BIN" "$INSTALLER" install --dry-run
+  QUOTA_MIRROR_NODE="$NODE_BIN" "$NODE_BIN" "$INSTALLER" install --dry-run
 }
 
 needs_install_write() {
@@ -425,7 +463,7 @@ do_apply() {
         printf 'backup sha16 %s none\n' "$name"
       fi
     done
-    "$NODE_BIN" "$INSTALLER" install
+    QUOTA_MIRROR_NODE="$NODE_BIN" "$NODE_BIN" "$INSTALLER" install
     for name in "${UNITS[@]}"; do
       print_sha_line new "$name" "$dir/$name"
     done

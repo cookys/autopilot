@@ -84,7 +84,7 @@ const ageOf = (t: T, ms: number, ago = true): string => {
   const a = ageUnit(t, ms)
   return ago ? t('page.now.ago', { age: a }) : a
 }
-const ageUnit = (t: T, ms: number): string => {
+export const ageUnit = (t: T, ms: number): string => {
   const s = Math.max(0, Math.floor(ms / 1000))
   if (s < 60) return t('page.now.age_s', { n: s })
   const m = Math.floor(s / 60)

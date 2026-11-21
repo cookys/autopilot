@@ -1,4 +1,5 @@
 'use strict';
+require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 // node --test scripts/dispatch-hetero-outbound-scan.test.js
 //
 // A planted secret must die as precondition outbound_secret before any runner.

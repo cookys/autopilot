@@ -13,6 +13,7 @@ import type { FleetCtx } from './fleet'
 import { frameRows } from './frame'
 import type { PageCtx, Row } from './frame'
 import { hygienePage, hygieneView } from './hygiene'
+import { GLYPHS } from '../../tux/glyphs.ts'
 import { renderSpend, resetIn, spendPage } from './spend'
 import type { DecideCard } from '../v74/contract'
 import { Pane } from '../pane'
@@ -131,6 +132,17 @@ test('v74 F S7: three blocks with full descriptions and no buttons', () => {
   expect(view.body.flat().some(s => s.press !== undefined)).toBe(false)
   expect(view.actions).toEqual([])
   expect(frameRows(hygienePage, ctxOf(liveOf({ residue: RESIDUE, load_source: LOAD_DEV }), null)).length).toBe(30)
+})
+
+test('v74 F S7: ● and two spaces only inside the band frame (box); the host Pane keeps ▲ and the locale separator', () => {
+  const live = liveOf({ residue: RESIDUE, load_source: LOAD_DEV })
+  const boxed = texts(hygieneView({ ...ctxOf(live, null), box: true }).body)[1]
+  expect(boxed).toContain(GLYPHS.state.running + ' ')
+  expect(boxed).toContain('old-probe  5 天沒有 commit')
+  const host = texts(hygieneView(ctxOf(live, null)).body)[1]
+  expect(host).toContain(GLYPHS.state.need_you + ' ')
+  expect(host).not.toContain(GLYPHS.state.running)
+  expect(host).toContain('old-probe' + t('residue.why.hyg_judge_sep') + '5 天沒有 commit')
 })
 
 test('v74 F S7: the description is the full wide wording at 80 columns too (never the cut form)', () => {

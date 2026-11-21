@@ -14,6 +14,7 @@ import { displayWidth, truncateToWidth } from '../model'
 import { GLYPHS } from '../../tux/glyphs.ts'
 import { PALETTE } from '../../tux/palette.ts'
 import { PAGES } from './index'
+import { ageUnit } from './now'
 import { PAGE_KEYS, STRIP_SPLIT_COLS, V74_STRIP_ORDER } from './layout'
 import { V74_KEY } from '../v74/contract'
 import { WRAP_HANG, brokenRow, decisionCount, poolsNeedLook, sourceMissing, staleBadge, unknownPoolCount, wrapRow } from './rows'
@@ -22,13 +23,13 @@ import type { Step } from '../speed'
 import type { V74Ctx } from '../v74/contract'
 
 export type { Row } from './rows'
-export interface PageCtx { live: LiveSnapshot | null; console: ConsoleSnapshot | null; size: { cols: number; rows: number }; t: T; nowMs: number; shortBody?: boolean; steps?: readonly Step[]; pet?: unknown; v74?: V74Ctx }
+export interface PageCtx { live: LiveSnapshot | null; console: ConsoleSnapshot | null; size: { cols: number; rows: number }; t: T; nowMs: number; shortBody?: boolean; steps?: readonly Step[]; pet?: unknown; v74?: V74Ctx; box?: true } // box: drawn inside the v7.4 band frame (not the host Pane)
 export type PageId = 'now' | 'decide' | 'fleet' | 'quota' | 'dispatch' | 'review' | 'spend' | 'hygiene' | 'pet' | 'forge' | 'help' | 'todo'
 // `framed` (optional, additive): true once the page is filled in; pane.tsx draws a framed page through frameRows and an unframed shell the old way, so S0 changes nothing on screen
 export interface Page { id: PageId; key: string; title: string; framed?: true; render(ctx: PageCtx): { body: Row[]; actions: Row[]; overflow?: true } }
 // a tab the frame's strip shows next to the pages (the old tabs that still draw the old way): `key` is its digit
 export type ExtraTab = { id: string; key: string; label: string }
-export type FrameOpts = { scroll?: number; unfold?: (ctx: PageCtx) => { body: Row[]; actions: Row[]; overflow?: true }; pages?: readonly Page[]; extra?: readonly ExtraTab[]; active?: string }
+export type FrameOpts = { topAnchor?: true; scroll?: number; unfold?: (ctx: PageCtx) => { body: Row[]; actions: Row[]; overflow?: true }; pages?: readonly Page[]; extra?: readonly ExtraTab[]; active?: string }
 
 // W1: the host already budgets pane borders and chat space. Use every allocated
 // body row in either placement; a second inline cap leaves padding below the strip.
@@ -98,9 +99,33 @@ const V74_BORDER_KEY: Record<string, string> = {
 }
 
 const TINY_FRAME_ROWS = 3
+export const frameHintText = (page: Page, ctx: PageCtx): string => ctx.t(V74_BORDER_KEY[page.id] ?? 'v74.b.border.default', { ud: GLYPHS.structure.up + GLYPHS.structure.behind })
+export const frameHintShort = (page: Page, ctx: PageCtx): string => {
+  const full = frameHintText(page, ctx)
+  const cut = full.split(' · ')[0]
+  return cut === '' ? full : cut
+}
 export function frameBorderRow(page: Page, ctx: PageCtx): Row {
-  const k = V74_BORDER_KEY[page.id] ?? 'v74.b.border.default'
-  return [{ text: GLYPHS.structure.frameBL + GLYPHS.structure.rule + ' ' + ctx.t(k), dim: true }]
+  return [{ text: GLYPHS.structure.frameBL + GLYPHS.structure.rule + ' ' + frameHintText(page, ctx), dim: true }]
+}
+
+// PM 01M7XB0B: one bottom border. Hints on the left, page tabs on the right, the current page marked.
+// Short width: shorten the hint first, then tabs become digits (the current page keeps its name). Never a second row.
+export type BorderTab = { key: string; id: string; text: string }
+export function frameBottomFit(cols: number, hintFull: string, hintShort: string, tabs: readonly BorderTab[], active: string): { hint: string; tabs: BorderTab[] } {
+  const digits = tabs.map(x => ({ ...x, text: x.id === active ? x.key + ' ' + x.text.replace(/^\d+\s+/, '') : x.key }))
+  const fullTabs = tabs.map(x => ({ ...x, text: x.text }))
+  const chrome = 2 + 2 + 1 + 1 // ╰─, two spaces, the gap before the tabs, ╯
+  const tabW = (list: readonly BorderTab[]): number => list.reduce((n, x, i) => n + (i === 0 ? 0 : 1) + displayWidth(x.text), 0)
+  const fits = (hint: string, list: readonly BorderTab[]): boolean => chrome + displayWidth(hint) + 1 + tabW(list) <= cols
+  // Short width: shorten the hint first. Only after the shortest hint still does not fit do the tabs become digits.
+  for (const hint of [hintFull, hintShort, '']) {
+    if (fits(hint, fullTabs)) return { hint, tabs: fullTabs }
+  }
+  for (const hint of [hintShort, '']) {
+    if (fits(hint, digits)) return { hint, tabs: digits }
+  }
+  return { hint: '', tabs: digits }
 }
 
 export function stripRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[] {
@@ -157,9 +182,28 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
   const avail = H - 1 - S
   const droppedDecideAct = first.actions.some(x => x.some(s => s.press === 'tab:2:decide'))
   const layout = (r: { body: Row[]; actions: Row[] }, short = false) => {
-    const body = r.body.filter(x => x.some(s => s.text.trim() !== '')).flatMap(x => wrapRow(x, ctx.size.cols, WRAP_HANG)) // X5: spare rows belong above the content; N3: reasons keep their hanging indent
+    const read = page.id === 'decide' || page.id === 'todo' || page.id === 'help'
+    const body = r.body.filter(x => read || x.some(s => s.text.trim() !== '')).flatMap(x => {
+      if (opts.topAnchor === true && x.map(s => s.text).join('').trimStart().startsWith(GLYPHS.structure.open + ' ') && x.map(s => s.text).join('').trimEnd().endsWith(GLYPHS.structure.rule)) { // only section rules (they end in ─); a ▾ legend row is text
+        const row = x.map(s => ({ ...s }))
+        const last = row[row.length - 1]
+        last.text = last.text.replace(new RegExp(' *' + GLYPHS.structure.rule + '+$'), '').trimEnd() + ' '
+        const width = row.reduce((n, s) => n + displayWidth(s.text), 0)
+        last.text += GLYPHS.structure.rule.repeat(Math.max(0, ctx.size.cols - width))
+        return wrapRow(row, ctx.size.cols, WRAP_HANG)
+      }
+      const joined = x.map(s => s.text).join('')
+      const lead = /^ */.exec(joined)?.[0].length ?? 0
+      const width = read ? Math.min(80, ctx.size.cols) : ctx.size.cols
+      const hang = read ? Math.max(WRAP_HANG, Math.min(lead, Math.max(0, width - 4))) : WRAP_HANG
+      return wrapRow(x, width, hang)
+    })
+    while (read && body.length > 0 && body[body.length - 1].every(s => s.text.trim() === '')) body.pop() // a blank between options stays; the row that touches the actions does not
+    // X5: spare rows belong above the content; N3: reasons keep their hanging indent. Reading pages (待決、待辦、說明) wrap at 70–80 columns.
     const omitEmptyAct = short && page.id === 'now' && (droppedDecideAct || decisionCount(ctx) > 0 || body.some(x => x.some(s => s.press === 'tab:2:decide')))
-    const acts: Row[] = r.actions.length === 0 ? (omitEmptyAct ? [] : [[{ text: emptyState(ctx, page), dim: true }]]) : r.actions
+    const acts: Row[] = opts.topAnchor === true
+      ? r.actions.filter(row => row.some(s => s.press !== undefined) || row.map(s => s.text).join('').trim() !== ctx.t('frame.unknown'))
+      : r.actions.length === 0 ? (omitEmptyAct ? [] : [[{ text: emptyState(ctx, page), dim: true }]]) : r.actions
     return { body, acts, room: avail - Math.min(acts.length, avail), short }
   }
   let lay = layout(first, ctx.shortBody === true || avail <= 4)
@@ -187,5 +231,30 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
     }
   }
   const gap: Row[] = Array.from({ length: room - shown.length }, blank)
-  return [head, ...gap, ...shown, ...(A === 0 ? [] : acts.slice(-A)), ...foot].map(r => clip(r, ctx.size.cols))
+  const actRows = A === 0 ? [] : acts.slice(-A)
+  // v7.4 box: the content starts on the first body row, the spare rows sit between it and the action rows (design S2/S3/S9)
+  if (opts.topAnchor === true) return [head, ...shown, ...gap, ...actRows, ...foot].map(r => clip(r, ctx.size.cols))
+  return [head, ...gap, ...shown, ...actRows, ...foot].map(r => clip(r, ctx.size.cols))
+}
+
+// v7.4 top border title: the page name, then the dim data source, its schema and the feed age (design S1-S10)
+const V74_SOURCES: Record<string, [string, string]> = {
+  now: ['fleet pm status --json', 'fleet.pm.status v1'],
+  decide: ['fleet decisions list --json', 'fleet.decisions v1'],
+  dispatch: ['autopilot status runs --json', 'autopilot.runs v1'],
+  review: ['autopilot status review --json', 'autopilot.review v1'],
+  spend: ['codeforge usage summary --json', 'usage.summary v1'],
+  quota: ['codeforge usage summary --json', 'usage.summary v1'],
+  hygiene: ['autopilot hygiene --json', 'autopilot.hygiene v1'],
+  fleet: ['fleet tasks --tree --json', 'fleet.tasks v1'],
+  todo: ['fleet todo --json', 'fleet.todo v1'],
+}
+export function v74TitleSegs(page: Page, ctx: PageCtx, name: Seg): Seg[] {
+  const { t, nowMs } = ctx
+  const src = V74_SOURCES[page.id]
+  if (src === undefined) return [name, { text: ' · ' + t('v74.c.help_src'), dim: true }]
+  const published = ctx.live?.published_at
+  const fetched = ctx.v74?.ages?.[page.id] ?? (page.id === 'dispatch' || page.id === 'review' || page.id === 'hygiene' ? (typeof published === 'string' && Number.isFinite(Date.parse(published)) ? Date.parse(published) : null) : null)
+  const info = fetched === null || fetched === undefined ? t('v74.c.header_noage', { source: src[0], schema: src[1] }) : t('v74.c.header', { source: src[0], schema: src[1], age: ageUnit(t, Math.max(0, nowMs - fetched)) })
+  return [name, { text: ' · ' + info, dim: true }]
 }

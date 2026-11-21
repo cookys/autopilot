@@ -38,9 +38,10 @@ const ageUnit = (t: T, ms: number): string => {
 }
 const ageAgo = (t: T, ms: number): string => t('page.now.ago', { age: ageUnit(t, ms) })
 
-function judgeRow(e: NeedsHumanEntry, wide: boolean, t: T): Row {
+// `box`: the v7.4 band frame (design S7: ● and two spaces); the host Pane keeps ▲ and the locale separator
+function judgeRow(e: NeedsHumanEntry, wide: boolean, t: T, box: boolean): Row {
   const entry = { kind: e.kind, target: e.target, cls: e.class, ageMs: null, bytes: e.bytes, reason: e.reason, command: e.command }
-  const rawName = residueNameOf(entry)
+  const rawName = e.branch?.trim() ? e.branch : e.kind === 'worktree' && !e.target.startsWith('/') ? e.target : residueNameOf(entry)
   const shortName = !wide && e.kind === 'worktree' && rawName.length > 16 && /-[A-Za-z0-9]{4,10}$/.test(rawName)
     ? rawName.slice(rawName.lastIndexOf('-') + 1)
     : rawName
@@ -48,10 +49,10 @@ function judgeRow(e: NeedsHumanEntry, wide: boolean, t: T): Row {
   const hasHumanReason = e.reason !== null && !/^\d+ uncommitted$/.test(e.reason) && !/^[a-z0-9_]+$/.test(e.reason)
   const fullWhy = hasHumanReason ? (e.reason as string) : (residueWhy(t, entry)[0] ?? '')
   const why = wide ? fullWhy : fullWhy.replace(/^分支/, '').replace(/^branch\s+/i, '')
-  const sep = why === '' ? '' : wide ? t('residue.why.hyg_judge_sep') : ' '
+  const sep = why === '' ? '' : box ? '  ' : wide ? t('residue.why.hyg_judge_sep') : ' '
   return [
     { text: wide ? '  ' : ' ' },
-    { text: GLYPHS.state.need_you + ' ', color: PALETTE.attention },
+    { text: (box ? GLYPHS.state.running : GLYPHS.state.need_you) + ' ', color: PALETTE.attention },
     { text: kindPrefix + shortName + sep + why },
   ]
 }
@@ -183,7 +184,7 @@ export function hygieneView(ctx: HygieneCtx, _view?: Partial<HygieneView>): { bo
     : kinds.length === 1 && tl.unlisted === 0 ? t('v74.f.need_kind', { n: tl.judgeCount, kind: kinds[0] }) : t('v74.f.need_n', { n: tl.judgeCount })
   body.push(openRule(needTitle, wide))
   if (tl.judgeCount === 0) body.push([{ text: ' ' + GLYPHS.state.done + ' ', color: PALETTE.done }, { text: t('v74.f.need_none'), dim: true }])
-  for (const e of tl.judge) body.push(judgeRow(e, true, t))
+  for (const e of tl.judge) body.push(judgeRow(e, true, t, ctx.box === true))
   if (tl.unlisted > 0) body.push([{ text: ' ' + t('hygiene.more', { n: tl.unlisted }), dim: true }])
 
   const auto = autoInfoOf(residue, ctx)

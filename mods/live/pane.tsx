@@ -3,6 +3,7 @@
 // (a missing fact is an explicit "no data" line there, never an empty tab). Words come from the string tables through `t`. This file decides no colour: every Text
 // gets its props from `drawSeg` (ui.ts), theme keys as text colour only, no background, no inverse.
 
+import { GLYPHS } from '../tux/glyphs.ts'
 import { T_EN } from './i18n'
 import type { T } from './i18n'
 import { paneWidth } from './model'
@@ -18,7 +19,8 @@ import { commandView } from './commandtab'
 import { consolePage } from './consolepages'
 import type { ConsoleNav, ConsoleTab } from './consoletabs'
 import { keyed, scrollFrame } from './scroll'
-import { actionRows, frameRows, STRIP_SPLIT_COLS } from './pages/frame'
+import { actionRows, frameBottomFit, frameHintShort, frameHintText, frameRows, stripRows, STRIP_SPLIT_COLS, v74TitleSegs } from './pages/frame'
+import { displayWidth, truncateToWidth } from './model'
 import { fleetView as fleetPageView } from './pages/fleet'
 import { renderQuota } from './pages/quota'
 import { DEFAULT_REVIEW_VIEW, renderReview } from './pages/review'
@@ -153,7 +155,7 @@ function stripView<Id extends string>(el: { Box: El; Text: El; Button?: El }, st
 // A page of the registry (pages/index.ts) drawn through frameRows: exactly `rows` rows, the strip entries are Buttons with the digit as hotkey.
 export type PageView = { focus: number; expanded: boolean; folded?: boolean }
 // view: focus index + expanded flag per page id (fleet, quota, spend); decide: the 待決 page's nav; onPress gets a Seg `press` that is not a tab switch (fleet:see:, fleet:fold, fill:...); onKey gets a page-local key (the host has no raw key hook: the keys are hidden hotkey Buttons); epoch rotates Button keys after a dock <-> inline move (B56)
-export type FramePane = { pages: readonly Page[]; pageId?: PageId; onPage?: (id: PageId) => void; console: ConsoleSnapshot | null; nowMs: number; rows: number; scroll?: number; view?: Record<string, PageView>; decide?: DecideNav; v74?: V74Ctx; onPress?: (id: string) => void; onKey?: (k: KeyAction) => void; onText?: (v: string) => void; epoch?: number; steps?: readonly Step[]; pet?: unknown; others?: OthersView | null }
+export type FramePane = { pages: readonly Page[]; pageId?: PageId; onPage?: (id: PageId) => void; console: ConsoleSnapshot | null; nowMs: number; rows: number; scroll?: number; view?: Record<string, PageView>; decide?: DecideNav; v74?: V74Ctx; v74Box?: true; onPress?: (id: string) => void; onKey?: (k: KeyAction) => void; onText?: (v: string) => void; epoch?: number; steps?: readonly Step[]; pet?: unknown; others?: OthersView | null }
 const COMMON_KEYS: Record<string, KeyAction> = { z: { kind: 'fold' } } // the host takes a digit or a lowercase letter as a hotkey: Space is z here. No j / k: a key needs a visible Button to carry it, and a row is its own Button (Tab walks the rows)
 const CARD_KEYS: Record<string, KeyAction> = { a: { kind: 'pick', index: 0 }, b: { kind: 'pick', index: 1 }, c: { kind: 'pick', index: 2 } }
 const DECIDE_KEYS: Record<string, KeyAction> = { ...CARD_KEYS, d: { kind: 'pick', index: 3 }, e: { kind: 'pick', index: 4 }, m: { kind: 'note' }, n: { kind: 'note' }, u: { kind: 'undo' }, h: { kind: 'prev' }, l: { kind: 'next' }, f: { kind: 'fill' }, s: { kind: 'submit' } }
@@ -172,20 +174,40 @@ export const framedPage = (frame: FramePane | null, tab: PaneTab): Page | undefi
 }
 const HINT_AT = /(^|\s)\[[a-z]\] \S/
 const HINT_SPLIT = /(?<=^|\s)(?=\[[a-z]\] \S)/
-function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: FramePane, snap: LiveSnapshot | null, onTab: (t: PaneTab) => void, t: T, cols: number) {
+// v7.4: the framed page drawn as a full-width box (frame.rows tall, borders included): the title in the top border, the key hint in the bottom border, `│` on both sides, and the tab row
+// as a separate last row under the box (the caller counts it in its own height). The page renderers are the same: they are asked for a frame of `frame.rows + strip` rows
+// (head + body + actions + hint border + strip, `cols - 4` wide) and the head, the hint border and the strip are cut off the result and redrawn as the box's borders and the tab row.
+const V74_TAB_HOTKEYS = false // the host draws a hotkey Button as `1: 現況`; the design's tab row is `1 現況`, so the tab buttons carry no hotkey (click only)
+function fitSegs(segs: Seg[], max: number): Seg[] {
+  const out: Seg[] = []
+  let used = 0
+  for (const sg of segs) {
+    const w = displayWidth(sg.text)
+    if (used + w <= max) { out.push(sg); used += w; continue }
+    if (max - used > 0) out.push({ ...sg, text: truncateToWidth(sg.text, max - used) })
+    break
+  }
+  return out
+}
+// the box title (design S2-S10): `<頁名> · 資料 <source>（schema <schema>）· <age>`; the age is the feed's own fetch time (or the live snapshot's published_at), absent when the feed has none
+function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: FramePane, snap: LiveSnapshot | null, onTab: (t: PaneTab) => void, t: T, fullCols: number) {
   const { Box, Text, Button } = el
+  const box = frame.v74Box === true
+  const cols = box ? Math.max(20, fullCols - 4) : fullCols
+  const stripN = cols < STRIP_SPLIT_COLS ? 2 : 1
+  const frameRowsN = box ? frame.rows + stripN : frame.rows // what the page renderers are asked for (box: the inner rows + head + hint border + strip)
   const epoch = frame.epoch ?? 0
   const ep = epoch > 0 ? ':' + epoch : ''
-  const ctx = { live: snap, console: frame.console, size: { cols, rows: frame.rows }, t, nowMs: frame.nowMs, steps: frame.steps, pet: frame.pet, ...(page.id === 'fleet' ? { others: frame.others ?? null } : {}), ...(frame.v74 !== undefined ? { v74: frame.v74 } : {}), ...(page.id === 'decide' && frame.decide !== undefined ? { decide: frame.decide } : {}) }
+  const ctx = { live: snap, console: frame.console, size: { cols, rows: frameRowsN }, t, nowMs: frame.nowMs, steps: frame.steps, pet: frame.pet, ...(box ? { box: true as const } : {}), ...(page.id === 'fleet' ? { others: frame.others ?? null } : {}), ...(frame.v74 !== undefined ? { v74: frame.v74 } : {}), ...(page.id === 'decide' && frame.decide !== undefined ? { decide: frame.decide } : {}) }
   const view = frame.view?.[page.id] ?? (page.id === 'review' ? DEFAULT_REVIEW_VIEW : { focus: 0, expanded: false })
   // the pages that take a view are drawn through their view functions; the registry's render() keeps the default view
   const drawn: Page = page.id === 'fleet' ? { ...page, render: c => fleetPageView(c, view) } : page.id === 'quota' ? { ...page, render: c => renderQuota(c, view) } : page.id === 'review' ? { ...page, render: c => renderReview(c, view) } : page.id === 'spend' ? { ...page, render: c => renderSpend(c, view) } : page
   // free rows go to content first: a folded page (fleet lines, a pool's seats, spend details) is drawn open when the open body fits whole in the rows the surface has left, unless folded by key
   const unfold = view.expanded || view.folded === true ? undefined : page.id === 'fleet' ? (c: PageCtx) => fleetPageView(c, { ...view, expanded: true }) : page.id === 'quota' ? (c: PageCtx) => renderQuota(c, { ...view, expanded: true }) : page.id === 'spend' ? (c: PageCtx) => renderSpend(c, { ...view, expanded: true }) : undefined
-  const rows: Row[] = frameRows(drawn, ctx, { pages: frame.pages, ...(unfold === undefined ? {} : { unfold }), ...(frame.scroll === undefined ? {} : { scroll: frame.scroll }) })
+  const rows: Row[] = frameRows(drawn, ctx, { ...(box ? { topAnchor: true as const } : {}), pages: frame.pages, ...(unfold === undefined ? {} : { unfold }), ...(frame.scroll === undefined ? {} : { scroll: frame.scroll }) })
   const stripCount = (cols < STRIP_SPLIT_COLS ? 2 : 1) + 1 // bottom border row + tab strip
   // the action rows are exactly the ones the page returned (the frame pads nothing): only those rows may bind a `[x]` hint, never the body rows above them
-  const avail = Math.max(0, frame.rows - 1 - stripCount)
+  const avail = Math.max(0, frameRowsN - 1 - stripCount)
   const firstActs = drawn.render(ctx).actions.length
   const effActs = avail - Math.min(Math.max(1, firstActs), avail) <= 4 ? drawn.render({ ...ctx, shortBody: true }).actions.length : Math.max(firstActs, unfold === undefined ? 0 : unfold(ctx).actions.length)
   const actionCount = Math.max(0, Math.min(effActs, avail))
@@ -205,7 +227,7 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
   const drawRow = (r: Row, i: number) => {
     if (i === noteAt && el.Input !== undefined) {
       const Input = el.Input
-      return <Box key={'f' + i}><Input key="[REDACTED]" placeholder={t('page.decide.act_text')} value={frame.decide?.textBuf ?? ''} onInput={(v: string) => frame.onText?.(v)} onSubmit={() => frame.onKey?.({ kind: 'text_save' })} autoFocus />{Button === undefined ? null : <Button key={'note:cancel' + ep} plain onPress={() => frame.onKey?.({ kind: 'text_cancel' })}><Text>{t('page.decide.act_cancel')}</Text></Button>}</Box>
+      return <Box key={'f' + i}><Input key="v74-note" placeholder={t('page.decide.act_text')} value={frame.decide?.textBuf ?? ''} onInput={(v: string) => frame.onText?.(v)} onSubmit={() => frame.onKey?.({ kind: 'text_save' })} autoFocus />{Button === undefined ? null : <Button key={'note:cancel' + ep} plain onPress={() => frame.onKey?.({ kind: 'text_cancel' })}><Text>{t('page.decide.act_cancel')}</Text></Button>}</Box>
     }
     const isStrip = i >= rows.length - stripCount + 1 // tab buttons only (not the border row above)
     const isBorder = i === rows.length - stripCount
@@ -228,11 +250,21 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
         let e = j
         while (e + 1 < r.length && r[e + 1].press === sg.press) e++
         const run = r.slice(j, e + 1)
+        const fromKey = typeof sg.press === 'string' && sg.press.startsWith('key:') ? sg.press.slice(4) : ''
         const hint = typing ? null : /^\[([a-z])\] /.exec(run[0].text)
-        const letter = hint !== null && !used.has(hint[1]) ? hint[1] : null
+        const keyLetter = /^[a-z]$/.test(fromKey) ? fromKey : null
+        const letter = hint !== null && !used.has(hint[1]) ? hint[1] : keyLetter !== null && !used.has(keyLetter) ? keyLetter : null
         if (letter !== null) used.add(letter)
-        const texts = run.map((x, n) => <Text key={'g' + (j + n)} {...drawSeg(x)} wrap="truncate">{n === 0 && letter !== null ? x.text.replace(/^\[[a-z]\] /, '') : x.text}</Text>)
-        nodes.push(<Button key={'p:' + i + ':' + j + ep} plain {...(letter === null ? {} : { hotkey: letter })} onPress={() => (sg.press as string).startsWith('key:') ? frame.onKey?.(keys[(sg.press as string).slice(4)]) : press(sg.press as string)}>{texts}</Button>)
+        const cardAt = typeof sg.press === 'string' && sg.press.startsWith('card:') ? Number(sg.press.slice(5)) : null
+        const focusMark = cardAt !== null && box && !typing && sg.text.startsWith(GLYPHS.structure.folded)
+        const stripLead = (x: string) => letter === null ? x : x.replace(new RegExp('^\\[' + letter + '\\] |^' + letter + ': |^' + letter + ' '), '')
+        const texts = run.map((x, n) => <Text key={'g' + (j + n)} {...drawSeg(x)} wrap="truncate">{n === 0 && letter !== null ? stripLead(x.text) : x.text}</Text>)
+        const onKeyPress = () => {
+          if (cardAt !== null) frame.onKey?.({ kind: 'cursor', at: cardAt })
+          else if (typeof sg.press === 'string' && sg.press.startsWith('key:')) frame.onKey?.(keys[sg.press.slice(4)] ?? { kind: 'none' })
+          else press(sg.press as string)
+        }
+        nodes.push(<Button key={(cardAt !== null ? 'card:' + cardAt : 'p:' + i + ':' + j + ep)} plain {...(letter === null ? {} : { hotkey: letter })} {...(focusMark ? { autoFocus: true } : {})} onPress={onKeyPress}>{texts}</Button>)
         j = e
         continue
       }
@@ -254,7 +286,48 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
     }
     return <Box key={'f' + i}>{nodes}{i === rows.length - 1 ? focusAnchor(el, epoch) : null}</Box>
   }
-  return <Box {...(epoch > 0 ? { key: 'frame:' + epoch } : {})} flexDirection="column" height={frame.rows}>{rows.map(drawRow)}</Box>
+  if (!box) return <Box {...(epoch > 0 ? { key: 'frame:' + epoch } : {})} flexDirection="column" height={frame.rows}>{rows.map(drawRow)}</Box>
+  const rule = GLYPHS.structure.rule
+  const side = GLYPHS.structure.bandSep
+  const pad = (n: number) => rule.repeat(Math.max(1, n))
+  const titleSegs = fitSegs(v74TitleSegs(page, ctx, (rows[0] ?? [])[0] ?? { text: t('tab.' + page.id) }), Math.max(0, fullCols - 6))
+  const titleW = titleSegs.reduce((n, x) => n + displayWidth(x.text), 0)
+  const top = <Box key="v74-top" height={1} width={fullCols} overflow="hidden"><Text>{GLYPHS.structure.frameTL + rule + ' '}</Text>{titleSegs.map((x, j) => <Text key={'tt' + j} {...drawSeg(x)} wrap="truncate">{x.text}</Text>)}<Text>{' ' + pad(fullCols - 5 - titleW) + GLYPHS.structure.frameTR}</Text></Box>
+  const inner = rows.slice(1, rows.length - stripN - 1).map((r, k) => (
+    <Box key={'v74-row' + k} height={1} width={fullCols} overflow="hidden"><Text>{side + ' '}</Text><Box flexGrow={1} flexDirection="row" overflow="hidden">{drawRow(r, k + 1)}</Box><Text>{' ' + side}</Text></Box>
+  ))
+  // PM 01M7XB0B: the page tabs sit on the bottom border, right side; the key hint stays on the left. One row, never a second line.
+  const entriesOf = (c: PageCtx) => stripRows(page, c).flat().filter(sg => sg.press !== undefined && !sg.press.endsWith(':pet'))
+  const fullForm = entriesOf({ ...ctx, size: { ...ctx.size, cols: 1000 } })
+  const tabItems = fullForm.flatMap(sg => {
+    const m = /^tab:(\d):(\w+)$/.exec(sg.press as string)
+    return m === null ? [] : [{ key: m[1], id: m[2], text: sg.text }]
+  })
+  const fit = frameBottomFit(fullCols, frameHintText(page, ctx), frameHintShort(page, ctx), tabItems, page.id)
+  const tabW = fit.tabs.reduce((n, x, i) => n + (i === 0 ? 0 : 1) + displayWidth(x.text), 0)
+  const padN = Math.max(1, fullCols - (2 + 2 + displayWidth(fit.hint) + tabW + 1))
+  const tabs = fit.tabs.map((tb, j) => {
+    const draw = <Text key={'tl' + j} wrap="truncate">{tb.text}</Text>
+    const choose = () => (frame.onPage !== undefined ? frame.onPage(tb.id as PageId) : onTab(PAGE_TAB[tb.id]))
+    const on = tb.id === page.id
+    // The host drops Button variant. The current tab is its own Text with inverse (SGR 7) so the ╰ row is not one plain string.
+    const label = on ? <Text key={'tl' + j} inverse wrap="truncate">{tb.text}</Text> : draw
+    // The selected card head is not a Button (it ate Up/Down and re-fired cursor at its own index).
+    // ctrl+x Tab still lands: the current tab is the visible autoFocus button.
+    const land = on && !typing && (page.id === 'decide' || page.id === 'todo')
+    const btn = Button === undefined ? label : <Button key={'tab:' + tb.id + ep} plain {...(V74_TAB_HOTKEYS ? { hotkey: tb.key } : {})} {...(land ? { autoFocus: true } : {})} onPress={choose}>{label}</Button>
+    return <Box key={'tb' + j}>{j === 0 ? null : <Text>{' '}</Text>}{btn}</Box>
+  })
+  const hidden = Button === undefined || frame.decide?.textMode === true ? [] : tabItems.map((tb, j) => {
+    const choose = () => (frame.onPage !== undefined ? frame.onPage(tb.id as PageId) : onTab(PAGE_TAB[tb.id]))
+    return <Box key={'hk' + j} width={0} height={0} overflow="hidden"><Button key={'hotkey:' + tb.key + ep} plain hotkey={tb.key} onPress={choose}>{tb.key}</Button></Box>
+  })
+  // a/b/c/m are not drawn between cards (that ate Up/Down). A zero-size box keeps the hotkey without a painted cell. s stays on the action row.
+  const letters = Button === undefined || typing || page.id !== 'decide' ? [] : (['a', 'b', 'c', 'm'] as const).map(letter => (
+    <Box key={'lk' + letter} width={0} height={0} overflow="hidden"><Button key={'letter:' + letter + ep} plain hotkey={letter} onPress={() => frame.onKey?.(keys[letter] ?? { kind: 'none' })}>{letter}</Button></Box>
+  ))
+  const bottom = <Box key="v74-bottom" height={1} width={fullCols} overflow="hidden"><Text>{GLYPHS.structure.frameBL + rule + '  ' + fit.hint + rule.repeat(padN)}</Text>{tabs}<Text>{GLYPHS.structure.frameBR}</Text>{hidden}{letters}</Box>
+  return <Box {...(epoch > 0 ? { key: 'v74:' + epoch } : {})} flexDirection="column">{top}{inner}{bottom}</Box>
 }
 
 // how one PaneLine is drawn (shared by the tabs and the console's 指揮 page): plain segments, a press row of Buttons, a text field, a toggle Button, a goto Button

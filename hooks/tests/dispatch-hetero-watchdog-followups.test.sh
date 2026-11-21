@@ -336,6 +336,7 @@ assert_r6_cancel_skips_kill_when_cmdline_lacks_tag() {
     return
   fi
   reap_pid "$helper"
+  kill "$helper" 2>/dev/null || true
 }
 
 assert_r2_cgroup_worker_stdin_is_devnull() {
@@ -410,6 +411,7 @@ assert_r6_cancel_kills_when_cmdline_has_tag() {
     return
   fi
   wait "$helper" 2>/dev/null || true
+  kill "$helper" 2>/dev/null || true
 }
 
 # RED at 39264663
@@ -714,8 +716,9 @@ case " $* " in *" __autopilot_probe__ "*)
   exit 1 ;;
 esac
 sleep 120 >/dev/null 2>&1 </dev/null &
+_spid=$!
 if [ -n "${HETERO_TEST_PIDFILE:-}" ]; then
-  echo "$!" > "$HETERO_TEST_PIDFILE"
+  echo "$_spid" > "$HETERO_TEST_PIDFILE"
 fi
 exit 0
 EOF

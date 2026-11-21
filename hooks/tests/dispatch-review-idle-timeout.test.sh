@@ -18,7 +18,8 @@ case "$STUB_MODE" in
   stall)
     echo "thinking..."
     sleep 301 > /dev/null 2>&1 < /dev/null &
-    echo $! > "$GC_PID_FILE"
+    _gc_pid=$!
+    echo "$_gc_pid" > "$GC_PID_FILE"
     wait ;;
   slow) for i in 1 2 3 4 5 6 7 8; do echo "step $i"; sleep 1; done; : > "$DONE_FILE" ;;
 esac

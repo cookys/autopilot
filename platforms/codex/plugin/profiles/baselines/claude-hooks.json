@@ -178,6 +178,17 @@
         ]
       },
       {
+        "matcher": "Read|Grep|Glob|Bash|Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/claude-home-read-guard.js",
+            "timeout": 5,
+            "onFailure": "continue"
+          }
+        ]
+      },
+      {
         "matcher": "ScheduleWakeup",
         "hooks": [
           {

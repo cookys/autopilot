@@ -110,6 +110,30 @@ test('lease grant 201 chooses local and validates lease id without exposing toke
   } finally { srv.close(); }
 });
 
+test('lease request requires a 26-character Crockford ULID before contacting gateway', async () => {
+  for (const [task, expectedReason, detail, hasTask] of [[undefined, 'fleet_task_missing', 'fleet_task_missing', false], ['12345678', 'fleet_task_invalid', 'fleet_task=12345678', true]]) {
+    const { srv, requests } = await leaseServer();
+    try {
+      const env = leaseEnv(srv.address().port);
+      delete env.AUTOPILOT_FLEET_TASK;
+      delete env.HETERO_FLEET_TASK_ID;
+      if (hasTask) env.AUTOPILOT_FLEET_TASK = task;
+      const result = await require('./local-impl-slot').acquireLocalLease({ env, cfg: {}, endpoint: { ready: true, baseUrl: `http://127.0.0.1:${srv.address().port}/v1`, tokenEnv: 'AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN' } });
+      assert.equal(result.reason, expectedReason);
+      assert.equal(result.detail, detail);
+      assert.equal(requests.length, 0);
+    } finally { srv.close(); }
+  }
+});
+
+test('lease HTTP error detail includes a bounded response message', async () => {
+  const { srv } = await leaseServer(400, '{"error":"bad fleet task"}');
+  try {
+    const result = await require('./local-impl-slot').acquireLocalLease({ env: leaseEnv(srv.address().port, { AUTOPILOT_FLEET_TASK: '01ARZ3NDEKTSV4RRFFQ69G5FAV' }), cfg: {}, endpoint: { ready: true, baseUrl: `http://127.0.0.1:${srv.address().port}/v1`, tokenEnv: 'AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN' } });
+    assert.equal(result.detail, 'lease_query_failed:http_400:bad fleet task');
+  } finally { srv.close(); }
+});
+
 test('lease capacity statuses fall back with stable detail', async () => {
   for (const [status, detail] of [[429, 'lease_429'], [409, 'lease_409']]) {
     const { srv } = await leaseServer(status, '{}');

@@ -148,9 +148,41 @@ assert_eq "qwen" "$(json_get "$OUT" model)" "a: result model is qwen"
 assert_file_exists "$MF" "a: manifest written"
 assert_eq "local" "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).runner)' "$MF")" "a: manifest runner is local"
 assert_eq "qwen" "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).model)' "$MF")" "a: manifest model is qwen"
+assert_eq "medium" "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).effort_sent||"")' "$MF")" "a: implicit local manifest sends medium effort"
 assert_eq "<null>" "$(json_get "$OUT" local_fallback)" "a: local choice records local_fallback null"
 assert_eq "null" "$(node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).local_fallback; process.stdout.write(v===null?"null":JSON.stringify(v))' "$MF")" "a: manifest local_fallback is null"
 assert_contains "$(cat "$GATE_LOG")" '--model qwen --endpoint qwen_local' "a: CN gate receives selected Qwen model and endpoint"
+
+# (a3) Local runner explicitly rejects effort values unsupported by the gateway.
+RUNS="$TEST_TMP/runs-a3"; mkdir -p "$RUNS"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
+  "$SCRIPT" --no-verify-tip --context-window off --runner local --model qwen --effort high \
+  --branch feat/local-a3 --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/a3.err")"
+EXIT=$?
+assert_neq "0" "$EXIT" "a3: explicit local high effort fails precondition"
+assert_contains "$(cat "$TEST_TMP/a3.err")" "low|medium|xhigh" "a3: error names supported local effort set"
+assert_contains "$OUT" '"status": "precondition_failed"' "a3: high effort fails before runner dispatch"
+RUNS="$TEST_TMP/runs-a3max"; mkdir -p "$RUNS"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
+  "$SCRIPT" --no-verify-tip --context-window off --runner local --model qwen --effort max \
+  --branch feat/local-a3max --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/a3max.err")"
+EXIT=$?
+assert_eq "2" "$EXIT" "a3: explicit local max effort exits precondition"
+assert_contains "$OUT" '"status": "precondition_failed"' "a3: max effort fails before runner dispatch"
+
+# (a4) An invalid Fleet-Task skips lease POST, records its reason and falls back to pace-select.
+PROMPT="$TEST_TMP/prompt-a4.txt"; printf 'Fleet-Task: 12345678\nedit impl-defaults-fixture.txt\n' > "$PROMPT"
+: > "$LEASE_LOG"; RUNS="$TEST_TMP/runs-a4"; mkdir -p "$RUNS"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
+  "$SCRIPT" --no-verify-tip --context-window off --grok-bin "$STUB_GROK" \
+  --branch feat/local-a4 --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/a4.err")"
+EXIT=$?
+assert_eq "0" "$EXIT" "a4: invalid Fleet-Task falls back successfully"
+FB_A4="$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\r?\n/).reverse().find(l=>l.trim().startsWith("{")));process.stdout.write(JSON.stringify(o.local_fallback))' "$OUT")"
+assert_contains "$FB_A4" '"reason":"fleet_task_invalid"' "a4: invalid task fallback reason"
+assert_contains "$FB_A4" '"detail":"fleet_task=12345678"' "a4: invalid task fallback detail"
+assert_not_contains "$(cat "$LEASE_LOG")" '"method":"POST","url":"/v1/local/lease"' "a4: invalid task skips lease request"
+assert_contains "$(cat "$TEST_TMP/a4.err")" "write the full task id in the brief" "a4: invalid task diagnostic"
 
 # (b) local, no Task-Class line -> dispatched prompt stays unchanged; caller file unchanged.
 PROMPT="$TEST_TMP/prompt-b.txt"

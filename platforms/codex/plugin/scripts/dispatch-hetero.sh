@@ -3462,6 +3462,10 @@ if [ "$RUNNER" = "local" ]; then
   apply_runner_local
 fi
 
+if [ "$LOCAL_RUNNER" -eq 1 ] && [ "$EFFORT_EXPLICIT" -eq 1 ] && { [ "$EFFORT" = "high" ] || [ "$EFFORT" = "max" ]; }; then
+  die_precondition "--runner local supports --effort low|medium|xhigh (got: $EFFORT)"
+fi
+
 case "$EFFORT" in
   default|low|medium|high|xhigh|max) ;;
   *) die_precondition "--effort must be one of default|low|medium|high|xhigh|max (got: $EFFORT)" ;;
@@ -3481,6 +3485,7 @@ fi
 # is not this change's job. `default` sends nothing.
 CLAUDE_EFFORT_ARG=""
 if [ "$EFFORT_EXPLICIT" -eq 1 ] && [ "$EFFORT" != "default" ]; then CLAUDE_EFFORT_ARG="$EFFORT"; fi
+if [ "$LOCAL_RUNNER" -eq 1 ] && [ "$EFFORT_EXPLICIT" -eq 0 ]; then CLAUDE_EFFORT_ARG="medium"; fi
 # kimi has no effort flag: kimi-code reads KIMI_MODEL_THINKING_EFFORT (low|high|max), and without it runs
 # config.toml's default_effort (max) whatever tier the seat declares (peer report 2026-10-24: 21 exam requests
 # for a `high` seat all went out as max). Sent only for an EXPLICIT --effort (the xhigh script default is not a

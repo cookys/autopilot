@@ -99,7 +99,7 @@ import {
   readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
   paneWidth, DEFAULT_PANE_COLS, slotTab, slotUnfolds, truncateToWidth, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
 } from './model'
-import type { AccountView, ActivityItem, Counts, DecideState, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveDecision, LiveSnapshot, LookTarget, Manifest, PaneLine, PaneTab, Seg, Slot, SlotId, QuotaWindow, Sources } from './model'
+import type { AccountView, ActivityItem, Counts, DecideState, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveDecision, LiveSnapshot, LookTarget, Manifest, PaneLine, PaneTab, Seg, Slot, SlotId, QuotaWindow, Sources, SourceGroup } from './model'
 
 const TICK_MS = 5000
 const FACTS_PRUNE_MS = 60_000
@@ -555,14 +555,79 @@ async function resolveScope($: EngineInterface, autopilotHome: string, liveBase:
 //    is not normally visible; it is retried on the next poll.
 //  - a listed file or directory of this project that cannot be checked (stat fails: gone, or EACCES, the engine gives a message only) reads as changed (stale),
 //    and so does a directory that cannot be listed once its mtime moved: with no way to confirm nothing changed, the age verdict stands.
+// The fresh verdict of one publish is MEMOIZED (keyed by the envelope's path + published_at + observed_at: the bytes of a publish are fixed once its tmp + rename
+// landed) together with the group dirs' mtimes the full check saw and the new files it could not judge yet (unreadable, unparseable, or a missing / non-string
+// owner: "not an answer, not cached"). The next poll of the same publish stats the group DIRS only: every writer creates / replaces / deletes by tmp + rename, so
+// any of those moves the dir's own mtime; equal dir mtimes confirm nothing of this project's moved and the memoized fresh stands without a single per-file stat
+// (a host's session-mode dir holds thousands of files, and a per-file pass per poll burned 11-22% of a core per seat). The pending files are re-read before the
+// memoized fresh is trusted (a repair must be seen on the next poll, exactly as by the full check), and a dir whose mtime moved, or that cannot be confirmed
+// (absent / EACCES: the same two outcomes as the full check), runs the full check, which re-memoizes a fresh verdict with what it saw. The memo is bounded
+// (SOURCE_MEMO_MAX: cleared whole above it) and a hot reload drops it with the rest of the module state.
+const SOURCE_MEMO_MAX = 256
+const sourceMemo = new Map<string, { dirs: (number | null)[]; pending: { p: string; g: number }[] }>()
+function rememberVerdict(key: string, dirs: (number | null)[], pending: { p: string; g: number }[], verdict: EnvelopeCheck): EnvelopeCheck {
+  if (verdict.status === 'fresh') {
+    if (sourceMemo.size > SOURCE_MEMO_MAX) sourceMemo.clear()
+    sourceMemo.set(key, { dirs, pending })
+  }
+  return verdict
+}
 const notOurs = new Set<string>()
-async function judgeByChange($: EngineInterface, check: EnvelopeCheck): Promise<EnvelopeCheck> {
+async function judgeByChange($: EngineInterface, check: EnvelopeCheck, idPath: string): Promise<EnvelopeCheck> {
   const env = check.envelope as Json
   if (env.sources === undefined) return check // an older watcher: no list, the age verdict stands
   const moved: EnvelopeCheck = { ...check, status: 'stale', moved: true }
   const groups = sourcesOf(env)
   if (groups === null) return moved // a list that is there but unreadable cannot confirm nothing changed
-  for (const g of groups) {
+  const memoKey = idPath + '|' + (typeof env.published_at === 'string' ? env.published_at : '') + '|' + (typeof env.observed_at === 'string' ? env.observed_at : '')
+  const hit = sourceMemo.get(memoKey)
+  if (hit !== undefined) {
+    const freshNow: EnvelopeCheck = { status: 'fresh', envelope: env }
+    // The last full check of this publish was fresh and saw these dir mtimes. Equal dir mtimes confirm nothing of this project's
+    // moved (see above): no per-file stats. A dir that cannot be re-stat'ed gets the full check's own two outcomes: absent then
+    // and still absent is no change, anything else cannot confirm nothing changed.
+    let same = true
+    for (let i = 0; i < groups.length && same; i++) {
+      const g = groups[i]
+      const dirSt = await $.fs.stat(g.dir).catch(() => null)
+      if (dirSt === null) {
+        const absent = await $.fs.exists(g.dir).then(x => !x).catch(() => false)
+        if (absent && g.dir_mtime_ms === null && hit.dirs[i] === null) continue
+        return moved
+      }
+      same = dirSt.mtimeMs === hit.dirs[i]
+    }
+    if (!same) return await fullSourceCheck($, check, groups, memoKey)
+    // The pending files are the ones the last fresh verdict could not judge: they are re-read, the full check's way (a repair
+    // must be seen on the next poll); only a string owner equal to this project's makes the snapshot stale, a different string
+    // settles them into notOurs, everything else stays pending.
+    const still: { p: string; g: number }[] = []
+    for (const pr of hit.pending) {
+      const g = groups[pr.g]
+      const text = await readText($, pr.p)
+      if (text === null) { still.push(pr); continue }
+      const parsed = parseJson(text)
+      if (!parsed.ok || !isObject(parsed.value)) { still.push(pr); continue }
+      const owner = parsed.value[g.match_field]
+      if (owner === g.match_value) return moved
+      if (typeof owner !== 'string') { still.push(pr); continue }
+      if (notOurs.size > 20000) notOurs.clear()
+      notOurs.add(pr.p + '|' + g.match_field + '=' + g.match_value)
+    }
+    if (still.length !== hit.pending.length) rememberVerdict(memoKey, hit.dirs, still, freshNow) // the set shrank: keep the memo current
+    return freshNow
+  }
+  return await fullSourceCheck($, check, groups, memoKey)
+}
+// The full per-file pass (what this used to be): every listed file is stat'ed, a moved dir is listed and every file not seen
+// before is read once and judged by this project's match value. `pending` collects the new files left unanswered, for the memo.
+async function fullSourceCheck($: EngineInterface, check: EnvelopeCheck, groups: SourceGroup[], memoKey: string): Promise<EnvelopeCheck> {
+  const env = check.envelope as Json
+  const moved: EnvelopeCheck = { ...check, status: 'stale', moved: true }
+  const dirsSeen: (number | null)[] = []
+  const pending: { p: string; g: number }[] = []
+  for (let gi = 0; gi < groups.length; gi++) {
+    const g = groups[gi]
     for (const f of g.files) {
       const st = await $.fs.stat(f.path).catch(() => null)
       if (st === null || sourceMoved(f.mtime_ms, st.mtimeMs)) return moved // a listed file that cannot be checked is a change, whatever was recorded
@@ -571,9 +636,10 @@ async function judgeByChange($: EngineInterface, check: EnvelopeCheck): Promise<
     if (dirSt === null) {
       // absent then and still absent is no change; any other failure (EACCES: the engine gives a message only) cannot be told from it by stat, so ask exists
       const absent = await $.fs.exists(g.dir).then(x => !x).catch(() => false)
-      if (absent && g.dir_mtime_ms === null) continue
+      if (absent && g.dir_mtime_ms === null) { dirsSeen.push(null); continue }
       return moved
     }
+    dirsSeen.push(dirSt.mtimeMs)
     if (!sourceMoved(g.dir_mtime_ms, dirSt.mtimeMs)) continue
     let entries: { name: string; kind: string }[]
     try { entries = await $.fs.list(g.dir) } catch { return moved }
@@ -584,17 +650,17 @@ async function judgeByChange($: EngineInterface, check: EnvelopeCheck): Promise<
       const memo = p + '|' + g.match_field + '=' + g.match_value
       if (known.has(p) || notOurs.has(memo)) continue
       const text = await readText($, p)
-      if (text === null) continue // unreadable now: not an answer, not cached, read again next poll
+      if (text === null) { pending.push({ p, g: gi }); continue } // unreadable now: not an answer, not cached, read again next poll
       const parsed = parseJson(text)
-      if (!parsed.ok || !isObject(parsed.value)) continue // same: a half-written or foreign shape is retried
+      if (!parsed.ok || !isObject(parsed.value)) { pending.push({ p, g: gi }); continue } // same: a half-written or foreign shape is retried
       const owner = parsed.value[g.match_field]
       if (owner === g.match_value) return moved
-      if (typeof owner !== 'string') continue // field missing, null or not a string: an incomplete file, not another project's; read again next poll
+      if (typeof owner !== 'string') { pending.push({ p, g: gi }); continue } // field missing, null or not a string: an incomplete file, not another project's; read again next poll
       if (notOurs.size > 20000) notOurs.clear()
       notOurs.add(memo)
     }
   }
-  return { status: 'fresh', envelope: env }
+  return rememberVerdict(memoKey, dirsSeen, pending, { status: 'fresh', envelope: env })
 }
 
 // The envelope of one scope: the tmpfs file, then the SSD copy; a fresh one beats a stale one.
@@ -607,7 +673,7 @@ async function findEnvelope($: EngineInterface, autopilotHome: string, liveBase:
   for (const path of paths) {
     let check = checkEnvelope(await readText($, path), want, nowMs)
     // a writer that is gone (the final publish) leaves a snapshot judged by what it was built from, never by its age: a change makes it stale even while valid_for_s runs
-    if ((check.status === 'fresh' || check.status === 'stale') && check.envelope !== null && check.envelope.writer === null) check = await judgeByChange($, check)
+    if ((check.status === 'fresh' || check.status === 'stale') && check.envelope !== null && check.envelope.writer === null) check = await judgeByChange($, check, path)
     if (check.status === 'fresh') return check
     if (check.status === 'stale' && stale === null) stale = check
     if (check.status === 'malformed') malformed = true

@@ -822,6 +822,39 @@ for (const surface of SURFACES) {
     expect(await bandText($, surface)).toContain('the watcher is not publishing')
   })
 
+  // CPU: on a real host the session-mode dir holds thousands of files and the mod stat-ed EVERY listed
+  // file of this project on every poll. judgeByChange memoizes a fresh verdict per envelope and re-checks
+  // the group dirs' mtimes only (writers create/replace/delete by tmp + rename, so any of those moves the
+  // dir's mtime); a dir whose mtime moved (or cannot be confirmed) falls back to the full per-file check.
+  test('band: an old publish that lists 2,000 markers stats only the two group dirs after its first full pass (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    const g = groups()
+    const MANY = 2000
+    g[1].files = Array.from({ length: MANY }, (_, i) => ({ path: KDIR + '/mm' + String(i).padStart(4, '0') + '.json', mtime_ms: 1000 }))
+    const w = oldWorld({ sources: g })
+    await start($, surface)
+    expect(await bandText($, surface)).toContain(FOUND)
+    const firstStats = w.order.filter((x: string) => x === 'stat').length
+    expect(firstStats).toBeGreaterThanOrEqual(MANY) // a never-seen publish gets the full pass: every listed file once
+    await w.clock.advance(60000) // 12 more polls, nothing moved
+    const stats = w.order.filter((x: string) => x === 'stat').length
+    expect(stats - firstStats).toBeLessThan(2 * 2 * 12 + 6 * 12) // per poll: the two group dirs, plus a few non-source stats (cwd, .claude.json, the pet heartbeat)
+    expect(await bandText($, surface)).toContain(FOUND)
+  })
+  test('band: after a memoized fresh poll, a moved dir mtime with a changed marker is stale again (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    const w = oldWorld({})
+    await start($, surface)
+    expect(await bandText($, surface)).toContain(FOUND) // first poll (full pass, nothing moved) memoizes fresh
+    w.files[KDIR + '/' + SID_A + '.json'] = j({ session_id: SID_A, project_key: KEY, root_run_id: ROOT, level: 'l5', expires_at: '2099-01-01T00:00:00.000Z' })
+    w.stats[KDIR + '/' + SID_A + '.json'] = { size: 1, mtimeMs: 2000 }
+    w.stats[KDIR] = { size: 0, mtimeMs: 2000 } // the writer replaced the marker by tmp + rename: the dir's own mtime moved
+    await w.clock.advance(5000)
+    const text = await bandText($, surface)
+    expect(text).toContain('changed since the last publish at')
+    expect(text).not.toContain(FOUND)
+  })
+
   test('band: stale after valid_for_s; a re-read never makes an old envelope fresh (' + surface + ')', async ($, on) => {
     const w = worldEn(on, base(), NOW_STALE)
     await start($, surface)

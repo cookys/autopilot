@@ -408,7 +408,10 @@ function signatureOf(runs) {
 // age (a watcher that left on purpose leaves a snapshot that stays true until one of these moves). Two directory groups, each
 //   { role, dir, dir_mtime_ms, suffix, match_field, match_value, files: [{ path, mtime_ms }] }
 //   manifest  the dispatch manifest dir; files = the manifests of this project's rows; match repo_identity === this project's identity
-//   marker    the session-mode dir; files = the markers whose project_key is this project's (any expiry); match project_key === this key
+//   marker    the session-mode dir; files = the LIVE markers whose project_key is this project's (expires_at in the future, or no parsable
+//             expires_at and an mtime within one marker TTL): an expired marker cannot change anything the snapshot shows, and every listed
+//             file is re-stat'ed by the mod (mods/live judgeByChange) on every poll — a host's dir had accumulated 2,615 never-cleaned
+//             files; match project_key === this key
 // A reader says "moved" when a listed file is newer or gone, or, once the directory's own mtime moved (a create / rename / delete in it, by anyone),
 // when a file it has not seen yet carries this project's match value. Other projects' manifests and markers therefore never make this one outdated.
 // A file's mtime is recorded as min(mtime, tick start): one modified while the tick was collecting reads as newer later (conservative, never lost).
@@ -424,7 +427,10 @@ function fileEntries(paths, startMs) {
     return { path: p, mtime_ms: m };
   });
 }
-function markerFilesOf(dir, key) {
+// Only the markers that are still LIVE for this project (see the sourceFingerprint comment): an expired marker cannot
+// change anything the snapshot shows, so it never enters the list the mod re-checks on every poll. Live = expires_at in
+// the future, or no parsable expires_at and an mtime within one marker TTL (24 h). Unreadable or another project's: never.
+function markerFilesOf(dir, key, nowMs) {
   const out = [];
   let names = [];
   try { names = fs.readdirSync(dir); } catch (_error) { return out; }
@@ -432,7 +438,12 @@ function markerFilesOf(dir, key) {
     if (!name.endsWith('.json')) continue;
     try {
       const m = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'));
-      if (m && m.project_key === key) out.push(path.join(dir, name));
+      if (!m || m.project_key !== key) continue;
+      const exp = Date.parse(m.expires_at);
+      if (Number.isFinite(exp)) {
+        if (exp <= nowMs) continue; // expired: cannot change the snapshot
+      } else if (nowMs - fs.statSync(path.join(dir, name)).mtimeMs > 24 * 3600 * 1000) continue; // no parsable expires_at: one marker TTL by mtime
+      out.push(path.join(dir, name));
     } catch (_error) { /* unreadable: not ours */ }
   }
   return out;
@@ -445,7 +456,7 @@ function sourceFingerprint({ env, key, identity, rows, dirs, startMs }) {
   const manifests = [...new Set(rows.map((r) => r && r.manifest).filter((p) => typeof p === 'string' && p))];
   return [
     { role: 'manifest', dir: manifestDir, dir_mtime_ms: dirs.manifest, suffix: '.manifest.json', match_field: 'repo_identity', match_value: identity, files: fileEntries(manifests, startMs) },
-    { role: 'marker', dir: markerDir, dir_mtime_ms: dirs.marker, suffix: '.json', match_field: 'project_key', match_value: key, files: fileEntries(markerFilesOf(markerDir, key), startMs) },
+    { role: 'marker', dir: markerDir, dir_mtime_ms: dirs.marker, suffix: '.json', match_field: 'project_key', match_value: key, files: fileEntries(markerFilesOf(markerDir, key, startMs), startMs) },
   ];
 }
 
@@ -1337,5 +1348,5 @@ function runWriter({ key, interval, idleExit, enrichCap, collect, render, cwd, e
 
 module.exports = {
   taskPollDue, TASK_SETTLED_POLL_MS, rotateWatcherLog, WATCHER_LOG_MAX_BYTES, SCHEMA, VALID_FOR_S, HEARTBEAT_S, LOCK_BUSY_RC, DEFAULT_IDLE_EXIT_S, createWatcher, readEnvelope, runWatchCli,
-  runWriter, makeOrphanCheck, lockPathOf, onPath, recentSessionFiles, openDecisionCount, isWatcherFor, flockAvailable, flockProbe, startWatcherDetached, watchLaunchArgv, worktreePaths, stableRepoRoot, computeCounts, unexpiredMarkers, isOrchestratorMarker, createCostReader,
+  runWriter, makeOrphanCheck, lockPathOf, onPath, recentSessionFiles, openDecisionCount, isWatcherFor, flockAvailable, flockProbe, startWatcherDetached, watchLaunchArgv, worktreePaths, stableRepoRoot, computeCounts, unexpiredMarkers, isOrchestratorMarker, createCostReader, sourceFingerprint, markerFilesOf,
 };

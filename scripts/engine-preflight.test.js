@@ -291,3 +291,19 @@ test('all candidates skipped -> chosen null, CLI exit 3', () => {
   assert.match(result.stderr, /preflight: skip codex:gpt-6\.1-terra \(recent:overloaded@hetero-e\); next codex:gpt-6\.1-sol/);
   assert.match(result.stderr, /preflight: skip codex:gpt-6\.1-sol \(recent:rate_limited@hetero-f\); next none/);
 });
+
+for (const [name, text] of [['model-unavailable', 'Model Unavailable for this account'], ['model-not-available', 'The requested model is not available']]) {
+  test(`account-unsupported-text-${name}`, () => {
+    const runs = caseDir(name);
+    manifest(runs, `hetero-${name}.manifest.json`, {
+      run_id: `hetero-${name}`,
+      runner: 'codex',
+      model: 'gpt-6.1-terra',
+      ended_at: new Date(NOW - 60 * 1000).toISOString(),
+      error: text,
+    }, 60 * 1000);
+    const out = preflight({ candidates: [terra, sol], now: NOW, sources: sources(runs) });
+    assert.equal(out.skipped[0].reason, `recent:model_unsupported@hetero-${name}`);
+    assert.deepEqual(out.chosen, sol);
+  });
+}

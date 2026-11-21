@@ -91,7 +91,7 @@ function failureCategory(manifest) {
   const low = text.toLowerCase();
   if (low.includes('overloaded')) return 'overloaded';
   if (low.includes('rate_limited') || low.includes('rate limited') || /\b429\b/.test(text)) return 'rate_limited';
-  if (low.includes('model_unsupported') || low.includes('not supported')) return 'model_unsupported';
+  if (low.includes('model_unsupported') || low.includes('not supported') || low.includes('model unavailable') || low.includes('model is not available')) return 'model_unsupported';
   if (low.includes('quota exhausted') || low.includes('quota_exhausted')) return 'quota_exhausted';
   return null;
 }

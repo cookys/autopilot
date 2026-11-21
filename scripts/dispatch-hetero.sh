@@ -6291,27 +6291,8 @@ if [ "$IS_CODEX" -eq 1 ]; then
       -c "model_reasoning_effort=\"$3\"" < "$4"' _ "$WT" "$MODEL" "$EFFORT" "$PROMPT_FILE" "$CODEX_BIN" "$MANAGED_CODEX_HOME"
   if [ "${AGENT_EXIT:-0}" -ne 0 ] && [ "${MODEL_SUBSTITUTED_TRIED:-0}" -eq 0 ] && [ -r "${LOG:-}" ]; then
     _codex_err_cls="$(node "$SELF_DIR/engine-capability-state.js" classify-error --file "$LOG" 2>/dev/null || true)"
-    if [ "$_codex_err_cls" = "model_unsupported" ] || grep -qiE 'model_unsupported|model_not_supported|not supported|model unavailable|model is not available|unsupported model' "$LOG" 2>/dev/null; then
-      _codex_sub="$(node - "$MODEL" "${HOME:-}/.codex/models_cache.json" <<'NODE' 2>/dev/null || true
-const fs = require('fs');
-const req = process.argv[2] || '';
-const cachePath = process.argv[3] || '';
-const tierOf = (id) => {
-  const m = String(id).toLowerCase().match(/(?:^|[-_])(terra|luna|mini|nano|spark|pro|max)(?:$|[-_])/);
-  return m ? m[1] : null;
-};
-const reqTier = tierOf(req);
-if (!reqTier || !cachePath) process.exit(0);
-let raw;
-try { raw = JSON.parse(fs.readFileSync(cachePath, 'utf8')); } catch { process.exit(0); }
-const list = Array.isArray(raw) ? raw : (Array.isArray(raw && raw.models) ? raw.models : (Array.isArray(raw && raw.data) ? raw.data : []));
-for (const entry of list) {
-  const id = typeof entry === 'string' ? entry : (entry && (entry.slug || entry.id));
-  if (!id || typeof id !== 'string' || id === req) continue;
-  if (tierOf(id) === reqTier) { process.stdout.write(id); process.exit(0); }
-}
-NODE
-)"
+    if [ "$_codex_err_cls" = "model_unsupported" ]; then
+      _codex_sub="$(node "$SELF_DIR/lib/codex-models-cache.js" substitute "$MODEL" "${CODEX_HOME:-${HOME:-}/.codex}/models_cache.json" 2>/dev/null || true)"
       if [ -n "$_codex_sub" ]; then
         MODEL_SUBSTITUTED_TRIED=1
         MODEL_SUBSTITUTED_JSON="$(node -e 'process.stdout.write(JSON.stringify({from:process.argv[1],to:process.argv[2]}))' "$MODEL" "$_codex_sub" 2>/dev/null || true)"
@@ -8081,16 +8062,7 @@ classify_outcome() {
   fi
   # Caller error, not an auth/quota escalation: name the model and cached alternatives.
   if [ "${CLASSIFIED_ERROR:-}" = "model_unsupported" ]; then
-    _codex_cache_models="$(node - "${HOME:-}/.codex/models_cache.json" <<'NODE' 2>/dev/null || true
-const fs = require('fs');
-const cachePath = process.argv[2] || '';
-let raw;
-try { raw = JSON.parse(fs.readFileSync(cachePath, 'utf8')); } catch { process.exit(0); }
-const list = Array.isArray(raw) ? raw : (Array.isArray(raw && raw.models) ? raw.models : (Array.isArray(raw && raw.data) ? raw.data : []));
-const ids = list.map((e) => (typeof e === 'string' ? e : (e && (e.slug || e.id)))).filter((id) => typeof id === 'string' && id.length > 0);
-if (ids.length > 0) process.stdout.write(ids.join(', '));
-NODE
-)"
+    _codex_cache_models="$(node "$SELF_DIR/lib/codex-models-cache.js" ids "${CODEX_HOME:-${HOME:-}/.codex}/models_cache.json" 2>/dev/null || true)"
     if [ -n "$_codex_cache_models" ]; then
       OUTCOME_ERR="codex model ${MODEL:-unknown} is not available for this account (models_cache: ${_codex_cache_models})"
     else

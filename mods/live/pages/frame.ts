@@ -99,12 +99,16 @@ const V74_BORDER_KEY: Record<string, string> = {
 }
 
 const TINY_FRAME_ROWS = 3
-export const frameHintText = (page: Page, ctx: PageCtx): string => ctx.t(V74_BORDER_KEY[page.id] ?? 'v74.b.border.default', { ud: GLYPHS.structure.up + GLYPHS.structure.behind })
-export const frameHintShort = (page: Page, ctx: PageCtx): string => {
-  const full = frameHintText(page, ctx)
-  const cut = full.split(' · ')[0]
-  return cut === '' ? full : cut
+// design-narrow: the short form of the hint keeps every key class (move, pick, send, Esc) and drops only the words and the ctrl+x tab clause
+const V74_SHORT_KEY: Record<string, string> = {
+  decide: 'v74.b.short.decide', todo: 'v74.b.short.todo', pet: 'v74.b.short.pet',
+  now: 'v74.b.short.scroll', dispatch: 'v74.b.short.scroll', review: 'v74.b.short.scroll', spend: 'v74.b.short.scroll', hygiene: 'v74.b.short.scroll',
+  fleet: 'v74.b.short.scroll', help: 'v74.b.short.scroll', quota: 'v74.b.short.scroll', forge: 'v74.b.short.scroll',
 }
+// the keyboard state is words, not colour: `ctrl+x tab` until a key reached the pane, `keys in pane` after
+const keysWord = (ctx: PageCtx): string => (ctx.v74?.keysHeld === true ? ctx.t('v74.b.keys_held') : ctx.t('v74.b.keys_take'))
+export const frameHintText = (page: Page, ctx: PageCtx): string => ctx.t(V74_BORDER_KEY[page.id] ?? 'v74.b.border.default', { ud: GLYPHS.structure.up + GLYPHS.structure.behind, keys: keysWord(ctx) })
+export const frameHintShort = (page: Page, ctx: PageCtx): string => ctx.t(V74_SHORT_KEY[page.id] ?? 'v74.b.short.scroll', { ud: GLYPHS.structure.up + GLYPHS.structure.behind })
 export function frameBorderRow(page: Page, ctx: PageCtx): Row {
   return [{ text: GLYPHS.structure.frameBL + GLYPHS.structure.rule + ' ' + frameHintText(page, ctx), dim: true }]
 }

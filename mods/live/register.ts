@@ -227,7 +227,7 @@ async function v74CtxOf($: EngineInterface, withStore = false): Promise<V74Ctx> 
   const nav = await read($, V74_NAV)
   // The host Pane's 待決 tab stays the retired pointer. Only the band box merges the card store.
   const decide = withStore ? mergedDecide() : decideFeed.cards()
-  return { pm: pmFeed.status(), pmFetchedMs: pmFeed.fetchedMs(), decide, todo: null, nav, ages: { now: pmFeed.fetchedMs(), decide: decideFeed.fetchedMs(), fleet: fleetFeed.fetchedMs() } }
+  return { pm: pmFeed.status(), pmFetchedMs: pmFeed.fetchedMs(), decide, todo: null, nav, keysHeld: v74KeysHeld, sendResult: v74SendResult, ages: { now: pmFeed.fetchedMs(), decide: decideFeed.fetchedMs(), fleet: fleetFeed.fetchedMs() } }
 }
 // The summary other plugins read (PM G33a; fleet.ts `FleetSummary`, `v: 1`): written by the feed after each run, success or failure, never while drawing. Each row is counted
 // by the state the Fleet tab draws for it, so the band reader and the tab never disagree.
@@ -1385,6 +1385,9 @@ async function commitV74Send($: EngineInterface, st: DecideState, feed: readonly
   })
   if (failed.length > 0) $.ui.toast(t('decide.send_failed', { reason: failed.join(' ') }))
   for (const id of Object.keys(next.sent)) if (st.sent[id] === undefined) durableClosedIds.add(id)
+  const sentNow = Object.keys(next.sent).filter(id => st.sent[id] === undefined).length
+  v74SendResult = { n: sentNow, left: feed.filter(c => next.sent[c.id] === undefined).length }
+  void $.ui.invalidate('ui.render')
   await update($, DECIDE, s => ({ ...s, sent: next.sent }))
 }
 async function undoDecide($: EngineInterface, id: string): Promise<void> {
@@ -1559,13 +1562,22 @@ let panePlacementEpoch = 0
 let paneFocused = false
 let paneOpenAsked = false
 let paneOpened = false
+// r8 #2: whether the band's frame holds the keyboard now, shown as words in the bottom border (`keys in pane` / `ctrl+x tab`). A focus event that names a band element, or a key that reached the frame, says yes;
+// a focus event that names nothing (the prompt took it back), the close key and a closed pane say no.
+let v74KeysHeld = false
+// r8 #3: how many cards the last `s` sent, shown under the send row (`已送出 N 張 · 尚有 M 張待決`); a new pane open clears it
+let v74SendResult: { n: number; left: number } | null = null
+const bandElement = (named: string | undefined): boolean => named !== undefined && /^(tab:|card:|letter:|hotkey:|opt:|v74-note$)/.test(named)
 function markPaneOpen(): void {
+  v74KeysHeld = false
+  v74SendResult = null
   v74Open = true
   paneOpened = true
   paneOpenAsked = true
   panePlacement = null
 }
 function markPaneClosed(): void {
+  v74KeysHeld = false
   v74Open = false
   paneOpened = false
   paneOpenAsked = false
@@ -1631,6 +1643,7 @@ async function frameKeyBody($: EngineInterface, k: KeyAction): Promise<void> {
     ...(k.kind === 'cursor' ? { cursorBefore, cursorAfter: cursorBefore } : {}),
   })
   const noteWas = decideLocal.textMode
+  v74KeysHeld = k.kind !== 'close' && k.kind !== 'page' ? true : v74KeysHeld
   try {
     if (k.kind === 'page') { await panePagePress($, k.to as PageId); return }
     if (k.kind === 'close') {
@@ -2302,6 +2315,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       void frameKey($, { kind: 'text_cancel' })
       return {}
     }
+    if (v74Open) { const was = v74KeysHeld; v74KeysHeld = bandElement(named); if (was !== v74KeysHeld) void $.ui.invalidate('ui.render') }
     const step = decideLocal.textMode || bandLegacy || !v74Open ? null : v74TabStep(panePage, named, (raw as { origin?: unknown }).origin)
     if (step !== null) { void frameKey($, step); return {} } // the ring stays on the current tab
     const at = v74FocusAt(raw)

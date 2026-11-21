@@ -488,6 +488,71 @@ function v74Card(c: DecideCard, i: number, selected: boolean, nav: DecideNav, ct
   return out
 }
 
+// ---- r8: the band frame's 待決 (design S3). The cards other than the one at the cursor are one summary row each (the answer picked, else the one suggested); the card at the cursor is open
+// in full: background on a hanging indent, then each option with its description, then the note. Spare rows keep the design's blank lines; a short frame drops them (then the descriptions) before it cuts.
+const BOX_LABEL_HANG = 15 // `    背景` (4 + the label's cells) + 7 blanks: the text of a labelled row starts here and every continuation row lines up under it
+const labelledBox = (label: string, text: string, width: number): Row[] => wrapRow([seg('    '), dimSeg(label), seg('   ' + text)], width, BOX_LABEL_HANG)
+function boxSummary(c: DecideCard, i: number, nav: DecideNav, ctx: PageCtx): Row {
+  const { t } = ctx
+  const picked = nav.picks[c.id]
+  const held = nav.hold?.[c.id] !== undefined
+  const sent = nav.sent[c.id] !== undefined && nav.fixing?.[c.id] === undefined
+  const recIx = c.options.findIndex(o => o.recommended)
+  const tail = sent ? t('v74.d.sent') : held ? t('v74.d.sum_held') : picked !== undefined && c.options[picked] !== undefined
+    ? t('v74.d.sum_pick', { k: PICK_KEYS[picked] ?? String(picked + 1), label: c.options[picked].label })
+    : recIx >= 0 ? t('v74.d.sum_rec', { label: c.options[recIx].label }) : ''
+  const lead = '   ' + String(i + 1) + '. '
+  const q = c.title + '：' + c.question
+  const tailText = tail === '' ? '' : '  ' + DOT + ' ' + tail
+  const room = ctx.size.cols - displayWidth(lead) - displayWidth(tailText)
+  return [seg(lead, { press: 'card:' + i }), seg(displayWidth(q) <= room ? q : truncateToWidth(q, Math.max(4, room))), ...(tailText === '' ? [] : [dimSeg(tailText)])]
+}
+// density 0 = the design (blank lines, descriptions under their option); 1 = no blank lines; 2 = descriptions run on after the option
+function boxOpen(c: DecideCard, i: number, nav: DecideNav, ctx: PageCtx, density: 0 | 1 | 2): Row[] {
+  const { t } = ctx
+  const width = Math.min(80, ctx.size.cols)
+  const gap = density === 0 ? [[seg('')]] : []
+  const picked = nav.picks[c.id]
+  const held = nav.hold?.[c.id] !== undefined
+  const sent = nav.sent[c.id] !== undefined && nav.fixing?.[c.id] === undefined
+  const out: Row[] = [wrapRow([seg(GLYPHS.structure.folded + '  ' + String(i + 1) + '. '), seg(c.title, { color: PALETTE.here, here: true }), seg('：' + c.question)], ctx.size.cols, 5)[0], ...gap]
+  out.push(...labelledBox(t('v74.d.bg'), c.background ?? t('v74.d.bg_none'), width), ...gap)
+  c.options.forEach((o, k) => {
+    const mark = picked === k ? ' ' + GLYPHS.structure.decisions : ''
+    const tone = picked === k ? { color: PALETTE.here } : o.recommended ? { color: PALETTE.attention } : {}
+    const label = (k < THREE ? PICK_KEYS[k] + ': ' : DOT + ' ') + o.label
+    const rec = o.recommended ? [seg('  ' + GLYPHS.structure.recommend + ' ' + t('v74.d.rec'), { color: PALETTE.attention })] : []
+    const head: Row = [seg('    '), seg(label + mark, tone), ...rec]
+    if (o.detail === '') { out.push(head); return }
+    if (density === 2) out.push(truncateSegs([...head, dimSeg('  ' + o.detail)], ctx.size.cols))
+    else out.push(head, ...wrapRow([seg('       '), dimSeg(o.detail)], width, 7))
+    if (density === 0) out.push([seg('')])
+  })
+  if (held) out.push([seg('    '), dimSeg(t('v74.d.held', { k: picked === undefined ? '-' : String(PICK_KEYS[picked] ?? picked + 1) }))])
+  else if (sent) out.push([seg('    '), dimSeg(t('v74.d.sent'))])
+  const note = nav.notes[c.id] ?? ''
+  const noteText = nav.textMode ? nav.textBuf + CARET : note === '' ? t('v74.d.note_empty') : note
+  if (density === 0 && c.options.every(o => o.detail === '')) out.push([seg('')])
+  out.push([seg('    m ' + t('v74.d.note')), seg(noteText)])
+  return out
+}
+function renderBoxV74(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: number, actions: Row[]): { body: Row[]; actions: Row[] } {
+  const { t } = ctx
+  const cols = ctx.size.cols
+  const head = ruleTo(GLYPHS.structure.open + ' ' + t('v74.d.head', { n: cards.length, k: cursor + 1 }), cols)
+  const room = Math.max(1, ctx.size.rows - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - 1 - actions.length) // the head row of the frame, the strip and the key-hint border are not the page's
+  const build = (density: 0 | 1 | 2): Row[] => [head, ...cards.flatMap((c, i) => (i === cursor ? boxOpen(c, i, nav, ctx, density) : [boxSummary(c, i, nav, ctx)]))]
+  let body = build(0)
+  for (const d of [1, 2] as const) if (body.length > room) body = build(d)
+  if (body.length > room) { // still too tall: the summaries above the open card give way first (the frame cuts the tail after that)
+    const open = build(2)
+    let drop = 0
+    while (open.length - drop > room && drop < cursor) drop++
+    body = [head, ...open.slice(1 + drop)]
+  }
+  return { body, actions }
+}
+
 function renderV74(ctx: PageCtx): { body: Row[]; actions: Row[] } {
   const { t } = ctx
   const cols = ctx.size.cols
@@ -500,6 +565,14 @@ function renderV74(ctx: PageCtx): { body: Row[]; actions: Row[] } {
   const cursor = Math.max(0, Math.min(cards.length - 1, nav.cursor))
   const ready = cards.filter(c => decideLine(cardToLive(c), nav) !== null && nav.hold?.[c.id] === undefined).length
   const actions: Row[] = [[seg('[s] ' + t('v74.d.send_all', { n: ready }), { press: 'key:s' })]]
+  if (ctx.box === true) {
+    const m = ctx.v74?.sendResult
+    const left = cards.length - ready
+    return renderBoxV74(ctx, cards, nav, cursor, [
+      [seg('[s] ' + t('v74.d.send_all', { n: ready }) + (ready > 0 && left > 0 ? '  ' + DOT + ' ' + t('v74.d.unpicked', { n: left }) : ''), { press: 'key:s' })],
+      ...(m === undefined || m === null ? [] : [[dimSeg(GLYPHS.state.done + ' ' + t('v74.d.result', { n: m.n, left: m.left }))] as Row]),
+    ])
+  }
   const head = ruleTo(GLYPHS.structure.open + ' ' + t('v74.d.head', { n: cards.length, k: cursor + 1 }), cols)
   const blocks = cards.map((c, i) => [...v74Card(c, i, i === cursor, nav, ctx, nav.picks, nav.notes), [seg('')]])
   // a short allocation: leading cards go first so the selected one stays on screen (the frame cuts the tail)

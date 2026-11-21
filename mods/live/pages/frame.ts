@@ -15,7 +15,7 @@ import { GLYPHS } from '../../tux/glyphs.ts'
 import { PALETTE } from '../../tux/palette.ts'
 import { PAGES } from './index'
 import { ageUnit } from './now'
-import { PAGE_KEYS, STRIP_SPLIT_COLS, V74_STRIP_ORDER } from './layout'
+import { PAGE_KEYS, STRIP_SPLIT_COLS, V74_STRIP_ORDER, actionRows } from './layout'
 import { V74_KEY } from '../v74/contract'
 import { WRAP_HANG, brokenRow, decisionCount, poolsNeedLook, sourceMissing, staleBadge, unknownPoolCount, wrapRow } from './rows'
 import type { Row } from './rows'
@@ -36,7 +36,7 @@ export type FrameOpts = { topAnchor?: true; scroll?: number; unfold?: (ctx: Page
 export const FRAME_MAX_ROWS = 24
 export const frameHeight = (available: number, _placement: 'dock' | 'inline' = 'inline'): number => Math.max(0, available)
 
-export const actionRows = (rows: number): number => (rows >= 32 ? 6 : 4)
+export { actionRows }
 // N3: the hanging indent of a body row the frame has to wrap (the cells under the left status-glyph column stay blank); rows.ts owns the number so a page can measure the same way
 export { WRAP_HANG }
 

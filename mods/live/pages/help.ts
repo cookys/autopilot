@@ -36,6 +36,7 @@ export function renderHelp(ctx: PageCtx): { body: Row[]; actions: Row[] } {
       row(''),
       ...labelled(ctx, 'v74.b.help.l_why', 'v74.b.help.keys_4', {}),
       ...labelled(ctx, 'v74.b.help.l_digits', 'v74.b.help.keys_5', {}),
+      ...(ctx.v74 !== undefined && ctx.v74.todo === null ? labelled(ctx, 'v74.b.help.l_todo', 'v74.b.help.todo_off', {}) : []),
       ...labelled(ctx, 'v74.b.help.l_click', 'v74.b.help.keys_6', { fold: g.open + g.foldUp }),
       row(''),
     ],

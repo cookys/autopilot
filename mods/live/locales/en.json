@@ -828,6 +828,8 @@
   "v74.b.help.keys_5": "Digits work when the input is empty; letters need ctrl+x tab or a click on the band",
   "v74.b.help.keys_6": "Tab row and status row are clickable; title borders are not; {fold} at the far right of the status row collapses or expands",
   "v74.b.help.l_why": "Why",
+  "v74.b.help.l_todo": "Todo",
+  "v74.b.help.todo_off": "The todo source (fleet todo --json) is not wired, so a decision card does not offer `todo` and c picks nothing for it. The option appears by itself once the source answers.",
   "v74.b.help.l_digits": "Digits and letters",
   "v74.b.help.l_click": "Clickable",
   "v74.c.sec_fleet_src": "Fleet {source}",

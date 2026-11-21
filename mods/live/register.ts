@@ -81,7 +81,8 @@ import type { DecideNav } from './pages/decide'
 import { SEATS_TIMEOUT_MS, seatQuota, v74PmCounts } from './pages/now'
 import { PAGES, EXTRA_PAGES } from './pages/index'
 import { makeDecideFeed, makePmFeed, mergeDecideCards } from './v74/feeds'
-import type { CardNav, DecideCard, PmStatus, V74Ctx } from './v74/contract'
+import { offerTodo } from './v74/contract'
+import type { CardNav, DecideCard, PmStatus, TodoCard, V74Ctx } from './v74/contract'
 import { v74Keylog } from './v74/keylog'
 import { frameHeight } from './pages/frame'
 import type { PageId } from './pages/frame'
@@ -228,11 +229,12 @@ function kickV74($: EngineInterface, nowMs: number): void {
   void pmFeed.refresh(run, nowMs).then(r => { if (r) void $.ui.invalidate('ui.render') }).catch(() => {})
   void decideFeed.refresh(run, nowMs).then(r => { if (r) void $.ui.invalidate('ui.render') }).catch(() => {})
 }
+const V74_TODO: TodoCard[] | null = null // the todo source (fleet todo --json) is not wired: decision cards do not offer `待辦` (offerTodo) until it is
 async function v74CtxOf($: EngineInterface, withStore = false): Promise<V74Ctx> {
   const nav = await read($, V74_NAV)
   // The host Pane's 待決 tab stays the retired pointer. Only the band box merges the card store.
-  const decide = withStore ? mergedDecide() : decideFeed.cards()
-  return { pm: pmFeed.status(), pmFetchedMs: pmFeed.fetchedMs(), decide, todo: null, nav, keysHeld: v74KeysHeld, sendResult: v74SendResult, ages: { now: pmFeed.fetchedMs(), decide: decideFeed.fetchedMs(), fleet: fleetFeed.fetchedMs() } }
+  const decide = offerTodo(withStore ? mergedDecide() : decideFeed.cards(), V74_TODO)
+  return { pm: pmFeed.status(), pmFetchedMs: pmFeed.fetchedMs(), decide, todo: V74_TODO, nav, keysHeld: v74KeysHeld, sendResult: v74SendResult, ages: { now: pmFeed.fetchedMs(), decide: decideFeed.fetchedMs(), fleet: fleetFeed.fetchedMs() } }
 }
 // The summary other plugins read (PM G33a; fleet.ts `FleetSummary`, `v: 1`): written by the feed after each run, success or failure, never while drawing. Each row is counted
 // by the state the Fleet tab draws for it, so the band reader and the tab never disagree.
@@ -1393,6 +1395,7 @@ async function commitV74Send($: EngineInterface, st: DecideState, feed: readonly
   for (const id of Object.keys(next.sent)) if (st.sent[id] === undefined) durableClosedIds.add(id)
   const sentNow = Object.keys(next.sent).filter(id => st.sent[id] === undefined).length
   v74SendResult = { n: sentNow, left: feed.filter(c => next.sent[c.id] === undefined).length }
+  v74KeysHeld = v74KeysHeldNext(v74KeysHeld, { kind: 'sent' })
   void $.ui.invalidate('ui.render')
   await update($, DECIDE, s => ({ ...s, sent: next.sent }))
 }
@@ -1594,6 +1597,15 @@ export function v74KeysHeldAfter(was: boolean, named: string | undefined, origin
   if (!bandElement(named)) return false
   return (origin as { kind?: unknown } | undefined)?.kind === 'person' ? true : was
 }
+// r11 #2: every change of the border word goes through this one function, so the sequence open -> keys -> send -> Esc is testable without the host.
+// A send posts the [待決回覆] line to the prompt and starts a turn; the host then gives the first Esc to the turn (it stops it) and raises no focus event for it, so the pane cannot tell
+// when the prompt has the keyboard again. After a send the word therefore falls back to `ctrl+x tab` and comes back only on evidence: a key that reached the pane or a focus event of the person.
+export type V74KeysEvent = { kind: 'open' } | { kind: 'closed' } | { kind: 'sent' } | { kind: 'key'; key: KeyAction['kind'] } | { kind: 'focus'; named: string | undefined; origin: unknown }
+export function v74KeysHeldNext(was: boolean, ev: V74KeysEvent): boolean {
+  if (ev.kind === 'open' || ev.kind === 'closed' || ev.kind === 'sent') return false
+  if (ev.kind === 'key') return ev.key !== 'close' && ev.key !== 'page' ? true : was
+  return v74KeysHeldAfter(was, ev.named, ev.origin)
+}
 const bandElement = (named: string | undefined): boolean => named !== undefined && /^(tab:|card:|letter:|hotkey:|opt:|v74-note$)/.test(named)
 function markPaneOpen(): void {
   v74KeysHeld = false
@@ -1670,7 +1682,7 @@ async function frameKeyBody($: EngineInterface, k: KeyAction): Promise<void> {
     ...(k.kind === 'cursor' ? { cursorBefore, cursorAfter: cursorBefore } : {}),
   })
   const noteWas = decideLocal.textMode
-  v74KeysHeld = k.kind !== 'close' && k.kind !== 'page' ? true : v74KeysHeld
+  v74KeysHeld = v74KeysHeldNext(v74KeysHeld, { kind: 'key', key: k.kind })
   try {
     if (k.kind === 'page') { await panePagePress($, k.to as PageId); return }
     if (k.kind === 'close') {
@@ -2356,7 +2368,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     }
     // r8-3: the border word follows the keyboard. It only re-renders when the value really flips, and one tick later (two microtasks, as ringToTab does), never inside the focus event:
     // a render there remounts the tab Buttons and the host's focus lands on a card Button, which wrote the cursor back (r8-1 gate, step 22).
-    if (v74Open) { const was = v74KeysHeld; v74KeysHeld = v74KeysHeldAfter(was, named, (raw as { origin?: unknown }).origin); if (was !== v74KeysHeld) void renderLater($) }
+    if (v74Open) { const was = v74KeysHeld; v74KeysHeld = v74KeysHeldNext(was, { kind: 'focus', named, origin: (raw as { origin?: unknown }).origin }); if (was !== v74KeysHeld) void renderLater($) }
     const step = decideLocal.textMode || bandLegacy || !v74Open ? null : v74TabStep(panePage, named, (raw as { origin?: unknown }).origin)
     if (step !== null) { void frameKey($, step); return {} } // the ring stays on the current tab
     const at = v74FocusAt(raw)

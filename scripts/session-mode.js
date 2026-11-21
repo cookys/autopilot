@@ -810,11 +810,11 @@ function sweepProbe(file) {
 // file that vanished, or a failed unlink simply means the next sweep tries again.
 function unlinkIfStillExpired(file, now = Date.now(), graceMs = SWEEP_EXPIRED_AFTER_MS) {
   try {
-    withWriteLock({ storeDir: path.dirname(file), lockFile: `${file}.lock`, name: 'session-mode marker', timeoutMs: 2000 }, () => {
-      if (!sweepDead({ ...sweepProbe(file), now, graceMs })) return;
+    return withWriteLock({ storeDir: path.dirname(file), lockFile: `${file}.lock`, name: 'session-mode marker', timeoutMs: 2000 }, () => {
+      if (!sweepDead({ ...sweepProbe(file), now, graceMs })) return false;
       fs.unlinkSync(file);
+      return true;
     });
-    return true;
   } catch (_error) {
     return false;
   }

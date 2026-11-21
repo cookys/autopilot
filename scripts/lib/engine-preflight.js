@@ -204,7 +204,7 @@ function loadRuns(dir) {
 
 function authFileForRunner(runner, env) {
   if (runner === 'codex') {
-    return path.join(homeOf(env), '.codex', 'auth.json');
+    return env.CODEX_HOME ? path.join(env.CODEX_HOME, 'auth.json') : path.join(homeOf(env), '.codex', 'auth.json');
   }
   return null;
 }
@@ -352,9 +352,8 @@ function preflight({ candidates, now, sources, preferBurnMore = false, localFirs
   const fallback = (chosen && authSkipped)
     ? { from: authSkipped.runner, to: chosen.runner, reason: 'auth:missing' }
     : null;
-  if (fallback && shouldNotifyAuthMissing(authSkipped.runner, nowMs, dir)) {
-    fs.writeSync(2, `preflight: auth:missing for ${authSkipped.runner}; falling back to ${chosen.runner}\n`);
-  }
+  // notify is true at most once per runner per 15 minutes; the dispatcher prints the one stderr line.
+  if (fallback) fallback.notify = shouldNotifyAuthMissing(authSkipped.runner, nowMs, dir);
   return {
     schema: SCHEMA,
     chosen,

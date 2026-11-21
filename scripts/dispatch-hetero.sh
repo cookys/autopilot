@@ -3778,6 +3778,8 @@ else if(j.warnings.includes("all_candidates_skipped_default_order"))process.stdo
 else process.stdout.write(`engine-preflight: read ${j.table_path} generated_at=${j.generated_at}; ${j.skipped.map(x=>`skipped ${x.runner}:${x.model} (${x.reason})`).join(", ")}${j.skipped.length?"; ":""}chosen ${j.chosen.runner}:${j.chosen.model}`);
 ' "$ENGINE_PREFLIGHT_JSON" 2>/dev/null || true)"
     [ -z "$ENGINE_PREFLIGHT_LOG_LINE" ] || printf '%s\n' "$ENGINE_PREFLIGHT_LOG_LINE" >&2
+    # auth:missing fallback: the record rides in the manifest as engine_preflight.fallback {from,to,reason}; one stderr notice per runner per 15 min (the dedupe is in engine-preflight.js).
+    node -e 'const j=JSON.parse(process.argv[1]);const f=j.fallback;if(f&&f.notify)process.stderr.write(`engine-preflight: ${f.from} login missing (${f.reason}); fell back to ${f.to}\n`)' "$ENGINE_PREFLIGHT_JSON" >&2 2>/dev/null || true
     _ep_choice="$(node -e 'const j=JSON.parse(process.argv[1]);process.stdout.write(j.chosen?`${j.chosen.runner}\t${j.chosen.model}`:"")' "$ENGINE_PREFLIGHT_JSON")"
     if [ -n "$_ep_choice" ]; then
       IFS=$'\t' read -r RUNNER MODEL <<< "$_ep_choice"

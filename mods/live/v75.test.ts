@@ -4,6 +4,7 @@ import decideFx from './fixtures/v74/decide.fixture'
 import { decidePage, decideReduce, NO_NAV, previewItems, previewStale } from './pages/decide'
 import type { DecideNav } from './pages/decide'
 import { makeT } from './i18n'
+import { v75Hint } from './v75'
 import { V75_PANE_MIN_ROWS, v75BandRows, v75EscStep, v75FocusNext, v75Plan, v75ReopenAfterReload, v75ScrollRoute } from './v75'
 import type { V75BandIn } from './v75'
 import etaFx from './fixtures/v74/pool-eta.fixture'
@@ -216,4 +217,16 @@ test('spend eta: an unreadable file or another schema is the broken row, not num
   expect(poolEtaRows(null, etaNow, t).map(text).join('')).toContain('沒有來源')
   const body = renderSpend({ live: null, console: null, size: { cols: 100, rows: 30 }, t, nowMs: etaNow, poolEta: parsePoolEta(JSON.stringify(etaFx)) }).body.map(text)
   expect(body.some(x => x.includes('alpha') && x.includes('54%'))).toBe(true)
+})
+
+test('v75 x: cancels the send preview in the Pane (routeKey) and says so in the hints; it means nothing without a preview; Esc stays 取消 in the Pane', () => {
+  const st = { page: 'decide', paneFocus: true, focusedButton: false, textMode: false }
+  expect(routeKey('x', { ...st, armed: true })).toEqual({ kind: 'disarm' })
+  expect(routeKey('x', st)).toEqual({ kind: 'none' })
+  expect(routeKey('x', { ...st, page: 'now', armed: true })).toEqual({ kind: 'none' })
+  const h = (armed: boolean, stale: boolean) => v75Hint({ note: false, armed, stale, sending: false, pane: true }, t)
+  expect(h(true, false)).toBe('y 確認送出 · x 取消預覽')
+  expect(h(true, true)).toContain('x 取消預覽')
+  expect(h(false, false)).toContain('進 Pane')
+  expect(makeT('en')('v75.hint.armed')).toBe('y confirm send · x cancel preview')
 })

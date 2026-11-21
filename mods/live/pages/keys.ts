@@ -44,6 +44,7 @@ export function routeKey(key: string, st: KeyState): KeyAction {
     if (key === 'y') return st.armed === true ? { kind: 'confirm' } : { kind: 'none' } // r11 #12: y confirms the send preview and means nothing else
     if (key === 'n') return { kind: 'note' }
     if (key === 'u') return { kind: 'undo' }
+    if (key === 'x') return st.armed === true ? { kind: 'disarm' } : { kind: 'none' } // x cancels the send preview, as Esc does (a band hotkey cannot be Esc, d.ts:1391)
     if (key === 'h') return { kind: 'prev' }
     if (key === 'l') return { kind: 'next' }
     if (key === 'f') return { kind: 'fill' }

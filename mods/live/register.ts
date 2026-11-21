@@ -1589,6 +1589,17 @@ async function logBandGeometry($: EngineInterface, maxRows: number, bodyColumns:
   await $.fs.write(path, geomLines.join('\n') + '\n').catch(() => undefined)
 }
 
+// every focus move the host reports (ctrl+x tab stops, clicks, our own focus calls), next to band-geometry.log: requestId (the site), element, origin, component. The last 200 lines. D (ctrl+x tab dwell): which element is each stop.
+let focusLines: string[] | null = null
+async function logFocusStop($: EngineInterface, ev: { requestId?: unknown; component?: unknown; element?: unknown; origin?: unknown }): Promise<void> {
+  if (liveBaseSeen === null) return
+  const path = liveBaseSeen + '/band-focus.log'
+  if (focusLines === null) focusLines = ((await readText($, path)) ?? '').split('\n').filter(l => l !== '')
+  focusLines.push(JSON.stringify({ ts: await $.clock.now(), requestId: ev.requestId, component: ev.component, element: ev.element, origin: ev.origin }))
+  if (focusLines.length > 200) focusLines.splice(0, focusLines.length - 200)
+  await $.fs.write(path, focusLines.join('\n') + '\n').catch(() => undefined)
+}
+
 // the forge tab: the widest label asked of the mod below, the narrowest worth asking for, the cells the indicator keeps at least, the rows the full forge view needs
 const FORGE_LABEL_MAX = 30
 const FORGE_FULL_ROWS = 12
@@ -1711,14 +1722,8 @@ async function refocusBand($: EngineInterface): Promise<void> {
   await $.ui.focus({ requestId: ABOVE_PROMPT, key: 'v75:anchor' }).catch(() => undefined)
 }
 // The keyboard is the person's to give (d.ts: `ui.open({focus})` is a request, granted only while the prompt has the keys over an empty composer; `$.ui.focus` needs the site to hold them). So the host's own word for
-// the Pane, `isFocused` (render props and $.ui.panes()), is the truth for 'pane'; the band and the input send no event when Esc moves the keys, so a Pane that lost them is read as the prompt.
+// the Pane, `isFocused` (the Pane's render props), is the truth for 'pane'; the band and the input send no event when Esc moves the keys, so a Pane that lost them is read as the prompt.
 let v75PaneHeld = false
-const v75Ticks = async (n = 3): Promise<void> => { for (let k = 0; k < n; k++) await Promise.resolve() }
-async function v75Regrab($: EngineInterface): Promise<void> {
-  await v75Ticks()
-  try { await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: true }) } catch (_e) { /* refused: the keys stay where they are */ }
-  try { const held = (await $.ui.panes()).some(p => p.id === PANE_ID && p.isFocused === true); v75PaneSeen($, held) } catch (_e) { /* no pane list */ }
-}
 function v75PaneSeen($: EngineInterface, held: boolean): void {
   if (!v75PaneOn) { v75PaneHeld = held; return }
   const was = v75PaneHeld
@@ -1728,7 +1733,7 @@ function v75PaneSeen($: EngineInterface, held: boolean): void {
   if (held) { if (v75Focus !== 'pane') v75Focus = 'pane'; void renderLater($); return }
   // the Pane lost the keyboard: Esc (one Esc, one layer: an open preview closes and the Pane takes the keys back) or ctrl+x tab / a click (then a focus event named the band, v75Focus is already 'band')
   if (v75Focus !== 'pane') return
-  if (decideLocal.armed === true && panePage === 'decide') { void frameKey($, { kind: 'disarm' }).then(() => v75Regrab($)); return }
+  if (decideLocal.armed === true && panePage === 'decide') void frameKey($, { kind: 'disarm' }) // Esc in the Pane: the preview closes and the keys go to the input (x cancels without leaving)
   v75Focus = 'prompt'
   void renderLater($)
 }
@@ -2249,7 +2254,6 @@ export function registerLive(on: Parameters<Register>[0]): void {
         const hostOpen = await $.ui.panes().then(ps => ps.some(p => p.id === PANE_ID)).catch(() => false)
         if (v75ReopenAfterReload({ wanted, hostOpen, paneOn: v75PaneOn, open: v74Open })) { v75OpenQuiet = true; markPaneOpen() }
       }
-      if (v75PaneOn) { try { v75PaneSeen($, (await $.ui.panes()).some(p => p.id === PANE_ID && p.isFocused === true)) } catch (_e) { /* no pane list: the focus events decide */ } }
       const v75c = await v74CtxOf($)
       const v75cards = v75c.decide ?? []
       let plan = v75Plan({ maxRows: rows, pending: v75cards.length, paneWanted: v74Open, notPlaced: v75NotPlaced, locked: v75Locked })
@@ -2562,6 +2566,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const raw = e as { element?: unknown; key?: unknown; component?: string }
     const named = typeof raw.element === 'string' ? raw.element : typeof raw.key === 'string' ? raw.key : undefined
     void v74Keylog($, { handler: 'ui.focus', component: raw.component, element: named, origin: ((raw as { origin?: { kind?: unknown } }).origin?.kind as string | undefined), page: panePage, cursor: decideLocal.cursor, focusOwner: decideLocal.textMode ? 'v74-note' : 'band', noteOpen: decideLocal.textMode })
+    void logFocusStop($, { requestId: (raw as { requestId?: unknown }).requestId, component: raw.component, element: named, origin: (raw as { origin?: { kind?: unknown } }).origin?.kind })
     const v75Was = v75Focus
     v75Focus = v75FocusNext(v75Focus, { kind: 'focus', component: raw.component, named })
     // v7.5 §7.3: one Esc, one layer. A cancelled note or preview hands the keyboard back to the band, so the next Esc is the next layer
@@ -2572,13 +2577,13 @@ export function registerLive(on: Parameters<Register>[0]): void {
       return {}
     }
     if (v74EscCancelsPreview(decideLocal.armed, v74Open, panePage, named) || (v75Esc && decideLocal.armed === true && panePage === 'decide' && (named === undefined || named === '') && v75Was !== 'prompt')) {
-      void frameKey($, { kind: 'disarm' }).then(() => { if (v75Esc) void (v75Was === 'pane' ? v75Regrab($) : refocusBand($)) })
+      void frameKey($, { kind: 'disarm' }).then(() => { if (v75Esc && v75Was !== 'pane') void refocusBand($) })
       return {}
     }
     if (v75Was !== v75Focus) void renderLater($)
     // r8-3: the border word follows the keyboard. It only re-renders when the value really flips, and one tick later (two microtasks, as ringToTab does), never inside the focus event:
     // a render there remounts the tab Buttons and the host's focus lands on a card Button, which wrote the cursor back (r8-1 gate, step 22).
-    if (v74Open) { const was = v74KeysHeld; v74KeysHeld = v74KeysHeldNext(was, { kind: 'focus', named, origin: (raw as { origin?: unknown }).origin }); if (was !== v74KeysHeld) void renderLater($) }
+    if (v74Open && !v75PaneOn) { const was = v74KeysHeld; v74KeysHeld = v74KeysHeldNext(was, { kind: 'focus', named, origin: (raw as { origin?: unknown }).origin }); if (was !== v74KeysHeld) void renderLater($) }
     const step = decideLocal.textMode || bandLegacy || !v74Open ? null : v74TabStep(panePage, named, (raw as { origin?: unknown }).origin)
     if (step !== null) { void frameKey($, step); return {} } // the ring stays on the current tab
     const at = v74FocusAt(raw)
@@ -2623,7 +2628,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       await probePane($, e, tree)
       return tree
     }
-    if (v75PaneOn) v75PaneSeen($, (e.props as { isFocused?: boolean }).isFocused === true)
+    if (v75PaneOn) { const mine = (e.props as { isFocused?: boolean }).isFocused === true; v75PaneSeen($, mine); v74KeysHeld = mine } // the Pane's words follow the Pane's own isFocused only (no band render, no focus event of another element overwrites it)
     return paneTree($, e, legacy, null)
   })
 

@@ -32,7 +32,7 @@ export function V75Band(el: { Box: El; Text: El; Button?: El; Input?: El }, rows
     ...LETTERS.slice(0, nOpts).map((l, k) => hot(l, l, () => acts.onKey({ kind: 'pick', index: k }))),
     hot('n', 'n', () => acts.onKey({ kind: 'note' })),
     hot('s', 's', () => acts.onKey({ kind: 'submit' })),
-    ...(i.armed ? [hot('y', 'y', () => acts.onKey({ kind: 'confirm' })), hot('esc', 'escape', () => acts.onKey({ kind: 'disarm' }))] : []), // Esc in the band closes the preview (one Esc, one layer)
+    ...(i.armed ? [hot('y', 'y', () => acts.onKey({ kind: 'confirm' })), hot('x', 'x', () => acts.onKey({ kind: 'disarm' }))] : []), // x cancels the preview (a hotkey is one digit or one lowercase letter, d.ts:1391: the band cannot take Esc)
     // §3: in the band a digit means page N: it opens the Pane there (the band has no pages of its own)
     ...Object.entries(V74_KEY).filter(([id]) => id !== 'help').map(([id, d]) => hot('d' + d, d as string, () => acts.onPage(id))),
     ...Object.entries(V75_MOVED).map(([d, id]) => hot('m' + d, d, () => acts.onPage(id))), // the old shell's menus: r 圓桌, u 用量, p 寵物

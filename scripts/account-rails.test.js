@@ -8,11 +8,8 @@ require('./lib/test-git-env'); // drop ambient GIT_DIR & co and the account's gl
 // (covered_by) that drive it with the shim, and this file
 //   1. checks each covering suite still has the three N9 parts (a good-registry case, a broken-registry case that spawns 0,
 //      a mutation case), so deleting one cannot go unnoticed;
-//   2. RUNS every covering suite once (the per-caller drivers and mutation tables live in those suites: W1/W2/W3 in
-//      hooks/tests/dispatch-{review,author}-account-rail.test.sh and scripts/dispatch-hetero-account.test.js, W4 in
-//      scripts/account-rails-w4.test.js, W5 in scripts/eval-account-rails.test.js, P4 in scripts/lane-reopen.test.js);
-//   3. holds the one env-check reading rule against all four readers (account-state.sh, account-rail.js, eval-account.js, eval-account.sh);
-//   4. asserts that a claude child does not outlive an outer `timeout` (TERM, and -k KILL) - the dispatch-review.sh TERM comparison counts real claude processes only (wrapper residual documented below),
+//   2. holds the one env-check reading rule against all four readers (account-state.sh, account-rail.js, eval-account.js, eval-account.sh);
+//   3. asserts that a claude child does not outlive an outer `timeout` (TERM, and -k KILL) - the dispatch-review.sh TERM comparison counts real claude processes only (wrapper residual documented below),
 //      and that a TERM aimed at a rail itself (4b) leaves no claude behind, with the cc-shim exit codes (0, N, 124/137) carried through;
 //   5. proves the test/registry isolation: hooks/tests/lib.sh, run.sh and affected-suites.js pin AUTOPILOT_ACCOUNTS_DIR to a path
 //      that does not exist, and a broken registry pointed at a real suite goes red only when the isolation is switched off.
@@ -142,38 +139,6 @@ test('N9 shape: the check itself rejects a suite that lost one of the parts (neg
   // a caller that is named only in a comment of its covering suite is reported
   const site = { file: 'scripts/zz-not-driven.sh', covered_by: [rel] };
   assert.ok(callerProblems(site).some((x) => /only in comments/.test(x)));
-});
-
-function runSuite(rel, env) {
-  return new Promise((resolve) => {
-    const isSh = rel.endsWith('.sh');
-    const child = spawn(isSh ? 'bash' : process.execPath, isSh ? [path.join(REPO, rel)] : ['--test', path.join(REPO, rel)], {
-      cwd: REPO, env, stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    let out = '';
-    child.stdout.on('data', (d) => { out += d; });
-    child.stderr.on('data', (d) => { out += d; });
-    const t = setTimeout(() => child.kill('SIGKILL'), 600000);
-    child.on('close', (code) => { clearTimeout(t); resolve({ rel, code, tail: out.split('\n').slice(-25).join('\n') }); });
-  });
-}
-
-test('N9 run: every covering suite is green (good registry -> alias token at the shim; broken -> spawn 0; mutations red)', { timeout: 1200000 }, async () => {
-  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'g37-rails-'));
-  const env = Object.assign({}, process.env, {
-    AUTOPILOT_ACCOUNTS_DIR: path.join(sandbox, 'no-accounts'), // a suite that needs a registry builds its own fixture
-    ENGINE_CAPABILITY_DIR: path.join(sandbox, 'cap'), AUTOPILOT_STRIKE_WRITER: 'off',
-  });
-  delete env.AUTOPILOT_SESSION_ID;
-  delete env.AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR;
-  const queue = RAIL_SUITES.slice();
-  const results = [];
-  const worker = async () => { for (let s = queue.shift(); s; s = queue.shift()) results.push(await runSuite(s, env)); };
-  await Promise.all([worker(), worker()]); // two at a time: the longest suites (hetero, w4) overlap, nothing more
-  fs.rmSync(sandbox, { recursive: true, force: true });
-  const bad = results.filter((r) => r.code !== 0);
-  assert.deepStrictEqual(bad.map((r) => r.rel), [], bad.map((r) => `--- ${r.rel} rc=${r.code}\n${r.tail}`).join('\n'));
-  assert.strictEqual(results.length, RAIL_SUITES.length);
 });
 
 // ---------------------------------------------------------------- 2b: run-d0gate-v2-campaign.js (A12): refuses, never falls back

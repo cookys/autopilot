@@ -1117,17 +1117,6 @@ assert_contains "$OUT" "active session-mode=l6 requires a sealed campaign strict
 assert_eq "false" "$([ -e "$TEST_TMP/captured_prompt.txt" ] && echo true || echo false)" \
   "bare dispatch under live L6 spawns no runner"
 
-# The marker-to-campaign admission bridge is a second, independent gate. Its
-# dedicated strict fixture exercises the caller's own marker, and (with no
-# CLAUDE_CODE_SESSION_ID) a foreign marker with no routing, which must still
-# fail before the runner even though 12a now bypasses only the session-mode
-# gate for a bounded non-Mission campaign.
-BRIDGE_OUT="$(bash "$REPO_ROOT/hooks/tests/mission-routing-campaign-bridge.test.sh" 2>&1)"; BRIDGE_EXIT=$?
-assert_eq "0" "$BRIDGE_EXIT" \
-  "strict campaign with stale-digest marker remains refused by marker bridge: $BRIDGE_OUT"
-assert_contains "$BRIDGE_OUT" "PASS [mission-routing-campaign-bridge]" \
-  "dedicated marker bridge oracle remains green"
-
 # 12g. A malformed marker in the authoritative namespace fails closed.
 MALFORMED_SESSION_MODE_DIR="$TEST_TMP/campaign-session-mode-malformed"
 mkdir -p "$MALFORMED_SESSION_MODE_DIR"

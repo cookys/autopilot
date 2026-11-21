@@ -584,4 +584,13 @@ PAYLOAD_NONPM='{"tool_name":"Agent","tool_input":{"model":"haiku","subagent_type
 FLEET_BIN="$FLEET_STUB_OPEN" run_hook dispatch-model-guard.js "$PAYLOAD_NONPM"
 assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "non-pm-console allows without id"
 
+# 8. undetermined PM seat on Agent -> allows and prints single warning line to stderr
+UNDET_DIR="$TEST_TMP/undetermined-seat"
+mkdir -p "$UNDET_DIR"
+PAYLOAD_UNDET='{"tool_name":"Agent","tool_input":{"model":"haiku","subagent_type":"general-purpose","prompt":"Engine: haiku\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$UNDET_DIR"'"}'
+FLEET_BIN="/nonexistent/fleet-binary-missing-check" run_hook dispatch-model-guard.js "$PAYLOAD_UNDET"
+assert_eq 0 "$__RUN_EXIT" "pm-seat-undetermined-exit"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "pm-seat-undetermined allows"
+assert_contains "$__RUN_STDERR" "pm-console: cannot determine PM seat (no console.json mode, no fleet address)" "pm-seat-undetermined logs warning"
+
 finalize_test

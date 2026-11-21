@@ -7,7 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const { isPmConsole } = require('./_shared/pm-console.js');
+const { isPmConsole, pmConsoleStatus } = require('./_shared/pm-console.js');
 const {
   DISPATCH_SIZE_DENY_REASON,
   DISPATCH_PLAN_DENY_REASON,
@@ -134,6 +134,26 @@ test('pm-console: walks up to first .git and requires autopilot.console/1 + mode
     fs.writeFileSync(path.join(fx.nonProgramRepo, '.claude', 'console.json'), '{bad');
     assert.equal(isPmConsole(fx.nonProgramRepo), false);
   } finally {
+    fx.cleanup();
+  }
+});
+
+test('pm-console: isPmConsole writes nothing to stderr when seat is undetermined', () => {
+  const fx = mkPmFixture();
+  const origWrite = process.stderr.write.bind(process.stderr);
+  let captured = '';
+  process.stderr.write = (chunk, ...args) => {
+    captured += String(chunk);
+    return origWrite(chunk, ...args);
+  };
+  try {
+    assert.equal(isPmConsole(fx.noGitDir), false);
+    assert.equal(captured, '');
+    assert.deepEqual(pmConsoleStatus(fx.noGitDir), { pm: false, undetermined: true });
+    assert.deepEqual(pmConsoleStatus(fx.pmRepo), { pm: true, undetermined: false });
+    assert.deepEqual(pmConsoleStatus(fx.nonProgramRepo), { pm: false, undetermined: false });
+  } finally {
+    process.stderr.write = origWrite;
     fx.cleanup();
   }
 });

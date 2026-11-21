@@ -46,7 +46,7 @@ const {
   costLineFor,
 } = require('./lib/brief-header-template.js');
 const { BRIEF_HEAD_WINDOW, headLines, findHeadMatch } = require('./lib/brief-head.js');
-const { isPmConsole } = require('./_shared/pm-console.js');
+const { isPmConsole, pmConsoleStatus } = require('./_shared/pm-console.js');
 const { findTaskId, checkTaskOpen } = require('../scripts/lib/fleet-task-ref.js');
 const { resolveFleetSeat } = require('./_shared/fleet-seat.js');
 const { userRuntimeBase, ensurePrivateDir } = require('../scripts/lib/runtime-paths.js');
@@ -266,7 +266,20 @@ function engineTokenFromPrompt(prompt) {
   return m ? m[1] : '';
 }
 
+let pmSeatWarned = false;
+
+function warnIfPmSeatUndetermined(input) {
+  if (pmSeatWarned) return;
+  if (String((input && input.tool_name) || '') !== 'Agent') return;
+  const status = pmConsoleStatus(input);
+  if (status.undetermined) {
+    pmSeatWarned = true;
+    process.stderr.write('pm-console: cannot determine PM seat (no console.json mode, no fleet address)\n');
+  }
+}
+
 function checkPmFleetTask(input, toolInput, prompt) {
+  warnIfPmSeatUndetermined(input);
   if (!isPmConsole(input)) return;
   const subagentType = String(toolInput.subagent_type || '').trim();
   if (subagentType === 'Explore' || subagentType === 'Plan') return;

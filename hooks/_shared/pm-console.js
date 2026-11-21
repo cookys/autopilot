@@ -47,7 +47,7 @@ function resolveStartDir(cwdOrInput) {
   return null;
 }
 
-function isPmConsole(cwdOrInput) {
+function pmConsoleStatus(cwdOrInput) {
   let modeKnown = false;
   try {
     const startDir = resolveStartDir(cwdOrInput);
@@ -56,7 +56,7 @@ function isPmConsole(cwdOrInput) {
       if (hasGitMarker(dir)) {
         try {
           const text = fs.readFileSync(path.join(dir, '.claude', 'console.json'), 'utf8');
-          if (consoleModeOf(text)) return true;
+          if (consoleModeOf(text)) return { pm: true, undetermined: false };
           const raw = JSON.parse(text);
           modeKnown = Boolean(raw && typeof raw.mode === 'string' && raw.mode.trim());
         } catch { /* no usable mode */ }
@@ -69,13 +69,17 @@ function isPmConsole(cwdOrInput) {
   } catch { /* no usable mode */ }
   let seat = '';
   try { seat = resolveFleetSeat(cwdOrInput); } catch { /* no usable address */ }
-  if (seat) return seat === 'pm';
-  if (!modeKnown) process.stderr.write('pm-console: cannot determine PM seat (no console.json mode, no fleet address)\n');
-  return false;
+  if (seat) return { pm: seat === 'pm', undetermined: false };
+  return { pm: false, undetermined: !modeKnown };
+}
+
+function isPmConsole(cwdOrInput) {
+  return pmConsoleStatus(cwdOrInput).pm;
 }
 
 module.exports = {
   isPmConsole,
+  pmConsoleStatus,
   consoleModeOf,
   CONSOLE_SCHEMA,
   CONSOLE_MODE,

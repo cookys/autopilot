@@ -3474,6 +3474,10 @@ if [ "$RUNNER" = "local" ]; then
   apply_runner_local
 fi
 
+if [ "$LOCAL_RUNNER" -eq 1 ] && [ "$EFFORT_EXPLICIT" -eq 1 ] && { [ "$EFFORT" = "high" ] || [ "$EFFORT" = "max" ]; }; then
+  die_precondition "--runner local supports --effort low|medium|xhigh (got: $EFFORT)"
+fi
+
 case "$EFFORT" in
   default|low|medium|high|xhigh|max) ;;
   *) die_precondition "--effort must be one of default|low|medium|high|xhigh|max (got: $EFFORT)" ;;
@@ -3493,6 +3497,7 @@ fi
 # is not this change's job. `default` sends nothing.
 CLAUDE_EFFORT_ARG=""
 if [ "$EFFORT_EXPLICIT" -eq 1 ] && [ "$EFFORT" != "default" ]; then CLAUDE_EFFORT_ARG="$EFFORT"; fi
+if [ "$LOCAL_RUNNER" -eq 1 ] && [ "$EFFORT_EXPLICIT" -eq 0 ]; then CLAUDE_EFFORT_ARG="medium"; fi
 # kimi has no effort flag: kimi-code reads KIMI_MODEL_THINKING_EFFORT (low|high|max), and without it runs
 # config.toml's default_effort (max) whatever tier the seat declares (peer report 2026-10-24: 21 exam requests
 # for a `high` seat all went out as max). Sent only for an EXPLICIT --effort (the xhigh script default is not a
@@ -3537,6 +3542,8 @@ _impl_role="${PACE_ROLE:-${AUTOPILOT_DISPATCH_ROLE:-implementer}}"
 if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_SUPPLIED" -eq 0 ] && [ "$RUNNER" = "auto" ] && [ "$STRICT_CONTRACT" -eq 0 ] \
    && [ -z "${ENGINE_CHOICE_JSON:-}" ] && [ -z "${AUTOPILOT_QUALIFICATION_OVERRIDE:-}" ] \
    && [ "$_impl_role" = "implementer" ] && [ -z "${AUTOPILOT_LOCAL_FALLBACK_PRESET:-}" ]; then
+  LOCAL_SLOT_FLEET_TASK_RAW="$(awk '/^[[:space:]]*Fleet-Task:/ { sub(/^[[:space:]]*Fleet-Task:[[:space:]]*/, ""); sub(/[[:space:]]*$/, ""); print; exit }' "$PROMPT_FILE")"
+  export LOCAL_SLOT_FLEET_TASK_RAW
   _slot_line="$(node "$SELF_DIR/lib/local-impl-slot.js" --prompt-file "$PROMPT_FILE" --cwd "$(pwd)")"
   _slot_parsed="$(node -e 'let o; try{o=JSON.parse(process.argv[1]);}catch{o={choose:false,reason:"no_free_slot",detail:"lease_query_failed:malformed"};} const fb={reason:o.reason||"no_free_slot",detail:String(o.detail||"")}; if(o.family==="glm"||o.local_fallback_from) Object.assign(fb,{family:o.family||"glm",endpoint:o.endpoint||"glm_local",local_fallback_from:o.local_fallback_from||null}); console.log(o.choose?"choose":"fallback"); console.log(JSON.stringify(o.local_lease||null)); console.log(JSON.stringify(o.local_slots||null)); console.log(o.lease_url||""); console.log(o.lease_token_env||""); console.log(JSON.stringify(fb));' "$_slot_line")"
   _slot_kind="$(printf '%s\n' "$_slot_parsed" | sed -n '1p')"
@@ -3547,6 +3554,10 @@ if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_S
     LOCAL_LEASE_GRANTED=1
     LOCAL_LEASE_URL="$(printf '%s\n' "$_slot_parsed" | sed -n '4p')"
     LOCAL_LEASE_TOKEN_ENV="$(printf '%s\n' "$_slot_parsed" | sed -n '5p')"
+    if [ "$EFFORT_EXPLICIT" -eq 1 ] && { [ "$EFFORT" = "high" ] || [ "$EFFORT" = "max" ]; }; then
+      release_local_lease || true
+      die_precondition "--runner local supports --effort low|medium|xhigh (got: $EFFORT)"
+    fi
     _slot_choice="$(printf '%s\n' "$_slot_parsed" | sed -n '6p')"
     _slot_family="$(node -e 'const o=JSON.parse(process.argv[1]); process.stdout.write(o.family||"qwen")' "$_slot_choice")"
     ENDPOINT="$(node -e 'const o=JSON.parse(process.argv[1]); process.stdout.write(o.endpoint||"qwen_local")' "$_slot_choice")"
@@ -3559,6 +3570,7 @@ if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_S
       local_lease_heartbeat_loop >/dev/null 2>&1 & LOCAL_LEASE_HEARTBEAT_PID=$!
       RUNNER="local"
       MODEL="$_slot_family"
+      if [ "$EFFORT_EXPLICIT" -eq 0 ]; then CLAUDE_EFFORT_ARG="medium"; fi
       ENDPOINT_SUPPLIED=1
       IMPLICIT_LOCAL_DEFAULT=1
       export IMPLICIT_LOCAL_DEFAULT
@@ -3574,6 +3586,7 @@ if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_S
     LOCAL_FALLBACK_JSON="$(printf '%s\n' "$_slot_parsed" | sed -n '6p')"
     LOCAL_SLOTS_JSON=null
   fi
+  unset LOCAL_SLOT_FLEET_TASK_RAW
   unset _slot_line _slot_parsed _slot_kind _lease_json _gate_msg _gate_rc
 fi
 unset _impl_role

@@ -19,6 +19,12 @@ const { configPath } = require('./config-path');
 const DEFAULT_BYTES = 400000;
 const HTTP_TIMEOUT_MS = 2000;
 
+function childEnv(env) {
+  const result = { ...process.env, ...env };
+  delete result.AUTOPILOT_TOKEN_SEAT;
+  return result;
+}
+
 function readConfig(env) {
   const file = configPath({ env });
   try {
@@ -58,7 +64,7 @@ function contextBytes(promptFile, cwd) {
 
 function endpointInfo(env, endpoint = 'qwen_local') {
   const r = spawnSync('bash', [path.join(__dirname, '..', 'resolve-endpoint.sh'), endpoint], {
-    env: { ...process.env, ...env }, encoding: 'utf8', timeout: 15000,
+    env: childEnv(env), encoding: 'utf8', timeout: 15000,
   });
   const line = String(r.stdout || '').split('\n').find((l) => l.startsWith('{'));
   if (!line) return { ready: false, baseUrl: '', tokenEnv: '' };
@@ -98,18 +104,35 @@ async function acquireLocalLease(opts = {}) {
   const info = opts.endpoint || endpointInfo(env);
   const base = leaseUrl(info.baseUrl);
   const token = info.tokenEnv && env[info.tokenEnv] ? String(env[info.tokenEnv]) : '';
-  const fail = (detail, status = null) => ({ choose: false, reason: 'no_free_slot', detail, local_slots: null,
+  const fail = (detail, status = null, reason = 'no_free_slot') => ({ choose: false, reason, detail, local_slots: null,
     local_lease: { id: null, granted: false, status, heartbeats: 0, released: false, detail } });
   if (!info.ready || !base || !token) return fail('lease_query_failed:unreachable');
   const parsedTtl = Number.parseInt(env.AUTOPILOT_LOCAL_LEASE_TTL_S || '180', 10);
   const ttl = Number.isInteger(parsedTtl) && parsedTtl > 0 ? parsedTtl : 180;
   const body = { model: opts.family || 'qwen', ...(opts.backend ? { backend: opts.backend } : {}), est_context_tokens: 8192, ttl_s: ttl };
-  const fleetTask = env.AUTOPILOT_FLEET_TASK || env.HETERO_FLEET_TASK_ID;
-  if (fleetTask) body.fleet_task = fleetTask;
+  const fleetTask = env.LOCAL_SLOT_FLEET_TASK_RAW !== undefined
+    ? String(env.LOCAL_SLOT_FLEET_TASK_RAW).trim()
+    : String(env.AUTOPILOT_FLEET_TASK || env.HETERO_FLEET_TASK_ID || '').trim();
+  if (!fleetTask || fleetTask === 'none') return fail('fleet_task_missing', null, 'fleet_task_missing');
+  if (!/^[0-9A-HJKMNP-TV-Z]{26}$/.test(fleetTask)) {
+    process.stderr.write(`dispatch-hetero: local slot skipped: Fleet-Task '${fleetTask}' is not a 26-char ULID (gateway requires it); write the full task id in the brief\n`);
+    return fail(`fleet_task=${fleetTask}`, null, 'fleet_task_invalid');
+  }
+  body.fleet_task = fleetTask;
   const res = await leaseRequest(base, 'POST', token, JSON.stringify(body));
   if (res.error) return fail(`lease_query_failed:${res.error}`);
   if (res.status === 429 || res.status === 409) return fail(res.status === 429 ? 'lease_429' : 'lease_409', res.status);
-  if (res.status !== 201) return fail(`lease_query_failed:http_${Number.isInteger(res.status) ? res.status : 'unknown'}`, res.status || null);
+  if (res.status !== 201) {
+    let message = '';
+    try {
+      const doc = JSON.parse(res.body);
+      const value = doc && (typeof doc.error === 'string' ? doc.error
+        : doc.error && typeof doc.error.message === 'string' ? doc.error.message
+          : doc.message || doc.detail);
+      if (typeof value === 'string') message = value.slice(0, 200);
+    } catch { /* response body may not be JSON */ }
+    return fail(`lease_query_failed:http_${Number.isInteger(res.status) ? res.status : 'unknown'}${message ? `:${message}` : ''}`, res.status || null);
+  }
   let doc; try { doc = JSON.parse(res.body); } catch { return fail('lease_query_failed:malformed', res.status); }
   if (!doc || typeof doc.lease_id !== 'string' || !doc.lease_id.trim()) return fail('lease_query_failed:malformed', res.status);
   return { choose: true, local_slots: null, local_lease: { id: doc.lease_id, granted: true, status: res.status, heartbeats: 0, released: false, detail: null }, lease_url: base, lease_token_env: info.tokenEnv };
@@ -220,7 +243,7 @@ function interpretPayload(o, source) {
 
 function slotsFromCmd(cmd, env) {
   const r = spawnSync('timeout', ['--signal=KILL', '3', 'bash', '-c', cmd], {
-    env: { ...process.env, ...env }, encoding: 'utf8', timeout: 5000,
+    env: childEnv(env), encoding: 'utf8', timeout: 5000,
   });
   if (r.error || r.signal || r.status === 124 || r.status === 137 || r.status == null) return queryFailed('cmd', 'timeout');
   if (r.status !== 0) return queryFailed('cmd', 'unreachable');

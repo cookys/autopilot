@@ -1348,7 +1348,10 @@ for (const cmd of RMVAR_DENY) {
     const r = run(cmd);
     assert.strictEqual(r.deny, true, r.reason);
     assert.match(r.reason, /rm-var-target/);
-    assert.match(r.reason, /literal path|trash/);
+    assert.doesNotMatch(r.reason, /trash/i);
+    assert.doesNotMatch(r.reason, /mv /);
+    assert.match(r.reason, /literal path/);
+    assert.match(r.reason, /cargo clean/);
   });
 }
 

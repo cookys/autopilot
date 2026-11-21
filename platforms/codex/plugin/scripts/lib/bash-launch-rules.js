@@ -1190,6 +1190,8 @@ function detectBareLsUnguarded(cmd) {
 // a backtick. The deletion then depends on state the reader of the command cannot see. Rules run on EXECUTABLE
 // text: quoted-heredoc bodies, comments, single-quoted and ANSI-C words are inert and never count; `$(…)` bodies,
 // `bash -c` strings and function-less segments are scanned like any other segment. Non-recursive `rm $F` passes.
+// The advice never says to mv a target into a trash dir: moving frees no disk. A hangar sweeper clears scratchpad trash
+// dirs, but that is a last line of defence, not a normal way to delete.
 function wordExpands(raw) {
   // Drop what the shell never expands: `\$`, `\``, single-quoted spans, ANSI-C `$'…'`; what is left is live text.
   const live = raw.replace(/\\[\s\S]/g, '').replace(/\$'[^']*'/g, '').replace(/'[^']*'/g, '');
@@ -1255,7 +1257,8 @@ function detectRecursiveRmVarUnguarded(cmd) {
       return {
         rule: 'rm-var-target',
         why: `recursive rm with the expanding target ${bad} (\`$VAR\`, \`\${VAR}\`, \`$(…)\` or a backtick): what it deletes depends on state the command does not show. `
-          + 'Use a literal path, or `mv` the directory into a trash dir (e.g. `mv x "$Q/trash/"`; a $VAR in a mv is fine). '
+          + 'Expand the target to a literal path, check it lies under the scratchpad or a repo build directory, then remove that literal path; '
+          + 'for a cargo project use `cargo clean` or one shared CARGO_TARGET_DIR across worktrees. '
           + 'Relax with AUTOPILOT_BASH_GUARD_RMVAR_MODE=warn|off (or depth0_delegate_gate.rm_var_target in ~/.autopilot/config.json)',
       };
     }

@@ -16,6 +16,9 @@ const home = path.join(root, 'home');
 const bin = path.join(root, 'bin');
 fs.mkdirSync(home, { recursive: true });
 fs.mkdirSync(bin, { recursive: true });
+// The pre-dispatch login probe needs a codex auth file in the fake HOME; its content is never read.
+fs.mkdirSync(path.join(home, '.codex'), { recursive: true });
+fs.writeFileSync(path.join(home, '.codex', 'auth.json'), 'x');
 
 const lib = path.join(__dirname, 'lib', 'engine-preflight.js');
 const NOW = Date.parse('2026-11-20T00:00:00.000Z');

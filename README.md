@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/version-3.0.0--alpha.6-E8A838?style=flat-square" alt="v3.0.0-alpha.6">
   <img src="https://img.shields.io/badge/skills-31-4A90D9?style=flat-square" alt="31 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
-  <img src="https://img.shields.io/badge/hooks-58-6B8E6B?style=flat-square" alt="58 Hooks">
+  <img src="https://img.shields.io/badge/hooks-59-6B8E6B?style=flat-square" alt="59 Hooks">
   <img src="https://img.shields.io/badge/dependencies-zero-A8B5A0?style=flat-square" alt="Zero Dependencies">
   <img src="https://img.shields.io/badge/license-MIT-D4A5A5?style=flat-square" alt="MIT License">
 </p>
@@ -51,7 +51,7 @@ Claude Code is still the most complete host. Autopilot makes AI coding agents **
 - **Catches the "done" that isn't** — a no-stub/no-TODO scan, your tests, and a real code review, run in the quality gate before you merge (and in the optional pre-push hook above).
 - **Remembers, so your repo doesn't rot** — captures the lessons, tracks the project, tells you what to do next, and adapts to your repo from a single markdown file in `.claude/`.
 
-It ships first as a Claude Code plugin — **31 skills, 3 methodology agents, 58 hooks (39 default-on, 19 opt-in), zero dependencies** — and keeps the same methodology portable where other harnesses expose compatible skill, agent, or plugin surfaces. It works fully on its own, and also plays nicely with the [`superpowers`](docs/guide/coexistence.md) plugin if you have it.
+It ships first as a Claude Code plugin — **31 skills, 3 methodology agents, 59 hooks (40 default-on, 19 opt-in), zero dependencies** — and keeps the same methodology portable where other harnesses expose compatible skill, agent, or plugin surfaces. It works fully on its own, and also plays nicely with the [`superpowers`](docs/guide/coexistence.md) plugin if you have it.
 
 > This README was written by Claude and adversarially reviewed by GPT-5.5 and Gemini through Autopilot's own second-engine review flow.
 

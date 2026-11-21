@@ -50,6 +50,17 @@
   "entries": [
     {
       "kind": "env",
+      "audience": "user",
+      "group": "Hook switches",
+      "doc": "hooks/README.md",
+      "name": "AUTOPILOT_BASH_TEST_TIMEOUT",
+      "default": "1",
+      "readers": ["hooks/bash-test-timeout-guard.js"],
+      "relates": [],
+      "note": "Set to 0 to disable the PreToolUse Bash test/check timeout-prefix guard (bash-test-timeout-guard)."
+    },
+    {
+      "kind": "env",
       "audience": "internal",
       "doc": "references/hetero-dispatch.md",
       "name": "AUTOPILOT_CLAUDE_HOME_EXCEPTION",

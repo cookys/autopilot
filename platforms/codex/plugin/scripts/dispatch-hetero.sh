@@ -483,6 +483,7 @@ RUNNER="auto"
 PACE_ROLE=""
 ENGINE_CHOICE_JSON=""
 PACE_CHOICE_JSON=""
+ENGINE_PREFLIGHT_JSON=""
 EFFORT="xhigh"
 EFFORT_EXPLICIT=0
 ENDPOINT=""          # optional named endpoint (cc-shim only) → resolve-endpoint.sh
@@ -2550,6 +2551,7 @@ process.stdout.write([policy, re, rf, rr, ep].map(clean).join("|"));
   local fb_demoted_json="[]"
   if [ -z "$engine" ] || [ -z "$effort" ] || [ -z "$runner" ]; then
     local pick_parsed=""
+    pick_errf="$(mktemp -t dispatch-hetero-fb-preflight-XXXXXX)" || return 1
     pick_parsed="$(node -e '
 const sf = require(process.argv[1]);
 const plan = sf.implementerFallbackPlan({
@@ -2558,11 +2560,19 @@ const plan = sf.implementerFallbackPlan({
   failedEndpoint: process.argv[4],
 });
 const gate = require(process.argv[6]);
-const rung = plan.chain.find((r) => gate.check({ runner: r.runner, model: r.model, endpoint: r.endpoint, cwd: process.cwd(), files: [process.argv[5]] }).allowed);
+const eligible = plan.chain.filter((r) => gate.check({ runner: r.runner, model: r.model, endpoint: r.endpoint, cwd: process.cwd(), files: [process.argv[5]] }).allowed);
+if (!eligible.length) process.exit(1);
+const ep = require(process.argv[7]);
+const pre = ep.preflight({ candidates: eligible, fallbackOnAllSkipped: true, preferBurnMore: true });
+const rung = eligible.find((r) => r.runner === pre.chosen.runner && r.model === pre.chosen.model);
 if (!rung) process.exit(1);
-process.stdout.write([rung.model, rung.effort, rung.runner, rung.endpoint || "", JSON.stringify(plan.demoted || [])].join("|"));
-' "$SELF_DIR/lib/seat-fallback.js" "$cur_runner" "${MODEL:-}" "${ENDPOINT:-}" "${VISION_PROMPT_FILE:-$PROMPT_FILE}" "$SELF_DIR/lib/cn-model-dispatch-gate.js" 2>/dev/null)" || return 1
-    IFS='|' read -r engine effort runner target_endpoint fb_demoted_json <<< "$pick_parsed"
+process.stdout.write([rung.model, rung.effort, rung.runner, rung.endpoint || "", JSON.stringify(plan.demoted || []), JSON.stringify(pre)].join("|"));
+' "$SELF_DIR/lib/seat-fallback.js" "$cur_runner" "${MODEL:-}" "${ENDPOINT:-}" "${VISION_PROMPT_FILE:-$PROMPT_FILE}" "$SELF_DIR/lib/cn-model-dispatch-gate.js" "$SELF_DIR/lib/engine-preflight.js" 2>"$pick_errf")" || { rm -f "$pick_errf"; return 1; }
+    ENGINE_PREFLIGHT_LOG_LINE="$(cat "$pick_errf")"
+    rm -f "$pick_errf"
+    IFS='|' read -r engine effort runner target_endpoint fb_demoted_json ENGINE_PREFLIGHT_JSON <<< "$pick_parsed"
+    ENGINE_PREFLIGHT_LOG_LINE="$(node -e 'const j=JSON.parse(process.argv[1]);const w=j.warnings.find(x=>x.startsWith("capacity_table_"));if(w)process.stdout.write(`engine-preflight: capacity table ${w==="capacity_table_stale"?"stale":"missing"}, using default order`);else process.stdout.write(`engine-preflight: read ${j.table_path} generated_at=${j.generated_at}; ${j.skipped.map(x=>`skipped ${x.runner}:${x.model} (${x.reason})`).join(", ")}${j.skipped.length?"; ":""}chosen ${j.chosen.runner}:${j.chosen.model}`)' "$ENGINE_PREFLIGHT_JSON" 2>/dev/null || true)"
+    [ -z "$ENGINE_PREFLIGHT_LOG_LINE" ] || echo "$ENGINE_PREFLIGHT_LOG_LINE" >&2
   fi
   [ -n "$engine" ] && [ -n "$effort" ] && [ -n "$runner" ] || return 1
   case "$runner" in
@@ -2943,7 +2953,11 @@ write_manifest() {
       "$(declare -F manifest_session_id_json >/dev/null 2>&1 && manifest_session_id_json || printf null)" \
       "$(declare -F manifest_child_session_json >/dev/null 2>&1 && manifest_child_session_json || printf null), \"local_fallback\": ${LOCAL_FALLBACK_JSON:-null}, \"local_slots\": ${LOCAL_SLOTS_JSON:-null}" \
       "$(target_precommit_json)" > "$tmp"
-  } 2>/dev/null && mv -f "$tmp" "$MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
+  } 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
+  if [ -n "${ENGINE_PREFLIGHT_JSON:-}" ]; then
+    node -e 'const fs=require("fs"),f=process.argv[1],v=JSON.parse(process.argv[2]);const j=JSON.parse(fs.readFileSync(f,"utf8"));j.engine_preflight=v;fs.writeFileSync(f,JSON.stringify(j)+"\n")' "$tmp" "$ENGINE_PREFLIGHT_JSON" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
+  fi
+  mv -f "$tmp" "$MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
   return 0
 }
 
@@ -3460,6 +3474,38 @@ if [ -n "$_ps_parsed" ]; then
     [ -n "${_ps_effort:-}" ] && EFFORT="$_ps_effort"
     unset _ps_effort
   fi
+fi
+# Capacity admission runs only for implicit selections. Keep pace-select's
+# chosen seat first, then its already-ranked known candidates as fallbacks.
+if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_SUPPLIED" -eq 0 ] \
+   && [ "$STRICT_CONTRACT" -eq 0 ] && { [ -n "${ENGINE_CHOICE_JSON:-}" ] || [ -n "${AUTOPILOT_ENGINE_PREFLIGHT_CANDIDATES:-}" ]; } && [ "$RUNNER" != "local" ]; then
+  _ep_candidates="${AUTOPILOT_ENGINE_PREFLIGHT_CANDIDATES:-}"
+  if [ -z "$_ep_candidates" ]; then _ep_candidates="$(node -e '
+const c=JSON.parse(process.argv[1]); const out=[];
+for(const x of [c,...(c.candidates||[])]){if(!x||!x.runner||!x.model||x.reason)continue; const endpoint=x.endpoint||""; if(!out.some(y=>y.runner===x.runner&&y.model===x.model))out.push({runner:x.runner,model:x.model,endpoint});}
+process.stdout.write(JSON.stringify(out));
+' "$ENGINE_CHOICE_JSON" 2>/dev/null || printf '[]')"; fi
+  _ep_options=(--fallback-on-all-skipped)
+  [ "${PACE_ROLE:-implementer}" != "implementer" ] || _ep_options+=(--prefer-burn-more)
+  _ep_json="$(node "$SELF_DIR/lib/engine-preflight.js" "${_ep_options[@]}" --candidates-json "$_ep_candidates" 2>/dev/null)" || _ep_json=""
+  if [ -n "$_ep_json" ]; then
+    ENGINE_PREFLIGHT_JSON="$_ep_json"
+    ENGINE_PREFLIGHT_LOG_LINE="$(node -e '
+const j=JSON.parse(process.argv[1]);
+const warning=j.warnings.find(x=>x.startsWith("capacity_table_"));
+if(warning)process.stdout.write(`engine-preflight: capacity table ${warning==="capacity_table_stale"?"stale":"missing"}, using default order`);
+else if(j.warnings.includes("all_candidates_skipped_default_order"))process.stdout.write(`engine-preflight: every candidate skipped, using default choice; chosen ${j.chosen.runner}:${j.chosen.model}`);
+else process.stdout.write(`engine-preflight: read ${j.table_path} generated_at=${j.generated_at}; ${j.skipped.map(x=>`skipped ${x.runner}:${x.model} (${x.reason})`).join(", ")}${j.skipped.length?"; ":""}chosen ${j.chosen.runner}:${j.chosen.model}`);
+' "$ENGINE_PREFLIGHT_JSON" 2>/dev/null || true)"
+    [ -z "$ENGINE_PREFLIGHT_LOG_LINE" ] || printf '%s\n' "$ENGINE_PREFLIGHT_LOG_LINE" >&2
+    _ep_choice="$(node -e 'const j=JSON.parse(process.argv[1]);process.stdout.write(j.chosen?`${j.chosen.runner}\t${j.chosen.model}`:"")' "$ENGINE_PREFLIGHT_JSON")"
+    if [ -n "$_ep_choice" ]; then
+      IFS=$'\t' read -r RUNNER MODEL <<< "$_ep_choice"
+      _ep_meta="$(node -e 'try{const xs=JSON.parse(process.argv[1]);const x=xs.find(y=>y.runner===process.argv[2]&&y.model===process.argv[3]);process.stdout.write(x?.endpoint||"")}catch{}' "$_ep_candidates" "$RUNNER" "$MODEL")"
+      [ -z "$_ep_meta" ] || ENDPOINT="$_ep_meta"
+    fi
+  fi
+  unset _ep_candidates _ep_options _ep_json _ep_choice _ep_meta
 fi
 # Saved before skill-pack / scaffold prepend text, which would hide image magic bytes.
 VISION_PROMPT_FILE="$PROMPT_FILE"
@@ -5188,6 +5234,7 @@ WT_PENDING_RECORD=""
 [ -n "$WT_BUDGET_LOCK_FD" ] && exec {WT_BUDGET_LOCK_FD}>&-
 WT_BUDGET_LOCK_FD=""
 LOG="$(mktemp -t "hetero-${BRANCH//\//-}-log-XXXXXX")"
+if [ -n "${ENGINE_PREFLIGHT_LOG_LINE:-}" ]; then printf '%s\n' "$ENGINE_PREFLIGHT_LOG_LINE" >> "$LOG"; fi
 
 # Snapshot consuming-repo git identity BEFORE the runner (worktrees share .git/config;
 # a bare `git config user.name` inside the worktree would silently rewrite the host repo).
@@ -7841,7 +7888,7 @@ dispatch_detached_run() {
   rm -f "$RESULT_FILE" "$EXIT_FILE"
   local state_file; state_file="$(mktemp -t hetero-detach-state-XXXXXX)"
   {
-  declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN CURSOR_BIN OPENCODE_BIN OPENCODE_VER KIMI_BIN QODER_BIN QODER_CONFIG_DIR KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER ENDPOINT PACE_ROLE ENGINE_CHOICE_JSON PACE_CHOICE_JSON EFFORT CLAUDE_EFFORT_ARG \
+  declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN CURSOR_BIN OPENCODE_BIN OPENCODE_VER KIMI_BIN QODER_BIN QODER_CONFIG_DIR KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER ENDPOINT PACE_ROLE ENGINE_CHOICE_JSON PACE_CHOICE_JSON ENGINE_PREFLIGHT_JSON EFFORT CLAUDE_EFFORT_ARG \
       SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_CURSOR IS_OPENCODE IS_KIMI IS_QODER IS_CNATIVE CNATIVE_CONFIG_DIR RUNNER_RESOLVED CURSOR_FAST PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT GITCONFIG_SNAPSHOT_FILE GITCONFIG_DRIFT_KEYS EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
       BROKER_TIMEOUT_S BROKER_RESULT BROKER_VERDICT BROKER_REASON BROKER_VERDICT_KIND BROKER_VERDICT_UNKNOWN BROKER_VERDICT_UNKNOWN_SET BROKER_RUNNER BIN_FLAG_KIMI \
       WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID WORKER_FALLBACK_PGID GROK_PROMPT_FILE EFFORT_SENT CCSHIM_PROMPT_FILE OPENCODE_PROMPT_FILE KIMI_PROMPT_FILE QODER_PROMPT_FILE KIMI_EDIT_ONLY \

@@ -24,6 +24,7 @@ export type { QuotaSeat }
 // ---- drawing helpers ----
 const DASH = GLYPHS.structure.empty
 const bad = GLYPHS.state.failed
+const unk = GLYPHS.state.unknown // r11 #6: no source / no forecast is not a failure (the help page: ✗ = ended in failure)
 const padR = (text: string, w: number): string => text + ' '.repeat(Math.max(0, w - displayWidth(text)))
 // numbers stand against the right edge of their column (the last two cells are the stale mark's and a gap), so the % signs line up (G8)
 const padL = (text: string, w: number): string => ' '.repeat(Math.max(0, w - displayWidth(text))) + text
@@ -110,7 +111,7 @@ function clipRowPlain(row: Row, cols: number, verdict = false): Row {
 export function shortVerdict(p: QuotaPool, v: Verdict, nowMs: number, paceOk: boolean, t: PageCtx['t']): string {
   const stalled = v.kind === 'stale' || v.kind === 'stale_seat'
   const fact = p.limit_hit === true || stalled
-  if (!paceOk && !fact) return bad + ' ' + t('page.quota.sv_nopace')
+  if (!paceOk && !fact) return unk + ' ' + t('page.quota.sv_nopace')
   if (v.kind === 'limit_nosw') return t('page.quota.sv_limit_nosw')
   if (v.kind === 'limit_stranded') return t('page.quota.sv_limit_stranded', { n: p.stranded_seats ?? 0 })
   if (v.kind === 'limit_switched') return t('page.quota.sv_limit_switched', { pool: typeof p.switched === 'string' ? poolLabel(p.switched) : DASH })
@@ -126,7 +127,7 @@ export function shortVerdict(p: QuotaPool, v: Verdict, nowMs: number, paceOk: bo
   }
   if (v.kind === 'use') return t('page.quota.sv_use', { p: p.projected_pct_at_reset === null ? 0 : Math.round(p.projected_pct_at_reset) })
   if (v.kind === 'waste') return t('page.quota.sv_waste', { y: Math.round(v.waste ?? 0) })
-  return bad + ' ' + t('page.quota.sv_nopace')
+  return unk + ' ' + t('page.quota.sv_nopace')
 }
 
 function resetText(ms: number | null, tier: Tier, dows: string[]): string {
@@ -181,7 +182,7 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
     // title row, with the age of the quota source on the right
     const age = ageText(ctx, ctx.console.sources.quota_now?.at_ms ?? null)
     const right = age === null ? null : t('page.quota.data_age', { age })
-    const title = paceOk ? t(tier === 'wide' ? 'page.quota.title_pace' : 'page.quota.title_pace_s', { h }) : t('page.quota.title_nopace') + ' · ' + bad + ' ' + t('page.quota.v_nopace')
+    const title = paceOk ? t(tier === 'wide' ? 'page.quota.title_pace' : 'page.quota.title_pace_s', { h }) : t('page.quota.title_nopace') + ' · ' + unk + ' ' + t('page.quota.v_nopace')
     headerRows.push(rule(title, right, cols))
     if (!paceOk && tier !== 'narrow') headerRows.push(clipRowPlain([{ text: '(' + t('page.quota.title_nopace_note') + ')', dim: true }], cols))
 

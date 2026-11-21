@@ -95,10 +95,10 @@ test('v74 host: /live-pane opens the full-width page at 209 columns: title in th
   expect(tree.children?.length, 'page tree + band row').toBe(2)
   const page = tree.children![0] as Node
   const rows = lines(page)
-  expect(rows.length, 'top + body + the bottom border that also carries the tabs (27, the design cap)').toBe(27)
+  expect(rows.length, 'top + body + the bottom border that also carries the tabs (28, the design cap: S2..S10 are 28 rows from ╭ to ╰)').toBe(28)
   expect(rows[0].startsWith('╭─ 現況')).toBe(true)
   expect(rows[0].endsWith('╮')).toBe(true)
-  expect(rows[rows.length - 1].startsWith('╰─  ↑↓ 捲動 · Enter 摺疊 · ctrl+x tab 拿鍵盤 · Esc 還給輸入框')).toBe(true)
+  expect(rows[rows.length - 1].startsWith('╰─  ↑↓ 捲動 · ctrl+x tab 拿鍵盤 · Esc 還給輸入框')).toBe(true)
   expect(rows[rows.length - 1].endsWith('╯')).toBe(true)
   expect(rows[rows.length - 1]).toContain('1 現況')
   expect(rows[rows.length - 1]).toContain('9 說明')
@@ -113,7 +113,7 @@ test('v74 host: /live-pane opens the full-width page at 209 columns: title in th
   await $.session.end({ reason: 'exit' })
 })
 
-for (const cols of [120, 80]) {
+for (const cols of [120, 100, 80]) {
   test(`v74 host: the open page is ${cols} columns wide, every row, and the tab row keeps the design form`, async ($, on) => {
     const h = host(on)
     await $.session.start({ surface: 'terminal', cwd: REPO })
@@ -128,7 +128,16 @@ for (const cols of [120, 80]) {
     expect(rows[rows.length - 1].startsWith('╰─')).toBe(true)
     expect(rows[rows.length - 1].endsWith('╯')).toBe(true)
     expect(rows[rows.length - 1]).toContain('1 現況')
-    expect(rows[rows.length - 1]).toContain('9 說明')
+    // design (narrow sheet): at 80 the border keeps the current page's name only, the other tabs are digits; from 120 every name shows
+    if (cols >= 120) expect(rows[rows.length - 1]).toContain('9 說明')
+    else expect(rows[rows.length - 1]).not.toContain('9 說明')
+    // r10 #1: the border shortens the tabs before it drops the hint: at 100 and 80 the shortest key hint stays and the other tabs are bare digits
+    if (cols < 120) {
+      const last = rows[rows.length - 1]
+      expect(last, 'the key hint is still on the border').toContain('Esc')
+      expect(last).not.toContain('2 待決')
+      expect(last).not.toContain('7 艦隊')
+    }
     expect(text(tree)).not.toContain('圓桌')
     await band.unmount()
     await $.session.end({ reason: 'exit' })
@@ -201,8 +210,8 @@ test('v74 host: the band row carries the fleet counts (fresh console) and 待決
   for (let k = 0; k < 4; k++) await h.clock.advance(5000)
   const band = await mountBand($, 209, 2)
   const row = text(await band.drawn())
-  expect(row, 'fleet counts, not ?').toMatch(/艦隊 [^?│]*[0-9]/)
-  expect(row).not.toContain('艦隊 ?')
+  expect(row, 'fleet counts, not ?').toMatch(/產線 [^?│]*[0-9]/)
+  expect(row).not.toContain('產線 ?')
   expect(row, '待決 N').toContain('待決 3')
   await band.unmount()
   await $.session.end({ reason: 'exit' })

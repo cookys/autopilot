@@ -38,7 +38,8 @@ function meterRow(label: string, pct: number | null, reset: string, stale: boole
   const lbl = padR(label, 10)
   const tail: Seg[] = [...(stale ? [staleBadge(' ' + GLYPHS.state.failed)] : []), { text: '  ' + t('page.spend.reset', { t: reset }) }]
   if (pct === null) {
-    return [{ text: ' ' + lbl }, { text: padL(DASH, 4) + '  ', color: PALETTE.idle }, { text: GLYPHS.chart.meterOff.repeat(cells), color: PALETTE.idle }, ...tail]
+    // r10b #6: an unknown value draws no bar (an empty bar reads as 0%); it says the feed is not connected
+    return [{ text: ' ' + lbl }, { text: DASH + ' ' + t('v74.f.q_unwired'), color: PALETTE.idle }, ...(reset === DASH ? [] : tail)]
   }
   const clamped = Math.max(0, Math.min(100, pct))
   const on = Math.max(0, Math.min(cells, Math.round((clamped / 100) * cells)))
@@ -64,13 +65,14 @@ function poolRows(ctx: PageCtx): Row[] {
   const out: Row[] = [[{ text: '   ' + padR(t('v74.f.col_pool'), labelWidth) + t('v74.f.col_state'), dim: true }]]
   for (const v of rankPools(pools, nowMs, t)) {
     const p = byName.get(v.pool) as QuotaPool
-    const glyph = v.role === 'broken' ? GLYPHS.state.failed : v.role === ROLE_WARNING ? GLYPHS.state.need_you : GLYPHS.state.pending
+    const glyphOf = (verdictText: string): string => verdictText.startsWith(GLYPHS.state.unknown + ' ') ? GLYPHS.state.unknown : v.role === 'broken' ? GLYPHS.state.failed : v.role === ROLE_WARNING ? GLYPHS.state.need_you : GLYPHS.state.pending
     const color = v.role === 'broken' ? PALETTE.broken : v.role === ROLE_WARNING ? PALETTE.attention : PALETTE.idle
     const ok = v.role !== 'broken' && v.role !== ROLE_WARNING && !isUnknownPool(v)
     const pct = p.five_hour_pct ?? p.seven_day_pct
     const verdict = ok && pct !== null ? Math.round(pct) + '%' : shortVerdict(p, v, nowMs, paceOk, t)
-    const state = verdict.startsWith(GLYPHS.state.failed + ' ') ? verdict.slice(GLYPHS.state.failed.length + 1) : verdict
-    out.push([{ text: ' ' }, { text: glyph + ' ', color }, { text: padR(poolLabel(v.pool), labelWidth) }, { text: state, ...(v.role === 'broken' ? { color: PALETTE.broken } : {}) }])
+    const noForecast = verdict.startsWith(GLYPHS.state.unknown + ' ')
+    const state = verdict.startsWith(GLYPHS.state.failed + ' ') || noForecast ? verdict.slice(2) : verdict
+    out.push([{ text: ' ' }, { text: glyphOf(verdict) + ' ', color }, { text: padR(poolLabel(v.pool), labelWidth) }, { text: state, ...(v.role === 'broken' ? { color: PALETTE.broken } : {}) }])
   }
   return out
 }
@@ -113,7 +115,13 @@ export function renderSpend(ctx: PageCtx, _view: SpendViewOpts = DEFAULT_VIEW): 
 
   body.push(openRule(t('v74.f.sec_24h')))
   const hourly = sp?.hourly ?? null
-  if (hourly !== null && hourly.length > 0) body.push([{ text: ' ' + sparkText(hourly.slice(-24)) }])
+  if (hourly !== null && hourly.length > 0) {
+    const last = hourly.slice(-24)
+    // r11 #11: the chart says its unit and source, and when today's total is unknown above, that the two do not come from the same number
+    body.push([{ text: ' ' + t('v74.f.chart_note', { n: last.length }), dim: true }])
+    if ((sp?.tok?.host ?? sp?.tok?.session ?? null) === null) body.push([{ text: ' ' + t('v74.f.chart_note_notoday'), dim: true }])
+    body.push([{ text: ' ' + sparkText(last) }])
+  }
   else body.push([{ text: ' ' + DASH, dim: true }])
 
   const broken = row === null || stale || live === null || live.state !== 'ok' || sp === null || con === null

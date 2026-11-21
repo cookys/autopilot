@@ -320,7 +320,7 @@ assert_contains "$(cat "$LEASE_LOG")" '"method":"DELETE"' "f: gateway received D
 
 # (f1) command substitution returns promptly after the worker, without waiting for heartbeat sleep.
 PROMPT="$TEST_TMP/prompt-f1.txt"
-printf 'Task-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
+printf 'Fleet-Task: 01ARZ3NDEKTSV4RRFFQ69G5FAV\nTask-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
 RUNS="$TEST_TMP/runs-f1"; mkdir -p "$RUNS"; : > "$LEASE_LOG"
 export TMPDIR="$TEST_TMP"
 SLEEP_PID_CAPTURE="$TEST_TMP/f1-heartbeat-sleep-pid"
@@ -352,7 +352,7 @@ assert_eq "false" "$_f1_sleep_alive" "f1: heartbeat sleep pid is no longer alive
 
 # (f1b) a stale sleep-file pid with a non-sleep comm is left alone by release.
 PROMPT="$TEST_TMP/prompt-f1b.txt"
-printf 'Task-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
+printf 'Fleet-Task: 01ARZ3NDEKTSV4RRFFQ69G5FAV\nTask-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
 RUNS="$TEST_TMP/runs-f1b"; mkdir -p "$RUNS"; : > "$LEASE_LOG"
 tail -f /dev/null >/dev/null 2>&1 &
 F1B_STANDIN_PID=$!

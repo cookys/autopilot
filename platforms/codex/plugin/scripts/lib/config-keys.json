@@ -8296,6 +8296,32 @@
       "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Default owner recipient for dispatch-hetero rc-alarm notices."
+    },
+    {
+      "name": "ask_guard",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": {
+        "allow_members": ["pm--claude", "glm-trial*"],
+        "enforce_from": "2026-11-24T00:00:00+08:00"
+      },
+      "readers": ["hooks/lib/ask-guard.js"],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": ["AUTOPILOT_ASK_GUARD_ENFORCE_FROM"],
+      "summary": "PM question-gate seat decision config: allow_members (glob list on fleet member segment) and enforce_from (ISO date-time).",
+      "type": "object"
+    },
+    {
+      "name": "AUTOPILOT_ASK_GUARD_ENFORCE_FROM",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": "2026-11-24T00:00:00+08:00",
+      "readers": ["hooks/lib/ask-guard.js"],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": ["ask_guard"],
+      "summary": "Environment override for ask_guard.enforce_from (ISO date-time when ask-guard switches from warn to deny after a 1-hour warn window)."
     }
   ]
 }

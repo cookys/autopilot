@@ -154,4 +154,4 @@ function readContextBudget(opts) {
   return o.model ? applyPerModel(cfg, o.model) : cfg;
 }
 
-module.exports = { configPath, metricsDirOf, costsFileOf, readContextBudget, applyPerModel, matchPerModel };
+module.exports = { configPath, metricsDirOf, costsFileOf, readContextBudget, applyPerModel, matchPerModel, globToRegExp };

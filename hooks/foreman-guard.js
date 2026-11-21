@@ -77,6 +77,7 @@ const { resolveLiveDir, sanitizeSessionId, readLive } = require('../scripts/lib/
 // advisory (depth0-delegate-gate.js) and this hook can never drift apart.
 const { executableText, isAffirmative, SLEEP_RE, WHILE_WAIT_RE } = require('../scripts/lib/bash-wait-rules.js');
 const { headLines } = require('./lib/brief-head.js');
+const { enforceFromReached } = require('./lib/enforce-from.js');
 const { execFileSync } = require('child_process');
 
 const DEFAULT_BASH_CAP = 40;
@@ -518,9 +519,7 @@ function appendPollHit(payload, rule, hitMode) {
 // true when a polling hit must be denied. Unparsable poll_enforce_from enforces now.
 function pollBlocks(cfg) {
   if (cfg.mode === 'warn') return false;
-  const t = Date.parse(String(cfg.pollEnforceFrom || ''));
-  if (!Number.isFinite(t)) return true;
-  return Date.now() >= t;
+  return enforceFromReached(cfg.pollEnforceFrom);
 }
 
 function pollAllowLine(cfg, reason) {

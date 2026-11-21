@@ -82,7 +82,8 @@
  *            depth0_delegate_gate.rm_wrapped or env AUTOPILOT_BASH_GUARD_RM_WRAPPED_MODE = off|warn|deny (default deny;
  *            garbage ⇒ deny). Runs at every depth, subagents included.
  *   2h. DENY zsh-only syntax (rule `zsh-only-syntax`): parameter flags `${(...)}`, glob qualifiers such as `*(.)`, and
- *            temp-file process substitution `=(...)` outside single-quoted text — Claude Code cannot parse these and would
+ *            temp-file process substitution `=(...)` outside single- or double-quoted text (parameter flags also count
+ *            inside double quotes, where zsh still expands them) — Claude Code cannot parse these and would
  *            hold the call on a permission prompt that auto-denies. Knob: depth0_delegate_gate.zsh_syntax or
  *            AUTOPILOT_BASH_GUARD_ZSH_MODE = off|warn|deny (default deny; garbage ⇒ deny). Rewrite in POSIX/Bash syntax
  *            or use bash -c with a single-quoted command.

@@ -553,7 +553,7 @@ test('rule2 also applies at subagent depth (agent_id present): deny, and warn un
 });
 
 // ---- Rule 10: zsh-only syntax is rejected before Claude Code's parser prompt ----
-for (const cmd of ['echo ${(L)e}', 'echo ${(j:,:)arr}', 'echo ${(s:/:)p}', 'ls *(.)', 'ls **/*(.om[1])', 'ls *(N)', 'cat =(ls)', 'diff =(a) =(b)']) {
+for (const cmd of ['echo ${(L)e}', 'echo ${(j:,:)arr}', 'echo ${(s:/:)p}', 'ls *(.)', 'ls **/*(.om[1])', 'ls *(N)', 'cat =(ls)', 'diff =(a) =(b)', '"${(L)e}"']) {
   test(`rule10 denies zsh-only syntax: ${cmd}`, () => {
     const r = run(cmd);
     assert.strictEqual(r.deny, true);
@@ -584,7 +584,7 @@ test('rule10 knob warns or silences as configured', () => {
   assert.doesNotMatch(run('echo ${(L)e}', { env: { AUTOPILOT_BASH_GUARD_ZSH_MODE: 'off' } }).ctx, /zsh-only-syntax/);
   assert.strictEqual(run('echo ${(L)e}', { env: { AUTOPILOT_BASH_GUARD_ZSH_MODE: 'bogus' } }).deny, true); // garbage ⇒ deny
 });
-for (const cmd of ['echo ${e}', 'bash -c \'x=${(L)e}\'', "bash -c 'echo ${(L)e}'", "echo '${(L)e}'", 'echo ${e:-x}', 'echo ${#e}', 'echo ${e%%.*}', 'echo $(cmd)', 'diff <(a) <(b)', 'arr=(1 2)', 'echo $((1+2))', 'echo ${a[@]}', 'f() { :; }', '( cd x )']) {
+for (const cmd of ['echo ${e}', 'bash -c \'x=${(L)e}\'', "bash -c 'echo ${(L)e}'", "echo '${(L)e}'", 'echo ${e:-x}', 'echo ${#e}', 'echo ${e%%.*}', 'echo $(cmd)', 'diff <(a) <(b)', 'arr=(1 2)', 'echo $((1+2))', 'echo ${a[@]}', 'f() { :; }', '( cd x )', 'echo "*(note)"', 'grep "*(no)" f', 'git commit -m "fix *(more)"', 'echo "=(a)"']) {
   test(`rule10 allows bash syntax and quoted data: ${cmd}`, () => {
     assert.strictEqual(run(cmd).deny, false);
   });

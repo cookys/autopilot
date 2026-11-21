@@ -7,7 +7,7 @@ export AUTOPILOT_QUALIFIED_FILE="$TEST_TMP/missing-qualified.json"
 export AUTOPILOT_PACE_FILE="$TEST_TMP/missing-pace.json"
 export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session-mode"
 export AUTOPILOT_TEST_CN_GATE_OFF=1 AUTOPILOT_ENDPOINT_PREPROBE=off
-export DISPATCH_DETACH=0 AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1
+export DISPATCH_DETACH=0 AUTOPILOT_SETTLE_MS=0
 export AUTOPILOT_STRIKE_WRITER=off ENGINE_CAPABILITY_DIR="$TEST_TMP/capability"
 mkdir -p "$AUTOPILOT_SESSION_MODE_DIR" "$TEST_TMP/bin" "$ENGINE_CAPABILITY_DIR"
 
@@ -28,7 +28,14 @@ echo changed > change.txt; git add change.txt; git -c user.email=t@t -c user.nam
 printf '%s\n' '{"event":"result","result":{"status":"SUCCESS","response":"ok"}}'
 SH
 chmod +x "$TEST_TMP/bin/grok" "$TEST_TMP/bin/agy"
-export PATH="$TEST_TMP/bin:$PATH" RUNNER_CALLS="$TEST_TMP/runner-calls"
+cat > "$TEST_TMP/bin/claude" <<'SH'
+#!/usr/bin/env bash
+printf 'claude-stub %s\n' "$*" >> "$RUNNER_CALLS"
+echo changed > change.txt; git add change.txt; git -c user.email=t@t -c user.name=t commit -q -m change
+printf '%s\n' '{"type":"result","is_error":false,"result":"ok"}'
+SH
+chmod +x "$TEST_TMP/bin/claude"
+export RUNNER_CALLS="$TEST_TMP/runner-calls"
 
 fresh_table() {
   node -e 'const fs=require("fs");fs.writeFileSync(process.argv[1],JSON.stringify({schema:"capacity.engines/1",generated_at:new Date().toISOString(),engines:JSON.parse(process.argv[2])}))' "$1" "$2"
@@ -44,9 +51,10 @@ run_case() {
     --branch "feat/table-$name" --prompt-file "$PROMPT" "$@" </dev/null 2>"$TEST_TMP/$name.err")"
   RC=$?
   ERR="$(cat "$TEST_TMP/$name.err")"
-  MF="$(node -e 'const fs=require("fs"),p=process.argv[1];for(const n of fs.readdirSync(p)){if(n.endsWith(".manifest.json")){process.stdout.write(p+"/"+n);break}}' "$runs")"
+  MF="$(node -e 'const fs=require("fs"),p=process.argv[1];function walk(d){for(const n of fs.readdirSync(d,{withFileTypes:true})){const f=d+"/"+n.name;if(n.isDirectory()){const x=walk(f);if(x)return x}else if(n.name.endsWith(".manifest.json"))return f}return ""}process.stdout.write(walk(p))' "$runs")"
 }
-json_get() { node -e 'const o=JSON.parse(process.argv[1]);process.stdout.write(String(o[process.argv[2]]??"null"))' "$1" "$2"; }
+json_get() { node -e 'const s=String(process.argv[1]||"");const o=JSON.parse(s.split(/\r?\n/).reverse().find(x=>x.trim().startsWith("{")));process.stdout.write(String(o[process.argv[2]]??"null"))' "$1" "$2"; }
+manifest_field() { node -e 'const o=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(o[process.argv[2]]??""))' "$1" "$2"; }
 
 NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 TABLE="$TEST_TMP/engines.json"; BURN="$TEST_TMP/burn.json"; burn_table "$BURN"
@@ -62,6 +70,35 @@ assert_eq grok "$(json_get "$OUT" runner)" 'a: next candidate selected'
 assert_contains "$ERR" 'skipped agy:gemini-4-hydrogen-low (capacity:已用完/不派)' 'a: skipped row logged'
 assert_contains "$(cat "$MF")" '"engine_preflight"' 'a: manifest carries engine_preflight'
 assert_contains "$(cat "$MF")" '"chosen":{"runner":"grok","model":"grok-4.7"}' 'a: manifest records chosen fallback'
+LOG_PATH="$(printf '%s\n' "$ERR" | sed -n 's/.* log=\([^ ]*\) .*/\1/p' | tail -1)"
+assert_file_exists "$LOG_PATH" 'a: dispatch log path exists'
+assert_contains "$(cat "$LOG_PATH")" 'engine-preflight:' 'a: preflight line reaches dispatch log'
+
+# (a2) Full dispatch path: Kimi is burn-more ranked before the local cc-shim seat,
+# but the local seat must win capacity admission. The node shim only replaces pace-select.
+cat > "$TEST_TMP/bin/node" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = "$REPO_ROOT/scripts/pace-select.js" ]; then
+  printf '%s\n' 'kimi' 'kimi-code/kimi-for-coding' '' '{"runner":"kimi","model":"kimi-code/kimi-for-coding","effort":"high","ranked_candidates":[{"runner":"kimi","model":"kimi-code/kimi-for-coding"},{"runner":"cc-shim","model":"glm-5.3","endpoint":"glm"}]}' '{}'
+  exit 0
+fi
+exec "$REAL_NODE" "$@"
+SH
+chmod +x "$TEST_TMP/bin/node"
+export REPO_ROOT REAL_NODE="$(command -v node)"
+LOCAL_PACE_RUNS="$TEST_TMP/runs-local-first"; mkdir -p "$LOCAL_PACE_RUNS"
+: > "$RUNNER_CALLS"
+LOCAL_TABLE="$TEST_TMP/local-first-engines.json"
+fresh_table "$LOCAL_TABLE" '[{"harness":"kimi","model":"kimi-code/kimi-for-coding","availability":"可用","suggest":"建議多用"},{"harness":"cc-shim","model":"glm-5.3","availability":"可用","suggest":"派"}]'
+OUT="$( (export PATH="$TEST_TMP/bin:$PATH"; cd "$SBX" && env AUTOPILOT_PACE_FILE="$PACE" AUTOPILOT_DISPATCH_RUNS_DIR="$LOCAL_PACE_RUNS" AUTOPILOT_ENGINES_TABLE="$LOCAL_TABLE" AUTOPILOT_BURN_MORE="$BURN" \
+  ANTHROPIC_COMPATIBLE_BASE_URL=https://example.invalid ANTHROPIC_COMPATIBLE_AUTH_TOKEN=test-token \
+  "$SCRIPT" --no-verify-tip --context-window off --grok-bin "$TEST_TMP/bin/grok" --agy-bin "$TEST_TMP/bin/agy" \
+  --branch feat/table-local-first --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/local-first.err") )"
+RC=$?
+MF="$(node -e 'const fs=require("fs"),p=process.argv[1];function walk(d){for(const n of fs.readdirSync(d,{withFileTypes:true})){const f=d+"/"+n.name;if(n.isDirectory()){const x=walk(f);if(x)return x}else if(n.name.endsWith(".manifest.json"))return f}return ""}process.stdout.write(walk(p))' "$LOCAL_PACE_RUNS")"
+assert_eq "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).engine_preflight.chosen.runner)' "$MF")" cc-shim 'a2: local cc-shim chosen ahead of burn-more Kimi'
+LOCAL_LOG_PATH="$(manifest_field "$MF" log_path)"
+assert_contains "$(cat "$LOCAL_LOG_PATH")" 'engine-preflight:' 'a2: local-first preflight result reaches dispatch log'
 
 # (b) The separate implementer retreat ladder skips the paused local GLM row.
 PAUSED="$(node -e 'const fs=require("fs"),p=process.argv[1];fs.writeFileSync(p,JSON.stringify({schema:"capacity.engines/1",generated_at:new Date().toISOString(),engines:[{harness:"xl270d",model:"Qwen3.8-27B-QUASAR-NVFP4",availability:"暫停",suggest:"不派"}]}))' "$TEST_TMP/paused.json"; printf '[{"runner":"xl270d","model":"Qwen3.8-27B-QUASAR-NVFP4","endpoint":"glm_local"},{"runner":"grok","model":"grok-4.7"}]')"

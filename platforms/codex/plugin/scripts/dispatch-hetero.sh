@@ -2563,7 +2563,7 @@ const gate = require(process.argv[6]);
 const eligible = plan.chain.filter((r) => gate.check({ runner: r.runner, model: r.model, endpoint: r.endpoint, cwd: process.cwd(), files: [process.argv[5]] }).allowed);
 if (!eligible.length) process.exit(1);
 const ep = require(process.argv[7]);
-const pre = ep.preflight({ candidates: eligible, fallbackOnAllSkipped: true, preferBurnMore: true });
+const pre = ep.preflight({ candidates: eligible, fallbackOnAllSkipped: true, preferBurnMore: true, localFirst: true });
 const rung = eligible.find((r) => r.runner === pre.chosen.runner && r.model === pre.chosen.model);
 if (!rung) process.exit(1);
 process.stdout.write([rung.model, rung.effort, rung.runner, rung.endpoint || "", JSON.stringify(plan.demoted || []), JSON.stringify(pre)].join("|"));
@@ -3482,6 +3482,7 @@ if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_S
   _ep_candidates="$(node -e 'const c=JSON.parse(process.argv[1]);process.stdout.write(JSON.stringify(c.ranked_candidates||[{runner:c.runner,model:c.model,endpoint:c.endpoint||"",effort:c.effort||""}]))' "$ENGINE_CHOICE_JSON" 2>/dev/null || printf '[]')"
   _ep_options=(--fallback-on-all-skipped)
   [ "${PACE_ROLE:-implementer}" != "implementer" ] || _ep_options+=(--prefer-burn-more)
+  _ep_options+=(--local-first)
   _ep_json="$(node "$SELF_DIR/lib/engine-preflight.js" "${_ep_options[@]}" --candidates-json "$_ep_candidates" 2>/dev/null)" || _ep_json=""
   if [ -n "$_ep_json" ]; then
     ENGINE_PREFLIGHT_JSON="$_ep_json"
@@ -5229,7 +5230,6 @@ WT_PENDING_RECORD=""
 [ -n "$WT_BUDGET_LOCK_FD" ] && exec {WT_BUDGET_LOCK_FD}>&-
 WT_BUDGET_LOCK_FD=""
 LOG="$(mktemp -t "hetero-${BRANCH//\//-}-log-XXXXXX")"
-if [ -n "${ENGINE_PREFLIGHT_LOG_LINE:-}" ]; then printf '%s\n' "$ENGINE_PREFLIGHT_LOG_LINE" >> "$LOG"; fi
 
 # Snapshot consuming-repo git identity BEFORE the runner (worktrees share .git/config;
 # a bare `git config user.name` inside the worktree would silently rewrite the host repo).
@@ -5896,6 +5896,7 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
   if [ "${#WORKER_MOUNT_PREFIX[@]}" -gt 0 ]; then set -- "${WORKER_MOUNT_PREFIX[@]}" "$@"; fi
   WORKER_TIMED_OUT=0
   : >"$LOG"
+  if [ -n "${ENGINE_PREFLIGHT_LOG_LINE:-}" ]; then printf '%s\n' "$ENGINE_PREFLIGHT_LOG_LINE" >> "$LOG"; fi
   WATCHDOG_PID=""
   WATCHDOG_TOKEN_FILE=""
   WATCHDOG_DISARMED=0

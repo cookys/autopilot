@@ -23,7 +23,8 @@
 //
 // CLI:
 //   node scripts/lib/engine-preflight.js [--prefer-burn-more] --candidate runner:model [--candidate runner:model ...]
-// Exit 0 when one candidate is chosen, 3 when every candidate is skipped, 2 on usage.
+// Exit 0 when one candidate is chosen, 3 when every candidate is skipped and
+// --fallback-on-all-skipped is not set, 2 on usage.
 // Stdout is the JSON object (fs.writeSync). Stderr is one line per skip.
 
 const fs = require('fs');
@@ -361,7 +362,7 @@ function main(argv) {
     fs.writeSync(2, `preflight: skip ${item.runner}:${item.model} (${item.reason}); next ${nxt}\n`);
   }
   writeStdout(`${JSON.stringify(result)}\n`);
-  return result.chosen && !result.chosen.fallback ? 0 : (result.chosen ? 0 : 3);
+  return result.chosen ? 0 : 3;
 }
 
 module.exports = {

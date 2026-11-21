@@ -111,6 +111,11 @@ function selectEngine(options = {}) {
   return rawSelectEngine({ ...options, env });
 }
 
+function withoutRankedCandidates(value) {
+  const { ranked_candidates, ...rest } = value;
+  return rest;
+}
+
 function withEnv(vars, fn) {
   const prev = {};
   for (const [k, v] of Object.entries(vars)) {
@@ -336,7 +341,7 @@ test('(a) reset-weighted quota outranks linear pace; claude rows are never candi
     role: 'implementer',
     checkEndpoint: allEndpointsReady,
   });
-  assert.deepEqual(res, {
+  assert.deepEqual(withoutRankedCandidates(res), {
     engine: 'glm',
     runner: 'cc-shim',
     model: 'glm-5.3',
@@ -364,7 +369,7 @@ test('(a) reset-weighted quota outranks linear pace; claude rows are never candi
 
   const r = cli(['--role', 'implementer', '--pace', fixturePath('ahead-vs-behind.json'), '--json']);
   assert.equal(r.status, 0, r.stderr);
-  assert.deepEqual(JSON.parse(r.stdout), res);
+  assert.deepEqual(withoutRankedCandidates(JSON.parse(r.stdout)), withoutRankedCandidates(res));
 
   // Even if a pool map entry mapped claude-pool-a (+80 slack) to codex, class "claude" is rejected.
   const poolsWithClaudeMapped = {
@@ -672,7 +677,7 @@ test('(f) alias rows of one key: the larger fresh slack is used', () => {
   const r = cli(['--role', 'implementer', '--pace', fixturePath('aliases.json'), '--json']);
   assert.equal(r.status, 0, r.stderr);
   const out = JSON.parse(r.stdout);
-  assert.deepEqual(out, {
+  assert.deepEqual(withoutRankedCandidates(out), {
     engine: 'agy',
     runner: 'agy',
     model: 'gemini-4-hydrogen-low',
@@ -716,7 +721,7 @@ test('(g) scarce codex row 35 pts ahead is a known reading with slack -35, not u
     role: 'implementer',
     checkEndpoint: allEndpointsReady,
   });
-  assert.deepEqual(res, {
+  assert.deepEqual(withoutRankedCandidates(res), {
     engine: 'codex',
     runner: 'codex',
     model: 'gpt-6.1-terra',

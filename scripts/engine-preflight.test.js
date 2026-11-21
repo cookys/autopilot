@@ -149,7 +149,7 @@ test('account-unsupported', () => {
   assert.deepEqual(out.chosen, sol);
 });
 
-test('burn_more is reported and does not reorder two healthy candidates', () => {
+test('burn_more is reported; ordering changes only when preferred', () => {
   const file = path.join(root, 'burn.json');
   writeJson(file, {
     schema: 'capacity.burn_more/1',
@@ -162,12 +162,34 @@ test('burn_more is reported and does not reorder two healthy candidates', () => 
   });
   assert.deepEqual(out.chosen, terra);
   assert.deepEqual(out.burn_more, [sol]);
+  const preferred = preflight({
+    candidates: [terra, sol],
+    now: NOW,
+    preferBurnMore: true,
+    sources: sources(caseDir('burn-preferred'), { burnMore: file }),
+  });
+  assert.deepEqual(preferred.chosen, { ...sol, burn_more: true });
+  assert.deepEqual(preferred.skipped, []);
+  assert.deepEqual(preferred.burn_more, [sol]);
 });
 
 test('missing capacity table warns and does not skip', () => {
   const out = preflight({ candidates: [terra], now: NOW, sources: sources(caseDir('missing')) });
   assert.deepEqual(out.chosen, terra);
   assert.ok(out.warnings.includes('capacity_table_missing'));
+});
+
+test('burn preference keeps local candidates first for mechanical work', () => {
+  const file = path.join(root, 'burn-local.json');
+  writeJson(file, { schema: 'capacity.burn_more/1', engines: [{ engine: 'kimi' }] });
+  const local = { runner: 'cc-shim', model: 'glm-5.3', endpoint: 'glm' };
+  const cloud = { runner: 'grok', model: 'grok-4.7' };
+  const kimi = { runner: 'kimi', model: 'kimi-code/kimi-for-coding' };
+  const out = preflight({
+    candidates: [cloud, kimi, local], now: NOW, preferBurnMore: true, localFirst: true,
+    sources: sources(caseDir('burn-local'), { burnMore: file }),
+  });
+  assert.deepEqual(out.chosen, { runner: local.runner, model: local.model });
 });
 
 function probeStub(code) {

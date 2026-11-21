@@ -4,12 +4,12 @@
 // engine-preflight.js — decide which runner:model to dispatch before spending a ticket.
 // Node >= 20.10, built-ins only. Never invokes grok, codex, agy, opencode, kimi or cursor.
 //
-//   preflight({ candidates, now, sources }) -> {
+//   preflight({ candidates, now, sources, preferBurnMore }) -> {
 //     schema: 'autopilot.engine-preflight/1',
 //     chosen: { runner, model, burn_more? } | null,
 //     skipped: [{ runner, model, reason, burn_more? }],
 //     warnings: string[],
-//     burn_more: [{ runner, model }]   // candidates listed in capacity burn_more; order kept
+//     burn_more: [{ runner, model }]   // candidates listed in capacity burn_more
 //   }
 //
 // Skip reasons:
@@ -18,12 +18,17 @@
 //   probe:<overloaded|rate_limited|unsupported|timeout>
 //
 // Capacity table older than 30 minutes, missing, or unparseable is ignored
-// (warnings capacity_table_stale / capacity_table_missing). It never blocks.
-// burn_more is not a skip and does not reorder.
+// (warnings: capacity_table_stale, capacity_table_missing,
+// capacity_table_unparseable). Other emitted warnings are
+// all_candidates_skipped_default_order and probe_unknown:<timeout|spawn|signal|exit-code>.
+// It never blocks.
+// burn_more is not a skip. `preferBurnMore` stably moves listed candidates first.
 //
 // CLI:
-//   node scripts/lib/engine-preflight.js --candidate runner:model [--candidate runner:model ...]
-// Exit 0 when one candidate is chosen, 3 when every candidate is skipped, 2 on usage.
+//   node scripts/lib/engine-preflight.js [--prefer-burn-more] [--local-first] [--fallback-on-all-skipped]
+//     (--candidate runner:model ... | --candidates-json '[{"runner":"...","model":"..."}]')
+// Exit 0 when one candidate is chosen, 3 when every candidate is skipped and
+// --fallback-on-all-skipped is not set, 2 on usage.
 // Stdout is the JSON object (fs.writeSync). Stderr is one line per skip.
 
 const fs = require('fs');
@@ -97,7 +102,7 @@ function loadCapacity(src, env, nowMs, warnings) {
   const file = typeof given === 'string' ? given : enginesTablePath(env);
   const read = readJson(file);
   if (!read.ok) {
-    warnings.push('capacity_table_missing');
+    warnings.push(read.code === 'ENOENT' ? 'capacity_table_missing' : 'capacity_table_unparseable');
     return [];
   }
   return rowsOf(read.value, nowMs, warnings);
@@ -105,11 +110,15 @@ function loadCapacity(src, env, nowMs, warnings) {
 
 function rowsOf(doc, nowMs, warnings) {
   if (!doc || doc.schema !== CAPACITY_SCHEMA || !Array.isArray(doc.engines)) {
-    warnings.push('capacity_table_missing');
+    warnings.push('capacity_table_unparseable');
     return [];
   }
   const gen = Date.parse(doc.generated_at);
-  if (!Number.isFinite(gen) || nowMs - gen > CAPACITY_MAX_AGE_MS) {
+  if (!Number.isFinite(gen)) {
+    warnings.push('capacity_table_unparseable');
+    return [];
+  }
+  if (nowMs - gen > CAPACITY_MAX_AGE_MS) {
     warnings.push('capacity_table_stale');
     return [];
   }
@@ -215,15 +224,31 @@ function probeCandidate(probe, candidate) {
   return { skip: null, warning: `probe_unknown:${code == null ? 'signal' : code}` };
 }
 
-function preflight({ candidates, now, sources } = {}) {
+function preflight({ candidates, now, sources, preferBurnMore = false, localFirst = false, fallbackOnAllSkipped = false } = {}) {
   const src = sources || {};
   const env = src.env || process.env;
   const nowMs = now instanceof Date ? now.getTime() : (typeof now === 'number' ? now : Date.now());
   const warnings = [];
-  const list = Array.isArray(candidates) ? candidates : [];
+  const input = Array.isArray(candidates) ? candidates : [];
   const windowMs = windowMinOf(env, src.windowMin) * 60 * 1000;
   const capacity = loadCapacity(src, env, nowMs, warnings);
+  const capacitySource = src.enginesTable;
+  const capacityPath = typeof capacitySource === 'string' ? capacitySource : enginesTablePath(env);
+  const capacityDoc = capacitySource && typeof capacitySource === 'object'
+    ? capacitySource
+    : readJson(capacityPath).value;
   const burn = loadBurn(src, env);
+  const list = (preferBurnMore || localFirst)
+    ? input.map((candidate, index) => ({ candidate, index, preferred: listedInBurn(candidate, burn) }))
+      .sort((a, b) => {
+        const aLocal = localFirst && (a.candidate.runner === 'local' || a.candidate.runner === 'cc-shim');
+        const bLocal = localFirst && (b.candidate.runner === 'local' || b.candidate.runner === 'cc-shim');
+        return Number(bLocal) - Number(aLocal)
+          || (preferBurnMore ? Number(b.preferred) - Number(a.preferred) : 0)
+          || a.index - b.index;
+      })
+      .map(({ candidate }) => candidate)
+    : input;
   const dir = src.runsDir || runsDir(env);
   const runs = loadRuns(dir);
   const probe = src.probe !== undefined ? src.probe : (env.AUTOPILOT_ENGINE_PREFLIGHT_PROBE || null);
@@ -257,20 +282,33 @@ function preflight({ candidates, now, sources } = {}) {
       if (burnMore) chosen.burn_more = true;
     }
   }
+  if (!chosen && fallbackOnAllSkipped && list.length > 0) {
+    const first = input[0];
+    chosen = { runner: first.runner, model: first.model, fallback: true };
+    warnings.push('all_candidates_skipped_default_order');
+  }
   return {
     schema: SCHEMA,
     chosen,
     skipped,
     warnings,
     burn_more: burnListed,
+    table_path: capacityPath,
+    generated_at: capacityDoc && typeof capacityDoc.generated_at === 'string' ? capacityDoc.generated_at : null,
   };
 }
 
 function parseArgs(argv) {
   const candidates = [];
+  let preferBurnMore = false;
+  let localFirst = false;
+  let fallbackOnAllSkipped = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--help' || a === '-h') return { help: true, candidates };
+    if (a === '--prefer-burn-more') { preferBurnMore = true; continue; }
+    if (a === '--local-first') { localFirst = true; continue; }
+    if (a === '--fallback-on-all-skipped') { fallbackOnAllSkipped = true; continue; }
     if (a === '--candidate') {
       const value = argv[++i];
       if (!value || !value.includes(':')) return { error: 'usage: --candidate runner:model' };
@@ -278,15 +316,28 @@ function parseArgs(argv) {
       candidates.push({ runner: value.slice(0, cut), model: value.slice(cut + 1) });
       continue;
     }
+    if (a === '--candidates-json') {
+      const value = argv[++i];
+      try {
+        const parsed = JSON.parse(value);
+        if (!Array.isArray(parsed) || parsed.some((r) => !r || typeof r.runner !== 'string' || typeof r.model !== 'string')) {
+          return { error: 'usage: --candidates-json must be an array of runner/model objects' };
+        }
+        candidates.push(...parsed);
+      } catch {
+        return { error: 'usage: --candidates-json must be valid JSON' };
+      }
+      continue;
+    }
     return { error: `unknown argument: ${a}` };
   }
   if (candidates.length === 0) return { error: 'usage: --candidate runner:model (repeatable)' };
-  return { candidates };
+  return { candidates, preferBurnMore, localFirst, fallbackOnAllSkipped };
 }
 
 function helpText() {
   return [
-    'Usage: node scripts/lib/engine-preflight.js --candidate runner:model [--candidate runner:model ...]',
+    'Usage: node scripts/lib/engine-preflight.js [--prefer-burn-more] [--local-first] [--fallback-on-all-skipped] (--candidate runner:model ... | --candidates-json JSON)',
     'Exit 0 when a candidate is chosen, 3 when every candidate is skipped, 2 on usage.',
     'Env: AUTOPILOT_ENGINES_TABLE, AUTOPILOT_BURN_MORE, AUTOPILOT_ENGINE_PREFLIGHT_WINDOW_MIN, AUTOPILOT_ENGINE_PREFLIGHT_PROBE.',
   ].join('\n');
@@ -306,7 +357,7 @@ function main(argv) {
     fs.writeSync(2, `${parsed.error}\n${helpText()}\n`);
     return 2;
   }
-  const result = preflight({ candidates: parsed.candidates });
+  const result = preflight({ candidates: parsed.candidates, preferBurnMore: parsed.preferBurnMore, localFirst: parsed.localFirst, fallbackOnAllSkipped: parsed.fallbackOnAllSkipped });
   for (let i = 0; i < result.skipped.length; i++) {
     const item = result.skipped[i];
     const idx = parsed.candidates.findIndex((c) => c.runner === item.runner && c.model === item.model);

@@ -8183,6 +8183,40 @@
       "doc": null,
       "relates": [],
       "note": "Test-only negative-control seam that bypasses target pre-commit execution; never set in normal dispatches."
+    },
+    {
+      "name": "rc_alarm_lead",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "dispatch",
+      "default": [],
+      "readers": ["scripts/rc-alarm.js"],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Fleet addresses notified by rc-alarm when no --lead is supplied.",
+      "type": "array"
+    },
+    {
+      "name": "AUTOPILOT_RC_ALARM_LABEL",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": null,
+      "readers": ["scripts/dispatch-hetero.sh"],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Default label for the dispatch-hetero shared rc-alarm check and record."
+    },
+    {
+      "name": "AUTOPILOT_RC_ALARM_OWNER",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": null,
+      "readers": ["scripts/dispatch-hetero.sh"],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Default owner recipient for dispatch-hetero rc-alarm notices."
     }
   ]
 }

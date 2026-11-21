@@ -725,6 +725,8 @@ RUN_ID=""
 STAGE=""
 RESULTS_DIR=""
 RESULT_FILE=""
+RC_ALARM_LABEL="${AUTOPILOT_RC_ALARM_LABEL:-}"
+RC_ALARM_OWNER="${AUTOPILOT_RC_ALARM_OWNER:-}"
 EXIT_FILE=""
 HEARTBEAT_SECS="${DISPATCH_HEARTBEAT_SECS:-20}"
 DETACH_PRECLAIM_GEN=""
@@ -3069,6 +3071,8 @@ while [ $# -gt 0 ]; do
     --campaign-seal) CAMPAIGN_SEAL_FILE="${2:-}"; shift 2 ;;
     --model) MODEL="${2:-}"; MODEL_SUPPLIED=1; MODEL_IS_DEFAULT=0; shift 2 ;;
     --runner) RUNNER="${2:-}"; RUNNER_SUPPLIED=1; shift 2 ;;
+    --rc-alarm-label) [ $# -ge 2 ] && [ -n "${2:-}" ] || die_precondition "--rc-alarm-label requires a non-empty label"; RC_ALARM_LABEL="$2"; shift 2 ;;
+    --rc-alarm-owner) [ $# -ge 2 ] && [ -n "${2:-}" ] || die_precondition "--rc-alarm-owner requires a non-empty address"; RC_ALARM_OWNER="$2"; shift 2 ;;
     --pace-role)
       [ $# -ge 2 ] && [ -n "${2:-}" ] && [[ "${2:-}" != --* ]] \
         || die_precondition "--pace-role requires a non-empty role"
@@ -3150,6 +3154,15 @@ while [ $# -gt 0 ]; do
     *) die_precondition "unknown argument: $1" ;;
   esac
 done
+
+# Optional shared consecutive-failure alarm. Check before runner selection or any engine work.
+if [ -n "$RC_ALARM_LABEL" ]; then
+  _rc_alarm_args=(check --label "$RC_ALARM_LABEL")
+  [ -z "$RC_ALARM_OWNER" ] || _rc_alarm_args+=(--owner "$RC_ALARM_OWNER")
+  node "$SELF_DIR/rc-alarm.js" "${_rc_alarm_args[@]}"
+  _rc_alarm_check_rc=$?
+  [ "$_rc_alarm_check_rc" -eq 0 ] || exit "$_rc_alarm_check_rc"
+fi
 
 if [ "$NO_VERIFY_TIP" -eq 1 ] && [ "${#VERIFY_CMDS[@]}" -gt 0 ]; then
   die_precondition "--no-verify-tip cannot be combined with --verify-cmd"
@@ -8405,4 +8418,11 @@ if ! _cont_finalize_or_die; then
 fi
 emit "$OUTCOME_STATUS" "$OUTCOME_COMMIT" "$OUTCOME_FILES" "$OUTCOME_INS" "$OUTCOME_DEL" "$OUTCOME_WT" "$OUTCOME_ERR"
 maybe_redispatch_cloud_busy "$OUTCOME_STATUS"
+if [ -n "$RC_ALARM_LABEL" ]; then
+  _rc_alarm_rc="$OUTCOME_EXIT"
+  case "$OUTCOME_STATUS" in committed|no_op) ;; *) [ "$_rc_alarm_rc" -ne 0 ] || _rc_alarm_rc=1 ;; esac
+  _rc_alarm_args=(record --label "$RC_ALARM_LABEL" --rc "$_rc_alarm_rc" --last-line "${OUTCOME_ERR:-}")
+  [ -z "$RC_ALARM_OWNER" ] || _rc_alarm_args+=(--owner "$RC_ALARM_OWNER")
+  node "$SELF_DIR/rc-alarm.js" "${_rc_alarm_args[@]}" || echo "dispatch-hetero: rc-alarm record failed" >&2
+fi
 exit "$OUTCOME_EXIT"

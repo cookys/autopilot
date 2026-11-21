@@ -32,6 +32,9 @@ type El = (props: any) => any
 export const BAND_ROWS = 1
 // M5: the cells row 1 of the console band keeps free at its right end for the `[-]` control (three cells and a gap)
 export const BAND_CLOSE_ROOM = 4
+// r10b #4: the host already hands the band bodyColumns = terminal width - 5 (its own gutter holds ` [-]`, see the `no +5` tier test), so the v7.4 toggle sits in the LAST cell of the band's width.
+// Keeping BAND_CLOSE_ROOM free as well counted the gutter twice and left four blank cells between ▴ and the host's `[-]`.
+export const BAND_TOGGLE_ROOM = 1
 // v7.4 S1: the collapse toggle drawn left of `[-]` while the pane is closed (the open form is GLYPHS.structure.open)
 export const PANE_TOGGLE_CLOSED = '\u25B4'
 // The pressable cell is the glyph alone, in the column just left of BAND_CLOSE_ROOM. The padding space is a plain Text before that cell.
@@ -235,7 +238,7 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
   // M5: in the console band the tab strip is row 2 (pageBarStrip), so row 1 gives the left text every idle cell up to the right-hand controls (BAND_CLOSE_ROOM keeps
   // the `[-]` cell): the stale reason and its whole fix command (`autopilot status runs --watch`) are never cut while blank cells are left. M6: the open Button says what it opens.
   if (sourceBad || (!legacyTabs && snap?.state === 'stale')) quota = null
-  const leftRoom = legacyTabs && con === null ? columns - (oldStrip as BarStrip).width - 1 - forgeW - moreW : columns - BAND_CLOSE_ROOM - forgeW - moreW - (quota === null ? 0 : displayWidth(quota.text) + 2)
+  const leftRoom = legacyTabs && con === null ? columns - (oldStrip as BarStrip).width - 1 - forgeW - moreW : columns - (onTogglePane === undefined ? BAND_CLOSE_ROOM : BAND_TOGGLE_ROOM) - forgeW - moreW - (quota === null ? 0 : displayWidth(quota.text) + 2)
   // R4-1: the open pane owns navigation; its spare band row holds the repair whole. Row 1 never carries the command. `forgeRow`: that row under the band is forge-stats' summary (PM G33), so the repair is not drawn here.
   const repairBelow = noTabs && !legacyTabs && !forgeRow && (sourceBad || snap?.state === 'stale')
   const left = bandCells(el, snap, Math.max(1, leftRoom), hd.onInfo, t, hd.onSlot, preset, con !== null && !noTabs ? t('band.open_pane') + ' ' : BAND_INFO_LABEL, legacyTabs, fleetUnknown)
@@ -261,13 +264,13 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
   // `stripRow` alone is the menu row of the O4 shell: the shell is already 12 rows (SHELL_ROWS), so it takes the tab strip and leaves the summary row to the band's own draw
   // the quota segment sits at the right end of row 1 when two cells of room are left; it never takes a row and never pushes the speed label
   const qw = quota === null ? 0 : displayWidth(quota.text)
-  const qpad = quota === null ? 0 : (onTogglePane === undefined ? columns : columns - BAND_CLOSE_ROOM) - left.width - forgeW - qw
+  const qpad = quota === null ? 0 : (onTogglePane === undefined ? columns : columns - BAND_TOGGLE_ROOM) - left.width - forgeW - qw
   const qnode = quota === null || qpad < 2 ? [] : [<Text key="[REDACTED]">{' '.repeat(qpad)}</Text>, <Text key="[REDACTED]" {...drawSeg(quota)} wrap="truncate">{quota.text}</Text>]
-  // v7.4 S1: with `onTogglePane` the cell just left of the host's `[-]` is a pressable ▴ (pane closed) / ▾ (pane open); the row then ends BAND_CLOSE_ROOM cells short of the edge
+  // v7.4 S1: with `onTogglePane` the cell just left of the host's `[-]` is a pressable ▴ (pane closed) / ▾ (pane open); the glyph is the row's last cell (BAND_TOGGLE_ROOM)
   const toggleNode = onTogglePane === undefined ? [] : (() => {
     const glyph = paneOpen ? GLYPHS.structure.open : PANE_TOGGLE_CLOSED
     const used = left.width + forgeW + (qnode.length === 0 ? 0 : qpad + qw)
-    const pad = Math.max(0, columns - BAND_CLOSE_ROOM - used)
+    const pad = Math.max(0, columns - BAND_TOGGLE_ROOM - used)
     const draw = <Text key="[REDACTED]" {...drawSeg(moreSeg())} wrap="truncate">{glyph}</Text>
     return [<Text key="tgpad">{' '.repeat(pad)}</Text>, Button === undefined ? draw : <Button key="pane-toggle" plain onPress={onTogglePane}>{draw}</Button>]
   })()

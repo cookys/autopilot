@@ -1,6 +1,6 @@
 // v7.4 S1: the band's pane toggle (▴ closed / ▾ open) left of the host's `[-]`. Negative control: no prop, nothing new.
 import { test, expect } from 'claude-code/testing'
-import { BandBar, PANE_TOGGLE_CLOSED, BAND_CLOSE_ROOM } from './band'
+import { BandBar, PANE_TOGGLE_CLOSED } from './band'
 import { GLYPHS } from '../tux/glyphs.ts'
 import { makeT } from './i18n'
 import { displayWidth } from './model'
@@ -33,10 +33,10 @@ test('v74.a: negative control — no prop draws no toggle', () => {
   expect(flat(all)).not.toContain(PANE_TOGGLE_CLOSED)
 })
 
-test('v74.a: row 1 stays within columns - BAND_CLOSE_ROOM + 1 at 80/120/209', () => {
+test('r10b #4: the toggle is the last cell of the band width (the host draws its own gutter and `[-]` after it): row 1 is exactly the columns wide at 80/120/209', () => {
   for (const cols of [80, 120, 209]) {
     const text = flat(row1(draw(cols, () => {})))
-    expect(displayWidth(text)).toBeLessThanOrEqual(cols - BAND_CLOSE_ROOM + displayWidth(PANE_TOGGLE_CLOSED))
+    expect(displayWidth(text)).toBe(cols)
     expect(text.includes('\n')).toBe(false)
     expect(text.endsWith(PANE_TOGGLE_CLOSED)).toBe(true)
   }

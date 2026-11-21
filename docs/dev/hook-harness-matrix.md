@@ -12,6 +12,7 @@ In `hooks/harness-support-evidence.json`, a `fired` row (a probe run saw the eve
 | `askpm-remind` | Stop<br>未驗證 | — | — | — |
 | `audit-log` | PostToolUse<br>未驗證 | — | — | — |
 | `awaiting-owner` | Notification, PermissionRequest, SessionEnd, Stop, SubagentStart, SubagentStop<br>未驗證 | — | — | — |
+| `bg-quiet-sweep` | Stop, UserPromptSubmit<br>未驗證 | — | — | — |
 | `claude-home-read-guard` | PreToolUse<br>未驗證 | — | — | — |
 | `context-budget` | PostToolUse<br>未驗證 | — | — | — |
 | `context-land-gate` | Stop<br>未驗證 | — | — | — |

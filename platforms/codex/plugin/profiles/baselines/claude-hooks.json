@@ -102,6 +102,12 @@
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/scheduled-wakeup-guard.js",
             "timeout": 5,
             "onFailure": "continue"
+          },
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/bg-quiet-sweep.js",
+            "timeout": 5,
+            "onFailure": "continue"
           }
         ]
       },
@@ -443,6 +449,17 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/askpm-remind.js",
+            "timeout": 5,
+            "onFailure": "continue"
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/bg-quiet-sweep.js",
             "timeout": 5,
             "onFailure": "continue"
           }

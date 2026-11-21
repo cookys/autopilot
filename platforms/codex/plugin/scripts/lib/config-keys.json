@@ -8043,6 +8043,64 @@
       "doc": "docs/guide/settings-reference.md",
       "relates": ["AUTOPILOT_ENGINE_PREFLIGHT_WINDOW_MIN"],
       "summary": "Optional probe executable. Args are runner and model. Exit 0 ok, 75 overloaded, 76 rate_limited, 77 unsupported. A 20s timeout is SIGKILL, skip probe:timeout, warning probe_unknown:timeout. Any other exit is a warning, not a skip. Unset runs no probe."
+    },
+    {
+      "name": "target_precommit",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "on",
+      "readers": ["scripts/dispatch-hetero.sh"],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": ["AUTOPILOT_TARGET_PRECOMMIT"],
+      "summary": "Run the target repository's executable pre-commit hook against captured commits in a disposable worktree.",
+      "type": "enum",
+      "allowed": ["on", "off"]
+    },
+    {
+      "name": "target_precommit_timeout_s",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "dispatch",
+      "default": 300,
+      "readers": ["scripts/dispatch-hetero.sh"],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": ["AUTOPILOT_TARGET_PRECOMMIT_TIMEOUT_S"],
+      "summary": "Seconds allowed for the target repository's pre-commit hook.",
+      "type": "number"
+    },
+    {
+      "name": "AUTOPILOT_TARGET_PRECOMMIT",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "on",
+      "readers": ["scripts/dispatch-hetero.sh"],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": ["target_precommit"],
+      "summary": "Environment override for target_precommit; set to off to skip the target hook."
+    },
+    {
+      "name": "AUTOPILOT_TARGET_PRECOMMIT_TIMEOUT_S",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "300",
+      "readers": ["scripts/dispatch-hetero.sh"],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": ["target_precommit_timeout_s"],
+      "summary": "Environment override for target_precommit_timeout_s."
+    },
+    {
+      "name": "AUTOPILOT_TARGET_PRECOMMIT_TEST_SKIP",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": ["scripts/dispatch-hetero.sh", "hooks/tests/dispatch-hetero-target-precommit.test.sh"],
+      "doc": null,
+      "relates": [],
+      "note": "Test-only negative-control seam that bypasses target pre-commit execution; never set in normal dispatches."
     }
   ]
 }

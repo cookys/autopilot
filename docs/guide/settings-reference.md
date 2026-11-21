@@ -233,6 +233,10 @@ Opt-in copy of hetero-review report files. Finalize is wired in. It writes to th
 | `AUTOPILOT_ALLOW_REAL_STORE_WITH_BIN_OVERRIDE` | Set to "1" to let a dispatch whose --*-bin override is not the PATH binary write the real capability store. Otherwise the strike writer and passive capture skip that write unless ENGINE_CAPABILITY_DIR, ENGINE_CAPABILITY_FILE, or --store isolates it. | unset |  |
 | `AUTOPILOT_ENDPOINT_PREPROBE` | Set to `off` to skip the 2 s GET /models probe that dispatch-hetero and dispatch-consult make before using a local `--endpoint`. | `on` |  |
 | `AUTOPILOT_TIP_VERIFY_REQUIRE` | Set to `1` to make `dispatch-hetero.sh` refuse before the worker starts when no acceptance command is found (no `--verify-cmd`, no fenced block under the brief `## Acceptance`, no fenced or whole-line command under `.claude/quality-gate-config.md` `## Test Command`). Unset, a non-empty `scripts/lib/tip-verify-grace.json` proceeds, records `tip_verify` `no_source`, prints one stderr line naming the repo, and does not re-run acceptance. An empty, missing or unreadable list refuses the same way as `1`. | unset |  |
+| `target_precommit` (config.json) | Run the target repo's executable pre-commit against captured commits in a disposable worktree. | on |  |
+| `target_precommit_timeout_s` (config.json) | Maximum time in seconds for the target repo's pre-commit hook. | `300` |  |
+| `AUTOPILOT_TARGET_PRECOMMIT` | Set to `off` to skip the target repo pre-commit check. | on |  |
+| `AUTOPILOT_TARGET_PRECOMMIT_TIMEOUT_S` | Override `target_precommit_timeout_s`. | `300` |  |
 | `AUTOPILOT_CONSULT_TIMEOUT` | Timeout of a consult dispatch. | `5m` |  |
 | `AUTOPILOT_DISCUSS_TIMEOUT` | Timeout of a discuss dispatch. | `5m` |  |
 | `AUTOPILOT_AUTHOR_HARD_TIMEOUT` | Wall cap for an author dispatch when `--hard-timeout` is not passed. A duration (`4h`, `60m`). The run is killed even if it is still producing output. | `4h` |  |
@@ -490,6 +494,10 @@ Opt-in copy of hetero-review report files. Finalize is wired in. It writes to th
 | `AUTOPILOT_ALLOW_REAL_STORE_WITH_BIN_OVERRIDE` | Set to "1" to let a dispatch whose --*-bin override is not the PATH binary write the real capability store. Otherwise the strike writer and passive capture skip that write unless ENGINE_CAPABILITY_DIR, ENGINE_CAPABILITY_FILE, or --store isolates it. | unset |  |
 | `AUTOPILOT_ENDPOINT_PREPROBE` | Set to `off` to skip the 2 s GET /models probe that dispatch-hetero and dispatch-consult make before using a local `--endpoint`. | `on` |  |
 | `AUTOPILOT_TIP_VERIFY_REQUIRE` | Set to `1` to make `dispatch-hetero.sh` refuse before the worker starts when no acceptance command is found (no `--verify-cmd`, no fenced block under the brief `## Acceptance`, no fenced or whole-line command under `.claude/quality-gate-config.md` `## Test Command`). Unset, a non-empty `scripts/lib/tip-verify-grace.json` proceeds, records `tip_verify` `no_source`, prints one stderr line naming the repo, and does not re-run acceptance. An empty, missing or unreadable list refuses the same way as `1`. | unset |  |
+| `target_precommit` (config.json) | Run the target repo's executable pre-commit against captured commits in a disposable worktree. | on |  |
+| `target_precommit_timeout_s` (config.json) | Maximum time in seconds for the target repo's pre-commit hook. | `300` |  |
+| `AUTOPILOT_TARGET_PRECOMMIT` | Set to `off` to skip the target repo pre-commit check. | on |  |
+| `AUTOPILOT_TARGET_PRECOMMIT_TIMEOUT_S` | Override `target_precommit_timeout_s`. | `300` |  |
 | `AUTOPILOT_CONSULT_TIMEOUT` | Timeout of a consult dispatch. | `5m` |  |
 | `AUTOPILOT_DISCUSS_TIMEOUT` | Timeout of a discuss dispatch. | `5m` |  |
 | `AUTOPILOT_AUTHOR_HARD_TIMEOUT` | Wall cap for an author dispatch when `--hard-timeout` is not passed. A duration (`4h`, `60m`). The run is killed even if it is still producing output. | `4h` |  |

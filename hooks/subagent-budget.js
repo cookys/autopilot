@@ -38,6 +38,20 @@
  * The first deny per (session, lane-or-root) opens one owner panel card (pointer file dedup); later denies open none.
  * Every allowed dispatch gets one additionalContext line: last-hour turns, estimated USD, heaviest lane.
  *
+ * TICKET CEILING (hard, per Fleet-Task): the brief's `Fleet-Task: <26-char ULID>` line (scripts/lib/fleet-task-ref.js
+ * findTaskId) names the ticket. Spend = the sum over this session's EARLIER subagent dispatches (the subagents dir this
+ * hook reads) whose own first user message carries the same Fleet-Task, estimated exactly like the lane USD (costOf per
+ * assistant turn, all turns, no hour window — like the lane totals). Budget: a `Claude-Budget: <usd>` line in THIS
+ * brief, else subagent_budget.per_ticket_usd (default 5). spend >= budget denies the Agent call with a
+ * Traditional-Chinese reason (the ticket's Claude budget is used up, spent/budget; report progress on the ticket;
+ * dispatch cheap non-Claude engines) — regardless of mode (warn/remind both deny), no owner card, no ledger row, and
+ * `Budget-Ack:` does NOT pass it (a money ceiling). 0.8*budget <= spend < budget appends one advisory line to the allow;
+ * under 0.8*budget is silent. Kill switches: the hook's own enable/disable (subagent_budget.mode=off /
+ * AUTOPILOT_SUBAGENT_BUDGET_MODE=off turns off the whole hook) and AUTOPILOT_TICKET_BUDGET=0 (turns off ONLY this
+ * part; the lane ceilings keep working). FAIL-OPEN: any error in the ticket part (unparsable budget line, unreadable
+ * data) is treated as "no ticket ceiling" and the dispatch falls back to the lane logic alone; the hook itself stays
+ * fail-open (main entry catches, exit 0, no stdout).
+ *
  * MODES (default warn): ~/.autopilot/config.json {"subagent_budget": {"mode": "remind"|"warn"|"off", "lane_dispatch_max", "lane_turns_max",
  * "root_turns_per_hour_max", "runaway_multiple", "concurrent_advise_max"}} or the matching environment variables registered in scripts/lib/config-keys.json.
  * concurrent_advise_max (default 3, env AUTOPILOT_SUBAGENT_BUDGET_CONCURRENT_ADVISE_MAX, 0 off) appends one advisory
@@ -52,12 +66,13 @@ const path = require('path');
 const crypto = require('crypto');
 
 const HOUR_MS = 3600000;
-const DEFAULTS = { mode: 'warn', lane_dispatch_max: 4, lane_turns_max: 300, root_turns_per_hour_max: 400, runaway_multiple: 3, concurrent_advise_max: 3 };
+const DEFAULTS = { mode: 'warn', lane_dispatch_max: 4, lane_turns_max: 300, root_turns_per_hour_max: 400, runaway_multiple: 3, concurrent_advise_max: 3, per_ticket_usd: 5 };
 const { LANE_RE, headerDenialSuffix } = require('./lib/brief-header-template.js');
 const REVIEWER_RE = /^Role:[ \t]*reviewer[ \t]*$/;
 const ACK_RE = /^Budget-Ack:[ \t]*(.*)$/;
 const ACK_MIN_REASON = 8;
-const CACHE_SCHEMA = 'autopilot.subagent-budget-cache/2';
+// v3: entries gained `ticket` (the brief's Fleet-Task id); v2 caches have no field => cold re-parse.
+const CACHE_SCHEMA = 'autopilot.subagent-budget-cache/3';
 const MAX_ANCESTOR_DEPTH = 8;
 // BL-0209 / panel card d-53cf611a (decided): a nested (spawnDepth >= 2) transcript occupies no lane DISPATCH slot
 // (its turns always count). tally()'s fourth parameter overrides this for tests.
@@ -83,6 +98,16 @@ function nonNegInt(v) {
 function normMode(v) {
   const m = typeof v === 'string' ? v.trim().toLowerCase() : '';
   return m === 'remind' || m === 'warn' || m === 'off' ? m : null;
+}
+
+// USD amount (a budget): positive finite number (number or plain digit string). null = absent or invalid.
+function usdValue(v) {
+  if (typeof v === 'number') return Number.isFinite(v) && v > 0 ? v : null;
+  if (typeof v === 'string' && /^\d+(?:\.\d+)?$/.test(v.trim())) {
+    const n = Number(v.trim());
+    return n > 0 ? n : null;
+  }
+  return null;
 }
 
 function loadConfig() {

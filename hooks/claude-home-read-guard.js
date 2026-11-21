@@ -104,31 +104,55 @@ function targetDecision(raw, payload, { write = false } = {}) {
 }
 function globCanReachClaude(pattern) { return /(?:^|\/)(?:\.claude|\*\*|\*)/.test(pattern || ''); }
 function shortFlag(arg, flag) { return /^-[A-Za-z]+$/.test(arg) && arg.slice(1).includes(flag); }
-function pathOperands(cmd, args) {
-  const search = ['grep','egrep','rg','ugrep','ag'].includes(cmd);
-  const scripted = ['sed','awk'].includes(cmd);
-  const jq = cmd === 'jq';
-  const out = []; let patternPending = false; let skipScript = false; let patternSeen = false; let endOptions = false;
+const OPERAND_OPTIONS = {
+  grep: { value: { e: 'pattern', regexp: 'pattern', f: 'pattern-path', file: 'pattern-path', g: 'glob', glob: 'glob', include: 'glob', exclude: 'glob', 'exclude-dir': 'glob', m: 'value', A: 'value', B: 'value', C: 'value', 'max-count': 'value', 'after-context': 'value', 'before-context': 'value', context: 'value' } },
+  egrep: { value: { e: 'pattern', regexp: 'pattern', f: 'pattern-path', file: 'pattern-path', g: 'glob', glob: 'glob', include: 'glob', exclude: 'glob', 'exclude-dir': 'glob', m: 'value', A: 'value', B: 'value', C: 'value', 'max-count': 'value', 'after-context': 'value', 'before-context': 'value', context: 'value' } },
+  rg: { value: { e: 'pattern', regexp: 'pattern', f: 'pattern-path', file: 'pattern-path', g: 'glob', glob: 'glob', include: 'glob', exclude: 'glob', 'max-count': 'value', 'after-context': 'value', 'before-context': 'value', context: 'value', maxdepth: 'value', threads: 'value', type: 'value', 'type-add': 'value', 'type-not': 'value' } },
+  ugrep: { value: { e: 'pattern', regexp: 'pattern', f: 'pattern-path', file: 'pattern-path', g: 'glob', glob: 'glob', include: 'glob', exclude: 'glob', 'exclude-dir': 'glob', m: 'value', A: 'value', B: 'value', C: 'value', 'max-count': 'value', 'after-context': 'value', 'before-context': 'value', context: 'value' } },
+  ag: { value: { e: 'pattern', regexp: 'pattern', f: 'pattern-path', file: 'pattern-path', g: 'glob', glob: 'glob', include: 'glob', exclude: 'glob', 'max-count': 'value', after: 'value', before: 'value', context: 'value', depth: 'value' } },
+  sed: { value: { e: 'script', f: 'pattern-path', expression: 'script', file: 'pattern-path' } },
+  awk: { value: { e: 'script', f: 'pattern-path', F: 'value', v: 'value', 'field-separator': 'value', assign: 'value' } },
+  jq: { value: { f: 'pattern-path', 'from-file': 'pattern-path', arg: 'value', argjson: 'value', rawfile: 'path', slurpfile: 'path', argfile: 'path', 'run-tests': 'path' } },
+};
+function classifyOperands(program, args) {
+  const table = OPERAND_OPTIONS[program]; const paths = []; const patterns = [];
+  let firstNonOption = true; let patternGivingOption = false; let endOptions = false;
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (patternPending) { if (arg !== '-f') { patternSeen = true; } else out.push(arg); patternPending = false; continue; }
     if (!endOptions && arg === '--') { endOptions = true; continue; }
-    if (!endOptions && search && (arg === '-e' || arg === '--regexp')) { patternPending = true; patternSeen = true; continue; }
-    if (!endOptions && search && (arg === '-f' || arg === '--file')) { if (args[i + 1]) out.push(args[++i]); patternSeen = true; continue; }
-    if (!endOptions && search && /^-e.+/.test(arg)) { patternSeen = true; continue; }
-    if (!endOptions && search && /^-f.+/.test(arg)) { out.push(arg.slice(2)); continue; }
-    if (!endOptions && scripted && (arg === '-e' || arg === '-f')) {
-      if (args[i + 1]) { const value = args[++i]; if (arg === '-f') out.push(value); }
-      skipScript = true; continue;
+    if (!endOptions && table && arg.startsWith('--')) {
+      const eq = arg.indexOf('='); const name = arg.slice(2, eq < 0 ? undefined : eq); const kind = table.value[name];
+      if (kind) {
+        if (kind === 'pattern' || kind === 'script' || kind === 'pattern-path') patternGivingOption = true;
+        if (eq >= 0) { const value = arg.slice(eq + 1); if (kind === 'path' || kind === 'pattern-path') paths.push(value); else if (kind === 'pattern' || kind === 'script') patterns.push(value); }
+        else if (i + 1 < args.length) { const value = args[++i]; if (kind === 'path' || kind === 'pattern-path') paths.push(value); else if (kind === 'pattern' || kind === 'script') patterns.push(value); }
+        continue;
+      }
     }
-    if (!endOptions && search && ['-g','--glob','--include','--exclude','--exclude-dir'].includes(arg)) { i++; continue; }
-    if (!endOptions && search && /^(?:--(?:glob|include|exclude|exclude-dir)=|-g=)/.test(arg)) continue;
+    if (!endOptions && table && /^-[^-]/.test(arg)) {
+      let consumed = false;
+      for (let n = 1; n < arg.length; n++) {
+        const kind = table.value[arg[n]]; if (!kind) continue;
+        const attached = arg.slice(n + 1);
+        if (attached) { if (kind === 'path' || kind === 'pattern-path') paths.push(attached); else if (kind === 'pattern' || kind === 'script') patterns.push(attached); if (kind === 'pattern' || kind === 'script' || kind === 'pattern-path') patternGivingOption = true; consumed = true; break; }
+        if (kind === 'pattern' || kind === 'script' || kind === 'path' || kind === 'pattern-path' || kind === 'glob' || kind === 'value') {
+          if (i + 1 < args.length) { const value = args[++i]; if (kind === 'path' || kind === 'pattern-path') paths.push(value); else if (kind === 'pattern' || kind === 'script') patterns.push(value); }
+          if (kind === 'pattern' || kind === 'script' || kind === 'pattern-path') patternGivingOption = true;
+          consumed = true; break;
+        }
+      }
+      if (consumed) continue;
+      if (arg !== '-') continue;
+    }
     if (!endOptions && arg.startsWith('-') && arg !== '-') continue;
-    if ((scripted || jq) && !skipScript) { skipScript = true; continue; }
-    if (search && !patternSeen) { patternSeen = true; continue; }
-    out.push(arg);
+    if (firstNonOption) {
+      firstNonOption = false;
+      if (['jq', 'sed', 'awk'].includes(program) && !patternGivingOption) { patterns.push(arg); patternGivingOption = true; continue; }
+      if (['grep','egrep','rg','ugrep','ag'].includes(program) && !patternGivingOption) { patterns.push(arg); patternGivingOption = true; continue; }
+    }
+    paths.push(arg);
   }
-  return out;
+  return { paths, patterns };
 }
 function ancestorOfHome(p, homes) {
   const ancestors = new Set(['/', '/home', '/root']);
@@ -139,7 +163,7 @@ function unwrapCommand(ws, depth = 0) {
   let i = 0;
   while (i < ws.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(ws[i])) i++;
   let cmd = path.basename(ws[i] || '');
-  while (['env','timeout','nice','nohup','command','xargs'].includes(cmd)) {
+  while (['env','timeout','nice','nohup','command','xargs','sudo'].includes(cmd)) {
     const wrapper = cmd; i++;
     if (wrapper === 'env') {
       while (i < ws.length && ws[i].startsWith('-')) { const opt = ws[i++]; if (opt === '-u' || opt === '--unset' || opt === '-C' || opt === '--chdir') i++; }
@@ -152,6 +176,8 @@ function unwrapCommand(ws, depth = 0) {
       else if (ws[i]?.startsWith('-')) i++;
     } else if (wrapper === 'xargs') {
       while (i < ws.length && ws[i].startsWith('-')) { const opt = ws[i++]; if (['-a','-E','-I','-L','-n','-P','-s','-d'].includes(opt) && ws[i]) i++; }
+    } else if (wrapper === 'sudo') {
+      while (i < ws.length && ws[i].startsWith('-')) { const opt = ws[i++]; if ((opt === '-u' || opt === '--user') && ws[i]) i++; }
     }
     while (i < ws.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(ws[i])) i++;
     cmd = path.basename(ws[i] || '');
@@ -165,7 +191,7 @@ function bashDecision(command, payload, depth = 0) {
     const parsed = unwrapCommand(ws, depth); let cmd = parsed.cmd;
     if (!cmd) continue;
     if (depth < 3 && ['bash','sh','zsh'].includes(cmd)) {
-      const cIndex = ws.findIndex((w) => w === '-c' || w === '--command');
+      const cIndex = ws.findIndex((w) => w === '--command' || (/^-[A-Za-z]+$/.test(w) && w.slice(1).includes('c')));
       if (cIndex >= 0 && ws[cIndex + 1]) { const nested = bashDecision(ws[cIndex + 1], { ...payload, cwd }, depth + 1); if (nested) return nested; }
       continue;
     }
@@ -184,8 +210,8 @@ function bashDecision(command, payload, depth = 0) {
     }
     const read = READ_COMMANDS.has(cmd); const write = WRITE_COMMANDS.has(cmd);
     if (read || write) {
-      const args = ['grep','egrep','rg','ugrep','ag','sed','awk','jq'].includes(cmd) ? pathOperands(cmd, ws.slice(1)) : ws.slice(1);
-      for (const arg of args) {
+      const operands = classifyOperands(cmd, ws.slice(1));
+      for (const arg of operands.paths) {
         if (/^(?:\d*[<>])/.test(arg)) continue;
         if (arg === '<' || arg === '>' || arg === '>>' || arg === '2>' || arg === '<<<') continue;
         const target = targetDecision(arg, { ...payload, cwd }, { write }); if (target) return target;
@@ -197,7 +223,7 @@ function bashDecision(command, payload, depth = 0) {
     if (recursive) {
       const excluded = ws.some((x) => x === '--exclude-dir=.claude' || (x === '-g' && ws[ws.indexOf(x) + 1] === '!.claude'))
         || /-not\s+-path\s+['"]?\*\/\.claude\*/.test(segment) || /(?:^|\s)-prune\b/.test(segment) && /\.claude/.test(segment);
-      if (!excluded) for (const arg of ws.slice(1)) {
+      if (!excluded) for (const arg of classifyOperands(cmd, ws.slice(1)).paths) {
         if (arg.startsWith('-')) continue;
         const p = expand(arg, cwd); if (ancestorOfHome(p, homes)) return p;
       }

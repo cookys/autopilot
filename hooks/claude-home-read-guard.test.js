@@ -85,6 +85,30 @@ test('search patterns and scripts are not treated as path operands', () => {
   ]) denied(call('Bash', { command }));
 });
 
+test('table-driven operand classification covers option values and pattern arguments', () => {
+  for (const command of [
+    'rg --regexp=x ~/.claude/settings.json', 'grep --regexp=x ~/.claude/settings.json',
+    `grep --file=${home}/.claude/p x.txt`, 'jq -f ~/.claude/x.jq y.json',
+    'jq -f ~/.claude/x.jq ~/.claude/settings.json',
+    'grep x ~/.claude/settings.json', 'grep -e x ~/.claude/settings.json',
+    'grep -f ~/.claude/settings.json x', 'sed -f ~/.claude/x f',
+    'jq . ~/.claude/settings.json', 'grep -rn x ~', 'rg x ~'
+  ]) denied(call('Bash', { command }));
+  for (const command of ['rg "$HOME" docs', "rg '~' docs", 'grep -rn "$HOME" hooks/']) {
+    allowed(call('Bash', { command }));
+  }
+});
+
+test('shell short clusters and sudo wrappers retain guard decisions', () => {
+  for (const command of [
+    'bash -lc "cat ~/.claude/settings.json"',
+    'sh -lc "cat ~/.claude/settings.json"',
+    'zsh -lc "cat ~/.claude/settings.json"',
+    'sudo cat ~/.claude/settings.json', 'sudo -u nobody cat ~/.claude/settings.json'
+  ]) denied(call('Bash', { command }));
+  for (const command of ['bash -lc "cat README.md"', 'sudo cat README.md']) allowed(call('Bash', { command }));
+});
+
 test('command wrappers and shell command strings retain guard decisions', () => {
   for (const command of [
     'env cat ~/.claude/settings.json', 'FOO=1 cat ~/.claude/settings.json',

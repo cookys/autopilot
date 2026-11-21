@@ -38,6 +38,20 @@
  * The first deny per (session, lane-or-root) opens one owner panel card (pointer file dedup); later denies open none.
  * Every allowed dispatch gets one additionalContext line: last-hour turns, estimated USD, heaviest lane.
  *
+ * TICKET CEILING (hard, per Fleet-Task): the brief's `Fleet-Task: <26-char ULID>` line (scripts/lib/fleet-task-ref.js
+ * findTaskId) names the ticket. Spend = the sum over this session's EARLIER subagent dispatches (the subagents dir this
+ * hook reads) whose own first user message carries the same Fleet-Task, estimated exactly like the lane USD (costOf per
+ * assistant turn, all turns, no hour window — like the lane totals). Budget: a `Claude-Budget: <usd>` line in THIS
+ * brief, else subagent_budget.per_ticket_usd (default 5). spend >= budget denies the Agent call with a
+ * Traditional-Chinese reason (the ticket's Claude budget is used up, spent/budget; report progress on the ticket;
+ * dispatch cheap non-Claude engines) — regardless of mode (warn/remind both deny), no owner card, no ledger row, and
+ * `Budget-Ack:` does NOT pass it (a money ceiling). 0.8*budget <= spend < budget appends one advisory line to the allow;
+ * under 0.8*budget is silent. Kill switches: the hook's own enable/disable (subagent_budget.mode=off /
+ * AUTOPILOT_SUBAGENT_BUDGET_MODE=off turns off the whole hook) and AUTOPILOT_TICKET_BUDGET=0 (turns off ONLY this
+ * part; the lane ceilings keep working). FAIL-OPEN: any error in the ticket part (unparsable budget line, unreadable
+ * data) is treated as "no ticket ceiling" and the dispatch falls back to the lane logic alone; the hook itself stays
+ * fail-open (main entry catches, exit 0, no stdout).
+ *
  * MODES (default warn): ~/.autopilot/config.json {"subagent_budget": {"mode": "remind"|"warn"|"off", "lane_dispatch_max", "lane_turns_max",
  * "root_turns_per_hour_max", "runaway_multiple", "concurrent_advise_max"}} or the matching environment variables registered in scripts/lib/config-keys.json.
  * concurrent_advise_max (default 3, env AUTOPILOT_SUBAGENT_BUDGET_CONCURRENT_ADVISE_MAX, 0 off) appends one advisory
@@ -52,12 +66,15 @@ const path = require('path');
 const crypto = require('crypto');
 
 const HOUR_MS = 3600000;
-const DEFAULTS = { mode: 'warn', lane_dispatch_max: 4, lane_turns_max: 300, root_turns_per_hour_max: 400, runaway_multiple: 3, concurrent_advise_max: 3 };
+const DEFAULTS = { mode: 'warn', lane_dispatch_max: 4, lane_turns_max: 300, root_turns_per_hour_max: 400, runaway_multiple: 3, concurrent_advise_max: 3, per_ticket_usd: 5 };
 const { LANE_RE, headerDenialSuffix } = require('./lib/brief-header-template.js');
+const { findTaskId } = require('../scripts/lib/fleet-task-ref.js');
 const REVIEWER_RE = /^Role:[ \t]*reviewer[ \t]*$/;
 const ACK_RE = /^Budget-Ack:[ \t]*(.*)$/;
+const CLAUDE_BUDGET_RE = /^Claude-Budget:[ \t]*(.+)$/;
 const ACK_MIN_REASON = 8;
-const CACHE_SCHEMA = 'autopilot.subagent-budget-cache/2';
+// v3: entries gained `ticket` (the brief's Fleet-Task id); v2 caches have no field => cold re-parse.
+const CACHE_SCHEMA = 'autopilot.subagent-budget-cache/3';
 const MAX_ANCESTOR_DEPTH = 8;
 // BL-0209 / panel card d-53cf611a (decided): a nested (spawnDepth >= 2) transcript occupies no lane DISPATCH slot
 // (its turns always count). tally()'s fourth parameter overrides this for tests.
@@ -85,6 +102,16 @@ function normMode(v) {
   return m === 'remind' || m === 'warn' || m === 'off' ? m : null;
 }
 
+// USD amount (a budget): positive finite number (number or plain digit string). null = absent or invalid.
+function usdValue(v) {
+  if (typeof v === 'number') return Number.isFinite(v) && v > 0 ? v : null;
+  if (typeof v === 'string' && /^\d+(?:\.\d+)?$/.test(v.trim())) {
+    const n = Number(v.trim());
+    return n > 0 ? n : null;
+  }
+  return null;
+}
+
 function loadConfig() {
   const cfg = { ...DEFAULTS };
   let file = {};
@@ -109,6 +136,9 @@ function loadConfig() {
   const adviseEnv = nonNegInt(process.env.AUTOPILOT_SUBAGENT_BUDGET_CONCURRENT_ADVISE_MAX);
   const adviseFile = nonNegInt(file.concurrent_advise_max);
   cfg.concurrent_advise_max = adviseEnv !== null ? adviseEnv : (adviseFile !== null ? adviseFile : DEFAULTS.concurrent_advise_max);
+  const ticketEnv = usdValue(process.env.AUTOPILOT_SUBAGENT_BUDGET_PER_TICKET_USD);
+  const ticketFile = usdValue(file.per_ticket_usd);
+  cfg.per_ticket_usd = ticketEnv !== null ? ticketEnv : (ticketFile !== null ? ticketFile : DEFAULTS.per_ticket_usd);
   return cfg;
 }
 
@@ -201,6 +231,15 @@ function ackFromBrief(text) {
   return weak;
 }
 
+function claudeBudgetFromBrief(text) {
+  if (typeof text !== 'string' || !text) return null;
+  for (const line of text.replace(/\r\n/g, '\n').split('\n')) {
+    const m = CLAUDE_BUDGET_RE.exec(line);
+    if (m) return usdValue(m[1].trim());
+  }
+  return null;
+}
+
 function contentText(content) {
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
@@ -254,13 +293,86 @@ function parseTranscript(file, metaFile) {
   for (const turn of turns) {
     t.push(Number.isFinite(turn.ts) ? turn.ts : null, costOf(turn));
   }
-  return { briefLane, descLane, parent, depth, reviewer: isReviewer(head), n: turns.length, t };
+  let ticket = null;
+  try { ticket = findTaskId(head); } catch { ticket = null; }
+  return { briefLane, descLane, parent, depth, reviewer: isReviewer(head), ticket, n: turns.length, t };
 }
 
 function cacheFile(sessionId) {
   const L = require('./live-session-lib.js');
   const { sanitizeSessionId } = require('../scripts/lib/live-state-dir.js');
   return path.join(L.liveBase(), 'subagent-budget', 'cache', `${sanitizeSessionId(sessionId)}.json`);
+}
+
+function ticketLedgerFile() {
+  const L = require('./live-session-lib.js');
+  return path.join(L.liveBase(), 'subagent-budget', 'ticket-usage.jsonl');
+}
+
+function entryUsd(e) {
+  let usd = 0;
+  if (e && Array.isArray(e.t)) {
+    for (let i = 0; i + 1 < e.t.length; i += 2) usd += e.t[i + 1];
+  }
+  return usd;
+}
+
+function readTicketLedgerRows() {
+  const rows = [];
+  try {
+    const raw = fs.readFileSync(ticketLedgerFile(), 'utf8');
+    for (const line of raw.split('\n')) {
+      const s = line.trim();
+      if (!s) continue;
+      try {
+        const row = JSON.parse(s);
+        if (row && typeof row === 'object') rows.push(row);
+      } catch { /* skip malformed line */ }
+    }
+  } catch { /* absent or unreadable ledger */ }
+  return rows;
+}
+
+function recordTicketLedger(sessionId, entries, now) {
+  if (!sessionId || !entries) return;
+  try {
+    const sid = String(sessionId);
+    const existing = new Map();
+    for (const row of readTicketLedgerRows()) {
+      if (row.session === sid && row.subagent) {
+        existing.set(`${row.ticket}\0${row.subagent}`, row.usd);
+      }
+    }
+    const toAppend = [];
+    for (const [name, e] of Object.entries(entries)) {
+      if (!e || !e.ticket) continue;
+      const usd = entryUsd(e);
+      if (!(usd > 0)) continue;
+      const key = `${e.ticket}\0${name}`;
+      const prev = existing.get(key);
+      if (prev !== undefined && Math.abs(prev - usd) <= 1e-9) continue;
+      toAppend.push(JSON.stringify({ ts: now, ticket: e.ticket, session: sid, subagent: name, usd }));
+    }
+    if (toAppend.length > 0) {
+      const file = ticketLedgerFile();
+      fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+      fs.appendFileSync(file, toAppend.join('\n') + '\n', { mode: 0o600 });
+    }
+  } catch { /* fail-open if ledger cannot be written */ }
+}
+
+function ticketLedgerSpend(ticket) {
+  if (!ticket) return 0;
+  const bySubagent = new Map();
+  for (const row of readTicketLedgerRows()) {
+    if (row.ticket !== ticket) continue;
+    if (typeof row.usd !== 'number' || !Number.isFinite(row.usd) || row.usd < 0) continue;
+    const key = `${row.session || ''}\0${row.subagent || ''}`;
+    bySubagent.set(key, row.usd);
+  }
+  let total = 0;
+  for (const v of bySubagent.values()) total += v;
+  return total;
 }
 
 function loadCache(file) {
@@ -355,17 +467,21 @@ function withLanes(entries) {
 
 // ---- counting ------------------------------------------------------------------------------------------------------
 
-function tally(entries, lane, now, countNested = COUNT_NESTED_DISPATCHES) {
+function tally(entries, lane, now, countNested = COUNT_NESTED_DISPATCHES, ticket = null) {
   const floor = now - HOUR_MS;
   const lanes = new Map();
   let hourTurns = 0;
   let hourUsd = 0;
+  let ticketUsd = 0;
   for (const e of Object.values(entries)) {
     if (e.lane) {
       const l = lanes.get(e.lane) || { dispatches: 0, turns: 0 };
       if (!e.reviewer && (countNested || !(e.depth >= 2))) l.dispatches += 1;
       l.turns += e.n;
       lanes.set(e.lane, l);
+    }
+    if (ticket && e.ticket === ticket) {
+      for (let i = 0; i + 1 < e.t.length; i += 2) ticketUsd += e.t[i + 1];
     }
     if (!(e.mtimeMs > floor)) continue; // only the hour total may skip old files
     for (let i = 0; i + 1 < e.t.length; i += 2) {
@@ -378,7 +494,7 @@ function tally(entries, lane, now, countNested = COUNT_NESTED_DISPATCHES) {
     if (!heaviest || l.turns > heaviest.turns) heaviest = { lane: name, ...l };
   }
   const own = lane && lanes.get(lane) ? lanes.get(lane) : { dispatches: 0, turns: 0 };
-  return { laneDispatches: own.dispatches, laneTurns: own.turns, hourTurns, hourUsd, heaviest, files: Object.keys(entries).length };
+  return { laneDispatches: own.dispatches, laneTurns: own.turns, hourTurns, hourUsd, ticketUsd, heaviest, files: Object.keys(entries).length };
 }
 
 function contextLine(c) {
@@ -480,6 +596,16 @@ function emit(obj) {
 
 function run(payload) {
   if (!payload || typeof payload !== 'object') return;
+  if (payload.hook_event_name === 'SubagentStop') {
+    const cfg = loadConfig();
+    if (cfg.mode === 'off') return;
+    if (process.env.AUTOPILOT_TICKET_BUDGET === '0') return;
+    if (typeof payload.session_id !== 'string' || !payload.session_id
+      || typeof payload.transcript_path !== 'string' || !payload.transcript_path) return;
+    const raw = collect(payload);
+    if (raw) recordTicketLedger(payload.session_id, raw, nowMs());
+    return;
+  }
   if (payload.tool_name !== 'Agent' && payload.tool_name !== 'Task') return;
   const cfg = loadConfig();
   if (cfg.mode === 'off') return;
@@ -499,13 +625,20 @@ function run(payload) {
     payload = { ...payload, transcript_path: '' };
   }
   const now = nowMs();
+  const ticketBudgetEnabled = process.env.AUTOPILOT_TICKET_BUDGET !== '0';
+  let ticket = null;
+  if (ticketBudgetEnabled) {
+    try { ticket = findTaskId(brief); } catch { ticket = null; }
+  }
   const raw = noTranscript ? null : collect(payload);
   if (raw === null) {
     // No subagents dir: nothing to count and no ancestry to inherit from. A depth-0 Engine: brief with no Lane: is
-    // still a format error (the first dispatch of a session is where the lane must start); anything else fails open.
+    // still a format error (the first dispatch of a session is where the lane must start); anything else fails open
+    // unless a Fleet-Task ticket has prior spend in the cross-session ledger.
     const sub = (typeof payload.agent_id === 'string' && payload.agent_id) || OWN_TRANSCRIPT_RE.test(payload.transcript_path);
-    if (!(needLane && !sub && !laneFromBrief(brief))) return;
+    if (!(needLane && !sub && !laneFromBrief(brief)) && !ticket) return;
   }
+  if (raw && ticketBudgetEnabled) recordTicketLedger(payload.session_id, raw, now);
   const entries = withLanes(raw || {});
 
   let lane = laneFromBrief(brief);
@@ -519,7 +652,27 @@ function run(payload) {
   // lane-less (root total only), so a missing Lane: is never billed to, or carded under, a description lane.
   if (!lane && !needLane) lane = laneFromDescription(input.description);
   const reviewer = isReviewer(brief);
-  const c = tally(entries, lane, now);
+  const c = tally(entries, lane, now, COUNT_NESTED_DISPATCHES, ticket);
+
+  // Per-ticket Claude budget ceiling (hard deny regardless of mode, no owner card, no Budget-Ack bypass; fail-open on error).
+  let ticketAdvisory = '';
+  if (ticket && ticketBudgetEnabled) {
+    try {
+      const briefBudget = claudeBudgetFromBrief(brief);
+      const ticketBudget = briefBudget === null ? cfg.per_ticket_usd : Math.min(briefBudget, cfg.per_ticket_usd);
+      const spentUsd = Math.max(c.ticketUsd, ticketLedgerSpend(ticket));
+      if (spentUsd >= ticketBudget) {
+        emit({
+          permissionDecision: 'deny',
+          permissionDecisionReason: `票務 ${ticket} 的 Claude 預算已用盡（已花費 $${spentUsd.toFixed(2)} / 上限 $${ticketBudget.toFixed(2)}）。請立即回報此票務的進度，並改派便宜的非 Claude 引擎（如 codex / grok / agy）。`,
+        });
+        return;
+      }
+      if (spentUsd >= 0.8 * ticketBudget) {
+        ticketAdvisory = ` 票務 ${ticket} 的 Claude 預算已使用 ${Math.round((spentUsd / ticketBudget) * 100)}%（$${spentUsd.toFixed(2)} / $${ticketBudget.toFixed(2)}）。`;
+      }
+    } catch { /* fail-open on ticket budget error */ }
+  }
 
   const hits = [];
   if (lane && !reviewer && c.laneDispatches >= cfg.lane_dispatch_max) {
@@ -541,7 +694,7 @@ function run(payload) {
     });
   }
 
-  const line = contextLine(c);
+  const line = contextLine(c) + ticketAdvisory;
   if (hits.length === 0) { emit({ additionalContext: withAdvisory(payload, line) }); return; }
 
   const summary = hits.map((h) => h.text).join('; ');
@@ -602,7 +755,7 @@ function run(payload) {
   });
 }
 
-module.exports = { run, collect, withLanes, tally, resolveDir, contentText, firstUserMessage, laneOf, laneFromBrief, laneFromDescription, ackFromBrief, isReviewer, isEngineBrief };
+module.exports = { run, collect, withLanes, tally, resolveDir, contentText, firstUserMessage, laneOf, laneFromBrief, laneFromDescription, ackFromBrief, claudeBudgetFromBrief, isReviewer, isEngineBrief };
 
 if (require.main === module) {
   try {

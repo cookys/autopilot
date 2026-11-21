@@ -172,8 +172,8 @@ od open --category goal --executor "$EXEC" --question "撤回？" --free-text --
 assert_eq "$RC" 0 "withdrawal open"; W="$OUT"
 od close --id "$W" --reask-after 1h
 assert_eq "$RC" 2 "--reask-after without an answer: exit 2"
-od close --id "$W"
-assert_eq "$RC" 0 "plain close with steps: exit 0"
+od close --id "$W" --withdraw "test cleanup: withdraw step card" --by "test/operator"
+assert_eq "$RC" 0 "explicit withdrawal with steps: exit 0"
 assert_eq "$(field "$W" status)" "closed" "withdrawal closes"
 assert_eq "$(field "$W" answer)" "null" "withdrawal answer is null"
 od close --id "$C" --answer "現在不方便" --reask-after 4hours
@@ -298,8 +298,8 @@ assert_eq "$RC" 0 "withdraw-due 0m decline: exit 0"
 od show
 assert_contains "$OUT" "re-ask due" "withdraw-due is due before close"
 assert_eq "$(first_id "$OUT")" "$DW" "withdraw-due sorts first while open"
-od close --id "$DW"
-assert_eq "$RC" 0 "withdraw-due plain close: exit 0"
+od close --id "$DW" --withdraw "test cleanup: withdraw due card" --by "test/operator"
+assert_eq "$RC" 0 "withdraw-due explicit close: exit 0"
 assert_eq "$(field "$DW" status)" "closed" "withdraw-due status closed"
 assert_eq "$(field "$DW" reask_at)" "<undef>" "plain close drops reask_at"
 od show --id "$DW"

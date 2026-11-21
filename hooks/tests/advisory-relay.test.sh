@@ -457,6 +457,22 @@ assert_contains "$__RUN_STDOUT" "decide-relay-still-here" "decide reply close: a
 SHOW1="$(dec_show || true)"
 assert_not_contains "$SHOW1" "$DEC_A" "card A closed"
 assert_not_contains "$SHOW1" "$DEC_B" "card B closed"
+
+# Regression for operator card d-54d32366: step cards without operator_steps retain panel answer text.
+STEP_ID="$(env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_ROOT_RUN_ID node -e 'const{openDecision}=require(process.argv[1]);const r=openDecision({cwd:process.argv[2],root:null,session:null,question:"d-54d32366 operator step",options:null,not_authorized:"irreversible",kind:"step"});process.stdout.write(r.id)' "$REPO_ROOT/scripts/open-decision.js" "$DEC_REPO")"
+STEP_STORE="$(env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_ROOT_RUN_ID node -e 'const{findCard}=require(process.argv[1]);process.stdout.write(findCard(process.argv[2],process.argv[3],{all:true}).file)' "$REPO_ROOT/scripts/open-decision.js" "$DEC_REPO" "$STEP_ID")"
+STEP_PROMPT="$(printf '[待決回覆]\n%s｜d-54d32366 operator step → 已完成：跑了 scripts/check.sh' "$STEP_ID")"
+run_hook advisory-relay.js "$(node -e 'process.stdout.write(JSON.stringify({session_id:"adv-d54d32366",cwd:process.argv[1],prompt:process.argv[2]}))' "$DEC_REPO" "$STEP_PROMPT")"
+assert_eq 0 "$__RUN_EXIT" "d-54d32366 panel answer hook exits 0"
+assert_eq "$(node -e 'const fs=require("fs");const d=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));process.stdout.write(String(d.decisions.find(x=>x.id===process.argv[2]).answer))' "$STEP_STORE" "$STEP_ID")" "已完成：跑了 scripts/check.sh" "d-54d32366 stores the panel answer text"
+assert_not_contains "$(node -e 'const fs=require("fs");const d=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));process.stdout.write(JSON.stringify(d.decisions.find(x=>x.id===process.argv[2])))' "$STEP_STORE" "$STEP_ID")" '"answer":null' "d-54d32366 never stores answer null"
+
+EMPTY_STEP_ID="$(env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_ROOT_RUN_ID node -e 'const{openDecision}=require(process.argv[1]);const r=openDecision({cwd:process.argv[2],root:null,session:null,question:"blank panel answer step",options:null,not_authorized:"irreversible",kind:"step"});process.stdout.write(r.id)' "$REPO_ROOT/scripts/open-decision.js" "$DEC_REPO")"
+EMPTY_STORE="$(env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_ROOT_RUN_ID node -e 'const{findCard}=require(process.argv[1]);process.stdout.write(findCard(process.argv[2],process.argv[3],{all:true}).file)' "$REPO_ROOT/scripts/open-decision.js" "$DEC_REPO" "$EMPTY_STEP_ID")"
+EMPTY_PROMPT="$(printf '[待決回覆]\n%s｜blank panel answer step → ' "$EMPTY_STEP_ID")"
+run_hook advisory-relay.js "$(node -e 'process.stdout.write(JSON.stringify({session_id:"adv-empty-step",cwd:process.argv[1],prompt:process.argv[2]}))' "$DEC_REPO" "$EMPTY_PROMPT")"
+assert_eq 0 "$__RUN_EXIT" "blank panel answer hook exits 0 with report"
+assert_eq "$(node -e 'const fs=require("fs");const d=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));process.stdout.write(d.decisions.find(x=>x.id===process.argv[2]).status)' "$EMPTY_STORE" "$EMPTY_STEP_ID")" "open" "blank panel answer leaves card open"
 # negative: head not on the first line
 DEC_IDS2="$(dec_ids)"
 DEC_C="$(printf '%s\n' "$DEC_IDS2" | sed -n '1p')"

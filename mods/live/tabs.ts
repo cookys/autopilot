@@ -507,11 +507,14 @@ function decideSteps(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
   let stepIndex = 0
   for (const d of steps) {
     if (d.kind === 'look') {
-      out.push(...ui.lookItemRows(u, needYou, d.question + staleSuffix(d, t), {
+      if (d.id !== null && ctx.decide?.dismissConfirmId === d.id) {
+        out.push(...ui.cardTitle(u, needYou, d.question + staleSuffix(d, t), undefined, { fact: F }))
+        out.push(...ui.detail(u, '做完了嗎？', { fact: F }))
+        out.push(ui.buttonRow(u, '做完了', { press: ui.DISMISS_PRESS + 'done:' + d.id, fact: F }))
+        out.push(ui.buttonRow(u, '還沒', { press: ui.DISMISS_PRESS + 'cancel:' + d.id, fact: F }))
+      } else out.push(...ui.lookItemRows(u, needYou, d.question + staleSuffix(d, t), {
         reopenPress: d.id !== null ? ui.LOOK_PRESS + d.id : undefined,
-        dismissLabel: t('decide.dismiss'),
-        dismissPress: d.id !== null ? ui.DISMISS_PRESS + d.id : undefined,
-        fact: F,
+        dismissLabel: t('decide.dismiss'), dismissPress: d.id !== null ? ui.DISMISS_PRESS + d.id : undefined, fact: F,
       }))
       out.push(ui.blank())
       continue
@@ -522,7 +525,11 @@ function decideSteps(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
     if (d.background !== null) out.push(...ui.cardParaRows(u, t('decide.k_background'), ui.cardParas(d.background), { fact: F, subtle: true }))
     if (d.blocks !== null) out.push(...ui.cardRow(u, t('decide.k_blocks'), d.blocks, { fact: F }))
     if ((d.attachments?.length ?? 0) > 0) out.push(...ui.cardAttachRows(u, t('decide.k_attach'), d.attachments as string[], { fact: F }))
-    if (d.id !== null) out.push(ui.buttonRow(u, t('decide.dismiss'), { press: ui.DISMISS_PRESS + d.id, fact: F }))
+    if (d.id !== null && ctx.decide?.dismissConfirmId === d.id) {
+      out.push(...ui.detail(u, '做完了嗎？', { fact: F }))
+      out.push(ui.buttonRow(u, '做完了', { press: ui.DISMISS_PRESS + 'done:' + d.id, fact: F }))
+      out.push(ui.buttonRow(u, '還沒', { press: ui.DISMISS_PRESS + 'cancel:' + d.id, fact: F }))
+    } else if (d.id !== null) out.push(ui.buttonRow(u, t('decide.dismiss'), { press: ui.DISMISS_PRESS + d.id, fact: F }))
     out.push(ui.blank())
   }
   if (out[out.length - 1]?.kind === 'blank') out.pop()

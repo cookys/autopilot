@@ -228,8 +228,19 @@ CBASE="$(git -C "$CODE" rev-parse main)"
 cat >"$CODE/scripts/dispatch-review.sh" <<'STUB'
 #!/usr/bin/env bash
 if [ -n "$STUB_ANSWER_FILE" ]; then
+  raw_answer=0
+  [[ " $* " == *"--raw-answer"* ]] && raw_answer=1
+  if [ -n "${STUB_PROMPT_FILE:-}" ]; then
+    while [ "$#" -gt 0 ]; do
+      if [ "$1" = "--spec-file" ]; then
+        cp "$2" "$STUB_PROMPT_FILE"
+        break
+      fi
+      shift
+    done
+  fi
   if [ "${STUB_TRANSPORT_FAIL:-0}" = "1" ]; then exit 1; fi
-  if [[ " $* " == *"--raw-answer"* ]]; then
+  if [ "$raw_answer" = 1 ]; then
     node -e 'const fs=require("fs");console.log(JSON.stringify({status:"reviewed",answer:fs.readFileSync(process.argv[1],"utf8"),usage:process.env.STUB_USAGE?JSON.parse(process.env.STUB_USAGE):null}))' "$STUB_ANSWER_FILE"
     exit 0
   fi
@@ -276,8 +287,8 @@ fs.writeFileSync(process.argv[3],JSON.stringify(body));' "$LD/review-p1/g1/findi
 code_answer fixed "$WORK/code-fixed.json"; code_answer notfixed "$WORK/code-notfixed.json"; code_answer extra "$WORK/code-extra.json"
 FID="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1])).findings[0].id)' "$LD/review-p1/g1/findings.json")"
 CHAIN_SHA="$(sha256sum "$LD/review-p1/chain.json" | cut -d' ' -f1)"
-code_recheck() { # <answer-file> <seats>
-  STUB_ANSWER_FILE="$1" STUB_USAGE='{"input_tokens":10,"output_tokens":2}' STUB_TRANSPORT_FAIL="${3:-0}" env -u AUTOPILOT_TOKEN_SEAT -u AUTOPILOT_SESSION_ID \
+code_recheck() { # <answer-file> <seats> [transport-fail] [prompt-file]
+  STUB_ANSWER_FILE="$1" STUB_USAGE='{"input_tokens":10,"output_tokens":2}' STUB_TRANSPORT_FAIL="${3:-0}" STUB_PROMPT_FILE="${4:-}" env -u AUTOPILOT_TOKEN_SEAT -u AUTOPILOT_SESSION_ID \
     node "$CODE_LOOP" recheck --repo-root "$CODE" --phase p1 --generation 1 --branch work --seats "$2" </dev/null 2>"$WORK/recheck.err"
 }
 OUT="$(code_recheck "$WORK/code-fixed.json" "claude-haiku-5/low@claude,gpt-m1/high@codex")"; RC=$?
@@ -308,18 +319,26 @@ assert_exit_code "$RC" "5" "(g)(h) unavailable sole seat exits 5"
 assert_eq "$(json_field "$OUT" recheck.status)" "unavailable" "(g)(h) transport failure adjudicates"
 assert_eq "$(json_field "$OUT" recheck.attempts.length)" "1" "(g)(h) does not dispatch a second seat"
 
-# ---- (g)(i) a blocker without a nearby repair hunk is never asked or frozen ----
-cp "$LD/review-p1/g1/findings.json" "$WORK/findings-no-hunk.json"
-node -e 'const fs=require("fs");const p=process.argv[1];const x=JSON.parse(fs.readFileSync(p));x.findings=[{...x.findings[0],id:"missing-hunk",text:"Major: absent.txt:40 unrelated issue"}];fs.writeFileSync(p,JSON.stringify(x));' "$WORK/findings-no-hunk.json"
-cp "$WORK/findings-no-hunk.json" "$LD/review-p1/g1/findings.json"
+# ---- (g)(i) mixed evidence asks only about the repaired blocker and lists only the missing hunk for PM ----
+cp "$LD/review-p1/g1/findings.json" "$WORK/findings-mixed.json"
+node -e 'const fs=require("fs");const p=process.argv[1];const x=JSON.parse(fs.readFileSync(p));const hunk={...x.findings[0],id:"hunk-blocker",text:"Major: src.txt:3 repaired issue"};const missing={...x.findings[0],id:"missing-hunk",text:"Major: absent.txt:40 unrelated issue"};x.findings=[hunk,missing];fs.writeFileSync(p,JSON.stringify(x));' "$WORK/findings-mixed.json"
+cp "$WORK/findings-mixed.json" "$LD/review-p1/g1/findings.json"
 rm -f "$LD/review-p1/g1/dispositions.json"
-node -e 'const fs=require("fs");const p=process.argv[1];const x=JSON.parse(fs.readFileSync(p));fs.writeFileSync(process.argv[2],JSON.stringify({results:x.findings.map(f=>({id:f.id,status:"fixed",reason:"line 3 no longer carries the bad value"}))}));' "$LD/review-p1/g1/findings.json" "$WORK/code-fixed-two.json"
-OUT="$(code_recheck "$WORK/code-fixed-two.json" "gpt-m1/high@codex" 0)"; RC=$?
-assert_exit_code "$RC" "0" "(g)(i) missing-hunk blocker is sent for adjudication"
-assert_eq "$(json_field "$OUT" verdict)" "FIX-THEN-SHIP" "(g)(i) no evidence cannot freeze"
-assert_eq "$(json_field "$OUT" recheck.results.0.reason)" "no_repair_hunk" "(g)(i) reason names missing repair evidence"
-assert_eq "$(json_field "$OUT" findings.0.id)" "missing-hunk" "(g)(i) correct blocker remains for PM"
-assert_eq "$(json_field "$OUT" recheck.attempts)" "[]" "(g)(i) no recheck seat is asked"
+printf '%s\n' '{"results":[{"id":"hunk-blocker","status":"fixed","reason":"the repaired line resolves the issue"}]}' >"$WORK/code-fixed-mixed.json"
+OUT="$(code_recheck "$WORK/code-fixed-mixed.json" "gpt-m1/high@codex" 0 "$WORK/mixed-prompt.md")"; RC=$?
+assert_exit_code "$RC" "0" "(g)(i) mixed-evidence recheck exits 0"
+assert_eq "$(json_field "$OUT" verdict)" "FIX-THEN-SHIP" "(g)(i) mixed evidence remains conditional"
+assert_eq "$(json_field "$OUT" policy_reason)" "generation_cap_requires_depth_0_adjudication" "(g)(i) generation-cap adjudication reason"
+assert_eq "$(json_field "$OUT" recheck.results.0.id)" "hunk-blocker" "(g)(i) hunk blocker is recorded fixed"
+assert_eq "$(json_field "$OUT" recheck.results.0.status)" "fixed" "(g)(i) hunk blocker result is fixed"
+assert_eq "$(json_field "$OUT" recheck.results.1.id)" "missing-hunk" "(g)(i) only the no-hunk blocker remains for PM"
+assert_eq "$(json_field "$OUT" recheck.results.1.reason)" "no_repair_hunk" "(g)(i) no-hunk reason names missing repair evidence"
+assert_eq "$(json_field "$OUT" recheck.not_fixed_ids)" '["missing-hunk"]' "(g)(i) only no-hunk id is not fixed"
+assert_eq "$(json_field "$OUT" findings.length)" "1" "(g)(i) one blocker is listed for PM"
+assert_eq "$(json_field "$OUT" findings.0.id)" "missing-hunk" "(g)(i) PM list excludes the repaired blocker"
+assert_contains "$(cat "$WORK/mixed-prompt.md")" "hunk-blocker" "(g)(i) seat is asked about hunk blocker"
+assert_not_contains "$(cat "$WORK/mixed-prompt.md")" "missing-hunk" "(g)(i) seat prompt excludes no-hunk blocker id"
+assert_eq "$(json_field "$OUT" recheck.attempts.length)" "1" "(g)(i) exactly one seat is asked"
 unset AUTOPILOT_DISPATCH_REVIEW_SCRIPT AUTOPILOT_STATE_DIR STUB_SEAT_RESPONSE
 
 # The real dispatcher returns pure JSON in raw-answer mode instead of applying its

@@ -110,6 +110,14 @@ fi
 
 end=$(date +%s)
 wall=$((end - start))
+# Test seam: AUTOPILOT_TEST_POST_MERGE_WALL_S replaces the measured wall for the 90-minute gate only.
+gate_wall=$wall
+if [ -n "${AUTOPILOT_TEST_POST_MERGE_WALL_S:-}" ]; then gate_wall=$AUTOPILOT_TEST_POST_MERGE_WALL_S; fi
+over_line=
+if [ "$gate_wall" -gt 5400 ]; then
+  over_min=$((gate_wall / 60))
+  over_line="post-merge suite took ${over_min} min on ${short}, over 90"
+fi
 : >"$tmp/red.list"
 : >"$tmp/new.list"
 if [ "${#red[@]}" -gt 0 ]; then printf '%s\n' "${red[@]}" >"$tmp/red.list"; fi
@@ -124,14 +132,21 @@ fs.writeFileSync(out, JSON.stringify({
 }) + '\n');
 JS
 
-if [ "${#new_red[@]}" -gt 0 ]; then
-  paths=$(IFS=' '; echo "${new_red[*]}")
-  line="post-merge NEW red on ${short}: ${paths}; revert with git revert -m 1 ${full_m}"
+if [ -n "$over_line" ] || [ "${#new_red[@]}" -gt 0 ]; then
+  new_line=
+  if [ "${#new_red[@]}" -gt 0 ]; then
+    paths=$(IFS=' '; echo "${new_red[*]}")
+    new_line="post-merge NEW red on ${short}: ${paths}; revert with git revert -m 1 ${full_m}"
+  fi
   if ! command -v fleet >/dev/null 2>&1; then
-    printf '%s\n' "$line"
+    if [ -n "$over_line" ]; then printf '%s\n' "$over_line"; fi
+    if [ -n "$new_line" ]; then printf '%s\n' "$new_line"; fi
     exit 4
   fi
-  fleet send "$NOTIFY" "$line"
-  exit 1
+  if [ -n "$over_line" ]; then fleet send "$NOTIFY" "$over_line"; fi
+  if [ -n "$new_line" ]; then
+    fleet send "$NOTIFY" "$new_line"
+    exit 1
+  fi
 fi
 exit 0

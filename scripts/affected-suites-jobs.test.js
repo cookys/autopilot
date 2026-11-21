@@ -71,7 +71,7 @@ const rcSet = (out) => [...out.matchAll(/^rc=(\d+) (\S+)$/gm)].map((m) => `${m[1
 const tmpTsv = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'durs-')), 'test-durations.tsv');
 const num = (f) => Number(fs.readFileSync(f, 'utf8').trim());
 
-test('--jobs 1 and no flag are byte-for-byte identical (stdout, stderr, status)', () => {
+test('--jobs 1 and --serial are byte-for-byte identical (stdout, stderr, status)', () => {
   const r = makeRepo({
     'hooks/tests/a.test.sh': suite('echo hello-a'),
     'hooks/tests/b.test.sh': suite('echo oops >&2; exit 3'),
@@ -79,7 +79,7 @@ test('--jobs 1 and no flag are byte-for-byte identical (stdout, stderr, status)'
   });
   try {
     const env = { AUTOPILOT_TEST_DURATIONS_FILE: tmpTsv() };
-    const plain = run(r.dir, [], env);
+    const plain = run(r.dir, ['--serial'], env);
     const one = run(r.dir, ['--jobs', '1'], env);
     assert.strictEqual(plain.status, 1);
     assert.strictEqual(one.stdout, plain.stdout);
@@ -121,7 +121,7 @@ test('--jobs 4 runs 8 one-second suites in clearly less wall time than serial, w
   const r = makeRepo(files);
   try {
     const env = { AUTOPILOT_TEST_DURATIONS_FILE: tmpTsv() };
-    const ser = run(r.dir, [], env);
+    const ser = run(r.dir, ['--serial'], env);
     const par = run(r.dir, ['--jobs', '4'], env);
     assert.deepStrictEqual(rcSet(par.stdout), rcSet(ser.stdout));
     assert.strictEqual(par.status, 1);

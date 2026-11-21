@@ -1872,15 +1872,37 @@
       "note": "Delay between claim attempts in ms; default 10000. Tests set 0."
     },
     {
+      "name": "AUTOPILOT_TEST_POST_MERGE_WALL_S",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": ["scripts/post-merge-suite.sh"],
+      "doc": null,
+      "relates": [],
+      "note": "Replaces the measured post-merge wall seconds for the 90-minute fleet notice only. Unset uses the real clock."
+    },
+    {
       "name": "AUTOPILOT_TEST_DURATIONS_FILE",
       "kind": "env",
       "audience": "internal",
       "class": "path_seam",
       "default": null,
-      "readers": ["scripts/affected-suites.js", "hooks/tests/run.sh"],
+      "readers": ["scripts/affected-suites.js", "hooks/tests/run.sh", "tools/migrate/suite-baseline.js"],
       "doc": null,
       "relates": [],
-      "note": "Path of the per-suite durations tsv (rel TAB seconds). Default ${XDG_CACHE_HOME:-~/.cache}/autopilot/test-durations.tsv. affected-suites --run writes it for the real repo only, or for any root when this is set (tests point it at a temp file)."
+      "note": "Path of the per-suite durations tsv (rel TAB seconds). Default ${XDG_CACHE_HOME:-~/.cache}/autopilot/test-durations.tsv. affected-suites --run writes it for the real repo only, or for any root when this is set (tests point it at a temp file). test-reds.tsv is the sibling file."
+    },
+    {
+      "name": "AUTOPILOT_TEST_REDS_FILE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": ["tools/migrate/suite-baseline.js"],
+      "doc": null,
+      "relates": ["AUTOPILOT_TEST_DURATIONS_FILE"],
+      "note": "Overrides the red-history TSV. Default is test-reds.tsv beside the durations file. Tests point it at a temp file."
     },
     {
       "name": "AUTOPILOT_TEST_TIMING_FACTOR",

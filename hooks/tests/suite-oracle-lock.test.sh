@@ -193,11 +193,11 @@ hold_lock_in_process "$CASE6_LOCK"
 CASE6_HOLDER="$_HOLD_LOCK_PID"
 poll_until 5 bash -c "flock -n '$CASE6_LOCK' -c true 2>/dev/null; [ \$? -eq 1 ]" \
   || fail "case6: setup — lock never observed held"
-TMPDIR="$CASE6_TMP" bash "$REPO_ROOT/hooks/tests/run.sh" sync-version-invalid-version >/dev/null 2>&1
+TMPDIR="$CASE6_TMP" bash "$REPO_ROOT/hooks/tests/run.sh" --serial sync-version-invalid-version >/dev/null 2>&1
 CASE6_RC=$?
 kill_lock_holder "$CASE6_HOLDER"
 assert_eq "$CASE6_RC" "0" \
-  "case6: a serial (non --parallel) run.sh is unaffected by a held oracle lock"
+  "case6: an explicit --serial run.sh is unaffected by a held oracle lock"
 
 # ── Case 7: lock released on normal exit — a held oracle lock does not ──
 # ── survive a run.sh --parallel process that exits cleanly ──

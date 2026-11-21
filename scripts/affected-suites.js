@@ -4,7 +4,7 @@
 //
 // Usage:
 //   node scripts/affected-suites.js --base <ref> [--head <ref>] [--json] [--run] [--record [path]]
-//     [--entry-timeout <secs>] [--attribute] [--jobs <N>]
+//     [--entry-timeout <secs>] [--attribute] [--jobs <N>] [--serial] [--dry-run]
 //   node scripts/affected-suites.js --files a.js b.sh [--json] [--run] [--allow-missing]   (paths relative to --root or absolute
 //     inside it; whitespace in a path, a path outside --root, a directory, or a path in neither the tree nor HEAD is exit 2;
 //     --allow-missing lets a hypothetical path through the existence check only)
@@ -51,7 +51,8 @@
 // (rel<TAB>seconds; timed-out entries are not written). For a --root other than this script's own repo it
 // is written only when AUTOPILOT_TEST_DURATIONS_FILE is set, so a fixture never pollutes the shared file.
 //
-// --jobs <N> (BL-0331; only with --run; default 1 = the serial run above, output byte-for-byte unchanged;
+// --jobs <N> (BL-0331; only with --run; default max(2, floor(nproc/2)); --serial or --jobs 1 is the
+// one-at-a-time run, output byte-for-byte the same as each other;
 // N>1 cannot be combined with --budget-seconds): suites not listed in hooks/tests/lib/serial-suites.txt (the
 // single source run.sh also reads) go through a pool of N workers, slowest first by the durations file
 // (no record = first, then name order); once the pool is empty the listed suites run one at a time, then
@@ -79,9 +80,13 @@
 // serialised between affected-suites instances by <tsv>.lock (10 s cap, then a warning and no write); run.sh
 // --parallel writes the same file with an atomic rename but does not take that lock.
 //
-// --entry-timeout <secs> (only with --run; default none): each executed entry runs in its own process
-// group and is killed after that many seconds (TERM, KILL 2s later); its rc is 124 and the summary
-// line ends with `(timeout: <paths>)`.
+// --entry-timeout <secs> (only with --run; overrides the per-suite wall cap): each executed entry runs
+// in its own process group and is killed after that many seconds (TERM, KILL 5s later); its rc is 124
+// and the summary line ends with `(timeout: <paths>)`. Without the flag every --run entry (pool and
+// serial, --fast and full) uses cap = min(600, max(30, 3 x recorded seconds)) from the durations file,
+// or 600 when that suite has no row. Expiry prints `timeout: <path> <cap>s`, records the suite red
+// with reason timeout, and the run continues. A red suite (fail or timeout) appends one TSV row
+// `<utc iso> TAB <path> TAB <fail|timeout> TAB <head sha>` to test-reds.tsv beside the durations file.
 // --attribute (needs --run and --base; not --files): after the run, re-run ONLY the non-zero entries at
 // the base commit in a temporary detached git worktree under the OS temp dir (always removed, also
 // on failure or TERM/INT), same command, env and entry timeout. An entry non-zero at base is
@@ -107,7 +112,9 @@
 // Each drop prints `deferred-to-post-merge: <path> <secs>s` and is not run (post-merge-suite.sh runs
 // the full affected set). Deferral never exits 3. Prints `fast-gate: selected N of M (full mode would
 // select K), deferred D` before the run, and at the end `fast-gate: wall <seconds>s` plus
-// `fast-gate: slowest <path> <secs>s` for the 5 slowest suites actually run. Pool jobs also get a
+// `fast-gate: slowest <path> <secs>s` for the 5 slowest suites actually run. When that measured wall
+// exceeds --fast-budget-seconds the run exits 5 and prints
+// `fast-gate: FAIL wall <s>s over budget <b>s`, even if every suite passed. Pool jobs also get a
 // fresh HOME and AUTOPILOT_HOME. In --fast, the five serial suites that mutate $REPO_ROOT
 // (context-window, session-mode, suite-residue-reaper, test-snapshot, check-phase-review-receipt)
 // run in the pool, each in its own `git worktree add --detach` of HEAD. The five that scan the
@@ -130,7 +137,7 @@
 //   extra_runners = entry points outside run.sh that the diff needs (mods/live/**, mods/viewer/**, mods/register.ts => mods/live/run-tests.sh + mods/viewer/run-tests.sh);
 //   present in both modes. Text output prints them as extra lines after the suites (or after FULL).
 //   mode "full" means: run the whole suite (hooks/tests/run.sh); `suites` is then empty.
-// Exit: 0 ok (selective or full; a whole-run skip is not ok), 1 a failed entry or an unverified whole-run skip, 2 usage/git error, 3 --budget-seconds ran out (executed entries green, none unverified).
+// Exit: 0 ok (selective or full; a whole-run skip is not ok), 1 a failed entry or an unverified whole-run skip, 2 usage/git error, 3 --budget-seconds ran out (executed entries green, none unverified), 5 --fast measured wall over --fast-budget-seconds.
 //
 // How it selects (static, conservative = over-select rather than miss):
 //   1. Index every code file (js/mjs/cjs/sh/bash/zsh/py/ps1) in the head tree by the file names it
@@ -958,7 +965,7 @@ function writeSkipSummary(n, failed, timedOut, infos) {
 }
 
 // Resolves {rc, timedOut, chunks}. With timeoutSecs the entry runs in its own process group; on expiry the
-// group gets TERM, then KILL 2s later, and rc is 124. stdout and stderr are always piped so a SKIP [ line
+// group gets TERM, then KILL 5s later, and rc is 124. stdout and stderr are always piped so a SKIP [ line
 // is visible. Without opts.capture each chunk is written through at once and the rc line is printed here.
 // 'close' finishes a normal suite; 'exit' plus 300 ms finishes one whose pipe a leftover process keeps open.
 function runEntry(root, rel, timeoutSecs, group, opts) {
@@ -990,7 +997,7 @@ function runEntry(root, rel, timeoutSecs, group, opts) {
       termTimer = setTimeout(() => {
         timedOut = true;
         killGroup(child.pid, 'SIGTERM');
-        killTimer = setTimeout(() => killGroup(child.pid, 'SIGKILL'), 2000);
+        killTimer = setTimeout(() => killGroup(child.pid, 'SIGKILL'), 5000);
       }, timeoutSecs * 1000);
     }
     const finish = (code) => {
@@ -1008,8 +1015,9 @@ function runEntry(root, rel, timeoutSecs, group, opts) {
           process.stderr.write(`affected-suites: ${rel}: process group ${pid} still alive ${groupWaitMs()} ms after SIGKILL; entry marked failed\n`);
           if (rc === 0) rc = 1;
         }
+        if (timedOut && !capture) process.stdout.write(`timeout: ${rel} ${timeoutSecs}s\n`);
         if (!capture) process.stdout.write(`rc=${rc} ${rel}\n`);
-        resolve({ rc, timedOut, chunks, lingering: !!lingering });
+        resolve({ rc, timedOut, chunks, lingering: !!lingering, cap: timeoutSecs });
       };
       // --jobs only (opts.confirmGroup): wait, bounded, until the group is gone (ESRCH; EPERM = no longer ours = gone).
       // The pid is seconds old here, so it cannot have been recycled into someone else's group.
@@ -1096,6 +1104,34 @@ function readDurations(file) {
     }
   } catch { /* no file = no history */ }
   return m;
+}
+// Wall cap for one suite. An explicit --entry-timeout wins. Otherwise min(600, max(30, 3 x recorded seconds)); no row = 600.
+function capFor(hist, rel, explicit) {
+  if (explicit != null) return explicit;
+  if (!hist || !hist.has(rel)) return 600;
+  return Math.min(600, Math.max(30, 3 * hist.get(rel)));
+}
+function loadRunHist(root) {
+  return durationsApply(root) ? readDurations(durationsFile()) : new Map();
+}
+function redsFile() {
+  return path.join(path.dirname(durationsFile()), 'test-reds.tsv');
+}
+function recordReds(root, results, timedOutPaths) {
+  const rows = (results || []).filter((r) => r && r.rc !== 0);
+  if (!rows.length || !durationsApply(root)) return;
+  let sha = '-';
+  try { sha = fullRef(root, 'HEAD'); } catch { /* no commit */ }
+  const iso = new Date().toISOString();
+  const timed = new Set(timedOutPaths || []);
+  const body = rows.map((r) => `${iso}\t${r.path}\t${timed.has(r.path) ? 'timeout' : 'fail'}\t${sha}\n`).join('');
+  try {
+    const file = redsFile();
+    lockedRun({ storeDir: path.dirname(file), lockFile: `${file}.lock`, name: 'reds', timeoutMs: 10000 }, () => {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.appendFileSync(file, body);
+    });
+  } catch (e) { process.stderr.write(`affected-suites: reds not recorded: ${e.message}\n`); }
 }
 // Only the real repo (or an explicit AUTOPILOT_TEST_DURATIONS_FILE) feeds the shared history: a fixture --root must not write fixture paths into ~/.cache.
 function durationsApply(root) {
@@ -1253,6 +1289,7 @@ async function runPool(root, doc, alwaysRun, jobs, entryTimeout, fast) {
   const callerFactor = process.env.AUTOPILOT_TEST_TIMING_FACTOR;
   const exec = async (rel, factor, isolateXdg) => {
     const t0 = Date.now();
+    const cap = capFor(hist, rel, entryTimeout);
     const env = jobEnv(tmpRoot, factor, isolateXdg ? xdgBase : null, made, !!(fast && isolateXdg));
     let cwd = root;
     let wt = null;
@@ -1267,8 +1304,8 @@ async function runPool(root, doc, alwaysRun, jobs, entryTimeout, fast) {
       }
     }
     try {
-      const r = await runEntry(cwd, rel, entryTimeout, true, { capture: true, env, confirmGroup: true });
-      return { ...r, seconds: Math.round(Date.now() - t0) / 1000 };
+      const r = await runEntry(cwd, rel, cap, true, { capture: true, env, confirmGroup: true });
+      return { ...r, seconds: Math.round(Date.now() - t0) / 1000, cap };
     } finally {
       if (wt) {
         removeFastWorktree(root, wt);
@@ -1280,6 +1317,7 @@ async function runPool(root, doc, alwaysRun, jobs, entryTimeout, fast) {
   const emit = (rel, r, extraLine) => {
     emitChunks(r.chunks);
     if (extraLine) process.stdout.write(extraLine);
+    if (r.timedOut) process.stdout.write(`timeout: ${rel} ${r.cap}s\n`);
     process.stdout.write(`rc=${r.rc} ${rel}\n`);
   };
   const finalize = (rel, r, flaky) => {
@@ -1363,10 +1401,12 @@ async function runSelected(root, doc, alwaysRun, budget, entryTimeout, jobs, fas
   const timedOut = [];
   let emptyFail = false;
   const started = Date.now();
+  const hist = loadRunHist(root);
   for (const rel of entries) {
     if (budgeted && (Date.now() - started) / 1000 >= budget) { skipped.push(rel); continue; }
     const t0 = Date.now();
-    const { rc, timedOut: to, chunks } = await runEntry(root, rel, entryTimeout);
+    const cap = capFor(hist, rel, entryTimeout);
+    const { rc, timedOut: to, chunks } = await runEntry(root, rel, cap);
     if (to) timedOut.push(rel);
     const row = { path: rel, rc, seconds: Math.round(Date.now() - t0) / 1000 };
     results.push(row);
@@ -1431,7 +1471,8 @@ async function attribute(root, baseSha, results, entryTimeout) {
     execFileSync('git', ['worktree', 'add', '--detach', wt, baseSha], { cwd: root, stdio: 'pipe' });
     for (const r of failing) {
       if (!fs.existsSync(path.join(wt, r.path))) { groups.new.push(r.path); continue; } // absent at base: cannot be preexisting
-      const { rc, timedOut: to } = await runEntry(wt, r.path, entryTimeout, true);
+      const cap = capFor(loadRunHist(root), r.path, entryTimeout);
+      const { rc, timedOut: to } = await runEntry(wt, r.path, cap, true);
       r.base_rc = rc;
       // Only a base run that finished normally and was non-zero is evidence of a preexisting failure;
       // a base run killed by the entry timeout, or exiting 124 (possibly the suite's own timeout), proves nothing.
@@ -1503,6 +1544,8 @@ function parseArgs(argv) {
       a.jobs = v !== undefined && /^[1-9][0-9]*$/.test(v.trim()) ? Number(v) : NaN;
       if (!Number.isInteger(a.jobs)) throw new Error(`--jobs needs a positive integer, got ${JSON.stringify(v)}`);
     }
+    else if (x === '--serial') a.serial = true;
+    else if (x === '--dry-run') a.dryRun = true;
     else if (x === '--fast') a.fast = true;
     else if (x === '--fast-max-suite-seconds') {
       const v = argv[++i];
@@ -1547,7 +1590,14 @@ async function main(argv) {
     process.stderr.write('affected-suites: --budget-seconds requires --run\n');
     return 2;
   }
+  if (a.serial && a.jobs == null) a.jobs = 1;
   if (a.fast && a.jobs == null) a.jobs = fastJobsDefault();
+  if ((a.run || a.dryRun) && a.jobs == null && a.budget == null && !a.serial) a.jobs = fastJobsDefault();
+  if (a.dryRun) {
+    const jobs = a.jobs || 1;
+    process.stdout.write(`mode: ${jobs > 1 ? 'parallel' : 'serial'}\njobs: ${jobs}\n`);
+    return 0;
+  }
   if ((a.fastMax != null || a.fastBudget != null) && !a.fast) {
     process.stderr.write('affected-suites: --fast-max-suite-seconds and --fast-budget-seconds require --fast\n');
     return 2;
@@ -1663,11 +1713,12 @@ async function main(argv) {
       // pool and rerun alike. AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR=1 keeps the caller's value.
       if (process.env.AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR !== '1') process.env.AUTOPILOT_ACCOUNTS_DIR = path.join(os.tmpdir(), `autopilot-no-accounts-${process.pid}`, 'accounts');
       else process.stderr.write(`WARNING: AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR=1: the caller's AUTOPILOT_ACCOUNTS_DIR is kept; a wired claude caller may read the operator's REAL account registry (WARNING)\n`);
-      if ((a.entryTimeout != null || a.jobs > 1 || a.fast) && !SIG_INSTALLED) installSignalKill();
+      if (!SIG_INSTALLED) installSignalKill();
       const runT0 = Date.now();
       const ran = await runSelected(root, doc, doc.mode === 'full' ? runAlways : doc.always_run, a.budget, a.entryTimeout, a.jobs || 1, !!a.fast);
       const fastWall = Math.round((Date.now() - runT0) / 1000);
       recordDurations(root, ran.results, ran.timedOutPaths || []);
+      recordReds(root, ran.results, ran.timedOutPaths || []);
       let attrCode = null;
       if (a.attribute) {
         const baseSha = fullRef(root, baseRef);
@@ -1692,12 +1743,18 @@ async function main(argv) {
         }
       }
       if (ran.slowest) process.stdout.write(ran.slowest);
+      let code = attrCode != null ? attrCode : ran.code;
       if (a.fast) {
+        const budget = a.fastBudget == null ? 300 : a.fastBudget;
         process.stdout.write(`fast-gate: wall ${fastWall}s\n`);
         const slow5 = ran.results.slice().sort((x, y) => y.seconds - x.seconds || (x.path < y.path ? -1 : 1)).slice(0, 5);
         for (const r of slow5) process.stdout.write(`fast-gate: slowest ${r.path} ${r.seconds}s\n`);
+        if (fastWall > budget) {
+          process.stdout.write(`fast-gate: FAIL wall ${fastWall}s over budget ${budget}s\n`);
+          if (code === 0) code = 5;
+        }
       }
-      return attrCode != null ? attrCode : ran.code;
+      return code;
     }
     const extra = doc.extra_runners.map((x) => x + '\n').join('');
     const full = doc.mode === 'full';

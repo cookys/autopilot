@@ -998,6 +998,7 @@
   "v75.room_none": "圓桌還沒有訊息。",
   "v75.help.moved": "舊 shell 的選單改成按鍵：r 圓桌、u 用量（第 5 頁）、p 或 0 寵物；d 是第 2 頁、h 是第 9 頁。在 Pane 的待決頁 u 仍是撤回。",
   "v75.help.click": "Pane 左邊框的卡號只有在全螢幕終端機才點得動；一般畫面宿主不回報點擊，卡號只當標示，用上下鍵換張。",
+  "v75.waiting": "Pane 待開：按 {closed} 開啟",
   "v75.toggle_close": "{open} 收起",
   "v75.toggle_open": "{closed} 展開"
 }

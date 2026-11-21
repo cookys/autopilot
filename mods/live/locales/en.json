@@ -998,6 +998,7 @@
   "v75.room_none": "The roundtable has no messages yet.",
   "v75.help.moved": "The old shell menus are keys now: r roundtable, u usage (page 5), p or 0 pet; d is page 2, h is page 9. In the Pane u stays undo on the 待決 page.",
   "v75.help.click": "Card numbers on the Pane's left edge are clickable only in a fullscreen terminal; in a normal screen the host sends no clicks, so the numbers are labels and Up/Down moves the card.",
+  "v75.waiting": "Pane waiting: press {closed} to open",
   "v75.toggle_close": "{open} fold",
   "v75.toggle_open": "{closed} open"
 }

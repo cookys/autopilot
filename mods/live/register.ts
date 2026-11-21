@@ -58,7 +58,7 @@ import type { ConsoleSnapshot } from './console'
 import { consoleSlotTab, nextConsoleTab } from './consoletabs'
 import type { ConsoleNav, ConsoleTab } from './consoletabs'
 
-import { BandBar, bandQuotaSeg, BarRule, Shell, barContent, barParts, cardMain, cardQuick, ShellBare, decideContent, progressRow, cardSplit, shellMenuRow, shellNote, speedContent, stackBand, stackRows, usageDraw } from './band'
+import { PANE_TOGGLE_CLOSED, BandBar, bandQuotaSeg, BarRule, Shell, barContent, barParts, cardMain, cardQuick, ShellBare, decideContent, progressRow, cardSplit, shellMenuRow, shellNote, speedContent, stackBand, stackRows, usageDraw } from './band'
 import type { SpeedPlacement } from './band'
 import { normalizedPools } from './pages/quota-pick'
 import { consoleFleetCounts } from './pages/rows'
@@ -1719,8 +1719,6 @@ async function closePane($: EngineInterface): Promise<void> {
 let v75Focus: V75Focus = 'prompt'
 let v75RingRank: number | null = null // screen-order rank of the Pane's last ring stop (the arrow = a ring step)
 let v75PaneOn = false // the host Pane opened for v7.5 is open now
-let v75ReopenActive = false // a reload reopen is still being asked for
-let v75ReopenLeft = 0 // renders that may still ask again
 let v75NotPlaced = false // the host answered isPlaced=false: no Pane, the band falls back to the v7.4 box
 let v75Locked: number | null = null // band height held while the Pane is open (0 -> 1 card never moves the layout)
 let v75LockCount = 0
@@ -2129,6 +2127,13 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const togglePane = async () => {
       let isOpen = v74Open
       if (!v74) { try { isOpen = (await $.ui.panes()).some(p => p.id === PANE_ID) } catch (_e) { /* the engine could not list panes: treat the pane as closed */ } }
+      if (isOpen && v75NotPlaced && !v75PaneOn) { // waiting (the host holds the pane open but undrawn): this press is the person's ask, the host seats it at any width
+        const placed = await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: true }).catch((err: unknown) => ({ isPlaced: false, reason: 'threw: ' + String(err) }) as { isPlaced: boolean; reason?: string })
+        void appendLog($, 'band-reload.log', { step: 'toggle-open', result: placed })
+        if (placed.isPlaced === true) v75NotPlaced = false
+        $.ui.invalidate('ui.render')
+        return
+      }
       if (!isOpen) { await pageOpen('now'); return }
       markPaneClosed(); void setPaneWanted($, false)
       await closePane($)
@@ -2255,7 +2260,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       const answer = await lower(forgeAsk.maxRows, forgeAsk.bodyColumns)
       if (answer !== undefined && answer !== null && (answer as { type?: string }).type !== 'engine') forgeRow = answer
     }
-    const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge, usageOn, moreTo, con, bandPreset, consoleOn && consoleSnap !== null ? bandQuotaSeg(normalizedPools(consoleSnap), bandNow, t, qSrc) : null, paneOpen || v74, legacyTabs, forgeRow !== null, legacyTabs ? undefined : () => { void togglePane() }, paneOpen)
+    const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge, usageOn, moreTo, con, bandPreset, consoleOn && consoleSnap !== null ? bandQuotaSeg(normalizedPools(consoleSnap), bandNow, t, qSrc) : null, paneOpen || v74, legacyTabs, forgeRow !== null, legacyTabs ? undefined : () => { void togglePane() }, paneOpen && !(v74 && v75NotPlaced))
     // v7.4: the O4 shell and the two-row band never draw. Closed: the one-line BandBar. Open: the page as a full-width framed tree (title in the top border, hint in the bottom border), the tab row, then the BandBar row.
     if (v74) {
       if ((await $.env.get('AUTOPILOT_LIVE_V75').catch(() => undefined)) !== '0') { // AUTOPILOT_LIVE_V75=0: the v7.4 in-band page only (kill switch; the v7.4 host tests run with it)
@@ -2267,23 +2272,24 @@ export function registerLive(on: Parameters<Register>[0]): void {
         const hostOpen = panes.some(p => p.id === PANE_ID && p.isPlaced === true) // a pane the host lists but has not placed is not open
         const reopen = v75ReopenAfterReload({ wanted, hostOpen, paneOn: v75PaneOn, open: v74Open })
         void appendLog($, 'band-reload.log', { step: 'first-render', wanted, panes: panes.map(p => ({ id: p.id, isShown: p.isShown, isFocused: p.isFocused, isPlaced: p.isPlaced })), reopen })
-        if (reopen) { v75OpenQuiet = true; v75ReopenActive = true; v75ReopenLeft = 3; markPaneOpen() }
+        if (reopen) { v75OpenQuiet = true; markPaneOpen() }
       }
       const v75c = await v74CtxOf($)
       const v75cards = v75c.decide ?? []
-      // G3: the host answered isPlaced=false to the reload reopen (m75e: 209 columns, no reason): the surface may not be ready on the first render, so the next renders ask again, up to 3 times
-      if (v75ReopenActive && v75ReopenLeft > 0 && v75NotPlaced && v74Open && !v75PaneOn) { v75ReopenLeft--; v75NotPlaced = false; v75OpenQuiet = true }
+      // G3: isPlaced=false means the pane is open but undrawn (d.ts UiOpenResult): asking again changes nothing, the person's own press on the band's ▴ seats it. Each draw looks at $.ui.panes(); once the host says placed the waiting state ends.
+      if (v75NotPlaced && v74Open && !v75PaneOn) {
+        const listed = await $.ui.panes().catch(() => [] as { id: string; isPlaced: boolean }[])
+        if (listed.some(p => p.id === PANE_ID && p.isPlaced === true)) { v75NotPlaced = false; void appendLog($, 'band-reload.log', { step: 'placed-later', panes: listed }) }
+      }
       let plan = v75Plan({ maxRows: rows, pending: v75cards.length, paneWanted: v74Open, notPlaced: v75NotPlaced, locked: v75Locked })
       if (v74Open && plan.pane && !v75PaneOn) {
         // open the host Pane; refused (isPlaced=false) -> the v7.4 box band, and the keyboard stays in the band
         const quiet = v75OpenQuiet; v75OpenQuiet = false
-        const placed = await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: !quiet }).catch(() => ({ isPlaced: false }) as { isPlaced: boolean })
-        if (quiet) void appendLog($, 'band-reload.log', { step: 'open', result: placed, retriesLeft: v75ReopenLeft })
-        if (placed.isPlaced === true) { v75ReopenActive = false; v75PaneOn = true; v75Focus = quiet ? 'prompt' : 'pane'; v75Locked = v75cards.length > 0 ? 5 : 1; v75LockCount = v75cards.length }
-        else if (v75ReopenActive && v75ReopenLeft === 0) { // three more asks refused: leave the band closed, one click on its ▴ opens the Pane (a person's press, which the host grants)
-          v75ReopenActive = false; v75Focus = 'band'; markPaneClosed(); void appendLog($, 'band-reload.log', { step: 'gave-up' })
-          plan = v75Plan({ maxRows: rows, pending: v75cards.length, paneWanted: false, notPlaced: false, locked: null })
-        } else { v75NotPlaced = true; v75Focus = 'band'; plan = v75Plan({ maxRows: rows, pending: v75cards.length, paneWanted: v74Open, notPlaced: true, locked: null }) }
+        let openErr: string | undefined
+        const placed = await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: !quiet }).catch((err: unknown) => { openErr = String(err); return { isPlaced: false, reason: 'threw: ' + openErr } as { isPlaced: boolean; reason?: string } }) // a throw has no reason of its own: the log names it
+        if (quiet) void appendLog($, 'band-reload.log', { step: 'open', result: placed, ...(openErr === undefined ? {} : { threw: openErr }), panes: await $.ui.panes().catch(() => []) })
+        if (placed.isPlaced === true) { v75PaneOn = true; v75Focus = quiet ? 'prompt' : 'pane'; v75Locked = v75cards.length > 0 ? 5 : 1; v75LockCount = v75cards.length }
+        else { v75NotPlaced = true; v75Focus = 'band'; plan = v75Plan({ maxRows: rows, pending: v75cards.length, paneWanted: v74Open, notPlaced: true, locked: null }) }
       } else if (v75PaneOn && !plan.pane) {
         v75PaneOn = false; v75Locked = null
         try { await $.ui.close({ id: PANE_ID }) } catch (_e) { /* already closed */ }
@@ -2312,11 +2318,12 @@ export function registerLive(on: Parameters<Register>[0]): void {
         return stackRows(el, [block, bar.row1])
       }
       }
-      const height = Math.min(rows - 1, V74_FRAME_MAX) // the band row stays; the tab row is the frame's bottom border. Never more than the design's 28 rows.
+      const waiting = v74Open && v75NotPlaced && !v75PaneOn
+      const height = Math.min(rows - 1 - (waiting ? 1 : 0), V74_FRAME_MAX) // the band row stays; the tab row is the frame's bottom border. Never more than the design's 28 rows.
       if (!v74Open || height < V74_FRAME_MIN) return stackRows(el, [bar.row1])
       const page = await paneTree($, e as never, false, height)
       await logBandGeometry($, rows, columns, height + 2)
-      return stackRows(el, [page, bar.row1])
+      return stackRows(el, [page, ...(waiting ? shellNote(el, t('v75.waiting', { closed: PANE_TOGGLE_CLOSED })) : []), bar.row1])
     }
     if (shellMode && rows < SHELL_MIN_ROWS) {
       const n = snapshot === null ? 0 : new Set(snapshot.pending.filter(d => !isStepCard(d)).map(cardKey)).size

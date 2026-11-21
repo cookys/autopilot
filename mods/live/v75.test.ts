@@ -253,3 +253,8 @@ test('v75 G2: FramePane.scroll moves the rows of a long decide page (PgDn); 0 is
   const down = frameRows(decidePage, ctx, { topAnchor: true, pages: PAGES, scroll: 8 }).map(text)
   expect(down.join('\n')).not.toBe(top.join('\n'))
 })
+
+test('v75 G3: the waiting hint names the closed-pane glyph in both languages', () => {
+  expect(makeT('zh-TW')('v75.waiting', { closed: '▴' })).toBe('Pane 待開：按 ▴ 開啟')
+  expect(makeT('en')('v75.waiting', { closed: '▴' })).toContain('▴')
+})

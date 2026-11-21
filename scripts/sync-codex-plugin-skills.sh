@@ -186,7 +186,7 @@ CODEX_DIRTY_TREE_DEST="hooks/dirty-protected-paths.js"
 # permission-block-lib.js lazily needs ask-decision.js; replay-stop-guard.js needs owner-question-guard.js;
 # scripts/pm-ask.js needs askpm-log.js).
 # Same-name mirrors only: this does not register additional Codex hooks.
-CODEX_HOOK_LIBS=(live-session-lib.js permission-block-lib.js ask-decision.js owner-question-guard.js askpm-log.js)
+CODEX_HOOK_LIBS=(live-session-lib.js permission-block-lib.js ask-decision.js owner-question-guard.js askpm-log.js native-msg-record.js native-msg-flush.js)
 PLUGIN_MANIFEST="$PLUGIN/.codex-plugin/plugin.json"
 
 if [ ! -d "$SRC" ]; then

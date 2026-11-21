@@ -190,6 +190,7 @@ for (const rel of [
   compareTree(rel);
 }
 for (const rel of [
+  'scripts/native-msg-outbox.js',
   'evals/capability-evidence-corpus.json',
   'evals/owner-capability-evidence-corpus.json',
   'evals/owner-eval-generator.js',
@@ -221,6 +222,8 @@ for (const [sourceRel, destinationRel] of [
   ['hooks/ask-decision.js', 'hooks/ask-decision.js'],
   ['hooks/owner-question-guard.js', 'hooks/owner-question-guard.js'],
   ['hooks/askpm-log.js', 'hooks/askpm-log.js'],
+  ['hooks/native-msg-record.js', 'hooks/native-msg-record.js'],
+  ['hooks/native-msg-flush.js', 'hooks/native-msg-flush.js'],
   ['platforms/codex/skill-adapters/lifecycle.md', 'skill-adapters/lifecycle.md'],
 ]) {
   const sourcePath = path.join(root, sourceRel);
@@ -249,7 +252,7 @@ if (!fs.existsSync(hookBaseline)) {
 const hookEntries = fs.existsSync(path.join(pluginDir, 'hooks'))
   ? fs.readdirSync(path.join(pluginDir, 'hooks')).sort() : [];
 if (JSON.stringify(hookEntries) !== JSON.stringify([
-  '_shared', 'ask-decision.js', 'askpm-log.js', 'dirty-protected-paths.js', 'hooks.json', 'lib', 'live-session-lib.js', 'orchestrator-edit-gate-lib.js',
+  '_shared', 'ask-decision.js', 'askpm-log.js', 'dirty-protected-paths.js', 'hooks.json', 'lib', 'live-session-lib.js', 'native-msg-flush.js', 'native-msg-record.js', 'orchestrator-edit-gate-lib.js',
   'owner-question-guard.js', 'permission-block-lib.js', 'post-compact.js', 'pre-effect.js',
 ])) {
   failures.push(`hooks entries ${hookEntries.join(',')}`);
@@ -442,6 +445,8 @@ for skill in dev-flow ceo-agent l3 l4 l5 l6 finish-flow; do
     "$skill" "$skill" > "$SYNC_SANDBOX/skills/$skill/SKILL.md"
 done
 cp "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" "$SYNC_SANDBOX/platforms/codex/plugin/scripts/sync-codex-plugin-skills.sh"
+printf "'use strict';\n" > "$SYNC_SANDBOX/scripts/native-msg-outbox.js"
+cp "$SYNC_SANDBOX/scripts/native-msg-outbox.js" "$SYNC_SANDBOX/platforms/codex/plugin/scripts/native-msg-outbox.js"
 for rel in \
   project/plans/_archive/2026/06/2026-06-04-distill-consolidate.md \
   project/plans/_archive/2026/06/2026-06-22-ceo-fleet-autonomy.md \
@@ -461,7 +466,7 @@ printf "'use strict';\n" > "$SYNC_SANDBOX/platforms/codex/hooks/pre-effect.js"
 printf "'use strict';\n" > "$SYNC_SANDBOX/platforms/codex/hooks/post-compact.js"
 printf "'use strict';\n" > "$SYNC_SANDBOX/hooks/orchestrator-edit-gate-lib.js"
 printf "'use strict';\n" > "$SYNC_SANDBOX/hooks/dirty-protected-paths.js"
-for hook_lib in live-session-lib.js permission-block-lib.js ask-decision.js owner-question-guard.js askpm-log.js; do
+for hook_lib in live-session-lib.js permission-block-lib.js ask-decision.js owner-question-guard.js askpm-log.js native-msg-record.js native-msg-flush.js; do
   printf "'use strict';\n" > "$SYNC_SANDBOX/hooks/$hook_lib"
   cp "$SYNC_SANDBOX/hooks/$hook_lib" "$SYNC_SANDBOX/platforms/codex/plugin/hooks/$hook_lib"
 done

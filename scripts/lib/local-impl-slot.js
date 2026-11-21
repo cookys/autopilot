@@ -56,8 +56,8 @@ function contextBytes(promptFile, cwd) {
   return n;
 }
 
-function endpointInfo(env) {
-  const r = spawnSync('bash', [path.join(__dirname, '..', 'resolve-endpoint.sh'), 'qwen_local'], {
+function endpointInfo(env, endpoint = 'qwen_local') {
+  const r = spawnSync('bash', [path.join(__dirname, '..', 'resolve-endpoint.sh'), endpoint], {
     env: { ...process.env, ...env }, encoding: 'utf8', timeout: 15000,
   });
   const line = String(r.stdout || '').split('\n').find((l) => l.startsWith('{'));
@@ -103,7 +103,7 @@ async function acquireLocalLease(opts = {}) {
   if (!info.ready || !base || !token) return fail('lease_query_failed:unreachable');
   const parsedTtl = Number.parseInt(env.AUTOPILOT_LOCAL_LEASE_TTL_S || '180', 10);
   const ttl = Number.isInteger(parsedTtl) && parsedTtl > 0 ? parsedTtl : 180;
-  const body = { model: 'qwen', est_context_tokens: 8192, ttl_s: ttl };
+  const body = { model: opts.family || 'qwen', ...(opts.backend ? { backend: opts.backend } : {}), est_context_tokens: 8192, ttl_s: ttl };
   const fleetTask = env.AUTOPILOT_FLEET_TASK || env.HETERO_FLEET_TASK_ID;
   if (fleetTask) body.fleet_task = fleetTask;
   const res = await leaseRequest(base, 'POST', token, JSON.stringify(body));
@@ -127,24 +127,24 @@ function queryFailed(source, why) {
   };
 }
 
-function namesQwen(ep) {
+function namesFamily(ep, family) {
   if (!ep || typeof ep !== 'object') return false;
   const models = ep.models;
   if (models && typeof models === 'object' && !Array.isArray(models)) {
     for (const k of Object.keys(models)) {
-      if (/qwen/i.test(k)) return true;
+      if (new RegExp(family, 'i').test(k)) return true;
     }
   }
   if (Array.isArray(models)) {
     for (const m of models) {
-      if (typeof m === 'string' && /qwen/i.test(m)) return true;
+      if (typeof m === 'string' && new RegExp(family, 'i').test(m)) return true;
       if (m && typeof m === 'object') {
         const id = m.id || m.name || m.alias;
-        if (typeof id === 'string' && /qwen/i.test(id)) return true;
+        if (typeof id === 'string' && new RegExp(family, 'i').test(id)) return true;
       }
     }
   }
-  if (typeof ep.id === 'string' && /qwen/i.test(ep.id)) return true;
+  if (typeof ep.id === 'string' && new RegExp(family, 'i').test(ep.id)) return true;
   return false;
 }
 
@@ -162,41 +162,29 @@ function freeOf(ep) {
 function interpretGateway(o, source) {
   const endpoints = Array.isArray(o.endpoints) ? o.endpoints : null;
   if (!endpoints) return null;
-  const named = endpoints.filter(namesQwen);
-  const ups = [];
-  for (const ep of named) {
-    if (ep.state !== 'up') continue;
-    const free = freeOf(ep);
-    if (free === null) continue;
-    ups.push({ id: typeof ep.id === 'string' ? ep.id : null, free });
-  }
-  if (ups.length) {
-    ups.sort((a, b) => b.free - a.free);
-    const best = ups[0];
-    if (best.free > 0) {
-      return {
-        local: true, backend: best.id, free: best.free, fallback: null, source, detail: 'free',
-      };
+  const familyResult = (family) => {
+    const named = endpoints.filter((ep) => namesFamily(ep, family));
+    const ups = [];
+    for (const ep of named) {
+      if (ep.state !== 'up') continue;
+      const free = freeOf(ep);
+      if (free !== null) ups.push({ id: typeof ep.id === 'string' ? ep.id : null, free });
     }
-    return {
-      local: false,
-      backend: best.id,
-      free: 0,
-      fallback: { reason: 'no_free_slot', detail: 'all_full' },
-      source,
-      detail: 'all_full',
-    };
+    ups.sort((a, b) => b.free - a.free);
+    if (ups.length && ups[0].free > 0) return { local: true, family, endpoint: `${family}_local`, backend: ups[0].id, free: ups[0].free, fallback: null, source, detail: 'free' };
+    if (ups.length) return { local: false, family, backend: ups[0].id, free: 0, fallback: { reason: 'no_free_slot', detail: 'all_full' }, source, detail: 'all_full' };
+    if (named.length && named.every((ep) => ep.state === 'draining')) return { local: false, family, backend: null, free: null, fallback: { reason: 'draining', detail: 'draining' }, source, detail: 'draining' };
+    return null;
+  };
+  const qwen = familyResult('qwen');
+  if (qwen && qwen.local) return qwen;
+  const glm = familyResult('glm');
+  if (glm && glm.local) {
+    if (qwen && qwen.fallback) glm.local_fallback_from = { family: 'qwen', reason: qwen.fallback.reason };
+    return glm;
   }
-  if (named.length && named.every((ep) => ep.state === 'draining')) {
-    return {
-      local: false,
-      backend: null,
-      free: null,
-      fallback: { reason: 'draining', detail: 'draining' },
-      source,
-      detail: 'draining',
-    };
-  }
+  if (qwen && qwen.fallback) return qwen;
+  if (glm && glm.fallback) return glm;
   return queryFailed(source, 'no_backend');
 }
 
@@ -344,9 +332,6 @@ async function decide(opts = {}) {
   const cwd = opts.cwd || process.cwd();
   const promptFile = opts.promptFile;
   const info = endpointInfo(env);
-  if (!info.ready) {
-    return { choose: false, reason: 'no_free_slot', detail: 'endpoint_not_ready', local_slots: null };
-  }
   const cfg = readConfig(env);
   const limit = Number.isFinite(Number(cfg.local_context_bytes)) && Number(cfg.local_context_bytes) > 0
     ? Number(cfg.local_context_bytes) : DEFAULT_BYTES;
@@ -354,7 +339,19 @@ async function decide(opts = {}) {
   if (bytes > limit) {
     return { choose: false, reason: 'context_too_large', detail: String(bytes), local_slots: null };
   }
-  return acquireLocalLease({ env, cfg, endpoint: info });
+  const cmd = Object.prototype.hasOwnProperty.call(env, 'AUTOPILOT_LOCAL_SLOTS_CMD') ? String(env.AUTOPILOT_LOCAL_SLOTS_CMD).trim() : String(cfg.local_slots_cmd || '').trim();
+  const explicitSlotsUrl = Object.prototype.hasOwnProperty.call(env, 'AUTOPILOT_LOCAL_SLOTS_URL') || String(cfg.local_slots_url || '').trim();
+  if (!cmd && !explicitSlotsUrl) {
+    if (!info.ready) return { choose: false, reason: 'no_free_slot', detail: 'endpoint_not_ready', local_slots: null };
+    return acquireLocalLease({ env, cfg, endpoint: info, family: 'qwen' });
+  }
+  const slot = await acquireLocalSlot({ env, cfg, endpoint: info });
+  if (!slot.local) return { choose: false, reason: slot.fallback.reason, detail: slot.fallback.detail, local_slots: slotView(slot), family: slot.family || null };
+  const leaseInfo = slot.family === 'glm' ? endpointInfo(env, 'glm_local') : info;
+  if (!leaseInfo.ready) return { choose: false, reason: 'no_free_slot', detail: 'endpoint_not_ready', family: slot.family, endpoint: slot.endpoint, local_slots: slotView(slot) };
+  const lease = await acquireLocalLease({ env, cfg, endpoint: leaseInfo, family: slot.family, backend: slot.backend });
+  return { ...lease, family: slot.family, endpoint: slot.endpoint, backend: slot.backend, free: slot.free,
+    local_fallback_from: slot.local_fallback_from || null, local_slots: slotView(slot) };
 }
 
 async function main() {

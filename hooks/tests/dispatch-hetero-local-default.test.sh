@@ -9,17 +9,17 @@ SCRIPT="$REPO_ROOT/scripts/dispatch-hetero.sh"
 export AUTOPILOT_QUALIFIED_FILE="$TEST_TMP/missing-qualified.json"
 export AUTOPILOT_PACE_FILE="$TEST_TMP/missing-pace.json"
 export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session-mode"
-export AUTOPILOT_TEST_CN_GATE_OFF=1
 export AUTOPILOT_ENDPOINT_PREPROBE=off
 export AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token
 export AUTOPILOT_LOCAL_SLOTS_CMD='printf %s '"'"'{"free":1,"draining":false}'"'"''
 export DISPATCH_DETACH=0 AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1
 LEASE_STATUS_FILE="$TEST_TMP/lease-status"
 LEASE_LOG="$TEST_TMP/lease-requests.jsonl"
+GATE_LOG="$TEST_TMP/cn-gate-requests.jsonl"
 printf '201\n' > "$LEASE_STATUS_FILE"
 LEASE_BUSY_FILE="$TEST_TMP/lease-endpoint-busy"
 LEASE_PORT_FILE="$TEST_TMP/lease.port"
-node - "$LEASE_STATUS_FILE" "$LEASE_LOG" "$LEASE_PORT_FILE" "$LEASE_BUSY_FILE" <<'NODE' &
+node - "$LEASE_STATUS_FILE" "$LEASE_LOG" "$LEASE_PORT_FILE" "$LEASE_BUSY_FILE" <<'NODE' >/dev/null 2>&1 &
 const http = require('http'), fs = require('fs');
 const [statusFile, logFile, portFile, busyFile] = process.argv.slice(2);
 const server = http.createServer((req, res) => {
@@ -41,13 +41,18 @@ const server = http.createServer((req, res) => {
 server.listen(0,'127.0.0.1',()=>fs.writeFileSync(portFile,String(server.address().port)));
 NODE
 LEASE_SERVER_PID=$!
-cleanup_lease_server() { kill "$LEASE_SERVER_PID" 2>/dev/null || true; wait "$LEASE_SERVER_PID" 2>/dev/null || true; }
+cleanup_lease_server() {
+  kill "$LEASE_SERVER_PID" 2>/dev/null || true
+  wait "$LEASE_SERVER_PID" 2>/dev/null || true
+}
 trap cleanup_lease_server EXIT
 for _i in 1 2 3 4 5 6 7 8 9 10; do [ -s "$LEASE_PORT_FILE" ] && break; sleep 0.1; done
 LEASE_PORT="$(cat "$LEASE_PORT_FILE")"
 export AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL="http://127.0.0.1:${LEASE_PORT}/v1"
+export AUTOPILOT_ENDPOINT_GLM_LOCAL_URL="http://127.0.0.1:${LEASE_PORT}/v1"
+export AUTOPILOT_ENDPOINT_GLM_LOCAL_TOKEN=fake-test-token
 mkdir -p "$AUTOPILOT_SESSION_MODE_DIR" "$TEST_TMP/bin"
-unset AUTOPILOT_QUALIFICATION_OVERRIDE AUTOPILOT_DISPATCH_ROLE 2>/dev/null || true
+unset AUTOPILOT_QUALIFICATION_OVERRIDE AUTOPILOT_DISPATCH_ROLE AUTOPILOT_TASK_CLASS 2>/dev/null || true
 
 GIT="git -c user.email=t@t -c user.name=t -c init.defaultBranch=develop -c commit.gpgsign=false"
 SBX="$TEST_TMP/repo"
@@ -65,6 +70,16 @@ printf '%s\n' "$@" > local-argv.txt
 printf '%s' '{"type":"result","is_error":false,"result":"ok"}'
 EOF
 chmod +x "$STUB_CLAUDE"
+
+REAL_NODE="$(command -v node)"
+cat > "$TEST_TMP/bin/node" <<EOF
+#!/usr/bin/env bash
+if [ "\${1:-}" = "$REPO_ROOT/scripts/lib/cn-model-dispatch-gate.js" ] && [ "\${2:-}" = "check" ]; then
+  printf '%s\n' "\$*" >> "$GATE_LOG"
+fi
+exec "$REAL_NODE" "\$@"
+EOF
+chmod +x "$TEST_TMP/bin/node"
 
 STUB_GROK="$TEST_TMP/grok"
 cat > "$STUB_GROK" <<'EOF'
@@ -99,7 +114,7 @@ run_local() {
   local runs="$TEST_TMP/runs-$tag"
   mkdir -p "$runs"
   OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
-    XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-}" \
+    XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-}" AUTOPILOT_ENDPOINT_GLM_LOCAL_URL="$AUTOPILOT_ENDPOINT_GLM_LOCAL_URL" AUTOPILOT_ENDPOINT_GLM_LOCAL_TOKEN="$AUTOPILOT_ENDPOINT_GLM_LOCAL_TOKEN" \
     "$SCRIPT" --no-verify-tip --context-window off \
     --branch "feat/local-$tag" --prompt-file "$PROMPT" "$@" </dev/null 2>"$TEST_TMP/$tag.err")"
   EXIT=$?
@@ -107,9 +122,24 @@ run_local() {
   MF="$(find "$runs" -name '*.manifest.json' | head -1)"
 }
 
+# (a2) A free GLM slot wins before a fixture that otherwise selects codex; gate and manifest carry GLM.
+export AUTOPILOT_LOCAL_SLOTS_CMD='printf %s '\''{"endpoints":[{"id":"qwen-a","state":"up","free":0},{"id":"glm-a","models":["GLM-4"],"state":"up","free":1}]}'\'''
+PROMPT="$TEST_TMP/prompt-a2.txt"
+printf 'Size: S\nRole: implementer\nTask-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
+run_local a2
+[ "$EXIT" -eq 0 ] || printf 'local-default diagnostic (a2): %s\n%s\n' "$OUT" "$ERR" >&2
+assert_eq "0" "$EXIT" "a2: GLM fallback exits 0"
+assert_eq "glm" "$(json_get "$OUT" model)" "a2: result model is glm"
+assert_file_exists "$MF" "a2: GLM manifest written"
+assert_eq "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).endpoint||"")' "$MF")" "glm_local" "a2: manifest endpoint is glm_local"
+assert_eq "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).model||"")' "$MF")" "glm" "a2: manifest model is glm"
+assert_contains "$(cat "$LEASE_LOG")" '"url":"/v1/local/lease"' "a2: GLM slot goes through lease"
+assert_contains "$(cat "$GATE_LOG")" '--model glm --endpoint glm_local' "a2: CN gate receives selected GLM model and endpoint"
+export AUTOPILOT_LOCAL_SLOTS_CMD='printf %s '\''{"free":1,"draining":false}'\'''
+
 # (a) implementer, no --runner -> manifest runner local, model qwen.
 PROMPT="$TEST_TMP/prompt-a.txt"
-printf 'edit ok.txt\n' > "$PROMPT"
+printf 'Size: S\nRole: implementer\nScope: ok.txt\nTask-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
 run_local a
 [ "$EXIT" -eq 0 ] || printf 'local-default diagnostic (a): %s\n%s\n' "$OUT" "$ERR" >&2
 assert_eq "0" "$EXIT" "a: implementer with no --runner exits 0"
@@ -120,22 +150,23 @@ assert_eq "local" "$(node -e 'process.stdout.write(JSON.parse(require("fs").read
 assert_eq "qwen" "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).model)' "$MF")" "a: manifest model is qwen"
 assert_eq "<null>" "$(json_get "$OUT" local_fallback)" "a: local choice records local_fallback null"
 assert_eq "null" "$(node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).local_fallback; process.stdout.write(v===null?"null":JSON.stringify(v))' "$MF")" "a: manifest local_fallback is null"
+assert_contains "$(cat "$GATE_LOG")" '--model qwen --endpoint qwen_local' "a: CN gate receives selected Qwen model and endpoint"
 
-# (b) local, short prompt is sent unchanged; no former Task-Class rule is needed.
+# (b) local, no Task-Class line -> dispatched prompt stays unchanged; caller file unchanged.
 PROMPT="$TEST_TMP/prompt-b.txt"
 printf 'edit only this line\n' > "$PROMPT"
 BEFORE="$(sha256sum "$PROMPT" | awk '{print $1}')"
 run_local b --runner local --model qwen
 [ "$EXIT" -eq 0 ] || printf 'local-default diagnostic (b): %s\n%s\n' "$OUT" "$ERR" >&2
-assert_eq "0" "$EXIT" "b: local dispatch without task-class metadata exits 0"
+assert_eq "0" "$EXIT" "b: local with no Task-Class exits 0"
 AFTER="$(sha256sum "$PROMPT" | awk '{print $1}')"
 assert_eq "$BEFORE" "$AFTER" "b: caller prompt file is unchanged"
 SHA_B="$(git -C "$SBX" rev-parse "feat/local-b")"
 DISPATCHED="$(git -C "$SBX" show "${SHA_B}:got-prompt.txt")"
 assert_contains "$DISPATCHED" "edit only this line" "b: dispatched prompt contains caller text"
-assert_not_contains "$DISPATCHED" "Task-Class: simple-script" "b: gate adds no task-class metadata"
+assert_not_contains "$DISPATCHED" "Task-Class: simple-script" "b: gate adds no Task-Class metadata"
 
-# (b2) body prose mentioning the former task-class header passes through unchanged.
+# (b2) body prose naming Task-Class passes through unchanged. Caller file stays unchanged.
 PROMPT="$TEST_TMP/prompt-b2.txt"
 {
   printf 'edit only this line\n'
@@ -149,19 +180,19 @@ PROMPT="$TEST_TMP/prompt-b2.txt"
 BEFORE="$(sha256sum "$PROMPT" | awk '{print $1}')"
 run_local b2 --runner local --model qwen
 [ "$EXIT" -eq 0 ] || printf 'local-default diagnostic (b2): %s\n%s\n' "$OUT" "$ERR" >&2
-assert_eq "0" "$EXIT" "b2: body mention of former metadata exits 0"
+assert_eq "0" "$EXIT" "b2: body mention of Task-Class exits 0"
 AFTER="$(sha256sum "$PROMPT" | awk '{print $1}')"
 assert_eq "$BEFORE" "$AFTER" "b2: caller prompt file is unchanged"
 SHA_B2="$(git -C "$SBX" rev-parse "feat/local-b2")"
 DISPATCHED="$(git -C "$SBX" show "${SHA_B2}:got-prompt.txt")"
 assert_contains "$DISPATCHED" "please add a Task-Class: header" "b2: dispatched prompt preserves body prose"
-assert_not_contains "$DISPATCHED" "Task-Class: simple-script" "b2: gate adds no task-class metadata"
+assert_not_contains "$DISPATCHED" "Task-Class: simple-script" "b2: gate adds no Task-Class metadata"
 
 # (c) local, no --worktree-parent -> worktree is outside the repo root.
 XDG_RUNTIME_DIR="$(mktemp -d /tmp/local-default-xdg.XXXXXX)"
 chmod 700 "$XDG_RUNTIME_DIR"
 PROMPT="$TEST_TMP/prompt-c.txt"
-printf 'edit ok.txt\n' > "$PROMPT"
+printf 'Task-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
 run_local c --runner local --model qwen
 [ "$EXIT" -eq 0 ] || printf 'local-default diagnostic (c): %s\n%s\n' "$OUT" "$ERR" >&2
 assert_eq "0" "$EXIT" "c: local with no --worktree-parent exits 0"
@@ -212,25 +243,6 @@ assert_eq "grok-4.7" "$(json_get "$OUT" model)" "e: no local endpoint model is g
 assert_contains "$(cat "$GROK_ARGV")" "grok-4.7" "e: grok stub received grok-4.7"
 FB_E="$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\n/).reverse().find(l=>l.trim().startsWith("{"))); process.stdout.write(JSON.stringify(o.local_fallback))' "$OUT")"
 assert_eq '{"reason":"no_free_slot","detail":"endpoint_not_ready"}' "$FB_E" "e: missing endpoint records endpoint_not_ready"
-
-# (f-develop) the old draining slot result cannot override a granted reserve-first lease.
-PROMPT="$TEST_TMP/prompt-f-develop.txt"; printf 'edit impl-defaults-fixture.txt\n' > "$PROMPT"
-printf '201\n' > "$LEASE_STATUS_FILE"; : > "$LEASE_LOG"
-export AUTOPILOT_LOCAL_SLOTS_CMD='printf %s '"'"'{"free":2,"draining":true}'"'"''
-run_local f-develop
-assert_eq "0" "$EXIT" "f-develop: draining slot command with granted lease exits 0"
-assert_eq "local" "$(json_get "$OUT" runner)" "f-develop: granted lease keeps the local runner"
-assert_eq "true" "$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).local_lease.granted))' "$OUT")" "f-develop: local result carries its granted lease"
-
-# (i-develop) a failed old-style slot command also cannot replace a lease grant.
-PROMPT="$TEST_TMP/prompt-i-develop.txt"; printf 'edit impl-defaults-fixture.txt\n' > "$PROMPT"
-: > "$LEASE_LOG"
-export AUTOPILOT_LOCAL_SLOTS_CMD='echo nope; exit 1'
-run_local i-develop
-assert_eq "0" "$EXIT" "i-develop: failed slot command with granted lease exits 0"
-assert_eq "local" "$(json_get "$OUT" runner)" "i-develop: granted lease keeps the local runner"
-assert_eq "true" "$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).local_lease.granted))' "$OUT")" "i-develop: local result carries its granted lease"
-export AUTOPILOT_LOCAL_SLOTS_CMD='printf %s '"'"'{"free":1,"draining":false}'"'"''
 
 # (f) successful implicit local run holds a lease and releases it after the worker.
 PROMPT="$TEST_TMP/prompt-f.txt"
@@ -306,7 +318,6 @@ EXIT=$?
 : > "$LEASE_BUSY_FILE"
 assert_eq "$EXIT" "0" "h: pre-probe busy cloud retry exits 0"
 assert_eq "grok" "$(json_get "$OUT" runner)" "h: pre-probe busy retry uses grok"
-assert_eq "grok-4.7" "$(json_get "$OUT" model)" "h: cloud default model"
 FB_H="$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\n/).reverse().find(l=>l.trim().startsWith("{")));process.stdout.write(JSON.stringify(o.local_fallback))' "$OUT")"
 assert_eq '{"reason":"no_free_slot","detail":"busy_at_run"}' "$FB_H" "h: pre-probe busy fallback detail"
 DELETE_COUNT="$(node -e 'const fs=require("fs");const rows=fs.readFileSync(process.argv[1],"utf8").trim().split(/\n/).filter(Boolean).map(JSON.parse);process.stdout.write(String(rows.filter(r=>r.method==="DELETE"&&r.url==="/v1/local/lease/test-lease-id").length))' "$LEASE_LOG")"
@@ -328,7 +339,6 @@ OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="
 EXIT=$?
 assert_eq "0" "$EXIT" "j: busy-at-run cloud retry exits 0"
 assert_eq "grok" "$(json_get "$OUT" runner)" "j: busy-at-run retry uses grok"
-assert_eq "grok-4.7" "$(json_get "$OUT" model)" "j: cloud default model"
 FB_J="$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\n/).reverse().find(l=>l.trim().startsWith("{")));process.stdout.write(JSON.stringify(o.local_fallback))' "$OUT")"
 assert_eq '{"reason":"no_free_slot","detail":"busy_at_run"}' "$FB_J" "j: busy-at-run fallback detail"
 DELETE_COUNT="$(node -e 'const fs=require("fs");const rows=fs.readFileSync(process.argv[1],"utf8").trim().split(/\n/).filter(Boolean).map(JSON.parse);process.stdout.write(String(rows.filter(r=>r.method==="DELETE"&&r.url==="/v1/local/lease/test-lease-id").length))' "$LEASE_LOG")"

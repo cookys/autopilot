@@ -236,6 +236,8 @@
 #                                              #   own hands/<run>/ namespace for every hand).
 #       [--retain-owner <id> --retain-reason <text> --retain-until <epoch>]
 #       [--reuse-worktree <absolute-path>]      # campaign repair: reuse an exact retained
+#       [--scratch]                             # restricted operators work in a fresh private directory;
+#                                                # captured edits are committed through the disposable worktree
 #       [--expected-worktree-instance <sha256>] # required identity fence for retained reuse
 #       [--resume-session <uuid>]               # Grok repair: resume the exact prior session
 #   (`--gc`, `--reap-unmarked`, `--yes` and the `stale_reaper_age_days` setting were removed at 3.0.0;
@@ -443,6 +445,14 @@ CURSOR_BIN="cursor-agent"  # Cursor CLI runner; test seam via --cursor-bin
 OPENCODE_BIN="opencode"    # OpenCode CLI runner (`opencode run`); test seam via --opencode-bin
 KIMI_BIN="kimi"            # Local CLI fixture seam only; default Kimi seat uses the broker
 KEEP=0
+SCRATCH=0
+SCRATCH_DIR=""
+SCRATCH_WORK_DIR=""
+SCRATCH_REJECTED_FILE=""
+SCRATCH_FINAL_PROMPT=""
+SCRATCH_HOME=""
+SCRATCH_CONFIG_DIR=""
+WORKER_CWD=""
 MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES=()  # --sibling-ref-prefix; read by main_checkout_fingerprint (lib/main-checkout-boundary.sh)
 MAIN_CHECKOUT_FP_EXCLUDE_PATHS=()     # --sibling-path-prefix; pruned from the fingerprint's stat walk
 # Round scope (fleet 01M788GD): this rail's fingerprint watches the main checkout and this
@@ -797,13 +807,15 @@ cleanup() {
   [ -n "${AGY_STDERR:-}" ] && rm -f "$AGY_STDERR"
   [ -n "${AGY_PARSED:-}" ] && rm -f "$AGY_PARSED"
   [ -n "${CCSHIM_ENVELOPE:-}" ] && rm -f "$CCSHIM_ENVELOPE"
+  [ -n "${SCRATCH_DIR:-}" ] && rm -rf -- "$SCRATCH_DIR"
   declare -F _reap_ccshim_env_dir >/dev/null 2>&1 && _reap_ccshim_env_dir
   reap_cnative_config_dir || true
+  [ -n "${SCRATCH_CONFIG_DIR:-}" ] && rm -rf -- "$SCRATCH_CONFIG_DIR"
+  [ -n "${SCRATCH_HOME:-}" ] && rm -rf -- "$SCRATCH_HOME"
   reap_sandbox_config_dir || true
   [ -n "${GATE_ARMED_SESSION:-}" ] && node "$SELF_DIR/per-turn-gate-arm.js" disarm --session "$GATE_ARMED_SESSION" >/dev/null 2>&1
   [ -n "${GATE_SETTINGS_FILE:-}" ] && rm -f "$GATE_SETTINGS_FILE"
   [ -n "${LOCAL_LEASE_HEARTBEAT_FILE:-}" ] && rm -f "$LOCAL_LEASE_HEARTBEAT_FILE"
-  [ -n "${LOCAL_LEASE_HEARTBEAT_SLEEP_FILE:-}" ] && rm -f "$LOCAL_LEASE_HEARTBEAT_SLEEP_FILE"
   # Fail closed: claimed WO must get a terminal disposition; never swallow finalizer failures.
   # Parent that transferred claim to detached child must not mark WO failed on its EXIT.
   if [ -n "${_CONT_WO_CLAIMED_ROOT:-}" ] && [ "${_CONT_WO_PARENT_TRANSFERRED:-0}" != "1" ]; then
@@ -835,15 +847,7 @@ local_lease_json() {
 local_lease_heartbeat_loop() {
   local interval="${AUTOPILOT_LOCAL_LEASE_TTL_S:-180}"
   interval=$((interval / 3)); [ "$interval" -gt 0 ] || interval=1
-  while
-    sleep "$interval" &
-    local sleep_pid=$!
-    printf '%s\n' "$sleep_pid" > "$LOCAL_LEASE_HEARTBEAT_SLEEP_FILE"
-    wait "$sleep_pid"
-    sleep_rc=$?
-    rm -f "$LOCAL_LEASE_HEARTBEAT_SLEEP_FILE"
-    [ "$sleep_rc" -eq 0 ]
-  do
+  while sleep "$interval"; do
     if node "$SELF_DIR/lib/local-impl-slot.js" --lease-operation heartbeat --lease-url "$LOCAL_LEASE_URL" --lease-id "$LOCAL_LEASE_ID" --token-env "$LOCAL_LEASE_TOKEN_ENV" >/dev/null 2>&1; then
       printf '.\n' >> "$LOCAL_LEASE_HEARTBEAT_FILE"
     else
@@ -855,11 +859,6 @@ local_lease_heartbeat_loop() {
 release_local_lease() {
   [ "$LOCAL_LEASE_GRANTED" -eq 1 ] || return 0
   if [ -n "$LOCAL_LEASE_HEARTBEAT_PID" ]; then
-    if [ -n "$LOCAL_LEASE_HEARTBEAT_SLEEP_FILE" ] && [ -s "$LOCAL_LEASE_HEARTBEAT_SLEEP_FILE" ]; then
-      local sleep_pid
-      sleep_pid="$(cat "$LOCAL_LEASE_HEARTBEAT_SLEEP_FILE" 2>/dev/null || true)"
-      [ -z "$sleep_pid" ] || kill "$sleep_pid" 2>/dev/null || true
-    fi
     kill "$LOCAL_LEASE_HEARTBEAT_PID" 2>/dev/null || true
     wait "$LOCAL_LEASE_HEARTBEAT_PID" 2>/dev/null || true
     LOCAL_LEASE_HEARTBEAT_PID=""
@@ -1415,6 +1414,9 @@ NODE
   fi
   release_local_lease
   tip_verify_fields="$tip_verify_fields$broker_fields, \"local_fallback\": ${LOCAL_FALLBACK_JSON:-null}, \"local_slots\": ${LOCAL_SLOTS_JSON:-null}, \"local_lease\": $(local_lease_json), \"target_precommit\": $(target_precommit_json)"
+  if [ "${SCRATCH:-0}" -eq 1 ]; then
+    tip_verify_fields="$tip_verify_fields, \"scratch\": {\"dir\": \"$(_flat_json_escape "${SCRATCH_DIR:-}")\", \"files\": ${SCRATCH_FILES:-0}, \"gate_result\": \"allowed\", \"rejected_manifest\": \"$(_flat_json_escape "${SCRATCH_REJECTED_FILE:-}")\"}"
+  fi
   hetero_log_fallback "$1"
   local _emit_json
   _emit_json="$(printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "num_turns": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s%s%s%s%s%s%s%s }\n' \
@@ -2907,6 +2909,10 @@ write_manifest() {
   if declare -F repo_identity_resolve_fields >/dev/null 2>&1; then repo_identity_resolve_fields "" "${CONSUMING_REPO_ROOT:-}" || true; fi
   [ -n "${REPO_IDENTITY_FIELDS:-}" ] || REPO_IDENTITY_FIELDS='"repo_identity": null, "repo_identity_source": null'
   local strict_manifest_fields=""
+  local scratch_manifest_field=""
+  if [ "${SCRATCH:-0}" -eq 1 ]; then
+    scratch_manifest_field=", \"scratch\": {\"dir\": \"$(_flat_json_escape "${SCRATCH_DIR:-}")\", \"files\": ${SCRATCH_FILES:-0}, \"gate_result\": \"allowed\", \"rejected_manifest\": \"$(_flat_json_escape "${SCRATCH_REJECTED_FILE:-}")\"}"
+  fi
   if [ "${STRICT_CONTRACT_RESULT_FIELDS:-0}" -eq 1 ]; then
     strict_manifest_fields=", \"unit_id\": \"$(_flat_json_escape "$STRICT_UNIT_ID")\", \"contract_sha256\": \"$(_flat_json_escape "$STRICT_CONTRACT_SHA")\", \"go\": \"$(_flat_json_escape "$STRICT_GO")\""
   fi
@@ -3001,7 +3007,7 @@ write_manifest() {
     fi
   fi
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "prompt_sha256": %s, "lane": %s, "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "tip_verify": %s, "tip_verify_source": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, "timeout_seconds": %s, "timeout_source": "%s", "timeout_enforced": %s%s%s%s%s%s, %s, "session_id": %s, "child_session_id": %s, "local_fallback": %s, "local_slots": %s, "local_lease": %s, "target_precommit": %s }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "prompt_sha256": %s, "lane": %s, "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "tip_verify": %s, "tip_verify_source": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, "timeout_seconds": %s, "timeout_source": "%s", "timeout_enforced": %s%s%s%s%s%s, %s, "session_id": %s, "child_session_id": %s, "target_precommit": %s%s }\n' \
       "$(_flat_json_escape "$DISPATCH_RUN_ID")" "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
       "${BASE_SHA:-}" "$(_flat_json_escape "${WT:-}")" "$(_flat_json_escape "${WT:-}/.autopilot-worktree.lock")" "$(_flat_json_escape "${LOG:-}")" \
       "$log_format" "$duplex_json" "$pid_json" "$scope_json" "${MANIFEST_CONTAINMENT:-plain}" \
@@ -3009,8 +3015,8 @@ write_manifest() {
       "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$tip_verify_json" "$tip_verify_source_json" "$parent_json" "$root_json" "$depth_json" \
       "$mf_timeout_secs" "$(_flat_json_escape "$mf_timeout_source")" "$mf_timeout_enforced" "$strict_manifest_fields" "$strike_suppressed_fields" "$capability_suppressed_fields" "$effort_manifest_fields$role_kit_manifest_fields" "$campaign_scope_fields" "$REPO_IDENTITY_FIELDS$(declare -F dispatch_attr_fields >/dev/null 2>&1 && dispatch_attr_fields "${PROMPT_FILE:-}" "$runner" "${ENDPOINT:-}" "${MANIFEST_FINAL_STATUS:+${OUTCOME_COMMIT:-}}")" \
       "$(declare -F manifest_session_id_json >/dev/null 2>&1 && manifest_session_id_json || printf null)" \
-      "$(declare -F manifest_child_session_json >/dev/null 2>&1 && manifest_child_session_json || printf null)" \
-      "${LOCAL_FALLBACK_JSON:-null}" "${LOCAL_SLOTS_JSON:-null}" "$(local_lease_json)" "$(target_precommit_json)" > "$tmp"
+      "$(declare -F manifest_child_session_json >/dev/null 2>&1 && manifest_child_session_json || printf null), \"local_fallback\": ${LOCAL_FALLBACK_JSON:-null}, \"local_slots\": ${LOCAL_SLOTS_JSON:-null}, \"local_lease\": $(local_lease_json)" \
+      "$(target_precommit_json)" "$scratch_manifest_field" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
   return 0
 }
@@ -3030,6 +3036,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --branch) BRANCH="${2:-}"; shift 2 ;;
     --prompt-file) PROMPT_FILE="${2:-}"; shift 2 ;;
+    --scratch) SCRATCH=1; shift ;;
     --scaffold-tier) SCAFFOLD_TIER_ARG="${2:-}"; shift 2 ;;
     --no-campaign) NO_CAMPAIGN=1; shift ;;
     --campaign-contract) CAMPAIGN_CONTRACT_FILE="${2:-}"; shift 2 ;;
@@ -3499,11 +3506,67 @@ esac
 [ -n "$BRANCH" ] || die_precondition "--branch is required"
 [ -n "$PROMPT_FILE" ] || die_precondition "--prompt-file is required"
 [ -r "$PROMPT_FILE" ] || die_precondition "prompt file not readable: $PROMPT_FILE"
+[ "$SCRATCH" -eq 0 ] || [ -z "$REUSE_WORKTREE" ] || die_precondition "--scratch cannot be combined with --reuse-worktree"
 HETERO_FLEET_TASK_ID="$(node "$SELF_DIR/lib/fleet-task-ref.js" resolve-parent --prompt-file "$PROMPT_FILE" 2>/dev/null || true)"
 DISPATCH_LANE_JSON=null # read from the original brief before it is repacked; crosses the detach boundary via declare -p
 declare -F dispatch_lane_json >/dev/null 2>&1 && DISPATCH_LANE_JSON="$(dispatch_lane_json "$PROMPT_FILE")"
 declare -F dispatch_export_attribution >/dev/null 2>&1 && dispatch_export_attribution "$PROMPT_FILE" # the child (its cost-tracker rows) inherits lane + fleet task
 [ -z "${HETERO_FLEET_TASK_ID:-}" ] || export AUTOPILOT_FLEET_TASK="$HETERO_FLEET_TASK_ID"
+# An unpinned implementer uses an available local qwen or GLM seat when its endpoint
+# is ready, a gateway lease is granted, the prompt fits local_context_bytes, and the CN
+# gate allows that seat (operator via PM 01M7XHF4). Otherwise the unpinned path
+# stays pace-select / grok-4.7 and records local_fallback. A pin already chose
+# a seat when --pace-role or a pace file returned one, a strict contract is on,
+# or AUTOPILOT_QUALIFICATION_OVERRIDE is set. Explicit --runner never falls back.
+LOCAL_FALLBACK_JSON="${AUTOPILOT_LOCAL_FALLBACK_PRESET:-null}"
+LOCAL_SLOTS_JSON=null
+IMPLICIT_LOCAL_DEFAULT=0
+_impl_role="${PACE_ROLE:-${AUTOPILOT_DISPATCH_ROLE:-implementer}}"
+if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_SUPPLIED" -eq 0 ] && [ "$RUNNER" = "auto" ] && [ "$STRICT_CONTRACT" -eq 0 ] \
+   && [ -z "${ENGINE_CHOICE_JSON:-}" ] && [ -z "${AUTOPILOT_QUALIFICATION_OVERRIDE:-}" ] \
+   && [ "$_impl_role" = "implementer" ] && [ -z "${AUTOPILOT_LOCAL_FALLBACK_PRESET:-}" ]; then
+  _slot_line="$(node "$SELF_DIR/lib/local-impl-slot.js" --prompt-file "$PROMPT_FILE" --cwd "$(pwd)")"
+  _slot_parsed="$(node -e 'let o; try{o=JSON.parse(process.argv[1]);}catch{o={choose:false,reason:"no_free_slot",detail:"lease_query_failed:malformed"};} const fb={reason:o.reason||"no_free_slot",detail:String(o.detail||"")}; if(o.family==="glm"||o.local_fallback_from) Object.assign(fb,{family:o.family||"glm",endpoint:o.endpoint||"glm_local",local_fallback_from:o.local_fallback_from||null}); console.log(o.choose?"choose":"fallback"); console.log(JSON.stringify(o.local_lease||null)); console.log(JSON.stringify(o.local_slots||null)); console.log(o.lease_url||""); console.log(o.lease_token_env||""); console.log(JSON.stringify(fb));' "$_slot_line")"
+  _slot_kind="$(printf '%s\n' "$_slot_parsed" | sed -n '1p')"
+  if [ "$_slot_kind" = "choose" ]; then
+    _lease_json="$(printf '%s\n' "$_slot_parsed" | sed -n '2p')"
+    LOCAL_LEASE_ID="$(node -e 'const o=JSON.parse(process.argv[1]); process.stdout.write(o.id||"")' "$_lease_json")"
+    LOCAL_LEASE_STATUS="$(node -e 'const o=JSON.parse(process.argv[1]); process.stdout.write(String(o.status))' "$_lease_json")"
+    LOCAL_LEASE_GRANTED=1
+    LOCAL_LEASE_URL="$(printf '%s\n' "$_slot_parsed" | sed -n '4p')"
+    LOCAL_LEASE_TOKEN_ENV="$(printf '%s\n' "$_slot_parsed" | sed -n '5p')"
+    _slot_choice="$(printf '%s\n' "$_slot_parsed" | sed -n '6p')"
+    _slot_family="$(node -e 'const o=JSON.parse(process.argv[1]); process.stdout.write(o.family||"qwen")' "$_slot_choice")"
+    ENDPOINT="$(node -e 'const o=JSON.parse(process.argv[1]); process.stdout.write(o.endpoint||"qwen_local")' "$_slot_choice")"
+    LOCAL_SLOTS_JSON="$(printf '%s\n' "$_slot_parsed" | sed -n '3p')"
+    LOCAL_LEASE_HEARTBEAT_FILE="${TMPDIR:-/tmp}/autopilot-local-lease-heartbeats-$$"
+    : > "$LOCAL_LEASE_HEARTBEAT_FILE"
+    _gate_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner cc-shim --model "$_slot_family" --endpoint "$ENDPOINT" --cwd "$(pwd)" --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" && _gate_rc=0 || _gate_rc=$?
+    if [ "$_gate_rc" -eq 0 ]; then
+      LOCAL_LEASE_HEARTBEAT_SLEEP_FILE="${TMPDIR:-/tmp}/autopilot-local-lease-heartbeat-sleep-$$"
+      local_lease_heartbeat_loop >/dev/null 2>&1 & LOCAL_LEASE_HEARTBEAT_PID=$!
+      RUNNER="local"
+      MODEL="$_slot_family"
+      ENDPOINT_SUPPLIED=1
+      IMPLICIT_LOCAL_DEFAULT=1
+      export IMPLICIT_LOCAL_DEFAULT
+      LOCAL_FALLBACK_JSON="$(node -e 'const o=JSON.parse(process.argv[1]); process.stdout.write(JSON.stringify(o.local_fallback_from||null))' "$_slot_choice")"
+    else
+      # A CN-gate refusal of the local seat is a block, not a cloud fallback.
+      die_precondition "${_gate_msg:-cn_model_dispatch_barred alibaba local_name_external_host (01M7E2A1, d-1dfcf757)}"
+    fi
+  else
+    _lease_json="$(printf '%s\n' "$_slot_parsed" | sed -n '2p')"
+    LOCAL_LEASE_STATUS="$(node -e 'try{const o=JSON.parse(process.argv[1]);process.stdout.write(o&&o.status!==null?String(o.status):"null")}catch{}' "$_lease_json")"
+    LOCAL_LEASE_DETAIL="$(node -e 'try{const o=JSON.parse(process.argv[1]);process.stdout.write(o&&o.detail||"")}catch{}' "$_lease_json")"
+    LOCAL_FALLBACK_JSON="$(printf '%s\n' "$_slot_parsed" | sed -n '6p')"
+    LOCAL_SLOTS_JSON=null
+  fi
+  unset _slot_line _slot_parsed _slot_kind _lease_json _gate_msg _gate_rc
+fi
+unset _impl_role
+
+if [ "${IMPLICIT_LOCAL_DEFAULT:-0}" != "1" ]; then
 # Pace is the default only for an unpinned seat. Strict contracts carry their own tuple.
 _ps_args=(--dispatch --role "${PACE_ROLE:-implementer}")
 [ -z "${PROMPT_FILE:-}" ] || _ps_args+=(--prompt-file "$PROMPT_FILE")
@@ -3529,62 +3592,15 @@ if [ -n "$_ps_parsed" ]; then
     unset _ps_effort
   fi
 fi
+fi
 # Saved before skill-pack / scaffold prepend text, which would hide image magic bytes.
 VISION_PROMPT_FILE="$PROMPT_FILE"
-# Implementer with no --runner is the local qwen seat when qwen_local resolves
-# ready, a gateway lease is granted, the prompt fits local_context_bytes, and the cn
-# gate allows that seat (operator via PM 01M7XHF4). Otherwise the unpinned path
-# stays pace-select / grok-4.7 and records local_fallback. A pin already chose
-# a seat when --pace-role or a pace file returned one, a strict contract is on,
-# or AUTOPILOT_QUALIFICATION_OVERRIDE is set. Explicit --runner never falls back.
-LOCAL_FALLBACK_JSON="${AUTOPILOT_LOCAL_FALLBACK_PRESET:-null}"
-LOCAL_SLOTS_JSON=null
-IMPLICIT_LOCAL_DEFAULT=0
-_impl_role="${PACE_ROLE:-${AUTOPILOT_DISPATCH_ROLE:-implementer}}"
-if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_SUPPLIED" -eq 0 ] && [ "$RUNNER" = "auto" ] && [ "$STRICT_CONTRACT" -eq 0 ] \
-   && [ -z "${ENGINE_CHOICE_JSON:-}" ] && [ -z "${AUTOPILOT_QUALIFICATION_OVERRIDE:-}" ] \
-   && [ "$_impl_role" = "implementer" ] && [ -z "${AUTOPILOT_LOCAL_FALLBACK_PRESET:-}" ]; then
-  _slot_line="$(node "$SELF_DIR/lib/local-impl-slot.js" --prompt-file "$PROMPT_FILE" --cwd "$(pwd)")"
-  _slot_parsed="$(node -e 'let o; try{o=JSON.parse(process.argv[1]);}catch{o={choose:false,reason:"no_free_slot",detail:"lease_query_failed:malformed"};} console.log(o.choose?"choose":"fallback"); console.log(JSON.stringify(o.local_lease||null)); console.log(JSON.stringify(o.local_lease||null)); console.log(o.lease_url||""); console.log(o.lease_token_env||""); console.log(JSON.stringify({reason:o.reason||"no_free_slot",detail:String(o.detail||"")}));' "$_slot_line")"
-  _slot_kind="$(printf '%s\n' "$_slot_parsed" | sed -n '1p')"
-  if [ "$_slot_kind" = "choose" ]; then
-    _lease_json="$(printf '%s\n' "$_slot_parsed" | sed -n '2p')"
-    LOCAL_LEASE_ID="$(node -e 'const o=JSON.parse(process.argv[1]); process.stdout.write(o.id||"")' "$_lease_json")"
-    LOCAL_LEASE_STATUS="$(node -e 'const o=JSON.parse(process.argv[1]); process.stdout.write(String(o.status))' "$_lease_json")"
-    LOCAL_LEASE_GRANTED=1
-    LOCAL_LEASE_URL="$(printf '%s\n' "$_slot_parsed" | sed -n '4p')"
-    LOCAL_LEASE_TOKEN_ENV="$(printf '%s\n' "$_slot_parsed" | sed -n '5p')"
-    LOCAL_LEASE_HEARTBEAT_FILE="${TMPDIR:-/tmp}/autopilot-local-lease-heartbeats-$$"
-    LOCAL_LEASE_HEARTBEAT_SLEEP_FILE="${TMPDIR:-/tmp}/autopilot-local-lease-heartbeat-sleep-$$"
-    : > "$LOCAL_LEASE_HEARTBEAT_FILE"
-    local_lease_heartbeat_loop >/dev/null 2>&1 & LOCAL_LEASE_HEARTBEAT_PID=$!
-    LOCAL_SLOTS_JSON=null
-    _gate_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner cc-shim --model qwen --endpoint qwen_local --cwd "$(pwd)" --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" && _gate_rc=0 || _gate_rc=$?
-    if [ "$_gate_rc" -eq 0 ]; then
-      RUNNER="local"
-      IMPLICIT_LOCAL_DEFAULT=1
-      export IMPLICIT_LOCAL_DEFAULT
-      LOCAL_FALLBACK_JSON=null
-    else
-      # A CN-gate refusal of the local seat is a block, not a cloud fallback.
-      die_precondition "${_gate_msg:-cn_model_dispatch_barred alibaba local_name_external_host (01M7E2A1, d-1dfcf757)}"
-    fi
-  else
-    _lease_json="$(printf '%s\n' "$_slot_parsed" | sed -n '2p')"
-    LOCAL_LEASE_STATUS="$(node -e 'try{const o=JSON.parse(process.argv[1]);process.stdout.write(o&&o.status!==null?String(o.status):"null")}catch{}' "$_lease_json")"
-    LOCAL_LEASE_DETAIL="$(node -e 'try{const o=JSON.parse(process.argv[1]);process.stdout.write(o&&o.detail||"")}catch{}' "$_lease_json")"
-    LOCAL_FALLBACK_JSON="$(printf '%s\n' "$_slot_parsed" | sed -n '6p')"
-    LOCAL_SLOTS_JSON=null
-  fi
-  unset _slot_line _slot_parsed _slot_kind _lease_json _gate_msg _gate_rc
-fi
-unset _impl_role
 if [ "$RUNNER" = "local" ]; then
   apply_runner_local
 fi
-# --runner local (explicit or the implementer default) with no --model is qwen. An explicit --model wins.
+# --runner local (explicit or the implementer default) with no --model uses the selected endpoint family. An explicit --model wins.
 if [ "$LOCAL_RUNNER" -eq 1 ] && [ "$MODEL_SUPPLIED" -eq 0 ]; then
-  MODEL="qwen"
+  MODEL="${_slot_family:-qwen}"
   MODEL_IS_DEFAULT=0
 fi
 # The reviewed run's actual seat (implicit local or the cloud seat this invocation
@@ -3604,7 +3620,34 @@ if [ "$LOCAL_RUNNER" -eq 1 ] && [ -z "$WORKTREE_PARENT" ] && [ -z "$REUSE_WORKTR
   unset _local_wt_base
 fi
 # Restricted cloud operators need a clean brief in a fresh non-repo sandbox; local endpoint names must resolve locally.
-_tfg_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner "$RUNNER" --model "$MODEL" --endpoint "${ENDPOINT:-${ANTHROPIC_BASE_URL:-$RUNNER}}" --cwd "$(pwd)" --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" \
+if [ "$SCRATCH" -eq 1 ]; then
+  case "$RUNNER" in
+    cc-shim) ;;
+    kimi) [ "${BIN_FLAG_KIMI:-0}" -eq 1 ] || die_precondition "--scratch requires a runner that honors WORKER_CWD; broker kimi is refused" ;;
+    *) die_precondition "--scratch is supported only by runners that honor WORKER_CWD (cc-shim, kimi-bin); runner $RUNNER is refused" ;;
+  esac
+  _scratch_parent="$(node "$SELF_DIR/lib/local-sandbox-parent.js" "${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}")" \
+    || die_precondition "--scratch could not create a private parent outside git work trees"
+  SCRATCH_DIR="$(umask 077; mktemp -d "${_scratch_parent}/dispatch-hetero-scratch-XXXXXX")" \
+    || die_precondition "--scratch could not create a fresh directory"
+  chmod 700 "$SCRATCH_DIR" || die_precondition "--scratch could not secure its directory"
+  SCRATCH_WORK_DIR="$SCRATCH_DIR/work"
+  mkdir -m 700 -- "$SCRATCH_WORK_DIR" || die_precondition "--scratch could not create worker directory"
+  SCRATCH_HOME="$SCRATCH_DIR/home"
+  mkdir -m 700 -- "$SCRATCH_HOME" || die_precondition "--scratch could not create isolated HOME"
+  if [ "$RUNNER" = "cc-shim" ]; then
+    SCRATCH_CONFIG_DIR="$SCRATCH_DIR/claude-config-empty"
+    mkdir -m 700 -- "$SCRATCH_CONFIG_DIR" || die_precondition "--scratch could not create empty Claude config"
+  fi
+  SCRATCH_REJECTED_FILE="${AUTOPILOT_DISPATCH_RUNS_DIR:-${MANIFEST_DIR_PATH:-${TMPDIR:-/tmp}}}/scratch-${DISPATCH_RUN_ID}.rejected"
+  cp -- "$PROMPT_FILE" "$SCRATCH_WORK_DIR/brief.md" || die_precondition "--scratch could not copy the brief"
+  chmod 600 "$SCRATCH_WORK_DIR/brief.md" || die_precondition "--scratch could not secure the brief"
+  WORKER_CWD="$SCRATCH_WORK_DIR"
+fi
+_gate_cwd="${SCRATCH_WORK_DIR:-$(pwd)}"
+_gate_prompt="${SCRATCH_WORK_DIR:+$SCRATCH_WORK_DIR/brief.md}"
+_gate_prompt="${_gate_prompt:-$PROMPT_FILE}"
+_tfg_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner "$RUNNER" --model "$MODEL" --endpoint "${ENDPOINT:-$RUNNER}" --cwd "$_gate_cwd" --prompt-file "$_gate_prompt" 2>&1 >/dev/null)" \
   || die_precondition "${_tfg_msg:-cn_model_dispatch_barred unknown restricted_operator_unknown_endpoint (01M7E2A1, d-1dfcf757)}"
 unset _tfg_msg
 # Warn-only: a brief that names a ../ path points outside the worktree. Never blocks, never
@@ -4708,6 +4751,19 @@ _vg_args=(--runner "$_vg_runner" --model "$MODEL")
 if [ -n "${PROMPT_FILE:-}" ] && [ "$PROMPT_FILE" != "$VISION_PROMPT_FILE" ]; then
   _vg_args+=(--file "$PROMPT_FILE")
 fi
+if [ "${SCRATCH:-0}" -eq 1 ]; then
+  SCRATCH_FINAL_PROMPT="$SCRATCH_WORK_DIR/final-prompt.md"
+  cp -- "$PROMPT_FILE" "$SCRATCH_FINAL_PROMPT" || die_precondition "--scratch could not copy the final assembled prompt"
+  chmod 600 "$SCRATCH_FINAL_PROMPT" || die_precondition "--scratch could not secure the final assembled prompt"
+  rm -f -- "$SCRATCH_WORK_DIR/brief.md"
+  _tfg_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner "$RUNNER" --model "$MODEL" --endpoint "${ENDPOINT:-$RUNNER}" --cwd "$SCRATCH_WORK_DIR" --prompt-file "$SCRATCH_FINAL_PROMPT" 2>&1 >/dev/null)" \
+    || die_precondition "${_tfg_msg:-cn_model_dispatch_barred final_prompt_scan_failed (01M7E2A1, d-1dfcf757)}"
+  rm -f -- "$SCRATCH_FINAL_PROMPT"
+  SCRATCH_FINAL_PROMPT=""
+  cp -- "$VISION_PROMPT_FILE" "$SCRATCH_WORK_DIR/brief.md"
+  chmod 600 "$SCRATCH_WORK_DIR/brief.md"
+  unset _tfg_msg
+fi
 _vg_msg="$(node "$SELF_DIR/lib/vision-guard.js" "${_vg_args[@]}" 2>&1 >/dev/null)" \
   || die_precondition "${_vg_msg:-vision-guard refused an image for engine ${_vg_runner}/${MODEL} file ${VISION_PROMPT_FILE}}"
 
@@ -5377,6 +5433,10 @@ abort_dispatch() {
   [ -n "$SCAFFOLD_PROMPT_FILE" ] && rm -f "$SCAFFOLD_PROMPT_FILE"
   [ -n "$GROK_PROMPT_FILE" ] && rm -f "$GROK_PROMPT_FILE"
   [ -n "$CCSHIM_PROMPT_FILE" ] && rm -f "$CCSHIM_PROMPT_FILE"
+  [ -n "${SCRATCH_DIR:-}" ] && rm -rf -- "$SCRATCH_DIR"
+  [ -n "${SCRATCH_HOME:-}" ] && rm -rf -- "$SCRATCH_HOME"
+  [ -n "${SCRATCH_CONFIG_DIR:-}" ] && rm -rf -- "$SCRATCH_CONFIG_DIR"
+  [ -n "${SCRATCH_FINAL_PROMPT:-}" ] && rm -f -- "$SCRATCH_FINAL_PROMPT"
   _reap_ccshim_env_dir
   [ -n "$OPENCODE_PROMPT_FILE" ] && rm -f "$OPENCODE_PROMPT_FILE"
   [ -n "$KIMI_PROMPT_FILE" ] && rm -f "$KIMI_PROMPT_FILE"
@@ -6088,7 +6148,7 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
         --strict-mcp-config --dangerously-skip-permissions ${CLAUDE_EFFORT_ARG:+--effort "$CLAUDE_EFFORT_ARG"}
         ${GATE_ARGV[@]+--settings "${GATE_ARGV[0]}"} --output-format json
         ${ROLE_KIT_ARGV[@]+"${ROLE_KIT_ARGV[@]}"})
-      run_worker node "$SELF_DIR/claude-account.js" run --pin-default --purpose hetero-impl --cwd "$WT" \
+      run_worker env HOME="${SCRATCH_HOME:-$HOME}" CLAUDE_CONFIG_DIR="${SCRATCH_CONFIG_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}}" node "$SELF_DIR/claude-account.js" run --pin-default --purpose hetero-impl --cwd "${WORKER_CWD:-$WT}" \
         --stdin "$CCSHIM_PROMPT_FILE" --stdout "$CCSHIM_ENVELOPE" -- "${CNATIVE_ARGV[@]}"
     else
       echo "claude-native: account registry not usable; worker not started" > "$LOG"
@@ -6101,7 +6161,12 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
     _CN_TAIL=()
     if [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ]; then _CN_TAIL=("${GATE_ARGV[0]-}" "${ROLE_KIT_ARGV[@]}"); else _CN_TAIL=(${GATE_ARGV[@]+"${GATE_ARGV[0]}"}); fi
     _ts_msg="$(token_seat_guard)" || die_precondition "$_ts_msg"
-    if CNATIVE_CONFIG_DIR="$(node "$SELF_DIR/lib/seed-claude-config.js" --parent "${TMPDIR:-/tmp}")"; then
+    if [ -n "${SCRATCH_CONFIG_DIR:-}" ]; then
+      CNATIVE_CONFIG_DIR="$SCRATCH_CONFIG_DIR"
+    elif CNATIVE_CONFIG_DIR="$(node "$SELF_DIR/lib/seed-claude-config.js" --parent "${TMPDIR:-/tmp}")"; then
+      :
+    fi
+    if [ -n "${CNATIVE_CONFIG_DIR:-}" ]; then
       # Scrub every alternate provider / credential selector so the seeded .credentials.json is the SOLE auth.
       # Names verified by strings(1) on the installed claude 2.1.309 binary (none invented). Cleared: provider
       # switches (BEDROCK/VERTEX/FOUNDRY/MANTLE/ANTHROPIC_AWS/ANTHROPIC_GOOGLE_CLOUD/GATEWAY), alternate keys and
@@ -6111,9 +6176,9 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
       # inject auth). NOT cleared: CLAUDE_CODE_OAUTH_TOKEN (PM 01M7975S: a seat token must reach the child;
       # the seeded dir is still the only config dir), CLAUDE_CODE_SKIP_*_AUTH (only meaningful once a provider is selected) and
       # region/project tuning vars (inert without a selector).
-      run_worker bash -c 'cd "$1" && for v in CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY CLAUDE_CODE_USE_MANTLE CLAUDE_CODE_USE_ANTHROPIC_AWS CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD CLAUDE_CODE_USE_GATEWAY ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_FOUNDRY_API_KEY ANTHROPIC_FOUNDRY_AUTH_TOKEN AWS_BEARER_TOKEN_BEDROCK ANTHROPIC_BASE_URL ANTHROPIC_BEDROCK_BASE_URL ANTHROPIC_BEDROCK_MANTLE_BASE_URL ANTHROPIC_VERTEX_BASE_URL ANTHROPIC_FOUNDRY_BASE_URL ANTHROPIC_FOUNDRY_RESOURCE ANTHROPIC_CUSTOM_HEADERS; do unset "$v"; done && exec env CLAUDE_CONFIG_DIR="$7" claude -p ${4:+--session-id "$4"} --model "$2" \
+      run_worker bash -c 'cd "$1" && for v in CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY CLAUDE_CODE_USE_MANTLE CLAUDE_CODE_USE_ANTHROPIC_AWS CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD CLAUDE_CODE_USE_GATEWAY ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_FOUNDRY_API_KEY ANTHROPIC_FOUNDRY_AUTH_TOKEN AWS_BEARER_TOKEN_BEDROCK ANTHROPIC_BASE_URL ANTHROPIC_BEDROCK_BASE_URL ANTHROPIC_BEDROCK_MANTLE_BASE_URL ANTHROPIC_VERTEX_BASE_URL ANTHROPIC_FOUNDRY_BASE_URL ANTHROPIC_FOUNDRY_RESOURCE ANTHROPIC_CUSTOM_HEADERS; do unset "$v"; done && exec env HOME="$10" CLAUDE_CONFIG_DIR="$7" claude -p ${4:+--session-id "$4"} --model "$2" \
           --strict-mcp-config --dangerously-skip-permissions ${5:+--effort "$5"} ${8:+--settings "$8"} --output-format json "${@:9}" < "$3" >"$6"' \
-          _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE" "$CNATIVE_CONFIG_DIR" ${_CN_TAIL[@]+"${_CN_TAIL[@]}"}
+          _ "${WORKER_CWD:-$WT}" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE" "$CNATIVE_CONFIG_DIR" ${_CN_TAIL[@]+"${_CN_TAIL[@]}"} "${SCRATCH_HOME:-$HOME}"
     else
       CNATIVE_CONFIG_DIR=""
       echo "claude-native: could not seed config dir; worker not started" > "$LOG"
@@ -6194,10 +6259,10 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
         _ccshim_env_probe="${ANTHROPIC_BASE_URL:+1}"
         [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ] && [ "$_ccshim_env_probe" = "1" ] || { printf "%s\n" "cc-shim 拒絕啟動：mount 隔離前綴不會保留環境變數，端點環境變數（ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN）將被清空" >&2; exit 2; }
         # ccshim-env-load-end
-        exec env -u ANTHROPIC_API_KEY -u ANTHROPIC_CUSTOM_HEADERS ${8:+ANTHROPIC_CUSTOM_HEADERS="$8"} ${10:+ENABLE_TOOL_SEARCH=false} claude -p ${4:+--session-id "$4"} --model "$2" \
+        exec env -u ANTHROPIC_API_KEY -u ANTHROPIC_CUSTOM_HEADERS HOME="${11:-$HOME}" CLAUDE_CONFIG_DIR="${12:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}}" ${8:+ANTHROPIC_CUSTOM_HEADERS="$8"} ${10:+ENABLE_TOOL_SEARCH=false} claude -p ${4:+--session-id "$4"} --model "$2" \
         --strict-mcp-config --dangerously-skip-permissions --disallowedTools TaskCreate,TaskUpdate,TaskGet,TaskList \
         ${5:+--effort "$5"} ${7:+--settings "$7"} --output-format json < "$3" >"$6"' \
-        _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE" "${GATE_ARGV[0]-}" "$FLEET_TASK_HEADER" "$CCSHIM_ENV_FILE" "$([ "${LOCAL_RUNNER:-0}" -eq 1 ] && printf 1)"
+        _ "${WORKER_CWD:-$WT}" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE" "${GATE_ARGV[0]-}" "$FLEET_TASK_HEADER" "$CCSHIM_ENV_FILE" "$([ "${LOCAL_RUNNER:-0}" -eq 1 ] && printf 1)" "${SCRATCH_HOME:-$HOME}" "${SCRATCH_CONFIG_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}}"
   fi
   # The worker is done (success, failure or timeout): the gate file and the settings file go now.
   if [ -n "${GATE_ARMED_SESSION:-}" ]; then
@@ -6392,7 +6457,7 @@ elif [ "$IS_KIMI" -eq 1 ] && [ "$BIN_FLAG_KIMI" -eq 1 ]; then
   seal_runner_prompt_bytes "$KIMI_SENT_FILE"
   EFFORT_SENT="${KIMI_EFFORT_SEND:-default}"
   run_worker bash -c 'cd "$1" && exec "$2" -m "$4" -p "$(cat "$3")" --output-format text' \
-      _ "$WT" "$KIMI_BIN" "$KIMI_SENT_FILE" "$MODEL"
+      _ "${WORKER_CWD:-$WT}" "$KIMI_BIN" "$KIMI_SENT_FILE" "$MODEL"
   rm -f "$KIMI_SENT_FILE" "$KIMI_PROMPT_FILE"
   # Part 3: kimi has no usage command; its result is the quota signal (429 -> exhausted + reset, clean -> available).
   node "$SELF_DIR/lib/kimi-quota-observe.js" observe --rc "${AGENT_EXIT:-0}" --log-file "$LOG" >/dev/null 2>&1 || true
@@ -6765,6 +6830,61 @@ DIRTY="$(_wt_git status --porcelain --ignore-submodules=dirty)"
   INS="$(printf '%s' "$SHORTSTAT" | grep -o '[0-9]\+ insertion' | grep -o '[0-9]\+' || echo 0)"
   DEL="$(printf '%s' "$SHORTSTAT" | grep -o '[0-9]\+ deletion' | grep -o '[0-9]\+' || echo 0)"
 fi
+}
+
+capture_scratch_files() {
+  [ "${SCRATCH:-0}" -eq 1 ] || return 0
+  [ -n "${SCRATCH_DIR:-}" ] && [ -d "$SCRATCH_DIR" ] || return 1
+  if [ -n "${MANIFEST_DIR_PATH:-}" ]; then mkdir -p -- "$MANIFEST_DIR_PATH" || return 1; fi
+  node - "$SCRATCH_WORK_DIR" "$WT" "${SCRATCH_REJECTED_FILE:-$SCRATCH_DIR/scratch.rejected}" <<'NODE' || return 1
+const fs = require('node:fs');
+const path = require('node:path');
+const src = path.resolve(process.argv[2]);
+const dst = path.resolve(process.argv[3]);
+const rejected = process.argv[4];
+const lines = [];
+function walk(dir, rel = '') {
+  for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+    const name = ent.name;
+    const childRel = rel ? `${rel}/${name}` : name;
+    if (childRel === 'brief.md' || childRel === 'final-prompt.md') continue;
+    const from = path.join(dir, name);
+    const to = path.join(dst, childRel);
+    let st;
+    try { st = fs.lstatSync(from); } catch { lines.push(`${childRel}\tstat_failed`); continue; }
+    const reason = name === '.git' ? 'git_metadata'
+      : name === '.autopilot-worktree.lock' ? 'worktree_lock'
+        : childRel.includes('..') ? 'dotdot_path'
+          : st.isSymbolicLink() ? 'symlink'
+            : st.isFile() && st.nlink > 1 ? 'hardlink'
+            : (!st.isDirectory() && !st.isFile()) ? 'unsupported_type' : '';
+    if (reason) { lines.push(`${childRel}\t${reason}`); continue; }
+    if (st.isDirectory()) {
+      try {
+        const dstStat = fs.lstatSync(to);
+        if (!dstStat.isDirectory() || dstStat.isSymbolicLink()) { lines.push(`${childRel}\tdestination_type`); continue; }
+      } catch (e) { if (!e || e.code !== 'ENOENT') { lines.push(`${childRel}\tdestination_stat_failed`); continue; } }
+      try { fs.mkdirSync(to, { recursive: true, mode: 0o755 }); } catch { lines.push(`${childRel}\tmkdir_failed`); continue; }
+      walk(from, childRel);
+    } else {
+      try {
+        fs.mkdirSync(path.dirname(to), { recursive: true, mode: 0o755 });
+        try {
+          const dstStat = fs.lstatSync(to);
+          if (!dstStat.isFile() || dstStat.isSymbolicLink()) { lines.push(`${childRel}\tdestination_type`); continue; }
+        } catch (e) { if (!e || e.code !== 'ENOENT') { lines.push(`${childRel}\tdestination_stat_failed`); continue; } }
+        fs.copyFileSync(from, to);
+      }
+      catch { lines.push(`${childRel}\tcopy_failed`); }
+    }
+  }
+}
+walk(src);
+fs.writeFileSync(rejected, lines.length ? `${lines.join('\n')}\n` : '', { mode: 0o600 });
+if (lines.length) process.stderr.write(`dispatch-hetero: scratch rejected ${lines.length} path(s); see scratch.rejected\n`);
+NODE
+  SCRATCH_FILES="$(_wt_git status --porcelain --untracked-files=all | wc -l | tr -d ' ')"
+  return 0
 }
 
 run_strict_acceptance_checks() {
@@ -7880,6 +8000,7 @@ detached_main() {
   hb_pid=$!
   # run the engine worker (in-session), then finalize by artifact
   run_agent
+  capture_scratch_files || { AGENT_EXIT=1; }
   [ -n "$hb_pid" ] && { kill "$hb_pid" 2>/dev/null || true; wait "$hb_pid" 2>/dev/null || true; }
   compute_artifacts
   classify_outcome
@@ -7912,6 +8033,12 @@ detached_main() {
   [ -n "${AGY_STDERR:-}" ] && rm -f "$AGY_STDERR" 2>/dev/null || true
   [ -n "${AGY_PARSED:-}" ] && rm -f "$AGY_PARSED" 2>/dev/null || true
   [ -n "${CCSHIM_ENVELOPE:-}" ] && rm -f "$CCSHIM_ENVELOPE" 2>/dev/null || true
+  [ -n "${SCRATCH_DIR:-}" ] && rm -rf -- "$SCRATCH_DIR"
+  SCRATCH_DIR=""
+  [ -n "${SCRATCH_CONFIG_DIR:-}" ] && rm -rf -- "$SCRATCH_CONFIG_DIR"
+  SCRATCH_CONFIG_DIR=""
+  [ -n "${SCRATCH_HOME:-}" ] && rm -rf -- "$SCRATCH_HOME"
+  SCRATCH_HOME=""
   exit "$OUTCOME_EXIT"
 }
 
@@ -7939,7 +8066,7 @@ dispatch_detached_run() {
       ORPHAN_LOG OUTCOME_ORPHAN WT_LOCK_FD LINEAGE_PARENT LINEAGE_ROOT LINEAGE_JOB_ROOT WORKTREE_ROOT_RUN_ID LINEAGE_DEPTH HETERO_FLEET_TASK_ID \
       STRICT_SCOPE_ALLOW_PATHS STRICT_SCOPE_DENY_PATHS STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS STRICT_SCOPE_MAX_FILES STRICT_SCOPE_MAX_DIFF_LINES STRICT_OUTPUT_PATHS STRICT_REQUIRED_CHANGE_PATHS STRICT_POSTCHECK_OK STRICT_POSTCHECK_STATUS STRICT_POSTCHECK_ERROR \
       DISPATCH_RUN_ID DISPATCH_STARTED_EPOCH MANIFEST_DIR_PATH MANIFEST_FILE MANIFEST_CONTAINMENT \
-      LOCAL_LEASE_ID LOCAL_LEASE_URL LOCAL_LEASE_TOKEN_ENV LOCAL_LEASE_STATUS LOCAL_LEASE_GRANTED LOCAL_LEASE_RELEASED LOCAL_LEASE_RELEASE_ATTEMPTED LOCAL_LEASE_DETAIL LOCAL_LEASE_HEARTBEATS LOCAL_LEASE_HEARTBEAT_PID LOCAL_LEASE_HEARTBEAT_FILE LOCAL_LEASE_HEARTBEAT_SLEEP_FILE \
+      LOCAL_LEASE_ID LOCAL_LEASE_URL LOCAL_LEASE_TOKEN_ENV LOCAL_LEASE_STATUS LOCAL_LEASE_GRANTED LOCAL_LEASE_RELEASED LOCAL_LEASE_RELEASE_ATTEMPTED LOCAL_LEASE_DETAIL LOCAL_LEASE_HEARTBEATS LOCAL_LEASE_HEARTBEAT_PID LOCAL_LEASE_HEARTBEAT_FILE \
       MANIFEST_SCOPE_UNIT MANIFEST_MOUNT_CONTAINMENT WORKER_MOUNT_MODE WORKER_MOUNT_PREFIX MANIFEST_PID_RECORDED MANIFEST_ENDED_AT MANIFEST_ENDED_EPOCH MANIFEST_FINAL_STATUS \
       TIMEOUT_SOURCE TIMEOUT_SUPPLIED WORKER_TIMED_OUT IDLE_TIMEOUT IDLE_TIMEOUT_SUPPLIED HARD_TIMEOUT HARD_TIMEOUT_SUPPLIED WATCHDOG_IDLE_S WATCHDOG_HARD_S WATCHDOG_SAMPLE_S WATCHDOG_SOFT_S WORKER_TIMEOUT_KIND KILLED_ELAPSED_S KILLED_LAST_PROGRESS_S COMMIT_QUIET_SECS COMMIT_QUIET_ENDED REPO_IDENTITY_FIELDS _REPO_IDENTITY_FIELDS_KEY CHILD_SESSION_ID 2>/dev/null
     declare -p NO_VERIFY_TIP VERIFY_TIMEOUT TIP_VERIFY_SKIP TIP_VERIFY_SOURCE TIP_VERIFY_CMDS_JSON TIP_VERIFY_RESULT_JSON VERIFY_CMDS 2>/dev/null || true
@@ -7953,6 +8080,7 @@ dispatch_detached_run() {
     declare -p MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES 2>/dev/null || true
     declare -p MAIN_CHECKOUT_FP_EXCLUDE_PATHS 2>/dev/null || true
     declare -p WRAPPER_COMMITTED 2>/dev/null || true
+    declare -p SCRATCH SCRATCH_DIR SCRATCH_WORK_DIR SCRATCH_REJECTED_FILE SCRATCH_FINAL_PROMPT SCRATCH_HOME SCRATCH_CONFIG_DIR SCRATCH_FILES WORKER_CWD 2>/dev/null || true
     declare -p DETACH_PRECLAIM_GEN DETACH_PRECLAIM_NONCE 2>/dev/null
     declare -p _CONT_WO_CLAIMED_ROOT _CONT_WO_CLAIMED_STAGE _CONT_WO_PARENT_TRANSFERRED 2>/dev/null
     declare -p CAMPAIGN_PROMPT_FILE 2>/dev/null
@@ -7970,10 +8098,9 @@ dispatch_detached_run() {
     # token_seat_guard (lib/token-seat.sh) is called inside run_agent's claude branches; without it the
     # detached child dies with "command not found" before the claude worker starts.
     declare -f token_seat_guard 2>/dev/null || true
-    declare -f local_lease_json release_local_lease local_lease_heartbeat_loop 2>/dev/null || true
     declare -f agy_print_timeout agy_assert_disposable_home die_precondition fell_back_json_suffix hetero_log_fallback child_session_env_setup repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_worker_alive _watchdog_signal_worker _hetero_resolve_watch_limits _watchdog_sleep_sample _watchdog_progress_sample _watchdog_fire _arm_worker_watchdog _worker_has_busy_descendant _supervise_commit_quiet _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts capture_structured_provider_error _prefer_structured_classified_error passive_capture \
       _is_engine_unavailable _hetero_runner_token _capability_write_note _capability_write_suppress_now seat_strike_capture classify_outcome _emit_question_waiting_event heartbeat_loop detached_main seal_runner_prompt_bytes write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks resolve_tip_verify_commands run_tip_verify _fp_unverifiable main_checkout_fingerprint main_checkout_parts_digest main_checkout_describe_delta main_checkout_wt_symlink_leaks check_main_checkout_boundary run_hands_content_gate run_hands_backlog_gate run_hands_backlog_reconcile_gate \
-      _cont_terminal_on_exit _cont_finalize_or_die \
+      capture_scratch_files _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \
       _wt_has_control_chars _wt_resolve_repo_root _wt_read_marker_created_at _wt_json_escape _wt_is_live \
       _wt_read_schema2_marker _wt_record_retention _wt_residue_lease_hours \
@@ -8000,6 +8127,10 @@ dispatch_detached_run() {
     setsid bash -c 'IN_DETACHED_CHILD=1; source "$1"; rm -f "$1"; detached_main' bash "$state_file" >/dev/null 2>&1 &
   fi
   local child=$!
+  # The detached child owns scratch until it has captured and committed the output.
+  SCRATCH_DIR=""
+  SCRATCH_CONFIG_DIR=""
+  SCRATCH_HOME=""
   # Clear parent claim after child is launched so parent EXIT cleanup cannot fail-mark the WO.
   _CONT_WO_CLAIMED_ROOT=""
   wait "$child"; local wait_rc=$?
@@ -8128,6 +8259,7 @@ fi
 
 # ---- inline path (DISPATCH_DETACH=0 OR no ledger coords): byte-identical to pre-R1 behavior ----
 run_agent
+capture_scratch_files || { AGENT_EXIT=1; }
 [ -n "${PACKED_PROMPT_TEMP:-}" ] && rm -f "$PACKED_PROMPT_TEMP"
 [ -n "${CAMPAIGN_PROMPT_FILE:-}" ] && rm -f "$CAMPAIGN_PROMPT_FILE"
 trap - INT TERM

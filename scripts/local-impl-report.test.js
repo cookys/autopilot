@@ -38,8 +38,12 @@ test('local-impl-report counts local runs, review fields, and fallbacks', () => 
     role: 'implementer', runner: 'local', endpoint: 'qwen_local', started_at: now,
     review_receipt: { pass: true, first_review_pass: false }, rework_count: 0, queue_wait_s: null, queue_wait_ms: 1500,
   });
+  write('glm.manifest.json', { runner: 'local', endpoint: 'glm_local', started_at: now, local_fallback: null });
   const o = report(dir, Date.parse('2026-11-21T00:00:00Z'));
-  assert.equal(o.local_runs, 4);
+  assert.equal(o.local_runs, 5);
+  assert.equal(o.implementer_total, 5);
+  assert.deepEqual(o.by_endpoint, { qwen_local: 4, glm_local: 1 });
+  assert.deepEqual(o.cloud_fallbacks, [{ reason: 'no_free_slot', count: 1 }, { reason: 'draining', count: 1 }]);
   assert.equal(o.local_first_review_pass.count, 1);
   assert.equal(o.local_first_review_pass.ratio, 1 / 3);
   assert.equal(o.local_reworked.count, 1);
@@ -58,7 +62,7 @@ test('local-impl-report counts local runs, review fields, and fallbacks', () => 
   const cli = spawnSync(process.execPath, [path.join(__dirname, 'local-impl-report.js'), '--dir', dir, '--since', '2026-11-21T00:00:00Z', '--text'], { encoding: 'utf8' });
   assert.equal(cli.status, 0, cli.stderr);
   assert.equal(cli.stdout.trim().split('\n').length, 5);
-  assert.match(cli.stdout, /本機派工 4 次/);
+  assert.match(cli.stdout, /本機派工 5 次/);
 });
 
 test('local-impl-report keys fallbacks by reason and detail prefix and counts backends', () => {
@@ -80,8 +84,10 @@ test('local-impl-report keys fallbacks by reason and detail prefix and counts ba
     local_fallback: null,
     local_slots: { source: 'gateway', free: 2, backend: 'gpu-a', detail: 'free' },
   });
+  write('local-glm.manifest.json', { runner: 'local', endpoint: 'glm_local', started_at: now, local_slots: { source: 'gateway', free: 1, backend: 'gpu-b', detail: 'free' } });
   const o = report(dir, Date.parse('2026-11-21T00:00:00Z'));
   assert.equal(o.fallback_reasons['no_free_slot:all_full'], 1);
   assert.equal(o.fallback_reasons['no_free_slot:slot_query_failed'], 1);
-  assert.deepEqual(o.backends, { 'gpu-a': 2 });
+  assert.deepEqual(o.backends, { 'gpu-a': 2, 'gpu-b': 1 });
+  assert.deepEqual(o.by_endpoint, { qwen_local: 1, glm_local: 1 });
 });

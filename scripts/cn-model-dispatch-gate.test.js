@@ -31,6 +31,11 @@ test('(b) Kimi in a fresh sandbox containing only the brief is allowed', () => f
   const got = check({ runner: 'kimi', model: 'kimi', endpoint: 'kimi', cwd, files: [prompt], env: endpointEnv('kimi', 'https://api.moonshot.cn/v1') });
   assert.equal(got.allowed, true);
 }));
+test('(b2) Kimi broker endpoint name is allowed without a resolvable URL', () => fixture((root) => {
+  const cwd = path.join(root, 'sandbox'); fs.mkdirSync(cwd); const prompt = brief(cwd);
+  const got = check({ runner: 'kimi', model: 'kimi-code/kimi-for-coding', endpoint: 'kimi', cwd, files: [prompt], env: {} });
+  assert.equal(got.allowed, true);
+}));
 test('(c) Kimi in a git checkout is refused as private workdir', () => fixture((root) => {
   const cwd = path.join(root, 'repo'); repo(cwd); const prompt = brief(cwd);
   const got = check({ runner: 'kimi', model: 'kimi', endpoint: 'kimi', cwd, files: [prompt], env: endpointEnv('kimi', 'https://api.moonshot.cn/v1') });

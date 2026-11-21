@@ -60,7 +60,7 @@ class Session {
     this.offset = plan.offset
     return plan
   }
-  titles(): string[] { return this.texts().filter(x => /^[▲✓●◌○·◆] \d+\. /u.test(x) || /^\S+ \d+\. /u.test(x)) }
+  titles(): string[] { return this.texts().filter(x => /^[▲✓●◌○·◆→] \d+\. /u.test(x) || /^\S+ \d+\. /u.test(x)) }
   greyed(): number { return this.lines().filter(l => l.kind === 'item' && l.segs !== undefined && l.segs.some(s => s.role === 'title') && l.segs.filter(s => s.role === 'title').every(s => s.dim === true)).length }
 }
 

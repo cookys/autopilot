@@ -138,7 +138,7 @@ function decidedRows(ctx: PageCtx, dv: DecisionsView, folded: boolean): Row[] {
   if (!folded) {
     for (const r of sorted) {
       const age = ageText(ctx, r.at, false)
-      const left = [seg(' '), seg(GLYPHS.structure.decisions, { color: PALETTE.attention }), seg(' ' + (r.decision_id !== null ? r.decision_id + ' ' : '') + firstLine(r.decision))]
+      const left = [seg(' '), seg(GLYPHS.state.done, { color: PALETTE.attention }), seg(' ' + (r.decision_id !== null ? r.decision_id + ' ' : '') + firstLine(r.decision))]
       out.push(truncateSegs(age === '' ? left : [...left, dimSeg('  · ' + age)], cols))
     }
   }

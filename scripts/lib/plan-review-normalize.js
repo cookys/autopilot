@@ -40,6 +40,7 @@ function validateResponse(value) {
       'repair',
       'blocks_next_slice_or_immediate_integrity',
       'cannot_defer_to_spike',
+      'failure_scenario',
     ]);
     if (Object.keys(finding).some((key) => !allowed.has(key))) {
       throw new TypeError(`finding ${index + 1} has unsupported fields`);
@@ -55,8 +56,12 @@ function validateResponse(value) {
     if (finding.class !== undefined && !CLASSES.has(finding.class)) {
       throw new TypeError(`finding ${index + 1} has invalid class`);
     }
+    if (finding.failure_scenario !== undefined && typeof finding.failure_scenario !== 'string') {
+      throw new TypeError(`finding ${index + 1} has invalid failure_scenario`);
+    }
     return {
       ...finding,
+      failure_scenario: typeof finding.failure_scenario === 'string' ? finding.failure_scenario.trim() : '',
       affected_surface: typeof finding.affected_surface === 'string'
         && finding.affected_surface.trim()
         ? finding.affected_surface.trim()

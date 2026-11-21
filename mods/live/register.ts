@@ -2127,20 +2127,29 @@ export function registerLive(on: Parameters<Register>[0]): void {
     }
     // v7.4 S1: the band's ▴ / ▾ toggle. Closed -> the same open path as the ⓘ (pageOpen('now')); open -> the same close path as a tab press on the showing tab (markPaneClosed + ui.close).
     const togglePane = async () => {
-      let isOpen = v74Open
-      if (!v74) { try { isOpen = (await $.ui.panes()).some(p => p.id === PANE_ID) } catch (_e) { /* the engine could not list panes: treat the pane as closed */ } }
-      else if (!isOpen) isOpen = await hostPlaced($) // I1: after a reload the module state is empty while the host still shows the Pane
-      if (isOpen && v75NotPlaced && !v75PaneOn) { // waiting (the host holds the pane open but undrawn): this press is the person's ask, the host seats it at any width
+      const listed = await $.ui.panes().catch(() => [] as { id: string; isShown: boolean; isFocused: boolean; isPlaced: boolean }[])
+      const mine = listed.find(p => p.id === PANE_ID)
+      // J2: the host's list decides, never closePane's module state (after a reload v75PaneOn is false while the host still shows the Pane, and closePane then closed nothing)
+      let action: string
+      if (!v74) { action = listed.some(p => p.id === PANE_ID) ? 'close' : 'open' }
+      else if (mine !== undefined && mine.isPlaced === false && v75NotPlaced) action = 'open-waiting'
+      else action = mine?.isPlaced === true || v75PaneOn || (v74Open && !v75NotPlaced) ? 'close' : 'open'
+      void appendLog($, 'band-reload.log', { step: 'toggle-press', panes: listed, v74Open, v75PaneOn, v75NotPlaced, action })
+      if (action === 'open-waiting') { // the host holds the pane open but undrawn: this press is the person's ask, the host seats it at any width
         const placed = await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: true }).catch((err: unknown) => ({ isPlaced: false, reason: 'threw: ' + String(err) }) as { isPlaced: boolean; reason?: string })
         void appendLog($, 'band-reload.log', { step: 'toggle-open', result: placed })
         if (placed.isPlaced === true) v75NotPlaced = false
         $.ui.invalidate('ui.render')
         return
       }
-      if (!isOpen) { await pageOpen('now'); return }
+      if (action === 'open') { await pageOpen('now'); return }
       markPaneClosed(); void setPaneWanted($, false)
-      await closePane($)
+      v75PaneOn = false; v75Locked = null; v75NotPlaced = false
+      v75Focus = v75FocusNext(v75Focus, { kind: 'pane-gone' })
+      try { await $.ui.close({ id: PANE_ID }) } catch (_e) { /* already closed */ }
+      if (bandLegacy === true) await closePane($)
       $.ui.invalidate('ui.render')
+      void refocusBand($)
     }
     const slot = (id: SlotId) => (consoleOn ? pageOpen(SLOT_PAGE_OF[id] ?? 'now', slotUnfolds(id), consoleSlotTab(id)) : openOn(slotTab(id), slotUnfolds(id), id === 'spend' ? 'spend' : undefined))
     // a tab of the band row: the open tab is a memory state; pressing it again closes it. In the console mode a page tab opens the pane on that page (the forge tab keeps its band behaviour)

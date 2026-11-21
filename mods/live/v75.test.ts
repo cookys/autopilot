@@ -261,7 +261,7 @@ test('v75 G3: the waiting hint names the closed-pane glyph in both languages', (
 
 test('v75 I2: a background with line breaks is one Pane row per line (the Pane is the full view)', () => {
   const long = { ...decide[0], background: Array.from({ length: 80 }, (_x, n) => '第 ' + (n + 1) + ' 行').join('\n') }
-  const ctx = { ...(ctxOf([long, ...decide.slice(1)], { size: { cols: 100, rows: 200 }, box: true }) as object), decide: { ...NO_NAV } } as never
+  const ctx = { ...(ctxOf([long, ...decide.slice(1)], { size: { cols: 100, rows: 200 } }) as object), decide: { ...NO_NAV } } as never
   const rows = decidePage.render(ctx).body.map(text).join('\n')
   expect(rows).toContain('第 1 行')
   expect(rows).toContain('第 80 行')

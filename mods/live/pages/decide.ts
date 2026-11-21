@@ -487,7 +487,9 @@ function v74Card(c: DecideCard, i: number, selected: boolean, nav: DecideNav, ct
     : [seg(mark + '  ' + String(i + 1) + '. ', selected ? {} : { press: 'card:' + i }), title, seg('：' + c.question)] // v7.5: the card number on the Pane's left edge is the click target (fullscreen only; elsewhere a label)
   out.push(box ? head : truncateSegs(head, cols))
   const bg = c.background ?? t('v74.d.bg_none')
-  out.push(box ? [seg('    '), dimSeg(t('v74.d.bg')), seg('   ' + bg)] : truncateSegs([seg('    '), dimSeg(t('v74.d.bg')), seg('   ' + bg)], cols))
+  // J1: the real Pane draws cards through this path (not boxOpen): the open card's background is shown in full (one row per line, wrapped on the label's hanging indent, never cut), the frame scrolls it; the other cards keep one cut row
+  if (selected) out.push(...labelledBox(t('v74.d.bg'), bg, cols))
+  else { const first = bg.split('\n')[0]; out.push(box ? [seg('    '), dimSeg(t('v74.d.bg')), seg('   ' + first)] : truncateSegs([seg('    '), dimSeg(t('v74.d.bg')), seg('   ' + first)], cols)) }
   const picked = picks[c.id]
   const held = nav.hold?.[c.id] !== undefined
   const sent = nav.sent[c.id] !== undefined && nav.fixing?.[c.id] === undefined

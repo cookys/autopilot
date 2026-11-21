@@ -575,7 +575,8 @@ function run(payload) {
   let ticketAdvisory = '';
   if (ticket && ticketBudgetEnabled) {
     try {
-      const ticketBudget = claudeBudgetFromBrief(brief) || cfg.per_ticket_usd;
+      const briefBudget = claudeBudgetFromBrief(brief);
+      const ticketBudget = briefBudget === null ? cfg.per_ticket_usd : Math.min(briefBudget, cfg.per_ticket_usd);
       if (c.ticketUsd >= ticketBudget) {
         emit({
           permissionDecision: 'deny',

@@ -50,9 +50,11 @@
 // Local endpoint (interim, PM 01M7HQ92; operator rule: CN bars cover external China-hosted services only):
 //   a name in scripts/lib/local-sandbox-endpoints.json (today qwen_local and glm_local) is local only when
 //   `scripts/resolve-endpoint.sh <name>` (the same resolver dispatch uses; this file does not read
-//   endpoints.env) returns a base_url whose host is loopback (localhost, 127.0.0.0/8, ::1) or a hostname
-//   in local_gateway_hosts (hostnames only; the repo list is empty, hangar fills it per host). Tests pass
-//   the resolver URL/token via AUTOPILOT_ENDPOINT_<NAME>_URL/_TOKEN and may add gateway hostnames via
+//   endpoints.env) returns a base_url whose host is loopback (localhost, 127.0.0.0/8, ::1) or a host
+//   in local_gateway_hosts (a hostname, or an IPv4 literal only when it is RFC1918 and equals a list
+//   entry exactly; the repo list is empty, hangar fills it per host). Public IPv4, IPv6 literals,
+//   loopback-as-a-gateway-name and anything unlisted stay refused. Tests pass
+//   the resolver URL/token via AUTOPILOT_ENDPOINT_<NAME>_URL/_TOKEN and may add gateway hosts via
 //   AUTOPILOT_LOCAL_GATEWAY_HOSTS (comma-separated). Model `auto` is the gateway's own routing, not a
 //   second family. A listed name plus a separator and a model suffix (`qwen_local/Qwen…`, `#`, `:`, `@`)
 //   is still that endpoint. When the name is listed but the host is not local, the dispatch is external:
@@ -455,13 +457,33 @@ function hostIsLoopback(host) {
   return oct[0] === 127;
 }
 
-// Gateway list is hostnames only. An IP literal in the list does not qualify.
+function ipv4Octets(host) {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (!m) return null;
+  const oct = m.slice(1).map((s) => Number(s));
+  if (oct.some((n) => !Number.isInteger(n) || n > 255)) return null;
+  return oct;
+}
+
+// RFC1918: 10/8, 172.16/12, 192.168/16. Loopback is not in this set.
+function isRfc1918(oct) {
+  if (oct[0] === 10) return true;
+  if (oct[0] === 172 && oct[1] >= 16 && oct[1] <= 31) return true;
+  if (oct[0] === 192 && oct[1] === 168) return true;
+  return false;
+}
+
+// A hostname matches the gateway list as before. An IPv4 literal qualifies only when it is
+// RFC1918 and equals, exactly, one entry of `names` (file list plus AUTOPILOT_LOCAL_GATEWAY_HOSTS).
+// Public IPv4, IPv6 literals, loopback and anything unlisted stay refused.
 function hostIsGateway(host, names) {
   const h = String(host || '').toLowerCase();
   if (!h || h.includes(':') || hostIsLoopback(h)) return false;
-  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h)) return false;
+  const listed = names.some((n) => String(n).trim().toLowerCase() === h);
+  const oct = ipv4Octets(h);
+  if (oct) return isRfc1918(oct) && listed;
   if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/.test(h)) return false;
-  return names.some((n) => String(n).trim().toLowerCase() === h);
+  return listed;
 }
 
 // Same resolver dispatch uses. stdout is metadata only (base_url, never a token value).

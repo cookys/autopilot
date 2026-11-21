@@ -863,6 +863,35 @@ test('local by URL: loopback, gateway host, external host, cloud CN, model auto,
   assert.equal(suffixed.allowed, true, 'case and a model suffix still name the local endpoint');
 });
 
+test('local by URL: a listed RFC1918 address is local-served; unlisted, public and outside 172.16/12 stay refused', () => {
+  const auto = path.join(tmp, 'autopilot');
+  const impl = { AUTOPILOT_TASK_SIZE: 'M', AUTOPILOT_TASK_ROLE: 'implementer', AUTOPILOT_TASK_SCOPE: 'docs/a.md', AUTOPILOT_TASK_CLASS: 'simple-script' };
+  const rfc1918 = [192, 168, 7, 9].join('.');
+  const publicIp = [203, 0, 113, 9].join('.');
+  const outside172 = [172, 32, 1, 4].join('.');
+  const qwen = (host, list) => gate.check({
+    runner: 'cc-shim', model: 'Qwen3.8-27B-QUASAR-NVFP4', endpoint: 'qwen_local',
+    env: {
+      ...impl,
+      AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL: `http://${host}:9/v1`,
+      ...(list === undefined ? {} : { AUTOPILOT_LOCAL_GATEWAY_HOSTS: list }),
+    },
+    cwd: auto,
+  });
+  const listed = qwen(rfc1918, rfc1918);
+  assert.equal(listed.allowed, true, 'listed RFC1918 address is local-served');
+  assert.equal(listed.family, 'alibaba');
+  const unlisted = qwen(rfc1918);
+  assert.equal(unlisted.allowed, false);
+  assert.equal(unlisted.cls, 'local_name_external_host', 'same RFC1918 address unlisted is refused');
+  const pub = qwen(publicIp, publicIp);
+  assert.equal(pub.allowed, false);
+  assert.equal(pub.cls, 'local_name_external_host', 'listed public IPv4 is refused');
+  const out172 = qwen(outside172, outside172);
+  assert.equal(out172.allowed, false);
+  assert.equal(out172.cls, 'local_name_external_host', 'listed address outside 172.16/12 is refused');
+});
+
 // Scoped review exception (PM 01M7XP968Q66): glm_local may act as the non-scoring ThinkSmart UX
 // reference reviewer only. repos/roles on an entry narrow it; an entry without them is unchanged.
 const GLM_BEFORE = '2026-11-25T12:00:00+08:00';

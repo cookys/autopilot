@@ -312,7 +312,7 @@ function checkPmFleetTask(input, toolInput, prompt) {
   }
   if (probe.state === 'not_found') {
     emitDeny(
-      `PM Console 派工硬阻擋：brief 中的 Fleet-Task: ${taskId} 找不到對應任務（not_found）。請先開啟或挑選有效的 open 任務（使用 fleet task show ${taskId} 確認），並將「Fleet-Task: <id>」加入 brief 前 10 行後再重新派工。`
+      `PM Console 派工硬阻擋：查無此單 Fleet-Task: ${taskId}。PM 席位自己的 courier 沒有此任務；若任務開在其他 courier，請綁定此 courier 持有的 open 任務，並將「Fleet-Task: <id>」加入 brief 前 10 行後再重新派工。`
     );
   }
   emitDeny(

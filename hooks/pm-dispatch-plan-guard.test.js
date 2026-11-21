@@ -7,7 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const { isPmConsole } = require('./_shared/pm-console.js');
+const { isPmConsole, pmConsoleStatus } = require('./_shared/pm-console.js');
 const {
   DISPATCH_SIZE_DENY_REASON,
   DISPATCH_PLAN_DENY_REASON,
@@ -138,6 +138,46 @@ test('pm-console: walks up to first .git and requires autopilot.console/1 + mode
   }
 });
 
+test('pm-console: isPmConsole writes nothing to stderr when seat is undetermined', () => {
+  const fx = mkPmFixture();
+  const xdg = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-stdio-'));
+  const dirs = { undet: fx.noGitDir, pm: fx.pmRepo, nonPm: fx.nonProgramRepo };
+  try {
+    // Hermetic child: the checks must not inherit the caller's FLEET_ADDRESS /
+    // session ids, or "undetermined" flips on a real seat.
+    const r = spawnSync(process.execPath, ['-e', `
+      const pm = require(process.argv[1]);
+      const dirs = JSON.parse(process.argv[2]);
+      const out = {};
+      for (const [name, dir] of Object.entries(dirs)) {
+        out[name] = { isPm: pm.isPmConsole(dir), status: pm.pmConsoleStatus(dir) };
+      }
+      process.stdout.write(JSON.stringify(out));
+    `, path.join(__dirname, '_shared/pm-console.js'), JSON.stringify(dirs)], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        HOME: fx.home,
+        FLEET_ADDRESS: '',
+        AUTOPILOT_FLEET_ADDRESS: '',
+        CLAUDE_CODE_SESSION_ID: '',
+        AUTOPILOT_SESSION_ID: '',
+        XDG_RUNTIME_DIR: xdg,
+      },
+    });
+    assert.equal(r.status, 0, `child exit 0 (${r.stderr})`);
+    assert.equal(r.stderr, '', `expected silent child, got: ${r.stderr}`);
+    const results = JSON.parse(r.stdout);
+    assert.equal(results.undet.isPm, false);
+    assert.deepEqual(results.undet.status, { pm: false, undetermined: true });
+    assert.deepEqual(results.pm.status, { pm: true, undetermined: false });
+    assert.deepEqual(results.nonPm.status, { pm: false, undetermined: false });
+  } finally {
+    fs.rmSync(xdg, { recursive: true, force: true });
+    fx.cleanup();
+  }
+});
+
 test('pm-dispatch-plan-guard: enforces Size and Plan rules in PM program console', () => {
   const fx = mkPmFixture();
   try {
@@ -241,7 +281,7 @@ test('pm-dispatch-plan-guard: enforces Size and Plan rules in PM program console
       runGuard(GUARD_PATH, {
         tool_name: 'mcp__fleet__send',
         cwd: fx.pmRepo,
-        tool_input: { to: 'ns/courier/lane', content: '請跑 tests', fyi: true },
+        tool_input: { to: 'ns/courier/lane', content: 'Tests passed.', fyi: true },
       }, { ...fx, envExtra: envOn }),
       'mcp__fleet__send fyi=true untouched',
     );
@@ -272,7 +312,7 @@ test('negative control: unguarded pm-console and work-order-plan stubs fail beha
     assert.notEqual(resChild.stdout, '', 'unguarded pm-console stub wrongly blocks child repo');
 
     // Stub 2: work-order-plan.js returning {size:null,plan:null} -> valid Plan dispatch wrongly denied
-    fs.copyFileSync(path.join(__dirname, '_shared', 'pm-console.js'), path.join(sandbox, 'hooks', '_shared', 'pm-console.js'));
+    fs.writeFileSync(path.join(sandbox, 'hooks', '_shared', 'pm-console.js'), 'module.exports = { isPmConsole: () => true };\n');
     fs.writeFileSync(
       path.join(sandbox, 'scripts', 'lib', 'work-order-plan.js'),
       'module.exports = { parse: () => ({ size: null, plan: null }), isMPlus: () => false };\n',
@@ -287,4 +327,35 @@ test('negative control: unguarded pm-console and work-order-plan stubs fail beha
     fs.rmSync(sandbox, { recursive: true, force: true });
     fx.cleanup();
   }
+});
+
+test('pm-console fleet address identifies the PM and gates Agent briefs', () => {
+  const fx = mkPmFixture();
+  try {
+    fs.writeFileSync(path.join(fx.nonProgramRepo, '.claude', 'console.json'), JSON.stringify({ schema: 'autopilot.console/1' }));
+    const probe = (address, cwd = fx.nonProgramRepo) => spawnSync(process.execPath, ['-e', 'process.stdout.write(String(require(process.argv[1]).isPmConsole(process.argv[2])))', path.join(__dirname, '_shared/pm-console.js'), cwd], {
+      encoding: 'utf8', env: { ...process.env, HOME: fx.home, FLEET_ADDRESS: address, AUTOPILOT_FLEET_ADDRESS: '', CLAUDE_CODE_SESSION_ID: '' },
+    });
+    assert.equal(probe('x/y/pm--claude').stdout, 'true');
+    assert.equal(probe('x/y/autopilot--claude').stdout, 'false');
+    const missing = probe('', fx.childRepoDir);
+    assert.equal(missing.stdout, 'false');
+    assert.equal(missing.stderr, '');
+    assert.equal(probe('', fx.pmRepo).stdout, 'true');
+    const payload = { tool_name: 'Agent', cwd: fx.nonProgramRepo, tool_input: { model: 'sonnet', prompt: 'Engine: sonnet\nDo work.' } };
+    for (const [address, denied] of [['x/y/pm--claude', true], ['x/y/autopilot--claude', false]]) {
+      const res = runGuard(path.join(__dirname, 'dispatch-model-guard.js'), payload, { ...fx, envExtra: { FLEET_ADDRESS: address, AUTOPILOT_FLEET_ADDRESS: '', CLAUDE_CODE_SESSION_ID: '', AUTOPILOT_MECHANICAL_REROUTE: 'off' } });
+      assert.equal(res.stdout.includes('Fleet-Task:'), denied, address);
+    }
+    // The undetermined-seat warning moved from isPmConsole to dispatch-model-guard:
+    // one Agent run on an undetermined seat must print it exactly once on stderr.
+    const seatWarn = 'pm-console: cannot determine PM seat (no console.json mode, no fleet address)';
+    const warned = runGuard(
+      path.join(__dirname, 'dispatch-model-guard.js'),
+      { tool_name: 'Agent', cwd: fx.childRepoDir, tool_input: { model: 'sonnet', prompt: 'Engine: sonnet\nDo work.' } },
+      { ...fx, envExtra: { FLEET_ADDRESS: '', AUTOPILOT_FLEET_ADDRESS: '', CLAUDE_CODE_SESSION_ID: '' } },
+    );
+    assert.equal(warned.status, 0, `guard exit 0 (${warned.stderr})`);
+    assert.equal(warned.stderr.split(seatWarn).length - 1, 1, `expected ${seatWarn} exactly once, got: ${warned.stderr}`);
+  } finally { fx.cleanup(); }
 });

@@ -78,6 +78,20 @@ function gitBranch(repoDir) {
   }
 }
 
+function commitExists(repoDir, head) {
+  if (!head) return false;
+  try {
+    execFileSync(
+      'git',
+      ['-C', repoDir, 'rev-parse', '--verify', `${head}^{commit}`],
+      { encoding: 'utf8', stdio: 'pipe' }
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function parseNotes(notesPath) {
   if (!notesPath) return { tests: [], tests_green: false, risk: null };
   let raw;
@@ -147,7 +161,7 @@ function readOptionalJson(filePath) {
 }
 
 function buildPack(opts) {
-  const { repo, base, head, runId, fleetTask, branch, notes, review, usage, out } = opts;
+  const { repo, base, head, runId, fleetTask, branch, notes, review, usage, out, runner } = opts;
   if (!repo || !base || !head || !runId || !out) {
     throw new Error('Missing required flags: --repo, --base, --head, --run-id, --out');
   }
@@ -157,6 +171,26 @@ function buildPack(opts) {
   const { tests, tests_green, risk } = parseNotes(notes);
   const reviewObj = readOptionalJson(review);
   const usageObj = readOptionalJson(usage);
+
+  const mergeable_reasons = [];
+  if (!tests_green) mergeable_reasons.push('tests_not_green');
+  if (high_risk_paths.length > 0) mergeable_reasons.push('high_risk_paths');
+  if (!risk) mergeable_reasons.push('risk_missing');
+  else if (risk.level === 'high') mergeable_reasons.push('risk_high');
+  if (!commitExists(repo, head)) mergeable_reasons.push('commit_missing');
+
+  const mergeable = mergeable_reasons.length === 0;
+
+  const isClaudeRunner = !runner || runner === 'claude-native' || runner === 'cc-shim' || runner.startsWith('claude');
+  let claude_usage;
+  if (!isClaudeRunner) {
+    claude_usage = { runner, claude_tokens: 0 };
+  } else if (usageObj && typeof usageObj === 'object') {
+    claude_usage = { tokens: Number(usageObj.tokens || 0), usd: Number(usageObj.usd || 0) };
+  } else {
+    claude_usage = null;
+    mergeable_reasons.push('claude_usage_missing');
+  }
 
   const pack = {
     schema: 'autopilot.evidence-pack/1',
@@ -174,10 +208,9 @@ function buildPack(opts) {
       : null,
     risk,
     high_risk_paths,
-    mergeable: null,
-    claude_usage: usageObj && typeof usageObj === 'object'
-      ? { tokens: Number(usageObj.tokens || 0), usd: Number(usageObj.usd || 0) }
-      : null,
+    mergeable,
+    mergeable_reasons,
+    claude_usage,
   };
 
   fs.mkdirSync(path.dirname(path.resolve(out)), { recursive: true });
@@ -197,7 +230,7 @@ function showPack(packPath) {
     ...pack.tests.slice(0, 4).map((t) => `  [${t.rc}] ${t.cmd}`),
     `Risk: ${pack.risk ? `${pack.risk.level} — ${pack.risk.note}` : 'none'}`,
     `Review: ${pack.review ? `${pack.review.verdict} (critical: ${pack.review.critical})` : 'none'}`,
-    `Usage: ${pack.claude_usage ? `${pack.claude_usage.tokens} tokens ($${pack.claude_usage.usd})` : 'none'}`,
+    `Usage: ${pack.claude_usage ? (pack.claude_usage.runner ? `${pack.claude_usage.runner}: ${pack.claude_usage.claude_tokens} claude tokens` : `${pack.claude_usage.tokens} tokens ($${pack.claude_usage.usd})`) : 'none'}`,
   ];
   return lines.slice(0, 15).join('\n') + '\n';
 }
@@ -221,6 +254,7 @@ function parseArgs(argv) {
       else if (a === '--notes') { opts.notes = v; i += 1; }
       else if (a === '--review') { opts.review = v; i += 1; }
       else if (a === '--usage') { opts.usage = v; i += 1; }
+      else if (a === '--runner') { opts.runner = v; i += 1; }
       else if (a === '--out') { opts.out = v; i += 1; }
     }
     return opts;

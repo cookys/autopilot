@@ -153,3 +153,98 @@ test('matchHighRiskPaths: table of dispatch/pin/lock paths and non-matches', () 
     assert.deepEqual(matchHighRiskPaths([p], globs), [], `expected ${p} not to match high-risk globs`);
   }
 });
+
+function makeTestRepo(tmp, files) {
+  const repo = path.join(tmp, 'repo');
+  fs.mkdirSync(repo, { recursive: true });
+  git(repo, ['init', '-q', '-b', 'feat/ev-merge']);
+  fs.writeFileSync(path.join(repo, 'README.md'), 'init\n');
+  git(repo, ['add', 'README.md']);
+  git(repo, ['commit', '-q', '-m', 'base']);
+  const base = git(repo, ['rev-parse', 'HEAD']);
+
+  for (const [relPath, content] of Object.entries(files)) {
+    const full = path.join(repo, relPath);
+    fs.mkdirSync(path.dirname(full), { recursive: true });
+    fs.writeFileSync(full, content);
+  }
+  git(repo, ['add', '-A']);
+  git(repo, ['commit', '-q', '-m', 'changes']);
+  const head = git(repo, ['rev-parse', 'HEAD']);
+  return { repo, base, head };
+}
+
+test('buildPack: (a) two rc=0 tests, Risk low, no high-risk path -> mergeable true', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ev-a-'));
+  try {
+    const { repo, base, head } = makeTestRepo(tmp, { 'normal.txt': 'ok\n' });
+    const notesPath = path.join(tmp, 'notes.md');
+    fs.writeFileSync(notesPath, '## Tests\n0 node a.test.js\n0 node b.test.js\n\n## Risk\nlow\nSafe change.\n');
+    const pack = buildPack({ repo, base, head, runId: 'r-a', notes: notesPath, runner: 'codex', out: path.join(tmp, 'pack.json') });
+    assert.equal(pack.mergeable, true);
+    assert.deepEqual(pack.mergeable_reasons, []);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('buildPack: (b) one rc=1 -> mergeable false with reason tests_not_green', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ev-b-'));
+  try {
+    const { repo, base, head } = makeTestRepo(tmp, { 'normal.txt': 'ok\n' });
+    const notesPath = path.join(tmp, 'notes.md');
+    fs.writeFileSync(notesPath, '## Tests\n0 node a.test.js\n1 node b.test.js\n\n## Risk\nlow\nOne failed.\n');
+    const pack = buildPack({ repo, base, head, runId: 'r-b', notes: notesPath, runner: 'codex', out: path.join(tmp, 'pack.json') });
+    assert.equal(pack.mergeable, false);
+    assert.ok(pack.mergeable_reasons.includes('tests_not_green'));
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('buildPack: (c) high-risk path -> mergeable false with reason high_risk_paths', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ev-c-'));
+  try {
+    const { repo, base, head } = makeTestRepo(tmp, { 'scripts/dispatch-review.sh': 'echo hi\n' });
+    const notesPath = path.join(tmp, 'notes.md');
+    fs.writeFileSync(notesPath, '## Tests\n0 node a.test.js\n\n## Risk\nlow\nSafe.\n');
+    const pack = buildPack({ repo, base, head, runId: 'r-c', notes: notesPath, runner: 'codex', out: path.join(tmp, 'pack.json') });
+    assert.equal(pack.mergeable, false);
+    assert.ok(pack.mergeable_reasons.includes('high_risk_paths'));
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('buildPack: (d) no notes file -> mergeable false with reasons tests_not_green and risk_missing', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ev-d-'));
+  try {
+    const { repo, base, head } = makeTestRepo(tmp, { 'normal.txt': 'ok\n' });
+    const pack = buildPack({ repo, base, head, runId: 'r-d', notes: path.join(tmp, 'missing.md'), runner: 'codex', out: path.join(tmp, 'pack.json') });
+    assert.equal(pack.mergeable, false);
+    assert.ok(pack.mergeable_reasons.includes('tests_not_green'));
+    assert.ok(pack.mergeable_reasons.includes('risk_missing'));
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('buildPack: (e) non-Claude runner -> claude_usage.claude_tokens 0', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ev-e-'));
+  try {
+    const { repo, base, head } = makeTestRepo(tmp, { 'normal.txt': 'ok\n' });
+    const notesPath = path.join(tmp, 'notes.md');
+    fs.writeFileSync(notesPath, '## Tests\n0 node a.test.js\n\n## Risk\nlow\nSafe.\n');
+    const pack = buildPack({ repo, base, head, runId: 'r-e', notes: notesPath, runner: 'grok', out: path.join(tmp, 'pack.json') });
+    assert.deepEqual(pack.claude_usage, { runner: 'grok', claude_tokens: 0 });
+    assert.equal(pack.mergeable, true);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('dispatch-hetero.sh: prompt banners include AUTOPILOT_EVIDENCE_NOTES instruction', () => {
+  const src = fs.readFileSync(path.join(__dirname, 'dispatch-hetero.sh'), 'utf8');
+  assert.ok(src.includes('AUTOPILOT_EVIDENCE_NOTES'), 'dispatch-hetero.sh should reference AUTOPILOT_EVIDENCE_NOTES');
+  assert.ok(src.includes('## Tests') && src.includes('## Risk'), 'dispatch-hetero.sh should instruct ## Tests and ## Risk sections');
+});

@@ -1,0 +1,11 @@
+---
+id: 01M7YC9QXGB4ARH3ZYZGKSZ38E
+kind: issue
+created: 2026-11-21T06:22:03.184Z
+---
+- **Since**: 2026-11-21
+- **Problem**: 本地端點因缺少 TRANSPORT opt-in 而未就緒時，閘門把本地 27B 和本地 GLM 判為外部主機（local_name_external_host）。建議閘門只檢查主機名是否在本地清單，不看就緒狀態。
+- **Impact**: 裸跑閘門或環境未載入 endpoints.env 時，本地單會被擋下。
+- **Trigger**: 本地端點缺少 TRANSPORT opt-in 時
+- **Source**: autopilot lane, 2026-11-21
+- **Pointer**: none

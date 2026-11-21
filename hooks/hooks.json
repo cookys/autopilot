@@ -74,6 +74,15 @@
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/awaiting-owner.js"
           }
         ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-mode-end.js"
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
@@ -95,6 +104,17 @@
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/scheduled-wakeup-guard.js",
             "timeout": 5,
+            "onFailure": "continue"
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-mode-refresh.js",
+            "timeout": 10,
             "onFailure": "continue"
           }
         ]

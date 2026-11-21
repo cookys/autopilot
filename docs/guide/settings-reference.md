@@ -165,6 +165,7 @@ Claude Code compacts when the context reaches **`autoCompactWindow` minus a fixe
 | `AUTOPILOT_PROTECTED_BRANCHES` | Branch-name pattern the opt-in branch-protection hook guards. | `^(main\|master)$` |  |
 | `AUTOPILOT_INTENT_CAPTURE` | Set to "false" to stop the per-directory intent capture used for cross-session resume hints. | on |  |
 | `AUTOPILOT_SESSION_TASKS` | Set to "off" to stop folding task-tool events into the live band. | on |  |
+| `AUTOPILOT_SESSION_END_CLEANUP` | Set to "0" (also off/false/no) to stop the SessionEnd hook (session-mode-end) from deleting the session's plain/expired marker or clamping its l3–l6 marker; residue then dies only through the sweep and reader-side cleanup. | on |  |
 | `AUTOPILOT_AWAITING_OWNER` | Set to "off" to stop the awaiting-owner attention records the band shows. | on |  |
 | `AUTOPILOT_ASK_DECISION` | Set to "off" to stop recording AskUserQuestion prompts as decisions. | on |  |
 | `AUTOPILOT_AGENT_ACTIVITY` | Set to "off" to stop the subagent activity stamps. | on |  |

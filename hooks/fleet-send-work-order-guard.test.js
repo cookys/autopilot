@@ -196,6 +196,30 @@ test('a seat memory path under .claude/projects is allowed', () => {
   }), null);
 });
 
+test('a sibling .claude-profiles projects path is allowed', () => {
+  const content = path.join('$HOME', '.claude-profiles', 'x', 'projects', 'y');
+  assert.equal(guard.decide({
+    tool_name: 'mcp__fleet__send',
+    tool_input: { to: 'ns/h/peer', content },
+  }), null);
+});
+
+test('bare ~/.claude boundaries and ~/.claude.json remain denied', () => {
+  for (const content of [
+    '~/.claude/settings.json',
+    '~/.claude.json',
+    '請讀 ~/.claude 的設定',
+    '看 ~/.claude，回報',
+    '訊息結尾 ~/.claude',
+  ]) {
+    const out = guard.decide({
+      tool_name: 'mcp__fleet__send',
+      tool_input: { to: 'ns/h/peer', content },
+    });
+    assert.equal(out && out.hookSpecificOutput.permissionDecision, 'deny', content);
+  }
+});
+
 test('a clause that forbids reading ~/.claude is allowed', () => {
   assert.equal(guard.decide({
     tool_name: 'mcp__fleet__dispatch',

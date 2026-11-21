@@ -48,6 +48,7 @@ const {
 const { BRIEF_HEAD_WINDOW, headLines, findHeadMatch } = require('./lib/brief-head.js');
 const { isPmConsole } = require('./_shared/pm-console.js');
 const { findTaskId, checkTaskOpen } = require('../scripts/lib/fleet-task-ref.js');
+const { userRuntimeBase, ensurePrivateDir } = require('../scripts/lib/runtime-paths.js');
 // default-on since v2.35.15 (was opt-in). Opt out: AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=off
 // (or `- mode: off` in .claude/dispatch-guard-config.md). The 2026-09-04 cuda quota digest:
 // subagents inherited the session's [1m] Fable model because nothing asked.
@@ -296,6 +297,89 @@ function checkPmFleetTask(input, toolInput, prompt) {
   );
 }
 
+const MECHANICAL_ROLES = new Set([
+  'mechanical', 'inventory', 'format', 'formatting',
+  'log', 'logs', 'log-reading', 'stats', 'statistics',
+  'docs', 'doc', 'test-run', 'lint',
+]);
+const MECHANICAL_READONLY_ROLES = new Set([
+  'log', 'logs', 'log-reading', 'stats', 'statistics', 'inventory',
+]);
+
+function checkMechanicalReroute(input, toolInput, prompt) {
+  const modeRaw = String(process.env.AUTOPILOT_MECHANICAL_REROUTE || 'shadow').trim().toLowerCase();
+  const mode = (modeRaw === 'off' || modeRaw === 'shadow' || modeRaw === 'enforce') ? modeRaw : 'shadow';
+  if (mode === 'off') return;
+
+  const envSeat = String(process.env.AUTOPILOT_SEAT_ROLE || '').trim().toLowerCase();
+  let seat = '';
+  if (isPmConsole(input)) {
+    seat = 'pm';
+  } else if (envSeat === 'pm' || envSeat === 'lead') {
+    seat = envSeat;
+  }
+  if (!seat) return;
+
+  const subagentType = String(toolInput.subagent_type || '').trim();
+  const model = String(toolInput.model || '').trim().toLowerCase();
+  const typeMatch = subagentType === '' || subagentType === 'general-purpose' || subagentType === 'Explore';
+  const modelMatch = model === 'haiku' || model === 'sonnet';
+  if (!typeMatch && !modelMatch) return;
+
+  const head = headLines(prompt, 6);
+  let matchedRole = '';
+  for (const line of head) {
+    const m = line.match(/^Role:\s*(\S+)/i);
+    if (m) {
+      const candidate = m[1].toLowerCase();
+      if (MECHANICAL_ROLES.has(candidate)) {
+        matchedRole = candidate;
+      }
+      break;
+    }
+  }
+  if (!matchedRole) return;
+
+  const engineLine = head.find((l) => /^Engine:/i.test(l.trim())) || '';
+  const intentional = /\(intentional:\s*[^)]+\)/i.test(engineLine);
+
+  if (mode === 'shadow') {
+    const entry = {
+      ts: new Date().toISOString(),
+      seat,
+      subagent_type: subagentType,
+      model,
+      role: matchedRole,
+    };
+    const laneLine = head.find((l) => /^Lane:\s*\S/i.test(l.trim()));
+    if (laneLine) entry.Lane = laneLine.replace(/^Lane:\s*/i, '').trim();
+    const taskId = findTaskId(head.join('\n'));
+    if (taskId) entry['Fleet-Task'] = taskId;
+    if (intentional) entry.intentional = true;
+
+    try {
+      const base = userRuntimeBase(process.env);
+      const ensured = ensurePrivateDir(base);
+      if (ensured.ok) {
+        fs.appendFileSync(path.join(ensured.path, 'mechanical-reroute-shadow.jsonl'), JSON.stringify(entry) + '\n');
+      }
+    } catch {
+      // fail-open on shadow log write errors
+    }
+    return;
+  }
+
+  if (intentional) return;
+
+  const isReadOnly = MECHANICAL_READONLY_ROLES.has(matchedRole);
+  const cmd = isReadOnly
+    ? 'scripts/dispatch-hetero.sh --runner local --sandbox bwrap --prompt-file <file>  (備援: --runner grok)'
+    : 'scripts/dispatch-hetero.sh --runner local --branch <branch> --prompt-file <file>  (備援: --runner grok)';
+  emitDeny(
+    `PM / Lead 席位機械性工作轉派阻擋：偵測到 ${seat} 席位以 Claude subagent 執行機械性任務（Role: ${matchedRole}）。請改用低成本引擎派工：${cmd}；若確有必要使用 Claude subagent，請在 brief 的 Engine: 行加上 (intentional: <原因>)。`
+  );
+}
+
 // Fable/opus only. Intentional does not skip this. Exits on deny.
 // Model present: after the engine-header check, before the guarded-engine allow.
 // Model absent: before the on_missing_model allow / ask / deny paths, with the
@@ -421,6 +505,7 @@ try {
     denyIfMissingCostLine(config, promptAbsent, engineTok);
     if (config.on_missing_model === 'allow') {
       checkPmFleetTask(input, toolInput, promptAbsent);
+      checkMechanicalReroute(input, toolInput, promptAbsent);
       checkBriefSizeUsedByStages(config, promptAbsent, advisories);
       exitAllow();
     }
@@ -480,6 +565,9 @@ try {
 
   // PM Console hard block: Agent calls with Engine: (non-Explore/Plan) require an open Fleet-Task in head 10 lines.
   checkPmFleetTask(input, toolInput, promptRaw);
+
+  // Mechanical subagent reroute on PM / lead seats.
+  checkMechanicalReroute(input, toolInput, promptRaw);
 
   // Size / Used-by / Stages check for autopilot briefs (Lane: present).
   checkBriefSizeUsedByStages(config, promptRaw, advisories);

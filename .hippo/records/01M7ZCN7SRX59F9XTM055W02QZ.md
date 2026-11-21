@@ -1,0 +1,11 @@
+---
+id: 01M7ZCN7SRX59F9XTM055W02QZ
+kind: issue
+created: 2026-11-21T15:47:34.328Z
+---
+- **Since**: 2026-11-21
+- **Problem**: hetero rail 自動產生的提交訊息只有分支名等空殼文案，沒有實質摘要，合併前每次都要人工改寫。
+- **Impact**: 歷史難追、合併審查看不出改了什麼。
+- **Trigger**: 下次修改 hetero rail 自動提交訊息產生邏輯時
+- **Source**: autopilot lane 2026-11-16
+- **Pointer**: none

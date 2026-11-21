@@ -118,6 +118,7 @@ export function frameBorderRow(page: Page, ctx: PageCtx): Row {
 // PM 01M7XB0B: one bottom border. Hints on the left, page tabs on the right, the current page marked.
 // Short width: shorten the hint first, then tabs become digits (the current page keeps its name). Never a second row.
 export type BorderTab = { key: string; id: string; text: string }
+const RULE_MIN = 8 // dashes the bottom border keeps between the hint and the tabs before the names are given up
 export const TAB_GAP = 2 // blanks between two tabs of the bottom border (design)
 export function frameBottomFit(cols: number, hintFull: string, hintShort: string, tabs: readonly BorderTab[], active: string): { hint: string; tabs: BorderTab[] } {
   const digits = tabs.map(x => ({ ...x, text: x.id === active ? x.key + ' ' + x.text.replace(/^\d+\s+/, '') : x.key }))
@@ -126,10 +127,10 @@ export function frameBottomFit(cols: number, hintFull: string, hintShort: string
   const chrome = 2 + 2 + 2 + 2 + 2 + 2 + 2 // ╰─, blanks, blanks, two dashes, blanks, blanks, ─╯
   const tabW = (list: readonly BorderTab[]): number => list.reduce((n, x, i) => n + (i === 0 ? 0 : TAB_GAP) + displayWidth(x.text), 0)
   const fits = (hint: string, list: readonly BorderTab[]): boolean => chrome + displayWidth(hint) + tabW(list) <= cols
-  // Short width: shorten the hint first. Only after the shortest hint still does not fit do the tabs become digits.
-  for (const hint of [hintFull, hintShort, '']) {
-    if (fits(hint, fullTabs)) return { hint, tabs: fullTabs }
-  }
+  // r10 #1: when the full hint and every name do not fit, the shortest hint stays and the tabs become digits (the current page keeps its name); the hint goes only when even that does not fit.
+  if (fits(hintFull, fullTabs)) return { hint: hintFull, tabs: fullTabs }
+  // the shortest hint keeps every name only while the border still shows a readable rule (RULE_MIN dashes); on a tighter border the names give way, not the hint
+  if (chrome + displayWidth(hintShort) + tabW(fullTabs) + RULE_MIN <= cols) return { hint: hintShort, tabs: fullTabs }
   for (const hint of [hintShort, '']) {
     if (fits(hint, digits)) return { hint, tabs: digits }
   }

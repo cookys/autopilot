@@ -113,7 +113,7 @@ test('v74 host: /live-pane opens the full-width page at 209 columns: title in th
   await $.session.end({ reason: 'exit' })
 })
 
-for (const cols of [120, 80]) {
+for (const cols of [120, 100, 80]) {
   test(`v74 host: the open page is ${cols} columns wide, every row, and the tab row keeps the design form`, async ($, on) => {
     const h = host(on)
     await $.session.start({ surface: 'terminal', cwd: REPO })
@@ -131,6 +131,13 @@ for (const cols of [120, 80]) {
     // design (narrow sheet): at 80 the border keeps the current page's name only, the other tabs are digits; from 120 every name shows
     if (cols >= 120) expect(rows[rows.length - 1]).toContain('9 說明')
     else expect(rows[rows.length - 1]).not.toContain('9 說明')
+    // r10 #1: the border shortens the tabs before it drops the hint: at 100 and 80 the shortest key hint stays and the other tabs are bare digits
+    if (cols < 120) {
+      const last = rows[rows.length - 1]
+      expect(last, 'the key hint is still on the border').toContain('Esc')
+      expect(last).not.toContain('2 待決')
+      expect(last).not.toContain('7 艦隊')
+    }
     expect(text(tree)).not.toContain('圓桌')
     await band.unmount()
     await $.session.end({ reason: 'exit' })

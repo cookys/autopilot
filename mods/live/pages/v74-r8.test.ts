@@ -95,8 +95,8 @@ test('r8 #9: help keys follow S10 — the send key has its own row, and the digi
   const l = helpLines()
   const k = l.findIndex(x => x.includes('a b c 選那張的選項'))
   expect(l[k]).toContain('p n 備用換張')
-  expect(l[k]).not.toContain('送出全部')
-  expect(l[k + 1]).toContain('s 送出全部（待決頁和待辦頁）')
+  expect(l[k]).not.toContain('送出已選')
+  expect(l[k + 1]).toContain('s 送出已選的卡（待決頁和待辦頁）')
   expect(l[k + 2].trim()).toBe('')
   expect(l[k + 3]).toMatch(/^ {2}為什麼 +hotkey/)
   expect(l[k + 4]).toMatch(/^ {2}數字與字母 +數字鍵/)
@@ -172,6 +172,17 @@ const tabsOf = [['1', 'now', '1 現況'], ['2', 'decide', '2 待決'], ['3', 'wo
 test('r8-3 #4: at a narrow width only the current tab keeps its name', () => {
   const fit = frameBottomFit(30, '↑↓ 換張 · a/b/c 選 · s 送出全部 · Esc 還給輸入框', '↑↓ · s · Esc', tabsOf, 'decide')
   expect(fit.tabs.map(x => x.text)).toEqual(['1', '2 待決', '3'])
+})
+
+test('r10 #1: tabs shrink to digits before the hint is dropped', () => {
+  const hint = '↑↓ 換張 · a/b/c 選 · s 送出全部 · Esc 還給輸入框'
+  const fit = frameBottomFit(40, hint, '↑↓ · s · Esc', tabsOf, 'decide')
+  expect(fit.hint).toBe('↑↓ · s · Esc')
+  expect(fit.tabs.map(x => x.text)).toEqual(['1', '2 待決', '3'])
+  const mid = frameBottomFit(48, hint, '↑↓ · s · Esc', tabsOf, 'decide') // the full hint does not fit with names: the short hint stays, the other tabs are digits
+  expect(mid.hint).toBe('↑↓ · s · Esc')
+  expect(mid.tabs.map(x => x.text)).toEqual(['1', '2 待決', '3'])
+  expect(frameBottomFit(8, hint, '↑↓ · s · Esc', tabsOf, 'decide').hint).toBe('')
 })
 
 test('r8-3 #4: tabs are two blanks apart on the border (design)', () => {

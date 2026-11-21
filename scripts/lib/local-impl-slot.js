@@ -106,8 +106,7 @@ function integerFree(v) {
 }
 
 function freeOf(ep) {
-  if (Object.prototype.hasOwnProperty.call(ep, 'free_for_caller')
-    && ep.free_for_caller !== undefined && ep.free_for_caller !== null) {
+  if (Object.prototype.hasOwnProperty.call(ep, 'free_for_caller')) {
     return integerFree(ep.free_for_caller);
   }
   return integerFree(ep.free);
@@ -197,34 +196,24 @@ function slotsFromCmd(cmd, env) {
   return interpretPayload(o, 'cmd') || queryFailed('cmd', 'malformed');
 }
 
-// In-process HTTP would deadlock if this thread blocked the event loop. The worker
-// thread owns the socket timer and the overall timer; this thread waits on a flag.
+// Keep the query on this event loop so in-process gateway stubs and callers can
+// continue servicing sockets while the decision waits for its response.
 function httpGet(urlStr, timeoutMs) {
-  const { Worker } = require('worker_threads');
-  const sab = new SharedArrayBuffer(4);
-  const flag = new Int32Array(sab);
-  const outPath = path.join(require('os').tmpdir(), `local-slots-${process.pid}-${Date.now()}.json`);
-  const worker = new Worker(`
-    'use strict';
-    const fs = require('fs');
-    const http = require('http');
-    const https = require('https');
-    const { URL } = require('url');
-    const { workerData } = require('worker_threads');
-    const flag = new Int32Array(workerData.sab);
-    function finish(obj) {
-      try { fs.writeFileSync(workerData.outPath, JSON.stringify(obj)); } catch { /* parent times out */ }
-      Atomics.store(flag, 0, 1);
-      Atomics.notify(flag, 0);
+  return new Promise((resolve) => {
+    let u;
+    try { u = new URL(urlStr); } catch { resolve({ error: 'unreachable' }); return; }
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+      resolve({ error: 'unreachable' });
+      return;
     }
-    let u = null;
-    try { u = new URL(workerData.url); } catch { /* finish below */ }
-    if (!u || (u.protocol !== 'http:' && u.protocol !== 'https:')) {
-      finish({ error: 'unreachable' });
-    } else {
-    const lib = u.protocol === 'https:' ? https : http;
+    const lib = u.protocol === 'https:' ? require('https') : require('http');
     let done = false;
-    function once(obj) { if (done) return; done = true; finish(obj); }
+    const finish = (result) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve(result);
+    };
     const req = lib.request({
       protocol: u.protocol,
       hostname: u.hostname,
@@ -234,36 +223,28 @@ function httpGet(urlStr, timeoutMs) {
       headers: { accept: 'application/json' },
     }, (res) => {
       const chunks = [];
-      res.on('data', (c) => chunks.push(c));
-      res.on('end', () => once({ status: res.statusCode, body: Buffer.concat(chunks).toString('utf8') }));
+      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('end', () => finish({ status: res.statusCode, body: Buffer.concat(chunks).toString('utf8') }));
+      res.on('error', () => finish({ error: 'unreachable' }));
     });
-    const timer = setTimeout(() => { req.destroy(); once({ error: 'timeout' }); }, workerData.timeoutMs);
-    req.on('socket', (sock) => {
-      sock.setTimeout(workerData.timeoutMs);
-      sock.on('timeout', () => { req.destroy(); once({ error: 'timeout' }); });
+    const timer = setTimeout(() => {
+      req.destroy();
+      finish({ error: 'timeout' });
+    }, timeoutMs);
+    req.on('socket', (socket) => {
+      socket.setTimeout(timeoutMs);
+      socket.on('timeout', () => {
+        req.destroy();
+        finish({ error: 'timeout' });
+      });
     });
-    req.on('error', () => { clearTimeout(timer); once({ error: 'unreachable' }); });
+    req.on('error', () => finish({ error: 'unreachable' }));
     req.end();
-    }
-  `, { eval: true, workerData: { url: urlStr, timeoutMs, outPath, sab } });
-  Atomics.wait(flag, 0, 0, timeoutMs + 500);
-  worker.terminate();
-  if (Atomics.load(flag, 0) !== 1) {
-    try { fs.unlinkSync(outPath); } catch { /* absent */ }
-    return { error: 'timeout' };
-  }
-  try {
-    const raw = fs.readFileSync(outPath, 'utf8');
-    fs.unlinkSync(outPath);
-    return JSON.parse(raw);
-  } catch {
-    try { fs.unlinkSync(outPath); } catch { /* absent */ }
-    return { error: 'unreachable' };
-  }
+  });
 }
 
-function slotsFromHttp(urlStr) {
-  const res = httpGet(urlStr, HTTP_TIMEOUT_MS);
+async function slotsFromHttp(urlStr) {
+  const res = await httpGet(urlStr, HTTP_TIMEOUT_MS);
   if (!res || res.error === 'timeout') return queryFailed('gateway', 'timeout');
   if (res.error) return queryFailed('gateway', 'unreachable');
   if (res.status !== 200) {
@@ -279,6 +260,7 @@ function slotsUrl(cfg, env, baseUrl) {
   const fromEnv = Object.prototype.hasOwnProperty.call(env, 'AUTOPILOT_LOCAL_SLOTS_URL');
   const raw = fromEnv ? String(env.AUTOPILOT_LOCAL_SLOTS_URL) : String(cfg.local_slots_url || '');
   const trimmed = raw.trim();
+  if (fromEnv) return trimmed;
   if (trimmed) return trimmed;
   if (!baseUrl) return '';
   try {
@@ -288,7 +270,7 @@ function slotsUrl(cfg, env, baseUrl) {
 }
 
 // One place a later lease (reserve / heartbeat / release) can replace the query.
-function acquireLocalSlot(opts = {}) {
+async function acquireLocalSlot(opts = {}) {
   const env = opts.env || process.env;
   const cfg = opts.cfg || readConfig(env);
   const cmd = (Object.prototype.hasOwnProperty.call(env, 'AUTOPILOT_LOCAL_SLOTS_CMD')
@@ -310,7 +292,7 @@ function slotView(slot) {
   };
 }
 
-function decide(opts = {}) {
+async function decide(opts = {}) {
   const env = opts.env || process.env;
   const cwd = opts.cwd || process.cwd();
   const promptFile = opts.promptFile;
@@ -325,19 +307,19 @@ function decide(opts = {}) {
   if (bytes > limit) {
     return { choose: false, reason: 'context_too_large', detail: String(bytes), local_slots: null };
   }
-  const slot = acquireLocalSlot({ env, cfg, endpoint: info });
+  const slot = await acquireLocalSlot({ env, cfg, endpoint: info });
   const view = slotView(slot);
   if (slot.local) return { choose: true, local_slots: view };
   const fb = slot.fallback || { reason: 'no_free_slot', detail: 'slot_query_failed:malformed' };
   return { choose: false, reason: fb.reason, detail: fb.detail, local_slots: view };
 }
 
-function main() {
+async function main() {
   const i = process.argv.indexOf('--prompt-file');
   const promptFile = i >= 0 ? process.argv[i + 1] : '';
   const cwdIdx = process.argv.indexOf('--cwd');
   const cwd = cwdIdx >= 0 ? process.argv[cwdIdx + 1] : process.cwd();
-  process.stdout.write(`${JSON.stringify(decide({ promptFile, cwd }))}\n`);
+  process.stdout.write(`${JSON.stringify(await decide({ promptFile, cwd }))}\n`);
 }
 
 if (require.main === module) main();

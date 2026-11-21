@@ -1315,7 +1315,7 @@ NODE
   if [ "${BROKER_VERDICT_UNKNOWN_SET:-0}" -eq 1 ]; then
     broker_fields="${broker_fields}, \"broker_verdict_unknown\": \"$(_flat_json_escape "${BROKER_VERDICT_UNKNOWN:-}")\""
   fi
-  tip_verify_fields="$tip_verify_fields$broker_fields, \"local_fallback\": ${LOCAL_FALLBACK_JSON:-null}"
+  tip_verify_fields="$tip_verify_fields$broker_fields, \"local_fallback\": ${LOCAL_FALLBACK_JSON:-null}, \"local_slots\": ${LOCAL_SLOTS_JSON:-null}"
   hetero_log_fallback "$1"
   local _emit_json
   _emit_json="$(printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "num_turns": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s%s%s%s%s%s%s%s }\n' \
@@ -2379,18 +2379,6 @@ sandbox_json() {
 # before it reads engine_unavailable); model_calls 0 and resources_created 0 say that no worker ran.
 # A configured cloud-fallback already re-exec'd before this runs. This die is the ask path, a missing
 # rung, or a retreat that could not start — and a failed retreat still carries fell_back.
-# A slot command that fails, times out, or prints malformed JSON, or a probe that
-# does not answer, is not a gateway capacity report. Stop. Do not fall back to cloud.
-die_slot_signal_unavailable() {
-  local detail="${1:-slot_signal_unavailable}"
-  local run_id_json="null"
-  [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(_flat_json_escape "$DISPATCH_RUN_ID")\""
-  printf '{ "status": "engine_unavailable", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "slot_signal_unavailable", "reason": "slot_signal_unavailable", "detail": "%s", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "local_fallback": null, "run_id": %s }\n' \
-    "$(current_runner_name)" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
-    "$(_flat_json_escape "$detail")" "$run_id_json"
-  exit 1
-}
-
 die_probe_unavailable() {
   local run_id_json="null"
   [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(_flat_json_escape "$DISPATCH_RUN_ID")\""
@@ -2837,7 +2825,7 @@ write_manifest() {
       "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$tip_verify_json" "$tip_verify_source_json" "$parent_json" "$root_json" "$depth_json" \
       "$mf_timeout_secs" "$(_flat_json_escape "$mf_timeout_source")" "$mf_timeout_enforced" "$strict_manifest_fields" "$strike_suppressed_fields" "$capability_suppressed_fields" "$effort_manifest_fields$role_kit_manifest_fields" "$campaign_scope_fields" "$REPO_IDENTITY_FIELDS$(declare -F dispatch_attr_fields >/dev/null 2>&1 && dispatch_attr_fields "${PROMPT_FILE:-}" "$runner" "${ENDPOINT:-}" "${MANIFEST_FINAL_STATUS:+${OUTCOME_COMMIT:-}}")" \
       "$(declare -F manifest_session_id_json >/dev/null 2>&1 && manifest_session_id_json || printf null)" \
-      "$(declare -F manifest_child_session_json >/dev/null 2>&1 && manifest_child_session_json || printf null), \"local_fallback\": ${LOCAL_FALLBACK_JSON:-null}" > "$tmp"
+      "$(declare -F manifest_child_session_json >/dev/null 2>&1 && manifest_child_session_json || printf null), \"local_fallback\": ${LOCAL_FALLBACK_JSON:-null}, \"local_slots\": ${LOCAL_SLOTS_JSON:-null}" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
   return 0
 }
@@ -3363,17 +3351,17 @@ VISION_PROMPT_FILE="$PROMPT_FILE"
 # a seat when --pace-role or a pace file returned one, a strict contract is on,
 # or AUTOPILOT_QUALIFICATION_OVERRIDE is set. Explicit --runner never falls back.
 LOCAL_FALLBACK_JSON="${AUTOPILOT_LOCAL_FALLBACK_PRESET:-null}"
+LOCAL_SLOTS_JSON=null
 IMPLICIT_LOCAL_DEFAULT=0
 _impl_role="${PACE_ROLE:-${AUTOPILOT_DISPATCH_ROLE:-implementer}}"
 if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_SUPPLIED" -eq 0 ] && [ "$RUNNER" = "auto" ] && [ "$STRICT_CONTRACT" -eq 0 ] \
    && [ -z "${ENGINE_CHOICE_JSON:-}" ] && [ -z "${AUTOPILOT_QUALIFICATION_OVERRIDE:-}" ] \
    && [ "$_impl_role" = "implementer" ] && [ -z "${AUTOPILOT_LOCAL_FALLBACK_PRESET:-}" ]; then
   _slot_line="$(node "$SELF_DIR/lib/local-impl-slot.js" --prompt-file "$PROMPT_FILE" --cwd "$(pwd)")"
-  _slot_kind="$(node -e 'let o; try { o=JSON.parse(process.argv[1]); } catch { o={}; } if (o.signalUnavailable) process.stdout.write("unavailable"); else if (o.choose) process.stdout.write("choose"); else process.stdout.write("fallback");' "$_slot_line")"
-  if [ "$_slot_kind" = "unavailable" ]; then
-    _slot_detail="$(node -e 'let o; try { o=JSON.parse(process.argv[1]); } catch { o={}; } process.stdout.write(String(o.detail||"slot_signal_unavailable"));' "$_slot_line")"
-    die_slot_signal_unavailable "$_slot_detail"
-  elif [ "$_slot_kind" = "choose" ]; then
+  _slot_parsed="$(node -e 'let o; try { o=JSON.parse(process.argv[1]); } catch { o={choose:false,reason:"no_free_slot",detail:"slot_query_failed:malformed"}; } const slots=o.local_slots==null?"null":JSON.stringify(o.local_slots); if (o.choose) process.stdout.write("choose\nnull\n"+slots+"\n"); else process.stdout.write("fallback\n"+JSON.stringify({reason:o.reason||"no_free_slot",detail:String(o.detail||"")})+"\n"+slots+"\n");' "$_slot_line")"
+  _slot_kind="$(printf '%s\n' "$_slot_parsed" | sed -n '1p')"
+  if [ "$_slot_kind" = "choose" ]; then
+    LOCAL_SLOTS_JSON="$(printf '%s\n' "$_slot_parsed" | sed -n '3p')"
     _gate_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --role implementer --runner cc-shim --model qwen --endpoint qwen_local --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" && _gate_rc=0 || _gate_rc=$?
     if [ "$_gate_rc" -eq 0 ]; then
       RUNNER="local"
@@ -3385,9 +3373,10 @@ if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_S
       die_precondition "${_gate_msg:-cn_model_dispatch_barred local (01M7XHF4)}"
     fi
   else
-    LOCAL_FALLBACK_JSON="$(node -e 'let o; try { o=JSON.parse(process.argv[1]); } catch { o={}; } process.stdout.write(JSON.stringify({reason:o.reason||"no_free_slot",detail:String(o.detail||"")}));' "$_slot_line")"
+    LOCAL_FALLBACK_JSON="$(printf '%s\n' "$_slot_parsed" | sed -n '2p')"
+    LOCAL_SLOTS_JSON="$(printf '%s\n' "$_slot_parsed" | sed -n '3p')"
   fi
-  unset _slot_line _slot_kind _slot_detail _gate_msg _gate_rc
+  unset _slot_line _slot_parsed _slot_kind _gate_msg _gate_rc
 fi
 unset _impl_role
 if [ "$RUNNER" = "local" ]; then

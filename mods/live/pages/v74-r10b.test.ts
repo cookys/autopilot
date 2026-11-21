@@ -10,6 +10,9 @@ import type { DecideCard, V74Ctx } from '../v74/contract'
 import { v74TitleSegs } from './frame'
 import { PAGES } from './index'
 import type { Row } from './rows'
+import { renderReview } from './review'
+import { NO_SECTIONS, NO_DETAIL } from '../model'
+import type { LiveSnapshot } from '../model'
 
 const t = makeT('zh-TW')
 const decide = decideFx as DecideCard[]
@@ -110,4 +113,20 @@ test('r10b #5: a source that failed writes 「· 讀取失敗」 in the title (n
   expect(titleOf('spend', {}, null)).toMatch(/· 讀取失敗$/)
   expect(titleOf('decide', { v74: v74({ decide: null }) })).toMatch(/· 讀取失敗$/)
   expect(titleOf('spend')).not.toContain('讀取失敗')
+})
+
+// ---- #7 review rows: branch name first, sha only when there is no branch ----
+const seats = [{ id: 'G', family: 'G', status: 'reviewed', verdict: 'SHIP-AS-IS' }]
+const reviewText = (code: object | null, plan: object | null = null): string => {
+  const live = { state: 'ok', text: '', header: '', band: null, pending: [], project_key: 'k', root_run_id: null, link: null, rows: [], gates: null, sections: NO_SECTIONS, review: { code, plan }, published_at: null, watcher_note: null, session_as_of: null, host_as_of: null, detail: { ...NO_DETAIL, now_ms: 1794200000000 }, account: { account: undefined, quota: [] } } as unknown as LiveSnapshot
+  return renderReview({ live, console: null, size: { cols: 160, rows: 40 }, t, nowMs: 1794200000000 } as never).body.map(text).join('\n')
+}
+test('r10b #7: a code review row names the branch and not the sha when the producer sends a branch', () => {
+  const out = reviewText({ branch: 'feat/tux-sync', phase: null, generation: 1, base: 'a1b2c3d4', head: 'e5f60718', seats, converged: true, at: null })
+  expect(out).toContain('feat/tux-sync')
+  expect(out).not.toContain('e5f60718')
+})
+test('r10b #7: without a branch name the row falls back to the sha (negative)', () => {
+  const out = reviewText({ phase: null, generation: 1, base: 'a1b2c3d4', head: 'e5f60718', seats, converged: true, at: null })
+  expect(out).toContain('e5f60718')
 })

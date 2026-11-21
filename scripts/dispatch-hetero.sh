@@ -491,7 +491,7 @@ LOCAL_RUNNER=0       # --runner local: public name stays local; the rail is cc-s
 GATEWAY_TOKEN_SOURCE="" # local only: lane-file | endpoint. Never the token bytes.
 LOCAL_LEASE_ID="" LOCAL_LEASE_URL="" LOCAL_LEASE_TOKEN_ENV=""
 LOCAL_LEASE_STATUS="null" LOCAL_LEASE_GRANTED=0 LOCAL_LEASE_RELEASED=0 LOCAL_LEASE_RELEASE_ATTEMPTED=0 LOCAL_LEASE_DETAIL=""
-LOCAL_LEASE_HEARTBEATS=0 LOCAL_LEASE_HEARTBEAT_PID="" LOCAL_LEASE_HEARTBEAT_FILE=""
+LOCAL_LEASE_HEARTBEATS=0 LOCAL_LEASE_HEARTBEAT_PID="" LOCAL_LEASE_HEARTBEAT_FILE="" LOCAL_LEASE_HEARTBEAT_SLEEP_FILE=""
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=lib/repo-identity.sh
 # Fail-open: a missing helper only degrades the manifest to repo_identity null (telemetry sidecar).
@@ -803,6 +803,7 @@ cleanup() {
   [ -n "${GATE_ARMED_SESSION:-}" ] && node "$SELF_DIR/per-turn-gate-arm.js" disarm --session "$GATE_ARMED_SESSION" >/dev/null 2>&1
   [ -n "${GATE_SETTINGS_FILE:-}" ] && rm -f "$GATE_SETTINGS_FILE"
   [ -n "${LOCAL_LEASE_HEARTBEAT_FILE:-}" ] && rm -f "$LOCAL_LEASE_HEARTBEAT_FILE"
+  [ -n "${LOCAL_LEASE_HEARTBEAT_SLEEP_FILE:-}" ] && rm -f "$LOCAL_LEASE_HEARTBEAT_SLEEP_FILE"
   # Fail closed: claimed WO must get a terminal disposition; never swallow finalizer failures.
   # Parent that transferred claim to detached child must not mark WO failed on its EXIT.
   if [ -n "${_CONT_WO_CLAIMED_ROOT:-}" ] && [ "${_CONT_WO_PARENT_TRANSFERRED:-0}" != "1" ]; then
@@ -834,7 +835,15 @@ local_lease_json() {
 local_lease_heartbeat_loop() {
   local interval="${AUTOPILOT_LOCAL_LEASE_TTL_S:-180}"
   interval=$((interval / 3)); [ "$interval" -gt 0 ] || interval=1
-  while sleep "$interval"; do
+  while
+    sleep "$interval" &
+    local sleep_pid=$!
+    printf '%s\n' "$sleep_pid" > "$LOCAL_LEASE_HEARTBEAT_SLEEP_FILE"
+    wait "$sleep_pid"
+    sleep_rc=$?
+    rm -f "$LOCAL_LEASE_HEARTBEAT_SLEEP_FILE"
+    [ "$sleep_rc" -eq 0 ]
+  do
     if node "$SELF_DIR/lib/local-impl-slot.js" --lease-operation heartbeat --lease-url "$LOCAL_LEASE_URL" --lease-id "$LOCAL_LEASE_ID" --token-env "$LOCAL_LEASE_TOKEN_ENV" >/dev/null 2>&1; then
       printf '.\n' >> "$LOCAL_LEASE_HEARTBEAT_FILE"
     else
@@ -846,6 +855,11 @@ local_lease_heartbeat_loop() {
 release_local_lease() {
   [ "$LOCAL_LEASE_GRANTED" -eq 1 ] || return 0
   if [ -n "$LOCAL_LEASE_HEARTBEAT_PID" ]; then
+    if [ -n "$LOCAL_LEASE_HEARTBEAT_SLEEP_FILE" ] && [ -s "$LOCAL_LEASE_HEARTBEAT_SLEEP_FILE" ]; then
+      local sleep_pid
+      sleep_pid="$(cat "$LOCAL_LEASE_HEARTBEAT_SLEEP_FILE" 2>/dev/null || true)"
+      [ -z "$sleep_pid" ] || kill "$sleep_pid" 2>/dev/null || true
+    fi
     kill "$LOCAL_LEASE_HEARTBEAT_PID" 2>/dev/null || true
     wait "$LOCAL_LEASE_HEARTBEAT_PID" 2>/dev/null || true
     LOCAL_LEASE_HEARTBEAT_PID=""
@@ -3541,8 +3555,9 @@ if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_S
     LOCAL_LEASE_URL="$(printf '%s\n' "$_slot_parsed" | sed -n '4p')"
     LOCAL_LEASE_TOKEN_ENV="$(printf '%s\n' "$_slot_parsed" | sed -n '5p')"
     LOCAL_LEASE_HEARTBEAT_FILE="${TMPDIR:-/tmp}/autopilot-local-lease-heartbeats-$$"
+    LOCAL_LEASE_HEARTBEAT_SLEEP_FILE="${TMPDIR:-/tmp}/autopilot-local-lease-heartbeat-sleep-$$"
     : > "$LOCAL_LEASE_HEARTBEAT_FILE"
-    local_lease_heartbeat_loop & LOCAL_LEASE_HEARTBEAT_PID=$!
+    local_lease_heartbeat_loop >/dev/null 2>&1 & LOCAL_LEASE_HEARTBEAT_PID=$!
     LOCAL_SLOTS_JSON=null
     _gate_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner cc-shim --model qwen --endpoint qwen_local --cwd "$(pwd)" --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" && _gate_rc=0 || _gate_rc=$?
     if [ "$_gate_rc" -eq 0 ]; then
@@ -7924,7 +7939,7 @@ dispatch_detached_run() {
       ORPHAN_LOG OUTCOME_ORPHAN WT_LOCK_FD LINEAGE_PARENT LINEAGE_ROOT LINEAGE_JOB_ROOT WORKTREE_ROOT_RUN_ID LINEAGE_DEPTH HETERO_FLEET_TASK_ID \
       STRICT_SCOPE_ALLOW_PATHS STRICT_SCOPE_DENY_PATHS STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS STRICT_SCOPE_MAX_FILES STRICT_SCOPE_MAX_DIFF_LINES STRICT_OUTPUT_PATHS STRICT_REQUIRED_CHANGE_PATHS STRICT_POSTCHECK_OK STRICT_POSTCHECK_STATUS STRICT_POSTCHECK_ERROR \
       DISPATCH_RUN_ID DISPATCH_STARTED_EPOCH MANIFEST_DIR_PATH MANIFEST_FILE MANIFEST_CONTAINMENT \
-      LOCAL_LEASE_ID LOCAL_LEASE_URL LOCAL_LEASE_TOKEN_ENV LOCAL_LEASE_STATUS LOCAL_LEASE_GRANTED LOCAL_LEASE_RELEASED LOCAL_LEASE_RELEASE_ATTEMPTED LOCAL_LEASE_DETAIL LOCAL_LEASE_HEARTBEATS LOCAL_LEASE_HEARTBEAT_PID LOCAL_LEASE_HEARTBEAT_FILE \
+      LOCAL_LEASE_ID LOCAL_LEASE_URL LOCAL_LEASE_TOKEN_ENV LOCAL_LEASE_STATUS LOCAL_LEASE_GRANTED LOCAL_LEASE_RELEASED LOCAL_LEASE_RELEASE_ATTEMPTED LOCAL_LEASE_DETAIL LOCAL_LEASE_HEARTBEATS LOCAL_LEASE_HEARTBEAT_PID LOCAL_LEASE_HEARTBEAT_FILE LOCAL_LEASE_HEARTBEAT_SLEEP_FILE \
       MANIFEST_SCOPE_UNIT MANIFEST_MOUNT_CONTAINMENT WORKER_MOUNT_MODE WORKER_MOUNT_PREFIX MANIFEST_PID_RECORDED MANIFEST_ENDED_AT MANIFEST_ENDED_EPOCH MANIFEST_FINAL_STATUS \
       TIMEOUT_SOURCE TIMEOUT_SUPPLIED WORKER_TIMED_OUT IDLE_TIMEOUT IDLE_TIMEOUT_SUPPLIED HARD_TIMEOUT HARD_TIMEOUT_SUPPLIED WATCHDOG_IDLE_S WATCHDOG_HARD_S WATCHDOG_SAMPLE_S WATCHDOG_SOFT_S WORKER_TIMEOUT_KIND KILLED_ELAPSED_S KILLED_LAST_PROGRESS_S COMMIT_QUIET_SECS COMMIT_QUIET_ENDED REPO_IDENTITY_FIELDS _REPO_IDENTITY_FIELDS_KEY CHILD_SESSION_ID 2>/dev/null
     declare -p NO_VERIFY_TIP VERIFY_TIMEOUT TIP_VERIFY_SKIP TIP_VERIFY_SOURCE TIP_VERIFY_CMDS_JSON TIP_VERIFY_RESULT_JSON VERIFY_CMDS 2>/dev/null || true

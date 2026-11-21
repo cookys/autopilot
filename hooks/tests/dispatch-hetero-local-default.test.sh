@@ -41,6 +41,8 @@ const server = http.createServer((req, res) => {
 server.listen(0,'127.0.0.1',()=>fs.writeFileSync(portFile,String(server.address().port)));
 NODE
 LEASE_SERVER_PID=$!
+cleanup_lease_server() { kill "$LEASE_SERVER_PID" 2>/dev/null || true; wait "$LEASE_SERVER_PID" 2>/dev/null || true; }
+trap cleanup_lease_server EXIT
 for _i in 1 2 3 4 5 6 7 8 9 10; do [ -s "$LEASE_PORT_FILE" ] && break; sleep 0.1; done
 LEASE_PORT="$(cat "$LEASE_PORT_FILE")"
 export AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL="http://127.0.0.1:${LEASE_PORT}/v1"
@@ -245,6 +247,20 @@ assert_eq "$(node -e 'process.stdout.write(String(JSON.parse(require("fs").readF
 assert_eq "$(node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1])).local_lease.heartbeats>=2))' "$MF")" "true" "f: heartbeat renews during worker run"
 assert_contains "$(cat "$LEASE_LOG")" '"method":"DELETE"' "f: gateway received DELETE"
 
+# (f1) command substitution returns promptly after the worker, without waiting for heartbeat sleep.
+PROMPT="$TEST_TMP/prompt-f1.txt"
+printf 'Task-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
+RUNS="$TEST_TMP/runs-f1"; mkdir -p "$RUNS"; : > "$LEASE_LOG"
+START_NS="$(date +%s%N)"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
+  AUTOPILOT_LOCAL_LEASE_TTL_S=18 LEASE_WORKER_SLEEP=1 \
+  "$SCRIPT" --no-verify-tip --context-window off --branch feat/local-f1 --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/f1.err")"
+EXIT=$?
+ELAPSED_MS=$((($(date +%s%N) - START_NS) / 1000000))
+assert_eq "0" "$EXIT" "f1: granted lease command substitution succeeds"
+[ "$ELAPSED_MS" -lt 4000 ] && _f1_fast=true || _f1_fast=false
+assert_eq "true" "$_f1_fast" "f1: command substitution returns promptly after worker (${ELAPSED_MS}ms)"
+
 # (f2) a hard-timeout worker is killed, but its granted lease is still released once.
 PROMPT="$TEST_TMP/prompt-f2.txt"
 printf 'Task-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
@@ -368,6 +384,4 @@ OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="
 assert_neq "$EXIT" "97" "k: explicit codex path is stubbed"
 assert_not_contains "$(cat "$LEASE_LOG")" '"method":"POST","url":"/v1/local/lease"' "k: explicit runner sends no grant"
 
-kill "$LEASE_SERVER_PID" 2>/dev/null || true
-wait "$LEASE_SERVER_PID" 2>/dev/null || true
 finalize_test

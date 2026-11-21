@@ -5620,6 +5620,17 @@
       "summary": "Maximum transcript bytes the snapshot writer reads (16 MiB)."
     },
     {
+      "name": "AUTOPILOT_HOME",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": ["scripts/affected-suites.js"],
+      "doc": null,
+      "relates": [],
+      "note": "Per-pool-job home for affected-suites.js --fast. The runner sets it to a fresh temp dir and removes that literal path after the job. Unset means the caller's HOME."
+    },
+    {
       "name": "AUTOPILOT_HOOK_<STEM>",
       "kind": "env",
       "audience": "user",

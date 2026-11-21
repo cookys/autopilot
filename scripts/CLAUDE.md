@@ -42,7 +42,7 @@ Shared Cursor/Kimi broker transport and clone rail use the cursor-named helpers;
 **Verification & review synthesis** — `dispatch-experience-critic.sh` `verify-preexisting.sh` `verify-red-green.sh` `verify-strength.js` `gate-verify.js` `per-turn-gate-arm.js` `adjudicate-findings.js` `probe-mutation.js` `review-mvp-portfolio.js` `review-seat-report.js` `qc-panel.js` `qc-evidence-status.js` `lib/qc-evidence.sh` `render-review-page.js` `qc-metric-emit.js` `calibration.sh` `ladder-run.sh` `check-node-report.js` `check-loop-convergence.js` `check-foreman-polling.js` `check-escalation-coverage.js` `rubric-freeze.js` `admit-backlog-follow-ups.js` `check-holdout-coverage.sh` `affected-suites.js` `plan-rubric-scaffold.js` `hetero-review-loop.js` `check-phase-review-receipt.js` `measure-streamjson-equivalence.js` `lib/review-chain-derive.js` `lib/review-packets.js`
 `lib/finding-class.js` `lib/exclude-allowlist.js` `lib/seat-id-guard.js` `lib/raw-log-path.js` `review-ledger-archive.js` `lib/review-ledger-copy.js` `lib/review-ledger-tar.js`
 
-**Verification & review synthesis (cont.)** — `review-jury.js` `render-fleet-inventory.js` `rule-effect-check.js`
+**Verification & review synthesis (cont.)** — `review-jury.js` `render-fleet-inventory.js` `rule-effect-check.js` `post-merge-suite.sh`
 `replay-stop-guard.js` `reply-precheck.js` `check-unmerged-ship.js` `lesson-lint.js` `lesson-lint.test.js` `check-tip-verify-default.sh` `lib/tip-verify-repo-default.js` `lib/tip-verify-grace.json`
 
 **Task tree & risk** — `tree.js` `risk-counter.js` `hook-harness-matrix.js` `lib/chain-command.js`

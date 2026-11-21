@@ -97,6 +97,22 @@
 // Without --attribute the exit code is unchanged. --record adds, per re-run suite, an additive
 // `base_rc` after the existing keys (schema 1 keys and order unchanged; consumers read path/rc only).
 //
+// --fast (selection mode; default mode stays byte-identical): keep (a) the changed file's own tests
+// (same-name rule), (b) suites that reach a changed file by STRONG edges only, at most 2 hops
+// (require/source; a weak name mention never counts), and (c) ALWAYS_RUN. Implies --jobs =
+// max(2, floor(nproc/2)) unless --jobs is given. Drops a selected suite whose recorded duration is
+// above --fast-max-suite-seconds (default 60), or that has no recorded duration and is listed in
+// serial-suites.txt, and then the slowest remaining suites until the estimate
+// (sum of pool durations / jobs, plus the serial tail) fits --fast-budget-seconds (default 300).
+// Each drop prints `deferred-to-post-merge: <path> <secs>s` and is not run (post-merge-suite.sh runs
+// the full affected set). Deferral never exits 3. Prints `fast-gate: selected N of M (full mode would
+// select K), deferred D` before the run, and at the end `fast-gate: wall <seconds>s` plus
+// `fast-gate: slowest <path> <secs>s` for the 5 slowest suites actually run. Pool jobs also get a
+// fresh HOME and AUTOPILOT_HOME. In --fast, the five serial suites that mutate $REPO_ROOT
+// (context-window, session-mode, suite-residue-reaper, test-snapshot, check-phase-review-receipt)
+// run in the pool, each in its own `git worktree add --detach` of HEAD. The five that scan the
+// process table or assert wall clock stay serial after the pool. Not with --budget-seconds.
+//
 // --budget-seconds N (only with --run; N a positive number) changes the ORDER and the STOP point of
 // the run, never which entries are selected. Order: a changed suite itself, then suites that name a
 // changed file (distance 1), then by chain distance (nearest first); within one distance the shorter
@@ -615,6 +631,109 @@ function walkParents(seeds, graph, maxWeak) {
   return parent;
 }
 
+// Strong edges only, at most maxHops (a weak name mention is not an edge). Hop 1 is a direct
+// require/source of a seed; hop 2 is test -> script -> changed file.
+function walkStrong(seeds, graph, maxHops) {
+  const parent = new Map();
+  const dist = new Map();
+  let level = [];
+  for (const c of seeds) { parent.set(c, null); dist.set(c, 0); level.push(c); }
+  for (let h = 0; h < maxHops && level.length; h++) {
+    const next = [];
+    for (const cur of level) {
+      if (!isCode(cur) && parent.get(cur) !== null) continue;
+      for (const [r, k] of referrersOf(graph, cur)) {
+        if (k !== 'strong' || dist.has(r)) continue;
+        dist.set(r, h + 1);
+        parent.set(r, cur);
+        next.push(r);
+      }
+    }
+    level = next;
+  }
+  return parent;
+}
+
+// Serial suites that mutate the real repo (worktree, branch, local config). In --fast they run
+// beside each other, each in a detached worktree of HEAD. Everyone else on the serial list stays
+// serial, including the process-table and wall-clock suites below.
+const FAST_WORKTREE = new Set([
+  `${HOOK_TESTS_DIR}/context-window.test.sh`,
+  `${HOOK_TESTS_DIR}/session-mode.test.sh`,
+  `${HOOK_TESTS_DIR}/suite-residue-reaper.test.sh`,
+  `${HOOK_TESTS_DIR}/test-snapshot.test.sh`,
+  `${HOOK_TESTS_DIR}/check-phase-review-receipt.test.sh`,
+]);
+const FAST_STAY_SERIAL = new Set([
+  `${HOOK_TESTS_DIR}/dispatch-hetero-wall-timeout.test.sh`,
+  `${HOOK_TESTS_DIR}/paid-batch-auth-stop.test.sh`,
+  `${HOOKS_DIR}/bash-launch-guard.test.js`,
+  `${HOOK_TESTS_DIR}/dispatch-hetero-gate-rules.test.sh`,
+  `${HOOK_TESTS_DIR}/dispatch-author-strict-roster.test.sh`,
+]);
+
+function fastJobsDefault() {
+  const n = typeof os.availableParallelism === 'function' ? os.availableParallelism() : os.cpus().length;
+  return Math.max(2, Math.floor(n / 2));
+}
+
+// --fast selection before the duration budget. fullCount is what the default selector would run
+// (every suite when that selector says mode full).
+function fastPick(changed, headTree) {
+  const full = select(changed, headTree, DEFAULT_MAX_WEAK);
+  const graph = buildGraph(headTree);
+  const present = new Set(headTree.files);
+  const parent = walkStrong(changed, graph, 2);
+  const strongSuites = [...parent.keys()].filter((p) => isSuite(p) && present.has(p));
+  const forced = forcedSuites(changed, present);
+  const alwaysRun = changed.some((p) => !isProse(p)) ? ALWAYS_RUN.map(([f]) => f).filter((f) => present.has(f)) : [];
+  const suites = [...new Set([...strongSuites, ...forced.keys(), ...alwaysRun])].sort();
+  const total = allSuites(headTree).length;
+  const fullCount = full.fullReasons.length > 0 ? total : full.suites.length;
+  return { suites, alwaysRun, total, fullCount };
+}
+
+// Drop suites over the per-suite cap, serial suites with no recorded duration, then the slowest
+// remaining until sum(pool)/jobs + serial tail fits the budget. Missing duration counts as 0 in
+// the estimate (only a serial suite with no record is dropped up front).
+function applyFastDeferral(root, suites, jobs, maxSuite, budget) {
+  const serial = loadSerialSuites(root);
+  const hist = durationsApply(root) ? readDurations(durationsFile()) : new Map();
+  const deferred = [];
+  const keep = [];
+  for (const s of suites) {
+    const has = hist.has(s);
+    const secs = has ? hist.get(s) : null;
+    if (has && secs > maxSuite) { deferred.push({ path: s, secs }); continue; }
+    if (!has && serial.has(s)) { deferred.push({ path: s, secs: null }); continue; }
+    keep.push(s);
+  }
+  const dur = (s) => (hist.has(s) ? hist.get(s) : 0);
+  const serialTail = (s) => (serial.has(s) || FAST_STAY_SERIAL.has(s)) && !FAST_WORKTREE.has(s);
+  const estimate = (list) => {
+    let pool = 0;
+    let tail = 0;
+    for (const s of list) { if (serialTail(s)) tail += dur(s); else pool += dur(s); }
+    return pool / jobs + tail;
+  };
+  const ranked = keep.slice().sort((a, b) => dur(b) - dur(a) || (a < b ? -1 : a > b ? 1 : 0));
+  const dropped = new Set();
+  let live = keep.slice();
+  while (live.length && estimate(live) > budget) {
+    const next = ranked.find((s) => !dropped.has(s));
+    if (!next) break;
+    dropped.add(next);
+    deferred.push({ path: next, secs: hist.has(next) ? hist.get(next) : null });
+    live = live.filter((s) => !dropped.has(s));
+  }
+  return { run: live.slice().sort(), deferred };
+}
+
+function writeFastPlan(plan) {
+  process.stdout.write(`fast-gate: selected ${plan.run.length} of ${plan.total} (full mode would select ${plan.fullCount}), deferred ${plan.deferred.length}\n`);
+  for (const d of plan.deferred) process.stdout.write(`deferred-to-post-merge: ${d.path} ${d.secs == null ? '?' : d.secs}s\n`);
+}
+
 // Fewest referrer hops from any changed file, ignoring the weak-cost bound. Used only to order a
 // budgeted run; the selector's own chain optimises weak-edge cost and may hide a direct reference.
 function shortestHops(seeds, graph) {
@@ -1026,7 +1145,7 @@ function emitChunks(chunks) {
 //   (dispatch-detach's no-setsid tuple lease fails with a per-entry one; nothing runs beside a serial entry).
 // Every directory made here is in `made` and removed when the run ends (also on TERM/INT via JOB_TMPS).
 // AUTOPILOT_TEST_TIMING_FACTOR defaults to N for pool entries (a caller value wins).
-function jobEnv(parent, factor, xdgBase, made) {
+function jobEnv(parent, factor, xdgBase, made, isolateHome) {
   const dir = fs.mkdtempSync(path.join(parent, 'asj.'));
   made.add(dir); JOB_TMPS.add(dir);
   fs.chmodSync(dir, 0o700);
@@ -1035,6 +1154,17 @@ function jobEnv(parent, factor, xdgBase, made) {
     const xdg = fs.mkdtempSync(path.join(xdgBase, 'asj.')); // inside xdgBase, removed with it
     fs.chmodSync(xdg, 0o700);
     env.XDG_RUNTIME_DIR = xdg;
+  }
+  // --fast pool jobs: a fresh HOME and AUTOPILOT_HOME, recorded as the literal mkdtemp path and removed with `made`.
+  if (isolateHome) {
+    const home = fs.mkdtempSync(path.join(parent, 'asj.'));
+    fs.chmodSync(home, 0o700);
+    made.add(home); JOB_TMPS.add(home);
+    env.HOME = home;
+    const ap = fs.mkdtempSync(path.join(parent, 'asj.'));
+    fs.chmodSync(ap, 0o700);
+    made.add(ap); JOB_TMPS.add(ap);
+    env.AUTOPILOT_HOME = ap;
   }
   if (env.AUTOPILOT_TEST_TIMING_FACTOR === undefined) env.AUTOPILOT_TEST_TIMING_FACTOR = String(factor);
   return env;
@@ -1090,7 +1220,13 @@ function tmpParent() {
   catch { process.stderr.write(`affected-suites: TMPDIR ${t} is long and /tmp is not writable; unix socket paths under per-entry TMPDIRs may exceed sun_path\n`); return t; }
 }
 
-async function runPool(root, doc, alwaysRun, jobs, entryTimeout) {
+const FAST_WTS = []; // {root, wt} detached worktrees this run created; removed by literal path
+
+function removeFastWorktree(root, wt) {
+  try { execFileSync('git', ['worktree', 'remove', '--force', wt], { cwd: root, stdio: 'pipe' }); } catch { /* already gone */ }
+}
+
+async function runPool(root, doc, alwaysRun, jobs, entryTimeout, fast) {
   if (doc.mode === 'full') {
     for (const reason of doc.full_reasons) process.stdout.write(`${reason}\n`);
     process.stdout.write('whole suite deferred to the pre-merge run (CLAUDE.md Mission graph verification)\n');
@@ -1099,10 +1235,14 @@ async function runPool(root, doc, alwaysRun, jobs, entryTimeout) {
   const serialSet = loadSerialSuites(root);
   const hist = durationsApply(root) ? readDurations(durationsFile()) : new Map();
   // Slowest first; no record = first (unknown may be slow), ties keep name order (run.sh rule).
-  const poolList = main.filter((r) => !serialSet.has(r))
+  // --fast: repo-mutating serial suites join the pool (each in its own worktree). The rest of the
+  // serial list, including FAST_STAY_SERIAL, stays a serial tail. Default mode is unchanged.
+  const staysSerial = (r) => (serialSet.has(r) || (fast && FAST_STAY_SERIAL.has(r))) && !(fast && FAST_WORKTREE.has(r));
+  const poolSrc = main.filter((r) => !staysSerial(r));
+  const poolList = poolSrc
     .map((rel, i) => ({ rel, i, s: hist.has(rel) ? hist.get(rel) : Infinity }))
     .sort((a, b) => (a.s !== b.s ? (a.s > b.s ? -1 : 1) : a.i - b.i)).map((x) => x.rel);
-  const serialList = main.filter((r) => serialSet.has(r));
+  const serialList = main.filter((r) => staysSerial(r));
   let tmpRoot = null;
   let xdgBase = null;
   const made = new Set();
@@ -1113,9 +1253,29 @@ async function runPool(root, doc, alwaysRun, jobs, entryTimeout) {
   const callerFactor = process.env.AUTOPILOT_TEST_TIMING_FACTOR;
   const exec = async (rel, factor, isolateXdg) => {
     const t0 = Date.now();
-    const env = jobEnv(tmpRoot, factor, isolateXdg ? xdgBase : null, made);
-    const r = await runEntry(root, rel, entryTimeout, true, { capture: true, env, confirmGroup: true });
-    return { ...r, seconds: Math.round(Date.now() - t0) / 1000 };
+    const env = jobEnv(tmpRoot, factor, isolateXdg ? xdgBase : null, made, !!(fast && isolateXdg));
+    let cwd = root;
+    let wt = null;
+    if (fast && FAST_WORKTREE.has(rel)) {
+      wt = path.join(env.TMPDIR, 'wt');
+      try {
+        execFileSync('git', ['worktree', 'add', '--detach', wt, 'HEAD'], { cwd: root, stdio: 'pipe' });
+        FAST_WTS.push({ root, wt });
+        cwd = wt;
+      } catch (e) {
+        return { rc: 1, timedOut: false, chunks: [['err', Buffer.from(`affected-suites: worktree add failed for ${rel}: ${e.message}\n`)]], seconds: Math.round(Date.now() - t0) / 1000 };
+      }
+    }
+    try {
+      const r = await runEntry(cwd, rel, entryTimeout, true, { capture: true, env, confirmGroup: true });
+      return { ...r, seconds: Math.round(Date.now() - t0) / 1000 };
+    } finally {
+      if (wt) {
+        removeFastWorktree(root, wt);
+        const i = FAST_WTS.findIndex((w) => w.wt === wt);
+        if (i >= 0) FAST_WTS.splice(i, 1);
+      }
+    }
   };
   const emit = (rel, r, extraLine) => {
     emitChunks(r.chunks);
@@ -1184,8 +1344,8 @@ async function runPool(root, doc, alwaysRun, jobs, entryTimeout) {
   return { code: failed === 0 && unverifiedCount === 0 ? 0 : 1, results, budgetDoc: null, emptyFail, timedOutPaths: timedOut, slowest: slow.length ? `slowest: ${slow.join(', ')}\n` : '', unverifiedCount };
 }
 
-async function runSelected(root, doc, alwaysRun, budget, entryTimeout, jobs) {
-  if (jobs > 1) return runPool(root, doc, alwaysRun, jobs, entryTimeout);
+async function runSelected(root, doc, alwaysRun, budget, entryTimeout, jobs, fast) {
+  if (jobs > 1 || fast) return runPool(root, doc, alwaysRun, jobs, entryTimeout, !!fast);
   if (doc.mode === 'full') {
     for (const reason of doc.full_reasons) process.stdout.write(`${reason}\n`);
     process.stdout.write('whole suite deferred to the pre-merge run (CLAUDE.md Mission graph verification)\n');
@@ -1249,6 +1409,7 @@ function installSignalKill() {
   for (const sig of ['SIGTERM', 'SIGINT']) {
     process.on(sig, () => {
       for (const pid of ACTIVE) killGroup(pid, 'SIGKILL');
+      for (const w of FAST_WTS.splice(0)) removeFastWorktree(w.root, w.wt);
       for (const d of JOB_TMPS) { try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* best effort */ } }
       if (SIG_CLEANUP) { try { SIG_CLEANUP(); } catch { /* best effort */ } }
       process.exit(sig === 'SIGINT' ? 130 : 143);
@@ -1342,6 +1503,17 @@ function parseArgs(argv) {
       a.jobs = v !== undefined && /^[1-9][0-9]*$/.test(v.trim()) ? Number(v) : NaN;
       if (!Number.isInteger(a.jobs)) throw new Error(`--jobs needs a positive integer, got ${JSON.stringify(v)}`);
     }
+    else if (x === '--fast') a.fast = true;
+    else if (x === '--fast-max-suite-seconds') {
+      const v = argv[++i];
+      a.fastMax = v !== undefined && v.trim() !== '' ? Number(v) : NaN;
+      if (!(a.fastMax > 0) || !Number.isFinite(a.fastMax)) throw new Error(`--fast-max-suite-seconds needs a positive number, got ${JSON.stringify(v)}`);
+    }
+    else if (x === '--fast-budget-seconds') {
+      const v = argv[++i];
+      a.fastBudget = v !== undefined && v.trim() !== '' ? Number(v) : NaN;
+      if (!(a.fastBudget > 0) || !Number.isFinite(a.fastBudget)) throw new Error(`--fast-budget-seconds needs a positive number, got ${JSON.stringify(v)}`);
+    }
     else if (x === '--entry-timeout') {
       const v = argv[++i];
       a.entryTimeout = v !== undefined && v.trim() !== '' ? Number(v) : NaN;
@@ -1375,7 +1547,16 @@ async function main(argv) {
     process.stderr.write('affected-suites: --budget-seconds requires --run\n');
     return 2;
   }
-  if (a.jobs != null && !a.run) {
+  if (a.fast && a.jobs == null) a.jobs = fastJobsDefault();
+  if ((a.fastMax != null || a.fastBudget != null) && !a.fast) {
+    process.stderr.write('affected-suites: --fast-max-suite-seconds and --fast-budget-seconds require --fast\n');
+    return 2;
+  }
+  if (a.fast && a.budget != null) {
+    process.stderr.write('affected-suites: --fast cannot be combined with --budget-seconds\n');
+    return 2;
+  }
+  if (a.jobs != null && !a.run && !a.fast) {
     process.stderr.write('affected-suites: --jobs requires --run\n');
     return 2;
   }
@@ -1445,6 +1626,21 @@ async function main(argv) {
       };
       runAlways = r.alwaysRun;
     }
+    let fastPlan = null;
+    if (a.fast) {
+      if (!tree) tree = gitTree(root, doc.head);
+      if (!changed) changed = doc.changed;
+      const picked = fastPick(changed, tree);
+      const deferred = applyFastDeferral(root, picked.suites, a.jobs, a.fastMax == null ? 60 : a.fastMax, a.fastBudget == null ? 300 : a.fastBudget);
+      fastPlan = { ...deferred, total: picked.total, fullCount: picked.fullCount };
+      const alwaysSet = new Set(picked.alwaysRun);
+      doc.mode = 'selective';
+      doc.suites = fastPlan.run;
+      doc.always_run = fastPlan.run.filter((s) => alwaysSet.has(s));
+      doc.stats.selected = fastPlan.run.length;
+      runAlways = doc.always_run;
+      writeFastPlan(fastPlan);
+    }
     const maxWeak = a.maxWeak == null ? DEFAULT_MAX_WEAK : a.maxWeak;
     if (doc.mode === 'selective' && doc.stats.total_suites > 0 && (doc.suites.length / doc.stats.total_suites) > OVER_HALF_THRESHOLD) {
       if (!tree) tree = gitTree(root, doc.head);
@@ -1467,8 +1663,10 @@ async function main(argv) {
       // pool and rerun alike. AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR=1 keeps the caller's value.
       if (process.env.AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR !== '1') process.env.AUTOPILOT_ACCOUNTS_DIR = path.join(os.tmpdir(), `autopilot-no-accounts-${process.pid}`, 'accounts');
       else process.stderr.write(`WARNING: AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR=1: the caller's AUTOPILOT_ACCOUNTS_DIR is kept; a wired claude caller may read the operator's REAL account registry (WARNING)\n`);
-      if ((a.entryTimeout != null || a.jobs > 1) && !SIG_INSTALLED) installSignalKill();
-      const ran = await runSelected(root, doc, doc.mode === 'full' ? runAlways : doc.always_run, a.budget, a.entryTimeout, a.jobs || 1);
+      if ((a.entryTimeout != null || a.jobs > 1 || a.fast) && !SIG_INSTALLED) installSignalKill();
+      const runT0 = Date.now();
+      const ran = await runSelected(root, doc, doc.mode === 'full' ? runAlways : doc.always_run, a.budget, a.entryTimeout, a.jobs || 1, !!a.fast);
+      const fastWall = Math.round((Date.now() - runT0) / 1000);
       recordDurations(root, ran.results, ran.timedOutPaths || []);
       let attrCode = null;
       if (a.attribute) {
@@ -1494,6 +1692,11 @@ async function main(argv) {
         }
       }
       if (ran.slowest) process.stdout.write(ran.slowest);
+      if (a.fast) {
+        process.stdout.write(`fast-gate: wall ${fastWall}s\n`);
+        const slow5 = ran.results.slice().sort((x, y) => y.seconds - x.seconds || (x.path < y.path ? -1 : 1)).slice(0, 5);
+        for (const r of slow5) process.stdout.write(`fast-gate: slowest ${r.path} ${r.seconds}s\n`);
+      }
       return attrCode != null ? attrCode : ran.code;
     }
     const extra = doc.extra_runners.map((x) => x + '\n').join('');

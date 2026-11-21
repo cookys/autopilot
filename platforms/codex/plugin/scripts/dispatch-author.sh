@@ -1008,8 +1008,8 @@ else
   die_precondition "${_pm_msg:-PM Console requires an open Fleet-Task}"
 fi
 unset _pm_repo _pm_out_err _pm_resolved _pm_msg
-# d-1dfcf757 / 01M7E2A1: Chinese-model dispatch gate (barred family blocked for transcript, sensitive, core, novel or unknown-scope/size/role tasks).
-_tfg_msg="$(node "$_AUTHOR_SELF_DIR/lib/cn-model-dispatch-gate.js" check --role author --runner "$RUNNER" --model "$MODEL" ${ENDPOINT:+--endpoint "$ENDPOINT"} --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" \
+# d-1dfcf757 / 01M7E2A1: operator-based cloud gate checks endpoint, workdir and brief before spawn.
+_tfg_msg="$(node "$_AUTHOR_SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner "$RUNNER" --model "$MODEL" --endpoint "${ENDPOINT:-$RUNNER}" --cwd "$(pwd)" --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" \
   || die_precondition "${_tfg_msg:-cn_model_dispatch_barred unknown unknown (01M7E2A1, d-1dfcf757)}"
 unset _tfg_msg
 case "$EFFORT" in default|low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be default|low|medium|high|xhigh|max" ;; esac
@@ -1593,7 +1593,7 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
   # fleet-gateway allowlist and AUTOPILOT_UPSTREAM_TASK_ID is a ULID (lib/fleet-task-header.js owns
   # both checks; never inline them). An inherited ANTHROPIC_CUSTOM_HEADERS never reaches the child:
   # env -u drops it first and the validated line is the only value set back. claude-native keeps no such header.
-  _FT_HEADER="$(node "$_AUTHOR_SELF_DIR/lib/fleet-task-header.js" --rail dispatch-author ${ENDPOINT:+--endpoint "$ENDPOINT"})"
+  _FT_HEADER="$(node "$_AUTHOR_SELF_DIR/lib/fleet-task-header.js" --rail dispatch-author --endpoint "${ENDPOINT:-$RUNNER}")"
   # Prompt is fed with < "$4" inside the exec'd child. Do not redirect this timeout's stdin.
   _LOCAL_ENV=()
   _LOCAL_WRAP=()

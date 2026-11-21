@@ -16,7 +16,7 @@ export AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token
 export AUTOPILOT_LOCAL_SLOTS_CMD='printf %s '"'"'{"free":1,"draining":false}'"'"''
 export DISPATCH_DETACH=0 AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1
 mkdir -p "$AUTOPILOT_SESSION_MODE_DIR" "$TEST_TMP/bin"
-unset AUTOPILOT_QUALIFICATION_OVERRIDE AUTOPILOT_DISPATCH_ROLE AUTOPILOT_TASK_CLASS 2>/dev/null || true
+unset AUTOPILOT_QUALIFICATION_OVERRIDE AUTOPILOT_DISPATCH_ROLE 2>/dev/null || true
 
 GIT="git -c user.email=t@t -c user.name=t -c init.defaultBranch=develop -c commit.gpgsign=false"
 SBX="$TEST_TMP/repo"

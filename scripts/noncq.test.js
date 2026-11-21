@@ -404,7 +404,7 @@ test('(a2) add checks brief header: missing all four, missing only Task-Class, c
   assert.equal(fs.readFileSync(path.join(q, 'items', newId, 'brief.md'), 'utf8'), fs.readFileSync(completeBrief, 'utf8'));
   const afterCompleteTree = snapshotTree(q);
 
-  // 4. Bad Task-Class -> exit 2 naming the allowed local_task_classes values
+  // 4. Bad Task-Class -> exit 2 naming noncq task-class values
   const badClass = path.join(work, 'bad-class.md');
   write(badClass, 'Size: S\nRole: implementer\nScope: docs/a.md\nTask-Class: refactor\n\nBody.\n');
   const rBad = cli([

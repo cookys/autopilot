@@ -513,15 +513,12 @@ function resolveSeat(parsedSeat, promptPath) {
 
   let gateRes;
   try {
-    const gateEnv = { ...process.env, AUTOPILOT_TASK_READS_TRANSCRIPT: '1' };
-    delete gateEnv.AUTOPILOT_TEST_CN_GATE_OFF;
     gateRes = cnGate.check({
       runner,
       model,
       endpoint,
-      role: 'consult',
       files: [promptPath],
-      env: gateEnv,
+      env: process.env,
       cwd: process.cwd(),
     });
   } catch {

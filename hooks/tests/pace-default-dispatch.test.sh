@@ -2,8 +2,8 @@
 # Real rails with sentinel PATH: quota selection, caller pins and manifest evidence.
 . "$(dirname "$0")/lib.sh"
 install_cli_sentinels
-# Drop any inherited task/token-seat env so brief headers and rail role control the CN gate.
-unset AUTOPILOT_TASK_SIZE AUTOPILOT_TASK_ROLE AUTOPILOT_TASK_SCOPE AUTOPILOT_TASK_NOVEL AUTOPILOT_TASK_READS_TRANSCRIPT AUTOPILOT_TASK_CLASS AUTOPILOT_TOKEN_SEAT AUTOPILOT_ENDPOINT_GLM_TRANSPORT
+# Drop inherited quota/token-seat selectors so the fixture exercises defaults.
+unset AUTOPILOT_TOKEN_SEAT AUTOPILOT_ENDPOINT_GLM_TRANSPORT
 export AUTOPILOT_ENDPOINTS_ENV=/nonexistent
 export AUTOPILOT_QUALIFIED_FILE="$TEST_TMP/missing-qualified.json"
 export AUTOPILOT_PACE_FILE="$REPO_ROOT/scripts/fixtures/pace-select/quota-default.json"

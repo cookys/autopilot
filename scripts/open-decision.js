@@ -409,6 +409,13 @@ function findBest(cwd, id) {
 }
 
 const repeatBaseQuestion = (question) => String(question || '').trim().replace(/（第\s*\d+\s*次）$/, '').trim();
+function taipeiDateTime(value) {
+  const ms = Date.parse(value || '');
+  if (!Number.isFinite(ms)) return '未知時間';
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(ms));
+  const get = (name) => parts.find((p) => p.type === name)?.value || '00';
+  return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}`;
+}
 const withRepeatSuffix = (question, n) => `${repeatBaseQuestion(question)}（第 ${n} 次）`;
 function repeatNumber(cwd, entry, seen = new Set()) {
   if (!entry || seen.has(entry.id)) return 1;
@@ -607,7 +614,7 @@ function takeFreeText(argv) {
 // BL cardtrail flags are lifted out like --kind/--target (parse()'s valued Set stays byte-identical to the frozen ask stub).
 // -> { rest, extra: { answer, executor, asker, 'awaiting-operator', 'reask-after', from, dispatched, 'dispatched-msg', title, note, 'operator-step', all, apply } } | { error }
 // operator-step is repeatable and may hold several steps separated by newlines. parse()'s valued Set stays untouched (frozen ask stub).
-const EXTRA_VALUED = ['answer', 'executor', 'asker', 'awaiting-operator', 'reask-after', 'from', 'dispatched', 'dispatched-msg', 'title', 'from-request', 'note', 'look-target', 'category', 'since', 'premise-source', 'withdraw', 'by', 'closed-key', 'repeat-of'];
+const EXTRA_VALUED = ['answer', 'executor', 'asker', 'awaiting-operator', 'reask-after', 'from', 'dispatched', 'dispatched-msg', 'title', 'from-request', 'note', 'look-target', 'category', 'since', 'days', 'premise-source', 'withdraw', 'by', 'closed-key', 'repeat-of'];
 const EXTRA_REPEAT = ['operator-step'];
 const EXTRA_SWITCH = ['all', 'apply', 'irreversible', 'premise-inferred', 'panel-done', 'panel-dismiss'];
 // The only seven kinds of question that go to the operator (operator rule 2026-11-15); everything else the PM decides.
@@ -798,7 +805,7 @@ function main(argv) {
   if (args.extra['look-target'] !== undefined && cmd !== 'open') return usage('--look-target is only an open argument');
   if (cmd !== 'open' && (args.extra['premise-source'] !== undefined || args.extra['premise-inferred'])) return usage('--premise-source 與 --premise-inferred 只用於 open');
   if (cmd === 'verify' && args._.length === 1) return verifyAnswer(args);
-  if (!['open', 'close', 'done', 'show', 'list', 'backfill', 'redeliver', 'due-sweep', 'stats'].includes(cmd) || args._.length > 1) return usage(cmd ? `bad command: ${args._.join(' ')}` : 'missing command');
+  if (!['open', 'close', 'done', 'show', 'list', 'dismissed', 'backfill', 'redeliver', 'due-sweep', 'stats'].includes(cmd) || args._.length > 1) return usage(cmd ? `bad command: ${args._.join(' ')}` : 'missing command');
   const sess = sessionRoot();
   const root = args['root-run-id'] !== undefined ? args['root-run-id'] : (process.env.AUTOPILOT_ROOT_RUN_ID || sess.root);
   if (root && (!SAFE_ROOT.test(root) || root === '.' || root === '..')) return usage('--root-run-id must match [A-Za-z0-9._-]+');
@@ -827,6 +834,29 @@ function main(argv) {
     if (entries.length === 0) { if (!args.json) process.stdout.write(all ? 'no decision\n' : 'no open decision\n'); return 1; }
     process.stdout.write(args.json ? `${JSON.stringify({ schema: SCHEMA, decisions: entries }, null, 2)}\n` : showText(entries, { all, nowMs }));
     return 0;
+  }
+  if (cmd === 'dismissed') {
+    if (args.id !== undefined) return usage('dismissed takes no --id');
+    const bad = Object.keys(ex).find((k) => !['since', 'days'].includes(k));
+    if (bad) return usage(`--${bad} is not a dismissed argument`);
+    if (ex.since !== undefined && ex.days !== undefined) return usage('dismissed takes either --since or --days, not both');
+    let sinceMs;
+    if (ex.days !== undefined) {
+      if (!/^\d+$/.test(String(ex.days)) || Number(ex.days) < 1 || Number(ex.days) > 36500) return usage('--days needs a positive whole number');
+      sinceMs = Date.now() - Number(ex.days) * 24 * 60 * 60 * 1000;
+    } else if (ex.since !== undefined) {
+      sinceMs = Date.parse(ex.since);
+      if (!Number.isFinite(sinceMs)) return usage('--since needs an ISO date or timestamp');
+    } else sinceMs = Date.now() - 14 * 24 * 60 * 60 * 1000;
+    const cards = pickCards(projectScopeFiles(args.cwd, { all: true }).flatMap((file) => readFile(file, { all: true }).map((e) => ({ file, e })))).map((w) => w.e)
+      .filter((e) => isClosedEntry(e) && (e.answer === null || e.answer === undefined || (typeof e.answer === 'string' && !e.answer.trim()))
+        && e.closed_via !== 'withdrawn' && e.closed_via !== 'panel_done' && Number.isFinite(Date.parse(e.closed_at || '')) && Date.parse(e.closed_at) >= sinceMs)
+      .sort((a, b) => Date.parse(b.closed_at) - Date.parse(a.closed_at));
+    const rows = cards.map((e) => ({ id: e.id, kind: e.kind || 'unknown', closed_at: taipeiDateTime(e.closed_at), closed_via: e.closed_via || '未記錄', question: Array.from(e.question).slice(0, 60).join('') }));
+    if (args.json) process.stdout.write(`${JSON.stringify({ schema: 'decision-dismissed/1', since: new Date(sinceMs).toISOString(), cards: rows }, null, 2)}\n`);
+    else if (rows.length === 0) { process.stdout.write('no dismissed cards\n'); return 1; }
+    else for (const r of rows) process.stdout.write(`${r.id} ${r.kind} ${r.closed_at} ${r.closed_via} ${r.question}\n`);
+    return rows.length === 0 ? 1 : 0;
   }
   if (cmd === 'stats') {
     const badT = stray(['answer', 'executor', 'asker', 'awaiting-operator', 'from', 'apply', 'dispatched', 'dispatched-msg', 'all', 'title', 'irreversible', 'from-request', 'note', 'category']);

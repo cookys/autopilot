@@ -8,6 +8,7 @@
     { "stem": "askpm-remind", "class": "invariant_effect" },
     { "stem": "audit-log", "class": "invariant_effect" },
     { "stem": "awaiting-owner", "class": "invariant_effect" },
+    { "stem": "bash-test-timeout-guard", "class": "invariant_effect" },
     { "stem": "batch-format", "class": "invariant_effect" },
     { "stem": "bg-quiet-sweep", "class": "guidance", "profiles": ["guided", "autonomous"] },
     { "stem": "branch-protection", "class": "invariant_effect" },

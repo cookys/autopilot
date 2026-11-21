@@ -51,7 +51,7 @@ Claude Code 仍是最完整的 host。Autopilot 讓 AI coding agent **把整件�
 - **抓出那種「假完成」** —— 無 stub/TODO 掃描、你的測試、真正的程式碼審查，在 quality gate 合併前跑（以及上面那個可選的 pre-push hook）。
 - **會記住，所以你的 repo 不會爛掉** —— 記下教訓、追蹤專案、告訴你下一步做什麼，並從 `.claude/` 裡一個 markdown 檔適應你的 repo。
 
-它優先以 Claude Code plugin 出貨 —— **31 個 skill、3 個方法論 agent、59 個 hook（40 default-on、19 opt-in）、零相依** —— 並在其他 harness 有相容 skill、agent 或 plugin surface 時，保留同一套方法論的可攜路徑。可完全獨立運作，若你有 [`superpowers`](docs/guide/coexistence.md) 也能並存。
+它優先以 Claude Code plugin 出貨 —— **31 個 skill、3 個方法論 agent、59 個 hook（39 default-on、19 opt-in）、零相依** —— 並在其他 harness 有相容 skill、agent 或 plugin surface 時，保留同一套方法論的可攜路徑。可完全獨立運作，若你有 [`superpowers`](docs/guide/coexistence.md) 也能並存。
 
 > 這份 README 是 Claude 寫的，並透過 Autopilot 自己的「第二引擎審查」流程，由 GPT-5.5 與 Gemini 對抗式審查而成。
 
@@ -230,7 +230,7 @@ local runtime 或 agentic local runner。
 | **架構與設計** —— 哲學、方法論 agent、致謝 | [docs/dev/architecture.md](docs/dev/architecture.md) |
 | **只審查的候選範圍審查** —— 對別人寫好的 commit 範圍做受管審查（英文文件） | [docs/guide/review-candidate.md](docs/guide/review-candidate.md) |
 | **Claude 帳號** —— 帳號別名與訂閱間的自動切換（英文文件） | [docs/guide/accounts.md](docs/guide/accounts.md) |
-| **Hooks** —— 59 個 runtime 強制 hook（分層見該文件） | [hooks/README.md](hooks/README.md) |
+| **Hooks** —— 58 個 runtime 強制 hook（分層見該文件） | [hooks/README.md](hooks/README.md) |
 | **Changelog** | [CHANGELOG.md](CHANGELOG.md) |
 
 ## License

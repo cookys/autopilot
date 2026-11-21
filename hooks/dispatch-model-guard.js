@@ -7,9 +7,20 @@
  * decision back to it — re-dispatch with a cheaper model, or keep the engine and mark the
  * Engine header `(intentional: <why>)`, which the guard then allows silently. No human
  * dialog either way (owner ruling 2026-09-06: the ask dialog blocked the session; the
- * agent should judge). "deny" (v2.36.2; was "ask") when model is omitted (would silently
- * inherit the session model) — the reason tells the agent to re-dispatch with model:.
- * `mode: ask` opts back into the interactive dialog.
+ * agent should judge). Worker-level default (2026-11, was "deny" in v2.36.2): when `model`
+ * is omitted the dispatch is ALLOWED and rewritten via `hookSpecificOutput.updatedInput`
+ * to model "sonnet" (every other tool_input field verbatim), with one advisory line
+ * 預設 worker 等級 sonnet (stderr + additionalContext) — a subagent that does not name a
+ * model runs at worker level, never silently inheriting the session model. `mode: ask`
+ * opts back into the interactive dialog for guarded engines.
+ * An opus/fable dispatch (any alias the cost-line normaliser recognises, see
+ * isOpusFableModel) is allowed only when the brief's first 8 lines carry a non-empty
+ * `Model-Reason: <why>` line; otherwise it is denied naming the line to add, and the
+ * Model-Reason line also acknowledges the guarded-engine check (like `(intentional: …)` —
+ * which alone no longer suffices for opus/fable). Every opus/fable dispatch that reaches
+ * that gate appends one JSONL line {ts, session, lane, model, reason|null, allowed} to
+ * ${AUTOPILOT_STATE_DIR:-$HOME/.local/state/autopilot}/brain-tier-dispatch.jsonl
+ * (fail-open on write; read by scripts/brain-tier-report.js for the PM's daily report).
  * Guards expensive engines during implementation dispatches (default: fable,opus via guarded_models_implementing).
  * Enforces self-declared engine headers on prompt line 1 matching the dispatch model (default: on via require_engine_header).
  * Requires a Cost line in the first 6 lines when the effective model is fable or opus
@@ -33,9 +44,11 @@
 'use strict';
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const {
   BRIEF_HEADER_TEMPLATE,
+  LANE_RE,
   hasBriefLane,
   briefSizeFromHead,
   hasValidUsedBy,
@@ -44,6 +57,7 @@ const {
   headerDenialSuffix,
   missingCostLine,
   costLineFor,
+  isOpusFableModel,
 } = require('./lib/brief-header-template.js');
 const { BRIEF_HEAD_WINDOW, headLines, findHeadMatch } = require('./lib/brief-head.js');
 const { isPmConsole } = require('./_shared/pm-console.js');
@@ -89,7 +103,6 @@ function briefLintWarning(prompt) {
 const DEFAULTS = {
   guarded_models: ['fable'],
   guarded_models_implementing: ['fable', 'opus'],
-  on_missing_model: 'deny', // v2.36.2: was 'ask' — see the comment at the missing-model branch
   require_engine_header: 'on',
   require_cost_line: 'on',
   brief_size_used_by: 'warn', // D8b: warn by default; deny only after the PM flips it
@@ -149,13 +162,6 @@ function loadConfig(cwd) {
     guardedImplementing = tokens.length ? tokens : DEFAULTS.guarded_models_implementing;
   }
 
-  // on_missing_model: deny | ask | allow; garbage → deny (fail-closed)
-  let onMissing = DEFAULTS.on_missing_model;
-  if (Object.prototype.hasOwnProperty.call(parsed, 'on_missing_model')) {
-    const v = String(parsed.on_missing_model || '').trim().toLowerCase();
-    onMissing = (v === 'deny' || v === 'ask' || v === 'allow') ? v : 'deny';
-  }
-
   // require_engine_header: on | off; garbage → on (fail-closed)
   let requireEngineHeader = DEFAULTS.require_engine_header;
   if (Object.prototype.hasOwnProperty.call(parsed, 'require_engine_header')) {
@@ -187,7 +193,6 @@ function loadConfig(cwd) {
   return {
     guarded_models: guarded,
     guarded_models_implementing: guardedImplementing,
-    on_missing_model: onMissing,
     require_engine_header: requireEngineHeader,
     require_cost_line: requireCostLine,
     brief_size_used_by: briefSizeUsedBy,
@@ -461,8 +466,8 @@ function mechanicalReroute(input, toolInput, prompt) {
 
 // Fable/opus only. Intentional does not skip this. Exits on deny.
 // Model present: after the engine-header check, before the guarded-engine allow.
-// Model absent: before the on_missing_model allow / ask / deny paths, with the
-// Engine token as the effective model.
+// Model absent: not called — the effective model is the sonnet worker default, which
+// never triggers a fable/opus cost line.
 function denyIfMissingCostLine(config, prompt, modelForCost) {
   if (config.require_cost_line !== 'on') return;
   if (!missingCostLine(prompt, modelForCost)) return;
@@ -486,6 +491,51 @@ function handleDeny(reason, mode) {
   }
   // denial on fail-closed header check (mode !== 'warn')
   emitDeny(reason);
+}
+
+// ── opus/fable justification + brain-tier dispatch ledger (2026-11 worker-level default) ──
+
+// The Model-Reason line: "Model-Reason:" + at least one non-whitespace character, within the
+// brief's first 8 lines (headLines normalises CRLF like every other head read).
+function modelReasonFromBrief(prompt) {
+  for (const line of headLines(prompt, 8)) {
+    const m = /^Model-Reason:[ \t]*(\S.*)$/.exec(line);
+    if (m) return m[1].trim();
+  }
+  return null;
+}
+
+// The Lane: slug the same way subagent-budget reads it: first matching line in the first 5.
+function laneFromBrief(prompt) {
+  for (const line of headLines(prompt, 5)) {
+    const m = LANE_RE.exec(line);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+// One JSONL line per opus/fable dispatch that reaches the Model-Reason gate. `allowed` is the
+// gate's decision: a warn-mode dispatch proceeds (true) in both outcomes; remind denies without
+// a reason (false); ask leaves it pending (false). Spend measurement, not a gate: any write
+// error fails open.
+function recordBrainTierDispatch(input, prompt, modelRaw, reason, allowed) {
+  try {
+    const dir = process.env.AUTOPILOT_STATE_DIR
+      || path.join(os.homedir(), '.local', 'state', 'autopilot');
+    fs.mkdirSync(dir, { recursive: true });
+    const session = String(input.session_id || process.env.CLAUDE_CODE_SESSION_ID || '').trim() || null;
+    const entry = {
+      ts: new Date().toISOString(),
+      session,
+      lane: laneFromBrief(prompt),
+      model: modelRaw,
+      reason,
+      allowed: !!allowed,
+    };
+    fs.appendFileSync(path.join(dir, 'brain-tier-dispatch.jsonl'), JSON.stringify(entry) + '\n');
+  } catch {
+    // fail-open on ledger write errors
+  }
 }
 
 // Autopilot dispatch briefs (Lane: present in the first 5 lines) must carry
@@ -571,37 +621,31 @@ try {
   const modelRaw = String(toolInput.model || '').trim();
   const model = modelRaw.toLowerCase();
 
-  // model empty: on_missing_model policy decides outright — the header check
-  // has nothing to match against and must not run (on_missing_model: allow
-  // would otherwise be dead config, since the header check ran first and
-  // denied before allow could take effect).
+  // model empty: the worker-level default decides outright — allow on sonnet via
+  // updatedInput. The header check has nothing to match against and does not run
+  // (a header check on an empty model would deny before the default could take
+  // effect, making the default dead behaviour).
   if (!model) {
-    // Cost line before allow / ask / deny. denyIfMissingCostLine exits on deny,
-    // so ask cannot turn a missing fable/opus Cost line into a dialog, and the
-    // default deny names the exact line.
     const promptAbsent = typeof toolInput.prompt === 'string' ? toolInput.prompt : '';
-    const engineTok = engineTokenFromPrompt(promptAbsent);
-    denyIfMissingCostLine(config, promptAbsent, engineTok);
-    if (config.on_missing_model === 'allow') {
-      checkPmFleetTask(input, toolInput, promptAbsent);
-      checkMechanicalReroute(input, toolInput, promptAbsent);
-      checkBriefSizeUsedByStages(config, promptAbsent, advisories);
-      exitAllow();
-    }
-    // v2.36.2: default is DENY, not ask. A missing model: is never a judgment for the
-    // user — the only correct next action is the model's own re-dispatch with model:
-    // set, and an interactive "ask" turned that into a permission dialog the owner had
-    // to click through (2026-09-05 dogfood: depth-0 spawned a reviewer without model:,
-    // the owner had to intervene). A deny carries the same reason back to the model
-    // and it re-dispatches on its own. `on_missing_model: ask` keeps the old dialog.
-    const reason = 'dispatch-model-guard: no model specified — the subagent would inherit the session model '
-      + '(possibly a guarded engine); re-dispatch NOW with an explicit model: (scripts/resolve-dispatch.sh '
-      + '--role <role>) and an "Engine: <model>" first prompt line'
-      + headerDenialSuffix(promptAbsent, '', { engineBy: 'self', laneBy: 'other' });
-    // on_missing_model: ask is the explicit opt-in to the dialog, so it asks even under
-    // the default remind mode (warn stays advisory).
-    if (config.on_missing_model === 'ask') handleGuard(reason, config.mode === 'remind' ? 'ask' : config.mode);
-    else handleDeny(reason, config.mode);
+    // No model to run: the effective model is the sonnet default, so the fable/opus
+    // Cost line does not apply (the sonnet line is advisory only). The brief checks
+    // that need no model still run, exactly as on the old allow path.
+    checkPmFleetTask(input, toolInput, promptAbsent);
+    checkMechanicalReroute(input, toolInput, promptAbsent);
+    checkBriefSizeUsedByStages(config, promptAbsent, advisories);
+    // One advisory line for the default; it rides the same stderr + additionalContext
+    // channel as every other advisory of this hook.
+    advisories.push('預設 worker 等級 sonnet');
+    const msg = advisories.join('\n');
+    process.stderr.write(msg + '\n');
+    process.stdout.write(`${JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'allow',
+        updatedInput: { ...toolInput, model: 'sonnet' },
+        additionalContext: msg,
+      },
+    })}\n`);
     process.exit(0);
   }
 
@@ -651,6 +695,26 @@ try {
   // Size / Used-by / Stages check for autopilot briefs (Lane: present).
   checkBriefSizeUsedByStages(config, promptRaw, advisories);
 
+  // Model-Reason gate (2026-11): opus/fable must be justified per dispatch and are
+  // counted. The non-empty "Model-Reason: <why>" line within the brief's first 8 lines
+  // is the justification; it also acknowledges the guarded-engine check below (the
+  // (intentional: …) Engine header alone no longer suffices for opus/fable). Every
+  // opus/fable dispatch reaching this gate appends one JSONL ledger line first, so the
+  // report counts denied attempts (reason null) as well as allowed ones.
+  let brainReason = null;
+  if (isOpusFableModel(modelRaw)) {
+    brainReason = modelReasonFromBrief(promptRaw);
+    recordBrainTierDispatch(input, promptRaw, modelRaw, brainReason,
+      brainReason !== null ? config.mode !== 'ask' : config.mode === 'warn');
+    if (brainReason === null) {
+      handleDeny(
+        `dispatch-model-guard: model '${modelRaw}' (opus/fable) requires its justification — add a non-empty `
+        + '"Model-Reason: <why>" line within the first 8 lines of the brief and re-dispatch',
+        config.mode,
+      );
+    }
+  }
+
   // guarded models check
   const isPlan = toolInput.mode === 'plan';
   const effectiveGuarded = isPlan
@@ -661,7 +725,7 @@ try {
   if (hit) {
     const acknowledged = firstLine !== null
       && /^Engine:/.test(firstLine)
-      && INTENTIONAL_RE.test(firstLine);
+      && (INTENTIONAL_RE.test(firstLine) || brainReason !== null);
     handleGuard(
       `dispatch-model-guard: model '${modelRaw}' is a guarded expensive engine`,
       config.mode,

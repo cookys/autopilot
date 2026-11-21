@@ -83,6 +83,14 @@ function missingCostLine(prompt, model) {
   return !headLines(prompt, 6).some((line) => COST_LINE_RE.test(line));
 }
 
+// True for opus/fable by the same normalisation as costLineFor (a full model id counts as its
+// family; an @-suffixed token is classified on the part before @). The dispatch-model-guard
+// Model-Reason gate and the brain-tier dispatch ledger key on this (2026-11 worker-level default).
+function isOpusFableModel(model) {
+  const token = costModelToken(model);
+  return tokenHasFamily(token, 'opus') || tokenHasFamily(token, 'fable');
+}
+
 // Which of the three header lines are absent. Engine uses the same first
 // non-blank line and the same model normalisation as dispatch-model-guard
 // (trim, lower-case; token equals the model or starts with model + "@").
@@ -175,6 +183,7 @@ module.exports = {
   stagesLineForSize,
   costLineFor,
   missingCostLine,
+  isOpusFableModel,
   missingBriefHeaders,
   headerDenialSuffix,
   sessionStartBriefHeaderLine,

@@ -48,7 +48,7 @@ Shared Cursor/Kimi broker transport and clone rail use the cursor-named helpers;
 **Verification & review synthesis (cont.)** — `review-jury.js` `render-fleet-inventory.js` `rule-effect-check.js` `post-merge-suite.sh` `nightly-suites.sh`
 `replay-stop-guard.js` `reply-precheck.js` `check-unmerged-ship.js` `lesson-lint.js` `lesson-lint.test.js` `check-tip-verify-default.sh` `lib/tip-verify-repo-default.js` `lib/tip-verify-grace.json`
 
-**Task tree & risk** — `tree.js` `risk-counter.js` `check-batch-overlap.js` `hook-harness-matrix.js` `lib/chain-command.js`
+**Task tree & risk** — `tree.js` `risk-counter.js` `brain-tier-report.js` `check-batch-overlap.js` `hook-harness-matrix.js` `lib/chain-command.js`
 
 **Sync, drift & release gates** — `sync-all.sh` `sync-version.js` `sync-agent-bodies.sh` `sync-model-routing.sh` `sync-codex-plugin-skills.sh` `sync-opencode-plugin.sh` `check-canonical-invariants.sh` `check-settings-changelog.js` `check-reference-sizes.js` `check-supersession-anchors.js` `check-claude-md-inventory.js` `check-tmp-residue-registry.js` `check-config-docs.js` `config-keys.json` `check-guidance-eval.js` `check-contract-schema.js` `check-hook-inventory.js` `check-js-syntax.js` `check-optin-changelog.js` `check-readme-parity.js` `check-plan-graduation.js` `preflight-portability.sh` `preflight-release.sh` `report-roster-field-consumers.js` `validate.sh` `validate-json-schema.js` `doc-drift-gate.js` `test-doc-drift-gate.sh` `check-stage-vocab.js` `layout-lint.js`
 `check-config-docs.test.js`

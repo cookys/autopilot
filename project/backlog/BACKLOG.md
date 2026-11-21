@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0480 -->
+<!-- next-id: BL-0481 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -649,7 +649,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: PEER llm-playground claude-4 2026-10-21
 - **Pointer**: project/backlog/cross-harness-token-discipline.md
-- **Context**: Item 4: owner chose P0 only (d-02c60498); p0spike 8eee6eac0 settled the seven hook facts; P1-P3 not started.
+- **Context**: Item 4: owner chose P0 only (d-02c60498); p0spike 8eee6eac0 settled the seven hook facts; P1-P3 not started. Owner: autopilot lane · Review: 3.0.0 發版當天（PM 01M7XQRV 裁 5B）
 
 ### Guidance cut gate is red on develop and not in preflight
 - **Id**: BL-0272
@@ -2070,3 +2070,17 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: PM 01M7RQPX
 - **Pointer**: none
+
+### guard-port Phase 1 已建未註冊：決定註冊進 chain 或刪除
+- **Id**: BL-0480
+- **Status**: open
+- **Since**: 2026-11-21
+- **Origin**: self
+- **Problem**: Phase 1 code built 2026-10-25 but not registered in the hook chain.
+- **Impact**: dead code that looks shipped.
+- **Trigger**: owner decides whether to register Phase 1 into the hook chain or delete it
+- **Trigger-Type**: owner
+- **Effort**: S
+- **Source**: PM 01M7XQRV 裁 6A
+- **Pointer**: project/plans/2026-10-23-guard-port.md
+- **Context**: owner autopilot lane.

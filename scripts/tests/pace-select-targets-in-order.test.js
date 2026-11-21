@@ -3,7 +3,22 @@
 
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const { selectEngine } = require('../pace-select.js');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { selectEngine: select } = require('../pace-select.js');
+
+// Keep quota state, broker sockets and the dispatch gate independent of the host.
+const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'pace-targets-'));
+const env = {
+  HOME: fixture,
+  XDG_RUNTIME_DIR: fixture,
+  AUTOPILOT_LIVE_DIR: fixture,
+  AUTOPILOT_CONFIG_FILE: path.join(fixture, 'config.json'),
+  AUTOPILOT_KIMI_BROKER_SOCK: path.join(fixture, 'kimi.sock'),
+  AUTOPILOT_TEST_CN_GATE_OFF: '1',
+};
+const selectEngine = options => select({ ...options, env, cwd: fixture });
 
 const NOW = new Date('2026-11-22T03:00:00Z');
 const RESET_AT = '2026-11-22T08:00:00Z';
@@ -27,6 +42,7 @@ function makeRow(pool, used_pct, expected_pct = 50, extra = {}) {
   return {
     pool,
     class: 'other',
+    stale: false,
     used_pct,
     expected_pct,
     reset_at: RESET_AT,

@@ -892,7 +892,7 @@ function selectEngine({
     };
   }
 
-  const paceIsStale = pace.stale === true || (paceGeneratedAt !== null && !isSeenAtFresh(paceGeneratedAt, selectClock));
+  const paceIsStale = pace.stale === true || (paceGeneratedAt !== null && !isSeenAtFresh({ pool: 'pace', seen_at: paceGeneratedAt }, selectClock));
   const rawTargets = !paceIsStale && Array.isArray(pace.burn_more?.targets_in_order)
     ? pace.burn_more.targets_in_order.filter((t) => typeof t === 'string' && t.trim() !== '').map((t) => t.trim())
     : [];

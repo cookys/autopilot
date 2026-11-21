@@ -38,10 +38,6 @@
 #                                              #   is a precondition conflict. Result and manifest record runner
 #                                              #   local, resolved_runner cc-shim, and the endpoint actually used
 #                                              #   (qwen_local by default, or the listed --endpoint).
-#                                              #   A local run whose prompt has no Task-Class field in the gate
-#                                              #   header window (first 8 lines, at line start or after |) gets
-#                                              #   that field on a prompt copy only (Task-Class: simple-script);
-#                                              #   the caller's file is not edited. Body prose is not a field.
 #                                              #   A local run with no --worktree-parent uses a 0700 per-user directory
 #                                              #   under $XDG_RUNTIME_DIR if set, else ${TMPDIR:-/tmp}, never inside the repo.
 #                                              #   Child env sets ENABLE_TOOL_SEARCH=false, does not set
@@ -595,7 +591,6 @@ CURSOR_FAST=0          # --cursor-fast opt-in (default non-fast); runner-scoped,
 SCAFFOLD_TIER_ARG="auto"      # --scaffold-tier auto|T0|T1|T2 (explicit may only ADD scaffolding)
 SCAFFOLD_TIER_EFFECTIVE="off" # recorded in the run manifest
 SCAFFOLD_PROMPT_FILE=""       # tier-envelope temp; init early for trap reap
-LOCAL_CLASS_PROMPT_FILE=""    # local Task-Class copy; caller's prompt file is never edited
 AGY_ENVELOPE=""       # private native JSON stdout; never exposed as agent_log
 CCSHIM_ENVELOPE=""    # private claude -p --output-format json stdout; result text is what reaches LOG
 SANDBOX="off"          # --sandbox off|bwrap (cc-shim, or the one cloud fallback re-exec)
@@ -2452,8 +2447,8 @@ process.stdout.write([policy, re, rf, rr, ep].map(clean).join("|"));
 ' "$resolved" 2>/dev/null)" || return 1
   IFS='|' read -r policy engine effort runner target_endpoint <<< "$parsed"
   [ "$policy" = "cloud-fallback" ] || return 1
-  # d-1dfcf757: a configured rung in a barred family is dropped for a marked task; the plan below then picks an allowed one.
-  if [ -n "$engine" ] && ! node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --role implementer --runner "$runner" --model "$engine" ${target_endpoint:+--endpoint "$target_endpoint"} --prompt-file "${VISION_PROMPT_FILE:-$PROMPT_FILE}" >/dev/null 2>&1; then
+  # Restricted-operator rungs that fail the current brief/sandbox check are dropped before fallback selection.
+  if [ -n "$engine" ] && ! node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner "$runner" --model "$engine" ${target_endpoint:+--endpoint "$target_endpoint"} --cwd "$(pwd)" --prompt-file "${VISION_PROMPT_FILE:-$PROMPT_FILE}" >/dev/null 2>&1; then
     engine=""; effort=""; runner=""; target_endpoint=""
   fi
   case "$(printf '%s' "${runner:-}" | tr '[:upper:]' '[:lower:]')" in
@@ -2475,7 +2470,7 @@ const plan = sf.implementerFallbackPlan({
   failedEndpoint: process.argv[4],
 });
 const gate = require(process.argv[6]);
-const rung = plan.chain.find((r) => gate.check({ runner: r.runner, model: r.model, endpoint: r.endpoint, role: "implementer", files: [process.argv[5]] }).allowed);
+const rung = plan.chain.find((r) => gate.check({ runner: r.runner, model: r.model, endpoint: r.endpoint, cwd: process.cwd(), files: [process.argv[5]] }).allowed);
 if (!rung) process.exit(1);
 process.stdout.write([rung.model, rung.effort, rung.runner, rung.endpoint || "", JSON.stringify(plan.demoted || [])].join("|"));
 ' "$SELF_DIR/lib/seat-fallback.js" "$cur_runner" "${MODEL:-}" "${ENDPOINT:-}" "${VISION_PROMPT_FILE:-$PROMPT_FILE}" "$SELF_DIR/lib/cn-model-dispatch-gate.js" 2>/dev/null)" || return 1
@@ -3397,7 +3392,7 @@ if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_S
   _slot_kind="$(printf '%s\n' "$_slot_parsed" | sed -n '1p')"
   if [ "$_slot_kind" = "choose" ]; then
     LOCAL_SLOTS_JSON="$(printf '%s\n' "$_slot_parsed" | sed -n '3p')"
-    _gate_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --role implementer --runner cc-shim --model qwen --endpoint qwen_local --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" && _gate_rc=0 || _gate_rc=$?
+    _gate_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner cc-shim --model qwen --endpoint qwen_local --cwd "$(pwd)" --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" && _gate_rc=0 || _gate_rc=$?
     if [ "$_gate_rc" -eq 0 ]; then
       RUNNER="local"
       IMPLICIT_LOCAL_DEFAULT=1
@@ -3405,7 +3400,7 @@ if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_S
       LOCAL_FALLBACK_JSON=null
     else
       # A CN-gate refusal of the local seat is a block, not a cloud fallback.
-      die_precondition "${_gate_msg:-cn_model_dispatch_barred local (01M7XHF4)}"
+      die_precondition "${_gate_msg:-cn_model_dispatch_barred alibaba local_name_external_host (01M7E2A1, d-1dfcf757)}"
     fi
   else
     LOCAL_FALLBACK_JSON="$(printf '%s\n' "$_slot_parsed" | sed -n '2p')"
@@ -3431,19 +3426,6 @@ else
 fi
 export AUTOPILOT_REVIEWED_IMPLEMENTER_ENDPOINT="${ENDPOINT:-}"
 export AUTOPILOT_REVIEWED_IMPLEMENTER_MODEL="${MODEL:-}"
-# The caller's prompt file stays untouched. Insert when the gate's header parser
-# (headerValue: first 8 lines, at line start or after |) sees no Task-Class.
-# A body mention of the words is not a field.
-if [ "$LOCAL_RUNNER" -eq 1 ] && ! node -e '
-  const g = require(process.argv[1]);
-  process.exit(g.headerValue([process.argv[2]], "Task-Class") ? 0 : 1);
-' "$SELF_DIR/lib/cn-model-dispatch-gate.js" "$PROMPT_FILE"; then
-  LOCAL_CLASS_PROMPT_FILE="$(mktemp -t 'dispatch-hetero-local-class-XX''XX''XX')"
-  { printf '%s\n' 'Task-Class: simple-script'; cat "$PROMPT_FILE"; } > "$LOCAL_CLASS_PROMPT_FILE" \
-    || die_precondition "could not copy the prompt to add Task-Class: simple-script"
-  PROMPT_FILE="$LOCAL_CLASS_PROMPT_FILE"
-  echo "dispatch-hetero: prompt has no Task-Class line; dispatched copy adds Task-Class: simple-script" >&2
-fi
 # bwrap refuses a worktree inside a repo. Local fills a 0700 per-user parent outside the checkout.
 if [ "$LOCAL_RUNNER" -eq 1 ] && [ -z "$WORKTREE_PARENT" ] && [ -z "$REUSE_WORKTREE" ]; then
   _local_wt_base="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}"
@@ -3451,9 +3433,9 @@ if [ "$LOCAL_RUNNER" -eq 1 ] && [ -z "$WORKTREE_PARENT" ] && [ -z "$REUSE_WORKTR
     || die_precondition "local runner could not create a worktree parent outside the repo"
   unset _local_wt_base
 fi
-# d-1dfcf757 / 01M7E2A1: Chinese-model dispatch gate (barred family blocked for transcript, sensitive, core, novel or unknown-scope/size/role tasks).
-_tfg_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --role implementer --runner "$RUNNER" --model "$MODEL" ${ENDPOINT:+--endpoint "$ENDPOINT"} --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" \
-  || die_precondition "${_tfg_msg:-cn_model_dispatch_barred unknown unknown (01M7E2A1, d-1dfcf757)}"
+# Restricted cloud operators need a clean brief in a fresh non-repo sandbox; local endpoint names must resolve locally.
+_tfg_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner "$RUNNER" --model "$MODEL" --endpoint "${ENDPOINT:-$RUNNER}" --cwd "$(pwd)" --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" \
+  || die_precondition "${_tfg_msg:-cn_model_dispatch_barred unknown restricted_operator_unknown_endpoint (01M7E2A1, d-1dfcf757)}"
 unset _tfg_msg
 # Warn-only: a brief that names a ../ path points outside the worktree. Never blocks, never
 # changes the exit code. A ../ counts only at a word start ( ../x, (../x, "../x), not a/../b.
@@ -5223,7 +5205,6 @@ abort_dispatch() {
   reap_container
   cleanup_managed_codex_home
   [ -n "$SCAFFOLD_PROMPT_FILE" ] && rm -f "$SCAFFOLD_PROMPT_FILE"
-  [ -n "${LOCAL_CLASS_PROMPT_FILE:-}" ] && rm -f "$LOCAL_CLASS_PROMPT_FILE"
   [ -n "$GROK_PROMPT_FILE" ] && rm -f "$GROK_PROMPT_FILE"
   [ -n "$CCSHIM_PROMPT_FILE" ] && rm -f "$CCSHIM_PROMPT_FILE"
   _reap_ccshim_env_dir

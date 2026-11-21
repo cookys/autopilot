@@ -61,7 +61,7 @@ test('pace-select never returns an exhausted kimi (negative control: available b
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(socket, resolve); });
   let clock = Date.now();
   const pace = { schema: 'capacity.pace/1', rows: [{ pool: 'kimi', used_pct: 5, expected_pct: 60, stale: false, seen_at: new Date(clock).toISOString(), hours_to_reset: 12 }] };
-  const env = { ...process.env, AUTOPILOT_LIVE_DIR: live, AUTOPILOT_KIMI_BROKER_SOCK: socket };
+  const env = { ...process.env, AUTOPILOT_TEST_CN_GATE_OFF: '1', AUTOPILOT_LIVE_DIR: live, AUTOPILOT_KIMI_BROKER_SOCK: socket };
   const roles = loadRoles();
   const pick = () => selectEngine({ pace, role: 'implementer', roles, env, now: new Date(clock) });
   try {

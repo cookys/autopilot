@@ -38,7 +38,7 @@ test('(c) Kimi in a git checkout is refused as private workdir', () => fixture((
 }));
 test('(d) inventory host and credential-shaped brief content are refused', () => fixture((root) => {
   const cwd = path.join(root, 'sandbox'); fs.mkdirSync(cwd);
-  for (const contents of ['Contact buildbox.internal for access.\n', 'Authorization: Bearer sk-123456789012345678901234\n']) {
+  for (const contents of ['Contact testhost-a for access.\n', 'Authorization: Bearer sk-123456789012345678901234\n']) {
     const prompt = brief(cwd, contents);
     const got = check({ runner: 'kimi', model: 'kimi', endpoint: 'kimi', cwd, files: [prompt], env: endpointEnv('kimi', 'https://api.moonshot.cn/v1') });
     assert.equal(got.cls, 'restricted_operator_brief_scan'); fs.unlinkSync(prompt);

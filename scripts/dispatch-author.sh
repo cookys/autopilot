@@ -1100,7 +1100,7 @@ fi
 unset _pm_repo _pm_out_err _pm_resolved _pm_msg
 # d-1dfcf757 / 01M7E2A1: operator-based cloud gate checks endpoint, workdir and brief before spawn.
 _tfg_msg="$(node "$_AUTHOR_SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner "$RUNNER" --model "$MODEL" --endpoint "${ENDPOINT:-$RUNNER}" --cwd "$(pwd)" --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" \
-  || die_precondition "${_tfg_msg:-cn_model_dispatch_barred unknown unknown (01M7E2A1, d-1dfcf757)}"
+  || die_precondition "${_tfg_msg:-cn_model_dispatch_barred unknown restricted_operator_unknown_endpoint (01M7E2A1, d-1dfcf757)}"
 unset _tfg_msg
 case "$EFFORT" in default|low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be default|low|medium|high|xhigh|max" ;; esac
 # `default` = no effort sent, the endpoint default runs. Only a runner whose effort is optional can honour that;

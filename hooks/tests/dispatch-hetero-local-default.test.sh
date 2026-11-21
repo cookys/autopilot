@@ -77,7 +77,7 @@ run_local() {
 
 # (a) implementer, no --runner -> manifest runner local, model qwen.
 PROMPT="$TEST_TMP/prompt-a.txt"
-printf 'Size: S\nRole: implementer\nScope: ok.txt\nTask-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
+printf 'edit ok.txt\n' > "$PROMPT"
 run_local a
 [ "$EXIT" -eq 0 ] || printf 'local-default diagnostic (a): %s\n%s\n' "$OUT" "$ERR" >&2
 assert_eq "0" "$EXIT" "a: implementer with no --runner exits 0"
@@ -89,22 +89,21 @@ assert_eq "qwen" "$(node -e 'process.stdout.write(JSON.parse(require("fs").readF
 assert_eq "<null>" "$(json_get "$OUT" local_fallback)" "a: local choice records local_fallback null"
 assert_eq "null" "$(node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).local_fallback; process.stdout.write(v===null?"null":JSON.stringify(v))' "$MF")" "a: manifest local_fallback is null"
 
-# (b) local, no Task-Class line -> dispatched prompt gains it; caller file unchanged.
+# (b) local, short prompt is sent unchanged; no former Task-Class rule is needed.
 PROMPT="$TEST_TMP/prompt-b.txt"
 printf 'edit only this line\n' > "$PROMPT"
 BEFORE="$(sha256sum "$PROMPT" | awk '{print $1}')"
 run_local b --runner local --model qwen
 [ "$EXIT" -eq 0 ] || printf 'local-default diagnostic (b): %s\n%s\n' "$OUT" "$ERR" >&2
-assert_eq "0" "$EXIT" "b: local with no Task-Class exits 0"
+assert_eq "0" "$EXIT" "b: local dispatch without task-class metadata exits 0"
 AFTER="$(sha256sum "$PROMPT" | awk '{print $1}')"
 assert_eq "$BEFORE" "$AFTER" "b: caller prompt file is unchanged"
 SHA_B="$(git -C "$SBX" rev-parse "feat/local-b")"
 DISPATCHED="$(git -C "$SBX" show "${SHA_B}:got-prompt.txt")"
-assert_contains "$DISPATCHED" "Task-Class: simple-script" "b: dispatched prompt carries Task-Class: simple-script"
-assert_contains "$ERR" "dispatched copy adds Task-Class: simple-script" "b: stderr says the copy was added"
+assert_contains "$DISPATCHED" "edit only this line" "b: dispatched prompt contains caller text"
+assert_not_contains "$DISPATCHED" "Task-Class: simple-script" "b: gate adds no task-class metadata"
 
-# (b2) body prose names Task-Class: outside the header window. The gate reads only
-# the first 8 lines, so the dispatched copy still gains the field. Caller file stays.
+# (b2) body prose mentioning the former task-class header passes through unchanged.
 PROMPT="$TEST_TMP/prompt-b2.txt"
 {
   printf 'edit only this line\n'
@@ -118,19 +117,19 @@ PROMPT="$TEST_TMP/prompt-b2.txt"
 BEFORE="$(sha256sum "$PROMPT" | awk '{print $1}')"
 run_local b2 --runner local --model qwen
 [ "$EXIT" -eq 0 ] || printf 'local-default diagnostic (b2): %s\n%s\n' "$OUT" "$ERR" >&2
-assert_eq "0" "$EXIT" "b2: body mention of Task-Class exits 0"
+assert_eq "0" "$EXIT" "b2: body mention of former metadata exits 0"
 AFTER="$(sha256sum "$PROMPT" | awk '{print $1}')"
 assert_eq "$BEFORE" "$AFTER" "b2: caller prompt file is unchanged"
 SHA_B2="$(git -C "$SBX" rev-parse "feat/local-b2")"
 DISPATCHED="$(git -C "$SBX" show "${SHA_B2}:got-prompt.txt")"
-assert_contains "$DISPATCHED" "Task-Class: simple-script" "b2: dispatched prompt carries Task-Class: simple-script"
-assert_contains "$ERR" "dispatched copy adds Task-Class: simple-script" "b2: stderr says the copy was added"
+assert_contains "$DISPATCHED" "please add a Task-Class: header" "b2: dispatched prompt preserves body prose"
+assert_not_contains "$DISPATCHED" "Task-Class: simple-script" "b2: gate adds no task-class metadata"
 
 # (c) local, no --worktree-parent -> worktree is outside the repo root.
 XDG_RUNTIME_DIR="$(mktemp -d /tmp/local-default-xdg.XXXXXX)"
 chmod 700 "$XDG_RUNTIME_DIR"
 PROMPT="$TEST_TMP/prompt-c.txt"
-printf 'Task-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
+printf 'edit ok.txt\n' > "$PROMPT"
 run_local c --runner local --model qwen
 [ "$EXIT" -eq 0 ] || printf 'local-default diagnostic (c): %s\n%s\n' "$OUT" "$ERR" >&2
 assert_eq "0" "$EXIT" "c: local with no --worktree-parent exits 0"
@@ -237,7 +236,7 @@ for _i in 1 2 3 4 5 6 7 8 9 10; do
 done
 BUSY_PORT="$(cat "$BUSY_PORT_FILE")"
 PROMPT="$TEST_TMP/prompt-h.txt"
-printf 'Task-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
+printf 'edit ok.txt\n' > "$PROMPT"
 : > "$GROK_ARGV"
 RUNS="$TEST_TMP/runs-h"
 mkdir -p "$RUNS"
@@ -282,7 +281,7 @@ exit 1
 EOF
 chmod +x "$BUSY_CLAUDE"
 PROMPT="$TEST_TMP/prompt-j.txt"
-printf 'Task-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
+printf 'edit ok.txt\n' > "$PROMPT"
 : > "$GROK_ARGV"
 RUNS="$TEST_TMP/runs-j"
 mkdir -p "$RUNS"

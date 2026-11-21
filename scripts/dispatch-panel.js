@@ -490,14 +490,14 @@ function prepareOutDirAndPrompt(rawOutDir, promptText) {
   return { outDir, promptPath };
 }
 
-function resolveSeat(parsedSeat, promptPath) {
+function resolveSeat(parsedSeat, promptPath, cwd = path.dirname(promptPath)) {
   const cnGate = require('./lib/cn-model-dispatch-gate');
   const rawRunner = parsedSeat.runner;
   const alias = Object.prototype.hasOwnProperty.call(RUNNER_ALIASES, rawRunner.toLowerCase())
     ? RUNNER_ALIASES[rawRunner.toLowerCase()]
     : null;
   const runner = alias ? alias.runner : rawRunner;
-  const endpoint = alias && alias.endpoint ? alias.endpoint : '';
+  const endpoint = (alias && alias.endpoint) || parsedSeat.endpoint || runner;
   const rawModel = parsedSeat.model;
   const modelAlias = MODEL_ALIASES[rawModel.toLowerCase()];
   const model = modelAlias || rawModel;
@@ -519,7 +519,7 @@ function resolveSeat(parsedSeat, promptPath) {
       endpoint,
       files: [promptPath],
       env: process.env,
-      cwd: process.cwd(),
+      cwd,
     });
   } catch {
     return { allowed: false, runner, model, endpoint, effort: parsedSeat.effort, reason: 'cn_gate_error' };
@@ -681,10 +681,15 @@ async function runPanel(opts, outDir, promptPath) {
     resultsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-panel-res-'));
     tempDirs.add(resultsDir);
     fs.chmodSync(resultsDir, 0o700);
-    const resolvedSeats = opts.seats.map((s) => ({
-      parsed: s,
-      resolved: resolveSeat(s, promptPath),
-    }));
+    const resolvedSeats = opts.seats.map((s) => {
+      const seatCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-panel-cwd-'));
+      fs.chmodSync(seatCwd, 0o700);
+      tempDirs.add(seatCwd);
+      const seatPrompt = path.join(seatCwd, 'brief.md');
+      fs.copyFileSync(promptPath, seatPrompt);
+      fs.chmodSync(seatPrompt, 0o600);
+      return { parsed: s, seatCwd, seatPrompt, resolved: resolveSeat(s, seatPrompt, seatCwd) };
+    });
 
     const childEnv = buildChildEnv();
     const expectKeys = [];
@@ -692,7 +697,7 @@ async function runPanel(opts, outDir, promptPath) {
     const seatMeta = [];
 
     for (let i = 0; i < resolvedSeats.length; i += 1) {
-      const { parsed, resolved } = resolvedSeats[i];
+      const { parsed, resolved, seatCwd, seatPrompt } = resolvedSeats[i];
       if (!resolved.allowed) {
         seatMeta.push({
           index: i,
@@ -712,23 +717,11 @@ async function runPanel(opts, outDir, promptPath) {
       const expectKey = `${runId}.${stage}`;
       expectKeys.push(expectKey);
 
-      let seatCwd;
-      try {
-        seatCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-panel-cwd-'));
-        fs.chmodSync(seatCwd, 0o700);
-        tempDirs.add(seatCwd);
-      } finally {
-        // Registered directories stay alive until the panel barrier's cleanup.
-        if (seatCwd && !tempDirs.has(seatCwd)) {
-          fs.rmSync(seatCwd, { recursive: true, force: true });
-        }
-      }
-
       const outPath = safeOutPath(outDir, i, resolved.model);
       const args = [
         '--runner', resolved.runner,
         '--model', resolved.model,
-        '--prompt-file', promptPath,
+        '--prompt-file', seatPrompt,
         '--timeout', opts.timeoutSpec.authorStr,
       ];
       if (resolved.effort) args.push('--effort', resolved.effort);

@@ -80,7 +80,7 @@ Bump with `scripts/sync-version.js` only. 3.0.0 final is the operator's "3.0.0.0
 - No hosted CI (operator): suites and the merge gate run locally; never add a hosted workflow.
 - Never read, print or copy credentials, and give dispatch children a throwaway config dir seeded with only `.credentials.json`, never the real `~/.claude` ([`references/hetero-dispatch.md`](references/hetero-dispatch.md)); destructive ops follow the global Red lines tiers.
 - A SHIP-AS-IS reviewed branch merges to `develop` once suites are green, never batched; `check-unmerged-ship.js` flags it after 1 h.
-- Restricted cloud operators receive only scan-clean briefs from fresh non-repo sandboxes; private repo work is refused; local endpoints must resolve locally.
+- CN gate follows the endpoint operator: restricted cloud needs a clean brief in a fresh non-repo sandbox; private-repo work is refused, and local names must resolve locally.
 
 ## Where context lives
 

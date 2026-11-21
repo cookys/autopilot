@@ -112,10 +112,14 @@ Claude Code compacts when the context reaches **`autoCompactWindow` minus a fixe
 | `hooks.<stem>` (config.json) | Per-hook switch. true enables an opt-in hook; false disables a default-on hook that honors it (residue-auto-reap). | opt-in hooks off, default-on hooks on | `AUTOPILOT_HOOK_<STEM>`: Per-hook switch from the environment; `<STEM>` is the hook file stem upper-cased with dashes as underscores (AUTOPILOT_HOOK_BRANCH_PROTECTION=1). |
 | `AUTOPILOT_HOOK_RESIDUE_AUTO_REAP` | Set to 0, false, off or no to disable the automatic residue sweep hook. | on |  |
 | `foreman_guard.mode` (config.json) | Foreman guard (Bash cap, no-polling, no-Monitor for l4-l6 subagents): "block", "warn" or "off". | block | `AUTOPILOT_FOREMAN_GUARD_MODE` |
+| `AUTOPILOT_FOREMAN_GUARD_POLL_SCOPE` | Environment override for `foreman_guard.poll_scope` (`all` or `foreman`). | unset |  |
+| `AUTOPILOT_FOREMAN_GUARD_POLL_ENFORCE_FROM` | Environment override for the ISO date-time when polling hits switch from warning to denial. | unset |  |
 | `foreman_guard.bash_cap` (config.json) | Bash calls a foreman may make before it is told to hand off. A brief's `Bash-Cap: <n>` line (first 10 lines, n from 1 to 200) overrides this per subagent. | `40` | `AUTOPILOT_FOREMAN_GUARD_BASH_CAP` |
 | `foreman_guard.reserve_calls` (config.json) | Calls held back after the cap for the closing handoff (git status, add, commit, ...). | `8` | `AUTOPILOT_FOREMAN_GUARD_RESERVE_CALLS` |
 | `foreman_guard.advisory_every` (config.json) | Repeat interval of the non-denying advisory for other Engine-header subagents. | `40` | `AUTOPILOT_FOREMAN_GUARD_ADVISORY_EVERY` |
 | `foreman_guard.role_caps` (config.json) | Per-role Bash caps: an object with foreman, worker and reviewer integers (worker and reviewer default to 120). | unset | `AUTOPILOT_FOREMAN_GUARD_ROLE_CAPS` |
+| `foreman_guard.poll_scope` (config.json) | `all` applies polling rules to every subagent; `foreman` applies them only in l4-l6 marker sessions. | `all` | `AUTOPILOT_FOREMAN_GUARD_POLL_SCOPE` |
+| `foreman_guard.poll_enforce_from` (config.json) | ISO date-time when polling-rule hits change from warn to deny; an invalid value denies immediately. | `2026-11-24T00:00:00+08:00` | `AUTOPILOT_FOREMAN_GUARD_POLL_ENFORCE_FROM` |
 | `depth0_delegate_gate.mode` (config.json) | Reminder when the top-level session fires many read-class calls in a row: "off", "warn" or "block". | warn | `AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE` |
 | `depth0_delegate_gate.threshold` (config.json) | Consecutive read-class calls before the delegate reminder. | `8` |  |
 | `depth0_delegate_gate.guarded_models` (config.json) | Model families the gate applies to. | `["fable","opus"]` |  |
@@ -234,6 +238,10 @@ Opt-in copy of hetero-review report files. Finalize is wired in. It writes to th
 | `AUTOPILOT_CONSULT_TIMEOUT` | Timeout of a consult dispatch. | `5m` |  |
 | `AUTOPILOT_DISCUSS_TIMEOUT` | Timeout of a discuss dispatch. | `5m` |  |
 | `AUTOPILOT_AUTHOR_KILL_GRACE_SECS` | Seconds the agy author runner is given after the outer timeout before it is killed. A positive integer; zero, negatives and non-numbers fall back to 30. | `30` |  |
+| `AUTOPILOT_HETERO_HARD_TIMEOUT` | Wall cap for a hetero dispatch when `--hard-timeout` is not passed; the worker is killed at the cap. | `4h` |  |
+| `AUTOPILOT_HETERO_SAMPLE_S` | Seconds between agent-log byte and process-tree CPU samples; positive number. | `15` |  |
+| `AUTOPILOT_AUTHOR_HARD_TIMEOUT` | Wall cap for an author dispatch when `--hard-timeout` is not passed; the run is killed at the cap. | `4h` |  |
+| `AUTOPILOT_AUTHOR_SAMPLE_S` | Seconds between agent-log byte and process-tree CPU samples; positive number. | `15` |  |
 | `AUTOPILOT_AUTHOR_MAX_TOKENS` | Response cap of an authoring dispatch. | `30000` |  |
 | `AUTOPILOT_CONTEXT_WINDOW_GATE` | off, warn or block: what a dispatch does when its prompt would not fit the engine context window. | block |  |
 | `AUTOPILOT_NONCQ_DIR` | Queue root for `scripts/noncq.js` (non-Claude work queue). Created `0700`; persistent on purpose. See [`references/noncq.md`](../../references/noncq.md). | `~/.autopilot/noncq` |  |
@@ -370,10 +378,14 @@ Claude Code compacts when the context reaches **`autoCompactWindow` minus a fixe
 | `hooks.<stem>` (config.json) | Per-hook switch. true enables an opt-in hook; false disables a default-on hook that honors it (residue-auto-reap). | opt-in hooks off, default-on hooks on | `AUTOPILOT_HOOK_<STEM>`: Per-hook switch from the environment; `<STEM>` is the hook file stem upper-cased with dashes as underscores (AUTOPILOT_HOOK_BRANCH_PROTECTION=1). |
 | `AUTOPILOT_HOOK_RESIDUE_AUTO_REAP` | Set to 0, false, off or no to disable the automatic residue sweep hook. | on |  |
 | `foreman_guard.mode` (config.json) | Foreman guard (Bash cap, no-polling, no-Monitor for l4-l6 subagents): "block", "warn" or "off". | block | `AUTOPILOT_FOREMAN_GUARD_MODE` |
+| `AUTOPILOT_FOREMAN_GUARD_POLL_SCOPE` | Environment override for `foreman_guard.poll_scope` (`all` or `foreman`). | unset |  |
+| `AUTOPILOT_FOREMAN_GUARD_POLL_ENFORCE_FROM` | Environment override for the ISO date-time when polling hits switch from warning to denial. | unset |  |
 | `foreman_guard.bash_cap` (config.json) | Bash calls a foreman may make before it is told to hand off. A brief's `Bash-Cap: <n>` line (first 10 lines, n from 1 to 200) overrides this per subagent. | `40` | `AUTOPILOT_FOREMAN_GUARD_BASH_CAP` |
 | `foreman_guard.reserve_calls` (config.json) | Calls held back after the cap for the closing handoff (git status, add, commit, ...). | `8` | `AUTOPILOT_FOREMAN_GUARD_RESERVE_CALLS` |
 | `foreman_guard.advisory_every` (config.json) | Repeat interval of the non-denying advisory for other Engine-header subagents. | `40` | `AUTOPILOT_FOREMAN_GUARD_ADVISORY_EVERY` |
 | `foreman_guard.role_caps` (config.json) | Per-role Bash caps: an object with foreman, worker and reviewer integers (worker and reviewer default to 120). | unset | `AUTOPILOT_FOREMAN_GUARD_ROLE_CAPS` |
+| `foreman_guard.poll_scope` (config.json) | `all` applies polling rules to every subagent; `foreman` applies them only in l4-l6 marker sessions. | `all` | `AUTOPILOT_FOREMAN_GUARD_POLL_SCOPE` |
+| `foreman_guard.poll_enforce_from` (config.json) | ISO date-time when polling-rule hits change from warn to deny; an invalid value denies immediately. | `2026-11-24T00:00:00+08:00` | `AUTOPILOT_FOREMAN_GUARD_POLL_ENFORCE_FROM` |
 | `depth0_delegate_gate.mode` (config.json) | Reminder when the top-level session fires many read-class calls in a row: "off", "warn" or "block". | warn | `AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE` |
 | `depth0_delegate_gate.threshold` (config.json) | Consecutive read-class calls before the delegate reminder. | `8` |  |
 | `depth0_delegate_gate.guarded_models` (config.json) | Model families the gate applies to. | `["fable","opus"]` |  |
@@ -492,6 +504,10 @@ Opt-in copy of hetero-review report files. Finalize is wired in. It writes to th
 | `AUTOPILOT_CONSULT_TIMEOUT` | Timeout of a consult dispatch. | `5m` |  |
 | `AUTOPILOT_DISCUSS_TIMEOUT` | Timeout of a discuss dispatch. | `5m` |  |
 | `AUTOPILOT_AUTHOR_KILL_GRACE_SECS` | Seconds the agy author runner is given after the outer timeout before it is killed. A positive integer; zero, negatives and non-numbers fall back to 30. | `30` |  |
+| `AUTOPILOT_HETERO_HARD_TIMEOUT` | Wall cap for a hetero dispatch when `--hard-timeout` is not passed; the worker is killed at the cap. | `4h` |  |
+| `AUTOPILOT_HETERO_SAMPLE_S` | Seconds between agent-log byte and process-tree CPU samples; positive number. | `15` |  |
+| `AUTOPILOT_AUTHOR_HARD_TIMEOUT` | Wall cap for an author dispatch when `--hard-timeout` is not passed; the run is killed at the cap. | `4h` |  |
+| `AUTOPILOT_AUTHOR_SAMPLE_S` | Seconds between agent-log byte and process-tree CPU samples; positive number. | `15` |  |
 | `AUTOPILOT_AUTHOR_MAX_TOKENS` | Response cap of an authoring dispatch. | `30000` |  |
 | `AUTOPILOT_CONTEXT_WINDOW_GATE` | off, warn or block: what a dispatch does when its prompt would not fit the engine context window. | block |  |
 | `AUTOPILOT_NONCQ_DIR` | Queue root for `scripts/noncq.js` (non-Claude work queue). Created `0700`; persistent on purpose. See [`references/noncq.md`](../../references/noncq.md). | `~/.autopilot/noncq` |  |

@@ -643,7 +643,7 @@ case "$RUNNER" in cc-shim|claude-native) declare -F child_session_mint >/dev/nul
 case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, qoderclicn, kimi, cursor, or opencode (got: $RUNNER)" ;; esac
 # d-1dfcf757 / 01M7E2A1: restricted operators require a fresh sandbox and clean brief; local names must resolve locally.
 _tfg_msg="$(node "$_REVIEW_SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner "$RUNNER" --model "$MODEL" --endpoint "${ENDPOINT:-$RUNNER}" ${SPEC_FILE:+--prompt-file "$SPEC_FILE"} --cwd "$(pwd)" 2>&1 >/dev/null)" \
-  || die_precondition "${_tfg_msg:-cn_model_dispatch_barred unknown unknown (01M7E2A1, d-1dfcf757)}"
+  || die_precondition "${_tfg_msg:-cn_model_dispatch_barred unknown restricted_operator_unknown_endpoint (01M7E2A1, d-1dfcf757)}"
 unset _tfg_msg
 # --role-kit: refused on every runner but claude-native, validated now (before any spawn, and before the
 # detach supervisor below re-runs this argv inline).

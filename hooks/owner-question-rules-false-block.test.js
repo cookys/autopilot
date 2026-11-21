@@ -191,4 +191,71 @@ describe('owner-question-rules false-block regressions', () => {
       assert.equal(rules.unresolvedHits(withNoDue).length, 1);
     });
   });
+
+  describe('5. reply_language 20% CJK threshold and drift checks', () => {
+    function cjkRatio(text) {
+      const stripped = rules.stripForLanguage(text);
+      const cjk = (stripped.match(/[\u3400-\u4dbf\u4e00-\u9fff]/g) || []).length;
+      const letters = (stripped.match(/[A-Za-z]/g) || []).length;
+      return cjk / (cjk + letters);
+    }
+
+    const passCases = [
+      {
+        name: 'about 41% CJK with seat names and English nouns',
+        text: '請讓這三個分支先過一次檢查，再交給他們處理 agy codex sonnet review pin。',
+        min: 0.39,
+        max: 0.43,
+      },
+      {
+        name: 'about 52.3% CJK with seat names and English nouns',
+        text: '這個版本已經完成初步測試，現在可以準備送出檢查 review merge pin canary。',
+        min: 0.50,
+        max: 0.54,
+      },
+      {
+        name: 'about 55.8% CJK with seat names and English nouns',
+        text: '這個版本已經完成初步測試，現在就可以準備送出並確認 agy codex sonnet merge。',
+        min: 0.54,
+        max: 0.58,
+      },
+      {
+        name: 'about 59.9% CJK with seat names and English nouns',
+        text: '這個版本已經完成初步測試，現在就可以準備送出檢查並等待最後確認，接著交給他們處理 agy codex sonnet review merge canary。',
+        min: 0.58,
+        max: 0.60,
+      },
+    ];
+
+    for (const tc of passCases) {
+      it(`passes: ${tc.name}`, () => {
+        const ratio = cjkRatio(tc.text);
+        assert.ok(ratio >= tc.min && ratio <= tc.max, `ratio ${ratio} not in [${tc.min}, ${tc.max}]`);
+        assert.equal(rules.languageCheck(tc.text), null);
+      });
+    }
+
+    it('blocks: about 15% CJK reply', () => {
+      const text = '分支已送出 agy codex sonnet review merge pin。';
+      const ratio = cjkRatio(text);
+      assert.ok(ratio >= 0.13 && ratio <= 0.17, `ratio ${ratio} not around 15%`);
+      const res = rules.languageCheck(text);
+      assert.equal(res && res.decision, 'block');
+    });
+
+    it('blocks: pure English reply of 40+ letters', () => {
+      const text = 'All checks passed and the branch is ready to merge into main without issues.';
+      const res = rules.languageCheck(text);
+      assert.equal(res && res.decision, 'block');
+    });
+
+    it('blocks: mostly Chinese reply containing 这 and 应该', () => {
+      const text = '這個問題這邊已經處理完成，接下来应该可以順利合併。';
+      const res = rules.languageCheck(text);
+      assert.equal(res && res.decision, 'block');
+      assert.match(res.reason, /这/);
+      assert.match(res.reason, /应/);
+      assert.match(res.reason, /该/);
+    });
+  });
 });

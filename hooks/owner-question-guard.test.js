@@ -692,7 +692,7 @@ test('negative controls turn the closed-card, second-stop and reply-language ass
     ['closed card must block', "return card && ['open', 'awaiting_operator_action'].includes(cardState(card.entry));", 'return true;'],
     ['second Stop must block again', 'function decide(input, opts = {}) {', 'function decide(input, opts = {}) {\n  if (input.stop_hook_active === true) return null;'],
     ['reply language waits for a final reply that reaches the transcript after Stop fires, and logs a content-free line', 'const READ_SETTLE_MS = 2000;', 'const READ_SETTLE_MS = 0;'],
-    ['reply language zh-Hant blocks pure English reply', 'const LANGUAGE_MIN_CJK_RATIO = 0.60;', 'const LANGUAGE_MIN_CJK_RATIO = 0;'],
+    ['reply language zh-Hant blocks pure English reply', 'const LANGUAGE_MIN_CJK_RATIO = 0.20;', 'const LANGUAGE_MIN_CJK_RATIO = 0;'],
   ]) {
     const guardSource = fs.readFileSync(guardPath, 'utf8');
     const rulesSource = fs.readFileSync(rulesPath, 'utf8');

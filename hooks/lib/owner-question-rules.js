@@ -143,7 +143,7 @@ function replyLanguageActive(env = envBag(), cfg = null) {
 }
 
 const LANGUAGE_MIN_CHARS = 20;
-const LANGUAGE_MIN_CJK_RATIO = 0.60;
+const LANGUAGE_MIN_CJK_RATIO = 0.20;
 const LANGUAGE_BLOCK_LEAD = '回覆要用正體中文（技術名詞和 id 可保留原文）；請改寫。';
 const CJK_IDEOGRAPH_RE = /[\u3400-\u4dbf\u4e00-\u9fff]/g;
 const ASCII_LETTER_RE = /[A-Za-z]/g;
@@ -201,7 +201,7 @@ function languageCheck(text) {
   const parts = [LANGUAGE_BLOCK_LEAD];
   if (lowRatio) {
     const pct = Number((ratio * 100).toFixed(1));
-    parts.push(`中文字比例 ${pct}%（需至少 60%）。`);
+    parts.push(`中文字比例 ${pct}%（需至少 ${Math.round(LANGUAGE_MIN_CJK_RATIO * 100)}%）。`);
   }
   if (simplified.length) {
     parts.push(`偵測到簡體字：${simplified.join('、')}。`);

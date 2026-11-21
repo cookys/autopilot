@@ -62,6 +62,10 @@ const FIXTURES_DIR = path.join(__dirname, 'fixtures', 'pace-select');
 const MISSING_PACE = path.join(FIXTURES_DIR, '__missing_pace__.json');
 const MISSING_CURSOR_AUDIT = path.join(FIXTURES_DIR, '__missing_cursor_audit__.tsv');
 const MISSING_KIMI_AUDIT = path.join(FIXTURES_DIR, '__missing_kimi_audit__.tsv');
+const MISSING_CURSOR_SOCKET = path.join(os.tmpdir(), `pace-select-missing-cursor-${process.pid}.sock`);
+const MISSING_KIMI_SOCKET = path.join(os.tmpdir(), `pace-select-missing-kimi-${process.pid}.sock`);
+process.env.AUTOPILOT_CURSOR_BROKER_SOCK = MISSING_CURSOR_SOCKET;
+process.env.AUTOPILOT_KIMI_BROKER_SOCK = MISSING_KIMI_SOCKET;
 process.env.AUTOPILOT_CURSOR_BROKER_AUDIT = MISSING_CURSOR_AUDIT;
 process.env.AUTOPILOT_KIMI_BROKER_AUDIT = MISSING_KIMI_AUDIT;
 const allEndpointsReady = () => true;
@@ -91,6 +95,8 @@ test.afterEach(() => {
 function selectEngine(options = {}) {
   const env = { ...(options.env || process.env) };
   if (env.AUTOPILOT_TEST_CN_GATE_OFF === undefined) env.AUTOPILOT_TEST_CN_GATE_OFF = '1';
+  if (env.AUTOPILOT_CURSOR_BROKER_SOCK === undefined) env.AUTOPILOT_CURSOR_BROKER_SOCK = MISSING_CURSOR_SOCKET;
+  if (env.AUTOPILOT_KIMI_BROKER_SOCK === undefined) env.AUTOPILOT_KIMI_BROKER_SOCK = MISSING_KIMI_SOCKET;
   env.AUTOPILOT_LIVE_DIR = options.env?.AUTOPILOT_LIVE_DIR || testLiveDir;
   if (!options.env || !Object.prototype.hasOwnProperty.call(options.env, 'AUTOPILOT_CURSOR_BROKER_AUDIT')) {
     env.AUTOPILOT_CURSOR_BROKER_AUDIT = MISSING_CURSOR_AUDIT;
@@ -159,6 +165,8 @@ function cli(args, envExtra = {}) {
   env.AUTOPILOT_QUALIFIED_FILE = path.join(FIXTURES_DIR, '__missing_qualified__.json');
   env.AUTOPILOT_CURSOR_BROKER_AUDIT = MISSING_CURSOR_AUDIT;
   env.AUTOPILOT_KIMI_BROKER_AUDIT = MISSING_KIMI_AUDIT;
+  env.AUTOPILOT_CURSOR_BROKER_SOCK = MISSING_CURSOR_SOCKET;
+  env.AUTOPILOT_KIMI_BROKER_SOCK = MISSING_KIMI_SOCKET;
   env.AUTOPILOT_TEST_CN_GATE_OFF = '1';
   env.AUTOPILOT_ENDPOINTS_ENV = '/nonexistent';
   env.AUTOPILOT_ENDPOINT_GLM_URL = 'https://glm.example.invalid/v1';

@@ -874,6 +874,15 @@ function selectEngine({
     }
   }
 
+  // Broker availability controls whether kimi can be selected, not whether the
+  // operator can see it in the implementer candidate pool.
+  if (role === 'implementer' && !useQualified && !kimiBrokerAvailable && resolvedRoles[role].includes('kimi')
+    && !candidates.some((candidate) => candidate.engine === 'kimi')) {
+    const kimiOrder = resolvedRoles[role].indexOf('kimi');
+    const insertAt = candidates.findIndex((candidate) => resolvedRoles[role].indexOf(candidate.engine) > kimiOrder);
+    candidates.splice(insertAt < 0 ? candidates.length : insertAt, 0, { engine: 'kimi', reason: 'unknown', basis: 'none' });
+  }
+
   if (known.length === 0) {
     return {
       engine: null,

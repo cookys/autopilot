@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0485 -->
+<!-- next-id: BL-0494 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -2135,4 +2135,130 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: autopilot lane, 2026-11-21
+- **Pointer**: none
+
+### 審查與派工 manifest 落在臨時目錄跨 session 殘留
+- **Id**: BL-0485
+- **Status**: open
+- **Since**: 2026-11-21
+- **Origin**: peer
+- **Reporter**: PM
+- **Report**: 01M7YXD5
+- **Reply**: none
+- **Problem**: 審查與派工產生的 manifest 寫在一般磁碟臨時目錄而非 tmpfs，重開機前不會清，跨工作階段會殘留。
+- **Impact**: 舊 manifest 可能被誤讀，多輪派工狀態容易混淆。
+- **Trigger**: 下次整理審查或派工 manifest 寫入位置時
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: PM 01M7YXD5 2026-11-16
+- **Pointer**: none
+
+### 結束時間夾限用 GNU date 同秒路徑在 macOS 失效
+- **Id**: BL-0486
+- **Status**: open
+- **Since**: 2026-11-21
+- **Origin**: self
+- **Problem**: 結束時間的夾限寫法只適用 GNU date 的秒時間戳格式，BSD 或 macOS 的 date 不支援，只在同秒結束的路徑會出錯。
+- **Impact**: macOS 上同秒結束的統計或記錄可能被算錯或失敗。
+- **Trigger**: 下次修改結束時間統計或記錄的夾限邏輯時
+- **Trigger-Type**: event
+- **Effort**: XS
+- **Source**: autopilot lane 2026-11-16
+- **Pointer**: none
+
+### dispatch-hetero rail 預設提交訊息是空殼
+- **Id**: BL-0487
+- **Status**: open
+- **Since**: 2026-11-21
+- **Origin**: self
+- **Problem**: hetero rail 自動產生的提交訊息只有分支名等空殼文案，沒有實質摘要，合併前每次都要人工改寫。
+- **Impact**: 歷史難追、合併審查看不出改了什麼。
+- **Trigger**: 下次修改 hetero rail 自動提交訊息產生邏輯時
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: autopilot lane 2026-11-16
+- **Pointer**: none
+
+### ctx 第二輪提交訊息數字不準且遠端功能分支刪不掉
+- **Id**: BL-0488
+- **Status**: open
+- **Since**: 2026-11-21
+- **Origin**: self
+- **Problem**: 上下文覆蓋第二輪的提交訊息裡數字與實際不符，且兩條遠端功能分支刪除失敗仍掛在 origin。
+- **Impact**: 審查與清庫會被誤導，孤枝分支持續堆積。
+- **Trigger**: 整理上下文第二輪落地證據與遠端分支衛生時
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: autopilot lane 2026-11-16
+- **Pointer**: none
+
+### rc-alarm 同名 label 跨 lane 共用計數
+- **Id**: BL-0489
+- **Status**: open
+- **Since**: 2026-11-21
+- **Origin**: self
+- **Problem**: 回歸警報用同名 label 計數時沒有區分 lane，不同 lane 的計數會混在一起。
+- **Impact**: 某 lane 的警報次數被其他 lane 污染，難以判斷來源。
+- **Trigger**: 下次修改回歸警報計數或 lane 隔離時
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: autopilot lane 2026-11-16
+- **Pointer**: none
+
+### hippo store 紀錄內含 fleet 主機名公開匯出恐外洩
+- **Id**: BL-0490
+- **Status**: open
+- **Since**: 2026-11-21
+- **Origin**: peer
+- **Reporter**: PM
+- **Report**: 01M7Z6NK
+- **Reply**: none
+- **Problem**: 本機 hippo store 至少三筆紀錄內文含有 fleet 主機名，若公開匯出白名單包含 store 會把主機名帶出去。
+- **Impact**: 公開版可能外洩內網主機識別，須確認匯出排除或遮蔽。
+- **Trigger**: 公開匯出工具審查白名單與遮蔽規則時
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: PM 01M7Z6NK 2026-11-16
+- **Pointer**: none
+
+### 單件選套件漏跑 session 模式 plain 測試
+- **Id**: BL-0491
+- **Status**: open
+- **Since**: 2026-11-21
+- **Origin**: self
+- **Problem**: 修改 session 模式相關程式時，單件挑選沒有選到對應的 plain session 測試檔，整包才抓到。
+- **Impact**: 只跑挑選套件會漏掉 session 模式迴歸。
+- **Trigger**: 下次修改 session 模式或單件套件挑選邏輯時
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: autopilot lane 2026-11-16
+- **Pointer**: none
+
+### fleet 巡查對等待中 P1 仍每十分鐘喚醒
+- **Id**: BL-0492
+- **Status**: open
+- **Since**: 2026-11-21
+- **Origin**: peer
+- **Reporter**: fleet
+- **Report**: 01M7Y9PS
+- **Reply**: none
+- **Problem**: fleet 巡查的 P1 停滯檢查對狀態為等待且已填 waiting_on 的單仍每十分鐘喚醒，等人安全點時會連續被打斷。
+- **Impact**: 等待中的 P1 被誤判停滯，巡查噪音大。
+- **Trigger**: 下次修改 fleet 巡查 P1 停滯判斷邏輯時
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: fleet lane 01M7Y9PS 2026-11-16
+- **Pointer**: none
+
+### 尖端驗證落到系統 node 無法跑 TypeScript 套件
+- **Id**: BL-0493
+- **Status**: open
+- **Since**: 2026-11-21
+- **Origin**: self
+- **Problem**: 尖端驗證若用到系統預設的 node 22 沒有執行 TypeScript 測試所需能力，相關套件會直接失敗。
+- **Impact**: 驗證在部分主機上假紅或跳過；與挑選過半逾時是不同面向，見 BL-0461。
+- **Trigger**: 下次修改尖端驗證或 node 路徑選擇時
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: autopilot lane 2026-11-16
 - **Pointer**: none

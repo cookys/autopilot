@@ -1,0 +1,11 @@
+---
+id: 01M7ZCNRY9AN1C9H2MXZVPRSVJ
+kind: issue
+created: 2026-11-21T15:47:51.881Z
+---
+- **Since**: 2026-11-21
+- **Problem**: 尖端驗證若用到系統預設的 node 22 沒有執行 TypeScript 測試所需能力，相關套件會直接失敗。
+- **Impact**: 驗證在部分主機上假紅或跳過；與挑選過半逾時是不同面向，見 BL-0461。
+- **Trigger**: 下次修改尖端驗證或 node 路徑選擇時
+- **Source**: autopilot lane 2026-11-16
+- **Pointer**: none

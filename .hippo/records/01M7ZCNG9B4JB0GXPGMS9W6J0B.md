@@ -1,0 +1,13 @@
+---
+id: 01M7ZCNG9B4JB0GXPGMS9W6J0B
+kind: issue
+created: 2026-11-21T15:47:43.019Z
+---
+- **Since**: 2026-11-21
+- **Report**: 01M7Z6NK
+- **Reply**: none
+- **Problem**: 本機 hippo store 至少三筆紀錄內文含有 fleet 主機名，若公開匯出白名單包含 store 會把主機名帶出去。
+- **Impact**: 公開版可能外洩內網主機識別，須確認匯出排除或遮蔽。
+- **Trigger**: 公開匯出工具審查白名單與遮蔽規則時
+- **Source**: PM 01M7Z6NK 2026-11-16
+- **Pointer**: none

@@ -1,0 +1,11 @@
+---
+id: 01M7ZCN4ZHYCG9RXG9QQ72F6NV
+kind: issue
+created: 2026-11-21T15:47:31.441Z
+---
+- **Since**: 2026-11-21
+- **Problem**: 結束時間的夾限寫法只適用 GNU date 的秒時間戳格式，BSD 或 macOS 的 date 不支援，只在同秒結束的路徑會出錯。
+- **Impact**: macOS 上同秒結束的統計或記錄可能被算錯或失敗。
+- **Trigger**: 下次修改結束時間統計或記錄的夾限邏輯時
+- **Source**: autopilot lane 2026-11-16
+- **Pointer**: none

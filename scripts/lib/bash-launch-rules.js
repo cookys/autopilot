@@ -1255,7 +1255,8 @@ function detectRecursiveRmVarUnguarded(cmd) {
       return {
         rule: 'rm-var-target',
         why: `recursive rm with the expanding target ${bad} (\`$VAR\`, \`\${VAR}\`, \`$(…)\` or a backtick): what it deletes depends on state the command does not show. `
-          + 'Use a literal path, or `mv` the directory into a trash dir (e.g. `mv x "$Q/trash/"`; a $VAR in a mv is fine). '
+          + 'Expand the target to a literal path, check it lies under the scratchpad or a repo build directory, then remove that literal path; '
+          + 'for a cargo project use `cargo clean` or one shared CARGO_TARGET_DIR across worktrees. '
           + 'Relax with AUTOPILOT_BASH_GUARD_RMVAR_MODE=warn|off (or depth0_delegate_gate.rm_var_target in ~/.autopilot/config.json)',
       };
     }

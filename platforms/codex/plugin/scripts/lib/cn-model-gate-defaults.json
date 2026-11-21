@@ -1,5 +1,5 @@
 {
-  "_why": "Starter lists for scripts/lib/cn-model-dispatch-gate.js (Fleet task 01M7E2A1, card d-1dfcf757). A repo extends every list (union, never replaces) in .claude/cn-model-gate.json, including review_roles. review_local_exceptions is not one of those lists: only this shipped file counts, because the window is the operator's decision (d-ede04b92, PM 01M7JPZQ), not a repo's. A repo cannot add, extend, or shrink an entry. core_unset_allow is the same kind of shipped-only list: when effective core_dirs is empty the gate treats every path as core unless it matches this list (or a New-Files path that does not exist yet), and a repo .claude/cn-model-gate.json cannot add to, replace, or shrink it (Fleet task 01M7S88YZPPZKVARP0F2SYMRGS, operator rule 2026-11-15 fail closed). core_unset_fixture_exts is shipped-only the same way: a path allowed only by **/fixtures/**, **/testdata/** or **/__fixtures__/** must have a basename extension in that list (lower-cased, the text after the last dot); a repo file cannot add, replace, or shrink it. docs/**, doc/** and an absent New-Files path have no extension rule. Globs: `*` stays inside one path segment, `**` crosses directories, a glob without `/` matches any single path segment.",
+  "_why": "Starter lists for scripts/lib/cn-model-dispatch-gate.js (Fleet task 01M7E2A1, card d-1dfcf757). A repo extends every list (union, never replaces) in .claude/cn-model-gate.json, including review_roles. review_local_exceptions is not one of those lists: only this shipped file counts, because the window is the operator's decision (d-ede04b92, PM 01M7JPZQ), not a repo's. A repo cannot add, extend, or shrink an entry. local_restricted_repos is shipped-only too (a repo file cannot add, replace, or shrink an entry). core_unset_allow is the same kind of shipped-only list: when effective core_dirs is empty the gate treats every path as core unless it matches this list (or a New-Files path that does not exist yet), and a repo .claude/cn-model-gate.json cannot add to, replace, or shrink it (Fleet task 01M7S88YZPPZKVARP0F2SYMRGS, operator rule 2026-11-15 fail closed). core_unset_fixture_exts is shipped-only the same way: a path allowed only by **/fixtures/**, **/testdata/** or **/__fixtures__/** must have a basename extension in that list (lower-cased, the text after the last dot); a repo file cannot add, replace, or shrink it. docs/**, doc/** and an absent New-Files path have no extension rule. Globs: `*` stays inside one path segment, `**` crosses directories, a glob without `/` matches any single path segment.",
   "sensitive_paths": [
     "**/.env", "**/.env.*", "**/*.pem", "**/*.key", "**/*.p12", "**/id_rsa*", "**/id_ed25519*", "**/.ssh/**",
     "**/credentials*", "**/secrets/**", "**/secret*", "**/.netrc", "**/.npmrc", "**/.kimi-code/**", "**/.aws/**",
@@ -12,10 +12,15 @@
   "core_unset_allow": ["docs/**", "doc/**", "**/fixtures/**", "**/testdata/**", "**/__fixtures__/**"],
   "core_unset_fixture_exts": ["json", "yaml", "yml", "toml", "txt", "csv", "md", "snap"],
   "novel_roles": ["plan", "design", "brainstorm", "architecture", "plan_review", "research"],
-  "review_roles": ["reviewer", "review", "qc", "qc_panel", "plan_review", "loop_reviewer", "verifier"],
+  "review_roles": ["reviewer", "review", "qc", "qc_panel", "plan_review", "loop_reviewer", "verifier", "ux-reference-reviewer"],
   "local_task_classes": ["format-convert", "log-summary", "simple-script", "test-scaffold"],
-  "local_deny_repos": ["aaa-race-*", "revival*", "pinball*", "twgameproject*", "308*", "*prod*", "*player*", "hangar", "mnemos", "*credential*", "*secret*"],
+  "local_deny_repos": ["aaa-race-*", "twgameproject*", "308*", "*prod*", "*player*", "hangar", "mnemos", "*credential*", "*secret*"],
+  "local_restricted_repos": [
+    { "repos": ["revival*", "pinball*"], "task_classes": ["test-scaffold", "simple-script"], "sizes": ["XS", "S"],
+      "deny_paths": ["**/*.uasset", "**/*.umap", "Content/**", "raw/**", "**/raw/**", "**/player*/**", "**/*player*data*", "**/Fab/**"] }
+  ],
   "review_local_exceptions": [
-    { "endpoint": "qwen_local", "until": "2026-11-21T23:59:59+08:00", "ref": "d-ede04b92 (PM 01M7JPZQ)" }
+    { "endpoint": "qwen_local", "until": "2026-11-21T23:59:59+08:00", "ref": "d-ede04b92 (PM 01M7JPZQ)" },
+    { "endpoint": "glm_local", "until": "2026-11-28T23:59:59+08:00", "repos": ["thinksmart*"], "roles": ["ux-reference-reviewer"], "ref": "PM 01M7XP968Q66P4BN4W907W06HR：操作員本人要試本地 GLM 當 ThinkSmart UX 閘門的第三位參考評審（不算分）（PM 轉述，原話未附）" }
   ]
 }

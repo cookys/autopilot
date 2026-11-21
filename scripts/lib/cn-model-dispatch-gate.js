@@ -10,16 +10,24 @@
 //                 `Reads-Transcript: yes` header line in the first 8 lines of the brief/spec)
 //   [sensitive]   the repo name or any path in the task's read/write scope matches the sensitive list
 //                 (money/payments, PII, private-home data, keys/credentials, customer data)
-//   [review-role] role is in review_roles (reviewer, review, qc, qc_panel, plan_review, loop_reviewer,
+//   [review-role] role is in review_roles (reviewer, review, qc, qc_panel, plan_review, loop_reviewer, ux-reference-reviewer,
 //                 verifier), regardless of size, including a missing size. The local served family on a
 //                 local-sandbox endpoint is exempt from THIS class only when review_local_exceptions in
 //                 the shipped defaults names that endpoint, now < until, and the repo is not in
 //                 local_deny_repos (d-ede04b92, PM 01M7JPZQ; today qwen_local until 2026-11-21T23:59:59+08:00).
+//                 An entry may carry optional repos (globs on the repo directory name) and roles (every review
+//                 role the task names must be listed); an entry without them applies to any repo and role.
+//                 Today's second entry: glm_local, repos thinksmart*, role ux-reference-reviewer only (a
+//                 non-scoring UX reference reviewer), until 2026-11-28T23:59:59+08:00 (PM 01M7XP968Q66).
 //                 Past until, with no entry, or on a denied repo, the class is review-role. A repo
 //                 .claude/cn-model-gate.json cannot add, extend, or shrink an entry: the window is the
 //                 operator's decision, not a repo's. Every other check still applies. A cloud endpoint
 //                 of the same family, and any other barred family on that endpoint, stay barred.
-//   [core-size]   size is above XS/S (M, L, XL)
+//   [core-size]   size is above XS/S (M, L, XL). Skipped when resolution() returns localServed:
+//                 the name is a local-sandbox endpoint AND resolve-endpoint.sh shows a loopback or
+//                 fleet-gateway host (operator rule: the CN gate covers external China-hosted
+//                 services only). A name in that list whose host is not local is not this skip; it
+//                 is [local_name_external_host] and the cloud rules do not run.
 //   [core-dir]    the scope touches a directory the config marks `core`. Skipped when resolution()
 //                 returns localServed (operator via PM, ledger fadf8dc9). A different barred family
 //                 named on a local endpoint, and every cloud endpoint, keep this check.
@@ -39,15 +47,28 @@
 //   [novel]       role is plan, design, brainstorm, architecture, plan_review or research, or the task is
 //                 marked novel (env AUTOPILOT_TASK_NOVEL=1, or `Novel: yes` header)
 //   [unknown-size|unknown-role|unknown-scope]  FAIL CLOSED: size, role or scope is missing
-// Local endpoint (interim, PM 01M7HQ92; operator rule 2026-11-15 applies to local qwen too, so being local
-//   is not a blanket exemption; this stands until the AR data-class allowlist replaces it): when --endpoint is listed
-//   in scripts/lib/local-sandbox-endpoints.json (today qwen_local and glm_local) and the family is the one that endpoint
-//   serves, every check above applies exactly as for a cloud endpoint of that family, except [review-role]
-//   when a shipped review_local_exceptions entry names that endpoint, now < until, and the repo is outside
-//   local_deny_repos, and except [core-dir] and [core-unset], which that local served family skips
-//   (operator via PM, ledger fadf8dc9). A different barred family named on the endpoint, and every cloud
-//   endpoint, keep [core-dir] and [core-unset]. Past the review window, [review-role] applies and is decided
-//   before the later local checks.
+// Local endpoint (interim, PM 01M7HQ92; operator rule: CN bars cover external China-hosted services only):
+//   a name in scripts/lib/local-sandbox-endpoints.json (today qwen_local and glm_local) is local only when
+//   `scripts/resolve-endpoint.sh <name>` (the same resolver dispatch uses; this file does not read
+//   endpoints.env) returns a base_url whose host is loopback (localhost, 127.0.0.0/8, ::1) or a hostname
+//   in local_gateway_hosts (hostnames only; the repo list is empty, hangar fills it per host). Tests pass
+//   the resolver URL/token via AUTOPILOT_ENDPOINT_<NAME>_URL/_TOKEN and may add gateway hostnames via
+//   AUTOPILOT_LOCAL_GATEWAY_HOSTS (comma-separated). Model `auto` is the gateway's own routing, not a
+//   second family. A listed name plus a separator and a model suffix (`qwen_local/Qwen…`, `#`, `:`, `@`)
+//   is still that endpoint. When the name is listed but the host is not local, the dispatch is external:
+//   [local_name_external_host], before the other classes. When the host is local and the family is the
+//   one that endpoint serves, every check above applies as for a cloud endpoint of that family, except
+//   [core-size] (a big size stays a known size, not unknown-size), [review-role] when a shipped
+//   review_local_exceptions entry names that endpoint, now < until, and the repo is outside
+//   local_deny_repos, and [core-dir] and [core-unset] (operator via PM, ledger fadf8dc9). A different
+//   barred family named on the endpoint, and every cloud endpoint, keep [core-size], [core-dir] and
+//   [core-unset]. Past the review window, [review-role] applies and is decided before the later local checks.
+//   [local-restricted-repo] (shipped-only local_restricted_repos; game repos revival* and pinball*, operator
+//   2026-11-15 rule: small mechanical tested work only): a repo matching an entry passes only with Task-Class in
+//   its task_classes, Size in its sizes, and no Scope/New-Files path matching its deny_paths (assets, Content,
+//   raw and player data); else this class, after [task-class]. Trial scope (PM ruling): when role is implementer
+//   and the repo matches such an entry, [unknown-task-class], [task-class] and the entry's task_classes are
+//   skipped (Size, deny_paths, transcript, sensitive and review-role still apply); other roles and repos unchanged. twgameproject* stays in local_deny_repos.
 //   Two further checks then apply, and only then: [local-deny-repo] the repo directory name matches local_deny_repos; [unknown-task-class]
 //   Task-Class is missing; [task-class] it is not in local_task_classes (format-convert, log-summary,
 //   simple-script, test-scaffold). A different barred family on that endpoint (a kimi model on qwen_local)
@@ -69,7 +90,7 @@
 // Config: scripts/lib/cn-model-gate-defaults.json (starter lists) extended by <repo>/.claude/cn-model-gate.json
 //   (union of every list; a repo can add entries and cannot remove a starter). Fields: sensitive_paths,
 //   sensitive_repos, core_dirs, novel_roles, review_roles, local_task_classes, local_deny_repos.
-//   review_local_exceptions, core_unset_allow and core_unset_fixture_exts are read only from the shipped defaults (not unioned).
+//   review_local_exceptions, local_restricted_repos, core_unset_allow and core_unset_fixture_exts are read only from the shipped defaults (not unioned).
 //   Clock: check(..., { now })
 //   with an ISO string. An explicit now that does not parse fails closed and is not replaced by the real
 //   clock. When now is omitted, Date.now() is used (no env override).
@@ -213,6 +234,30 @@ function shippedReviewExceptions() {
   return Array.isArray(raw) ? raw : [];
 }
 
+// Shipped defaults only (a repo file cannot loosen it). A repo directory matching an entry's repos globs
+// passes only when Task-Class and Size are in that entry's lists and no scope or New-Files path matches
+// its deny_paths. A missing size never matches the list, so it is refused too.
+function shippedRestrictedRepos() {
+  const raw = loadList(DEFAULTS_PATH).local_restricted_repos;
+  return Array.isArray(raw) ? raw : [];
+}
+
+function inRestrictedTrial(repoName) {
+  return shippedRestrictedRepos().some((e) => e && typeof e === 'object' && Array.isArray(e.repos) && matchesAny(repoName, e.repos.map(String)));
+}
+
+function restrictedRepoBlocks(repoName, f, skipClass = false) {
+  const lower = (a) => (Array.isArray(a) ? a.map((x) => String(x).toLowerCase()) : []);
+  const upper = (a) => (Array.isArray(a) ? a.map((x) => String(x).toUpperCase()) : []);
+  return shippedRestrictedRepos().some((e) => {
+    if (!e || typeof e !== 'object' || !Array.isArray(e.repos) || !matchesAny(repoName, e.repos.map(String))) return false;
+    if (!skipClass && !lower(e.task_classes).includes(f.taskClass)) return true;
+    if (!upper(e.sizes).includes(f.size)) return true;
+    const deny = Array.isArray(e.deny_paths) ? e.deny_paths.map(String) : [];
+    return [...f.scope, ...f.newFiles].some((p) => matchesAny(p, deny));
+  });
+}
+
 // Shipped defaults only. A repo file is not consulted: an empty core_dirs must not be widened
 // by a repo adding source globs to the allow list (01M7S88YZPPZKVARP0F2SYMRGS).
 function shippedCoreUnsetAllow() {
@@ -326,13 +371,21 @@ function gateNow(opts) {
   return Date.now();
 }
 
-function reviewLocalExempt(endpoint, nowMs, root, denyGlobs) {
+// An entry may narrow itself with repos (globs on the repo directory name) and roles (every review
+// role the task names must be in the list). An entry without them applies to any repo and role.
+function reviewLocalExempt(endpoint, nowMs, root, denyGlobs, reviewHits = []) {
   if (nowMs == null) return false;
-  if (matchesAny(path.basename(root), denyGlobs)) return false;
+  const repoName = path.basename(root);
+  if (matchesAny(repoName, denyGlobs)) return false;
   const ep = String(endpoint || '');
   return shippedReviewExceptions().some((e) => {
     if (!e || typeof e !== 'object') return false;
     if (String(e.endpoint || '') !== ep) return false;
+    if (e.repos !== undefined && !(Array.isArray(e.repos) && matchesAny(repoName, e.repos.map(String)))) return false;
+    if (e.roles !== undefined) {
+      const roles = Array.isArray(e.roles) ? e.roles.map((r) => String(r).toLowerCase()) : [];
+      if (!reviewHits.every((r) => roles.includes(r))) return false;
+    }
     const until = Date.parse(String(e.until || ''));
     return Number.isFinite(until) && nowMs < until;
   });
@@ -345,41 +398,114 @@ function localEndpoints() {
   return Array.isArray(l) ? l.map(String) : [];
 }
 
+function localGatewayHosts(env = process.env) {
+  const fromFile = loadList(LOCAL_ENDPOINTS_PATH).local_gateway_hosts;
+  const fileHosts = Array.isArray(fromFile) ? fromFile.map(String) : [];
+  const extra = String((env && env.AUTOPILOT_LOCAL_GATEWAY_HOSTS) || '').split(',').map((s) => s.trim()).filter(Boolean);
+  return [...fileHosts, ...extra];
+}
+
 function rawFamily(p) { return /qoder/i.test(p) ? 'qoder' : familyOfEngine(p); }
+
+// `auto` is the fleet gateway's own model route, not a vendor family.
+function namedFamily(s) {
+  if (/^auto$/i.test(String(s || '').trim())) return '';
+  return rawFamily(s);
+}
+
+// A listed name, or that name plus a model suffix after / # : @. Case-insensitive. Returns the canonical list spelling.
+function matchLocalName(raw, locals) {
+  const s = String(raw || '').trim();
+  if (!s) return '';
+  const lower = s.toLowerCase();
+  const exact = locals.find((l) => l.toLowerCase() === lower);
+  if (exact) return exact;
+  for (const l of locals) {
+    const ll = l.toLowerCase();
+    if (lower.startsWith(ll) && /^[/#:@]/.test(lower.slice(ll.length))) return l;
+  }
+  return '';
+}
 
 // Effective endpoint: an explicit endpoint wins; otherwise a runner or model shorthand that names a listed
 // local-sandbox endpoint resolves to that canonical endpoint (matching filterLadder).
 function effectiveEndpointOf(runner, model, endpoint, locals = localEndpoints()) {
   const ep = String(endpoint || '');
-  if (ep) {
-    const matched = locals.find((l) => l.toLowerCase() === ep.toLowerCase());
-    return matched || ep;
-  }
+  if (ep) return matchLocalName(ep, locals) || ep;
   for (const cand of [runner, model]) {
-    const s = String(cand || '');
-    if (!s) continue;
-    const matched = locals.find((l) => l.toLowerCase() === s.toLowerCase());
+    const matched = matchLocalName(cand, locals);
     if (matched) return matched;
   }
   return '';
 }
 
-// localServed: the endpoint is a local-sandbox endpoint and no OTHER barred family is named.
-// The family id is the one that endpoint serves (cloud qwen is alibaba), so the cloud checks apply as-is.
-function resolution(runner, model, endpoint) {
+function hostOfBaseUrl(baseUrl) {
+  const raw = String(baseUrl || '').trim();
+  if (!raw) return '';
+  try { return new URL(raw).hostname || ''; } catch { return ''; }
+}
+
+function hostIsLoopback(host) {
+  const h = String(host || '').toLowerCase().replace(/^\[|\]$/g, '');
+  if (h === 'localhost' || h === '::1') return true;
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h);
+  if (!m) return false;
+  const oct = m.slice(1).map((s) => Number(s));
+  if (oct.some((n) => !Number.isInteger(n) || n > 255)) return false;
+  return oct[0] === 127;
+}
+
+// Gateway list is hostnames only. An IP literal in the list does not qualify.
+function hostIsGateway(host, names) {
+  const h = String(host || '').toLowerCase();
+  if (!h || h.includes(':') || hostIsLoopback(h)) return false;
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h)) return false;
+  if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/.test(h)) return false;
+  return names.some((n) => String(n).trim().toLowerCase() === h);
+}
+
+// Same resolver dispatch uses. stdout is metadata only (base_url, never a token value).
+function resolvedBaseUrl(name, env) {
+  const script = path.join(__dirname, '..', 'resolve-endpoint.sh');
+  const childEnv = { ...process.env, ...(env && typeof env === 'object' ? env : {}) };
+  const r = spawnSync('bash', [script, name], { env: childEnv, encoding: 'utf8', timeout: 15000 });
+  const line = String(r.stdout || '').split('\n').find((l) => l.startsWith('{'));
+  if (!line) return '';
+  try {
+    const o = JSON.parse(line);
+    return o && typeof o.base_url === 'string' ? o.base_url : '';
+  } catch { return ''; }
+}
+
+function endpointHostIsLocal(name, env) {
+  const host = hostOfBaseUrl(resolvedBaseUrl(name, env));
+  if (!host) return false;
+  if (hostIsLoopback(host)) return true;
+  return hostIsGateway(host, localGatewayHosts(env));
+}
+
+// localServed: listed name, resolved host is loopback or a fleet gateway, and no OTHER barred family is named.
+// A listed name whose host is external is localNameExternal (CN rules, reason local_name_external_host).
+function resolution(runner, model, endpoint, env = process.env) {
   const locals = localEndpoints();
   const ep = effectiveEndpointOf(runner, model, endpoint, locals);
+  const none = { localNameExternal: false };
   if (ep && locals.includes(ep)) {
+    const hostLocal = endpointHostIsLocal(ep, env);
     const served = rawFamily(ep);
-    const fams = [model, runner].map((s) => String(s || '')).filter(Boolean).map(rawFamily);
+    const fams = [model, runner].map((s) => namedFamily(s)).filter(Boolean);
     const other = fams.find((f) => BARRED_FAMILIES.includes(f) && f !== served);
-    if (other) return { family: other, localServed: false, endpoint: ep };
-    if (BARRED_FAMILIES.includes(served)) return { family: served, localServed: true, endpoint: ep };
-    return { family: fams.find((f) => f !== 'unknown') || served, localServed: false, endpoint: ep };
+    if (!hostLocal) {
+      const family = other || (BARRED_FAMILIES.includes(served) ? served : (fams.find((f) => f !== 'unknown') || served));
+      return { family, localServed: false, endpoint: ep, localNameExternal: BARRED_FAMILIES.includes(family) };
+    }
+    if (other) return { family: other, localServed: false, endpoint: ep, ...none };
+    if (BARRED_FAMILIES.includes(served)) return { family: served, localServed: true, endpoint: ep, ...none };
+    return { family: fams.find((f) => f !== 'unknown') || served, localServed: false, endpoint: ep, ...none };
   }
   const probes = [ep, model, runner].map((s) => String(s || '')).filter(Boolean);
   const fams = probes.map(rawFamily);
-  return { family: fams.find((f) => BARRED_FAMILIES.includes(f)) || fams.find((f) => f !== 'unknown') || 'unknown', localServed: false, endpoint: ep };
+  return { family: fams.find((f) => BARRED_FAMILIES.includes(f)) || fams.find((f) => f !== 'unknown') || 'unknown', localServed: false, endpoint: ep, ...none };
 }
 
 function familyOf(runner, model, endpoint) { return resolution(runner, model, endpoint).family; }
@@ -408,23 +534,27 @@ function taskFacts({ files = [], diffFiles = [], role = '', env = process.env })
 // -> { allowed, family, cls?, line? }
 function check(opts = {}) {
   const { runner, model, endpoint, files = [], diffFiles = [], role = '', env = process.env, cwd = process.cwd() } = opts;
-  const { family, localServed, endpoint: effectiveEndpoint } = resolution(runner, model, endpoint);
+  const { family, localServed, endpoint: effectiveEndpoint, localNameExternal } = resolution(runner, model, endpoint, env);
   if (String(env.AUTOPILOT_TEST_CN_GATE_OFF || '') === '1' || !BARRED_FAMILIES.includes(family)) return { allowed: true, family };
   const root = repoRootOf(cwd);
   const cfg = loadConfig(root);
   const f = taskFacts({ files, diffFiles, role, env });
   const block = (cls) => ({ allowed: false, family, cls, line: refusalLine(family, cls) });
+  // Listed local name, host is not the fleet's own gateway: external, before size/role.
+  if (localNameExternal) return block('local_name_external_host');
   if (f.transcript) return block('transcript');
   if (matchesAny(path.basename(root), cfg.sensitive_repos) || f.scope.some((p) => matchesAny(p, cfg.sensitive_paths))) return block('sensitive');
   // Review roles are refused at every size. A review rail role (or brief Role:) is a floor that
   // env/header Role: implementer cannot lower. The local served family skips this class only
   // inside a shipped review_local_exceptions window on a repo outside local_deny_repos.
   const reviewRolesToCheck = [f.role, f.railRole, f.headerRole].filter(Boolean);
-  if (reviewRolesToCheck.some((r) => cfg.review_roles.includes(r))) {
-    const exempt = localServed && reviewLocalExempt(effectiveEndpoint, gateNow(opts), root, cfg.local_deny_repos);
+  const reviewHits = reviewRolesToCheck.filter((r) => cfg.review_roles.includes(r));
+  if (reviewHits.length) {
+    const exempt = localServed && reviewLocalExempt(effectiveEndpoint, gateNow(opts), root, cfg.local_deny_repos, reviewHits);
     if (!exempt) return block('review-role');
   }
-  if (BIG_SIZES.includes(f.size)) return block('core-size');
+  // Proven-local served family: size above S is not a CN core-size bar (gpu-lead 27B). A missing size still fails closed below.
+  if (!localServed && BIG_SIZES.includes(f.size)) return block('core-size');
   // localServed may edit core directories: the gate exists to stop data leaving the fleet
   // (operator via PM, ledger fadf8dc9). Other classes above and below are unchanged.
   if (!localServed && cfg.core_dirs.length === 0) {
@@ -446,13 +576,18 @@ function check(opts = {}) {
     if (unset) return block('core-unset');
   } else if (!localServed && f.scope.some((p) => matchesAny(p, cfg.core_dirs))) return block('core-dir');
   if (f.novel || cfg.novel_roles.includes(f.role) || cfg.novel_roles.includes(f.railRole)) return block('novel');
-  if (!SMALL_SIZES.includes(f.size)) return block('unknown-size');
+  if (!SMALL_SIZES.includes(f.size) && !(localServed && BIG_SIZES.includes(f.size))) return block('unknown-size');
   if (!f.role) return block('unknown-role');
   if (!f.scope.length) return block('unknown-scope');
   if (localServed) {
     if (matchesAny(path.basename(root), cfg.local_deny_repos)) return block('local-deny-repo');
-    if (!f.taskClass) return block('unknown-task-class');
-    if (!cfg.local_task_classes.includes(f.taskClass)) return block('task-class');
+    // Trial scope (PM ruling): an implementer in a local_restricted_repos repo needs no Task-Class.
+    const trial = f.role === 'implementer' && inRestrictedTrial(path.basename(root));
+    if (!trial) {
+      if (!f.taskClass) return block('unknown-task-class');
+      if (!cfg.local_task_classes.includes(f.taskClass)) return block('task-class');
+    }
+    if (restrictedRepoBlocks(path.basename(root), f, trial)) return block('local-restricted-repo');
   }
   return { allowed: true, family };
 }

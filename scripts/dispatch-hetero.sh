@@ -20,14 +20,17 @@
 #
 # USAGE:
 #   scripts/dispatch-hetero.sh --branch <name> --prompt-file <file>
-#       [--model <id>]                        # no built-in model. Unpinned (no --runner/--model) goes to
-#                                             # grok-4.7 at effort low; --runner codex -> gpt-6.1-terra low,
+#       [--model <id>]                        # no built-in model. An implementer call with no --runner,
+#                                             # and no pace selection or strict-contract pin, uses runner local
+#                                             # and, when --model is omitted, model qwen. --runner grok with
+#                                             # no --model is still grok-4.7 at effort low; --runner codex -> gpt-6.1-terra low,
 #                                             # --runner agy -> gemini-4-hydrogen-low low (never carbon),
 #                                             # --runner opencode -> opencode-go/beam-free (no variant),
 #                                             # cursor/kimi use broker defaults; other runners REQUIRE --model.
 #                                             # A gemini-flash[-tier] alias still resolves against the live
 #                                             # `agy models` inventory. Explicit --model/--effort always win.
-#       [--runner auto|codex|agy|grok|cc-shim|local|pi|cursor|opencode|kimi|claude-native|qoderclicn] # default auto: *gpt*/*codex*→codex,
+#       [--runner auto|codex|agy|grok|cc-shim|local|pi|cursor|opencode|kimi|claude-native|qoderclicn] # implementer default (no --runner, no pace selection or contract pin): local only when qwen_local resolves ready and the cn gate allows that seat; otherwise grok-4.7.
+#                                              #   Other roles stay auto: *gpt*/*codex*→codex,
 #                                              #   local: shorthand for cc-shim + --sandbox bwrap + an endpoint that
 #                                              #   is qwen_local by default, or --endpoint when that name is listed
 #                                              #   in scripts/lib/local-sandbox-endpoints.json. An unlisted
@@ -35,6 +38,12 @@
 #                                              #   is a precondition conflict. Result and manifest record runner
 #                                              #   local, resolved_runner cc-shim, and the endpoint actually used
 #                                              #   (qwen_local by default, or the listed --endpoint).
+#                                              #   A local run whose prompt has no Task-Class field in the gate
+#                                              #   header window (first 8 lines, at line start or after |) gets
+#                                              #   that field on a prompt copy only (Task-Class: simple-script);
+#                                              #   the caller's file is not edited. Body prose is not a field.
+#                                              #   A local run with no --worktree-parent uses a 0700 per-user directory
+#                                              #   under $XDG_RUNTIME_DIR if set, else ${TMPDIR:-/tmp}, never inside the repo.
 #                                              #   Child env sets ENABLE_TOOL_SEARCH=false, does not set
 #                                              #   CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, and sets
 #                                              #   ANTHROPIC_CUSTOM_HEADERS to the caller's existing headers
@@ -113,7 +122,8 @@
 #                                              #   references/hetero-dispatch.md § Write sandbox.
 #       [--worktree-parent <abs dir>]          # place the new worktree under this directory instead of
 #                                              #   <main checkout>/.claude/worktrees (required with --sandbox bwrap
-#                                              #   unless --reuse-worktree: the default place is inside the repo)
+#                                              #   unless --reuse-worktree, except --runner local, which fills this
+#                                              #   with a 0700 per-user dir outside the repo when the flag is omitted)
 #       [--context-window off|warn|block]      # pre-dispatch context-window gate (default:
 #                                              #   block; also AUTOPILOT_CONTEXT_WINDOW_GATE).
 #                                              #   Over budget ⇒ fail closed BEFORE the runner
@@ -536,6 +546,7 @@ cnative_account_state() {
 }
 PI_BIN="pi"
 GROK_PROMPT_FILE=""   # grok-only combined prompt temp; init early so the INT/TERM trap can reap it
+PROMPT_SHA256_SEALED="" # sha256 of the exact bytes the selected runner reads; empty until sealed
 EFFORT_SENT=""        # final effort actually sent (or "default" when none is); set once before the worker, read by emit/manifest and detach declare -p
 QODER_PROMPT_FILE=""  # qoder combined prompt temp; init early so the INT/TERM trap and detach declare -p can reap it
 CCSHIM_PROMPT_FILE="" # cc-shim combined prompt temp; same trap-reap rationale
@@ -560,6 +571,7 @@ CURSOR_FAST=0          # --cursor-fast opt-in (default non-fast); runner-scoped,
 SCAFFOLD_TIER_ARG="auto"      # --scaffold-tier auto|T0|T1|T2 (explicit may only ADD scaffolding)
 SCAFFOLD_TIER_EFFECTIVE="off" # recorded in the run manifest
 SCAFFOLD_PROMPT_FILE=""       # tier-envelope temp; init early for trap reap
+LOCAL_CLASS_PROMPT_FILE=""    # local Task-Class copy; caller's prompt file is never edited
 AGY_ENVELOPE=""       # private native JSON stdout; never exposed as agent_log
 CCSHIM_ENVELOPE=""    # private claude -p --output-format json stdout; result text is what reaches LOG
 SANDBOX="off"          # --sandbox off|bwrap (cc-shim, or the one cloud fallback re-exec)
@@ -2576,6 +2588,23 @@ die_resource_budget() {
   exit 2
 }
 
+# seal_runner_prompt_bytes <file> — scan and hash the exact bytes one runner will read.
+# The early PROMPT_FILE scan stays. This second scan covers the banner plus the prompt
+# (or the raw file, when that runner reads it unchanged). A hit refuses before spawn.
+# PROMPT_SHA256_SEALED is what write_manifest records, including the later finalize.
+seal_runner_prompt_bytes() {
+  local file="$1" cats="" rc=0 _psha=""
+  [ -n "$file" ] && [ -f "$file" ] || die_precondition "outbound_secret: unreadable"
+  cats="$(node "$SELF_DIR/lib/outbound-secret-scan.js" --categories "$file")"; rc=$?
+  if [ "$rc" -ne 0 ]; then
+    die_precondition "outbound_secret: ${cats:-unreadable}"
+  fi
+  _psha="$(sha256sum -- "$file" 2>/dev/null | awk 'NR==1 { print $1 }')"
+  [[ "$_psha" =~ ^[0-9a-f]{64}$ ]] || die_precondition "outbound_secret: prompt digest failed"
+  PROMPT_SHA256_SEALED="$_psha"
+  write_manifest "${MANIFEST_PID_RECORDED:-$$}"
+}
+
 # write_manifest [pid] — (re)write the run manifest atomically. Best-effort: ANY failure
 # is swallowed (the manifest is a telemetry sidecar, never a dispatch dependency).
 # Called at three points: pre-dispatch (parent pid), detached-child start (child pid —
@@ -2711,12 +2740,25 @@ write_manifest() {
     printf '%s\n' "$tip_verify_json" | grep -Eq '^(null|"pass"|"fail"|"timeout"|"no_source"|"skipped_by_flag")$' || tip_verify_json="null"
     printf '%s\n' "$tip_verify_source_json" | grep -Eq '^(null|"flag"|"brief"|"repo_config")$' || tip_verify_source_json="null"
   fi
+  # sha256 of the bytes this runner actually reads (banner + prompt when the runner
+  # gets a banner). Sealed just before spawn. Before that, the scanned PROMPT_FILE.
+  # Absent file stays JSON null. The digest is hex, so it needs no further escaping.
+  local prompt_sha_json="null"
+  if [[ "${PROMPT_SHA256_SEALED:-}" =~ ^[0-9a-f]{64}$ ]]; then
+    prompt_sha_json="\"$PROMPT_SHA256_SEALED\""
+  elif [ -n "${PROMPT_FILE:-}" ] && [ -f "$PROMPT_FILE" ]; then
+    local _psha=""
+    _psha="$(sha256sum -- "$PROMPT_FILE" 2>/dev/null | awk 'NR==1 { print $1 }')"
+    if [[ "$_psha" =~ ^[0-9a-f]{64}$ ]]; then
+      prompt_sha_json="\"$_psha\""
+    fi
+  fi
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "lane": %s, "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "tip_verify": %s, "tip_verify_source": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, "timeout_seconds": %s, "timeout_source": "%s", "timeout_enforced": %s%s%s%s%s%s, %s, "session_id": %s, "child_session_id": %s }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "prompt_sha256": %s, "lane": %s, "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "tip_verify": %s, "tip_verify_source": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, "timeout_seconds": %s, "timeout_source": "%s", "timeout_enforced": %s%s%s%s%s%s, %s, "session_id": %s, "child_session_id": %s }\n' \
       "$(_flat_json_escape "$DISPATCH_RUN_ID")" "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
       "${BASE_SHA:-}" "$(_flat_json_escape "${WT:-}")" "$(_flat_json_escape "${WT:-}/.autopilot-worktree.lock")" "$(_flat_json_escape "${LOG:-}")" \
       "$log_format" "$duplex_json" "$pid_json" "$scope_json" "${MANIFEST_CONTAINMENT:-plain}" \
-      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${DISPATCH_STARTED_EPOCH:-null}" "$(_flat_json_escape "${PROMPT_FILE:-}")" "${DISPATCH_LANE_JSON:-null}" "${SCAFFOLD_TIER_EFFECTIVE:-off}" \
+      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${DISPATCH_STARTED_EPOCH:-null}" "$(_flat_json_escape "${PROMPT_FILE:-}")" "$prompt_sha_json" "${DISPATCH_LANE_JSON:-null}" "${SCAFFOLD_TIER_EFFECTIVE:-off}" \
       "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$tip_verify_json" "$tip_verify_source_json" "$parent_json" "$root_json" "$depth_json" \
       "$mf_timeout_secs" "$(_flat_json_escape "$mf_timeout_source")" "$mf_timeout_enforced" "$strict_manifest_fields" "$strike_suppressed_fields" "$capability_suppressed_fields" "$effort_manifest_fields$role_kit_manifest_fields" "$campaign_scope_fields" "$REPO_IDENTITY_FIELDS$(declare -F dispatch_attr_fields >/dev/null 2>&1 && dispatch_attr_fields "${PROMPT_FILE:-}" "$runner" "${ENDPOINT:-}" "${MANIFEST_FINAL_STATUS:+${OUTCOME_COMMIT:-}}")" \
       "$(declare -F manifest_session_id_json >/dev/null 2>&1 && manifest_session_id_json || printf null)" \
@@ -3123,7 +3165,8 @@ validate_d2_agy_claims() {
 # The endpoint is qwen_local by default, or --endpoint when that name is listed
 # in scripts/lib/local-sandbox-endpoints.json. The public name stays local
 # (LOCAL_RUNNER) for the result and the manifest.
-if [ "$RUNNER" = "local" ]; then
+# The implementer default sets RUNNER=local after pace, so both sites call this.
+apply_runner_local() {
   if [ "$ENDPOINT_SUPPLIED" -eq 1 ]; then
     _local_listed_rc=0
     local_sandbox_endpoint_listed "$ENDPOINT" || _local_listed_rc=$?
@@ -3157,6 +3200,9 @@ if [ "$RUNNER" = "local" ]; then
   if [[ ! "$LOCAL_LANE" =~ ^[A-Za-z0-9._-]+$ ]] || [[ "$LOCAL_LANE" == "." ]] || [[ "$LOCAL_LANE" == ".." ]]; then
     die_precondition "--runner local refuses AUTOPILOT_LANE that is empty, '.' or '..', or contains '/' or a character outside [A-Za-z0-9._-]"
   fi
+}
+if [ "$RUNNER" = "local" ]; then
+  apply_runner_local
 fi
 
 case "$EFFORT" in
@@ -3235,6 +3281,65 @@ if [ -n "$_ps_parsed" ]; then
 fi
 # Saved before skill-pack / scaffold prepend text, which would hide image magic bytes.
 VISION_PROMPT_FILE="$PROMPT_FILE"
+# Implementer with no --runner is the local qwen seat only when qwen_local
+# resolves ready and the cn gate allows that seat (same prompt the local path
+# will dispatch, including the Task-Class line it would add). Otherwise the
+# unpinned path stays pace-select / grok-4.7 and the checks below keep their
+# previous order. A pin already chose a seat when --pace-role or a pace file
+# returned one, a strict contract is on, or AUTOPILOT_QUALIFICATION_OVERRIDE
+# is set. Explicit --runner is already RUNNER_SUPPLIED.
+_impl_role="${PACE_ROLE:-${AUTOPILOT_DISPATCH_ROLE:-implementer}}"
+if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_SUPPLIED" -eq 0 ] && [ "$RUNNER" = "auto" ] && [ "$STRICT_CONTRACT" -eq 0 ] \
+   && [ -z "${ENGINE_CHOICE_JSON:-}" ] && [ -z "${AUTOPILOT_QUALIFICATION_OVERRIDE:-}" ] \
+   && [ "$_impl_role" = "implementer" ] \
+   && "$SELF_DIR/resolve-endpoint.sh" qwen_local >/dev/null 2>&1; then
+  _local_gate_prompt="$PROMPT_FILE"
+  _local_gate_tmp=""
+  if ! node -e '
+    const g = require(process.argv[1]);
+    process.exit(g.headerValue([process.argv[2]], "Task-Class") ? 0 : 1);
+  ' "$SELF_DIR/lib/cn-model-dispatch-gate.js" "$PROMPT_FILE"; then
+    _local_gate_tmp="$(mktemp -t 'dispatch-hetero-local-gate-XX''XX''XX')" && \
+      { printf '%s\n' 'Task-Class: simple-script'; cat "$PROMPT_FILE"; } > "$_local_gate_tmp" && \
+      _local_gate_prompt="$_local_gate_tmp"
+  fi
+  if [ "$_local_gate_prompt" = "$PROMPT_FILE" ] || [ -n "$_local_gate_tmp" ]; then
+    if node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --role implementer --runner cc-shim --model qwen --endpoint qwen_local --prompt-file "$_local_gate_prompt" >/dev/null 2>&1; then
+      RUNNER="local"
+    fi
+  fi
+  [ -n "$_local_gate_tmp" ] && rm -f "$_local_gate_tmp"
+  unset _local_gate_prompt _local_gate_tmp
+fi
+unset _impl_role
+if [ "$RUNNER" = "local" ]; then
+  apply_runner_local
+fi
+# --runner local (explicit or the implementer default) with no --model is qwen. An explicit --model wins.
+if [ "$LOCAL_RUNNER" -eq 1 ] && [ "$MODEL_SUPPLIED" -eq 0 ]; then
+  MODEL="qwen"
+  MODEL_IS_DEFAULT=0
+fi
+# The caller's prompt file stays untouched. Insert when the gate's header parser
+# (headerValue: first 8 lines, at line start or after |) sees no Task-Class.
+# A body mention of the words is not a field.
+if [ "$LOCAL_RUNNER" -eq 1 ] && ! node -e '
+  const g = require(process.argv[1]);
+  process.exit(g.headerValue([process.argv[2]], "Task-Class") ? 0 : 1);
+' "$SELF_DIR/lib/cn-model-dispatch-gate.js" "$PROMPT_FILE"; then
+  LOCAL_CLASS_PROMPT_FILE="$(mktemp -t 'dispatch-hetero-local-class-XX''XX''XX')"
+  { printf '%s\n' 'Task-Class: simple-script'; cat "$PROMPT_FILE"; } > "$LOCAL_CLASS_PROMPT_FILE" \
+    || die_precondition "could not copy the prompt to add Task-Class: simple-script"
+  PROMPT_FILE="$LOCAL_CLASS_PROMPT_FILE"
+  echo "dispatch-hetero: prompt has no Task-Class line; dispatched copy adds Task-Class: simple-script" >&2
+fi
+# bwrap refuses a worktree inside a repo. Local fills a 0700 per-user parent outside the checkout.
+if [ "$LOCAL_RUNNER" -eq 1 ] && [ -z "$WORKTREE_PARENT" ] && [ -z "$REUSE_WORKTREE" ]; then
+  _local_wt_base="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}"
+  WORKTREE_PARENT="$(node "$SELF_DIR/lib/local-sandbox-parent.js" "$_local_wt_base")" \
+    || die_precondition "local runner could not create a worktree parent outside the repo"
+  unset _local_wt_base
+fi
 # d-1dfcf757 / 01M7E2A1: Chinese-model dispatch gate (barred family blocked for transcript, sensitive, core, novel or unknown-scope/size/role tasks).
 _tfg_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --role implementer --runner "$RUNNER" --model "$MODEL" ${ENDPOINT:+--endpoint "$ENDPOINT"} --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" \
   || die_precondition "${_tfg_msg:-cn_model_dispatch_barred unknown unknown (01M7E2A1, d-1dfcf757)}"
@@ -4974,6 +5079,7 @@ abort_dispatch() {
   reap_container
   cleanup_managed_codex_home
   [ -n "$SCAFFOLD_PROMPT_FILE" ] && rm -f "$SCAFFOLD_PROMPT_FILE"
+  [ -n "${LOCAL_CLASS_PROMPT_FILE:-}" ] && rm -f "$LOCAL_CLASS_PROMPT_FILE"
   [ -n "$GROK_PROMPT_FILE" ] && rm -f "$GROK_PROMPT_FILE"
   [ -n "$CCSHIM_PROMPT_FILE" ] && rm -f "$CCSHIM_PROMPT_FILE"
   _reap_ccshim_env_dir
@@ -5513,6 +5619,8 @@ run_agent() {
 if [ "$IS_CODEX" -eq 1 ]; then
   EFFORT_SENT="$EFFORT"
   prepare_managed_codex_home
+  # Codex reads PROMPT_FILE on stdin, with no harness banner added here.
+  seal_runner_prompt_bytes "$PROMPT_FILE"
   run_worker bash -c 'cd "$1" && exec env -u CODEX_THREAD_ID CODEX_HOME="$6" \
       "$5" exec --ignore-user-config --model "$2" \
       --dangerously-bypass-approvals-and-sandbox \
@@ -5539,6 +5647,7 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
 "
   CCSHIM_PROMPT_FILE="$(mktemp -t dispatch-hetero-ccshim-prompt-XXXXXX)"
   printf '%s' "${CCSHIM_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$CCSHIM_PROMPT_FILE"
+  seal_runner_prompt_bytes "$CCSHIM_PROMPT_FILE"
   # Harness-owned envelope: claude's JSON stdout never shares the worker log.
   # The result string (or the raw bytes if it does not parse) is appended to
   # LOG so classify-error and other log consumers still see the old plain text.
@@ -5783,6 +5892,7 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
   # resolves --prompt-file relative to --cwd (Spike-verified 2026-06-29). mktemp is absolute.
   GROK_PROMPT_FILE="$(mktemp -t dispatch-hetero-grok-prompt-XXXXXX)"
   printf '%s' "${GROK_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$GROK_PROMPT_FILE"
+  seal_runner_prompt_bytes "$GROK_PROMPT_FILE"
   # effort enum is per-MODEL (grok-4.5 rejects xhigh; 4.6+ accept) ⇒ clamp against THIS model's live enum.
   GROK_EFFORT="$(grok_effort_clamp "$EFFORT" "$MODEL" "$GROK_BIN")"
   EFFORT_SENT="$GROK_EFFORT"
@@ -5814,6 +5924,7 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
 "
   QODER_PROMPT_FILE="$(mktemp -t dispatch-hetero-qoder-prompt-XXXXXX)"
   printf '%s' "${QODER_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$QODER_PROMPT_FILE"
+  seal_runner_prompt_bytes "$QODER_PROMPT_FILE"
   QODER_CFG_ARGS=()
   [ -n "${QODER_CONFIG_DIR:-}" ] && QODER_CFG_ARGS+=(--config-dir "$QODER_CONFIG_DIR")
   run_worker bash -c 'cd "$1" && exec "$2" -p --model "$4" -w "$1" \
@@ -5848,6 +5959,7 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
 "
   OPENCODE_PROMPT_FILE="$(mktemp -t dispatch-hetero-opencode-prompt-XXXXXX)"
   printf '%s' "${OPENCODE_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$OPENCODE_PROMPT_FILE"
+  seal_runner_prompt_bytes "$OPENCODE_PROMPT_FILE"
   EFFORT_SENT="$EFFORT"
   # argv/env come from lib/opencode-containment.js (`plan --profile implement`): v1 =
   # `run --dir <wt> --pure -m M --variant V --format json`; v2 (opencode 2.x removed those flags) =
@@ -5879,10 +5991,14 @@ elif [ "$IS_KIMI" -eq 1 ] && [ "$BIN_FLAG_KIMI" -eq 1 ]; then
   #   (above) so the run here sends the EXACT bytes that were size-checked.
   KIMI_PROMPT_FILE="$(mktemp -t dispatch-hetero-kimi-prompt-XXXXXX)"
   printf '%s' "${KIMI_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$KIMI_PROMPT_FILE"
+  # -p "$(cat file)" drops trailing newlines. Hash and send those exact argv bytes.
+  KIMI_SENT_FILE="$(mktemp -t dispatch-hetero-kimi-sent-XXXXXX)"
+  printf '%s' "$(cat "$KIMI_PROMPT_FILE")" > "$KIMI_SENT_FILE"
+  seal_runner_prompt_bytes "$KIMI_SENT_FILE"
   EFFORT_SENT="${KIMI_EFFORT_SEND:-default}"
   run_worker bash -c 'cd "$1" && exec "$2" -m "$4" -p "$(cat "$3")" --output-format text' \
-      _ "$WT" "$KIMI_BIN" "$KIMI_PROMPT_FILE" "$MODEL"
-  rm -f "$KIMI_PROMPT_FILE"
+      _ "$WT" "$KIMI_BIN" "$KIMI_SENT_FILE" "$MODEL"
+  rm -f "$KIMI_SENT_FILE" "$KIMI_PROMPT_FILE"
   # Part 3: kimi has no usage command; its result is the quota signal (429 -> exhausted + reset, clean -> available).
   node "$SELF_DIR/lib/kimi-quota-observe.js" observe --rc "${AGENT_EXIT:-0}" --log-file "$LOG" >/dev/null 2>&1 || true
 elif [ "$IS_CURSOR" -eq 1 ] || [ "$IS_KIMI" -eq 1 ]; then
@@ -5895,6 +6011,17 @@ elif [ "$IS_CURSOR" -eq 1 ] || [ "$IS_KIMI" -eq 1 ]; then
     broker_group_wrapper="${AUTOPILOT_KIMI_GROUP_WRAPPER:-sg}"
   fi
   BROKER_RESULT="$LOG.$BROKER_RUNNER-broker.json"
+  # The broker prepends EDIT_ONLY inside readPrompt. Hash that string, not PROMPT_FILE.
+  BROKER_PROMPT_FILE="$(mktemp -t dispatch-hetero-broker-prompt-XXXXXX)"
+  node - "$SELF_DIR/lib/cursor-broker-client.js" "$BROKER_PROMPT_FILE" "$PROMPT_FILE" "$BROKER_RUNNER" <<'NODE' \
+    || die_precondition "broker prompt materialize failed"
+const fs = require('fs');
+const { readPrompt } = require(process.argv[2]);
+fs.writeFileSync(process.argv[3], readPrompt(process.argv[4], process.argv[5]));
+NODE
+  seal_runner_prompt_bytes "$BROKER_PROMPT_FILE"
+  rm -f "$BROKER_PROMPT_FILE"
+  BROKER_PROMPT_FILE=""
   printf -v broker_group_cmd '%q ' "$(command -v node)" "$SELF_DIR/lib/cursor-broker-run.js" \
     "$WT" "$PROMPT_FILE" "$MODEL" "$BROKER_TIMEOUT_S" "$DISPATCH_RUN_ID" "$BROKER_RESULT" "$BROKER_RUNNER"
   run_worker "$broker_group_wrapper" lanegit -c "$broker_group_cmd"
@@ -5935,6 +6062,19 @@ elif [ "$IS_PI" -eq 1 ]; then
   # supervisor polls + steers + acks; it gates cleanly on absence). Gated on ALL three
   # coords — a partial set forwards nothing (supervisor would refuse anyway; keep the
   # no-coords invocation byte-identical to pre-Phase-2).
+  # pi-rpc-run prepends HARNESS_EDIT_ONLY before the RPC prompt message. Hash those bytes.
+  PI_FINAL_PROMPT="$(mktemp -t dispatch-hetero-pi-prompt-XXXXXX)"
+  node - "$SELF_DIR/lib/pi-rpc-run.js" "$PI_FINAL_PROMPT" "$PROMPT_FILE" <<'NODE' \
+    || die_precondition "pi prompt materialize failed"
+const fs = require('fs');
+const src = fs.readFileSync(process.argv[2], 'utf8');
+const m = src.match(/const HARNESS_EDIT_ONLY = `([\s\S]*?)`;\r?\n/);
+if (!m) { process.stderr.write('pi harness banner missing\n'); process.exit(2); }
+fs.writeFileSync(process.argv[3], Buffer.concat([Buffer.from(m[1], 'utf8'), fs.readFileSync(process.argv[4])]));
+NODE
+  seal_runner_prompt_bytes "$PI_FINAL_PROMPT"
+  rm -f "$PI_FINAL_PROMPT"
+  PI_FINAL_PROMPT=""
   if [ -n "$LEDGER" ] && [ -n "$RUN_ID" ] && [ -n "$STAGE" ]; then
     run_worker bash -c 'cd "$1" && exec node "$2" --pi-bin "$3" --provider "$4" --model "$5" --cwd "$1" --prompt-file "$6" --ledger "$7" --run-id "$8" --stage "$9"' _ "$WT" "$SELF_DIR/lib/pi-rpc-run.js" "$PI_BIN" "${PI_RPC_PROVIDER:-minimax}" "$MODEL" "$PROMPT_FILE" "$LEDGER" "$RUN_ID" "$STAGE"
   else
@@ -5990,13 +6130,20 @@ else
   # non-zero-agent path (agent_log gets stderr, status from git artifacts).
   # NOTE: no positional parameter above $9 — systemd-run (the scope branch of run_worker) expands
   # `${10}` in the command line, so the script `shift`s the worktree off instead.
+  # agy-stream-json concatenates --prefix and the prompt file. Write that once and
+  # pass it with an empty prefix so the sealed file is what agy is given.
+  AGY_FINAL_PROMPT="$(mktemp -t dispatch-hetero-agy-prompt-XXXXXX)"
+  { printf '%s' "$AGY_EDIT_ONLY"; cat "$PROMPT_FILE"; } > "$AGY_FINAL_PROMPT"
+  seal_runner_prompt_bytes "$AGY_FINAL_PROMPT"
   run_worker bash -c 'cd "$1" && shift && exec node "$8" run --prompt-file "$9" --prefix "$2" --emit envelope \
       -- "$1" --new-project --model "$3" --effort "$7" \
       --dangerously-skip-permissions --print-timeout "$4" \
       >"$5" 2>"$6"' \
-      _ "$WT" "$AGY_BIN" "$AGY_EDIT_ONLY" "$MODEL" "$AGY_PRINT_TIMEOUT" \
+      _ "$WT" "$AGY_BIN" "" "$MODEL" "$AGY_PRINT_TIMEOUT" \
       "$AGY_ENVELOPE" "$AGY_STDERR" "$AGY_EFFORT" \
-      "$SELF_DIR/lib/agy-stream-json.js" "$PROMPT_FILE"
+      "$SELF_DIR/lib/agy-stream-json.js" "$AGY_FINAL_PROMPT"
+  rm -f "$AGY_FINAL_PROMPT"
+  AGY_FINAL_PROMPT=""
   local _agy_early_return=0
   if [ "$AGENT_EXIT" -ne 0 ]; then
     cat "$AGY_STDERR" >> "$LOG"
@@ -7372,7 +7519,7 @@ dispatch_detached_run() {
     # detached child dies with "command not found" before the claude worker starts.
     declare -f token_seat_guard 2>/dev/null || true
     declare -f agy_print_timeout agy_assert_disposable_home die_precondition fell_back_json_suffix hetero_log_fallback child_session_env_setup repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_worker_alive _watchdog_signal_worker _arm_worker_watchdog _worker_has_busy_descendant _supervise_commit_quiet _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts capture_structured_provider_error _prefer_structured_classified_error passive_capture \
-      _is_engine_unavailable _hetero_runner_token _capability_write_note _capability_write_suppress_now seat_strike_capture classify_outcome _emit_question_waiting_event heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks resolve_tip_verify_commands run_tip_verify _fp_unverifiable main_checkout_fingerprint main_checkout_parts_digest main_checkout_describe_delta main_checkout_wt_symlink_leaks check_main_checkout_boundary run_hands_content_gate run_hands_backlog_gate \
+      _is_engine_unavailable _hetero_runner_token _capability_write_note _capability_write_suppress_now seat_strike_capture classify_outcome _emit_question_waiting_event heartbeat_loop detached_main seal_runner_prompt_bytes write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks resolve_tip_verify_commands run_tip_verify _fp_unverifiable main_checkout_fingerprint main_checkout_parts_digest main_checkout_describe_delta main_checkout_wt_symlink_leaks check_main_checkout_boundary run_hands_content_gate run_hands_backlog_gate \
       _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \
       _wt_has_control_chars _wt_resolve_repo_root _wt_read_marker_created_at _wt_json_escape _wt_is_live \

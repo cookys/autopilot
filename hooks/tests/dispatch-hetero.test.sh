@@ -24,7 +24,7 @@ done
 unset _git_cfg_i
 
 REAL_SCRIPT="$REPO_ROOT/scripts/dispatch-hetero.sh"
-# A call with no --runner and no --model is the unpinned grok default (impl-defaults.test.sh covers it), but this
+# A call with no --runner and no --model is the local qwen default (dispatch-hetero-local-default.test.sh). This
 # suite's fixtures drive the agy rail through --agy-bin stubs. SCRIPT pins --runner agy on such calls; a call that
 # names --model, --runner, a pace role or a contract goes to the real script untouched. Default-behaviour
 # assertions call "$REAL_SCRIPT" directly.

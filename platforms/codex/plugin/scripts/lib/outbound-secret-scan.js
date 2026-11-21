@@ -8,7 +8,7 @@
  *   Output: `<file>:<line>: <category>` per hit — NEVER the matched text. With
  *   --categories: one line, the sorted unique categories joined by commas.
  *
- * Categories: pem_key, bearer_token, token_prefix, long_base64, long_hex,
+ * Categories: pem_key, bearer_token, token_prefix, url_credentials, long_base64, long_hex,
  *   number_run, b64_key32.
  * Token-prefix patterns (ghp_/sk-/xox...) are the shared hooks/_shared/secret-patterns.js
  * list; this file adds only the shapes that list does not cover (ported from alfred's
@@ -82,6 +82,8 @@ function defaultAllowPath() {
 
 const RE_PEM = /-----BEGIN [A-Z0-9 ]*(?:PRIVATE KEY|KEY BLOCK)-----/;
 const RE_BEARER = /\bBearer[ \t]+[A-Za-z0-9._~+/=-]{20,}/i;
+// user:password in a URL authority. Category only is emitted; the match itself stays internal.
+const RE_URL_CRED = /[a-z][a-z0-9+.-]*:\/\/[^\s/:@]+:[^\s/@]+@[^\s/]+/i;
 const RE_LONG = new RegExp(`[A-Za-z0-9+/]{${LONG_RUN},}={0,2}`);
 // 43 base64 chars, optional '=' pad; neighbours may not continue the token.
 const RE_KEY32 = /(?<![A-Za-z0-9+/=._-])([A-Za-z0-9+/]{43})(?:=)?(?![A-Za-z0-9+/=._-])/g;
@@ -106,6 +108,7 @@ function scanText(text, allow = new Set()) {
     const n = i + 1;
     for (const m of eachMatch(RE_PEM, line)) add(n, 'pem_key', m[0]);
     for (const m of eachMatch(RE_BEARER, line)) add(n, 'bearer_token', m[0]);
+    for (const m of eachMatch(RE_URL_CRED, line)) add(n, 'url_credentials', m[0]);
     for (const { pattern } of secrets.patterns) {
       for (const m of eachMatch(pattern, line)) add(n, 'token_prefix', m[0]);
     }

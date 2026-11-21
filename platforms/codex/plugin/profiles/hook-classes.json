@@ -15,6 +15,7 @@
     { "stem": "commit-secret-scan", "class": "invariant_effect" },
     { "stem": "config-protection", "class": "invariant_effect" },
     { "stem": "context-budget", "class": "invariant_effect" },
+    { "stem": "context-land-gate", "class": "invariant_effect" },
     { "stem": "cost-fuse", "class": "invariant_effect" },
     { "stem": "cost-tracker", "class": "invariant_effect" },
     { "stem": "depth0-delegate-gate", "class": "invariant_effect" },

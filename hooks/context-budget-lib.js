@@ -54,6 +54,7 @@ const DEFAULT_STEP = 50_000;
 // past the real ceiling and silence the hook entirely.
 const KNOWN_WINDOWS = [200_000, 1_000_000];
 const BASE_WINDOW = 200_000; // the window the default tiers were calibrated for
+const T3_WINDOW_RATIO = 0.7;
 
 /** Smallest known context window strictly greater than the largest observation. */
 function inferWindowTokens(observedMax, windows = KNOWN_WINDOWS) {
@@ -101,6 +102,8 @@ function tiersForKnownWindow(cfg, window) {
     ...cfg,
     t1: cfg.explicitT1 ? cfg.t1 : Math.round(cfg.t1 * ratio),
     t2: cfg.explicitT2 ? cfg.t2 : Math.round(cfg.t2 * ratio),
+    // T3 default: 70% of an exactly known window (budgetDecision ignores it unless it is above t2).
+    t3: cfg.explicitT3 ? cfg.t3 : (Number.isFinite(window) && window > 0 ? Math.round(window * T3_WINDOW_RATIO) : 0),
     inferredWindow: window,
   };
 }
@@ -216,6 +219,37 @@ function stepEligible(contextTokens, lastCtx, step) {
   return delta >= step || delta <= -step;
 }
 
+// The fixed land checklist (T2 and T3). The model answers each item; the context-land-gate Stop hook
+// then blocks stopping (at most twice per fire) until a handoff file newer than the fire exists.
+function landMessage(label, k, pct, threshold, handoffPath) {
+  const where = handoffPath ? `；handoff 檔寫到 ${handoffPath}` : '';
+  return `Context budget ${label}: context is ${k}k tokens${pct} (threshold ${Math.round(threshold / 1000)}k). 先落地再繼續，逐項回答：\n` +
+    '1. 本 session 有沒有還沒寫回 repo 的東西：文件、skill、SOP、討論結論、發現、知識、plan、決策紀錄、memory？\n' +
+    '2. 有的話寫去哪：照 references/knowledge-routing.md 的去向表（先跑 scripts/resolve-knowledge-routing.sh 取本專案的實際路徑），用 learn / distill 落地。\n' +
+    `3. 然後執行 /handoff（autopilot:handoff skill）${where}。\n` +
+    '沒寫 handoff 就停下會被擋（每次觸發最多擋兩次）。';
+}
+
+// --- land gate shared helpers (context-budget.js writes the fire, context-land-gate.js reads it) ---
+function sessionIdOf(payload) {
+  const { sanitizeSessionId } = require('../scripts/lib/live-state-dir.js');
+  const raw = (payload && typeof payload.session_id === 'string' && payload.session_id)
+    || process.env.CLAUDE_CODE_SESSION_ID
+    || process.env.CLAUDE_SESSION_ID
+    || process.cwd();
+  return sanitizeSessionId(raw);
+}
+
+function stateDirOf(liveBase) {
+  return process.env.AUTOPILOT_CONTEXT_BUDGET_DIR || require('path').join(liveBase, 'context-budget');
+}
+
+// The per-session handoff file the land checklist names: the same path the post-compaction restore reads
+// (scripts/lib/compaction-handoff.js modelNotePath; one implementation, lazily loaded to keep hooks light).
+function sessionHandoffPath(sid) {
+  return require('../scripts/lib/compaction-handoff.js').modelNotePath(sid, {});
+}
+
 /**
  * Pure tier decision. state: {contextTokens, calls, lastT1Context, lastT2Context};
  * cfg: {t1, t2, step}. Returns {tier: null|'t1'|'t2', message: string|null}.
@@ -238,6 +272,12 @@ function budgetDecision(state, cfg) {
       : 'inferred from observed usage';
   const pct = win ? ` = ${Math.round((contextTokens / win) * 100)}% of the ` +
     `~${Math.round(win / 1000)}k window ${windowClause}` : '';
+  // T3 outranks T2. Only above t2 (a default 70% of a 200K window sits below t2: then T2 is the last tier).
+  // Resident seats and an unknown window never get it by default (cfg.t3 is 0 there).
+  if (cfg.t3 > 0 && cfg.t3 > (cfg.t2 || 0) && cfg.seat !== 'resident' && contextTokens >= cfg.t3) {
+    if (!stepEligible(contextTokens, state.lastT3Context || 0, step)) return { tier: null, message: null };
+    return { tier: 't3', land: true, message: landMessage('T3', k, pct, cfg.t3, cfg.handoffPath) };
+  }
   if (cfg.t2 > 0 && contextTokens >= cfg.t2) {
     // lastT2Context 0 = never fired ⇒ always eligible (first crossing must not be throttled)
     if (!stepEligible(contextTokens, lastT2Context, step)) return { tier: null, message: null };
@@ -247,11 +287,10 @@ function budgetDecision(state, cfg) {
     // it like T1 (exit 0, additionalContext).
     const resident = cfg.seat === 'resident';
     const residentClose = 'Update the state file and confirm that after compaction only the state file path and unfinished items remain.';
-    // Every session, window set or not: keep working. A handoff file is a backup.
-    // A slash command that resets the session is a user action this lane cannot press.
-    const keepWorking = resident
-      ? `Keep working. Claude Code auto-compacts at the window. ${residentClose}`
-      : 'Keep working. Claude Code auto-compacts at the window; write a handoff file as a BACKUP (not as a stopping point) and continue the task.';
+    // Resident seats cannot change thread: they keep the state-file wording. Every other seat gets the
+    // fixed land checklist (landMessage): the old "keep working, handoff as a backup" wording was ignored.
+    const keepWorking = `Keep working. Claude Code auto-compacts at the window. ${residentClose}`;
+    const keepWorkingAdvisory = 'Keep working. Claude Code auto-compacts at the window; write a handoff file as a BACKUP (not as a stopping point) and continue the task.';
     if (cfg.windowUnknown === true) {
       return {
         tier: 't2',
@@ -264,12 +303,15 @@ function budgetDecision(state, cfg) {
             '(no statusline live file, so 200K and 1M cannot be told apart). ' +
             'If this is a 200K window, the handoff file is the backup; ' +
             'on a 1M window this is early and no action is needed. ' +
-            keepWorking,
+            keepWorkingAdvisory,
       };
     }
     return {
       tier: 't2',
-      message: `Context budget T2: context is ${k}k tokens${pct} (threshold ${Math.round(cfg.t2 / 1000)}k). ${keepWorking}`,
+      land: !resident,
+      message: resident
+        ? `Context budget T2: context is ${k}k tokens${pct} (threshold ${Math.round(cfg.t2 / 1000)}k). ${keepWorking}`
+        : landMessage('T2', k, pct, cfg.t2, cfg.handoffPath),
     };
   }
   if (cfg.t1 > 0 && contextTokens >= cfg.t1) {
@@ -302,6 +344,11 @@ module.exports = {
   readContextTokens,
   readContextUsage,
   budgetDecision,
+  landMessage,
+  sessionIdOf,
+  stateDirOf,
+  sessionHandoffPath,
+  T3_WINDOW_RATIO,
   usageOf,
   inferWindowTokens,
   scaleTiers,

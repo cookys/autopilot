@@ -50,7 +50,7 @@ In a Mission graph, each node's `verification_commands` hold only fast, fixed ch
 
 ## What this repo is
 
-Standalone lifecycle orchestration plugin: 31 skills, 3 methodology agents, 53 hooks (34 default-on,
+Standalone lifecycle orchestration plugin: 31 skills, 3 methodology agents, 54 hooks (35 default-on,
 19 opt-in). Optional integrations and coexistence rules: [`docs/guide/coexistence.md`](docs/guide/coexistence.md).
 
 

@@ -35,6 +35,8 @@ Triggered by "寫 handoff", "寫 handover", "ctx 太滿", "context 快滿", "cle
    - `projects_dir: none`, or no active project under it: the **manual route already
      defined below** — the path `node <plugin>/scripts/resolve-repo-placement.js handoff --route manual` prints. Do not invent a
      doc root; a handoff nobody can find is worse than one outside the repo.
+   - A context-budget T2/T3 message names a session handoff path (`$XDG_RUNTIME_DIR/autopilot/handoff/<session_id>.md`):
+     write the handoff there (the `context-land-gate` Stop hook looks for it, and blocks stopping until it is newer than the fire).
    - Repo not writable or no repo: the path `node <plugin>/scripts/resolve-repo-placement.js handoff --route manual` prints
 
 2.5. **Sweep the session, not just the document** (do this BEFORE drafting step 3):

@@ -103,7 +103,7 @@ test('config seat=resident reaches the hook T2 text', () => {
   const unknownLine = unknown.stderr.split('\n').find((l) => l.startsWith('Context budget T2'));
   assert.strictEqual(sessionLine, unsetLine);
   assert.strictEqual(unknownLine, unsetLine);
-  assert.match(unsetLine, /handoff/i);
+  assert.match(unset.stderr, /\/handoff/);
 });
 
 test('outer AUTOPILOT_CONTEXT_BUDGET_SEAT=resident does not leak into the session-default case', () => {
@@ -113,7 +113,7 @@ test('outer AUTOPILOT_CONTEXT_BUDGET_SEAT=resident does not leak into the sessio
     const unset = runHook('{}\n', {});
     assert.strictEqual(unset.status, 2);
     const line = unset.stderr.split('\n').find((l) => l.startsWith('Context budget T2'));
-    assert.match(line, /handoff/i);
+    assert.match(unset.stderr, /\/handoff/);
     assert.doesNotMatch(line, /state file path and unfinished items/);
   } finally {
     if (prev === undefined) delete process.env.AUTOPILOT_CONTEXT_BUDGET_SEAT;

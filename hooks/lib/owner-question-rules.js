@@ -189,7 +189,8 @@ function languageCheck(text) {
   const lowRatio = total >= LANGUAGE_MIN_CHARS && ratio < LANGUAGE_MIN_CJK_RATIO;
   const simplified = [];
   const seen = new Set();
-  for (const ch of stripped) {
+  const unquoted = stripped.replace(/「[^」\r\n]*」|『[^』\r\n]*』|“[^”\r\n]*”|"[^"\r\n]*"/g, ' ');
+  for (const ch of unquoted) {
     const trad = SIMPLIFIED_TO_TRADITIONAL[ch];
     if (trad && !seen.has(ch)) {
       seen.add(ch);

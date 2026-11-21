@@ -249,6 +249,26 @@ describe('owner-question-rules false-block regressions', () => {
       assert.equal(res && res.decision, 'block');
     });
 
+    it('passes: quoted Simplified examples', () => {
+      assert.equal(rules.languageCheck('簡體字檢測會擋「这」「应该」「档案」這類字。'), null);
+      for (const text of ['這是『这』的範例。', '這是“这”的範例。', '這是"这"的範例。']) {
+        assert.equal(rules.languageCheck(text), null);
+      }
+    });
+
+    it('blocks: unquoted Simplified characters and names them', () => {
+      const res = rules.languageCheck('我们应该这样做，这个档案要改。');
+      assert.equal(res && res.decision, 'block');
+      assert.match(res.reason, /这/);
+    });
+
+    it('blocks: unquoted characters but does not name quoted examples', () => {
+      const res = rules.languageCheck('這裡引用「这」，但应该改寫。');
+      assert.equal(res && res.decision, 'block');
+      assert.match(res.reason, /应/);
+      assert.doesNotMatch(res.reason, /这/);
+    });
+
     it('blocks: mostly Chinese reply containing 这 and 应该', () => {
       const text = '這個問題这边已經處理完成，接下来应该可以順利合併。';
       const res = rules.languageCheck(text);

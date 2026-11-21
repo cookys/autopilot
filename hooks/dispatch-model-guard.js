@@ -11,7 +11,7 @@
  * is omitted the dispatch is ALLOWED and rewritten via `hookSpecificOutput.updatedInput`
  * to model "sonnet" (every other tool_input field verbatim), with one advisory line
  * 預設 worker 等級 sonnet (stderr + additionalContext) — a subagent that does not name a
- * model runs at worker level, never silently inheriting the session model. `mode: ask`
+ * model runs at worker level; local or non-Claude seats inherit their main model instead. `mode: ask`
  * opts back into the interactive dialog for guarded engines.
  * An opus/fable dispatch (any alias the cost-line normaliser recognises, see
  * isOpusFableModel) is allowed only when the brief's first 8 lines carry a non-empty
@@ -75,6 +75,22 @@ if (process.env.AUTOPILOT_DISPATCH_MODEL_GUARD_MODE === 'off') process.exit(0);
 // budget on a refusal. Advisory only (never blocks); the line is the same one session-mode.js prints
 // (hooks/tests/blocked-dispatch-guidance.test.sh pins them equal).
 const MASK_LINE = 'To run a non-strict dispatch in this session, prefix that one command with: AUTOPILOT_SESSION_MODE_DIR=$(mktemp -d)';
+function mainSeatIsNonClaude(env = process.env) {
+  if (['ANTHROPIC_MODEL', 'ANTHROPIC_DEFAULT_SONNET_MODEL', 'CLAUDE_CODE_SUBAGENT_MODEL']
+    .some(key => env[key] && !/claude|sonnet|opus|haiku|fable/i.test(env[key]))) return true;
+  if (!env.ANTHROPIC_BASE_URL) return false;
+  try {
+    const host = new URL(env.ANTHROPIC_BASE_URL).hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    if (host === 'localhost' || host === '::1') return true;
+    const parts = host.split('.').map(Number);
+    if (parts.length !== 4 || parts.some(n => !Number.isInteger(n) || n < 0 || n > 255)) return false;
+    const [a, b] = parts;
+    return a === 127 || a === 10 || (a === 192 && b === 168)
+      || (a === 172 && b >= 16 && b <= 31) || (a === 100 && b >= 64 && b <= 127);
+  } catch {
+    return false;
+  }
+}
 const SETS_MANAGED_MARKER_RE = /session-mode(?:\.js)?\s+set\s+--level\s+l[56]\b/;
 // Rails the l5/l6 marker refuses unless strict: dispatch-author (and dispatch-consult /
 // dispatch-plan-review, which ride it). `--strict-contract` on the same line marks a strict call.
@@ -662,6 +678,10 @@ try {
     checkBriefSizeUsedByStages(config, promptAbsent, advisories);
     // One advisory line for the default; it rides the same stderr + additionalContext
     // channel as every other advisory of this hook.
+    if (mainSeatIsNonClaude()) {
+      advisories.push('預設 worker 等級 inherit（主席是本地／非 Claude 模型）');
+      exitAllow();
+    }
     advisories.push('預設 worker 等級 sonnet');
     const msg = advisories.join('\n');
     process.stderr.write(msg + '\n');
@@ -674,6 +694,10 @@ try {
       },
     })}\n`);
     process.exit(0);
+  }
+
+  if (mainSeatIsNonClaude() && (/^(sonnet|opus|haiku)$/.test(model) || /^claude-/.test(model))) {
+    advisories.push(`本地模型席指定了 Claude 模型 ${modelRaw}，會用 Claude 額度`);
   }
 
   const promptRaw = typeof toolInput.prompt === 'string' ? toolInput.prompt : '';

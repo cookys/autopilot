@@ -4,6 +4,8 @@
 # Test for dispatch-model-guard.js hook
 . "$(dirname "$0")/lib.sh"
 
+unset ANTHROPIC_BASE_URL ANTHROPIC_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL CLAUDE_CODE_SUBAGENT_MODEL
+
 # Exact fable/opus Cost line. Existing fable/opus fixtures include it so they
 # still reach the Model-Reason / guarded-engine checks; the costline cases below omit it.
 COST_FABLE_OPUS="$(node -e 'process.stdout.write(require(process.argv[1]).costLineFor("opus"))' "$REPO_ROOT/hooks/lib/brief-header-template.js")"
@@ -62,6 +64,34 @@ assert_contains "$__RUN_STDOUT" '"updatedInput"' "case6-updatedInput present"
 assert_contains "$__RUN_STDOUT" '"model":"sonnet"' "case6-updatedInput sets model sonnet"
 assert_contains "$__RUN_STDERR" "預設 worker 等級 sonnet" "case6-advisory line"
 assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"ask"' "case6-never ask"
+
+# Local seats inherit the main model; explicitly choosing sonnet is advisory.
+ANTHROPIC_BASE_URL=http://127.0.0.1:8780 ANTHROPIC_MODEL=glm-5 run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "local-inherit-exit"
+assert_not_contains "$__RUN_STDOUT" '"model":"sonnet"' "local-inherit-no-rewrite"
+assert_contains "$__RUN_STDERR" "預設 worker 等級 inherit" "local-inherit-advisory"
+assert_not_contains "$__RUN_STDERR" "預設 worker 等級 sonnet" "local-inherit-no-sonnet-advisory"
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"sonnet","prompt":"Engine: sonnet\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+ANTHROPIC_BASE_URL=http://127.0.0.1:8780 ANTHROPIC_MODEL=glm-5 run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "local-explicit-allowed"
+assert_contains "$__RUN_STDERR" "本地模型席指定了 Claude 模型 sonnet，會用 Claude 額度" "local-explicit-advisory"
+
+# Exercise model overrides and private-address boundaries independently.
+PAYLOAD='{"tool_name":"Agent","tool_input":{},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+for url in http://localhost:8780 http://127.2.3.4 http://[::1]:8780 http://10.0.0.1 http://192.168.1.1 http://172.16.0.1 http://172.31.255.255 http://100.64.0.1 http://100.127.255.255; do
+  ANTHROPIC_BASE_URL="$url" run_hook dispatch-model-guard.js "$PAYLOAD"
+  assert_contains "$__RUN_STDERR" "預設 worker 等級 inherit" "private-url-$url"
+done
+for url in https://api.anthropic.com http://172.15.0.1 http://172.32.0.1 http://100.63.255.255 http://100.128.0.1; do
+  ANTHROPIC_BASE_URL="$url" run_hook dispatch-model-guard.js "$PAYLOAD"
+  assert_contains "$__RUN_STDOUT" '"model":"sonnet"' "public-url-$url"
+done
+ANTHROPIC_DEFAULT_SONNET_MODEL=glm-5 run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_contains "$__RUN_STDERR" "預設 worker 等級 inherit" "sonnet-model-override"
+CLAUDE_CODE_SUBAGENT_MODEL=glm-5 run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_contains "$__RUN_STDERR" "預設 worker 等級 inherit" "subagent-model-override"
+ANTHROPIC_MODEL=glm-5 run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_contains "$__RUN_STDERR" "預設 worker 等級 inherit" "main-model-override"
 
 # Case 6b: model absent with other tool_input fields → updatedInput keeps them verbatim.
 PAYLOAD='{"tool_name":"Agent","tool_input":{"subagent_type":"general-purpose","description":"check the tests","prompt":"Engine: sonnet\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'

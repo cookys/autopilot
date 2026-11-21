@@ -52,9 +52,10 @@
 //   `scripts/resolve-endpoint.sh <name>` (the same resolver dispatch uses; this file does not read
 //   endpoints.env) returns a base_url whose host is loopback (localhost, 127.0.0.0/8, ::1) or a host
 //   in local_gateway_hosts (a hostname, or an IPv4 literal only when it is RFC1918 and equals a list
-//   entry exactly; the repo list is empty, hangar fills it per host). Public IPv4, IPv6 literals,
-//   loopback-as-a-gateway-name and anything unlisted stay refused. Tests pass
-//   the resolver URL/token via AUTOPILOT_ENDPOINT_<NAME>_URL/_TOKEN and may add gateway hosts via
+//   entry exactly). Per-host entries go in ~/.autopilot/config.json local_gateway_hosts; RFC1918 IPv4
+//   is allowed. The tracked repo list stays empty. Public IPv4, IPv6 literals, loopback-as-a-gateway-name
+//   and anything unlisted stay refused. Tests pass the resolver URL/token via
+//   AUTOPILOT_ENDPOINT_<NAME>_URL/_TOKEN and may add gateway hosts via
 //   AUTOPILOT_LOCAL_GATEWAY_HOSTS (comma-separated). Model `auto` is the gateway's own routing, not a
 //   second family. A listed name plus a separator and a model suffix (`qwen_local/Qwen…`, `#`, `:`, `@`)
 //   is still that endpoint. When the name is listed but the host is not local, the dispatch is external:
@@ -109,6 +110,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { familyOfEngine } = require('./stage-write');
+const { configPath } = require('./config-path');
 
 const CARD = 'd-1dfcf757';
 const TASK = '01M7E2A1';
@@ -400,11 +402,23 @@ function localEndpoints() {
   return Array.isArray(l) ? l.map(String) : [];
 }
 
+// AUTOPILOT_CONFIG wins, then configPath (AUTOPILOT_CONFIG_FILE, else ~/.autopilot/config.json),
+// the same order as scripts/claude-account.js. A missing or unparsable file adds nothing.
+function userGatewayHosts(env) {
+  const e = env && typeof env === 'object' ? env : process.env;
+  let file;
+  try { file = e.AUTOPILOT_CONFIG || configPath({ env: e }); } catch { return []; }
+  let user;
+  try { user = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return []; }
+  const hosts = user && user.local_gateway_hosts;
+  return Array.isArray(hosts) ? hosts.map(String) : [];
+}
+
 function localGatewayHosts(env = process.env) {
   const fromFile = loadList(LOCAL_ENDPOINTS_PATH).local_gateway_hosts;
   const fileHosts = Array.isArray(fromFile) ? fromFile.map(String) : [];
   const extra = String((env && env.AUTOPILOT_LOCAL_GATEWAY_HOSTS) || '').split(',').map((s) => s.trim()).filter(Boolean);
-  return [...fileHosts, ...extra];
+  return [...fileHosts, ...extra, ...userGatewayHosts(env)];
 }
 
 function rawFamily(p) { return /qoder/i.test(p) ? 'qoder' : familyOfEngine(p); }
@@ -474,7 +488,7 @@ function isRfc1918(oct) {
 }
 
 // A hostname matches the gateway list as before. An IPv4 literal qualifies only when it is
-// RFC1918 and equals, exactly, one entry of `names` (file list plus AUTOPILOT_LOCAL_GATEWAY_HOSTS).
+// RFC1918 and equals, exactly, one entry of `names` (tracked list, AUTOPILOT_LOCAL_GATEWAY_HOSTS, user config).
 // Public IPv4, IPv6 literals, loopback and anything unlisted stay refused.
 function hostIsGateway(host, names) {
   const h = String(host || '').toLowerCase();
@@ -559,27 +573,27 @@ function check(opts = {}) {
   const { family, localServed, endpoint: effectiveEndpoint, localNameExternal } = resolution(runner, model, endpoint, env);
   if (String(env.AUTOPILOT_TEST_CN_GATE_OFF || '') === '1' || !BARRED_FAMILIES.includes(family)) return { allowed: true, family };
   const root = repoRootOf(cwd);
-  const cfg = loadConfig(root);
+  const gateLists = loadConfig(root);
   const f = taskFacts({ files, diffFiles, role, env });
   const block = (cls) => ({ allowed: false, family, cls, line: refusalLine(family, cls) });
   // Listed local name, host is not the fleet's own gateway: external, before size/role.
   if (localNameExternal) return block('local_name_external_host');
   if (f.transcript) return block('transcript');
-  if (matchesAny(path.basename(root), cfg.sensitive_repos) || f.scope.some((p) => matchesAny(p, cfg.sensitive_paths))) return block('sensitive');
+  if (matchesAny(path.basename(root), gateLists.sensitive_repos) || f.scope.some((p) => matchesAny(p, gateLists.sensitive_paths))) return block('sensitive');
   // Review roles are refused at every size. A review rail role (or brief Role:) is a floor that
   // env/header Role: implementer cannot lower. The local served family skips this class only
   // inside a shipped review_local_exceptions window on a repo outside local_deny_repos.
   const reviewRolesToCheck = [f.role, f.railRole, f.headerRole].filter(Boolean);
-  const reviewHits = reviewRolesToCheck.filter((r) => cfg.review_roles.includes(r));
+  const reviewHits = reviewRolesToCheck.filter((r) => gateLists.review_roles.includes(r));
   if (reviewHits.length) {
-    const exempt = localServed && reviewLocalExempt(effectiveEndpoint, gateNow(opts), root, cfg.local_deny_repos, reviewHits);
+    const exempt = localServed && reviewLocalExempt(effectiveEndpoint, gateNow(opts), root, gateLists.local_deny_repos, reviewHits);
     if (!exempt) return block('review-role');
   }
   // Proven-local served family: size above S is not a CN core-size bar (gpu-lead 27B). A missing size still fails closed below.
   if (!localServed && BIG_SIZES.includes(f.size)) return block('core-size');
   // localServed may edit core directories: the gate exists to stop data leaving the fleet
   // (operator via PM, ledger fadf8dc9). Other classes above and below are unchanged.
-  if (!localServed && cfg.core_dirs.length === 0) {
+  if (!localServed && gateLists.core_dirs.length === 0) {
     const allow = shippedCoreUnsetAllow();
     const fixtureExts = shippedCoreUnsetFixtureExts();
     const news = new Set();
@@ -596,18 +610,18 @@ function check(opts = {}) {
       return !(news.has(c.normalised) && absentUnderRepoRoot(root, c.normalised));
     });
     if (unset) return block('core-unset');
-  } else if (!localServed && f.scope.some((p) => matchesAny(p, cfg.core_dirs))) return block('core-dir');
-  if (f.novel || cfg.novel_roles.includes(f.role) || cfg.novel_roles.includes(f.railRole)) return block('novel');
+  } else if (!localServed && f.scope.some((p) => matchesAny(p, gateLists.core_dirs))) return block('core-dir');
+  if (f.novel || gateLists.novel_roles.includes(f.role) || gateLists.novel_roles.includes(f.railRole)) return block('novel');
   if (!SMALL_SIZES.includes(f.size) && !(localServed && BIG_SIZES.includes(f.size))) return block('unknown-size');
   if (!f.role) return block('unknown-role');
   if (!f.scope.length) return block('unknown-scope');
   if (localServed) {
-    if (matchesAny(path.basename(root), cfg.local_deny_repos)) return block('local-deny-repo');
+    if (matchesAny(path.basename(root), gateLists.local_deny_repos)) return block('local-deny-repo');
     // Trial scope (PM ruling): an implementer in a local_restricted_repos repo needs no Task-Class.
     const trial = f.role === 'implementer' && inRestrictedTrial(path.basename(root));
     if (!trial) {
       if (!f.taskClass) return block('unknown-task-class');
-      if (!cfg.local_task_classes.includes(f.taskClass)) return block('task-class');
+      if (!gateLists.local_task_classes.includes(f.taskClass)) return block('task-class');
     }
     if (restrictedRepoBlocks(path.basename(root), f, trial)) return block('local-restricted-repo');
   }

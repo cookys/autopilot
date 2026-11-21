@@ -3247,7 +3247,7 @@
       "readers": ["scripts/lib/cn-model-dispatch-gate.js"],
       "doc": null,
       "relates": [],
-      "summary": "Comma-separated hostnames added to local_gateway_hosts for tests. Production hosts live in local-sandbox-endpoints.json."
+      "summary": "Comma-separated hostnames added to local_gateway_hosts for tests. Per-host entries go in ~/.autopilot/config.json local_gateway_hosts; RFC1918 IPv4 is allowed."
     },
     {
       "name": "AUTOPILOT_LOCAL_LEASE_DIR",
@@ -7308,6 +7308,22 @@
         "AUTOPILOT_FLEET_GATEWAY_ENDPOINTS"
       ],
       "summary": "Named endpoints allowlisted as fleet gateways to receive the X-Fleet-Task header (case-insensitive). Empty means no endpoint is a gateway.",
+      "type": "array"
+    },
+    {
+      "name": "local_gateway_hosts",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "dispatch",
+      "default": [],
+      "readers": [
+        "scripts/lib/cn-model-dispatch-gate.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_LOCAL_GATEWAY_HOSTS"
+      ],
+      "summary": "Per-host gateway hostnames, or RFC1918 IPv4 addresses, unioned with the tracked list. A missing or unparsable config adds nothing. Public IPv4 stays refused.",
       "type": "array"
     },
     {

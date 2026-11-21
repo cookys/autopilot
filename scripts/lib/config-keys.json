@@ -52,6 +52,28 @@
       "kind": "env",
       "audience": "internal",
       "doc": "references/hetero-dispatch.md",
+      "name": "AUTOPILOT_CLAUDE_HOME_EXCEPTION",
+      "class": "plumbing",
+      "default": "",
+      "readers": ["hooks/claude-home-read-guard.js"],
+      "relates": [],
+      "note": "Internal exception label for the Claude home read guard; only named guarded paths may be accessed."
+    },
+    {
+      "kind": "env",
+      "audience": "internal",
+      "doc": "references/hetero-dispatch.md",
+      "name": "AUTOPILOT_CLAUDE_HOME_ROOTS",
+      "class": "path_seam",
+      "default": "/home:/root",
+      "readers": ["hooks/claude-home-read-guard.js"],
+      "relates": [],
+      "note": "Colon-separated home roots considered by the Claude home read guard."
+    },
+    {
+      "kind": "env",
+      "audience": "internal",
+      "doc": "references/hetero-dispatch.md",
       "name": "AUTOPILOT_OUTBOUND_SCAN_ALLOW",
       "class": "path_seam",
       "default": "<repo>/.autopilot/outbound-scan-allow",
@@ -7661,6 +7683,30 @@
       "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Byte cap for an implicit local implementer: prompt file plus existing relative Scope files. Above this, dispatch stays on the cloud default.",
+      "type": "number"
+    },
+    {
+      "name": "local_context_tokens",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "dispatch",
+      "default": 262144,
+      "readers": ["scripts/lib/local-impl-slot.js"],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Estimated context window in tokens for an implicit local implementer.",
+      "type": "number"
+    },
+    {
+      "name": "local_output_reserve_tokens",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "dispatch",
+      "default": 32000,
+      "readers": ["scripts/lib/local-impl-slot.js"],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Output tokens reserved from the local implementer's context window during estimation.",
       "type": "number"
     },
     {

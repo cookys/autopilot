@@ -3543,7 +3543,7 @@ declare -F dispatch_lane_json >/dev/null 2>&1 && DISPATCH_LANE_JSON="$(dispatch_
 declare -F dispatch_export_attribution >/dev/null 2>&1 && dispatch_export_attribution "$PROMPT_FILE" # the child (its cost-tracker rows) inherits lane + fleet task
 [ -z "${HETERO_FLEET_TASK_ID:-}" ] || export AUTOPILOT_FLEET_TASK="$HETERO_FLEET_TASK_ID"
 # An unpinned implementer uses an available local qwen or GLM seat when its endpoint
-# is ready, a gateway lease is granted, the prompt fits local_context_bytes, and the CN
+# is ready, a gateway lease is granted, the estimated prompt context fits, and the CN
 # gate allows that seat (operator via PM 01M7XHF4). Otherwise the unpinned path
 # falls through to pace-select (its ranked seat, not a fixed engine) and records local_fallback. A pin already chose
 # a seat when --pace-role or a pace file returned one, a strict contract is on,
@@ -3618,7 +3618,7 @@ if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_S
   LOCAL_SLOT_FLEET_TASK_RAW="$(awk '/^[[:space:]]*Fleet-Task:/ { sub(/^[[:space:]]*Fleet-Task:[[:space:]]*/, ""); sub(/[[:space:]]*$/, ""); print; exit }' "$PROMPT_FILE")"
   export LOCAL_SLOT_FLEET_TASK_RAW
   _slot_line="$(node "$SELF_DIR/lib/local-impl-slot.js" --prompt-file "$PROMPT_FILE" --cwd "$(pwd)")"
-  _slot_parsed="$(node -e 'let o; try{o=JSON.parse(process.argv[1]);}catch{o={choose:false,reason:"no_free_slot",detail:"lease_query_failed:malformed"};} const fb={reason:o.reason||"no_free_slot",detail:String(o.detail||"")}; if(o.family==="glm"||o.local_fallback_from) Object.assign(fb,{family:o.family||"glm",endpoint:o.endpoint||"glm_local",local_fallback_from:o.local_fallback_from||null}); console.log(o.choose?"choose":"fallback"); console.log(JSON.stringify(o.local_lease||null)); console.log(JSON.stringify(o.local_slots||null)); console.log(o.lease_url||""); console.log(o.lease_token_env||""); console.log(JSON.stringify(fb));' "$_slot_line")"
+  _slot_parsed="$(node -e 'let o; try{o=JSON.parse(process.argv[1]);}catch{o={choose:false,reason:"no_free_slot",detail:"lease_query_failed:malformed"};} const fb={reason:o.reason||"no_free_slot"}; if(o.reason==="local_ctx_over") Object.assign(fb,{est_tokens:o.est_tokens,limit:o.limit}); else fb.detail=String(o.detail||""); if(o.family==="glm"||o.local_fallback_from) Object.assign(fb,{family:o.family||"glm",endpoint:o.endpoint||"glm_local",local_fallback_from:o.local_fallback_from||null}); console.log(o.choose?"choose":"fallback"); console.log(JSON.stringify(o.local_lease||null)); console.log(JSON.stringify(o.local_slots||null)); console.log(o.lease_url||""); console.log(o.lease_token_env||""); console.log(JSON.stringify(fb));' "$_slot_line")"
   _slot_kind="$(printf '%s\n' "$_slot_parsed" | sed -n '1p')"
   if [ "$_slot_kind" = "choose" ]; then
     _lease_json="$(printf '%s\n' "$_slot_parsed" | sed -n '2p')"
@@ -3659,6 +3659,13 @@ if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_S
     LOCAL_FALLBACK_JSON="$(printf '%s\n' "$_slot_parsed" | sed -n '6p')"
     LOCAL_SLOTS_JSON=null
     if [ "$SHED_ROUTE_TARGET" = "local" ]; then RUNNER="codex"; fi
+    if [ "$(node -e 'try{process.stdout.write(JSON.parse(process.argv[1]).reason||"")}catch{}' "$LOCAL_FALLBACK_JSON")" = "local_ctx_over" ]; then
+      printf 'local-slot: local_ctx_over est_tokens=%s limit=%s -> codex\n' \
+        "$(node -e 'const o=JSON.parse(process.argv[1]);process.stdout.write(String(o.est_tokens))' "$LOCAL_FALLBACK_JSON")" \
+        "$(node -e 'const o=JSON.parse(process.argv[1]);process.stdout.write(String(o.limit))' "$LOCAL_FALLBACK_JSON")" >&2
+      RUNNER="codex"
+      LOCAL_CTX_CODEX_FALLBACK=1
+    fi
   fi
   unset LOCAL_SLOT_FLEET_TASK_RAW
   unset _slot_line _slot_parsed _slot_kind _lease_json _gate_msg _gate_rc
@@ -3667,7 +3674,8 @@ fi
 unset _impl_role
 
 if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_SUPPLIED" -eq 0 ] \
-   && [ "${IMPLICIT_LOCAL_DEFAULT:-0}" != "1" ] && [ -z "${SHED_ROUTE_TARGET:-}" ]; then
+   && [ "${IMPLICIT_LOCAL_DEFAULT:-0}" != "1" ] && [ -z "${SHED_ROUTE_TARGET:-}" ] \
+   && [ "${LOCAL_CTX_CODEX_FALLBACK:-0}" != "1" ]; then
 # Pace is the default only for an unpinned seat. Strict contracts carry their own tuple.
 _ps_args=(--dispatch --role "${PACE_ROLE:-implementer}")
 [ -z "${PROMPT_FILE:-}" ] || _ps_args+=(--prompt-file "$PROMPT_FILE")

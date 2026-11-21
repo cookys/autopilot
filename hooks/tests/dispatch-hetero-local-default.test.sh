@@ -16,6 +16,7 @@ export AUTOPILOT_LOCAL_SLOTS_CMD='printf %s '"'"'{"free":1,"draining":false}'"'"
 export DISPATCH_DETACH=0 AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1
 LEASE_STATUS_FILE="$TEST_TMP/lease-status"
 LEASE_LOG="$TEST_TMP/lease-requests.jsonl"
+GATE_LOG="$TEST_TMP/cn-gate-requests.jsonl"
 printf '201\n' > "$LEASE_STATUS_FILE"
 LEASE_BUSY_FILE="$TEST_TMP/lease-endpoint-busy"
 LEASE_PORT_FILE="$TEST_TMP/lease.port"
@@ -44,6 +45,8 @@ LEASE_SERVER_PID=$!
 for _i in 1 2 3 4 5 6 7 8 9 10; do [ -s "$LEASE_PORT_FILE" ] && break; sleep 0.1; done
 LEASE_PORT="$(cat "$LEASE_PORT_FILE")"
 export AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL="http://127.0.0.1:${LEASE_PORT}/v1"
+export AUTOPILOT_ENDPOINT_GLM_LOCAL_URL="http://127.0.0.1:${LEASE_PORT}/v1"
+export AUTOPILOT_ENDPOINT_GLM_LOCAL_TOKEN=fake-test-token
 mkdir -p "$AUTOPILOT_SESSION_MODE_DIR" "$TEST_TMP/bin"
 unset AUTOPILOT_QUALIFICATION_OVERRIDE AUTOPILOT_DISPATCH_ROLE AUTOPILOT_TASK_CLASS 2>/dev/null || true
 
@@ -63,6 +66,8 @@ printf '%s\n' "$@" > local-argv.txt
 printf '%s' '{"type":"result","is_error":false,"result":"ok"}'
 EOF
 chmod +x "$STUB_CLAUDE"
+
+export AUTOPILOT_TEST_CN_GATE_OFF=1
 
 STUB_GROK="$TEST_TMP/grok"
 cat > "$STUB_GROK" <<'EOF'
@@ -97,13 +102,27 @@ run_local() {
   local runs="$TEST_TMP/runs-$tag"
   mkdir -p "$runs"
   OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
-    XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-}" \
+    XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-}" AUTOPILOT_ENDPOINT_GLM_LOCAL_URL="$AUTOPILOT_ENDPOINT_GLM_LOCAL_URL" AUTOPILOT_ENDPOINT_GLM_LOCAL_TOKEN="$AUTOPILOT_ENDPOINT_GLM_LOCAL_TOKEN" \
     "$SCRIPT" --no-verify-tip --context-window off \
     --branch "feat/local-$tag" --prompt-file "$PROMPT" "$@" </dev/null 2>"$TEST_TMP/$tag.err")"
   EXIT=$?
   ERR="$(cat "$TEST_TMP/$tag.err" 2>/dev/null || true)"
   MF="$(find "$runs" -name '*.manifest.json' | head -1)"
 }
+
+# (a2) stubbed gateway payload selects GLM when qwen is full; gate and manifest carry the selected seat.
+export AUTOPILOT_LOCAL_SLOTS_CMD='printf %s '\''{"endpoints":[{"id":"qwen-a","state":"up","free":0},{"id":"glm-a","models":["GLM-4"],"state":"up","free":1}]}'\'''
+PROMPT="$TEST_TMP/prompt-a2.txt"
+printf 'Size: S\nRole: implementer\nTask-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
+run_local a2
+[ "$EXIT" -eq 0 ] || printf 'local-default diagnostic (a2): %s\n%s\n' "$OUT" "$ERR" >&2
+assert_eq "0" "$EXIT" "a2: GLM fallback exits 0"
+assert_eq "glm" "$(json_get "$OUT" model)" "a2: result model is glm"
+assert_file_exists "$MF" "a2: GLM manifest written"
+assert_eq "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).endpoint||"")' "$MF")" "glm_local" "a2: manifest endpoint is glm_local"
+assert_eq "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).model||"")' "$MF")" "glm" "a2: manifest model is glm"
+assert_contains "$(cat "$LEASE_LOG")" '"url":"/v1/local/lease"' "a2: GLM slot goes through lease"
+export AUTOPILOT_LOCAL_SLOTS_CMD='printf %s '\''{"free":1,"draining":false}'\'''
 
 # (a) implementer, no --runner -> manifest runner local, model qwen.
 PROMPT="$TEST_TMP/prompt-a.txt"

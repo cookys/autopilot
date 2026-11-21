@@ -7,6 +7,49 @@ const os = require('os');
 const path = require('path');
 const { decide, contextBytes } = require('./local-impl-slot');
 
+function fixtureDecision(endpoints) {
+  const env = readyEnv({ AUTOPILOT_LOCAL_SLOTS_CMD: `printf '%s\\n' '${JSON.stringify({ endpoints })}'` });
+  return require('./local-impl-slot').acquireLocalSlot({ env, cfg: {} });
+}
+
+test('gateway selection prefers free qwen over GLM', async () => {
+  const d = await fixtureDecision([{ id: 'qwen-a', state: 'up', free: 1 }, { id: 'glm-a', models: ['GLM-4'], state: 'up', free: 2 }]);
+  assert.equal(d.family, 'qwen');
+  assert.equal(d.endpoint, 'qwen_local');
+});
+
+test('gateway selection falls back to GLM when qwen is full', async () => {
+  const d = await fixtureDecision([{ id: 'qwen-a', state: 'up', free: 0 }, { id: 'glm-a', models: ['GLM-4'], state: 'up', free: 2 }]);
+  assert.equal(d.family, 'glm');
+  assert.equal(d.endpoint, 'glm_local');
+  assert.deepEqual(d.local_fallback_from, { family: 'qwen', reason: 'no_free_slot' });
+});
+
+test('gateway selection keeps no_free_slot when both families are full', async () => {
+  const d = await fixtureDecision([{ id: 'qwen-a', state: 'up', free: 0 }, { id: 'glm-a', models: ['GLM-4'], state: 'up', free: 0 }]);
+  assert.equal(d.fallback.reason, 'no_free_slot');
+});
+
+test('gateway selection accepts a free GLM endpoint when qwen is absent', async () => {
+  const d = await fixtureDecision([{ id: 'glm-a', models: ['GLM-4'], state: 'up', free: 1 }]);
+  assert.equal(d.family, 'glm');
+  assert.equal(d.endpoint, 'glm_local');
+});
+
+test('decision reserves the GLM backend and preserves fallback provenance', async () => {
+  const { srv, requests } = await leaseServer();
+  try {
+    const env = leaseEnv(srv.address().port, { AUTOPILOT_ENDPOINT_GLM_LOCAL_URL: `http://127.0.0.1:${srv.address().port}/v1`, AUTOPILOT_ENDPOINT_GLM_LOCAL_TOKEN: 'fake-test-token', AUTOPILOT_LOCAL_SLOTS_CMD: `printf '%s\\n' '${JSON.stringify({ endpoints: [{ id: 'qwen-a', state: 'up', free: 0 }, { id: 'glm-a', models: ['GLM-4'], state: 'up', free: 1 }] })}'` });
+    const d = await decide({ env, promptFile: '', cwd: os.tmpdir() });
+    assert.equal(d.choose, true);
+    assert.equal(d.family, 'glm');
+    assert.equal(d.endpoint, 'glm_local');
+    assert.deepEqual(d.local_fallback_from, { family: 'qwen', reason: 'no_free_slot' });
+    assert.equal(JSON.parse(requests[0].body).model, 'glm');
+    assert.equal(JSON.parse(requests[0].body).backend, 'glm-a');
+  } finally { srv.close(); }
+});
+
 function readyEnv(extra = {}) {
   const env = {
     ...process.env,

@@ -99,6 +99,7 @@ SCRIPT_EXCLUDES=(
   "CLAUDE.md"
   "AGENTS.md"
   # tests are not shipped in the package; PM 01M7XRRV
+  "tests"
   "*.test.js"
   "*.test.sh"
   "*.test.mjs"

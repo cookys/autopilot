@@ -112,6 +112,27 @@ function assertAllowed(res, msg) {
   assert.equal(res.stdout, '', `${msg}: expected empty stdout`);
 }
 
+test('PM Fleet-Task exemptions and work dispatches', () => {
+  const fx = mkPmFixture();
+  try {
+    for (const [type, model, allowed] of [
+      ['web-fetch', 'sonnet', true],
+      ['claude-code-guide', 'sonnet', true],
+      ['general-purpose', 'Claude-Haiku-4', true],
+      ['general-purpose', 'sonnet', false],
+      ['autopilot:reviewer', 'sonnet', false],
+    ]) {
+      const payload = { tool_name: 'Agent', cwd: fx.pmRepo, tool_input: { subagent_type: type, model, prompt: 'Engine: sonnet\nDo work.' } };
+      const res = runGuard(path.join(__dirname, 'dispatch-model-guard.js'), payload, { ...fx, envExtra: { AUTOPILOT_MECHANICAL_REROUTE: 'off' } });
+      assert.equal(res.status, 0, type);
+      if (allowed) assert.ok(!res.stdout.includes('Fleet-Task:'), `${type}: expected no Fleet-Task denial`);
+      else assert.ok(res.stdout.includes('Fleet-Task:'), `${type}: expected Fleet-Task denial`);
+    }
+  } finally {
+    fx.cleanup();
+  }
+});
+
 test('pm-console: walks up to first .git and requires autopilot.console/1 + mode program', () => {
   const fx = mkPmFixture();
   try {

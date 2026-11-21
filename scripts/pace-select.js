@@ -715,6 +715,12 @@ function selectEngine({
       overCeiling.set(key, reading);
       continue;
     }
+    const heteroReserveRaw = finiteNum(pace.burn_more?.hetero_reserve_pct) ?? finiteNum(pace.hetero_reserve_pct);
+    const heteroReservePct = heteroReserveRaw !== null ? heteroReserveRaw : 50;
+    if (scope === 'mechanical' && key === 'agy' && reading.used_pct !== null && reading.used_pct >= (100 - heteroReservePct)) {
+      blockedKeys.set(key, 'hetero_reserve');
+      continue;
+    }
     const low = isLowStatus(row.status);
     const ahead = reading.status === 'fresh' && isAheadPaceStatus(row.status);
 
@@ -886,10 +892,21 @@ function selectEngine({
     };
   }
 
+  const paceIsStale = pace.stale === true || (paceGeneratedAt !== null && !isSeenAtFresh(paceGeneratedAt, selectClock));
+  const rawTargets = !paceIsStale && Array.isArray(pace.burn_more?.targets_in_order)
+    ? pace.burn_more.targets_in_order.filter((t) => typeof t === 'string' && t.trim() !== '').map((t) => t.trim())
+    : [];
+  const targetRank = key => { const i = rawTargets.indexOf(key); return i < 0 ? Infinity : i; };
+
   const priorityList = Array.isArray(resolvedRoles.priority?.[role]) ? resolvedRoles.priority[role] : [];
   const priorityRank = key => { const i = priorityList.indexOf(key); return i < 0 ? Infinity : i; };
   const statusRank = r => ['schedule_only', 'observed_available'].includes(r.status) ? 2 : Number(r.status === 'stale_recent');
   known.sort((a, b) => {
+    if (rawTargets.length > 0) {
+      const aT = targetRank(a.key);
+      const bT = targetRank(b.key);
+      if (aT !== bT) return aT - bT;
+    }
     const aAhead = a.ahead === true ? 1 : 0;
     const bAhead = b.ahead === true ? 1 : 0;
     if (aAhead !== bAhead) return aAhead - bAhead;

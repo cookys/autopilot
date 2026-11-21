@@ -65,7 +65,8 @@ const { findTaskId, checkTaskOpen } = require('../scripts/lib/fleet-task-ref.js'
 const { ownerAddress, whoamiSession } = require('../scripts/lib/fleet-task.js');
 const { userRuntimeBase, ensurePrivateDir } = require('../scripts/lib/runtime-paths.js');
 // default-on since v2.35.15 (was opt-in). Opt out: AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=off
-// (or `- mode: off` in .claude/dispatch-guard-config.md). The 2026-09-04 cuda quota digest:
+// (or `- mode: off` in .claude/dispatch-guard-config.md). Set AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=warn
+// to downgrade overloaded-Claude mechanical blocks to warnings. The 2026-09-04 cuda quota digest:
 // subagents inherited the session's [1m] Fable model because nothing asked.
 if (process.env.AUTOPILOT_DISPATCH_MODEL_GUARD_MODE === 'off') process.exit(0);
 
@@ -464,6 +465,61 @@ function mechanicalReroute(input, toolInput, prompt) {
   );
 }
 
+function checkOverloadedClaudeMechanical(toolInput, prompt, advisories) {
+  const model = String(toolInput.model || '').trim().toLowerCase();
+  const isClaudeModel = model === '' || model === 'haiku' || model === 'sonnet' || model === 'opus' || model === 'fable' || model.startsWith('claude-');
+  if (!isClaudeModel) return;
+
+  const head = headLines(prompt, 6);
+  const fields = head.flatMap((line) => line.split('|').map((f) => f.trim()));
+  let matchedRole = '';
+  for (const field of fields) {
+    const m = field.match(/^Role:\s*([A-Za-z][\w-]*)/i);
+    if (m) {
+      const candidate = m[1].toLowerCase();
+      if (MECHANICAL_ROLES.has(candidate)) {
+        matchedRole = candidate;
+      }
+      break;
+    }
+  }
+  if (!matchedRole) return;
+
+  const pacePath = process.env.AUTOPILOT_PACE_FILE || path.join(os.homedir(), 'projects', 'capacity', 'out', 'pace.v1.json');
+  let pace;
+  try {
+    pace = JSON.parse(fs.readFileSync(pacePath, 'utf8'));
+  } catch {
+    return;
+  }
+  if (!pace || typeof pace !== 'object' || !Array.isArray(pace.rows) || pace.stale === true) return;
+
+  const claudeOverloaded = pace.rows.some((r) => (
+    r && r.class === 'claude' && (
+      (typeof r.used_pct === 'number' && Number.isFinite(r.used_pct) && r.used_pct >= 85)
+      || (typeof r.status === 'string' && /^ALERT_/i.test(r.status))
+    )
+  ));
+  if (!claudeOverloaded) return;
+
+  const overCeilingPools = new Set(
+    pace.rows
+      .filter((r) => r && typeof r.used_pct === 'number' && Number.isFinite(r.used_pct) && r.used_pct >= 85 && typeof r.pool === 'string')
+      .map((r) => r.pool.toLowerCase())
+  );
+  const targets = Array.isArray(pace.burn_more?.targets_in_order)
+    ? pace.burn_more.targets_in_order.filter((t) => typeof t === 'string' && t.trim() !== '').map((t) => t.trim())
+    : [];
+  const suggested = targets.find((t) => !overCeilingPools.has(t.toLowerCase())) || targets[0] || 'agy';
+
+  const msg = `dispatch-model-guard: Claude pool is overloaded; mechanical subagent (Role: ${matchedRole}) must not land on Claude. Use ${suggested} instead (set AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=warn to warn only).`;
+  if (process.env.AUTOPILOT_DISPATCH_MODEL_GUARD_MODE === 'warn') {
+    advisories.push(msg);
+    return;
+  }
+  emitDeny(msg);
+}
+
 // Fable/opus only. Intentional does not skip this. Exits on deny.
 // Model present: after the engine-header check, before the guarded-engine allow.
 // Model absent: not called — the effective model is the sonnet worker default, which
@@ -632,6 +688,7 @@ try {
     // that need no model still run, exactly as on the old allow path.
     checkPmFleetTask(input, toolInput, promptAbsent);
     checkMechanicalReroute(input, toolInput, promptAbsent);
+    checkOverloadedClaudeMechanical(toolInput, promptAbsent, advisories);
     checkBriefSizeUsedByStages(config, promptAbsent, advisories);
     // One advisory line for the default; it rides the same stderr + additionalContext
     // channel as every other advisory of this hook.
@@ -691,6 +748,7 @@ try {
 
   // Mechanical subagent reroute on PM / lead seats.
   checkMechanicalReroute(input, toolInput, promptRaw);
+  checkOverloadedClaudeMechanical(toolInput, promptRaw, advisories);
 
   // Size / Used-by / Stages check for autopilot briefs (Lane: present).
   checkBriefSizeUsedByStages(config, promptRaw, advisories);

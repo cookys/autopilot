@@ -614,4 +614,33 @@ LEDGER_CHECK="$(node -e '
 ' "$STATE_DIR_LEDGER/brain-tier-dispatch.jsonl")"
 assert_eq "ledger_ok" "$LEDGER_CHECK" "ledger-jsonl-entries"
 
+# Overloaded Claude pool + mechanical subagent cases
+PACE_OVERLOADED="$TEST_TMP/pace-overloaded.json"
+cat > "$PACE_OVERLOADED" <<'EOF'
+{"schema":"capacity.pace/1","burn_more":{"targets_in_order":["agy","minimax"]},"rows":[{"pool":"claude","class":"claude","used_pct":90,"status":"ALERT_ahead"},{"pool":"agy","class":"other","used_pct":20}]}
+EOF
+PACE_OK="$TEST_TMP/pace-ok.json"
+cat > "$PACE_OK" <<'EOF'
+{"schema":"capacity.pace/1","burn_more":{"targets_in_order":["agy","minimax"]},"rows":[{"pool":"claude","class":"claude","used_pct":30,"status":"ok"},{"pool":"agy","class":"other","used_pct":20}]}
+EOF
+
+PAYLOAD_MECH='{"tool_name":"Agent","tool_input":{"model":"sonnet","prompt":"Engine: sonnet\nRole: implementer\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+AUTOPILOT_PACE_FILE="$PACE_OVERLOADED" run_hook dispatch-model-guard.js "$PAYLOAD_MECH"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "overloaded-claude-mechanical-blocks"
+assert_contains "$__RUN_STDOUT" "agy" "overloaded-claude-mechanical-names-agy"
+
+AUTOPILOT_PACE_FILE="$PACE_OVERLOADED" AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=warn run_hook dispatch-model-guard.js "$PAYLOAD_MECH"
+assert_eq 0 "$__RUN_EXIT" "overloaded-claude-mechanical-warn-exit"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "overloaded-claude-mechanical-warn-no-deny"
+assert_contains "$__RUN_STDOUT" "agy" "overloaded-claude-mechanical-warn-names-agy"
+
+PAYLOAD_NONMECH='{"tool_name":"Agent","tool_input":{"model":"sonnet","prompt":"Engine: sonnet\nRole: reviewer\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+AUTOPILOT_PACE_FILE="$PACE_OVERLOADED" run_hook dispatch-model-guard.js "$PAYLOAD_NONMECH"
+assert_eq 0 "$__RUN_EXIT" "overloaded-claude-nonmechanical-exit"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "overloaded-claude-nonmechanical-allowed"
+
+AUTOPILOT_PACE_FILE="$PACE_OK" run_hook dispatch-model-guard.js "$PAYLOAD_MECH"
+assert_eq 0 "$__RUN_EXIT" "nonoverloaded-claude-mechanical-exit"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "nonoverloaded-claude-mechanical-allowed"
+
 finalize_test

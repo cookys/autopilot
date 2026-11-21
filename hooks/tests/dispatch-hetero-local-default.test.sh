@@ -305,11 +305,28 @@ EXIT=$?
 : > "$LEASE_BUSY_FILE"
 assert_eq "$EXIT" "0" "h: pre-probe busy cloud retry exits 0"
 assert_eq "grok" "$(json_get "$OUT" runner)" "h: pre-probe busy retry uses grok"
-assert_contains "$(cat "$TEST_TMP/h.err")" 'engine-preflight:' "h: local-slot fallback runs engine preflight"
+assert_not_contains "$(cat "$TEST_TMP/h.err")" 'engine-preflight:' "h: busy-at-run re-dispatch is explicitly pinned and skips preflight"
 FB_H="$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\n/).reverse().find(l=>l.trim().startsWith("{")));process.stdout.write(JSON.stringify(o.local_fallback))' "$OUT")"
 assert_eq '{"reason":"no_free_slot","detail":"busy_at_run"}' "$FB_H" "h: pre-probe busy fallback detail"
 DELETE_COUNT="$(node -e 'const fs=require("fs");const rows=fs.readFileSync(process.argv[1],"utf8").trim().split(/\n/).filter(Boolean).map(JSON.parse);process.stdout.write(String(rows.filter(r=>r.method==="DELETE"&&r.url==="/v1/local/lease/test-lease-id").length))' "$LEASE_LOG")"
 assert_eq "1" "$DELETE_COUNT" "h: pre-probe retry releases its granted lease exactly once"
+
+# (h2) a lease denial is no_free_slot and keeps the selection unpinned for pace preflight.
+PROMPT="$TEST_TMP/prompt-h2.txt"
+printf 'Task-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
+printf '201\n' > "$LEASE_STATUS_FILE"; : > "$GROK_ARGV"; : > "$LEASE_LOG"; RUNS="$TEST_TMP/runs-h2"; mkdir -p "$RUNS"
+H2_PACE="$TEST_TMP/h2-pace.json"
+node -e 'const fs=require("fs");fs.writeFileSync(process.argv[1],JSON.stringify({schema:"capacity.pace/1",generated_at:new Date().toISOString(),rows:[{pool:"grok-cli",class:"other",stale:false,used_pct:30,expected_pct:40,hours_to_reset:24}]}))' "$H2_PACE"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_PACE_FILE="$H2_PACE" AUTOPILOT_LOCAL_SLOTS_CMD="printf %s '{\"free\":0,\"draining\":false}'" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
+  "$SCRIPT" --no-verify-tip --context-window off --grok-bin "$STUB_GROK" \
+  --branch feat/local-h2 --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/h2.err")"
+EXIT=$?
+printf '201\n' > "$LEASE_STATUS_FILE"
+assert_eq "0" "$EXIT" "h2: no-free-slot cloud fallback exits 0"
+assert_eq "grok" "$(json_get "$OUT" runner)" "h2: no-free-slot pace selection uses grok"
+FB_H2="$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\n/).reverse().find(l=>l.trim().startsWith("{")));process.stdout.write(JSON.stringify(o.local_fallback))' "$OUT")"
+assert_contains "$FB_H2" '"reason":"no_free_slot"' "h2: lease denial reports no_free_slot"
+assert_contains "$(cat "$TEST_TMP/h2.err")" 'engine-preflight:' "h2: unpinned no-free-slot fallback runs engine preflight"
 
 # (j) local worker reports endpoint busy; dispatch retries on cloud and releases its grant.
 cat > "$STUB_CLAUDE" <<'EOF'

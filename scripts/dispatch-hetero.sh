@@ -2637,7 +2637,6 @@ const rung = eligible.find((r) => r.runner === pre.chosen.runner && r.model === 
 if (!rung) process.exit(1);
 process.stdout.write([rung.model, rung.effort, rung.runner, rung.endpoint || "", JSON.stringify(plan.demoted || []), JSON.stringify(pre)].join("|"));
 ' "$SELF_DIR/lib/seat-fallback.js" "$cur_runner" "${MODEL:-}" "${ENDPOINT:-}" "${VISION_PROMPT_FILE:-$PROMPT_FILE}" "$SELF_DIR/lib/cn-model-dispatch-gate.js" "$SELF_DIR/lib/engine-preflight.js" 2>"$pick_errf")" || { rm -f "$pick_errf"; return 1; }
-    ENGINE_PREFLIGHT_LOG_LINE="$(cat "$pick_errf")"
     rm -f "$pick_errf"
     IFS='|' read -r engine effort runner target_endpoint fb_demoted_json ENGINE_PREFLIGHT_JSON <<< "$pick_parsed"
     ENGINE_PREFLIGHT_LOG_LINE="$(node -e 'const j=JSON.parse(process.argv[1]);const w=j.warnings.find(x=>x.startsWith("capacity_table_"));if(w)process.stdout.write(`engine-preflight: capacity table ${w==="capacity_table_stale"?"stale":w==="capacity_table_unparseable"?"unparseable":"missing"}, using default order`);else process.stdout.write(`engine-preflight: read ${j.table_path} generated_at=${j.generated_at}; ${j.skipped.map(x=>`skipped ${x.runner}:${x.model} (${x.reason})`).join(", ")}${j.skipped.length?"; ":""}chosen ${j.chosen.runner}:${j.chosen.model}`)' "$ENGINE_PREFLIGHT_JSON" 2>/dev/null || true)"

@@ -139,4 +139,39 @@ assert_eq 0 "$RC" 'f: explicit spent runner still dispatches'
 assert_eq agy "$(json_get "$OUT" runner)" 'f: explicit agy remains chosen'
 assert_not_contains "$ERR" 'engine-preflight:' 'f: explicit runner bypasses preflight'
 
+# (g) A failed local endpoint probe retreats through the pace-ranked ladder and logs engine preflight.
+cat > "$TEST_TMP/bin/node" <<'SH'
+#!/usr/bin/env bash
+exec "$REAL_NODE" "$@"
+SH
+chmod +x "$TEST_TMP/bin/node"
+FALLBACK_PORT="$TEST_TMP/fallback.port"
+node - "$FALLBACK_PORT" <<'NODE' >/dev/null 2>&1 &
+const http=require('http'),fs=require('fs'),portFile=process.argv[2];
+const server=http.createServer((req,res)=>{res.writeHead(404);res.end('{}');});
+server.listen(0,'127.0.0.1',()=>fs.writeFileSync(portFile,String(server.address().port)));
+NODE
+FALLBACK_SERVER_PID=$!
+for _i in 1 2 3 4 5 6 7 8 9 10; do [ -s "$FALLBACK_PORT" ] && break; sleep 0.1; done
+FALLBACK_URL="http://127.0.0.1:$(cat "$FALLBACK_PORT")/v1"
+FALLBACK_RUNS="$TEST_TMP/runs-endpoint-fallback"; mkdir -p "$FALLBACK_RUNS"
+FALLBACK_TABLE="$TEST_TMP/endpoint-fallback-engines.json"
+fresh_table "$FALLBACK_TABLE" '[{"harness":"agy","model":"gemini-4-hydrogen-low","availability":"已用完","suggest":"不派"},{"harness":"cc-shim","model":"glm-5.3","availability":"暫停","suggest":"不派"},{"harness":"grok","model":"grok-4.7","availability":"可用","suggest":"派"}]'
+: > "$RUNNER_CALLS"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" \
+  AUTOPILOT_ENDPOINT_PREPROBE=on ANTHROPIC_COMPATIBLE_BASE_URL="$FALLBACK_URL" ANTHROPIC_COMPATIBLE_AUTH_TOKEN=test-token \
+  AUTOPILOT_PACE_FILE="$PACE" AUTOPILOT_DISPATCH_RUNS_DIR="$FALLBACK_RUNS" \
+  AUTOPILOT_ENGINES_TABLE="$FALLBACK_TABLE" AUTOPILOT_BURN_MORE="$BURN" \
+  "$SCRIPT" --no-verify-tip --context-window off --runner cc-shim --endpoint test --model fixture-model --effort high \
+  --grok-bin "$TEST_TMP/bin/grok" --branch feat/table-endpoint-fallback --prompt-file "$PROMPT" \
+  </dev/null 2>"$TEST_TMP/endpoint-fallback.err")"
+RC=$?
+kill "$FALLBACK_SERVER_PID" 2>/dev/null || true
+wait "$FALLBACK_SERVER_PID" 2>/dev/null || true
+LOG="$TEST_TMP/endpoint-fallback.err"
+FALLBACK_ERR="$(cat "$LOG")"
+assert_eq 0 "$RC" 'g: unreachable local endpoint falls back successfully'
+assert_eq grok "$(json_get "$OUT" runner)" 'g: first capacity-allowed pace-ranked rung is grok'
+assert_contains "$(cat "$LOG")" 'engine-preflight:' 'g: fallback ladder preflight reaches captured dispatch log'
+
 finalize_test

@@ -847,7 +847,11 @@ local_lease_json() {
 local_lease_heartbeat_loop() {
   local interval="${AUTOPILOT_LOCAL_LEASE_TTL_S:-180}"
   interval=$((interval / 3)); [ "$interval" -gt 0 ] || interval=1
-  while sleep "$interval"; do
+  while :; do
+    sleep "$interval" &
+    local sleep_pid=$!
+    printf '%s\n' "$sleep_pid" > "$LOCAL_LEASE_HEARTBEAT_SLEEP_FILE"
+    wait "$sleep_pid" || break
     if node "$SELF_DIR/lib/local-impl-slot.js" --lease-operation heartbeat --lease-url "$LOCAL_LEASE_URL" --lease-id "$LOCAL_LEASE_ID" --token-env "$LOCAL_LEASE_TOKEN_ENV" >/dev/null 2>&1; then
       printf '.\n' >> "$LOCAL_LEASE_HEARTBEAT_FILE"
     else
@@ -858,11 +862,19 @@ local_lease_heartbeat_loop() {
 
 release_local_lease() {
   [ "$LOCAL_LEASE_GRANTED" -eq 1 ] || return 0
+  local sleep_pid=""
+  if [ -r "$LOCAL_LEASE_HEARTBEAT_SLEEP_FILE" ]; then
+    IFS= read -r sleep_pid < "$LOCAL_LEASE_HEARTBEAT_SLEEP_FILE" || true
+    if [[ "$sleep_pid" =~ ^[0-9]+$ ]] && kill -0 "$sleep_pid" 2>/dev/null && [ "$(cat "/proc/$sleep_pid/comm" 2>/dev/null)" = "sleep" ]; then
+      kill "$sleep_pid" 2>/dev/null || true
+    fi
+  fi
   if [ -n "$LOCAL_LEASE_HEARTBEAT_PID" ]; then
     kill "$LOCAL_LEASE_HEARTBEAT_PID" 2>/dev/null || true
     wait "$LOCAL_LEASE_HEARTBEAT_PID" 2>/dev/null || true
     LOCAL_LEASE_HEARTBEAT_PID=""
   fi
+  rm -f -- "$LOCAL_LEASE_HEARTBEAT_SLEEP_FILE"
   if [ "$LOCAL_LEASE_RELEASE_ATTEMPTED" -eq 0 ]; then
     LOCAL_LEASE_RELEASE_ATTEMPTED=1
     if node "$SELF_DIR/lib/local-impl-slot.js" --lease-operation release --lease-url "$LOCAL_LEASE_URL" --lease-id "$LOCAL_LEASE_ID" --token-env "$LOCAL_LEASE_TOKEN_ENV" >/dev/null 2>&1; then

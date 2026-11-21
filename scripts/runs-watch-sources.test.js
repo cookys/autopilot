@@ -17,7 +17,9 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { sourceFingerprint, readLiveMarkers } = require('../src/status/runs-watch');
+const { sourceFingerprint, readLiveMarkers, createWatcher } = require('../src/status/runs-watch');
+const { spawnSync } = require('child_process');
+const { scopeFromCwd } = require('../src/status/project-key');
 
 const H = 3600 * 1000;
 const NOW = Date.parse('2026-11-21T12:00:00.000Z');
@@ -95,4 +97,52 @@ test('readLiveMarkers: the same live-only rule, and an unreadable marker is not 
     t.w('unreadable.json', '{not json');
     assert.deepStrictEqual(readLiveMarkers(t.markers, KEY, NOW).paths.map((p) => path.basename(p)), ['live.json']);
   } finally { t.cleanup(); }
+});
+
+test('runs-watch with 5000 expired markers', () => {
+  const t = mk();
+  const oldHome = process.env.HOME;
+  process.env.HOME = t.base;
+  const repo = path.join(t.base, 'repo');
+  fs.mkdirSync(repo);
+  assert.equal(spawnSync('git', ['init', '-q', repo]).status, 0);
+  const scope = scopeFromCwd(repo);
+  const env = { ...t.env, PATH: process.env.PATH, HOME: t.base, AUTOPILOT_LIVE_DIR: path.join(t.base, 'live'), AUTOPILOT_COSTS_FILE: path.join(t.base, 'costs'), AUTOPILOT_PLAN_REVIEW_STATE_DIR: path.join(t.base, 'plan-review') };
+  const watcher = createWatcher({ key: scope.project_key, env, cwd: repo, collect: () => [], now: () => NOW, render: { outRoot: path.join(t.base, 'render') }, codeFingerprint: { changed: () => false } });
+  const write = (name, expires, extra = {}) => t.w(`${name}.json`, { session_id: name, project_key: scope.project_key, expires_at: iso(expires), ...extra });
+  for (let i = 0; i < 2000; i++) write(`old-${i}`, NOW - 26 * H);
+  for (let i = 0; i < 2000; i++) write(`hour-${i}`, NOW - H);
+  for (let i = 0; i < 500; i++) write(`campaign-${i}`, NOW - H, { level: 'l5', campaign_roots: ['root'] });
+  for (let i = 0; i < 500; i++) write(`l3-${i}`, NOW - 26 * H, { level: 'l3' });
+  for (let i = 0; i < 3; i++) write(`live-${i}`, NOW + H, { root_run_id: 'root' });
+  const originalRead = fs.readFileSync;
+  const originalReaddir = fs.readdirSync;
+  const originalParse = JSON.parse;
+  let counts;
+  const inside = (file) => typeof file === 'string' && (path.resolve(file) === path.resolve(t.markers) || path.resolve(file).startsWith(path.resolve(t.markers) + path.sep));
+  fs.readFileSync = function (file, ...args) { if (inside(file)) counts.read++; return originalRead.call(this, file, ...args); };
+  fs.readdirSync = function (file, ...args) { if (inside(file)) counts.readdir++; return originalReaddir.call(this, file, ...args); };
+  JSON.parse = function (...args) { counts.parse++; return originalParse.apply(this, args); };
+  const tick = () => { counts = { read: 0, readdir: 0, parse: 0 }; const result = watcher.tick(); assert.equal(result.error, undefined); return { ...counts }; };
+  try {
+    const first = tick();
+    const firstRemaining = originalReaddir(t.markers).length;
+    for (let i = 0; i < 100; i++) write(`recent-${i}`, NOW - 1000);
+    const second = tick();
+    const secondRemaining = originalReaddir(t.markers).length;
+    assert.equal(secondRemaining, 3, 'second tick removes every expired marker');
+    const clean = tick();
+    assert.ok(clean.read <= 3 + 5, `clean tick reads ${clean.read}`);
+    assert.equal(clean.readdir, 1);
+    assert.ok(clean.parse <= 3 + 5, `clean tick parses ${clean.parse}`);
+    assert.ok(second.read <= 203 + 5, `second tick reads ${second.read}`);
+    assert.equal(firstRemaining, 3, 'first tick removes every expired marker');
+    assert.ok(first.read <= 10003 + 5, `first tick reads ${first.read}`);
+  } finally {
+    fs.readFileSync = originalRead;
+    fs.readdirSync = originalReaddir;
+    JSON.parse = originalParse;
+    if (oldHome === undefined) delete process.env.HOME; else process.env.HOME = oldHome;
+    t.cleanup();
+  }
 });

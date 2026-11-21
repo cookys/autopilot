@@ -263,7 +263,11 @@ export function v74TitleSegs(page: Page, ctx: PageCtx, name: Seg): Seg[] {
   const src = V74_SOURCES[page.id]
   if (src === undefined) return [name, { text: ' · ' + t('v74.c.help_src'), dim: true }]
   const published = ctx.live?.published_at
-  const fetched = ctx.v74?.ages?.[page.id] ?? (page.id === 'dispatch' || page.id === 'review' || page.id === 'hygiene' ? (typeof published === 'string' && Number.isFinite(Date.parse(published)) ? Date.parse(published) : null) : null)
+  // r10b #5: every page's title ends in the data age; spend and quota read the console snapshot's own time, and a source that failed says so instead of staying silent
+  const consoleAt = ctx.console !== null && ctx.console !== undefined && ctx.console.generated_at_ms > 0 ? ctx.console.generated_at_ms : null
+  const fetched = ctx.v74?.ages?.[page.id] ?? (page.id === 'dispatch' || page.id === 'review' || page.id === 'hygiene' ? (typeof published === 'string' && Number.isFinite(Date.parse(published)) ? Date.parse(published) : null) : page.id === 'spend' || page.id === 'quota' ? consoleAt : null)
+  const failed = (page.id === 'todo' && ctx.v74 !== undefined && ctx.v74.todo === null) || (page.id === 'decide' && ctx.v74 !== undefined && ctx.v74.decide === null) || ((page.id === 'spend' || page.id === 'quota') && ctx.console === null)
+  if (failed) return [name, { text: ' · ' + t('v74.c.header_failed', { source: src[0], schema: src[1] }), dim: true }]
   const info = fetched === null || fetched === undefined ? t('v74.c.header_noage', { source: src[0], schema: src[1] }) : t('v74.c.header', { source: src[0], schema: src[1], age: ageUnit(t, Math.max(0, nowMs - fetched)) })
   return [name, { text: ' · ' + info, dim: true }]
 }

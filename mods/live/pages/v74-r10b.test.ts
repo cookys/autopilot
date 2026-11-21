@@ -7,6 +7,8 @@ import { routeKey } from './keys'
 import { renderHelp } from './help'
 import { makeT } from '../i18n'
 import type { DecideCard, V74Ctx } from '../v74/contract'
+import { v74TitleSegs } from './frame'
+import { PAGES } from './index'
 import type { Row } from './rows'
 
 const t = makeT('zh-TW')
@@ -89,4 +91,23 @@ test('r10b #3: other cards folded into 另有 N 張 still say how many of them h
   const plain = decidePage.render({ ...(ctxOf({}, 13) as object), decide: { ...NO_NAV, cursor: 0 } } as never).body.map(text).join('\n')
   expect(plain).toContain('另有 2 張 ·')
   expect(plain).not.toContain('已選')
+})
+
+// ---- #5 every page title ends in the data age; a failed source says so ----
+const titleOf = (id: string, over: Record<string, unknown> = {}, console: unknown = { generated_at_ms: 1794200000000 - 42_000 }): string => {
+  const page = PAGES.find(p => p.id === id)!
+  const c = { ...(ctxOf({ ages: { todo: 1794200000000 - 9_000 } }) as object), console, ...over } as never
+  return v74TitleSegs(page, c, { text: '頁' }).map(s => s.text).join('')
+}
+test('r10b #5: 花費 and 待辦 titles end in 「· N 秒前」 like the other pages', () => {
+  expect(titleOf('spend')).toMatch(/· 42 秒前$/)
+  expect(titleOf('quota')).toMatch(/· 42 秒前$/)
+  expect(titleOf('todo', { v74: v74({ todo: [], ages: { todo: 1794200000000 - 9_000 } }) })).toMatch(/· 9 秒前$/)
+  expect(titleOf('review', {}, null)).not.toContain('讀取失敗')
+})
+test('r10b #5: a source that failed writes 「· 讀取失敗」 in the title (negative: a working one does not)', () => {
+  expect(titleOf('todo', { v74: v74({ todo: null }) })).toMatch(/· 讀取失敗$/)
+  expect(titleOf('spend', {}, null)).toMatch(/· 讀取失敗$/)
+  expect(titleOf('decide', { v74: v74({ decide: null }) })).toMatch(/· 讀取失敗$/)
+  expect(titleOf('spend')).not.toContain('讀取失敗')
 })

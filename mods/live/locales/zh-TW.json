@@ -857,6 +857,7 @@
   "v74.c.header_noage": "資料 {source}（schema {schema}）",
   "v74.c.help_src": "本機說明（無資料來源）· 圖示與按鍵",
   "v74.c.header": "資料 {source}（schema {schema}）· {age}",
+  "v74.c.header_failed": "資料 {source}（schema {schema}）· 讀取失敗",
   "v74.c.src_missing": "現況來源不明",
   "v74.e.section": "派工 {n} 筆",
   "v74.e.col_line": "線",

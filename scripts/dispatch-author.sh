@@ -1352,6 +1352,10 @@ author_manifest_finalize() {
   [ -n "$AUTHOR_MANIFEST_FILE" ] || return 0
   AUTHOR_MANIFEST_ENDED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   AUTHOR_MANIFEST_ENDED_EPOCH="$(date +%s)"
+  if [ -n "${AUTHOR_STARTED_EPOCH:-}" ] && [ "$AUTHOR_MANIFEST_ENDED_EPOCH" -le "$AUTHOR_STARTED_EPOCH" ]; then
+    AUTHOR_MANIFEST_ENDED_EPOCH="$((AUTHOR_STARTED_EPOCH + 1))"
+    AUTHOR_MANIFEST_ENDED="$(date -u -d "@$AUTHOR_MANIFEST_ENDED_EPOCH" +%Y-%m-%dT%H:%M:%SZ)"
+  fi
   write_author_manifest
 }
 write_author_manifest

@@ -1843,6 +1843,10 @@ review_manifest_finalize() {
   [ -n "${REVIEW_MANIFEST_FILE:-}" ] || return 0
   REVIEW_MANIFEST_ENDED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   REVIEW_MANIFEST_ENDED_EPOCH="$(date +%s)"
+  if [ -n "${REVIEW_STARTED_EPOCH:-}" ] && [ "$REVIEW_MANIFEST_ENDED_EPOCH" -le "$REVIEW_STARTED_EPOCH" ]; then
+    REVIEW_MANIFEST_ENDED_EPOCH="$((REVIEW_STARTED_EPOCH + 1))"
+    REVIEW_MANIFEST_ENDED="$(date -u -d "@$REVIEW_MANIFEST_ENDED_EPOCH" +%Y-%m-%dT%H:%M:%SZ)"
+  fi
   write_review_manifest
 }
 write_review_manifest

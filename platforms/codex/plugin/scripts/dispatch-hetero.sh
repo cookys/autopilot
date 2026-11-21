@@ -3053,6 +3053,10 @@ manifest_finalize() {
   MANIFEST_FINAL_STATUS="${1:-}"
   MANIFEST_ENDED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   MANIFEST_ENDED_EPOCH="$(date +%s)"
+  if [ -n "${DISPATCH_STARTED_EPOCH:-}" ] && [ "$MANIFEST_ENDED_EPOCH" -le "$DISPATCH_STARTED_EPOCH" ]; then
+    MANIFEST_ENDED_EPOCH="$((DISPATCH_STARTED_EPOCH + 1))"
+    MANIFEST_ENDED_AT="$(date -u -d "@$MANIFEST_ENDED_EPOCH" +%Y-%m-%dT%H:%M:%SZ)"
+  fi
   write_manifest
 }
 

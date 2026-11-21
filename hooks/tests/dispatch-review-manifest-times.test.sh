@@ -36,9 +36,9 @@ exit 23
 EOF
 chmod +x "$TIMED_ABORT"
 
-run_timed_review() { # <runner-bin> <run-id>
+run_timed_review() { # <runner-bin> <run-id> [script]
   (cd "$REPO" && AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
-    "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" \
+    "${3:-$SCRIPT}" --runner codex --model gpt-5.5 --diff-file "$DIFF" \
     --bin "$1" --run-id "$2" >/dev/null 2>&1)
 }
 
@@ -62,5 +62,40 @@ assert_manifest_times rv-timed-success
 
 run_timed_review "$TIMED_ABORT" rv-timed-abort
 assert_manifest_times rv-timed-abort
+
+# Freeze the dispatch's clock so a zero-delay runner deterministically ends in
+# the same whole second in which it started.
+FIXED_BIN="$TEST_TMP/fixed-bin"
+mkdir -p "$FIXED_BIN"
+cat > "$FIXED_BIN/date" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+  '-u +%Y-%m-%dT%H:%M:%SZ') printf '2026-11-21T00:00:00Z\n' ;;
+  '-u +%s %Y-%m-%dT%H:%M:%SZ') printf '1795228800 2026-11-21T00:00:00Z\n' ;;
+  '+%s') printf '1795228800\n' ;;
+  *) exec /usr/bin/date "$@" ;;
+esac
+EOF
+chmod +x "$FIXED_BIN/date"
+FAST_VERDICT="$TEST_TMP/fast-verdict"
+cat > "$FAST_VERDICT" <<'EOF'
+#!/usr/bin/env bash
+exec "$STUB_VERDICT" "$@"
+EOF
+chmod +x "$FAST_VERDICT"
+run_zero_delay_review() { # <script> <run-id>
+  (cd "$REPO" && PATH="$FIXED_BIN:$PATH" AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
+    "$1" --runner codex --model gpt-5.5 --diff-file "$DIFF" \
+    --bin "$FAST_VERDICT" --run-id "$2" >/dev/null 2>&1)
+}
+run_zero_delay_review "${ZERO_DELAY_REVIEW_SCRIPT:-$SCRIPT}" rv-zero-delay
+node - "$AUTOPILOT_DISPATCH_RUNS_DIR/rv-zero-delay.manifest.json" <<'NODE'
+const fs = require('fs');
+const m = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+if (!(Date.parse(m.ended_at) > Date.parse(m.started_at))) {
+  throw new Error(`started_at ${m.started_at} must precede ended_at ${m.ended_at}`);
+}
+NODE
+assert_eq "0" "$?" "zero-delay reviewer manifest ends after it starts"
 
 finalize_test

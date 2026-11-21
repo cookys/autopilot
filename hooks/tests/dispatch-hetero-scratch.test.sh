@@ -18,6 +18,9 @@ export HOME="$TEST_TMP/operator-home" CLAUDE_CONFIG_DIR="$TEST_TMP/operator-home
 git -C "$TEST_TMP/repo" init -q
 git -C "$TEST_TMP/repo" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
 git -C "$TEST_TMP/repo" branch -m develop
+printf 'repo-owned README\n' > "$TEST_TMP/repo/README.md"
+git -C "$TEST_TMP/repo" add README.md
+git -C "$TEST_TMP/repo" -c user.email=t@t -c user.name=t commit -q -m 'base README'
 
 STUB="$TEST_TMP/bin/claude"
 cat > "$STUB" <<'STUB'
@@ -26,6 +29,16 @@ pwd > "$STUB_CWD"
 printf 'called\n' >> "$STUB_CALLS"
 printf '%s\n' * > "$STUB_FILES"
 printf '%s\n' "$HOME" "$CLAUDE_CONFIG_DIR" > "$STUB_ENV"
+if [ "${STUB_MODE:-}" = regression ]; then
+  printf 'worker README\n' > README.md
+  printf 'worker output\n' > worker-output.txt
+  printf '%s' '{"type":"result","is_error":false,"result":"ok"}'
+  exit 0
+fi
+if [ "${STUB_MODE:-}" = no-write ]; then
+  printf '%s' '{"type":"result","is_error":false,"result":"ok"}'
+  exit 0
+fi
 (
   shopt -s globstar dotglob nullglob
   for reachable in ../**/*; do [ -f "$reachable" ] && printf '%s\n' "$reachable"; done
@@ -61,6 +74,26 @@ run_dispatch() {
       --model MiniMax-M2.5 --branch "feat/scratch-$tag" \
       --prompt-file "$TEST_TMP/$tag.md" "$@" >"$TEST_TMP/$tag.out" 2>"$TEST_TMP/$tag.err")
 }
+
+printf 'Overwrite README and create one file.\n' > "$TEST_TMP/regression.md"
+STUB_MODE=regression run_dispatch regression --scratch
+RC=$?
+assert_exit_code "$RC" 0 "scratch README regression dispatch exits successfully"
+REGRESSION_COMMIT="$(git -C "$TEST_TMP/repo" rev-parse feat/scratch-regression)"
+REGRESSION_PARENTS="$(git -C "$TEST_TMP/repo" rev-list --parents -n1 "$REGRESSION_COMMIT" | wc -w | tr -d ' ')"
+assert_eq "1" "$REGRESSION_PARENTS" "scratch commit has no parent"
+REGRESSION_TREE="$(git -C "$TEST_TMP/repo" ls-tree -r --name-only "$REGRESSION_COMMIT" | sort | tr '\n' ' ')"
+assert_eq "README.md worker-output.txt " "$REGRESSION_TREE" "scratch commit contains exactly worker files"
+assert_eq "repo-owned README" "$(git -C "$TEST_TMP/repo" show develop:README.md)" "base README remains unchanged"
+assert_eq "worker README" "$(git -C "$TEST_TMP/repo" show "$REGRESSION_COMMIT:README.md")" "scratch commit references worker README"
+REGRESSION_MANIFEST="$(printf '%s\n' "$TEST_TMP/runs-regression"/*.manifest.json)"
+assert_eq "orphan" "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).scratch.base)' "$REGRESSION_MANIFEST")" "scratch manifest records orphan base"
+
+printf 'Write nothing.\n' > "$TEST_TMP/no-write.md"
+STUB_MODE=no-write run_dispatch no-write --scratch
+RC=$?
+assert_exit_code "$RC" 1 "empty scratch dispatch keeps its existing no-op exit code"
+assert_contains "$(cat "$TEST_TMP/no-write.out")" '"status": "no_op"' "empty scratch dispatch remains no_op"
 
 printf 'Create produced.txt with one line.\n' > "$TEST_TMP/allowed.md"
 run_dispatch allowed --scratch

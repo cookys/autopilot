@@ -693,3 +693,56 @@ Module._extensions['.js']=(m,file)=>file===${JSON.stringify(sourcePath)}
     t.diagnostic(`negative control: ${name}: exit ${r.status}; restored source assertion passes in this suite`);
   }
 });
+
+// ---- stop-hook false positives (fleet task 01M7XQVBYG2Q8A4M6RFR8Z4MBR) ----
+const OQ_DUE_ID = '01M7HHAVYD6BTQV7ZT4K2PDDHE';
+const OQ_NODUE_ID = '01M7TXFAG94R9GEDR8MS6ZNW2J';
+const OQ_MISSING_ID = '01M7AAAAAAAAAAAAAAAAAAAAAA';
+function oqStubLookup(t, calls = []) {
+  guard.setFleetTaskLookup((id) => {
+    calls.push(id);
+    if (id === OQ_DUE_ID) return { next_evidence_due: '-', hard_deadline: '2026-11-21T10:00:00Z', state: 'open' };
+    if (id === OQ_NODUE_ID) return { next_evidence_due: '-', hard_deadline: '-', state: 'open' };
+    return null;
+  });
+  t.after(() => guard.setFleetTaskLookup(null));
+  return calls;
+}
+
+test('operator-step sentence naming a 26-char task id that has a due passes', (t) => {
+  const f = fixture(t);
+  oqStubLookup(t);
+  const s = (id) => `更正那一句：剩下要你本人登入才能看的，thinksmart 已經寫成五步流程，追在單 ${id}（交期今天 18:00 台北）。`;
+  assert.equal(f.check(s(OQ_DUE_ID)), null);
+  assert.equal(f.check(`更正那一句：接下來那一步要你本人用自己配對好的手機打 2 分鐘，追在單 ${OQ_DUE_ID}（交期 11-22 00:00 台北）。`), null);
+  // reverse: a real task without a due, an unknown id, and no id at all still block
+  assert.equal(f.check(s(OQ_NODUE_ID))?.decision, 'block');
+  assert.equal(f.check(s(OQ_MISSING_ID))?.decision, 'block');
+  assert.equal(f.check('請你登入 thinksmart 看一下結果。')?.decision, 'block');
+});
+
+test('each task id is looked up once per run', (t) => {
+  const calls = oqStubLookup(t);
+  const text = `要你本人登入，追在單 ${OQ_DUE_ID}（交期今天）。另外要你本人再看，單 ${OQ_DUE_ID}。`;
+  guard.unresolvedHits(text);
+  guard.unresolvedHits(text);
+  assert.deepEqual(calls, [OQ_DUE_ID]);
+});
+
+test('role-split description and rule explanation are not questions; deferrals still are', (t) => {
+  const f = fixture(t);
+  for (const s of [
+    '紅線、授權表、開卡分類、那些 hook，大多是我們一起討論出來的：我起草或提方案，你拍板，之後由我維護文字和追蹤有沒有落實。',
+    '做法一直是我起草或提方案，你拍板；文字是我在維護。',
+    '- **評審是你指定的**：兩家都要 8 分以上是你定的標準，換掉評審等於改你的標準，要你決定。',
+  ]) assert.equal(f.check(s), null, s);
+  assert.equal(f.check('至於要不要正式採用……等你想定再說。')?.decision, 'block');
+  // the narrowing is the explainer shape only: a bare ask with the same tail still blocks
+  assert.equal(f.check('換掉評審的事，要你決定。')?.decision, 'block');
+});
+
+test('a colon heading and its bullets are one sentence: a card in the bullet counts', (t) => {
+  const f = fixture(t), id = f.card();
+  assert.equal(f.check(`**新開一張卡要你決定：**\n- ${id}（合成待決）…`), null);
+  assert.equal(f.check('**新開一張卡要你決定：**\n- 合成待決的事項…')?.decision, 'block');
+});

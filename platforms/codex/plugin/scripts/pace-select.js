@@ -957,6 +957,12 @@ function selectEngine({
     qualified_source: resolvedQualifiedSource,
     pace_generated_at: paceGeneratedAt,
     candidates,
+    ranked_candidates: known.map((entry) => ({
+      runner: entry.entry.runner ?? null,
+      model: cheapSeats?.[entry.key]?.model || roleModelMap[entry.key] || entry.entry.model || null,
+      endpoint: entry.entry.endpoint || '',
+      effort: cheapSeats?.[entry.key]?.effort || entry.entry.effort || '',
+    })),
     runner_up: known[1]?.key ?? null,
     reason: selectionReason,
   };

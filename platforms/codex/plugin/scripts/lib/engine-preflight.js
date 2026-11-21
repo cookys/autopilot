@@ -4,7 +4,7 @@
 // engine-preflight.js — decide which runner:model to dispatch before spending a ticket.
 // Node >= 20.10, built-ins only. Never invokes grok, codex, agy, opencode, kimi or cursor.
 //
-//   preflight({ candidates, now, sources }) -> {
+//   preflight({ candidates, now, sources, preferBurnMore }) -> {
 //     schema: 'autopilot.engine-preflight/1',
 //     chosen: { runner, model, burn_more? } | null,
 //     skipped: [{ runner, model, reason, burn_more? }],
@@ -278,7 +278,7 @@ function preflight({ candidates, now, sources, preferBurnMore = false, localFirs
     }
   }
   if (!chosen && fallbackOnAllSkipped && list.length > 0) {
-    const first = list[0];
+    const first = input[0];
     chosen = { runner: first.runner, model: first.model, fallback: true };
     warnings.push('all_candidates_skipped_default_order');
   }

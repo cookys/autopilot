@@ -64,7 +64,7 @@ assert_contains "$(cat "$MF")" '"engine_preflight"' 'a: manifest carries engine_
 assert_contains "$(cat "$MF")" '"chosen":{"runner":"grok","model":"grok-4.7"}' 'a: manifest records chosen fallback'
 
 # (b) The separate implementer retreat ladder skips the paused local GLM row.
-PAUSED="$(node -e 'const fs=require("fs"),p=process.argv[1];fs.writeFileSync(p,JSON.stringify({schema:"capacity.engines/1",generated_at:new Date().toISOString(),engines:[{harness:"cc-shim",model:"glm-5.3",availability:"暫停",suggest:"不派"}]}))' "$TEST_TMP/paused.json"; printf '[{"runner":"cc-shim","model":"glm-5.3","endpoint":"glm"},{"runner":"grok","model":"grok-4.7"}]')"
+PAUSED="$(node -e 'const fs=require("fs"),p=process.argv[1];fs.writeFileSync(p,JSON.stringify({schema:"capacity.engines/1",generated_at:new Date().toISOString(),engines:[{harness:"xl270d",model:"Qwen3.8-27B-QUASAR-NVFP4",availability:"暫停",suggest:"不派"}]}))' "$TEST_TMP/paused.json"; printf '[{"runner":"xl270d","model":"Qwen3.8-27B-QUASAR-NVFP4","endpoint":"glm_local"},{"runner":"grok","model":"grok-4.7"}]')"
 OUT_PAUSED="$(AUTOPILOT_ENGINES_TABLE="$TEST_TMP/paused.json" AUTOPILOT_BURN_MORE="$BURN" node "$REPO_ROOT/scripts/lib/engine-preflight.js" --fallback-on-all-skipped --candidates-json "$PAUSED" 2>/dev/null)"
 assert_contains "$OUT_PAUSED" 'capacity:暫停/不派' 'b: paused local host is skipped'
 assert_contains "$OUT_PAUSED" '"runner":"grok"' 'b: next fallback rung selected'
@@ -73,9 +73,9 @@ assert_contains "$OUT_PAUSED" '"runner":"grok"' 'b: next fallback rung selected'
 PREF='[{"runner":"grok","model":"grok-4.7"},{"runner":"kimi","model":"kimi-code/kimi-for-coding"}]'
 OUT_PREF="$(AUTOPILOT_ENGINES_TABLE="$TABLE" AUTOPILOT_BURN_MORE="$TEST_TMP/burn.json" node "$REPO_ROOT/scripts/lib/engine-preflight.js" --prefer-burn-more --candidates-json "$PREF")"
 assert_eq kimi "$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).chosen.runner)' "$OUT_PREF")" 'c: burn-more candidate chosen before non-burn cloud candidate'
-LOCAL_PREF='[{"runner":"grok","model":"grok-4.7"},{"runner":"kimi","model":"kimi-code/kimi-for-coding"},{"runner":"local","model":"qwen"}]'
+LOCAL_PREF='[{"runner":"grok","model":"grok-4.7"},{"runner":"kimi","model":"kimi-code/kimi-for-coding"},{"runner":"cc-shim","model":"Qwen3.8-27B-QUASAR-NVFP4","endpoint":"glm_local"}]'
 OUT_LOCAL="$(AUTOPILOT_ENGINES_TABLE="$TABLE" AUTOPILOT_BURN_MORE="$TEST_TMP/burn.json" node "$REPO_ROOT/scripts/lib/engine-preflight.js" --prefer-burn-more --local-first --candidates-json "$LOCAL_PREF")"
-assert_contains "$OUT_LOCAL" '"runner":"local"' 'c: local remains first for mechanical selection'
+assert_contains "$OUT_LOCAL" '"runner":"cc-shim"' 'c: local GLM endpoint remains first for mechanical selection'
 
 # (d) Missing table preserves candidate order, emits one warning, and exits 0.
 : > "$RUNNER_CALLS"

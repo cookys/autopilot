@@ -3489,7 +3489,7 @@ if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_S
 const j=JSON.parse(process.argv[1]);
 const warning=j.warnings.find(x=>x.startsWith("capacity_table_"));
 if(warning)process.stdout.write(`engine-preflight: capacity table ${warning==="capacity_table_stale"?"stale":"missing"}, using default order`);
-else if(j.warnings.includes("all_candidates_skipped_default_order"))process.stdout.write(`engine-preflight: every candidate skipped, using default choice; chosen ${j.chosen.runner}:${j.chosen.model}`);
+else if(j.warnings.includes("all_candidates_skipped_default_order"))process.stdout.write(`engine-preflight: read ${j.table_path} generated_at=${j.generated_at}; ${j.skipped.map(x=>`skipped ${x.runner}:${x.model} (${x.reason})`).join(", ")}; every candidate skipped, using default choice ${j.chosen.runner}:${j.chosen.model}`);
 else process.stdout.write(`engine-preflight: read ${j.table_path} generated_at=${j.generated_at}; ${j.skipped.map(x=>`skipped ${x.runner}:${x.model} (${x.reason})`).join(", ")}${j.skipped.length?"; ":""}chosen ${j.chosen.runner}:${j.chosen.model}`);
 ' "$ENGINE_PREFLIGHT_JSON" 2>/dev/null || true)"
     [ -z "$ENGINE_PREFLIGHT_LOG_LINE" ] || printf '%s\n' "$ENGINE_PREFLIGHT_LOG_LINE" >&2

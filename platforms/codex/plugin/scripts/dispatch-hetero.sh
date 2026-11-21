@@ -3478,13 +3478,8 @@ fi
 # Capacity admission runs only for implicit selections. Keep pace-select's
 # chosen seat first, then its already-ranked known candidates as fallbacks.
 if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_SUPPLIED" -eq 0 ] \
-   && [ "$STRICT_CONTRACT" -eq 0 ] && { [ -n "${ENGINE_CHOICE_JSON:-}" ] || [ -n "${AUTOPILOT_ENGINE_PREFLIGHT_CANDIDATES:-}" ]; } && [ "$RUNNER" != "local" ]; then
-  _ep_candidates="${AUTOPILOT_ENGINE_PREFLIGHT_CANDIDATES:-}"
-  if [ -z "$_ep_candidates" ]; then _ep_candidates="$(node -e '
-const c=JSON.parse(process.argv[1]); const out=[];
-for(const x of [c,...(c.candidates||[])]){if(!x||!x.runner||!x.model||x.reason)continue; const endpoint=x.endpoint||""; if(!out.some(y=>y.runner===x.runner&&y.model===x.model))out.push({runner:x.runner,model:x.model,endpoint});}
-process.stdout.write(JSON.stringify(out));
-' "$ENGINE_CHOICE_JSON" 2>/dev/null || printf '[]')"; fi
+   && [ "$STRICT_CONTRACT" -eq 0 ] && [ -n "${ENGINE_CHOICE_JSON:-}" ] && [ "$RUNNER" != "local" ]; then
+  _ep_candidates="$(node -e 'const c=JSON.parse(process.argv[1]);process.stdout.write(JSON.stringify(c.ranked_candidates||[{runner:c.runner,model:c.model,endpoint:c.endpoint||"",effort:c.effort||""}]))' "$ENGINE_CHOICE_JSON" 2>/dev/null || printf '[]')"
   _ep_options=(--fallback-on-all-skipped)
   [ "${PACE_ROLE:-implementer}" != "implementer" ] || _ep_options+=(--prefer-burn-more)
   _ep_json="$(node "$SELF_DIR/lib/engine-preflight.js" "${_ep_options[@]}" --candidates-json "$_ep_candidates" 2>/dev/null)" || _ep_json=""
@@ -3494,7 +3489,7 @@ process.stdout.write(JSON.stringify(out));
 const j=JSON.parse(process.argv[1]);
 const warning=j.warnings.find(x=>x.startsWith("capacity_table_"));
 if(warning)process.stdout.write(`engine-preflight: capacity table ${warning==="capacity_table_stale"?"stale":"missing"}, using default order`);
-else if(j.warnings.includes("all_candidates_skipped_default_order"))process.stdout.write(`engine-preflight: every candidate skipped, using default choice; chosen ${j.chosen.runner}:${j.chosen.model}`);
+else if(j.warnings.includes("all_candidates_skipped_default_order"))process.stdout.write(`engine-preflight: read ${j.table_path} generated_at=${j.generated_at}; ${j.skipped.map(x=>`skipped ${x.runner}:${x.model} (${x.reason})`).join(", ")}; every candidate skipped, using default choice ${j.chosen.runner}:${j.chosen.model}`);
 else process.stdout.write(`engine-preflight: read ${j.table_path} generated_at=${j.generated_at}; ${j.skipped.map(x=>`skipped ${x.runner}:${x.model} (${x.reason})`).join(", ")}${j.skipped.length?"; ":""}chosen ${j.chosen.runner}:${j.chosen.model}`);
 ' "$ENGINE_PREFLIGHT_JSON" 2>/dev/null || true)"
     [ -z "$ENGINE_PREFLIGHT_LOG_LINE" ] || printf '%s\n' "$ENGINE_PREFLIGHT_LOG_LINE" >&2

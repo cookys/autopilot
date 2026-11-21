@@ -524,7 +524,10 @@ function v74Card(c: DecideCard, i: number, selected: boolean, nav: DecideNav, ct
 // ---- r8: the band frame's 待決 (design S3). The cards other than the one at the cursor are one summary row each (the answer picked, else the one suggested); the card at the cursor is open
 // in full: background on a hanging indent, then each option with its description, then the note. Spare rows keep the design's blank lines; a short frame drops them (then the descriptions) before it cuts.
 const BOX_LABEL_HANG = 11 // `    背景   `: 4 blanks + the label (2 wide chars = 4 cells) + 3 blanks. The text of the first row starts here and every continuation row starts on the same cell (r8-3 #3)
-const labelledBox = (label: string, text: string, width: number): Row[] => wrapRow([seg('    '), dimSeg(label), seg('   ' + text)], width, BOX_LABEL_HANG)
+// I2: the Pane is the full view: a background with line breaks is one row per line (80 lines are 80 rows), the frame scrolls what does not fit (PgUp / PgDn, 還有 N 列); the band keeps its truncation
+const labelledBox = (label: string, text: string, width: number): Row[] => text.split('\n').flatMap((ln, k) => k === 0
+  ? wrapRow([seg('    '), dimSeg(label), seg('   ' + ln)], width, BOX_LABEL_HANG)
+  : wrapRow([seg(' '.repeat(BOX_LABEL_HANG) + ln)], width, BOX_LABEL_HANG))
 function boxSummary(c: DecideCard, i: number, nav: DecideNav, ctx: PageCtx): Row {
   const { t } = ctx
   const picked = nav.picks[c.id]

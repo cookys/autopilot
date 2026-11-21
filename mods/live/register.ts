@@ -1596,6 +1596,8 @@ const pendingLogs: { name: string; row: Record<string, unknown> }[] = []
 async function flushPendingLogs($: EngineInterface): Promise<void> {
   while (liveBaseSeen !== null && pendingLogs.length > 0) { const p = pendingLogs.shift() as { name: string; row: Record<string, unknown> }; await appendLog($, p.name, p.row) }
 }
+// the host's own word on whether the Pane is seated (isPlaced), never the module state or pane_wanted: the toggle's glyph and its press read this
+const hostPlaced = async ($: EngineInterface): Promise<boolean> => (await $.ui.panes().catch(() => [] as { id: string; isPlaced: boolean }[])).some(p => p.id === PANE_ID && p.isPlaced === true)
 async function appendLog($: EngineInterface, name: string, row: Record<string, unknown>): Promise<void> {
   if (liveBaseSeen === null) { pendingLogs.push({ name, row }); return } // before the first snapshot names the live base: kept, written by flushPendingLogs
   const path = liveBaseSeen + '/' + name
@@ -2127,6 +2129,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const togglePane = async () => {
       let isOpen = v74Open
       if (!v74) { try { isOpen = (await $.ui.panes()).some(p => p.id === PANE_ID) } catch (_e) { /* the engine could not list panes: treat the pane as closed */ } }
+      else if (!isOpen) isOpen = await hostPlaced($) // I1: after a reload the module state is empty while the host still shows the Pane
       if (isOpen && v75NotPlaced && !v75PaneOn) { // waiting (the host holds the pane open but undrawn): this press is the person's ask, the host seats it at any width
         const placed = await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: true }).catch((err: unknown) => ({ isPlaced: false, reason: 'threw: ' + String(err) }) as { isPlaced: boolean; reason?: string })
         void appendLog($, 'band-reload.log', { step: 'toggle-open', result: placed })
@@ -2260,7 +2263,9 @@ export function registerLive(on: Parameters<Register>[0]): void {
       const answer = await lower(forgeAsk.maxRows, forgeAsk.bodyColumns)
       if (answer !== undefined && answer !== null && (answer as { type?: string }).type !== 'engine') forgeRow = answer
     }
-    const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge, usageOn, moreTo, con, bandPreset, consoleOn && consoleSnap !== null ? bandQuotaSeg(normalizedPools(consoleSnap), bandNow, t, qSrc) : null, paneOpen || v74, legacyTabs, forgeRow !== null, legacyTabs ? undefined : () => { void togglePane() }, paneOpen && !(v74 && v75NotPlaced))
+    const placedNow = v74 ? v75PaneOn || await hostPlaced($) || (paneOpen && !v75NotPlaced) : paneOpen // I1: the toggle shows the host's state
+    if (v74 && v75NotPlaced && (v75PaneOn || await hostPlaced($))) v75NotPlaced = false
+    const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge, usageOn, moreTo, con, bandPreset, consoleOn && consoleSnap !== null ? bandQuotaSeg(normalizedPools(consoleSnap), bandNow, t, qSrc) : null, paneOpen || v74, legacyTabs, forgeRow !== null, legacyTabs ? undefined : () => { void togglePane() }, v74 ? placedNow : paneOpen)
     // v7.4: the O4 shell and the two-row band never draw. Closed: the one-line BandBar. Open: the page as a full-width framed tree (title in the top border, hint in the bottom border), the tab row, then the BandBar row.
     if (v74) {
       if ((await $.env.get('AUTOPILOT_LIVE_V75').catch(() => undefined)) !== '0') { // AUTOPILOT_LIVE_V75=0: the v7.4 in-band page only (kill switch; the v7.4 host tests run with it)

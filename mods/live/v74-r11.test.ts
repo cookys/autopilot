@@ -54,7 +54,7 @@ test('r11 #2: send then Esc: the keys-held word falls back after the send and on
 })
 
 const picked = { ...NO_NAV, picks: { [decide[0].id]: 0, [decide[1].id]: 1 }, notes: { [decide[1].id]: '這是一段很長很長很長很長很長很長很長很長很長很長很長的附註' }, armed: true }
-test('r11 #3/#4/#5: the preview names card number, letter, option and note; Esc is only in the border; the unarmed row announces the preview', () => {
+test('r11 #3/#4/#5: the preview names card number, letter, option and note; x is only in the border; the unarmed row announces the preview', () => {
   const armedRows = decidePage.render(ctxOf({}, 40, 120, { decide: picked })).actions.map(text)
   const all = armedRows.join('\n')
   expect(armedRows[0]).toContain('將送出 2 張')
@@ -69,9 +69,9 @@ test('r11 #3/#4/#5: the preview names card number, letter, option and note; Esc 
   expect(unarmed).toContain('預覽並送出已選 2 張 · 另 ')
   const page = PAGES.find(p => p.id === 'decide')!
   const armedCtx = ctxOf({}, 40, 120, { decide: picked })
-  expect(frameHintText(page, armedCtx)).toContain('y 確認送出 · Esc 取消預覽')
+  expect(frameHintText(page, armedCtx)).toContain('y 確認送出 · x 取消預覽')
   expect(frameHintText(page, armedCtx)).not.toContain('還給輸入框')
-  expect(frameHintShort(page, armedCtx)).toContain('Esc 取消')
+  expect(frameHintShort(page, armedCtx)).toContain('x 取消')
 })
 
 test('r11 #4: Esc while the preview is up is swallowed as a cancel; with no preview or on a band element it is not', () => {

@@ -44,9 +44,10 @@ export type LiveFleetSummary = {
 
 // `panel_open_at_ms`: clock ms of the last draw of the O4 shell (band.tsx Shell), written at most every 15 s while it is on screen. codeforge's forge-stats reads it: within a minute of now it
 // keeps the quota mirror and its `forge-stats.panel` current. 0 until the shell was first drawn.
+// `pane_wanted`: the owner asked for the v7.5 Pane open (band ▴ / /live-pane / a page key); cleared by 收起 and by the Pane's close. The first render after a reload reopens it (no focus) when the host closed it.
 
 declare module 'claude-code' {
   interface PluginState {
-    autopilot: { decide: LiveDecideState; steps: Shaped<LiveStep[]>; fleet: LiveFleetSummary; panel_open_at_ms: number }
+    autopilot: { decide: LiveDecideState; steps: Shaped<LiveStep[]>; fleet: LiveFleetSummary; panel_open_at_ms: number; pane_wanted: boolean }
   }
 }

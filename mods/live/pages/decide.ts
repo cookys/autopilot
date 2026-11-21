@@ -18,11 +18,12 @@ import { brokenRow, pendingMissingReason, pendingSourceMissing, wrapRow } from '
 import type { Row } from './rows'
 import { STRIP_SPLIT_COLS } from './layout'
 import { PICK_KEYS } from '../v74/contract'
+import { v75On } from '../v75'
 import type { DecideCard } from '../v74/contract'
 
 // ---- view state and the key reducer ----
 // DecideState (model.ts) carries picks, notes, sent and hold (the 10 s undo window, by card id); the rest is this page's own: which card shows in full, whether the others are folded, the note mode and its buffer, the focused option beyond a)–e)
-export type DecideNav = DecideState & { cursor: number; folded: boolean; textMode: boolean; textBuf: string; opt: number | null; detailOffset?: number; armed?: boolean }
+export type DecideNav = DecideState & { cursor: number; folded: boolean; textMode: boolean; textBuf: string; opt: number | null; detailOffset?: number; armed?: boolean; snap?: string; stale?: boolean }
 export const NO_NAV: DecideNav = { ...NO_DECIDE, cursor: 0, folded: false, textMode: false, textBuf: '', opt: null }
 export type DecideCtx = PageCtx & { decide?: DecideNav }
 export type DecideEffect = { kind: 'send'; id: string; line: string } | { kind: 'undo'; id: string } | { kind: 'fill'; text: string } | null
@@ -76,6 +77,27 @@ export const v74Pool = (pending: readonly LiveDecision[], feed: readonly DecideC
   return [...pending, ...(feed ?? []).filter(c => !held.has(c.id)).map(cardToLive)]
 }
 
+// v7.5 §7.2: the preview is bound to the whole send list. One item per card that would go out: its id, its version (a hash of what the owner read: question, background, option labels), the letter and the note.
+const djb = (x: string): string => { let h = 5381; for (const ch of x) h = ((h * 33) ^ ch.codePointAt(0)!) >>> 0; return h.toString(36) }
+export const cardVersion = (d: LiveDecision): string => djb([d.question, d.background ?? '', ...d.options.map(o => o.label)].join('\u0001'))
+export function decideReadySig(nav: DecideNav, ctx: PageCtx): string {
+  const m = modelOf(ctx)
+  const items = m.all.flatMap(it => (it.kind === 'own' && it.d.id !== null && nav.hold?.[it.d.id] === undefined && !(nav.sent[it.d.id] !== undefined && nav.fixing?.[it.d.id] === undefined) && decideLine(it.d, nav) !== null
+    ? [[it.d.id, cardVersion(it.d), decidePick(it.d, nav), nav.notes[it.d.id] ?? ''] as const] : []))
+  return JSON.stringify(items)
+}
+// the cards a send would carry, in card order, as the preview and the band's third row name them (v7.5 §7.2)
+export function previewItems(nav: DecideNav, ctx: PageCtx): { n: number; title: string; letter: string; label: string; note: string }[] {
+  const m = modelOf(ctx)
+  return m.all.flatMap((it, i) => {
+    if (it.kind !== 'own' || it.d.id === null || nav.hold?.[it.d.id] !== undefined || (nav.sent[it.d.id] !== undefined && nav.fixing?.[it.d.id] === undefined) || decideLine(it.d, nav) === null) return []
+    const at = decidePick(it.d, nav)
+    return at === null ? [] : [{ n: i + 1, title: it.d.title ?? it.d.id, letter: letterOf(at), label: it.d.options[at]?.label ?? '', note: (nav.notes[it.d.id] ?? '').trim() }]
+  })
+}
+// a preview that is open but whose list no longer matches the frozen one
+export const previewStale = (nav: DecideNav, ctx: PageCtx): boolean => nav.armed === true && nav.snap !== undefined && (nav.stale === true || nav.snap !== decideReadySig(nav, ctx))
+
 const clampCursor = (nav: DecideNav, n: number): number => (n === 0 ? 0 : Math.max(0, Math.min(n - 1, nav.cursor)))
 
 // one key of routeKey's table applied to the page state. The host calls it with the cards of the current draw (`cards` = the seat's own decision cards and the console cards, in page order), and does the effect.
@@ -87,17 +109,24 @@ export function decideReduce(nav: DecideNav, key: KeyAction, ctx: PageCtx, nowMs
   const same = (patch: Partial<DecideNav>): { nav: DecideNav; effect: DecideEffect } => ({ nav: { ...nav, cursor, ...patch }, effect: null })
   const heldNow = d !== null && d.id !== null && nav.hold?.[d.id] !== undefined
   const sentNow = d !== null && d.id !== null && nav.sent[d.id] !== undefined && nav.fixing?.[d.id] === undefined
-  if (key.kind === 'disarm') return same({ armed: false })
-  if (nav.armed === true && key.kind !== 'submit' && key.kind !== 'confirm') return decideReduce({ ...nav, armed: false }, key, ctx, nowMs) // any other key cancels the send preview, then does its own work
+  if (key.kind === 'disarm') return same({ armed: false, snap: undefined, stale: false })
+  // v7.5 gate 21: a pick (or a saved note) under an open preview does not close it: the preview stays and is stale, y is refused with the reason until `s` previews again
+  if (nav.armed === true && nav.snap !== undefined && (key.kind === 'pick' || key.kind === 'text_save')) {
+    const r = decideReduce({ ...nav, armed: false, snap: undefined, stale: false }, key, ctx, nowMs)
+    return { nav: { ...r.nav, armed: true, snap: nav.snap, stale: nav.stale === true }, effect: r.effect }
+  }
+  if (nav.armed === true && key.kind !== 'submit' && key.kind !== 'confirm') return decideReduce({ ...nav, armed: false, snap: undefined, stale: false }, key, ctx, nowMs) // any other key cancels the send preview, then does its own work
   if (v74Cards(ctx) !== null && key.kind === 'move') return same({ cursor: Math.min(Math.max(0, m.all.length - 1), Math.max(0, cursor + key.by)), opt: null, detailOffset: 0 })
   if (v74Cards(ctx) !== null && key.kind === 'cursor') return same({ cursor: Math.min(Math.max(0, m.all.length - 1), Math.max(0, key.at)), opt: null, detailOffset: 0 })
   if (v74Cards(ctx) !== null && key.kind === 'confirm' && nav.armed !== true) return same({}) // y means nothing outside the send preview
-  if (v74Cards(ctx) !== null && (key.kind === 'submit' || key.kind === 'confirm')) { // s sends every answered card that is not already in its window (holdSend); the effect carries the first one
+  if (v74Cards(ctx) !== null && (key.kind === 'submit' || key.kind === 'confirm')) { // s only opens (or redraws) the preview; y sends every answered card of the FROZEN preview list (v7.5 §7.2)
     const ready = m.all.flatMap(it => (it.kind === 'own' && it.d.id !== null && nav.hold?.[it.d.id] === undefined && !(nav.sent[it.d.id] !== undefined && nav.fixing?.[it.d.id] === undefined) ? [it.d] : []))
       .flatMap(c => { const line = decideLine(c, nav); return line === null ? [] : [{ id: c.id as string, line }] })
-    if (ready.length === 0) return same({ armed: false })
-    if (nav.armed !== true || key.kind === 'submit') return same({ armed: true }) // r10b #2: the first s only previews what would go out; the second s sends
-    return { nav: { ...nav, cursor, armed: false, hold: { ...(nav.hold ?? {}), ...Object.fromEntries(ready.map(r => [r.id, nowMs])) } }, effect: { kind: 'send', id: ready[0].id, line: ready[0].line } }
+    if (ready.length === 0) return same({ armed: false, snap: undefined, stale: false })
+    const sig = decideReadySig(nav, ctx)
+    if (nav.armed !== true || key.kind === 'submit') return same({ armed: true, snap: sig, stale: false })
+    if (nav.snap !== sig) return same({ armed: true, stale: true }) // the picks, notes or a card changed under the preview: y is refused until `s` previews again
+    return { nav: { ...nav, cursor, armed: false, snap: undefined, stale: false, hold: { ...(nav.hold ?? {}), ...Object.fromEntries(ready.map(r => [r.id, nowMs])) } }, effect: { kind: 'send', id: ready[0].id, line: ready[0].line } }
   }
   switch (key.kind) {
     case 'text': {
@@ -456,10 +485,12 @@ function v74Card(c: DecideCard, i: number, selected: boolean, nav: DecideNav, ct
   // with its own card:N, so the cursor event writes the index the ▸ already has.
   const head = box
     ? [seg(mark + '  ' + String(i + 1) + '. ', selected ? {} : { press: 'card:' + i }), title, seg('：' + c.question)]
-    : [seg(mark + '  ' + String(i + 1) + '. '), title, seg('：' + c.question)]
+    : [seg(mark + '  ' + String(i + 1) + '. ', selected || !v75On() ? {} : { press: 'card:' + i }), title, seg('：' + c.question)] // v7.5: the card number on the Pane's left edge is the click target (fullscreen only; elsewhere a label)
   out.push(box ? head : truncateSegs(head, cols))
   const bg = c.background ?? t('v74.d.bg_none')
-  out.push(box ? [seg('    '), dimSeg(t('v74.d.bg')), seg('   ' + bg)] : truncateSegs([seg('    '), dimSeg(t('v74.d.bg')), seg('   ' + bg)], cols))
+  // J1: the real Pane draws cards through this path (not boxOpen): the open card's background is shown in full (one row per line, wrapped on the label's hanging indent, never cut), the frame scrolls it; the other cards keep one cut row
+  if (selected) out.push(...labelledBox(t('v74.d.bg'), bg, cols))
+  else { const first = bg.split('\n')[0]; out.push(box ? [seg('    '), dimSeg(t('v74.d.bg')), seg('   ' + first)] : truncateSegs([seg('    '), dimSeg(t('v74.d.bg')), seg('   ' + first)], cols)) }
   const picked = picks[c.id]
   const held = nav.hold?.[c.id] !== undefined
   const sent = nav.sent[c.id] !== undefined && nav.fixing?.[c.id] === undefined
@@ -496,7 +527,10 @@ function v74Card(c: DecideCard, i: number, selected: boolean, nav: DecideNav, ct
 // ---- r8: the band frame's 待決 (design S3). The cards other than the one at the cursor are one summary row each (the answer picked, else the one suggested); the card at the cursor is open
 // in full: background on a hanging indent, then each option with its description, then the note. Spare rows keep the design's blank lines; a short frame drops them (then the descriptions) before it cuts.
 const BOX_LABEL_HANG = 11 // `    背景   `: 4 blanks + the label (2 wide chars = 4 cells) + 3 blanks. The text of the first row starts here and every continuation row starts on the same cell (r8-3 #3)
-const labelledBox = (label: string, text: string, width: number): Row[] => wrapRow([seg('    '), dimSeg(label), seg('   ' + text)], width, BOX_LABEL_HANG)
+// I2: the Pane is the full view: a background with line breaks is one row per line (80 lines are 80 rows), the frame scrolls what does not fit (PgUp / PgDn, 還有 N 列); the band keeps its truncation
+const labelledBox = (label: string, text: string, width: number): Row[] => text.split('\n').flatMap((ln, k) => k === 0
+  ? wrapRow([seg('    '), dimSeg(label), seg('   ' + ln)], width, BOX_LABEL_HANG)
+  : wrapRow([seg(' '.repeat(BOX_LABEL_HANG) + ln)], width, BOX_LABEL_HANG))
 function boxSummary(c: DecideCard, i: number, nav: DecideNav, ctx: PageCtx): Row {
   const { t } = ctx
   const picked = nav.picks[c.id]
@@ -596,7 +630,8 @@ function renderV74(ctx: PageCtx): { body: Row[]; actions: Row[] } {
   const left = cards.length - ready
   // `s` sends the picked cards only: say how many go and how many stay (nothing after the `·` when none stay)
   const sendText = '[s] ' + t('v74.d.send_all', { n: ready }) + (left > 0 ? ' ' + DOT + ' ' + t('v74.d.unpicked', { n: left }) : '')
-  const actions: Row[] = [[seg(sendText, { press: 'key:s' })]]
+  // v7.5: the host Pane holds no preview of its own (it is drawn in the band, one list for both places); with one open this row says where it is and that y sends it
+  const actions: Row[] = [[ctx.box !== true && nav.armed === true && ready > 0 ? seg(previewStale({ ...nav, snap: dn?.snap, stale: dn?.stale }, ctx) ? t('v75.stale') : t('v75.pane_armed', { n: ready }), { press: 'key:y', color: PALETTE.attention }) : seg(sendText, { press: 'key:s' })]]
   if (ctx.box === true) {
     const m = ctx.v74?.sendResult
     // r11 #3: after the first s the preview lists every card that goes out: number, title, letter, option name, note (cut by chars). Rows beyond the action area end in 「…另 N 張」.
@@ -613,7 +648,7 @@ function renderV74(ctx: PageCtx): { body: Row[]; actions: Row[] } {
     const shown = plan.length + 1 <= cap ? plan : plan.slice(0, Math.max(0, cap - 2))
     const rest = plan.length - shown.length
     const previewRows: Row[] = [
-      [seg(t('v74.d.preview', { n: plan.length }), { press: 'key:y', color: PALETTE.attention })],
+      [seg(previewStale({ ...nav, snap: dn?.snap, stale: dn?.stale }, ctx) ? t('v75.stale') : t('v74.d.preview', { n: plan.length }), { press: 'key:y', color: PALETTE.attention })],
       ...shown.map(x => truncateSegs([seg('  ' + x)], cols)),
       ...(rest > 0 ? [[dimSeg('  ' + t('v74.d.pv_more', { n: rest }))] as Row] : []),
     ]

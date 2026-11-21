@@ -16,6 +16,8 @@ const pageForDigit = (key: string): string | undefined => {
   return hit?.[0]
 }
 
+// v7.5 draws no O4 shell: its menus d 待決 / r 圓桌 / u 用量 / p 寵物 / h 說明 live on in the Pane and the band as keys (d is the 2 page, h is the 9 page, the rest are here)
+export const V75_MOVED: Record<string, string> = { r: 'room', u: 'spend', p: 'pet' }
 const CARD_PAGES = new Set(['decide', 'todo'])
 
 export function routeKey(key: string, st: KeyState): KeyAction {
@@ -23,6 +25,8 @@ export function routeKey(key: string, st: KeyState): KeyAction {
   if (st.textMode) return key === 'Enter' ? { kind: 'text_save' } : key === 'Escape' ? { kind: 'text_cancel' } : { kind: 'text', ch: key }
   if (key === 'Escape') return st.armed === true && st.page === 'decide' ? { kind: 'disarm' } : { kind: 'close' }
   if (key === 'Enter') return st.focusedButton ? { kind: 'button' } : { kind: 'fold' }
+  const moved = V75_MOVED[key] // v7.5: the old shell's r / p / u menus, as page keys (u is 撤回 on 待決, so there it stays undo)
+  if (moved !== undefined && !(key === 'u' && st.page === 'decide')) return moved === st.page ? { kind: 'none' } : { kind: 'page', to: moved }
   const target = /^[1-9]$/.test(key) ? pageForDigit(key) : key === PET_KEY ? 'pet' : undefined
   if (target !== undefined) return target === st.page ? { kind: 'none' } : { kind: 'page', to: target }
   if (/^[0-9]$/.test(key)) return { kind: 'none' }
@@ -40,6 +44,7 @@ export function routeKey(key: string, st: KeyState): KeyAction {
     if (key === 'y') return st.armed === true ? { kind: 'confirm' } : { kind: 'none' } // r11 #12: y confirms the send preview and means nothing else
     if (key === 'n') return { kind: 'note' }
     if (key === 'u') return { kind: 'undo' }
+    if (key === 'x') return st.armed === true ? { kind: 'disarm' } : { kind: 'none' } // x cancels the send preview, as Esc does (a band hotkey cannot be Esc, d.ts:1391)
     if (key === 'h') return { kind: 'prev' }
     if (key === 'l') return { kind: 'next' }
     if (key === 'f') return { kind: 'fill' }

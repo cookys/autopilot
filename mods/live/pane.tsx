@@ -4,6 +4,7 @@
 // gets its props from `drawSeg` (ui.ts), theme keys as text colour only, no background, no inverse.
 
 import { GLYPHS } from '../tux/glyphs.ts'
+import { v75On } from './v75'
 import { T_EN } from './i18n'
 import type { T } from './i18n'
 import { paneWidth } from './model'
@@ -25,6 +26,7 @@ import { fleetView as fleetPageView } from './pages/fleet'
 import { renderQuota } from './pages/quota'
 import { DEFAULT_REVIEW_VIEW, renderReview } from './pages/review'
 import { renderSpend } from './pages/spend'
+import type { PoolEta } from './pages/spend'
 import type { DecideNav } from './pages/decide'
 import type { KeyAction } from './pages/keys'
 import type { ConsoleSnapshot } from './console'
@@ -155,14 +157,16 @@ function stripView<Id extends string>(el: { Box: El; Text: El; Button?: El }, st
 // A page of the registry (pages/index.ts) drawn through frameRows: exactly `rows` rows, the strip entries are Buttons with the digit as hotkey.
 export type PageView = { focus: number; expanded: boolean; folded?: boolean }
 // view: focus index + expanded flag per page id (fleet, quota, spend); decide: the 待決 page's nav; onPress gets a Seg `press` that is not a tab switch (fleet:see:, fleet:fold, fill:...); onKey gets a page-local key (the host has no raw key hook: the keys are hidden hotkey Buttons); epoch rotates Button keys after a dock <-> inline move (B56)
-export type FramePane = { pages: readonly Page[]; pageId?: PageId; onPage?: (id: PageId) => void; console: ConsoleSnapshot | null; nowMs: number; rows: number; scroll?: number; view?: Record<string, PageView>; decide?: DecideNav; v74?: V74Ctx; v74Box?: true; onPress?: (id: string) => void; onKey?: (k: KeyAction) => void; onText?: (v: string) => void; epoch?: number; steps?: readonly Step[]; pet?: unknown; others?: OthersView | null }
-const COMMON_KEYS: Record<string, KeyAction> = { z: { kind: 'fold' } } // the host takes a digit or a lowercase letter as a hotkey: Space is z here. No j / k: a key needs a visible Button to carry it, and a row is its own Button (Tab walks the rows)
+// the screen-order rank of every Button the framed page drew (`card:N`, `p:row:col`): the ring's step direction is read from it (register.ts, ui.focus)
+export const paneRank = new Map<string, number>()
+export type FramePane = { poolEta?: PoolEta | null; room?: readonly { seq: number; from: string; kind: string; text: string }[]; pages: readonly Page[]; pageId?: PageId; onPage?: (id: PageId) => void; console: ConsoleSnapshot | null; nowMs: number; rows: number; scroll?: number; view?: Record<string, PageView>; decide?: DecideNav; v74?: V74Ctx; v74Box?: true; onPress?: (id: string) => void; onKey?: (k: KeyAction) => void; onText?: (v: string) => void; epoch?: number; steps?: readonly Step[]; pet?: unknown; others?: OthersView | null }
+const COMMON_KEYS: Record<string, KeyAction> = { z: { kind: 'fold' } } // the host takes a digit or a lowercase letter as a hotkey: Space is z here. j / k (next / previous card) are carried by the `[j] [k]` hint Buttons of the 待決 action row
 const CARD_KEYS: Record<string, KeyAction> = { a: { kind: 'pick', index: 0 }, b: { kind: 'pick', index: 1 }, c: { kind: 'pick', index: 2 } }
-const DECIDE_KEYS: Record<string, KeyAction> = { ...CARD_KEYS, d: { kind: 'pick', index: 3 }, e: { kind: 'pick', index: 4 }, m: { kind: 'note' }, n: { kind: 'note' }, u: { kind: 'undo' }, h: { kind: 'prev' }, l: { kind: 'next' }, f: { kind: 'fill' }, s: { kind: 'submit' } }
+const DECIDE_KEYS: Record<string, KeyAction> = { ...CARD_KEYS, d: { kind: 'pick', index: 3 }, e: { kind: 'pick', index: 4 }, j: { kind: 'move', by: 1 }, k: { kind: 'move', by: -1 }, m: { kind: 'note' }, n: { kind: 'note' }, u: { kind: 'undo' }, h: { kind: 'prev' }, l: { kind: 'next' }, f: { kind: 'fill' }, s: { kind: 'submit' } }
 // o acts on the focused (▸) row: quota shows / hides that pool's seats. decide has no o (a-e pick there); now has no focused row yet, so o is not bound there
 const OPEN_KEY: Record<string, KeyAction> = { o: { kind: 'open' } }
 const pageKeys = (id: string): Record<string, KeyAction> =>
-  (id === 'decide' ? { ...COMMON_KEYS, ...DECIDE_KEYS } : id === 'todo' ? { ...COMMON_KEYS, ...CARD_KEYS } : id === 'fleet' ? {} : id === 'quota' ? { ...COMMON_KEYS, ...OPEN_KEY } : COMMON_KEYS) // v7.4 S8: the 艦隊 page is a plain list with no action rows, so it binds nothing (no fold, no see, no fill)
+  (id === 'decide' ? { ...COMMON_KEYS, ...(v75On() ? DECIDE_KEYS : Object.fromEntries(Object.entries(DECIDE_KEYS).filter(([l]) => l !== 'j' && l !== 'k'))) } : id === 'todo' ? { ...COMMON_KEYS, ...CARD_KEYS } : id === 'fleet' ? {} : id === 'quota' ? { ...COMMON_KEYS, ...OPEN_KEY } : COMMON_KEYS) // v7.4 S8: the 艦隊 page is a plain list with no action rows, so it binds nothing (no fold, no see, no fill)
 // every hotkey a framed page binds (f on fleet / quota is the page's own fill action): a visible `[x]` key hint must be one of these (frame.test.ts)
 export const pageHotkeys = (id: string): string[] => [...Object.keys(pageKeys(id)), ...(id === 'quota' ? ['f'] : [])]
 // quota renders under spend tab; spend page id maps to spend tab
@@ -198,7 +202,7 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
   const frameRowsN = box ? frame.rows + stripN : frame.rows // what the page renderers are asked for (box: the inner rows + head + hint border + strip)
   const epoch = frame.epoch ?? 0
   const ep = epoch > 0 ? ':' + epoch : ''
-  const ctx = { live: snap, console: frame.console, size: { cols, rows: frameRowsN }, t, nowMs: frame.nowMs, steps: frame.steps, pet: frame.pet, ...(box ? { box: true as const } : {}), ...(page.id === 'fleet' ? { others: frame.others ?? null } : {}), ...(frame.v74 !== undefined ? { v74: frame.v74 } : {}), ...(page.id === 'decide' && frame.decide !== undefined ? { decide: frame.decide } : {}) }
+  const ctx = { live: snap, console: frame.console, size: { cols, rows: frameRowsN }, t, nowMs: frame.nowMs, steps: frame.steps, pet: frame.pet, ...(frame.room !== undefined ? { room: frame.room } : {}), ...(frame.poolEta !== undefined ? { poolEta: frame.poolEta } : {}), ...(box ? { box: true as const } : {}), ...(page.id === 'fleet' ? { others: frame.others ?? null } : {}), ...(frame.v74 !== undefined ? { v74: frame.v74 } : {}), ...(page.id === 'decide' && frame.decide !== undefined ? { decide: frame.decide } : {}) }
   const view = frame.view?.[page.id] ?? (page.id === 'review' ? DEFAULT_REVIEW_VIEW : { focus: 0, expanded: false })
   // the pages that take a view are drawn through their view functions; the registry's render() keeps the default view
   const drawn: Page = page.id === 'fleet' ? { ...page, render: c => fleetPageView(c, view) } : page.id === 'quota' ? { ...page, render: c => renderQuota(c, view) } : page.id === 'review' ? { ...page, render: c => renderReview(c, view) } : page.id === 'spend' ? { ...page, render: c => renderSpend(c, view) } : page
@@ -264,6 +268,7 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
           else if (typeof sg.press === 'string' && sg.press.startsWith('key:')) frame.onKey?.(keys[sg.press.slice(4)] ?? (sg.press === 'key:y' ? { kind: 'confirm' } : { kind: 'none' }))
           else press(sg.press as string)
         }
+        paneRank.set(cardAt !== null ? 'card:' + cardAt : 'p:' + i + ':' + j + ep, i * 1000 + j)
         nodes.push(<Button key={(cardAt !== null ? 'card:' + cardAt : 'p:' + i + ':' + j + ep)} plain {...(letter === null ? {} : { hotkey: letter })} {...(focusMark ? { autoFocus: true } : {})} onPress={onKeyPress}>{texts}</Button>)
         j = e
         continue
@@ -284,7 +289,11 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
       }
       nodes.push(text(sg.text, 'g' + j))
     }
-    return <Box key={'f' + i}>{nodes}{i === rows.length - 1 ? focusAnchor(el, epoch) : null}</Box>
+    // F1: j / k (next / previous card) are always carried by a zero-size Button on 待決 and 待辦, whatever the action row says: a letter with no Button in the Pane is handed to the prompt and takes the keyboard with it (gate m75d 12, 14)
+    const navHot = v75On() && i === rows.length - 1 && !typing && Button !== undefined && (page.id === 'decide' || page.id === 'todo')
+      ? [['j', 1], ['k', -1]].filter(([l]) => !used.has(l as string)).map(([l, by]) => <Box key={'hk:' + l} width={0} height={0} overflow="hidden"><Button key={'pn:' + l + ep} plain hotkey={l as string} onPress={() => frame.onKey?.({ kind: 'move', by: by as 1 | -1 })}>{l as string}</Button></Box>)
+      : []
+    return <Box key={'f' + i}>{nodes}{i === rows.length - 1 ? [focusAnchor(el, epoch), ...navHot] : null}</Box>
   }
   if (!box) return <Box {...(epoch > 0 ? { key: 'frame:' + epoch } : {})} flexDirection="column" height={frame.rows}>{rows.map(drawRow)}</Box>
   const rule = GLYPHS.structure.rule

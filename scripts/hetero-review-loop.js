@@ -466,11 +466,11 @@ function resolveSeatsWithPolicy(seatsArg, repoRoot) {
   }
 
   const exclusion = require('./lib/local-reviewer-exclusion');
-  const implSeat = {
+  const implSeat = exclusion.reviewedImplementer(process.env, {
     runner: fullJson.implementer_runner,
     endpoint: fullJson.implementer_endpoint,
     model: fullJson.implementer_engine,
-  };
+  });
   const filteredPanel = exclusion.filterReviewers(qcSeats, implSeat);
   if (exclusion.implementerIsLocalQwen(implSeat) && filteredPanel.empty) {
     console.error(exclusion.REFUSAL);

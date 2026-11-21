@@ -30,13 +30,21 @@ test('local-impl-report counts local runs, review fields, and fallbacks', () => 
   });
   write('old.manifest.json', { runner: 'local', started_at: old, review_receipt: { first_pass: true } });
   write('unknown.manifest.json', { runner: 'local', started_at: now });
+  write('reviewer.manifest.json', {
+    role: 'reviewer', runner: 'local', endpoint: 'qwen_local', started_at: now,
+    review_receipt: { pass: true, first_review_pass: false }, rework_count: 0, queue_wait_s: null, queue_wait_ms: 1500,
+  });
+  write('evidence.manifest.json', {
+    role: 'implementer', runner: 'local', endpoint: 'qwen_local', started_at: now,
+    review_receipt: { pass: true, first_review_pass: false }, rework_count: 0, queue_wait_s: null, queue_wait_ms: 1500,
+  });
   const o = report(dir, Date.parse('2026-11-21T00:00:00Z'));
-  assert.equal(o.local_runs, 3);
+  assert.equal(o.local_runs, 4);
   assert.equal(o.local_first_review_pass.count, 1);
-  assert.equal(o.local_first_review_pass.ratio, 0.5);
+  assert.equal(o.local_first_review_pass.ratio, 1 / 3);
   assert.equal(o.local_reworked.count, 1);
-  assert.equal(o.local_reworked.ratio, 0.5);
-  assert.equal(o.mean_queue_wait_s, 3);
+  assert.equal(o.local_reworked.ratio, 1 / 3);
+  assert.equal(o.mean_queue_wait_s, (2 + 4 + 1.5) / 3);
   assert.equal(o.fallbacks, 2);
   assert.deepEqual(o.fallback_reasons, { no_free_slot: 1, draining: 1 });
   const none = report(dir, Date.parse('2099-01-01T00:00:00Z'));
@@ -46,5 +54,5 @@ test('local-impl-report counts local runs, review fields, and fallbacks', () => 
   const cli = spawnSync(process.execPath, [path.join(__dirname, 'local-impl-report.js'), '--dir', dir, '--since', '2026-11-21T00:00:00Z', '--text'], { encoding: 'utf8' });
   assert.equal(cli.status, 0, cli.stderr);
   assert.equal(cli.stdout.trim().split('\n').length, 5);
-  assert.match(cli.stdout, /本機派工 3 次/);
+  assert.match(cli.stdout, /本機派工 4 次/);
 });

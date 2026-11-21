@@ -1018,9 +1018,6 @@ process.exit(2);
 }
 
 emit() { # status commit files ins del worktree error
-  if [ "$1" = "engine_unavailable" ] && [ "${CLASSIFIED_ERROR:-}" = "endpoint_busy" ]; then
-    redispatch_cloud_default_busy || true
-  fi
   # Identity containment rail (shared emit path — every outcome): compare post-run
   # consuming-repo user.name/email to the pre-run snapshot; restore + flag on drift.
   # A bare `git config user.*` inside a worktree writes through the shared .git/config.
@@ -2382,6 +2379,18 @@ sandbox_json() {
 # before it reads engine_unavailable); model_calls 0 and resources_created 0 say that no worker ran.
 # A configured cloud-fallback already re-exec'd before this runs. This die is the ask path, a missing
 # rung, or a retreat that could not start — and a failed retreat still carries fell_back.
+# A slot command that fails, times out, or prints malformed JSON, or a probe that
+# does not answer, is not a gateway capacity report. Stop. Do not fall back to cloud.
+die_slot_signal_unavailable() {
+  local detail="${1:-slot_signal_unavailable}"
+  local run_id_json="null"
+  [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(_flat_json_escape "$DISPATCH_RUN_ID")\""
+  printf '{ "status": "engine_unavailable", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "slot_signal_unavailable", "reason": "slot_signal_unavailable", "detail": "%s", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "local_fallback": null, "run_id": %s }\n' \
+    "$(current_runner_name)" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
+    "$(_flat_json_escape "$detail")" "$run_id_json"
+  exit 1
+}
+
 die_probe_unavailable() {
   local run_id_json="null"
   [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(_flat_json_escape "$DISPATCH_RUN_ID")\""
@@ -2543,11 +2552,49 @@ redispatch_cloud_default_busy() {
     esac
   done
   args+=(--runner grok --model grok-4.7)
+  # The failed local attempt already owns a worktree. Reuse it after emit has
+  # restored identity; do not start a second branch. Pre-probe busy has no worktree.
+  if [ -n "${WT:-}" ] && [ -d "${WT:-}" ]; then
+    if [ -n "${WT_LOCK_FD:-}" ]; then
+      exec {WT_LOCK_FD}>&- || true
+      WT_LOCK_FD=""
+    fi
+    if [ -n "${WT_BUDGET_LOCK_FD:-}" ]; then
+      exec {WT_BUDGET_LOCK_FD}>&- || true
+      WT_BUDGET_LOCK_FD=""
+    fi
+    local _inst=""
+    _inst="$(node - "$WT" <<'NODE'
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const worktree = path.resolve(process.argv[2]);
+const stat = fs.statSync(worktree, { bigint: true });
+process.stdout.write(crypto.createHash('sha256').update(JSON.stringify({
+  birthtime_ns: stat.birthtimeNs.toString(),
+  device: stat.dev.toString(),
+  inode: stat.ino.toString(),
+  schema: 1,
+  worktree,
+})).digest('hex'));
+NODE
+)" || true
+    args+=(--reuse-worktree "$WT")
+    [ -n "$_inst" ] && args+=(--expected-worktree-instance "$_inst")
+    [ -n "${WORKTREE_ROOT_RUN_ID:-}" ] && export AUTOPILOT_WORKTREE_ROOT_RUN_ID="$WORKTREE_ROOT_RUN_ID"
+  fi
   unset ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN
   export LOCAL_BUSY_REDISPATCH=1
   export AUTOPILOT_LOCAL_FALLBACK_PRESET='{"reason":"no_free_slot","detail":"busy_at_run"}'
   exec "$0" "${args[@]}" < /dev/null
   return 1
+}
+
+# Called only after emit returns, so identity restoration and the result row finish first.
+maybe_redispatch_cloud_busy() {
+  [ "${1:-}" = "engine_unavailable" ] || return 1
+  [ "${CLASSIFIED_ERROR:-}" = "endpoint_busy" ] || return 1
+  redispatch_cloud_default_busy
 }
 
 die_dev_flow_admission() {
@@ -3322,16 +3369,25 @@ if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_S
    && [ -z "${ENGINE_CHOICE_JSON:-}" ] && [ -z "${AUTOPILOT_QUALIFICATION_OVERRIDE:-}" ] \
    && [ "$_impl_role" = "implementer" ] && [ -z "${AUTOPILOT_LOCAL_FALLBACK_PRESET:-}" ]; then
   _slot_line="$(node "$SELF_DIR/lib/local-impl-slot.js" --prompt-file "$PROMPT_FILE" --cwd "$(pwd)")"
-  _slot_choose="$(node -e 'let o; try { o=JSON.parse(process.argv[1]); } catch { o={}; } process.stdout.write(o.choose?"1":"0");' "$_slot_line")"
-  if [ "$_slot_choose" = "1" ] \
-     && node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --role implementer --runner cc-shim --model qwen --endpoint qwen_local --prompt-file "$PROMPT_FILE" >/dev/null 2>&1; then
-    RUNNER="local"
-    IMPLICIT_LOCAL_DEFAULT=1
-    LOCAL_FALLBACK_JSON=null
+  _slot_kind="$(node -e 'let o; try { o=JSON.parse(process.argv[1]); } catch { o={}; } if (o.signalUnavailable) process.stdout.write("unavailable"); else if (o.choose) process.stdout.write("choose"); else process.stdout.write("fallback");' "$_slot_line")"
+  if [ "$_slot_kind" = "unavailable" ]; then
+    _slot_detail="$(node -e 'let o; try { o=JSON.parse(process.argv[1]); } catch { o={}; } process.stdout.write(String(o.detail||"slot_signal_unavailable"));' "$_slot_line")"
+    die_slot_signal_unavailable "$_slot_detail"
+  elif [ "$_slot_kind" = "choose" ]; then
+    _gate_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --role implementer --runner cc-shim --model qwen --endpoint qwen_local --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" && _gate_rc=0 || _gate_rc=$?
+    if [ "$_gate_rc" -eq 0 ]; then
+      RUNNER="local"
+      IMPLICIT_LOCAL_DEFAULT=1
+      export IMPLICIT_LOCAL_DEFAULT
+      LOCAL_FALLBACK_JSON=null
+    else
+      # A CN-gate refusal of the local seat is a block, not a cloud fallback.
+      die_precondition "${_gate_msg:-cn_model_dispatch_barred local (01M7XHF4)}"
+    fi
   else
-    LOCAL_FALLBACK_JSON="$(node -e 'let o; try { o=JSON.parse(process.argv[1]); } catch { o={}; } if (o.choose) o={reason:"no_free_slot",detail:"gate"}; process.stdout.write(JSON.stringify({reason:o.reason||"no_free_slot",detail:String(o.detail||"")}));' "$_slot_line")"
+    LOCAL_FALLBACK_JSON="$(node -e 'let o; try { o=JSON.parse(process.argv[1]); } catch { o={}; } process.stdout.write(JSON.stringify({reason:o.reason||"no_free_slot",detail:String(o.detail||"")}));' "$_slot_line")"
   fi
-  unset _slot_line _slot_choose
+  unset _slot_line _slot_kind _slot_detail _gate_msg _gate_rc
 fi
 unset _impl_role
 if [ "$RUNNER" = "local" ]; then
@@ -3342,6 +3398,15 @@ if [ "$LOCAL_RUNNER" -eq 1 ] && [ "$MODEL_SUPPLIED" -eq 0 ]; then
   MODEL="qwen"
   MODEL_IS_DEFAULT=0
 fi
+# The reviewed run's actual seat (implicit local or the cloud seat this invocation
+# kept). Review entry points read these; a config default is not the run.
+if [ "${LOCAL_RUNNER:-0}" -eq 1 ]; then
+  export AUTOPILOT_REVIEWED_IMPLEMENTER_RUNNER=local
+else
+  export AUTOPILOT_REVIEWED_IMPLEMENTER_RUNNER="$RUNNER"
+fi
+export AUTOPILOT_REVIEWED_IMPLEMENTER_ENDPOINT="${ENDPOINT:-}"
+export AUTOPILOT_REVIEWED_IMPLEMENTER_MODEL="${MODEL:-}"
 # The caller's prompt file stays untouched. Insert when the gate's header parser
 # (headerValue: first 8 lines, at line start or after |) sees no Task-Class.
 # A body mention of the words is not a field.
@@ -3409,7 +3474,11 @@ elif [ -n "$RETENTION_OWNER$RETENTION_REASON$RETENTION_EXPIRES_AT" ]; then
   die_precondition "retention metadata requires --keep-worktree"
 fi
 if [ -n "$REUSE_WORKTREE" ]; then
-  [ "$KEEP" -eq 1 ] || die_precondition "--reuse-worktree requires --keep-worktree"
+  # busy_at_run reuses the worktree the failed local attempt already prepared.
+  # That path is not an operator --keep-worktree lease.
+  if [ "${LOCAL_BUSY_REDISPATCH:-}" != "1" ]; then
+    [ "$KEEP" -eq 1 ] || die_precondition "--reuse-worktree requires --keep-worktree"
+  fi
   [[ "$REUSE_WORKTREE" = /* ]] || die_precondition "--reuse-worktree must be absolute"
   [[ "$EXPECTED_WORKTREE_INSTANCE" =~ ^[0-9a-f]{64}$ ]] \
     || die_precondition "--reuse-worktree requires --expected-worktree-instance SHA-256"
@@ -4710,12 +4779,16 @@ NODE
     || die_precondition "retained worktree marker branch mismatch"
   [ "$_WT_MARKER_ROOT_RUN_ID" = "$WORKTREE_ROOT_RUN_ID" ] \
     || die_precondition "retained worktree root identity mismatch"
-  [ "$_WT_MARKER_RETENTION_OWNER" = "$RETENTION_OWNER" ] \
-    || die_precondition "retained worktree lease owner mismatch"
-  [ "$_WT_MARKER_RETENTION_REASON_SHA256" = "$RETENTION_REASON_SHA256" ] \
-    || die_precondition "retained worktree lease reason mismatch"
-  [ "$_WT_MARKER_RETENTION_EXPIRES_AT" = "$RETENTION_EXPIRES_AT" ] \
-    || die_precondition "retained worktree lease expiry mismatch"
+  # busy_at_run reuses the worktree this process just prepared. The failure path
+  # stamps a residue lease; that stamp is not an operator --keep-worktree lease.
+  if [ "${LOCAL_BUSY_REDISPATCH:-}" != "1" ]; then
+    [ "$_WT_MARKER_RETENTION_OWNER" = "$RETENTION_OWNER" ] \
+      || die_precondition "retained worktree lease owner mismatch"
+    [ "$_WT_MARKER_RETENTION_REASON_SHA256" = "$RETENTION_REASON_SHA256" ] \
+      || die_precondition "retained worktree lease reason mismatch"
+    [ "$_WT_MARKER_RETENTION_EXPIRES_AT" = "$RETENTION_EXPIRES_AT" ] \
+      || die_precondition "retained worktree lease expiry mismatch"
+  fi
   WORKTREE_REUSED=1
 else
   # Under <main checkout>/.claude/worktrees/ (resolve-repo-placement.js; temp dir on its fallback).
@@ -7587,6 +7660,13 @@ dispatch_detached_run() {
   local out_rc="$wait_rc"
   if [ -f "$EXIT_FILE" ]; then out_rc="$(cat "$EXIT_FILE" 2>/dev/null || echo "$wait_rc")"; fi
   if [ -f "$RESULT_FILE" ]; then
+    if [ "${IMPLICIT_LOCAL_DEFAULT:-0}" = "1" ] && [ "${LOCAL_BUSY_REDISPATCH:-}" != "1" ]; then
+      _busy_retry="$(node -e 'let o; try { o=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); } catch { o={}; } process.stdout.write(o.status==="engine_unavailable" && o.error_category==="endpoint_busy" ? "1" : "0");' "$RESULT_FILE" 2>/dev/null || true)"
+      if [ "$_busy_retry" = "1" ]; then
+        CLASSIFIED_ERROR="endpoint_busy"
+        maybe_redispatch_cloud_busy engine_unavailable
+      fi
+    fi
     cat "$RESULT_FILE"; printf '\n'
   else
     emit "failure" "" 0 0 0 "$WT" "detached worker produced no result file (run-id=$RUN_ID stage=$STAGE)"
@@ -7709,4 +7789,5 @@ if ! _cont_finalize_or_die; then
   exit 1
 fi
 emit "$OUTCOME_STATUS" "$OUTCOME_COMMIT" "$OUTCOME_FILES" "$OUTCOME_INS" "$OUTCOME_DEL" "$OUTCOME_WT" "$OUTCOME_ERR"
+maybe_redispatch_cloud_busy "$OUTCOME_STATUS"
 exit "$OUTCOME_EXIT"

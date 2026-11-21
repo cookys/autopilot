@@ -78,7 +78,7 @@ function makeTempRepoCopy(name, { initGit = false } = {}) {
   if (initGit) {
     assert.equal(spawnSync('git', ['init', '-q'], { cwd: dir }).status, 0);
     assert.equal(spawnSync('git', ['add', '.'], { cwd: dir }).status, 0);
-    assert.equal(spawnSync('git', ['commit', '-q', '-m', 'init'], { cwd: dir }).status, 0);
+    assert.equal(spawnSync('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-q', '-m', 'init'], { cwd: dir }).status, 0);
   }
   return dir;
 }

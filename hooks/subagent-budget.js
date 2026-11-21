@@ -68,8 +68,10 @@ const crypto = require('crypto');
 const HOUR_MS = 3600000;
 const DEFAULTS = { mode: 'warn', lane_dispatch_max: 4, lane_turns_max: 300, root_turns_per_hour_max: 400, runaway_multiple: 3, concurrent_advise_max: 3, per_ticket_usd: 5 };
 const { LANE_RE, headerDenialSuffix } = require('./lib/brief-header-template.js');
+const { findTaskId } = require('../scripts/lib/fleet-task-ref.js');
 const REVIEWER_RE = /^Role:[ \t]*reviewer[ \t]*$/;
 const ACK_RE = /^Budget-Ack:[ \t]*(.*)$/;
+const CLAUDE_BUDGET_RE = /^Claude-Budget:[ \t]*(.+)$/;
 const ACK_MIN_REASON = 8;
 // v3: entries gained `ticket` (the brief's Fleet-Task id); v2 caches have no field => cold re-parse.
 const CACHE_SCHEMA = 'autopilot.subagent-budget-cache/3';
@@ -134,6 +136,9 @@ function loadConfig() {
   const adviseEnv = nonNegInt(process.env.AUTOPILOT_SUBAGENT_BUDGET_CONCURRENT_ADVISE_MAX);
   const adviseFile = nonNegInt(file.concurrent_advise_max);
   cfg.concurrent_advise_max = adviseEnv !== null ? adviseEnv : (adviseFile !== null ? adviseFile : DEFAULTS.concurrent_advise_max);
+  const ticketEnv = usdValue(process.env.AUTOPILOT_SUBAGENT_BUDGET_PER_TICKET_USD);
+  const ticketFile = usdValue(file.per_ticket_usd);
+  cfg.per_ticket_usd = ticketEnv !== null ? ticketEnv : (ticketFile !== null ? ticketFile : DEFAULTS.per_ticket_usd);
   return cfg;
 }
 
@@ -226,6 +231,15 @@ function ackFromBrief(text) {
   return weak;
 }
 
+function claudeBudgetFromBrief(text) {
+  if (typeof text !== 'string' || !text) return null;
+  for (const line of text.replace(/\r\n/g, '\n').split('\n')) {
+    const m = CLAUDE_BUDGET_RE.exec(line);
+    if (m) return usdValue(m[1].trim());
+  }
+  return null;
+}
+
 function contentText(content) {
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
@@ -279,7 +293,9 @@ function parseTranscript(file, metaFile) {
   for (const turn of turns) {
     t.push(Number.isFinite(turn.ts) ? turn.ts : null, costOf(turn));
   }
-  return { briefLane, descLane, parent, depth, reviewer: isReviewer(head), n: turns.length, t };
+  let ticket = null;
+  try { ticket = findTaskId(head); } catch { ticket = null; }
+  return { briefLane, descLane, parent, depth, reviewer: isReviewer(head), ticket, n: turns.length, t };
 }
 
 function cacheFile(sessionId) {
@@ -380,17 +396,21 @@ function withLanes(entries) {
 
 // ---- counting ------------------------------------------------------------------------------------------------------
 
-function tally(entries, lane, now, countNested = COUNT_NESTED_DISPATCHES) {
+function tally(entries, lane, now, countNested = COUNT_NESTED_DISPATCHES, ticket = null) {
   const floor = now - HOUR_MS;
   const lanes = new Map();
   let hourTurns = 0;
   let hourUsd = 0;
+  let ticketUsd = 0;
   for (const e of Object.values(entries)) {
     if (e.lane) {
       const l = lanes.get(e.lane) || { dispatches: 0, turns: 0 };
       if (!e.reviewer && (countNested || !(e.depth >= 2))) l.dispatches += 1;
       l.turns += e.n;
       lanes.set(e.lane, l);
+    }
+    if (ticket && e.ticket === ticket) {
+      for (let i = 0; i + 1 < e.t.length; i += 2) ticketUsd += e.t[i + 1];
     }
     if (!(e.mtimeMs > floor)) continue; // only the hour total may skip old files
     for (let i = 0; i + 1 < e.t.length; i += 2) {
@@ -403,7 +423,7 @@ function tally(entries, lane, now, countNested = COUNT_NESTED_DISPATCHES) {
     if (!heaviest || l.turns > heaviest.turns) heaviest = { lane: name, ...l };
   }
   const own = lane && lanes.get(lane) ? lanes.get(lane) : { dispatches: 0, turns: 0 };
-  return { laneDispatches: own.dispatches, laneTurns: own.turns, hourTurns, hourUsd, heaviest, files: Object.keys(entries).length };
+  return { laneDispatches: own.dispatches, laneTurns: own.turns, hourTurns, hourUsd, ticketUsd, heaviest, files: Object.keys(entries).length };
 }
 
 function contextLine(c) {
@@ -544,7 +564,30 @@ function run(payload) {
   // lane-less (root total only), so a missing Lane: is never billed to, or carded under, a description lane.
   if (!lane && !needLane) lane = laneFromDescription(input.description);
   const reviewer = isReviewer(brief);
-  const c = tally(entries, lane, now);
+  const ticketBudgetEnabled = process.env.AUTOPILOT_TICKET_BUDGET !== '0';
+  let ticket = null;
+  if (ticketBudgetEnabled) {
+    try { ticket = findTaskId(brief); } catch { ticket = null; }
+  }
+  const c = tally(entries, lane, now, COUNT_NESTED_DISPATCHES, ticket);
+
+  // Per-ticket Claude budget ceiling (hard deny regardless of mode, no owner card, no Budget-Ack bypass; fail-open on error).
+  let ticketAdvisory = '';
+  if (ticket && ticketBudgetEnabled) {
+    try {
+      const ticketBudget = claudeBudgetFromBrief(brief) || cfg.per_ticket_usd;
+      if (c.ticketUsd >= ticketBudget) {
+        emit({
+          permissionDecision: 'deny',
+          permissionDecisionReason: `票務 ${ticket} 的 Claude 預算已用盡（已花費 $${c.ticketUsd.toFixed(2)} / 上限 $${ticketBudget.toFixed(2)}）。請立即回報此票務的進度，並改派便宜的非 Claude 引擎（如 codex / grok / agy）。`,
+        });
+        return;
+      }
+      if (c.ticketUsd >= 0.8 * ticketBudget) {
+        ticketAdvisory = ` 票務 ${ticket} 的 Claude 預算已使用 ${Math.round((c.ticketUsd / ticketBudget) * 100)}%（$${c.ticketUsd.toFixed(2)} / $${ticketBudget.toFixed(2)}）。`;
+      }
+    } catch { /* fail-open on ticket budget error */ }
+  }
 
   const hits = [];
   if (lane && !reviewer && c.laneDispatches >= cfg.lane_dispatch_max) {
@@ -566,7 +609,7 @@ function run(payload) {
     });
   }
 
-  const line = contextLine(c);
+  const line = contextLine(c) + ticketAdvisory;
   if (hits.length === 0) { emit({ additionalContext: withAdvisory(payload, line) }); return; }
 
   const summary = hits.map((h) => h.text).join('; ');
@@ -627,7 +670,7 @@ function run(payload) {
   });
 }
 
-module.exports = { run, collect, withLanes, tally, resolveDir, contentText, firstUserMessage, laneOf, laneFromBrief, laneFromDescription, ackFromBrief, isReviewer, isEngineBrief };
+module.exports = { run, collect, withLanes, tally, resolveDir, contentText, firstUserMessage, laneOf, laneFromBrief, laneFromDescription, ackFromBrief, claudeBudgetFromBrief, isReviewer, isEngineBrief };
 
 if (require.main === module) {
   try {

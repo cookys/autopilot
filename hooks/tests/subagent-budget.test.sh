@@ -581,4 +581,26 @@ assert_eq "$((c0 + 1))" "$(cards)" "remind opt-in: opens one owner card"
 # off stays silent
 AUTOPILOT_SUBAGENT_BUDGET_MODE=off fire w3 'Engine: sonnet\nLane: wl3\ngo'; expect_silent "off mode with a runaway count"
 
+# ---- Per-ticket Claude budget ceiling --------------------------------------------------------------------------------
+TICKET_ID="01M7ZKZ8D4511JJ451P71J73R3"
+# Under 80%: silent (no ticket advisory)
+mk st1 "[{\"id\":\"t1\",\"brief\":[\"Lane: tlane\",\"Fleet-Task: $TICKET_ID\"],\"turns\":1}]"
+expect_allow st1 "Engine: sonnet\nLane: tlane\nFleet-Task: $TICKET_ID\nClaude-Budget: 100\ngo" "" "ticket under 80% allowed"
+assert_not_contains "$__RUN_STDOUT" "Claude 預算" "ticket under 80% is silent"
+# 80-100%: one advisory line
+mk st2 "[{\"id\":\"t1\",\"brief\":[\"Lane: tlane\",\"Fleet-Task: $TICKET_ID\"],\"turns\":5}]"
+USAGE_JSON=$(node "$REPO_ROOT/scripts/ticket-claude-usage.js" --fleet-task "$TICKET_ID" --session st2 --transcript "$PROJ/st2.jsonl")
+TICKET_USD=$(node -e 'console.log(JSON.parse(process.argv[1]).usd)' "$USAGE_JSON")
+ADV_BUDGET=$(node -e 'console.log((Number(process.argv[1]) / 0.85).toFixed(4))' "$TICKET_USD")
+expect_allow st2 "Engine: sonnet\nLane: tlane\nFleet-Task: $TICKET_ID\nClaude-Budget: $ADV_BUDGET\ngo" "" "ticket 80-100% allowed"
+assert_contains "$__RUN_STDOUT" "Claude 預算已使用" "ticket 80-100% emits advisory"
+# Over budget (>= 100%): denied in Traditional Chinese, even in warn mode, even with Budget-Ack
+OVER_BUDGET=$(node -e 'console.log((Number(process.argv[1]) * 0.5).toFixed(4))' "$TICKET_USD")
+AUTOPILOT_SUBAGENT_BUDGET_MODE=warn expect_deny st2 "Engine: sonnet\nLane: tlane\nFleet-Task: $TICKET_ID\nClaude-Budget: $OVER_BUDGET\nBudget-Ack: try to bypass\ngo" "" "ticket over budget denied in warn mode"
+assert_contains "$__RUN_STDOUT" "Claude 預算已用盡" "ticket deny in Traditional Chinese"
+# No Fleet-Task: unaffected
+AUTOPILOT_SUBAGENT_BUDGET_MODE=warn expect_allow st2 "Engine: sonnet\nLane: tlane\nClaude-Budget: $OVER_BUDGET\ngo" "" "no Fleet-Task unaffected"
+# Kill switch: AUTOPILOT_TICKET_BUDGET=0 disables ticket ceiling
+AUTOPILOT_TICKET_BUDGET=0 expect_allow st2 "Engine: sonnet\nLane: tlane\nFleet-Task: $TICKET_ID\nClaude-Budget: $OVER_BUDGET\ngo" "" "AUTOPILOT_TICKET_BUDGET=0 disables ticket ceiling"
+
 finalize_test

@@ -49,6 +49,38 @@
   },
   "entries": [
     {
+      "kind": "config_key",
+      "audience": "user",
+      "doc": "docs/guide/settings-reference.md",
+      "name": "subagent_budget.per_ticket_usd",
+      "type": "number",
+      "default": 5,
+      "readers": ["hooks/subagent-budget.js"],
+      "relates": ["AUTOPILOT_SUBAGENT_BUDGET_PER_TICKET_USD", "AUTOPILOT_TICKET_BUDGET"],
+      "invalid_effect": "falls back to default 5 USD",
+      "note": "Default per-ticket Claude subagent USD budget when the brief has no Claude-Budget: line."
+    },
+    {
+      "kind": "env",
+      "audience": "user",
+      "doc": "docs/guide/settings-reference.md",
+      "name": "AUTOPILOT_SUBAGENT_BUDGET_PER_TICKET_USD",
+      "default": "5",
+      "readers": ["hooks/subagent-budget.js"],
+      "relates": ["subagent_budget.per_ticket_usd", "AUTOPILOT_TICKET_BUDGET"],
+      "note": "Overrides subagent_budget.per_ticket_usd."
+    },
+    {
+      "kind": "env",
+      "audience": "user",
+      "doc": "docs/guide/settings-reference.md",
+      "name": "AUTOPILOT_TICKET_BUDGET",
+      "default": "1",
+      "readers": ["hooks/subagent-budget.js"],
+      "relates": ["subagent_budget.per_ticket_usd"],
+      "note": "Set to 0 to disable only the per-ticket Claude budget ceiling in subagent-budget.js."
+    },
+    {
       "kind": "env",
       "audience": "internal",
       "doc": "references/hetero-dispatch.md",

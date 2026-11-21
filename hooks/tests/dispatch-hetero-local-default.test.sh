@@ -143,6 +143,7 @@ printf 'Size: S\nRole: implementer\nScope: ok.txt\nTask-Class: simple-script\ned
 run_local a
 [ "$EXIT" -eq 0 ] || printf 'local-default diagnostic (a): %s\n%s\n' "$OUT" "$ERR" >&2
 assert_eq "0" "$EXIT" "a: implementer with no --runner exits 0"
+assert_not_contains "$(cat "$TEST_TMP/a.err")" 'engine-preflight:' "a: a free local slot bypasses cloud preflight"
 assert_eq "local" "$(json_get "$OUT" runner)" "a: result runner is local"
 assert_eq "qwen" "$(json_get "$OUT" model)" "a: result model is qwen"
 assert_file_exists "$MF" "a: manifest written"
@@ -304,6 +305,7 @@ EXIT=$?
 : > "$LEASE_BUSY_FILE"
 assert_eq "$EXIT" "0" "h: pre-probe busy cloud retry exits 0"
 assert_eq "grok" "$(json_get "$OUT" runner)" "h: pre-probe busy retry uses grok"
+assert_contains "$(cat "$TEST_TMP/h.err")" 'engine-preflight:' "h: local-slot fallback runs engine preflight"
 FB_H="$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\n/).reverse().find(l=>l.trim().startsWith("{")));process.stdout.write(JSON.stringify(o.local_fallback))' "$OUT")"
 assert_eq '{"reason":"no_free_slot","detail":"busy_at_run"}' "$FB_H" "h: pre-probe busy fallback detail"
 DELETE_COUNT="$(node -e 'const fs=require("fs");const rows=fs.readFileSync(process.argv[1],"utf8").trim().split(/\n/).filter(Boolean).map(JSON.parse);process.stdout.write(String(rows.filter(r=>r.method==="DELETE"&&r.url==="/v1/local/lease/test-lease-id").length))' "$LEASE_LOG")"

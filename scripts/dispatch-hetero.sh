@@ -2584,7 +2584,7 @@ die_probe_unavailable() {
 hetero_endpoint_cloud_fallback() {
   [ "${AUTOPILOT_HETERO_FELL_BACK:-}" = "1" ] && return 1
   [ -n "${CAMPAIGN_CONTRACT_FILE:-}" ] && return 1
-  local errf resolved rc parsed policy engine effort runner target_endpoint to_rung cur_runner
+  local errf pick_errf resolved rc parsed policy engine effort runner target_endpoint to_rung cur_runner
   cur_runner="$(current_runner_name)"
   errf="$(mktemp -t dispatch-hetero-fb-resolve-XXXXXX)" || return 1
   resolved="$("$SELF_DIR/resolve-review-loop.sh" 2>"$errf")"
@@ -2640,7 +2640,7 @@ process.stdout.write([rung.model, rung.effort, rung.runner, rung.endpoint || "",
     ENGINE_PREFLIGHT_LOG_LINE="$(cat "$pick_errf")"
     rm -f "$pick_errf"
     IFS='|' read -r engine effort runner target_endpoint fb_demoted_json ENGINE_PREFLIGHT_JSON <<< "$pick_parsed"
-    ENGINE_PREFLIGHT_LOG_LINE="$(node -e 'const j=JSON.parse(process.argv[1]);const w=j.warnings.find(x=>x.startsWith("capacity_table_"));if(w)process.stdout.write(`engine-preflight: capacity table ${w==="capacity_table_stale"?"stale":"missing"}, using default order`);else process.stdout.write(`engine-preflight: read ${j.table_path} generated_at=${j.generated_at}; ${j.skipped.map(x=>`skipped ${x.runner}:${x.model} (${x.reason})`).join(", ")}${j.skipped.length?"; ":""}chosen ${j.chosen.runner}:${j.chosen.model}`)' "$ENGINE_PREFLIGHT_JSON" 2>/dev/null || true)"
+    ENGINE_PREFLIGHT_LOG_LINE="$(node -e 'const j=JSON.parse(process.argv[1]);const w=j.warnings.find(x=>x.startsWith("capacity_table_"));if(w)process.stdout.write(`engine-preflight: capacity table ${w==="capacity_table_stale"?"stale":w==="capacity_table_unparseable"?"unparseable":"missing"}, using default order`);else process.stdout.write(`engine-preflight: read ${j.table_path} generated_at=${j.generated_at}; ${j.skipped.map(x=>`skipped ${x.runner}:${x.model} (${x.reason})`).join(", ")}${j.skipped.length?"; ":""}chosen ${j.chosen.runner}:${j.chosen.model}`)' "$ENGINE_PREFLIGHT_JSON" 2>/dev/null || true)"
     [ -z "$ENGINE_PREFLIGHT_LOG_LINE" ] || echo "$ENGINE_PREFLIGHT_LOG_LINE" >&2
   fi
   [ -n "$engine" ] && [ -n "$effort" ] && [ -n "$runner" ] || return 1
@@ -3619,7 +3619,7 @@ if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_S
     ENGINE_PREFLIGHT_LOG_LINE="$(node -e '
 const j=JSON.parse(process.argv[1]);
 const warning=j.warnings.find(x=>x.startsWith("capacity_table_"));
-if(warning)process.stdout.write(`engine-preflight: capacity table ${warning==="capacity_table_stale"?"stale":"missing"}, using default order`);
+if(warning)process.stdout.write(`engine-preflight: capacity table ${warning==="capacity_table_stale"?"stale":warning==="capacity_table_unparseable"?"unparseable":"missing"}, using default order`);
 else if(j.warnings.includes("all_candidates_skipped_default_order"))process.stdout.write(`engine-preflight: read ${j.table_path} generated_at=${j.generated_at}; ${j.skipped.map(x=>`skipped ${x.runner}:${x.model} (${x.reason})`).join(", ")}; every candidate skipped, using default choice ${j.chosen.runner}:${j.chosen.model}`);
 else process.stdout.write(`engine-preflight: read ${j.table_path} generated_at=${j.generated_at}; ${j.skipped.map(x=>`skipped ${x.runner}:${x.model} (${x.reason})`).join(", ")}${j.skipped.length?"; ":""}chosen ${j.chosen.runner}:${j.chosen.model}`);
 ' "$ENGINE_PREFLIGHT_JSON" 2>/dev/null || true)"

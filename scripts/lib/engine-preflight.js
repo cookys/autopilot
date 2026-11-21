@@ -18,11 +18,15 @@
 //   probe:<overloaded|rate_limited|unsupported|timeout>
 //
 // Capacity table older than 30 minutes, missing, or unparseable is ignored
-// (warnings capacity_table_stale / capacity_table_missing). It never blocks.
+// (warnings: capacity_table_stale, capacity_table_missing,
+// capacity_table_unparseable). Other emitted warnings are
+// all_candidates_skipped_default_order and probe_unknown:<timeout|spawn|signal|exit-code>.
+// It never blocks.
 // burn_more is not a skip. `preferBurnMore` stably moves listed candidates first.
 //
 // CLI:
-//   node scripts/lib/engine-preflight.js [--prefer-burn-more] --candidate runner:model [--candidate runner:model ...]
+//   node scripts/lib/engine-preflight.js [--prefer-burn-more] [--local-first] [--fallback-on-all-skipped]
+//     (--candidate runner:model ... | --candidates-json '[{"runner":"...","model":"..."}]')
 // Exit 0 when one candidate is chosen, 3 when every candidate is skipped and
 // --fallback-on-all-skipped is not set, 2 on usage.
 // Stdout is the JSON object (fs.writeSync). Stderr is one line per skip.
@@ -333,7 +337,7 @@ function parseArgs(argv) {
 
 function helpText() {
   return [
-    'Usage: node scripts/lib/engine-preflight.js [--prefer-burn-more] --candidate runner:model [--candidate runner:model ...]',
+    'Usage: node scripts/lib/engine-preflight.js [--prefer-burn-more] [--local-first] [--fallback-on-all-skipped] (--candidate runner:model ... | --candidates-json JSON)',
     'Exit 0 when a candidate is chosen, 3 when every candidate is skipped, 2 on usage.',
     'Env: AUTOPILOT_ENGINES_TABLE, AUTOPILOT_BURN_MORE, AUTOPILOT_ENGINE_PREFLIGHT_WINDOW_MIN, AUTOPILOT_ENGINE_PREFLIGHT_PROBE.',
   ].join('\n');

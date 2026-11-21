@@ -7,6 +7,7 @@ export AUTOPILOT_QUALIFIED_FILE="$TEST_TMP/missing-qualified.json"
 export AUTOPILOT_PACE_FILE="$TEST_TMP/missing-pace.json"
 export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session-mode"
 export AUTOPILOT_TEST_CN_GATE_OFF=1 AUTOPILOT_ENDPOINT_PREPROBE=off
+export AUTOPILOT_LOCAL_SLOTS_CMD='printf %s '\''{"free":0,"draining":false}'\''' # Prevent inherited host endpoint dispatches in this suite.
 export DISPATCH_DETACH=0 AUTOPILOT_SETTLE_MS=0
 export AUTOPILOT_STRIKE_WRITER=off ENGINE_CAPABILITY_DIR="$TEST_TMP/capability"
 mkdir -p "$AUTOPILOT_SESSION_MODE_DIR" "$TEST_TMP/bin" "$ENGINE_CAPABILITY_DIR"
@@ -74,12 +75,11 @@ LOG_PATH="$(printf '%s\n' "$ERR" | sed -n 's/.* log=\([^ ]*\) .*/\1/p' | tail -1
 assert_file_exists "$LOG_PATH" 'a: dispatch log path exists'
 assert_contains "$(cat "$LOG_PATH")" 'engine-preflight:' 'a: preflight line reaches dispatch log'
 
-# (a2) Full dispatch path: Kimi is burn-more ranked before the local cc-shim seat,
-# but the local seat must win capacity admission. The node shim only replaces pace-select.
+# (a2) Dispatch-level preflight falls through a spent pace candidate to the next rung.
 cat > "$TEST_TMP/bin/node" <<'SH'
 #!/usr/bin/env bash
 if [ "${1:-}" = "$REPO_ROOT/scripts/pace-select.js" ]; then
-  printf '%s\n' 'kimi' 'kimi-code/kimi-for-coding' '' '{"runner":"kimi","model":"kimi-code/kimi-for-coding","effort":"high","ranked_candidates":[{"runner":"kimi","model":"kimi-code/kimi-for-coding"},{"runner":"cc-shim","model":"glm-5.3","endpoint":"glm"}]}' '{}'
+  printf '%s\n' 'agy' 'gemini-4-hydrogen-low' '' '{"runner":"agy","model":"gemini-4-hydrogen-low","effort":"high","ranked_candidates":[{"runner":"agy","model":"gemini-4-hydrogen-low"},{"runner":"grok","model":"grok-4.7"}]}' '{}'
   exit 0
 fi
 exec "$REAL_NODE" "$@"
@@ -89,14 +89,14 @@ export REPO_ROOT REAL_NODE="$(command -v node)"
 LOCAL_PACE_RUNS="$TEST_TMP/runs-local-first"; mkdir -p "$LOCAL_PACE_RUNS"
 : > "$RUNNER_CALLS"
 LOCAL_TABLE="$TEST_TMP/local-first-engines.json"
-fresh_table "$LOCAL_TABLE" '[{"harness":"kimi","model":"kimi-code/kimi-for-coding","availability":"可用","suggest":"建議多用"},{"harness":"cc-shim","model":"glm-5.3","availability":"可用","suggest":"派"}]'
+fresh_table "$LOCAL_TABLE" '[{"harness":"agy","model":"gemini-4-hydrogen-low","availability":"已用完","suggest":"不派"},{"harness":"grok","model":"grok-4.7","availability":"可用","suggest":"派"}]'
 OUT="$( (export PATH="$TEST_TMP/bin:$PATH"; cd "$SBX" && env AUTOPILOT_PACE_FILE="$PACE" AUTOPILOT_DISPATCH_RUNS_DIR="$LOCAL_PACE_RUNS" AUTOPILOT_ENGINES_TABLE="$LOCAL_TABLE" AUTOPILOT_BURN_MORE="$BURN" \
   ANTHROPIC_COMPATIBLE_BASE_URL=https://example.invalid ANTHROPIC_COMPATIBLE_AUTH_TOKEN=test-token \
   "$SCRIPT" --no-verify-tip --context-window off --grok-bin "$TEST_TMP/bin/grok" --agy-bin "$TEST_TMP/bin/agy" \
   --branch feat/table-local-first --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/local-first.err") )"
 RC=$?
 MF="$(node -e 'const fs=require("fs"),p=process.argv[1];function walk(d){for(const n of fs.readdirSync(d,{withFileTypes:true})){const f=d+"/"+n.name;if(n.isDirectory()){const x=walk(f);if(x)return x}else if(n.name.endsWith(".manifest.json"))return f}return ""}process.stdout.write(walk(p))' "$LOCAL_PACE_RUNS")"
-assert_eq "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).engine_preflight.chosen.runner)' "$MF")" cc-shim 'a2: local cc-shim chosen ahead of burn-more Kimi'
+assert_eq "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).engine_preflight.chosen.runner)' "$MF")" grok 'a2: pace-ranked fallback rung is chosen after spent agy'
 LOCAL_LOG_PATH="$(manifest_field "$MF" log_path)"
 assert_contains "$(cat "$LOCAL_LOG_PATH")" 'engine-preflight:' 'a2: local-first preflight result reaches dispatch log'
 
@@ -119,6 +119,12 @@ assert_contains "$OUT_LOCAL" '"runner":"cc-shim"' 'c: local GLM endpoint remains
 run_case missing "$TEST_TMP/no-table.json" "$PACE"
 assert_eq 0 "$RC" 'd: missing table fails open'
 assert_eq 1 "$(printf '%s\n' "$ERR" | rg -c '^engine-preflight: capacity table missing, using default order')" 'd: one missing warning'
+
+# (d2) A malformed table is ignored with a distinct warning, never reported as missing.
+printf '%s\n' '{not json' > "$TEST_TMP/unparseable.json"
+run_case unparseable "$TEST_TMP/unparseable.json" "$PACE"
+assert_eq 0 "$RC" 'd2: unparseable table fails open'
+assert_eq 1 "$(printf '%s\n' "$ERR" | rg -c '^engine-preflight: capacity table unparseable, using default order')" 'd2: unparseable warning is explicit'
 
 # (e) Stale table does the same.
 node -e 'require("fs").writeFileSync(process.argv[1],JSON.stringify({schema:"capacity.engines/1",generated_at:"2000-01-01T00:00:00Z",engines:[]}))' "$TEST_TMP/stale.json"

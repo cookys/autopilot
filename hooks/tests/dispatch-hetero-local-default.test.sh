@@ -125,7 +125,7 @@ run_local() {
 # (a2) A free GLM slot wins before a fixture that otherwise selects codex; gate and manifest carry GLM.
 export AUTOPILOT_LOCAL_SLOTS_CMD='printf %s '\''{"endpoints":[{"id":"qwen-a","state":"up","free":0},{"id":"glm-a","models":["GLM-4"],"state":"up","free":1}]}'\'''
 PROMPT="$TEST_TMP/prompt-a2.txt"
-printf 'Size: S\nRole: implementer\nTask-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
+printf 'Fleet-Task: 01ARZ3NDEKTSV4RRFFQ69G5FAV\nSize: S\nRole: implementer\nTask-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
 run_local a2
 [ "$EXIT" -eq 0 ] || printf 'local-default diagnostic (a2): %s\n%s\n' "$OUT" "$ERR" >&2
 assert_eq "0" "$EXIT" "a2: GLM fallback exits 0"
@@ -139,7 +139,7 @@ export AUTOPILOT_LOCAL_SLOTS_CMD='printf %s '\''{"free":1,"draining":false}'\'''
 
 # (a) implementer, no --runner -> manifest runner local, model qwen.
 PROMPT="$TEST_TMP/prompt-a.txt"
-printf 'Size: S\nRole: implementer\nScope: ok.txt\nTask-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
+printf 'Fleet-Task: 01ARZ3NDEKTSV4RRFFQ69G5FAV\nSize: S\nRole: implementer\nScope: ok.txt\nTask-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
 run_local a
 [ "$EXIT" -eq 0 ] || printf 'local-default diagnostic (a): %s\n%s\n' "$OUT" "$ERR" >&2
 assert_eq "0" "$EXIT" "a: implementer with no --runner exits 0"
@@ -148,7 +148,10 @@ assert_eq "qwen" "$(json_get "$OUT" model)" "a: result model is qwen"
 assert_file_exists "$MF" "a: manifest written"
 assert_eq "local" "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).runner)' "$MF")" "a: manifest runner is local"
 assert_eq "qwen" "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).model)' "$MF")" "a: manifest model is qwen"
-assert_eq "medium" "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).effort_sent||"")' "$MF")" "a: implicit local manifest sends medium effort"
+assert_eq "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).effort||"")' "$MF")" "medium" "a: implicit local manifest sends medium effort"
+LOCAL_ARGV_A="$(git -C "$SBX" show "feat/local-a:local-argv.txt")"
+assert_contains "$LOCAL_ARGV_A" "--effort" "a: local stub receives an explicit effort argument"
+assert_contains "$LOCAL_ARGV_A" "medium" "a: local stub receives medium effort"
 assert_eq "<null>" "$(json_get "$OUT" local_fallback)" "a: local choice records local_fallback null"
 assert_eq "null" "$(node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).local_fallback; process.stdout.write(v===null?"null":JSON.stringify(v))' "$MF")" "a: manifest local_fallback is null"
 assert_contains "$(cat "$GATE_LOG")" '--model qwen --endpoint qwen_local' "a: CN gate receives selected Qwen model and endpoint"
@@ -160,7 +163,7 @@ OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="
   --branch feat/local-a3 --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/a3.err")"
 EXIT=$?
 assert_neq "0" "$EXIT" "a3: explicit local high effort fails precondition"
-assert_contains "$(cat "$TEST_TMP/a3.err")" "low|medium|xhigh" "a3: error names supported local effort set"
+assert_contains "$OUT" "low|medium|xhigh" "a3: error names supported local effort set"
 assert_contains "$OUT" '"status": "precondition_failed"' "a3: high effort fails before runner dispatch"
 RUNS="$TEST_TMP/runs-a3max"; mkdir -p "$RUNS"
 OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
@@ -182,7 +185,21 @@ FB_A4="$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\r?\n/).reve
 assert_contains "$FB_A4" '"reason":"fleet_task_invalid"' "a4: invalid task fallback reason"
 assert_contains "$FB_A4" '"detail":"fleet_task=12345678"' "a4: invalid task fallback detail"
 assert_not_contains "$(cat "$LEASE_LOG")" '"method":"POST","url":"/v1/local/lease"' "a4: invalid task skips lease request"
+assert_contains "$(cat "$TEST_TMP/a4.err")" "Fleet-Task '12345678'" "a4: invalid task diagnostic names the raw value"
 assert_contains "$(cat "$TEST_TMP/a4.err")" "write the full task id in the brief" "a4: invalid task diagnostic"
+
+# (a5) No Fleet-Task line is treated as missing and skips the lease POST.
+PROMPT="$TEST_TMP/prompt-a5.txt"; printf 'edit impl-defaults-fixture.txt\n' > "$PROMPT"
+: > "$LEASE_LOG"; RUNS="$TEST_TMP/runs-a5"; mkdir -p "$RUNS"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
+  "$SCRIPT" --no-verify-tip --context-window off --grok-bin "$STUB_GROK" \
+  --branch feat/local-a5 --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/a5.err")"
+EXIT=$?
+assert_eq "0" "$EXIT" "a5: missing Fleet-Task falls back successfully"
+FB_A5="$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\r?\n/).reverse().find(l=>l.trim().startsWith("{")));process.stdout.write(JSON.stringify(o.local_fallback))' "$OUT")"
+assert_contains "$FB_A5" '"reason":"fleet_task_missing"' "a5: missing task fallback reason"
+assert_contains "$FB_A5" '"detail":"fleet_task_missing"' "a5: missing task fallback detail"
+assert_not_contains "$(cat "$LEASE_LOG")" '"method":"POST","url":"/v1/local/lease"' "a5: missing task skips lease request"
 
 # (b) local, no Task-Class line -> dispatched prompt stays unchanged; caller file unchanged.
 PROMPT="$TEST_TMP/prompt-b.txt"
@@ -224,7 +241,7 @@ assert_not_contains "$DISPATCHED" "Task-Class: simple-script" "b2: gate adds no 
 XDG_RUNTIME_DIR="$(mktemp -d /tmp/local-default-xdg.XXXXXX)"
 chmod 700 "$XDG_RUNTIME_DIR"
 PROMPT="$TEST_TMP/prompt-c.txt"
-printf 'Task-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
+printf 'Fleet-Task: 01ARZ3NDEKTSV4RRFFQ69G5FAV\nTask-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
 run_local c --runner local --model qwen
 [ "$EXIT" -eq 0 ] || printf 'local-default diagnostic (c): %s\n%s\n' "$OUT" "$ERR" >&2
 assert_eq "0" "$EXIT" "c: local with no --worktree-parent exits 0"
@@ -278,7 +295,7 @@ assert_eq '{"reason":"no_free_slot","detail":"endpoint_not_ready"}' "$FB_E" "e: 
 
 # (f) successful implicit local run holds a lease and releases it after the worker.
 PROMPT="$TEST_TMP/prompt-f.txt"
-printf 'Task-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
+printf 'Fleet-Task: 01ARZ3NDEKTSV4RRFFQ69G5FAV\nTask-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
 RUNS="$TEST_TMP/runs-f"; mkdir -p "$RUNS"; : > "$LEASE_LOG"
 OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" AUTOPILOT_LOCAL_LEASE_TTL_S=3 LEASE_WORKER_SLEEP=7 \
   "$SCRIPT" --no-verify-tip --context-window off --branch feat/local-f --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/f.err")"
@@ -293,7 +310,7 @@ assert_contains "$(cat "$LEASE_LOG")" '"method":"DELETE"' "f: gateway received D
 
 # (f2) a hard-timeout worker is killed, but its granted lease is still released once.
 PROMPT="$TEST_TMP/prompt-f2.txt"
-printf 'Task-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
+printf 'Fleet-Task: 01ARZ3NDEKTSV4RRFFQ69G5FAV\nTask-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
 RUNS="$TEST_TMP/runs-f2"; mkdir -p "$RUNS"; : > "$LEASE_LOG"
 OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
   AUTOPILOT_LOCAL_LEASE_TTL_S=3 AUTOPILOT_HETERO_HARD_TIMEOUT=3 AUTOPILOT_HETERO_SAMPLE_S=1 \
@@ -327,7 +344,7 @@ assert_not_contains "$(cat "$LEASE_LOG")" '"method":"DELETE"' "g: oversized cont
 
 # (h) a pre-probe 503 triggers the cloud retry and releases the lease before re-exec.
 PROMPT="$TEST_TMP/prompt-h.txt"
-printf 'Task-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
+printf 'Fleet-Task: 01ARZ3NDEKTSV4RRFFQ69G5FAV\nTask-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
 printf 'busy\n' > "$LEASE_BUSY_FILE"; : > "$GROK_ARGV"; : > "$LEASE_LOG"; RUNS="$TEST_TMP/runs-h"; mkdir -p "$RUNS"
 OUT="$(cd "$SBX" && env AUTOPILOT_ENDPOINT_PREPROBE=on AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
   "$SCRIPT" --no-verify-tip --context-window off --grok-bin "$STUB_GROK" \
@@ -349,7 +366,7 @@ exit 1
 EOF
 chmod +x "$STUB_CLAUDE"
 PROMPT="$TEST_TMP/prompt-h.txt"
-printf 'Task-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
+printf 'Fleet-Task: 01ARZ3NDEKTSV4RRFFQ69G5FAV\nTask-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
 : > "$GROK_ARGV"; : > "$LEASE_LOG"; RUNS="$TEST_TMP/runs-j"; mkdir -p "$RUNS"
 OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
   "$SCRIPT" --no-verify-tip --context-window off --grok-bin "$STUB_GROK" \
@@ -378,7 +395,7 @@ EOF
 chmod +x "$STUB_CLAUDE"
 
 # (i) capacity denial falls back to cloud with the lease status detail.
-PROMPT="$TEST_TMP/prompt-i.txt"; printf 'edit impl-defaults-fixture.txt\n' > "$PROMPT"
+PROMPT="$TEST_TMP/prompt-i.txt"; printf 'Fleet-Task: 01ARZ3NDEKTSV4RRFFQ69G5FAV\nedit impl-defaults-fixture.txt\n' > "$PROMPT"
 printf '429\n' > "$LEASE_STATUS_FILE"; : > "$GROK_ARGV"; : > "$LEASE_LOG"; RUNS="$TEST_TMP/runs-i"; mkdir -p "$RUNS"
 OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" "$SCRIPT" --no-verify-tip --context-window off --grok-bin "$STUB_GROK" --branch feat/local-i --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/i.err")"; EXIT=$?
 assert_eq "$EXIT" "0" "i: lease 429 cloud fallback exits 0"

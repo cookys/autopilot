@@ -92,7 +92,7 @@ function leaseServer(status = 201, body = '{"lease_id":"lease-test"}') {
 }
 
 function leaseEnv(port, extra = {}) {
-  return readyEnv({ AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL: `http://127.0.0.1:${port}/v1`, AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN: 'fake-test-token', ...extra });
+  return readyEnv({ AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL: `http://127.0.0.1:${port}/v1`, AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN: 'fake-test-token', AUTOPILOT_FLEET_TASK: '01ARZ3NDEKTSV4RRFFQ69G5FAV', ...extra });
 }
 
 test('lease grant 201 chooses local and validates lease id without exposing token', async () => {
@@ -111,7 +111,7 @@ test('lease grant 201 chooses local and validates lease id without exposing toke
 });
 
 test('lease request requires a 26-character Crockford ULID before contacting gateway', async () => {
-  for (const [task, expectedReason, detail, hasTask] of [[undefined, 'fleet_task_missing', 'fleet_task_missing', false], ['12345678', 'fleet_task_invalid', 'fleet_task=12345678', true]]) {
+  for (const [task, expectedReason, detail, hasTask] of [[undefined, 'fleet_task_missing', 'fleet_task_missing', false], ['', 'fleet_task_missing', 'fleet_task_missing', true], ['none', 'fleet_task_missing', 'fleet_task_missing', true], ['12345678', 'fleet_task_invalid', 'fleet_task=12345678', true]]) {
     const { srv, requests } = await leaseServer();
     try {
       const env = leaseEnv(srv.address().port);

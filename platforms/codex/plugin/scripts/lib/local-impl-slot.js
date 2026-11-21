@@ -104,8 +104,10 @@ async function acquireLocalLease(opts = {}) {
   const parsedTtl = Number.parseInt(env.AUTOPILOT_LOCAL_LEASE_TTL_S || '180', 10);
   const ttl = Number.isInteger(parsedTtl) && parsedTtl > 0 ? parsedTtl : 180;
   const body = { model: opts.family || 'qwen', ...(opts.backend ? { backend: opts.backend } : {}), est_context_tokens: 8192, ttl_s: ttl };
-  const fleetTask = env.AUTOPILOT_FLEET_TASK || env.HETERO_FLEET_TASK_ID;
-  if (!fleetTask) return fail('fleet_task_missing', null, 'fleet_task_missing');
+  const fleetTask = env.LOCAL_SLOT_FLEET_TASK_RAW !== undefined
+    ? String(env.LOCAL_SLOT_FLEET_TASK_RAW).trim()
+    : String(env.AUTOPILOT_FLEET_TASK || env.HETERO_FLEET_TASK_ID || '').trim();
+  if (!fleetTask || fleetTask === 'none') return fail('fleet_task_missing', null, 'fleet_task_missing');
   if (!/^[0-9A-HJKMNP-TV-Z]{26}$/.test(fleetTask)) {
     process.stderr.write(`dispatch-hetero: local slot skipped: Fleet-Task '${fleetTask}' is not a 26-char ULID (gateway requires it); write the full task id in the brief\n`);
     return fail(`fleet_task=${fleetTask}`, null, 'fleet_task_invalid');

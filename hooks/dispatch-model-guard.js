@@ -332,9 +332,10 @@ function mechanicalReroute(input, toolInput, prompt) {
   if (!typeMatch && !modelMatch) return;
 
   const head = headLines(prompt, 6);
+  const fields = head.flatMap((line) => line.split('|').map((f) => f.trim()));
   let matchedRole = '';
-  for (const line of head) {
-    const m = line.match(/^Role:\s*([A-Za-z][\w-]*)/i);
+  for (const field of fields) {
+    const m = field.match(/^Role:\s*([A-Za-z][\w-]*)/i);
     if (m) {
       const candidate = m[1].toLowerCase();
       if (MECHANICAL_ROLES.has(candidate)) {
@@ -345,8 +346,8 @@ function mechanicalReroute(input, toolInput, prompt) {
   }
   if (!matchedRole) return;
 
-  const engineLine = head.find((l) => /^Engine:/i.test(l.trim())) || '';
-  const intentional = /\(intentional:\s*[^)]+\)/i.test(engineLine);
+  const engineField = fields.find((f) => /^Engine:/i.test(f)) || '';
+  const intentional = /\(intentional:\s*[^)]+\)/i.test(engineField);
 
   if (mode === 'shadow') {
     const entry = {
@@ -356,8 +357,8 @@ function mechanicalReroute(input, toolInput, prompt) {
       model,
       role: matchedRole,
     };
-    const laneLine = head.find((l) => /^Lane:\s*\S/i.test(l.trim()));
-    if (laneLine) entry.Lane = laneLine.replace(/^Lane:\s*/i, '').trim().slice(0, 120);
+    const laneField = fields.find((f) => /^Lane:\s*\S/i.test(f));
+    if (laneField) entry.Lane = laneField.replace(/^Lane:\s*/i, '').trim().slice(0, 120);
     const taskId = findTaskId(head.join('\n'));
     if (taskId) entry['Fleet-Task'] = taskId;
     if (intentional) entry.intentional = true;

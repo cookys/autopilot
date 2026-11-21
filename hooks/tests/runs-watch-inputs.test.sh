@@ -67,11 +67,11 @@ odo show --root-run-id R1 > "$SB/show.txt"; eq 0 "$?" "show (text) exits 0"
 eq 'yes' "$(grep -q 'Q one?' "$SB/show.txt" && grep -q 'Q two?' "$SB/show.txt" && grep -q 'BG one' "$SB/show.txt" && grep -q 'not_authorized: irreversible:NA one' "$SB/show.txt" && echo yes || echo no)" "show (text) lists both questions with their context"
 odo show --root-run-id R-none --json > "$SB/show2.out"; eq 0 "$?" "show --json from another root still lists the project's open questions (every scope file counts)"
 odo close --root-run-id R1 > /dev/null; eq 2 "$?" "close without --id is a usage error (it would be ambiguous)"
-odo close --id "$ID1" --root-run-id R1 > "$SB/close.out"; eq 0 "$?" "close --id removes one entry"
+odo close --id "$ID1" --withdraw "test cleanup" --by "test/operator" --root-run-id R1 > "$SB/close.out"; eq 0 "$?" "close --id removes one entry"
 eq "$ID2" "$(jf "$F1" 'v.decisions.filter((d)=>d.status!=="closed").map((d)=>d.id).join(",")')" "closing one entry leaves the other open (the closed one stays as a record)"
-odo close --id "$ID1" --root-run-id R1 > "$SB/close2.out"; eq 0 "$?" "close of an already-closed id is idempotent (exit 0)"
+odo close --id "$ID1" --withdraw "repeat test cleanup" --by "test/operator" --root-run-id R1 > "$SB/close2.out"; eq 0 "$?" "withdrawal of an already-closed id is idempotent (exit 0)"
 eq 'not open: '"$ID1" "$(cat "$SB/close2.out")" "and says so"
-odo close --id "$ID2" --root-run-id R1 > /dev/null; eq 0 "$?" "close of the last entry succeeds"
+odo close --id "$ID2" --withdraw "test cleanup" --by "test/operator" --root-run-id R1 > /dev/null; eq 0 "$?" "close of the last entry succeeds"
 assert_file_exists "$F1" "the file is kept when its last entry closes (BL cardtrail: the closed cards are the record)"
 eq "closed,closed" "$(jf "$F1" 'v.decisions.map((d)=>d.status).join(",")')" "both entries are kept with status closed"
 odo show --root-run-id R1 --json > /dev/null; eq 1 "$?" "show exits 1 after the last close"
@@ -87,7 +87,7 @@ FK="$COMMON/autopilot/decisions/${KEY}--RK.json"
 for i in $(seq 1 12); do odo open --not-authorized irreversible --free-text --question "keep-$i?" --root-run-id RK >> "$SB/keep.ids"; odo open --not-authorized irreversible --free-text --question "gone-$i?" --root-run-id RK >> "$SB/gone.ids"; done
 eq 24 "$(jf "$FK" 'v.decisions.length')" "setup: 24 entries open on the scope"
 rm -f "$SB"/k*.rc "$SB"/n*.rc "$SB"/new.ids.*
-i=0; while read -r gid; do i=$((i+1)); ( odo close --id "$gid" --root-run-id RK > /dev/null; echo $? > "$SB/k$i.rc" ) & done < "$SB/gone.ids"
+i=0; while read -r gid; do i=$((i+1)); ( odo close --id "$gid" --withdraw "concurrent test cleanup" --by "test/operator" --root-run-id RK > /dev/null; echo $? > "$SB/k$i.rc" ) & done < "$SB/gone.ids"
 for i in $(seq 1 12); do ( odo open --not-authorized irreversible --free-text --question "new-$i?" --root-run-id RK > "$SB/new.ids.$i"; echo $? > "$SB/n$i.rc" ) & done; wait
 eq '0' "$(cat "$SB"/k*.rc "$SB"/n*.rc | sort -u | tr '\n' ' ' | sed 's/ $//')" "concurrent close x12 + open x12: every call exits 0"
 cat "$SB/keep.ids" "$SB"/new.ids.* | LC_ALL=C sort > "$SB/want.ids"
@@ -98,7 +98,7 @@ rm -f "$FK"
 # unbound scope file name = project_key
 IDU=$(odo open --not-authorized irreversible --free-text --question 'unbound?'); eq 0 "$?" "open without a root targets the unbound scope"
 assert_file_exists "$COMMON/autopilot/decisions/${KEY}.json" "unbound decision file is <project_key>.json"
-odo close --id "$IDU" > /dev/null
+odo close --id "$IDU" --withdraw "test cleanup" --by "test/operator" > /dev/null
 # schema file validates a written file
 odo open --not-authorized irreversible --question 'S?' --option a --option b --recommendation a --root-run-id RS > /dev/null
 vs() { node -e 'const {validateJsonSchema}=require(process.argv[1]+"/scripts/validate-json-schema.js");const s=JSON.parse(require("fs").readFileSync(process.argv[1]+"/schemas/decision.schema.json","utf8"));const v=JSON.parse(process.argv[2]);process.stdout.write(validateJsonSchema(s,v).valid?"yes":"no")' "$REPO_ROOT" "$1" 2>&1 | tail -1; }

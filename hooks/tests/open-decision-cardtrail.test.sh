@@ -103,7 +103,9 @@ od close --id "$C6" --executor "$EXEC"; assert_eq "$RC" 2 "--executor without --
 od close --id "$C6" --answer a --executor "x y"; assert_eq "$RC" 2 "--executor not an address: usage exit 2"
 od close --id "$C6" --dispatched t --answer a; assert_eq "$RC" 2 "--dispatched with --answer: usage exit 2"
 od close --id "$C6" --dispatched "bad id!"; assert_eq "$RC" 2 "--dispatched needs a task id token"
-od close --id "$C6"; assert_eq "$RC" 0 "plain close (withdrawal) still works"; assert_eq "$(field "$C6" status)" "closed" "withdrawal kept as closed"; assert_eq "$(field "$C6" answer)" "null" "withdrawal has answer null"
+od close --id "$C6"; assert_eq "$RC" 2 "bare close is refused"; assert_eq "$(field "$C6" status)" "open" "bare close leaves card open"; assert_contains "$ERR" "--withdraw <reason> --by <actor>" "bare close prints complete withdrawal example"
+od close --id "$C6" --withdraw "PM 撤回：重開成新卡" --by "ns/cc/pm"; assert_eq "$RC" 0 "explicit withdrawal succeeds"; assert_eq "$(field "$C6" status)" "closed" "withdrawal kept as closed"; assert_eq "$(field "$C6" answer)" "null" "withdrawal has no answer"; assert_eq "$(field "$C6" closed_via)" "withdrawn" "withdrawal marker stored"; assert_eq "$(field "$C6" withdraw_reason)" "PM 撤回：重開成新卡" "withdrawal reason stored"; assert_eq "$(field "$C6" withdrawn_by)" "ns/cc/pm" "withdrawal actor stored"
+
 
 # 6. backfill: dry run by default, status per line
 cat > "$TEST_TMP/bf.jsonl" <<JSON
@@ -180,7 +182,7 @@ assert_eq "$(field "$CO" status)" "open" "(c) open card stays open"
 od done --id "$CO" --note "try bypass"; assert_eq "$RC" 2 "(c) done --note on open card: still refused (exit 2)"
 assert_contains "$ERR" "$CO is open, not awaiting_operator_action" "(c) done --note on open card still prints the open message"
 assert_eq "$(field "$CO" status)" "open" "(c) open card stays open even with --note"
-od close --id "$CO" >/dev/null
+od close --id "$CO" --withdraw "test cleanup: close open card" --by "test/operator" >/dev/null
 # (d) awaiting_operator_action done unchanged (--note optional; if given, stored as done_note)
 opencard "Q-AW1?" --executor "$EXEC"; CAW1="$OUT"
 od close --id "$CAW1" --answer "op step 1" --awaiting-operator "run step 1" >/dev/null
@@ -203,4 +205,8 @@ node "$M/scripts/open-decision.js" close --id "$CM" --answer "z" --executor "$EX
 assert_neq "$(field "$CM" status)" "pending_dispatch" "NC2 the sabotaged close --executor does NOT leave pending_dispatch (so the real assertion would fail on it)"
 assert_eq "$(field "$CM" status)" "closed" "NC2 the sabotaged copy closed it directly"
 assert_eq "$(cat "$STUBLOG")" "" "fleet was never called in this whole test"
+LIB_REPO="$TEST_TMP/helper-repo"; mkdir -p "$LIB_REPO"; $GIT -C "$LIB_REPO" init -q; $GIT -C "$LIB_REPO" commit -q --allow-empty -m base
+LIB_NO_ANSWER_ID="$(node -e 'const{openDecision}=require(process.argv[1]);const r=openDecision({cwd:process.argv[2],root:"rt",session:null,question:"helper requires a real answer or withdrawal",options:null,not_authorized:"irreversible"});process.stdout.write(r.id)' "$OD" "$LIB_REPO")"
+LIB_NO_ANSWER_FILE="$(node -e 'const{findCard}=require(process.argv[1]);process.stdout.write(findCard(process.argv[2],process.argv[3],{all:true}).file)' "$OD" "$LIB_REPO" "$LIB_NO_ANSWER_ID")"
+LIB_RESULT="$(node -e 'const od=require(process.argv[1]);const r=od.closeDecisionById(process.argv[2],process.argv[3]);process.stdout.write(JSON.stringify(r))' "$OD" "$LIB_NO_ANSWER_FILE" "$LIB_NO_ANSWER_ID")"; assert_contains "$LIB_RESULT" '"status":"error"' "closeDecisionById refuses missing answer and withdrawal"; assert_eq "$(node -e 'const{findCard}=require(process.argv[1]);process.stdout.write(findCard(process.argv[2],process.argv[3],{all:true}).entry.status)' "$OD" "$LIB_REPO" "$LIB_NO_ANSWER_ID")" "open" "refused helper close leaves card open"
 finalize_test

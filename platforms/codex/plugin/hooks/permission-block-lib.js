@@ -68,7 +68,7 @@ function openBlockedCard({ cwd, sessionId, paneId, socket, summary }) {
 function closeBlockedCard(file, id, sessionId) {
   if (typeof file !== 'string' || typeof id !== 'string' || !file || !id) return;
   const session = sanitizeSessionId(sessionId);
-  require('../scripts/open-decision.js').closeDecisionById(file, id, (v) => v.origin === ORIGIN && v.opened_by_session === session);
+  require('../scripts/open-decision.js').closeDecisionById(file, id, (v) => v.origin === ORIGIN && v.opened_by_session === session, { withdrawn: true, reason: 'permission prompt resolved', by: session });
 }
 
 module.exports = { STATE, ORIGIN, socketFromTmuxEnv, openBlockedCard, closeBlockedCard };

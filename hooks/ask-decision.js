@@ -116,7 +116,7 @@ function closeOwn(p) {
   if (!rec || typeof rec.decision_file !== 'string' || typeof rec.decision_id !== 'string') { L.removeFile(ptr); return; }
   const session = normSession(p.session_id);
   const { closeDecisionById } = require('../scripts/open-decision.js');
-  closeDecisionById(rec.decision_file, rec.decision_id, (v) => v.origin === SOURCE && v.opened_by_session === session);
+  closeDecisionById(rec.decision_file, rec.decision_id, (v) => v.origin === SOURCE && v.opened_by_session === session, { withdrawn: true, reason: 'AskUserQuestion prompt resolved', by: session });
   L.removeFile(ptr);
 }
 

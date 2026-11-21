@@ -312,7 +312,7 @@ function answer(opts) {
       }
       appendLinesUnlocked(batchesPath(cacheDir), lines);
     }
-    if (typeof batch.file === 'string' && batch.file) closeDecisionById(batch.file, cardId);
+    if (typeof batch.file === 'string' && batch.file) closeDecisionById(batch.file, cardId, undefined, decision === 'confirm' ? 'confirm' : 'reject');
     return { ok: true, decision, card_id: cardId, batch_id: batch.batch_id };
   });
 }

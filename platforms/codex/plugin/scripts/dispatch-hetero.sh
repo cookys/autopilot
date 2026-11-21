@@ -7910,7 +7910,10 @@ dispatch_detached_run() {
   if [ -f "$EXIT_FILE" ]; then out_rc="$(cat "$EXIT_FILE" 2>/dev/null || echo "$wait_rc")"; fi
   if [ -f "$RESULT_FILE" ]; then
     _lease_released="$(node -e 'try { const o=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); process.stdout.write(o.local_lease && o.local_lease.released ? "1" : "0"); } catch {}' "$RESULT_FILE" 2>/dev/null || true)"
-    [ "$_lease_released" != "1" ] || LOCAL_LEASE_RELEASED=1
+    if [ "$_lease_released" = "1" ]; then
+      LOCAL_LEASE_RELEASED=1
+      LOCAL_LEASE_RELEASE_ATTEMPTED=1
+    fi
     unset _lease_released
     if [ "${IMPLICIT_LOCAL_DEFAULT:-0}" = "1" ] && [ "${LOCAL_BUSY_REDISPATCH:-}" != "1" ]; then
       _busy_retry="$(node -e 'let o; try { o=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); } catch { o={}; } process.stdout.write(o.status==="engine_unavailable" && o.error_category==="endpoint_busy" ? "1" : "0");' "$RESULT_FILE" 2>/dev/null || true)"

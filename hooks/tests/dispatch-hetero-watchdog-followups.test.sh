@@ -423,6 +423,7 @@ assert_r3_zombie_worker_not_stamped_timed_out() {
   eval "$(sed -n '/^_self_pgid() {/,/^}$/p' "$SCRIPT")"
   eval "$(sed -n '/^_watchdog_worker_alive() {/,/^}$/p' "$SCRIPT")"
   eval "$(sed -n '/^_watchdog_signal_worker() {/,/^}$/p' "$SCRIPT")"
+  eval "$(sed -n '/^_watchdog_fire() {/,/^}$/p' "$SCRIPT")"
   eval "$(sed -n '/^_arm_worker_watchdog() {/,/^}$/p' "$SCRIPT")"
   local zpid="" holder="" zfile="$TEST_TMP/r3-zombie.pid"
   : > "$zfile"
@@ -1036,6 +1037,7 @@ assert_r11_nosetsid_sleeper_tagged_and_cancel_reaps() {
   eval "$(sed -n '/^_cancel_worker_watchdog() {/,/^}$/p' "$SCRIPT")"
   eval "$(sed -n '/^_watchdog_worker_alive() {/,/^}$/p' "$SCRIPT")"
   eval "$(sed -n '/^_watchdog_signal_worker() {/,/^}$/p' "$SCRIPT")"
+  eval "$(sed -n '/^_watchdog_fire() {/,/^}$/p' "$SCRIPT")"
   eval "$(sed -n '/^_arm_worker_watchdog() {/,/^}$/p' "$SCRIPT")"
   unset SCOPE_UNIT WORKER_FALLBACK_PGID WORKER_SID WORKER_RP
   WATCHDOG_TOKEN_FILE=""; WATCHDOG_PID=""

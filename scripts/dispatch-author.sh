@@ -85,7 +85,15 @@
 #   Known behavior: the agy path passes prompt bytes via "$(cat ...)" (via a helper
 #   shell script), which drops trailing prompt newlines. This mirrors dispatch-review
 #   and is safe for prompt semantics.
-#   ⏳ TIMEOUT: this call can run for MINUTES.
+#   ⏳ TIMEOUT: --timeout is the idle limit (default 5m), not a fixed wall clock.
+#   While the runner process tree is alive, progress (stdout/stderr/raw-log bytes,
+#   or utime+stime summed over that tree) resets the idle clock and appends
+#   "dispatch-author: extend: progress seen (<signal>), idle reset" to the raw log.
+#   No progress for the whole idle limit kills the tree (runner exit 124,
+#   transport_status idle_timeout). --hard-timeout (default 4h, or
+#   AUTOPILOT_AUTHOR_HARD_TIMEOUT) is the total wall cap (transport_status
+#   hard_timeout). AUTOPILOT_AUTHOR_SAMPLE_S is the sample interval (default 15).
+#   A kill adds "killed_at": {"elapsed_s": N, "last_progress_s_ago": N, "signal": "idle"|"hard"}.
 #   DISPATCH_QUIET=1 suppresses progress notes on stderr.
 #   AUTOPILOT_SETTLE_MS         # override the late-flush settle wait bounds in milliseconds
 #                               #   (default: 3000ms; cc-shim: 10000ms)
@@ -178,6 +186,9 @@ CONTEXT_WINDOW_GATE=""   # off|warn|block; empty ⇒ AUTOPILOT_CONTEXT_WINDOW_GA
 ROLE_KIT_DIR=""   # --role-kit (lib/role-kit.sh)
 RUNNER=""; MODEL=""; PROMPT_FILE=""; EFFORT="xhigh"; EFFORT_EXPLICIT=0; TIMEOUT="5m"; BIN=""; BIN_SUPPLIED=0; ENDPOINT=""
 SANDBOX="off"; SANDBOX_SUPPLIED=0; LOCAL_RUNNER=0; AUTHOR_PUBLIC_RUNNER=""
+HARD_TIMEOUT=""; HARD_TIMEOUT_SUPPLIED=0
+AUTHOR_TRANSPORT_STATUS=""; AUTHOR_WATCH_KIND=""; AUTHOR_WATCH_STATUS=""
+AUTHOR_HARD_SPEC=""; AUTHOR_IDLE_S=""; AUTHOR_HARD_S=""; AUTHOR_SAMPLE_S=""
 FLEET_TASK_ARG=""; AUTHOR_FLEET_TASK_ID=""
 REPO_ROOT=""; STRICT_ROSTER=0; STRICT_CONTRACT=0; CONTRACT_FILE=""; CONTRACT_FILE_SUPPLIED=0
 TIMEOUT_SUPPLIED=0
@@ -197,6 +208,7 @@ while [[ $# -gt 0 ]]; do
     --prompt-file)  PROMPT_FILE="${2:-}"; shift 2 ;;
     --effort)      EFFORT="${2:-}"; EFFORT_SUPPLIED=1; EFFORT_EXPLICIT=1; shift 2 ;;
     --timeout)     TIMEOUT="${2:-}"; TIMEOUT_SUPPLIED=1; shift 2 ;;
+    --hard-timeout) { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--hard-timeout requires a duration" >&2; exit 2; }; HARD_TIMEOUT="$2"; HARD_TIMEOUT_SUPPLIED=1; shift 2 ;;
     --role-kit)    { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--role-kit requires a non-empty directory path" >&2; exit 2; }; ROLE_KIT_DIR="$2"; shift 2 ;;
     --bin)         BIN="${2:-}"; BIN_SUPPLIED=1; shift 2 ;;
     --fleet-task)  { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--fleet-task requires a non-empty value" >&2; exit 2; }; FLEET_TASK_ARG="$2"; shift 2 ;;
@@ -435,6 +447,72 @@ author_remap_kill_exit() {
   fi
 }
 
+# Idle limit (--timeout) and hard wall cap (--hard-timeout / AUTOPILOT_AUTHOR_HARD_TIMEOUT,
+# default 4h). Parsed after a strict contract may rewrite TIMEOUT, before any runner.
+author_resolve_watch_limits() {
+  if [ "${HARD_TIMEOUT_SUPPLIED:-0}" -eq 1 ]; then
+    AUTHOR_HARD_SPEC="$HARD_TIMEOUT"
+  elif [ -n "${AUTOPILOT_AUTHOR_HARD_TIMEOUT:-}" ]; then
+    AUTHOR_HARD_SPEC="$AUTOPILOT_AUTHOR_HARD_TIMEOUT"
+  else
+    AUTHOR_HARD_SPEC="4h"
+  fi
+  local sample="${AUTOPILOT_AUTHOR_SAMPLE_S:-15}" parsed
+  if ! parsed="$(node "$_AUTHOR_SELF_DIR/lib/idle-watch.js" parse --idle "$TIMEOUT" --hard "$AUTHOR_HARD_SPEC" --sample "$sample" 2>&1)"; then
+    die_precondition "invalid idle/hard timeout: ${parsed:-idle=$TIMEOUT hard=$AUTHOR_HARD_SPEC sample=$sample}"
+  fi
+  read -r AUTHOR_IDLE_S AUTHOR_HARD_S AUTHOR_SAMPLE_S <<<"$parsed"
+  [[ "$AUTHOR_IDLE_S" =~ ^[1-9][0-9]*$ ]] || die_precondition "invalid --timeout value: $TIMEOUT"
+  [[ "$AUTHOR_HARD_S" =~ ^[1-9][0-9]*$ ]] || die_precondition "invalid --hard-timeout value: $AUTHOR_HARD_SPEC"
+  export AUTOPILOT_AUTHOR_IDLE_S="$AUTHOR_IDLE_S"
+  export AUTOPILOT_AUTHOR_HARD_S="$AUTHOR_HARD_S"
+  export AUTOPILOT_AUTHOR_SAMPLE_S="$AUTHOR_SAMPLE_S"
+}
+
+# Rebuild per launch: extra --watch paths differ, and RAW_LOG may have been retargeted.
+author_watch_prepare() {
+  AUTHOR_WATCH_STATUS="$(mktemp -t dispatch-author-watch-XXXXXX)"
+  AUTHOR_WATCH_CMD=(
+    node "$_AUTHOR_SELF_DIR/lib/idle-watch.js" run
+    --idle-s "$AUTHOR_IDLE_S"
+    --hard-s "$AUTHOR_HARD_S"
+    --sample-s "$AUTHOR_SAMPLE_S"
+    --grace-s "$AUTHOR_KILL_GRACE_SECS"
+    --raw-log "$RAW_LOG"
+    --status-file "$AUTHOR_WATCH_STATUS"
+  )
+  local w
+  for w in "$@"; do
+    [ -n "$w" ] || continue
+    AUTHOR_WATCH_CMD+=(--watch "$w")
+  done
+  AUTHOR_WATCH_CMD+=(--)
+}
+
+# The watcher's stderr is the runner capture. The user-facing line is printed here,
+# outside that redirection. <T> and the hard cap are the configured specs.
+author_note_watch() {
+  if [ -z "${AUTHOR_WATCH_KIND:-}" ] && [ -n "${AUTHOR_WATCH_STATUS:-}" ] && [ -s "$AUTHOR_WATCH_STATUS" ]; then
+    local _aw_kind="" _aw_el="" _aw_ago=""
+    read -r _aw_kind _aw_el _aw_ago < "$AUTHOR_WATCH_STATUS" || true
+    AUTHOR_WATCH_KIND="$_aw_kind"
+    [[ "${_aw_el:-}" =~ ^[0-9]+$ ]] && AUTHOR_KILLED_ELAPSED="$_aw_el"
+    [[ "${_aw_ago:-}" =~ ^[0-9]+$ ]] && AUTHOR_KILLED_AGO="$_aw_ago"
+  fi
+  case "${AUTHOR_WATCH_KIND:-}" in
+    idle_timeout)
+      AUTHOR_KILLED_SIGNAL="idle"
+      printf 'dispatch-author: idle for %s with no output or CPU; killed (raise --timeout to allow longer idle)\n' "$TIMEOUT" >&2
+      RUNNER_EXIT=124
+      ;;
+    hard_timeout)
+      AUTHOR_KILLED_SIGNAL="hard"
+      printf 'dispatch-author: hard cap %s reached; killed\n' "$AUTHOR_HARD_SPEC" >&2
+      RUNNER_EXIT=124
+      ;;
+  esac
+}
+
 strict_result_fields() {
   local containment="$1"
   local fields=""
@@ -519,6 +597,12 @@ emit_result() {
   fi
   if [ -n "${POLARITY_RECEIPT_DIGEST:-}" ]; then
     extra_fields="${extra_fields}, \"polarity_receipt_digest\": \"$(json_escape "$POLARITY_RECEIPT_DIGEST")\""
+  fi
+  if [ -n "${AUTHOR_KILLED_SIGNAL:-}" ]; then
+    local _ak_el="${AUTHOR_KILLED_ELAPSED:-0}" _ak_ago="${AUTHOR_KILLED_AGO:-0}"
+    [[ "$_ak_el" =~ ^[0-9]+$ ]] || _ak_el=0
+    [[ "$_ak_ago" =~ ^[0-9]+$ ]] || _ak_ago=0
+    extra_fields="${extra_fields}, \"killed_at\": {\"elapsed_s\": ${_ak_el}, \"last_progress_s_ago\": ${_ak_ago}, \"signal\": \"${AUTHOR_KILLED_SIGNAL}\"}"
   fi
 
   local raw_log_json="null"
@@ -632,16 +716,21 @@ runner_stderr_excerpt() {
   ' "$err_file" "$_AUTHOR_SELF_DIR" "$only_errors" 2>/dev/null || true
 }
 
-# transport_status vocabulary matches dispatch-plan-review.js: quota | timeout | exit_failure.
-# Quota detection reuses engine-capability-state.js classify-error (402/balance/credits shapes).
+# transport_status: quota | idle_timeout | hard_timeout | exit_failure.
+# A watcher kill names its kind. A bare 124 (no kind) is idle_timeout.
+# Quota detection reuses engine-capability-state.js classify-error (402/balance/credits shapes)
+# and still wins over a bare 124; it does not override a watcher kind.
 runner_transport_status() {
   local exit_code="$1" scan cls
   scan="$(mktemp -t dispatch-author-classify-XXXXXX)"
   { [[ -s "${RUNNER_ERR_FILE:-}" ]] && cat "$RUNNER_ERR_FILE"; tail -c 4096 "$RAW_LOG" 2>/dev/null; } > "$scan" 2>/dev/null || true
   cls="$(node "$_AUTHOR_SELF_DIR/engine-capability-state.js" classify-error --file "$scan" 2>/dev/null || true)"
   rm -f "$scan"
+  case "${AUTHOR_WATCH_KIND:-}" in
+    idle_timeout|hard_timeout) echo "$AUTHOR_WATCH_KIND"; return ;;
+  esac
   if [[ "$cls" = "quota_exhausted" ]]; then echo quota
-  elif [[ "$exit_code" = "124" ]]; then echo timeout
+  elif [[ "$exit_code" = "124" ]]; then echo idle_timeout
   else echo exit_failure; fi
 }
 
@@ -650,6 +739,7 @@ die_runner_failed() {
   local excerpt status msg
   excerpt="$(runner_stderr_excerpt)"
   status="$(runner_transport_status "$runner_exit_code")"
+  AUTHOR_TRANSPORT_STATUS="$status"
   msg="runner exited $runner_exit_code"
   if [[ -n "$excerpt" ]]; then
     msg="$msg: $excerpt"
@@ -1237,8 +1327,13 @@ write_author_manifest() {
   [ -n "${PACE_CHOICE_JSON:-}" ] && _rk_ident="$_rk_ident, \"pace_choice\": $PACE_CHOICE_JSON"
   declare -F dispatch_attr_fields >/dev/null 2>&1 && _rk_ident="$_rk_ident$(dispatch_attr_fields "${PROMPT_FILE_ORIG:-$PROMPT_FILE}" "${AUTHOR_PUBLIC_RUNNER:-$RUNNER}" "${ENDPOINT:-}")"
   [[ "${LOCAL_RUNNER:-0}" -eq 1 ]] && _rk_ident="$_rk_ident, \"resolved_runner\": \"cc-shim\", \"endpoint\": \"qwen_local\""
+  local transport_json="null"
+  case "${AUTHOR_TRANSPORT_STATUS:-}" in
+    quota|idle_timeout|hard_timeout|exit_failure|timeout|outbound_secret)
+      transport_json="\"$(json_escape "$AUTHOR_TRANSPORT_STATUS")\"" ;;
+  esac
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "%s", "allow_narrative": null, "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "lane": %s, "diff_file": null, "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, %s, "session_id": %s, "child_session_id": %s, "child_transcript": %s }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "%s", "allow_narrative": null, "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "lane": %s, "diff_file": null, "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, %s, "session_id": %s, "child_session_id": %s, "child_transcript": %s, "transport_status": %s }\n' \
       "$(json_escape "$AUTHOR_RUN_ID")" "$role_tok" "$(json_escape "${AUTHOR_PUBLIC_RUNNER:-$RUNNER}")" "$(json_escape "$MODEL")" \
       "$(json_escape "$RAW_LOG")" "$log_format" "$aux_json" "$$" \
       "$AUTHOR_STARTED_AT" "$AUTHOR_STARTED_EPOCH" \
@@ -1248,7 +1343,8 @@ write_author_manifest() {
       "$parent_json" "$root_json" "$depth_json" "$_rk_ident" \
       "$(declare -F manifest_session_id_json >/dev/null 2>&1 && manifest_session_id_json || printf null)" \
       "$(declare -F manifest_child_session_json >/dev/null 2>&1 && manifest_child_session_json || printf null)" \
-      "$(declare -F manifest_child_transcript_json >/dev/null 2>&1 && manifest_child_transcript_json || printf null)" > "$tmp"
+      "$(declare -F manifest_child_transcript_json >/dev/null 2>&1 && manifest_child_transcript_json || printf null)" \
+      "$transport_json" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$AUTHOR_MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
   return 0
 }
@@ -1335,6 +1431,7 @@ cleanup() {
   [ -n "$AUTHOR_WRAP_FILE" ] && rm -f "$AUTHOR_WRAP_FILE" || true
   [ -n "$AUTHOR_PARSE_FILE" ] && rm -f "$AUTHOR_PARSE_FILE" || true
   [ -n "$AUTHOR_BLOCK_FILE" ] && rm -f "$AUTHOR_BLOCK_FILE" || true
+  [ -n "$AUTHOR_WATCH_STATUS" ] && rm -f "$AUTHOR_WATCH_STATUS" || true
   # Codex private run artifacts are retained for raw_log consumers (not deleted).
   # Stamp the manifest terminal so a watcher can tell "finished" from "hung" — the
   # whole point of emitting it. Runs last so it records the real end of the process.
@@ -1446,6 +1543,8 @@ if [[ "$RUNNER" != "anthropic-compatible" && "$RUNNER" != "agy" && "$WORKER_MOUN
   die_precondition "$WORKER_MOUNT_REFUSE_LINE"
 fi
 
+author_resolve_watch_limits
+
 if [[ "$RUNNER" = "codex" ]]; then
   CODEX_BIN="$(runner_bin_fallback "${BIN:-codex}")"
   command -v "$CODEX_BIN" >/dev/null 2>&1 || die_precondition "codex binary not found: $CODEX_BIN"
@@ -1493,7 +1592,8 @@ elif [[ "$RUNNER" = "grok" ]]; then
   grok_effort_note "$EFFORT" "dispatch-author" "$MODEL" "$GROK_BIN" "$GROK_EFFORT"
   AUTHOR_TIMEOUT_START=$SECONDS
   # grok reads --prompt-file, so stdin is /dev/null (avoids SIGTTOU on a tty).
-  timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} "$GROK_BIN" --prompt-file "$PROMPT_FILE" --cwd "$GROK_CWD" --model "$MODEL" \
+  author_watch_prepare "$RUNNER_ERR_FILE"
+  "${AUTHOR_WATCH_CMD[@]}" ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} "$GROK_BIN" --prompt-file "$PROMPT_FILE" --cwd "$GROK_CWD" --model "$MODEL" \
     --reasoning-effort "$GROK_EFFORT" \
     --no-alt-screen --output-format plain --disable-web-search </dev/null > "$RAW_LOG" 2>"$RUNNER_ERR_FILE"
   RUNNER_EXIT=$?
@@ -1526,7 +1626,8 @@ elif [[ "$RUNNER" = "cursor" ]]; then
   set +e
   AUTHOR_TIMEOUT_START=$SECONDS
   # Prompt is fed with < "$4" inside the exec'd child. Do not redirect this timeout's stdin.
-  timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} bash -c 'cd "$1" && exec "$2" -p --trust --mode ask --model "$3" \
+  author_watch_prepare "$CURSOR_ERR"
+  "${AUTHOR_WATCH_CMD[@]}" ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} bash -c 'cd "$1" && exec "$2" -p --trust --mode ask --model "$3" \
     --output-format text < "$4"' \
     _ "$CURSOR_CWD" "$BIN" "$MODEL" "$PROMPT_FILE" > "$RAW_LOG" 2> "$CURSOR_ERR"
   RUNNER_EXIT=$?
@@ -1547,14 +1648,10 @@ elif [[ "$RUNNER" = "kimi" ]]; then
   # no known benign chatter to filter, and a swallowed adapter error would
   # surface downstream as the unfalsifiable `empty_output`.
   #
-  # The resolved deadline is also forwarded to the shim (`--timeout-seconds`) so the adapter
-  # honours --timeout instead of its fixed 300 s cap; the shim keeps it 5 s under the shell
-  # kill so the adapter reports `kimi_timeout`. A TIMEOUT normalize_timeout_seconds cannot
-  # parse (e.g. `1h`, which `timeout` accepts) forwards nothing = adapter default.
-  KIMI_TIMEOUT_ARGS=()
-  if KIMI_TIMEOUT_S="$(normalize_timeout_seconds "$TIMEOUT" 2>/dev/null)" && [[ "$KIMI_TIMEOUT_S" -gt 0 ]]; then
-    KIMI_TIMEOUT_ARGS=(--timeout-seconds "$KIMI_TIMEOUT_S")
-  fi
+  # Forward the hard cap, not the idle limit. The shim dies 5 s before
+  # --timeout-seconds; an idle-sized value would kill a working kimi before the
+  # outer watcher can extend. The shim still reports kimi_timeout 5 s early.
+  KIMI_TIMEOUT_ARGS=(--timeout-seconds "$AUTHOR_HARD_S")
   KIMI_AGENT_ARGS=()
   if [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ]; then
     KIMI_KIT_DIR="$(mktemp -d -t dispatch-author-kimikit-XXXXXX)" || die_precondition "could not create the kimi role-kit dir"
@@ -1565,7 +1662,8 @@ elif [[ "$RUNNER" = "kimi" ]]; then
   set +e
   AUTHOR_TIMEOUT_START=$SECONDS
   # kimi.js reads --prompt-file, so stdin is /dev/null (avoids SIGTTOU on a tty).
-  timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} node "$KIMI_JS" --model "$MODEL" --prompt-file "$PROMPT_FILE" \
+  author_watch_prepare
+  "${AUTHOR_WATCH_CMD[@]}" ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} node "$KIMI_JS" --model "$MODEL" --prompt-file "$PROMPT_FILE" \
     ${KIMI_TIMEOUT_ARGS[@]+"${KIMI_TIMEOUT_ARGS[@]}"} ${KIMI_AGENT_ARGS[@]+"${KIMI_AGENT_ARGS[@]}"} </dev/null > "$RAW_LOG" 2>>"$RAW_LOG"
   RUNNER_EXIT=$?
   author_remap_kill_exit "$AUTHOR_TIMEOUT_START"
@@ -1602,7 +1700,8 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
     _LOCAL_ENV=(ENABLE_TOOL_SEARCH=false)
     _LOCAL_WRAP=(bwrap --ro-bind / / --dev /dev --proc /proc --bind "$CCSHIM_CWD" "$CCSHIM_CWD" --die-with-parent)
   fi
-  timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} -u ANTHROPIC_API_KEY -u CLAUDE_CONFIG_DIR -u ANTHROPIC_CUSTOM_HEADERS ${_FT_HEADER:+ANTHROPIC_CUSTOM_HEADERS="$_FT_HEADER"} ${_LOCAL_ENV[@]+"${_LOCAL_ENV[@]}"} HOME="$CCSHIM_CWD" ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" \
+  author_watch_prepare "$RUNNER_ERR_FILE"
+  "${AUTHOR_WATCH_CMD[@]}" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} -u ANTHROPIC_API_KEY -u CLAUDE_CONFIG_DIR -u ANTHROPIC_CUSTOM_HEADERS ${_FT_HEADER:+ANTHROPIC_CUSTOM_HEADERS="$_FT_HEADER"} ${_LOCAL_ENV[@]+"${_LOCAL_ENV[@]}"} HOME="$CCSHIM_CWD" ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" \
     ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} ${_LOCAL_WRAP[@]+"${_LOCAL_WRAP[@]}"} bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" ${6:+--effort "$6"} ${7:+--settings "$7"} < "$4"' \
     _ "$CCSHIM_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "${CHILD_MARKER_SETTINGS:-}" > "$RAW_LOG" 2>"$RUNNER_ERR_FILE" &
   # Backgrounded + forwarded so a TERM/INT/HUP aimed at this script reaches timeout and the claude child (BL-0420); see _acct_forward.
@@ -1651,11 +1750,12 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
   child_marker_hook_setup || { CHILD_MARKER_SETTINGS=""; CHILD_MARKER_DIR="${AUTOPILOT_SESSION_MODE_DIR:-}"; }
   author_kill_grace
   AUTHOR_TIMEOUT_START=$SECONDS
-  # Prompt is fed with < "$4" inside the exec'd child. Do not redirect this timeout's stdin.
+  # Prompt is fed with < "$4" inside the exec'd child. Do not redirect this watcher's stdin.
+  author_watch_prepare "$RUNNER_ERR_FILE"
   if [ "$CNATIVE_ACCOUNT" = "1" ]; then
     # Token never appears in bash or argv: claude-account.js reads it and sets it in the child env only.
     CNATIVE_WRAP_ERR="${RUNNER_ERR_FILE}.wrap"
-    timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" \
+    "${AUTHOR_WATCH_CMD[@]}" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" \
       ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} node "$_CNATIVE_ACCT_JS" run --pin-default --purpose author --stdin "$PROMPT_FILE" --stdout "$RAW_LOG" --stderr "$RUNNER_ERR_FILE" --cwd "$CNATIVE_CWD" -- \
       "$CC_BIN" -p ${CHILD_SESSION_ID:+--session-id "$CHILD_SESSION_ID"} --model "$MODEL" --setting-sources project --strict-mcp-config --tools "$ROLE_KIT_TOOLS" ${CLAUDE_EFFORT_ARG:+--effort "$CLAUDE_EFFORT_ARG"} ${CHILD_MARKER_SETTINGS:+--settings "$CHILD_MARKER_SETTINGS"} ${ROLE_KIT_EXTRA[@]+"${ROLE_KIT_EXTRA[@]}"} \
       2>"$CNATIVE_WRAP_ERR" &
@@ -1672,7 +1772,7 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
   # --collect-err-fd 3 and the 3>&2 below stay together: fd 3 is this script's stderr,
   # saved before stdout/stderr go to the verdict capture. The child must not inherit it.
   node "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/seed-claude-config.js" --parent "${TMPDIR:-/tmp}" --exec --collect-err-fd 3 -- \
-  timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "$8" ${6:+--effort "$6"} ${7:+--settings "$7"} "${@:9}" < "$4"' \
+  "${AUTHOR_WATCH_CMD[@]}" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "$8" ${6:+--effort "$6"} ${7:+--settings "$7"} "${@:9}" < "$4"' \
     _ "$CNATIVE_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "${CHILD_MARKER_SETTINGS:-}" "$ROLE_KIT_TOOLS" ${ROLE_KIT_EXTRA[@]+"${ROLE_KIT_EXTRA[@]}"} 3>&2 > "$RAW_LOG" 2>"$RUNNER_ERR_FILE"
     RUNNER_EXIT=$?
   fi
@@ -1683,7 +1783,8 @@ elif [[ "$RUNNER" = "anthropic-compatible" ]]; then
   ANTHROPIC_JS="${BIN:-$(cd "$(dirname "$0")" && pwd)/dispatch-anthropic-review.js}"
   [[ -r "$ANTHROPIC_JS" ]] || die_precondition "dispatch-anthropic-review.js not found beside dispatch-author.sh"
   command -v node >/dev/null 2>&1 || die_precondition "node binary not found: node (required for anthropic-compatible author)"
-  TIMEOUT_MS="$(timeout_to_ms "$TIMEOUT")" || die_precondition "--timeout must be an integer millisecond value or use Ns/Nm syntax (got: $TIMEOUT)"
+  # Inner HTTP deadline is the hard cap. The outer watcher still kills a silent wait at the idle limit.
+  TIMEOUT_MS="$((AUTHOR_HARD_S * 1000))"
   if [[ -n "$EP_URL" ]]; then
     ANTHROPIC_BASE_URL="$EP_URL"
     ANTHROPIC_TOKEN_ENV="$EP_TOKEN_ENV"
@@ -1729,8 +1830,10 @@ process.stdout.write("base URL must use https:// unless it is an http:// loopbac
   if [[ -n "$ANTHROPIC_TOKEN_ENV" ]]; then
     ANTHROPIC_ARGS+=(--token-env "$ANTHROPIC_TOKEN_ENV")
   fi
+  author_kill_grace
+  author_watch_prepare
   set +e
-  AUTOPILOT_FLEET_TASK_ENDPOINT="${ENDPOINT:-}" node "$ANTHROPIC_JS" "${ANTHROPIC_ARGS[@]}" > "$RAW_LOG" 2>>"$RAW_LOG"
+  AUTOPILOT_FLEET_TASK_ENDPOINT="${ENDPOINT:-}" "${AUTHOR_WATCH_CMD[@]}" node "$ANTHROPIC_JS" "${ANTHROPIC_ARGS[@]}" > "$RAW_LOG" 2>>"$RAW_LOG"
   RUNNER_EXIT=$?
   set -e
 else
@@ -1770,7 +1873,7 @@ else
     printf 'agy effort %s (clamped %s) folded to %s: model id encodes the tier\n' \
       "$EFFORT" "$AGY_CLAMPED" "$AGY_EFFORT" >&2
   fi
-  AGY_PRINT_TIMEOUT="$(agy_print_timeout "$TIMEOUT")" || die_precondition "$AGY_PRINT_TIMEOUT"
+  AGY_PRINT_TIMEOUT="$(agy_print_timeout "$AUTHOR_HARD_SPEC")" || die_precondition "$AGY_PRINT_TIMEOUT"
   {
     printf '#!/usr/bin/env bash\n'
     printf 'cd %q || exit 9\n' "$AGY_CWD"
@@ -1788,12 +1891,15 @@ else
   author_kill_grace
   set +e
   AGY_TIMEOUT_START=$SECONDS
-  timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} script -qec "$RUN_SH" "$RAW_LOG" >/dev/null 2>&1
+  author_watch_prepare
+  "${AUTHOR_WATCH_CMD[@]}" ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} script -qec "$RUN_SH" "$RAW_LOG" >/dev/null 2>&1
   RUNNER_EXIT=$?
   author_remap_kill_exit "$AGY_TIMEOUT_START"
   set -e
   rm -rf "$RUN_SH"
 fi
+
+author_note_watch
 
 # Exit-first classification: deadline / incomplete tree / any nonzero precede
 # ALL content reads (witness, session, empty check). Bytes written during

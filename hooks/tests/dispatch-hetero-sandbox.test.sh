@@ -726,7 +726,7 @@ for f in dispatch-hetero.sh check-disjointness.sh; do
   eq "0" "$nodiff" "g4 static: every name-only/shortstat/--cached diff in scripts/$f carries --ignore-submodules=none"
   eq "0" "$(grep -c -e '--ignore-submodules=all' "$REPO_ROOT/scripts/$f" || true)" "g4 static: scripts/$f has no --ignore-submodules=all"
 done
-eq "2" "$(grep -c -e '_wt_git diff --ignore-submodules=none' "$REPO_ROOT/scripts/dispatch-hetero.sh" || true)" "g4 static: dispatch-hetero.sh makes exactly two diffs (shortstat, name-only), both with =none"
+eq "3" "$(grep -c -e '_wt_git diff --ignore-submodules=none' "$REPO_ROOT/scripts/dispatch-hetero.sh" || true)" "g4 static: dispatch-hetero.sh makes exactly three diffs (shortstat, name-only, backlog gate), all with =none"
 eq "4" "$(grep -c -e 'diff --cached --ignore-submodules=none\|diff --ignore-submodules=none --name-only' "$REPO_ROOT/scripts/check-disjointness.sh" || true)" "g4 static: check-disjointness.sh makes four diffs (staged, range, parent, empty-tree), all with =none"
 eq "0" "$(grep -E "'diff-tree'" "$REPO_ROOT/scripts/check-hands-commit.js" | grep -vc -e '--ignore-submodules=none' || true)" "g4 static: check-hands-commit.js's diff-tree carries --ignore-submodules=none (diff-tree honours ignore=all too)"
 eq "0" "$(grep -E 'status .*--ignore-submodules' "$REPO_ROOT/scripts/dispatch-hetero.sh" | grep -vc -e '--ignore-submodules=dirty' || true)" "g4 static: every rail status carries --ignore-submodules=dirty"

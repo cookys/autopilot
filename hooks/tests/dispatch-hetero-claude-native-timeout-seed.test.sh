@@ -29,8 +29,8 @@ chmod +x "$BIN_DIR/claude"
 export PATH="$BIN_DIR:$PATH"
 
 START="$(date +%s)"
-OUT="$(cd "$SBX" && timeout 60 "$SCRIPT" --no-verify-tip --runner claude-native --model claude-sonnet-4-6 --effort low \
-  --prompt-file "$PROMPT" --context-window off --branch feat/cn-timeout --timeout 3s 2>&1)"
+OUT="$(cd "$SBX" && timeout 60 env AUTOPILOT_HETERO_SAMPLE_S=1 "$SCRIPT" --no-verify-tip --runner claude-native --model claude-sonnet-4-6 --effort low \
+  --prompt-file "$PROMPT" --context-window off --branch feat/cn-timeout --timeout 3s --idle-timeout 3s --hard-timeout 3s 2>&1)"
 ELAPSED=$(( $(date +%s) - START ))
 JSON="$(printf '%s\n' "$OUT" | grep '^{' | tail -n 1)"
 assert_contains "$JSON" '"timed_out": true' "run ended by the wall timeout (${ELAPSED}s): $OUT"

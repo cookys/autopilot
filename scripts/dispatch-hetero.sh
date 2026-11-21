@@ -133,7 +133,17 @@
 #       [--skill-mode off|prompt|native|auto]  # skill transport mode (default: off)
 #       [--skill <name>]                       # repeatable skill name (0+)
 #       [--base develop]                       # default
-#       [--timeout 9m]                         # agy --print-timeout (default 5m is too short)
+#       [--timeout 9m]                         # wall deadline (default 9m). It kills the worker
+#                                              #   unless --idle-timeout was also passed and progress
+#                                              #   (output bytes or process-tree CPU) is still inside
+#                                              #   that idle window — then one "extend:" line per idle
+#                                              #   window and the run continues until idle or --hard-timeout.
+#       [--idle-timeout 5m]                    # no output-byte or process-tree CPU growth for
+#                                              #   this long kills the worker group (default 5m).
+#                                              #   AUTOPILOT_HETERO_SAMPLE_S is the sample period
+#                                              #   (default 15; tests set it lower).
+#       [--hard-timeout 4h]                    # wall cap even while progress continues
+#                                              #   (default 4h, or AUTOPILOT_HETERO_HARD_TIMEOUT).
 #       [--gate-rules <file>]                  # claude-native / cc-shim only (any other runner is refused):
 #                                              #   per-turn gate for THIS hand. Mints a fresh session id, arms
 #                                              #   scripts/per-turn-gate-arm.js (gate-verify --check first; nothing
@@ -250,6 +260,9 @@
 #     "files_changed": N, "insertions": N, "deletions": N,
 #     "worktree": "...|null", "agent_log": "..." , "error": "...|null",
 #     "timed_out": true|false, "timeout_enforced": true|false,
+#     "timeout_kind": "idle"|"hard"            # only when this rail killed the worker
+#     "candidate_ref": "<sha>|null"            # worktree HEAD when it moved past base, on a kill
+#     "killed_at": {"elapsed_s": N, "last_progress_s_ago": N, "signal": "idle"|"hard"}
 #     "timeout_source": "caller"|"contract_wall"|"caller_within_wall"
 #       (when present; caller = no-contract --timeout, caller_within_wall = within
 #        a Mission contract wall, contract_wall = contract-supplied). The run
@@ -390,6 +403,17 @@ MODEL=""
 MODEL_IS_DEFAULT=1
 BASE="develop"
 TIMEOUT="9m"
+IDLE_TIMEOUT="5m"
+IDLE_TIMEOUT_SUPPLIED=0
+HARD_TIMEOUT=""
+HARD_TIMEOUT_SUPPLIED=0
+WATCHDOG_IDLE_S=""
+WATCHDOG_HARD_S=""
+WATCHDOG_SAMPLE_S=""
+WATCHDOG_SOFT_S=""
+WORKER_TIMEOUT_KIND=""
+KILLED_ELAPSED_S=""
+KILLED_LAST_PROGRESS_S=""
 GATE_RULES_FILE=""     # --gate-rules: per-turn gate rule list for ONE claude-native/cc-shim hand (BL-0306 P2)
 GATE_SETTINGS_FILE=""
 GATE_ARMED_SESSION=""
@@ -1275,6 +1299,14 @@ NODE
   [ "${WATCHDOG_DISARMED:-0}" -eq 1 ] && timeout_enforced_json="false"
   emit_timeout_secs="$(normalize_timeout_seconds "${TIMEOUT:-}" 2>/dev/null || true)"
   timeout_fields=", \"timed_out\": $timed_out_json, \"timeout_enforced\": $timeout_enforced_json"
+  if [ "$timed_out_json" = "true" ]; then
+    local _tk="${WORKER_TIMEOUT_KIND:-idle}"
+    case "$_tk" in hard|idle) ;; *) _tk="idle" ;; esac
+    local _kel="${KILLED_ELAPSED_S:-0}" _kago="${KILLED_LAST_PROGRESS_S:-0}"
+    [[ "$_kel" =~ ^[0-9]+$ ]] || _kel=0
+    [[ "$_kago" =~ ^[0-9]+$ ]] || _kago=0
+    timeout_fields="$timeout_fields, \"timeout_kind\": \"$_tk\", \"candidate_ref\": $commit_json, \"killed_at\": {\"elapsed_s\": $_kel, \"last_progress_s_ago\": $_kago, \"signal\": \"$_tk\"}"
+  fi
   [ "${COMMIT_QUIET_ENDED:-0}" -eq 1 ] && timeout_fields="$timeout_fields, \"note\": \"ended_after_commit_quiet\""
   if [ -n "${TIMEOUT_SOURCE:-}" ] && [ -n "$emit_timeout_secs" ]; then
     timeout_fields="$timeout_fields, \"timeout_seconds\": $emit_timeout_secs, \"timeout_source\": \"$(_flat_json_escape "$TIMEOUT_SOURCE")\""
@@ -2805,6 +2837,8 @@ while [ $# -gt 0 ]; do
     --worktree-parent) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--worktree-parent requires a non-empty directory path"; WORKTREE_PARENT="$2"; shift 2 ;;
     --base) BASE="${2:-}"; BASE_SUPPLIED=1; shift 2 ;;
     --timeout) TIMEOUT="${2:-}"; TIMEOUT_SUPPLIED=1; shift 2 ;;
+    --idle-timeout) { [ $# -ge 2 ] && [ -n "$2" ]; } || die_precondition "--idle-timeout requires a duration"; IDLE_TIMEOUT="$2"; IDLE_TIMEOUT_SUPPLIED=1; shift 2 ;;
+    --hard-timeout) { [ $# -ge 2 ] && [ -n "$2" ]; } || die_precondition "--hard-timeout requires a duration"; HARD_TIMEOUT="$2"; HARD_TIMEOUT_SUPPLIED=1; shift 2 ;;
     --gate-rules) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--gate-rules requires a non-empty file path"; GATE_RULES_FILE="$2"; shift 2 ;;
     --role-kit) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--role-kit requires a non-empty directory path"; ROLE_KIT_DIR="$2"; shift 2 ;;
     --commit-quiet-secs) COMMIT_QUIET_SECS="${2:-}"; shift 2 ;;
@@ -3428,6 +3462,28 @@ fi
 if [ "$TIMEOUT_SUPPLIED" -eq 1 ] && [ -z "${TIMEOUT_SOURCE:-}" ]; then
   TIMEOUT_SOURCE="caller"
 fi
+# Idle / hard / sample limits. --timeout stays a soft deadline (WATCHDOG_SOFT_S);
+# an unenforced default still parses so a later arm uses the same numbers.
+_hetero_resolve_watch_limits() {
+  local sample="${AUTOPILOT_HETERO_SAMPLE_S:-15}"
+  local hard_spec idle_spec parsed
+  if [ "${HARD_TIMEOUT_SUPPLIED:-0}" -eq 1 ]; then
+    hard_spec="$HARD_TIMEOUT"
+  elif [ -n "${AUTOPILOT_HETERO_HARD_TIMEOUT:-}" ]; then
+    hard_spec="$AUTOPILOT_HETERO_HARD_TIMEOUT"
+  else
+    hard_spec="4h"
+  fi
+  idle_spec="${IDLE_TIMEOUT:-5m}"
+  parsed="$(node "$SELF_DIR/lib/idle-watch.js" parse --idle "$idle_spec" --hard "$hard_spec" --sample "$sample" 2>&1)" || return 1
+  read -r WATCHDOG_IDLE_S WATCHDOG_HARD_S WATCHDOG_SAMPLE_S <<<"$parsed"
+  [[ "$WATCHDOG_IDLE_S" =~ ^[1-9][0-9]*$ ]] || return 1
+  [[ "$WATCHDOG_HARD_S" =~ ^[1-9][0-9]*$ ]] || return 1
+  WATCHDOG_SOFT_S="$(normalize_timeout_seconds "${TIMEOUT:-}" 2>/dev/null || true)"
+  [[ "${WATCHDOG_SOFT_S:-}" =~ ^[1-9][0-9]*$ ]] || return 1
+  return 0
+}
+_hetero_resolve_watch_limits || die_precondition "invalid --timeout/--idle-timeout/--hard-timeout (or AUTOPILOT_HETERO_HARD_TIMEOUT / AUTOPILOT_HETERO_SAMPLE_S)"
 if [ -n "$CAMPAIGN_CONTRACT_FILE" ]; then
   run_campaign_projection_preflight
 fi
@@ -5350,8 +5406,48 @@ _watchdog_signal_worker() {
   kill "-$sig" "-$target" 2>/dev/null
 }
 
+_watchdog_sleep_sample() {
+  local tok="$1" tag="$2" secs="$3" sp=""
+  if [ "${HETERO_TEST_NO_SETSID:-}" != "1" ] && command -v setsid >/dev/null 2>&1; then
+    setsid bash -c 'exec -a "hetero-wall-watchdog-'"$tag"'" sleep "$1"' bash "$secs" &
+  else
+    bash -c 'exec -a "hetero-wall-watchdog-'"$tag"'" sleep "$1"' bash "$secs" &
+  fi
+  sp=$!
+  echo "$sp" > "${tok}.sleeppid"
+  wait "$sp" 2>/dev/null || true
+}
+
+# One sample via scripts/lib/idle-watch.js (bytes of the agent log + CPU ticks
+# of the worker process tree). Prints "bytes cpu" or nothing when the sampler fails.
+_watchdog_progress_sample() {
+  local pid="$1" log="$2" line=""
+  [ -n "$pid" ] && [ -n "$log" ] || return 1
+  line="$(node "$SELF_DIR/lib/idle-watch.js" sample --pid "$pid" --watch "$log" 2>/dev/null)" || return 1
+  printf '%s\n' "$line"
+}
+
+_watchdog_fire() {
+  local tok="$1" kind="$2" elapsed="$3" ago="$4"
+  printf '%s %s %s\n' "$kind" "$elapsed" "$ago" > "${tok}.fired"
+  if ! _watchdog_signal_worker TERM; then
+    rm -f "${tok}.fired"
+    return 0
+  fi
+  local i=0
+  while [ "$i" -lt 10 ]; do
+    [ -f "${tok}.cancel" ] && return 0
+    _watchdog_worker_alive || return 0
+    sleep 1
+    i=$((i + 1))
+  done
+  [ -f "${tok}.cancel" ] && return 0
+  _watchdog_worker_alive || return 0
+  _watchdog_signal_worker KILL || true
+}
+
 _arm_worker_watchdog() {
-  local secs="$1"
+  local soft="$1"
   # Prefix must not match any test-lockgated glob (hetero-*). suite_residue_reap
   # deletes lockless hetero-* names and would remove this token mid-run, so the
   # sleeper exits at "[ -f "$tok" ] || exit 0" and the wall timeout never fires.
@@ -5359,50 +5455,102 @@ _arm_worker_watchdog() {
   : > "$WATCHDOG_TOKEN_FILE"
   local tok="$WATCHDOG_TOKEN_FILE"
   local tag="${tok##*/}"
+  local idle="${WATCHDOG_IDLE_S:-300}"
+  local hard="${WATCHDOG_HARD_S:-14400}"
+  local sample="${WATCHDOG_SAMPLE_S:-15}"
+  local log="${LOG:-}"
   (
-    sp=""
     trap 'kill "${sp:-}" 2>/dev/null; exit 0' TERM
-    # test-only: HETERO_TEST_NO_SETSID=1 pretends setsid is missing (watchdog sleeper too).
-    if [ "${HETERO_TEST_NO_SETSID:-}" != "1" ] && command -v setsid >/dev/null 2>&1; then
-      setsid bash -c 'exec -a "hetero-wall-watchdog-'"$tag"'" sleep "$1"' bash "$secs" &
-    else
-      # No setsid: still tag argv0 so _cancel_worker_watchdog can recognise and kill it.
-      bash -c 'exec -a "hetero-wall-watchdog-'"$tag"'" sleep "$1"' bash "$secs" &
-    fi
-    sp=$!
-    echo "$sp" > "${tok}.sleeppid"
-    wait "$sp" 2>/dev/null || true
-    sp=""   # reaped: the TERM trap must not signal a recycled pid
-    # (a) explicit cancel (b) token vanished while the worker lives (c) worker gone.
-    if [ -f "${tok}.cancel" ]; then
-      exit 0
-    fi
-    if [ ! -f "$tok" ]; then
-      if _watchdog_worker_alive; then
-        echo "watchdog token vanished without cancel; enforcing timeout" >&3 2>/dev/null || true
+    sp=""
+    start="$(date +%s)"
+    last_progress="$start"
+    last_extend=0
+    last_sig=""
+    prev_b=""
+    prev_c=""
+    while _watchdog_worker_alive; do
+      # Sample interval, but never sleep past the next soft/idle/hard deadline.
+      # A 1s wall with the 15s default sample must still fire on that wall.
+      now="$(date +%s)"
+      nap="$sample"
+      until_soft=$((start + soft - now))
+      until_idle=$((last_progress + idle - now))
+      until_hard=$((start + hard - now))
+      until="$until_soft"
+      [ "$until_idle" -lt "$until" ] && until="$until_idle"
+      [ "$until_hard" -lt "$until" ] && until="$until_hard"
+      [ "$until" -lt 1 ] && until=1
+      [ "$nap" -gt "$until" ] && nap="$until"
+      if [ "${HETERO_TEST_NO_SETSID:-}" != "1" ] && command -v setsid >/dev/null 2>&1; then
+        setsid bash -c 'exec -a "hetero-wall-watchdog-'"$tag"'" sleep "$1"' bash "$nap" &
       else
+        bash -c 'exec -a "hetero-wall-watchdog-'"$tag"'" sleep "$1"' bash "$nap" &
+      fi
+      sp=$!
+      echo "$sp" > "${tok}.sleeppid"
+      wait "$sp" 2>/dev/null || true
+      sp=""
+      if [ -f "${tok}.cancel" ]; then
         exit 0
       fi
-    elif ! _watchdog_worker_alive; then
-      exit 0
-    fi
-    # Stamp first: wait "$rp" can return as soon as TERM is delivered, before
-    # a post-signal write runs; the parent would then cancel and miss timeout.
-    : > "${tok}.fired"
-    if ! _watchdog_signal_worker TERM; then
-      rm -f "${tok}.fired"
-      exit 0
-    fi
-    local i=0
-    while [ "$i" -lt 10 ]; do
-      [ -f "${tok}.cancel" ] && exit 0
+      if [ ! -f "$tok" ]; then
+        if _watchdog_worker_alive; then
+          echo "watchdog token vanished without cancel; enforcing timeout" >&3 2>/dev/null || true
+          now="$(date +%s)"
+          _watchdog_fire "$tok" idle "$((now - start))" "$((now - last_progress))"
+        fi
+        exit 0
+      fi
       _watchdog_worker_alive || exit 0
-      sleep 1
-      i=$((i + 1))
+      now="$(date +%s)"
+      sample_line="$(_watchdog_progress_sample "${WORKER_RP:-}" "$log" || true)"
+      bytes=""; cpu=""
+      if [ -n "$sample_line" ]; then
+        bytes="${sample_line#*bytes=}"; bytes="${bytes%% *}"
+        cpu="${sample_line#*cpu=}"; cpu="${cpu%% *}"
+      fi
+      sig=""
+      if [[ "$bytes" =~ ^[0-9]+$ ]]; then
+        if [[ "$prev_b" =~ ^[0-9]+$ ]] && [ "$bytes" -gt "$prev_b" ]; then
+          sig="bytes"
+        fi
+        prev_b="$bytes"
+      fi
+      if [[ "$cpu" =~ ^[0-9]+$ ]]; then
+        if [[ "$prev_c" =~ ^[0-9]+$ ]] && [ "$cpu" -gt "$prev_c" ]; then
+          if [ "$sig" = "bytes" ]; then sig="bytes+cpu"; else sig="cpu"; fi
+        fi
+        prev_c="$cpu"
+      fi
+      if [ -n "$sig" ]; then
+        last_progress="$now"
+        last_sig="$sig"
+      fi
+      elapsed=$((now - start))
+      ago=$((now - last_progress))
+      if [ "$elapsed" -ge "$hard" ]; then
+        _watchdog_fire "$tok" hard "$elapsed" "$ago"
+        exit 0
+      fi
+      if [ "$ago" -ge "$idle" ]; then
+        _watchdog_fire "$tok" idle "$elapsed" "$ago"
+        exit 0
+      fi
+      # --timeout is a wall kill. --idle-timeout opts into extending past it
+      # while output bytes or process-tree CPU are still moving.
+      if [ "$elapsed" -ge "$soft" ]; then
+        if [ "${IDLE_TIMEOUT_SUPPLIED:-0}" -eq 1 ] && [ -n "$last_sig" ] && [ "$ago" -lt "$idle" ]; then
+          if [ $((now - last_extend)) -ge "$idle" ]; then
+            printf 'dispatch-hetero: extend: progress seen (%s), past --timeout\n' "$last_sig" >> "$log" 2>/dev/null || true
+            prev_b="$(stat -c %s "$log" 2>/dev/null || echo "$prev_b")"
+            last_extend="$now"
+          fi
+        else
+          _watchdog_fire "$tok" wall "$elapsed" "$ago"
+          exit 0
+        fi
+      fi
     done
-    [ -f "${tok}.cancel" ] && exit 0
-    _watchdog_worker_alive || exit 0
-    _watchdog_signal_worker KILL || true
   # fd 3 is the dispatcher's stderr; the subshell's own stdout/stderr stay discarded.
   ) 3>&2 >/dev/null 2>&1 &
   WATCHDOG_PID=$!
@@ -5465,9 +5613,12 @@ _wait_worker_with_watchdog() {
   local rp="$1"
   local secs=""
   WORKER_RP="$rp"
-  if [ -n "${TIMEOUT_SOURCE:-}" ]; then
-    secs="$(normalize_timeout_seconds "${TIMEOUT:-}" 2>/dev/null || true)"
-    if [ -n "$secs" ] && [ "${WATCHDOG_DISARMED:-0}" -ne 1 ]; then
+  if [ "${WATCHDOG_DISARMED:-0}" -ne 1 ]; then
+    if [ -z "${WATCHDOG_IDLE_S:-}" ]; then
+      _hetero_resolve_watch_limits || true
+    fi
+    secs="${WATCHDOG_SOFT_S:-}"
+    if [ -n "$secs" ] && [ -n "${WATCHDOG_IDLE_S:-}" ]; then
       _arm_worker_watchdog "$secs"
     fi
   fi
@@ -5484,6 +5635,10 @@ _wait_worker_with_watchdog() {
     # Do not cancel it: the grace loop exits on the cancel marker and would
     # skip KILL, leaving a group member that ignores TERM alive until a later reap.
     WORKER_TIMED_OUT=1
+    WORKER_TIMEOUT_KIND=""
+    KILLED_ELAPSED_S=""
+    KILLED_LAST_PROGRESS_S=""
+    read -r WORKER_TIMEOUT_KIND KILLED_ELAPSED_S KILLED_LAST_PROGRESS_S < "${WATCHDOG_TOKEN_FILE}.fired" || true
     if [ -n "${WATCHDOG_PID:-}" ]; then
       wait "${WATCHDOG_PID}" 2>/dev/null || true
     fi
@@ -5540,6 +5695,7 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
   # (scope, setsid, plain) starts the worker inside the private mount namespace.
   if [ "${#WORKER_MOUNT_PREFIX[@]}" -gt 0 ]; then set -- "${WORKER_MOUNT_PREFIX[@]}" "$@"; fi
   WORKER_TIMED_OUT=0
+  : >"$LOG"
   WATCHDOG_PID=""
   WATCHDOG_TOKEN_FILE=""
   WATCHDOG_DISARMED=0
@@ -5556,12 +5712,12 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
     # group so the watchdog never signals the dispatcher session.
     CONTAINMENT="setsid"
     if [ "${HETERO_TEST_NO_SETSID:-}" != "1" ] && command -v setsid >/dev/null 2>&1; then
-      setsid env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_CLAUDE_ENV[@]+"${CHILD_SESSION_CLAUDE_ENV[@]}"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
+      setsid env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_CLAUDE_ENV[@]+"${CHILD_SESSION_CLAUDE_ENV[@]}"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >>"$LOG" 2>&1 &
       rp=$!
       WORKER_SID="$rp"
     else
       _job_control_on
-      env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_CLAUDE_ENV[@]+"${CHILD_SESSION_CLAUDE_ENV[@]}"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 </dev/null &
+      env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_CLAUDE_ENV[@]+"${CHILD_SESSION_CLAUDE_ENV[@]}"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >>"$LOG" 2>&1 </dev/null &
       rp=$!
       WORKER_SID="$(ps -o pgid= -p "$rp" 2>/dev/null | tr -d ' ' || true)"
       [ -z "$WORKER_SID" ] && WORKER_SID="$rp"
@@ -5575,7 +5731,7 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
     # Isolate the systemd-run job so its pgid can be a safe fallback if
     # systemctl --user kill fails (must not share the dispatcher group).
     _job_control_on
-    systemd-run --user --scope --quiet --unit="$SCOPE_UNIT" -- env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_CLAUDE_ENV[@]+"${CHILD_SESSION_CLAUDE_ENV[@]}"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 </dev/null &
+    systemd-run --user --scope --quiet --unit="$SCOPE_UNIT" -- env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_CLAUDE_ENV[@]+"${CHILD_SESSION_CLAUDE_ENV[@]}"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >>"$LOG" 2>&1 </dev/null &
     rp=$!
     local selfpg="" pg=""
     selfpg="$(_self_pgid)" || selfpg=""
@@ -5587,7 +5743,7 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
     _wait_worker_with_watchdog "$rp"
   elif [ "$HAVE_SETSID" -eq 1 ]; then
     CONTAINMENT="setsid"
-    setsid --wait env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_CLAUDE_ENV[@]+"${CHILD_SESSION_CLAUDE_ENV[@]}"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
+    setsid --wait env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_CLAUDE_ENV[@]+"${CHILD_SESSION_CLAUDE_ENV[@]}"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >>"$LOG" 2>&1 &
     rp=$!
     WORKER_SID="$(_setsid_wait_worker_sid "$rp")"
     [ -z "$WORKER_SID" ] && WORKER_SID="$rp"
@@ -5595,12 +5751,12 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
   else
     CONTAINMENT="plain"
     if [ "${HETERO_TEST_NO_SETSID:-}" != "1" ] && command -v setsid >/dev/null 2>&1; then
-      setsid env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_CLAUDE_ENV[@]+"${CHILD_SESSION_CLAUDE_ENV[@]}"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
+      setsid env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_CLAUDE_ENV[@]+"${CHILD_SESSION_CLAUDE_ENV[@]}"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >>"$LOG" 2>&1 &
       rp=$!
       WORKER_SID="$rp"
     else
       _job_control_on
-      env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_CLAUDE_ENV[@]+"${CHILD_SESSION_CLAUDE_ENV[@]}"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 </dev/null &
+      env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_CLAUDE_ENV[@]+"${CHILD_SESSION_CLAUDE_ENV[@]}"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >>"$LOG" 2>&1 </dev/null &
       rp=$!
       WORKER_SID="$(ps -o pgid= -p "$rp" 2>/dev/null | tr -d ' ' || true)"
       [ -z "$WORKER_SID" ] && WORKER_SID="$rp"
@@ -5670,7 +5826,7 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
     GATE_SETTINGS_FILE="$(mktemp -t dispatch-hetero-gate-settings-XXXXXX)"
     if [[ "$_gate_ttl" =~ ^[0-9]+$ ]] \
        && node "$SELF_DIR/per-turn-gate-arm.js" arm --session "${CHILD_SESSION_ID:-}" --repo "$WT" --rules "$GATE_RULES_FILE" \
-            --ttl-seconds "$((_gate_ttl + 60))" >"$LOG" 2>&1 \
+            --ttl-seconds "$((_gate_ttl + 60))" >>"$LOG" 2>&1 \
        && GATE_ARMED_SESSION="$CHILD_SESSION_ID" \
        && node "$SELF_DIR/per-turn-gate-arm.js" settings --out "$GATE_SETTINGS_FILE" >>"$LOG" 2>&1; then
       GATE_ARGV=("$GATE_SETTINGS_FILE")
@@ -6549,7 +6705,7 @@ run_hands_backlog_gate() {
         break
         ;;
     esac
-  done < <(_wt_git diff --name-only -z "$BASE_SHA..$HEAD_SHA" 2>/dev/null || true)
+  done < <(_wt_git diff --ignore-submodules=none --name-only -z "$BASE_SHA..$HEAD_SHA" 2>/dev/null || true)
   [ "$bsw_touched" -eq 1 ] || return 0
   bsw_out="$(cd "$WT" && node "$SELF_DIR/check-backlog-single-writer.js" --range "$BASE_SHA..$HEAD_SHA" --target "$WT" 2>&1 < /dev/null)" && bsw_rc=0 || bsw_rc=$?
   if [ "$bsw_rc" -ne 0 ]; then
@@ -7151,7 +7307,7 @@ classify_outcome() {
         OUTCOME_STATUS="engine_unavailable"
         OUTCOME_ERR="engine unavailable ($CLASSIFIED_ERROR): worker exited non-zero (agent exit $AGENT_EXIT); worktree kept"
       fi
-    elif [ "$AGENT_EXIT" -ne 0 ]; then
+    elif [ "$AGENT_EXIT" -ne 0 ] || [ "${WORKER_TIMED_OUT:-0}" -eq 1 ]; then
       # clean commit but the worker exited non-zero — NOT scored success (KR1):
       # the abnormal exit means the run can't be trusted as a clean implementation.
       # Prefer engine_unavailable when the log is a known quota/auth/overload signal.
@@ -7288,11 +7444,15 @@ classify_outcome() {
     OUTCOME_ERR="codex model ${MODEL:-unknown} is not available for this account; pick another model (e.g. --model gpt-6-luna)"
   fi
   if [ "${WORKER_TIMED_OUT:-0}" -eq 1 ]; then
-    local __wt_secs
-    __wt_secs="$(normalize_timeout_seconds "${TIMEOUT:-}" 2>/dev/null || true)"
     OUTCOME_STATUS="failure"
     OUTCOME_EXIT=1
-    OUTCOME_ERR="wall timeout (${__wt_secs}s) exceeded — worker terminated"
+    if [ "${WORKER_TIMEOUT_KIND:-}" = "hard" ]; then
+      OUTCOME_ERR="hard timeout (${WATCHDOG_HARD_S:-0}s) exceeded — worker terminated"
+    elif [ "${WORKER_TIMEOUT_KIND:-}" = "idle" ]; then
+      OUTCOME_ERR="idle timeout (${WATCHDOG_IDLE_S:-0}s with no output or CPU) — worker terminated"
+    else
+      OUTCOME_ERR="wall timeout (${WATCHDOG_SOFT_S:-0}s) exceeded — worker terminated"
+    fi
     CLASSIFIED_ERROR="timeout"
   fi
   # Do not default an empty verdict to done: that hid a missing verdict on exit 0.
@@ -7497,7 +7657,7 @@ dispatch_detached_run() {
       STRICT_SCOPE_ALLOW_PATHS STRICT_SCOPE_DENY_PATHS STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS STRICT_SCOPE_MAX_FILES STRICT_SCOPE_MAX_DIFF_LINES STRICT_OUTPUT_PATHS STRICT_REQUIRED_CHANGE_PATHS STRICT_POSTCHECK_OK STRICT_POSTCHECK_STATUS STRICT_POSTCHECK_ERROR \
       DISPATCH_RUN_ID DISPATCH_STARTED_EPOCH MANIFEST_DIR_PATH MANIFEST_FILE MANIFEST_CONTAINMENT \
       MANIFEST_SCOPE_UNIT MANIFEST_MOUNT_CONTAINMENT WORKER_MOUNT_MODE WORKER_MOUNT_PREFIX MANIFEST_PID_RECORDED MANIFEST_ENDED_AT MANIFEST_ENDED_EPOCH MANIFEST_FINAL_STATUS \
-      TIMEOUT_SOURCE TIMEOUT_SUPPLIED WORKER_TIMED_OUT COMMIT_QUIET_SECS COMMIT_QUIET_ENDED REPO_IDENTITY_FIELDS _REPO_IDENTITY_FIELDS_KEY CHILD_SESSION_ID 2>/dev/null
+      TIMEOUT_SOURCE TIMEOUT_SUPPLIED WORKER_TIMED_OUT IDLE_TIMEOUT IDLE_TIMEOUT_SUPPLIED HARD_TIMEOUT HARD_TIMEOUT_SUPPLIED WATCHDOG_IDLE_S WATCHDOG_HARD_S WATCHDOG_SAMPLE_S WATCHDOG_SOFT_S WORKER_TIMEOUT_KIND KILLED_ELAPSED_S KILLED_LAST_PROGRESS_S COMMIT_QUIET_SECS COMMIT_QUIET_ENDED REPO_IDENTITY_FIELDS _REPO_IDENTITY_FIELDS_KEY CHILD_SESSION_ID 2>/dev/null
     declare -p NO_VERIFY_TIP VERIFY_TIMEOUT TIP_VERIFY_SKIP TIP_VERIFY_SOURCE TIP_VERIFY_CMDS_JSON TIP_VERIFY_RESULT_JSON VERIFY_CMDS 2>/dev/null || true
     # Hands boundary gates (item (E)): the pre-hands main-checkout fingerprint MUST cross the
     # detach boundary as the parent measured it, and the push-blocking env with it.
@@ -7526,7 +7686,7 @@ dispatch_detached_run() {
     # token_seat_guard (lib/token-seat.sh) is called inside run_agent's claude branches; without it the
     # detached child dies with "command not found" before the claude worker starts.
     declare -f token_seat_guard 2>/dev/null || true
-    declare -f agy_print_timeout agy_assert_disposable_home die_precondition fell_back_json_suffix hetero_log_fallback child_session_env_setup repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_worker_alive _watchdog_signal_worker _arm_worker_watchdog _worker_has_busy_descendant _supervise_commit_quiet _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts capture_structured_provider_error _prefer_structured_classified_error passive_capture \
+    declare -f agy_print_timeout agy_assert_disposable_home die_precondition fell_back_json_suffix hetero_log_fallback child_session_env_setup repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_worker_alive _watchdog_signal_worker _hetero_resolve_watch_limits _watchdog_sleep_sample _watchdog_progress_sample _watchdog_fire _arm_worker_watchdog _worker_has_busy_descendant _supervise_commit_quiet _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts capture_structured_provider_error _prefer_structured_classified_error passive_capture \
       _is_engine_unavailable _hetero_runner_token _capability_write_note _capability_write_suppress_now seat_strike_capture classify_outcome _emit_question_waiting_event heartbeat_loop detached_main seal_runner_prompt_bytes write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks resolve_tip_verify_commands run_tip_verify _fp_unverifiable main_checkout_fingerprint main_checkout_parts_digest main_checkout_describe_delta main_checkout_wt_symlink_leaks check_main_checkout_boundary run_hands_content_gate run_hands_backlog_gate \
       _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \

@@ -16,6 +16,8 @@ const { isEnabled } = require('./_shared/opt-in');
 
 if (!isEnabled('branch-protection')) process.exit(0);
 
+const { gateHint } = require('./lib/gate-hint.js');
+
 const DEFAULT_PROTECTED = /^(main|master)$/;
 
 function getProtectedRegex() {
@@ -59,7 +61,9 @@ try {
       const targetBranch = pushMatch[2];
       if (protectedRegex.test(targetBranch) && /--force\b|-f\b|--force-with-lease\b/.test(command)) {
         process.stderr.write(
-          `BLOCKED: Force push to protected branch '${targetBranch}' is not allowed.\n`
+          `BLOCKED: Force push to protected branch '${targetBranch}' is not allowed.\n` +
+          `Create a feature branch: git checkout -b feature/your-change and push that branch instead.\n` +
+          gateHint('改在 feature 分支上改完再推；保護分支不接受 force-push', 'CLAUDE.md') + '\n'
         );
         process.exit(2);
       }
@@ -74,7 +78,8 @@ try {
   if (isForcePush) {
     process.stderr.write(
       `BLOCKED: Force push on protected branch '${branch}' is not allowed.\n` +
-      `Create a feature branch: git checkout -b feature/your-change\n`
+      `Create a feature branch: git checkout -b feature/your-change\n` +
+      gateHint('改在 feature 分支上改完再推；保護分支不接受 force-push', 'CLAUDE.md') + '\n'
     );
     process.exit(2);
   }
@@ -82,7 +87,8 @@ try {
   if (isCommit) {
     process.stderr.write(
       `BLOCKED: Direct commit on protected branch '${branch}' is not allowed.\n` +
-      `Create a feature branch: git checkout -b feature/your-change\n`
+      `Create a feature branch: git checkout -b feature/your-change\n` +
+      gateHint('改在 feature 分支上改完再 commit；保護分支不接受直接 commit', 'CLAUDE.md') + '\n'
     );
     process.exit(2);
   }

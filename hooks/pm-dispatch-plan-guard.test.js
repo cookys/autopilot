@@ -317,9 +317,11 @@ test('negative control: unguarded pm-console and work-order-plan stubs fail beha
   try {
     // Mirror minimal tree into sandbox so relative requires load stubs
     fs.mkdirSync(path.join(sandbox, 'hooks', '_shared'), { recursive: true });
+    fs.mkdirSync(path.join(sandbox, 'hooks', 'lib'), { recursive: true });
     fs.mkdirSync(path.join(sandbox, 'scripts', 'lib'), { recursive: true });
     fs.copyFileSync(GUARD_PATH, path.join(sandbox, 'hooks', 'fleet-send-work-order-guard.js'));
     fs.copyFileSync(path.join(__dirname, '_shared', 'opt-in.js'), path.join(sandbox, 'hooks', '_shared', 'opt-in.js'));
+    fs.copyFileSync(path.join(__dirname, '..', 'lib', 'gate-hint.js'), path.join(sandbox, 'hooks', 'lib', 'gate-hint.js'));
     fs.copyFileSync(path.join(__dirname, '..', 'scripts', 'lib', 'config-path.js'), path.join(sandbox, 'scripts', 'lib', 'config-path.js'));
 
     // Stub 1: pm-console.js returning true -> child repo is wrongly denied

@@ -78,6 +78,7 @@ const { resolveLiveDir, sanitizeSessionId, readLive } = require('../scripts/lib/
 const { executableText, isAffirmative, SLEEP_RE, WHILE_WAIT_RE } = require('../scripts/lib/bash-wait-rules.js');
 const { headLines } = require('./lib/brief-head.js');
 const { enforceFromReached } = require('./lib/enforce-from.js');
+const { gateHint } = require('./lib/gate-hint.js');
 const { execFileSync } = require('child_process');
 
 const DEFAULT_BASH_CAP = 40;
@@ -232,7 +233,8 @@ function isTmpSafePath(raw) {
 }
 
 function reserveDirective(left) {
-  return `Close-out reserve: ${left} call(s) left before the cap. Allowed now: cd; git status/diff/add/commit/log/show/rev-parse/restore --staged; kill <pid>; rm/rmdir under /tmp or $TMPDIR; mkdir -p; ls; test; writing a file (cat >, tee, printf >). Commit, clean up, write your handoff, and end the turn.`;
+  return `Close-out reserve: ${left} call(s) left before the cap. Allowed now: cd; git status/diff/add/commit/log/show/rev-parse/restore --staged; kill <pid>; rm/rmdir under /tmp or $TMPDIR; mkdir -p; ls; test; writing a file (cat >, tee, printf >). Commit, clean up, write your handoff, and end the turn.`
+    + gateHint('只做收工動作：commit、清理、寫 handoff、結束 turn', 'docs/dev/ironlaw-to-gate-map.md');
 }
 
 function segmentMatchesAllowlist(seg) {
@@ -480,7 +482,8 @@ function checkContextCeiling(payload) {
       reason: `foreman-guard: this agent's own context is ${tokenCount} tokens, at or past T2 `
         + `(${tiers.t2} of its ${w}-token window, subagent status line). Write your handoff `
         + '(autopilot:handoff) NOW and end the turn (一刀一命); depth-0 spawns the next foreman/worker '
-        + 'for the remaining work.',
+        + 'for the remaining work.'
+        + gateHint('立刻寫 handoff（autopilot:handoff）並結束 turn，由 depth-0 派下一席', 'docs/dev/ironlaw-to-gate-map.md'),
     };
   }
   return {};
@@ -585,11 +588,13 @@ function matchPollRule(cmd, background) {
 
 function pollRuleReason(rule, spentSuffix) {
   const suffix = spentSuffix ? ` ${spentSuffix}` : '';
-  return `foreman-guard: ${rule.why} (rule ${rule.id}, ironlaw #6). ${POLL_WAIT_DIRECTIVE}${suffix}`;
+  return `foreman-guard: ${rule.why} (rule ${rule.id}, ironlaw #6). ${POLL_WAIT_DIRECTIVE}${suffix}`
+    + gateHint('用 run_in_background + 完成通知（或 fleet watch）等待，不要輪詢', 'docs/dev/ironlaw-to-gate-map.md');
 }
 
 function monitorDenyReason() {
-  return `foreman-guard: Monitor is depth-0 only (ironlaw #6). ${POLL_WAIT_DIRECTIVE}`;
+  return `foreman-guard: Monitor is depth-0 only (ironlaw #6). ${POLL_WAIT_DIRECTIVE}`
+    + gateHint('Monitor 只給 depth-0 用；subagent 改用 run_in_background 完成通知等待', 'docs/dev/ironlaw-to-gate-map.md');
 }
 
 function checkPollTool(payload) {
@@ -737,7 +742,8 @@ function decide(payload, cfg, st, ceiling = {}, role = 'foreman', briefCap = nul
     return { deny: true, rule: 'context-ceiling', count: n, reason: ceiling.reason, diagnostic: ceiling.diagnostic };
   }
   if (n > cap) {
-    let reason = `foreman-guard: Bash call ${n} exceeds the ${role} cap of ${cap} (ironlaw #6, 一刀一命). Write your handoff (autopilot:handoff) NOW and end the turn; depth-0 spawns the next foreman for the next deliverable. Resident foremen are forbidden.`;
+    let reason = `foreman-guard: Bash call ${n} exceeds the ${role} cap of ${cap} (ironlaw #6, 一刀一命). Write your handoff (autopilot:handoff) NOW and end the turn; depth-0 spawns the next foreman for the next deliverable. Resident foremen are forbidden.`
+      + gateHint('寫好 handoff（autopilot:handoff）後結束 turn，depth-0 會派下一位工頭', 'docs/dev/ironlaw-to-gate-map.md');
     if (briefCap && briefCap.ignored) {
       reason += ` The Bash-Cap line was ignored because ${briefCap.why}.`;
     }

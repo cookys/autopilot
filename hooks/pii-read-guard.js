@@ -72,7 +72,8 @@ function handle(payload) {
       hookEventName: 'PreToolUse',
       permissionDecision: 'deny',
       permissionDecisionReason: `這個目標含個人資料 ${piiSummary(counts)}，直接讀會讓真實個資進入對話。`
-        + '請改用 node scripts/safe-inspect.js file <路徑>（自動遮罩個資）；目錄請先用 grep -l 或 -c 找到檔案，再逐檔用 safe-inspect。',
+        + '請改用 node scripts/safe-inspect.js file <路徑>（自動遮罩個資）；目錄請先用 grep -l 或 -c 找到檔案，再逐檔用 safe-inspect。'
+        + require('./lib/gate-hint.js').gateHint('用 node scripts/safe-inspect.js 逐檔看（自動遮罩）；只數不讀就用 grep -c / -l', 'docs/guide/safe-inspect.md'),
     },
   };
 }

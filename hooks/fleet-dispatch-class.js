@@ -18,6 +18,7 @@
 'use strict';
 
 const fs = require('fs');
+const { gateHint } = require('./lib/gate-hint.js');
 
 const ROLE_CLASS_MAP = Object.freeze({
   'plan-reviewer': 'plan-review',
@@ -123,21 +124,24 @@ function decide(input) {
     }
     const shown = typeof toolInput.class === 'string' ? toolInput.class : JSON.stringify(toolInput.class);
     return preToolDeny(
-      `mcp__fleet__dispatch 的 class 值「${oneLine(shown)}」無效；允許的值僅限 ${ALLOWED_CLASSES_TEXT} 十種。`,
+      `mcp__fleet__dispatch 的 class 值「${oneLine(shown)}」無效；允許的值僅限 ${ALLOWED_CLASSES_TEXT} 十種。`
+      + gateHint('class 只限這十種值；或拿掉 class 改用有效的 Role: 標頭', 'hooks/README.md'),
     );
   }
 
   const roleHeader = extractRoleHeader(toolInput.task);
   if (!roleHeader) {
     return preToolDeny(
-      `mcp__fleet__dispatch 缺少 Role: 標頭；請在 task 前 15 行加上「Role: <角色>」，或明確傳入 class（${ALLOWED_CLASSES_TEXT} 十擇一）。`,
+      `mcp__fleet__dispatch 缺少 Role: 標頭；請在 task 前 15 行加上「Role: <角色>」，或明確傳入 class（${ALLOWED_CLASSES_TEXT} 十擇一）。`
+      + gateHint('在 task 前 15 行加「Role: <角色>」，或明確傳入 class 十擇一', 'hooks/README.md'),
     );
   }
 
   const mappedClass = resolveClassFromRole(roleHeader);
   if (!mappedClass) {
     return preToolDeny(
-      `mcp__fleet__dispatch 的 Role:「${oneLine(roleHeader)}」不在支援的角色表內；請改用支援的 Role: 標頭（如 plan-reviewer、reviewer、implementer、chat），或明確傳入 class（${ALLOWED_CLASSES_TEXT} 十擇一）。`,
+      `mcp__fleet__dispatch 的 Role:「${oneLine(roleHeader)}」不在支援的角色表內；請改用支援的 Role: 標頭（如 plan-reviewer、reviewer、implementer、chat），或明確傳入 class（${ALLOWED_CLASSES_TEXT} 十擇一）。`
+      + gateHint('改用支援的 Role:（plan-reviewer / reviewer / implementer / chat…），或明確傳入 class', 'hooks/README.md'),
     );
   }
 

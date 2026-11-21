@@ -2660,6 +2660,7 @@ NODE
   unset ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN
   export LOCAL_BUSY_REDISPATCH=1
   export AUTOPILOT_LOCAL_FALLBACK_PRESET='{"reason":"no_free_slot","detail":"busy_at_run"}'
+  release_local_lease || true
   exec "$0" "${args[@]}" < /dev/null
   return 1
 }

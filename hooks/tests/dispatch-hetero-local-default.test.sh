@@ -17,13 +17,15 @@ export DISPATCH_DETACH=0 AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1
 LEASE_STATUS_FILE="$TEST_TMP/lease-status"
 LEASE_LOG="$TEST_TMP/lease-requests.jsonl"
 printf '201\n' > "$LEASE_STATUS_FILE"
+LEASE_BUSY_FILE="$TEST_TMP/lease-endpoint-busy"
 LEASE_PORT_FILE="$TEST_TMP/lease.port"
-node - "$LEASE_STATUS_FILE" "$LEASE_LOG" "$LEASE_PORT_FILE" <<'NODE' &
+node - "$LEASE_STATUS_FILE" "$LEASE_LOG" "$LEASE_PORT_FILE" "$LEASE_BUSY_FILE" <<'NODE' &
 const http = require('http'), fs = require('fs');
-const [statusFile, logFile, portFile] = process.argv.slice(2);
+const [statusFile, logFile, portFile, busyFile] = process.argv.slice(2);
 const server = http.createServer((req, res) => {
   const chunks=[]; req.on('data', c=>chunks.push(c)); req.on('end', ()=>{
     fs.appendFileSync(logFile, JSON.stringify({method:req.method,url:req.url})+'\n');
+    if (req.method === 'GET' && req.url === '/v1/models' && fs.readFileSync(busyFile,'utf8').trim() === 'busy') { res.writeHead(503); res.end(); return; }
     if (req.method === 'POST' && req.url === '/v1/local/lease') {
       const status = Number(fs.readFileSync(statusFile,'utf8').trim());
       if (status !== 201) { res.writeHead(status); res.end('{}'); return; }
@@ -225,31 +227,125 @@ assert_eq "$(node -e 'process.stdout.write(String(JSON.parse(require("fs").readF
 assert_eq "$(node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1])).local_lease.heartbeats>=2))' "$MF")" "true" "f: heartbeat renews during worker run"
 assert_contains "$(cat "$LEASE_LOG")" '"method":"DELETE"' "f: gateway received DELETE"
 
-# (g) capacity denial falls back to cloud with the lease status detail.
-PROMPT="$TEST_TMP/prompt-g.txt"; printf 'edit impl-defaults-fixture.txt\n' > "$PROMPT"
-printf '429\n' > "$LEASE_STATUS_FILE"; : > "$GROK_ARGV"; : > "$LEASE_LOG"; RUNS="$TEST_TMP/runs-g"; mkdir -p "$RUNS"
-OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" "$SCRIPT" --no-verify-tip --context-window off --grok-bin "$STUB_GROK" --branch feat/local-g --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/g.err")"; EXIT=$?
-assert_eq "$EXIT" "0" "g: lease 429 cloud fallback exits 0"
-assert_eq "$(json_get "$OUT" runner)" "grok" "g: lease 429 selects grok"
-assert_contains "$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\n/).reverse().find(l=>l.trim().startsWith("{")));process.stdout.write(JSON.stringify(o.local_fallback))' "$OUT")" 'lease_429' "g: fallback detail is lease_429"
-assert_not_contains "$(cat "$LEASE_LOG")" '"method":"DELETE"' "g: denied lease is not released"
+# (f2) a hard-timeout worker is killed, but its granted lease is still released once.
+PROMPT="$TEST_TMP/prompt-f2.txt"
+printf 'Task-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
+RUNS="$TEST_TMP/runs-f2"; mkdir -p "$RUNS"; : > "$LEASE_LOG"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
+  AUTOPILOT_LOCAL_LEASE_TTL_S=3 AUTOPILOT_HETERO_HARD_TIMEOUT=3 AUTOPILOT_HETERO_SAMPLE_S=1 \
+  LEASE_WORKER_SLEEP=15 "$SCRIPT" --no-verify-tip --context-window off \
+  --branch feat/local-f2 --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/f2.err")"
+EXIT=$?
+MF="$(find "$RUNS" -name '*.manifest.json' | head -1)"
+assert_file_exists "$MF" "f2: timeout writes a manifest"
+assert_eq "true" "$(json_get "$OUT" timed_out)" "f2: hard timeout kills the sleeping worker"
+assert_eq "$(node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1])).local_lease.released))' "$MF")" "true" "f2: manifest records release after timeout"
+DELETE_COUNT="$(node -e 'const fs=require("fs");const rows=fs.readFileSync(process.argv[1],"utf8").trim().split(/\n/).filter(Boolean).map(JSON.parse);process.stdout.write(String(rows.filter(r=>r.method==="DELETE"&&r.url==="/v1/local/lease/test-lease-id").length))' "$LEASE_LOG")"
+assert_eq "1" "$DELETE_COUNT" "f2: timeout sends exactly one DELETE for the granted lease"
 
-# (g2) conflict denial has the documented fallback detail.
-printf '409\n' > "$LEASE_STATUS_FILE"; RUNS="$TEST_TMP/runs-g2"; mkdir -p "$RUNS"
-OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" "$SCRIPT" --no-verify-tip --context-window off --grok-bin "$STUB_GROK" --branch feat/local-g2 --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/g2.err")"; EXIT=$?
-assert_eq "$EXIT" "0" "g2: lease 409 cloud fallback exits 0"
-assert_contains "$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\n/).reverse().find(l=>l.trim().startsWith("{")));process.stdout.write(JSON.stringify(o.local_fallback))' "$OUT")" 'lease_409' "g2: fallback detail is lease_409"
+# (g) oversized local context falls back before requesting a lease.
+PROMPT="$TEST_TMP/prompt-g.txt"
+printf 'Scope: big.bin\nedit\n' > "$PROMPT"
+dd if=/dev/zero of="$SBX/big.bin" bs=1000 count=500 status=none
+CFG="$TEST_TMP/ctx-config.json"
+printf '%s\n' '{"local_context_bytes":100}' > "$CFG"
+: > "$GROK_ARGV"; : > "$LEASE_LOG"; RUNS="$TEST_TMP/runs-g"; mkdir -p "$RUNS"
+OUT="$(cd "$SBX" && env AUTOPILOT_CONFIG_FILE="$CFG" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
+  "$SCRIPT" --no-verify-tip --context-window off --grok-bin "$STUB_GROK" \
+  --branch feat/local-g --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/g.err")"
+EXIT=$?
+assert_eq "0" "$EXIT" "g: oversized context exits 0"
+assert_eq "grok" "$(json_get "$OUT" runner)" "g: oversized context uses cloud"
+FB_G="$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\n/).reverse().find(l=>l.trim().startsWith("{")));process.stdout.write(o.local_fallback.reason)' "$OUT")"
+assert_eq "context_too_large" "$FB_G" "g: context_too_large fallback"
+assert_not_contains "$(cat "$LEASE_LOG")" '"method":"POST","url":"/v1/local/lease"' "g: oversized context does not grant a lease"
+assert_not_contains "$(cat "$LEASE_LOG")" '"method":"DELETE"' "g: oversized context has no lease to release"
 
-# (h) explicit runner never asks the lease service.
-PROMPT="$TEST_TMP/prompt-h.txt"; printf 'edit impl-defaults-fixture.txt\n' > "$PROMPT"
+# (h) a pre-probe 503 triggers the cloud retry and releases the lease before re-exec.
+PROMPT="$TEST_TMP/prompt-h.txt"
+printf 'Task-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
+printf 'busy\n' > "$LEASE_BUSY_FILE"; : > "$GROK_ARGV"; : > "$LEASE_LOG"; RUNS="$TEST_TMP/runs-h"; mkdir -p "$RUNS"
+OUT="$(cd "$SBX" && env AUTOPILOT_ENDPOINT_PREPROBE=on AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
+  "$SCRIPT" --no-verify-tip --context-window off --grok-bin "$STUB_GROK" \
+  --branch feat/local-h --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/h.err")"
+EXIT=$?
+: > "$LEASE_BUSY_FILE"
+assert_eq "$EXIT" "0" "h: pre-probe busy cloud retry exits 0"
+assert_eq "grok" "$(json_get "$OUT" runner)" "h: pre-probe busy retry uses grok"
+FB_H="$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\n/).reverse().find(l=>l.trim().startsWith("{")));process.stdout.write(JSON.stringify(o.local_fallback))' "$OUT")"
+assert_eq '{"reason":"no_free_slot","detail":"busy_at_run"}' "$FB_H" "h: pre-probe busy fallback detail"
+DELETE_COUNT="$(node -e 'const fs=require("fs");const rows=fs.readFileSync(process.argv[1],"utf8").trim().split(/\n/).filter(Boolean).map(JSON.parse);process.stdout.write(String(rows.filter(r=>r.method==="DELETE"&&r.url==="/v1/local/lease/test-lease-id").length))' "$LEASE_LOG")"
+assert_eq "1" "$DELETE_COUNT" "h: pre-probe retry releases its granted lease exactly once"
+
+# (j) local worker reports endpoint busy; dispatch retries on cloud and releases its grant.
+cat > "$STUB_CLAUDE" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' '{"type":"result","is_error":true,"terminal_reason":"api_error","result":"API Error: 503 Service Unavailable"}'
+exit 1
+EOF
+chmod +x "$STUB_CLAUDE"
+PROMPT="$TEST_TMP/prompt-h.txt"
+printf 'Task-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
+: > "$GROK_ARGV"; : > "$LEASE_LOG"; RUNS="$TEST_TMP/runs-j"; mkdir -p "$RUNS"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
+  "$SCRIPT" --no-verify-tip --context-window off --grok-bin "$STUB_GROK" \
+  --branch feat/local-j --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/j.err")"
+EXIT=$?
+assert_eq "0" "$EXIT" "j: busy-at-run cloud retry exits 0"
+assert_eq "grok" "$(json_get "$OUT" runner)" "j: busy-at-run retry uses grok"
+FB_J="$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\n/).reverse().find(l=>l.trim().startsWith("{")));process.stdout.write(JSON.stringify(o.local_fallback))' "$OUT")"
+assert_eq '{"reason":"no_free_slot","detail":"busy_at_run"}' "$FB_J" "j: busy-at-run fallback detail"
+DELETE_COUNT="$(node -e 'const fs=require("fs");const rows=fs.readFileSync(process.argv[1],"utf8").trim().split(/\n/).filter(Boolean).map(JSON.parse);process.stdout.write(String(rows.filter(r=>r.method==="DELETE"&&r.url==="/v1/local/lease/test-lease-id").length))' "$LEASE_LOG")"
+assert_eq "1" "$DELETE_COUNT" "j: busy-at-run releases its granted lease exactly once"
+WT_SAME="$(node -e '
+const lines=String(process.argv[1]).split(/\n/).map(l=>l.trim()).filter(l=>l.startsWith("{")).map(JSON.parse);
+const local=lines.find(o=>o.status==="engine_unavailable"), cloud=lines[lines.length-1];
+process.stdout.write(local&&local.worktree&&cloud&&cloud.worktree_reused===true?"yes":"no");
+' "$OUT")"
+assert_eq "yes" "$WT_SAME" "j: cloud retry reuses the prepared worktree"
+cat > "$STUB_CLAUDE" <<'EOF'
+#!/usr/bin/env bash
+cat > got-prompt.txt
+pwd > worktree-pwd.txt
+printf '%s\n' "$@" > local-argv.txt
+[ -z "${LEASE_WORKER_SLEEP:-}" ] || sleep "$LEASE_WORKER_SLEEP"
+printf '%s' '{"type":"result","is_error":false,"result":"ok"}'
+EOF
+chmod +x "$STUB_CLAUDE"
+
+# (i) capacity denial falls back to cloud with the lease status detail.
+PROMPT="$TEST_TMP/prompt-i.txt"; printf 'edit impl-defaults-fixture.txt\n' > "$PROMPT"
+printf '429\n' > "$LEASE_STATUS_FILE"; : > "$GROK_ARGV"; : > "$LEASE_LOG"; RUNS="$TEST_TMP/runs-i"; mkdir -p "$RUNS"
+OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" "$SCRIPT" --no-verify-tip --context-window off --grok-bin "$STUB_GROK" --branch feat/local-i --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/i.err")"; EXIT=$?
+assert_eq "$EXIT" "0" "i: lease 429 cloud fallback exits 0"
+assert_eq "$(json_get "$OUT" runner)" "grok" "i: lease 429 selects grok"
+assert_contains "$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\n/).reverse().find(l=>l.trim().startsWith("{")));process.stdout.write(JSON.stringify(o.local_fallback))' "$OUT")" 'lease_429' "i: fallback detail is lease_429"
+assert_not_contains "$(cat "$LEASE_LOG")" '"method":"DELETE"' "i: denied lease is not released"
+
+# (i2) conflict denial has the documented fallback detail.
+printf '409\n' > "$LEASE_STATUS_FILE"; RUNS="$TEST_TMP/runs-i2"; mkdir -p "$RUNS"
+OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" "$SCRIPT" --no-verify-tip --context-window off --grok-bin "$STUB_GROK" --branch feat/local-i2 --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/i2.err")"; EXIT=$?
+assert_eq "$EXIT" "0" "i2: lease 409 cloud fallback exits 0"
+assert_contains "$(node -e 'const o=JSON.parse(String(process.argv[1]).split(/\n/).reverse().find(l=>l.trim().startsWith("{")));process.stdout.write(JSON.stringify(o.local_fallback))' "$OUT")" 'lease_409' "i2: fallback detail is lease_409"
+
+# (j) explicit runner never asks the lease service.
+cat > "$STUB_CLAUDE" <<'EOF'
+#!/usr/bin/env bash
+cat > got-prompt.txt
+pwd > worktree-pwd.txt
+printf '%s\n' "$@" > local-argv.txt
+printf '%s' '{"type":"result","is_error":false,"result":"ok"}'
+EOF
+chmod +x "$STUB_CLAUDE"
+PROMPT="$TEST_TMP/prompt-j.txt"; printf 'edit impl-defaults-fixture.txt\n' > "$PROMPT"
 printf '201\n' > "$LEASE_STATUS_FILE"; : > "$LEASE_LOG"
 cat > "$TEST_TMP/bin/codex" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' '{"type":"result","is_error":false,"result":"ok"}'
 EOF
 chmod +x "$TEST_TMP/bin/codex"
-OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$TEST_TMP/runs-h" "$SCRIPT" --no-verify-tip --context-window off --runner codex --codex-bin "$TEST_TMP/bin/codex" --branch feat/local-h --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/h.err")"; EXIT=$?
-assert_neq "$EXIT" "97" "h: explicit codex path is stubbed"
-assert_not_contains "$(cat "$LEASE_LOG")" '"method":"POST","url":"/v1/local/lease"' "h: explicit runner sends no grant"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$TEST_TMP/runs-k" "$SCRIPT" --no-verify-tip --context-window off --runner codex --codex-bin "$TEST_TMP/bin/codex" --branch feat/local-k --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/k.err")"; EXIT=$?
+assert_neq "$EXIT" "97" "k: explicit codex path is stubbed"
+assert_not_contains "$(cat "$LEASE_LOG")" '"method":"POST","url":"/v1/local/lease"' "k: explicit runner sends no grant"
 
 finalize_test

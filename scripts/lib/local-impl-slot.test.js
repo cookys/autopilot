@@ -47,15 +47,48 @@ test('raising local_context_tokens lets the f53c prompt pass the estimate', asyn
   } finally { fs.unlinkSync(config); }
 });
 
-function fixtureDecision(endpoints) {
-  const env = readyEnv({ AUTOPILOT_LOCAL_SLOTS_CMD: `printf '%s\\n' '${JSON.stringify({ endpoints })}'` });
+function fixtureDecision(endpoints, rrFile) {
+  const env = readyEnv({ AUTOPILOT_LOCAL_SLOTS_CMD: `printf '%s\\n' '${JSON.stringify({ endpoints })}'`, ...(rrFile ? { AUTOPILOT_LOCAL_SLOT_RR_FILE: rrFile } : {}) });
   return require('./local-impl-slot').acquireLocalSlot({ env, cfg: {} });
 }
 
-test('gateway selection prefers free qwen over GLM', async () => {
-  const d = await fixtureDecision([{ id: 'qwen-a', state: 'up', free: 1 }, { id: 'glm-a', models: ['GLM-4'], state: 'up', free: 2 }]);
+test('gateway selection chooses family with more free slots', async () => {
+  const d = await fixtureDecision([{ id: 'qwen-a', state: 'up', free: 1 }, { id: 'glm-a', models: ['GLM-4'], state: 'up', free: 3 }]);
+  assert.equal(d.family, 'glm');
+  assert.equal(d.endpoint, 'glm_local');
+  assert.equal(d.pick_reason, 'more_free');
+});
+
+test('gateway selection alternates qwen and GLM on ties', async () => {
+  const rrFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'slot-rr-')), 'state.json');
+  const endpoints = [{ id: 'qwen-a', state: 'up', free: 2 }, { id: 'glm-a', models: ['GLM-4'], state: 'up', free: 2 }];
+  const picks = [];
+  for (let i = 0; i < 3; i += 1) picks.push(await fixtureDecision(endpoints, rrFile));
+  assert.deepEqual(picks.map((d) => [d.family, d.pick_reason]), [
+    ['qwen', 'tie_round_robin'], ['glm', 'tie_round_robin'], ['qwen', 'tie_round_robin'],
+  ]);
+});
+
+test('gateway selection records only-free and fallback provenance', async () => {
+  const d = await fixtureDecision([{ id: 'qwen-a', state: 'up', free: 0 }, { id: 'glm-a', models: ['GLM-4'], state: 'up', free: 2 }]);
+  assert.equal(d.family, 'glm');
+  assert.equal(d.endpoint, 'glm_local');
+  assert.equal(d.pick_reason, 'only_free');
+  assert.deepEqual(d.local_fallback_from, { family: 'qwen', reason: 'no_free_slot' });
+});
+
+test('gateway selection uses qwen when GLM is missing', async () => {
+  const d = await fixtureDecision([{ id: 'qwen-a', state: 'up', free: 1 }]);
   assert.equal(d.family, 'qwen');
-  assert.equal(d.endpoint, 'qwen_local');
+  assert.equal(d.pick_reason, 'only_free');
+});
+
+test('gateway selection preserves fallback object when both families are full', async () => {
+  const d = await fixtureDecision([{ id: 'qwen-a', state: 'up', free: 0 }, { id: 'glm-a', models: ['GLM-4'], state: 'up', free: 0 }]);
+  assert.deepEqual(d, {
+    local: false, family: 'qwen', backend: 'qwen-a', free: 0,
+    fallback: { reason: 'no_free_slot', detail: 'all_full' }, source: 'cmd', detail: 'all_full',
+  });
 });
 
 test('gateway selection falls back to GLM when qwen is full', async () => {

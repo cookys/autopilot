@@ -6,6 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn, spawnSync } = require('node:child_process');
 const { configPath } = require('./lib/config-path');
+const { mkdirp } = require('./lib/safe-mkdirp');
 
 function usage() {
   console.error('usage: rc-alarm.js --label <name> [--lead <addr> ...] [--owner <addr>] [--state-dir DIR] [--reset | -- COMMAND...]');
@@ -51,16 +52,18 @@ function parse(argv) {
   if (o.mode === 'check' && (o.reset || o.command.length || o.rc !== null || o.lastLine)) usage();
   return o;
 }
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+const sleepBuf = new Int32Array(new SharedArrayBuffer(4));
+const sleep = ms => Atomics.wait(sleepBuf, 0, 0, ms);
 async function lock(label, dir) {
-  const file = path.join(dir, `${label}.lock`), end = Date.now() + 30000;
+  const lockMs = Number(process.env.AUTOPILOT_RC_ALARM_LOCK_MS) > 0 ? Number(process.env.AUTOPILOT_RC_ALARM_LOCK_MS) : 30000;
+  const file = path.join(dir, `${label}.lock`), end = Date.now() + lockMs;
   while (true) {
+    if (Date.now() >= end) throw new Error(`timed out waiting for lock for ${label}`);
     try { const fd = fs.openSync(file, 'wx', 0o600); fs.writeFileSync(fd, `${process.pid}\n${Date.now()}\n`); return () => { try { fs.closeSync(fd); } catch {} try { fs.unlinkSync(file); } catch {} }; }
     catch (error) {
       if (error.code !== 'EEXIST') throw error;
       try { if (Date.now() - fs.statSync(file).mtimeMs > 600000) { fs.unlinkSync(file); continue; } } catch (statError) { if (statError.code === 'ENOENT') continue; }
-      if (Date.now() >= end) throw new Error(`timed out waiting for lock for ${label}`);
-      await sleep(50 + Math.floor(Math.random() * 50));
+      sleep(50);
     }
   }
 }
@@ -104,8 +107,19 @@ function update(o, count, rc, lastLine, oldCount, blockedFile) {
 function lastNonEmpty(lines) { for (let i = lines.length - 1; i >= 0; i--) if (lines[i].trim()) return lines[i].trim(); return ''; }
 async function main() {
   const o = parse(process.argv.slice(2));
-  try { fs.mkdirSync(o.stateDir, { recursive: true }); }
-  catch (error) { warn(`cannot prepare state directory: ${o.stateDir}`); if (o.mode === 'wrap' && !o.reset) { const child = spawn(o.command[0], o.command.slice(1), { stdio: 'inherit' }); child.on('exit', code => process.exit(code ?? 1)); return; } process.exit(1); }
+  try {
+    mkdirp(o.stateDir);
+    fs.accessSync(o.stateDir, fs.constants.W_OK);
+  } catch (error) {
+    if (o.mode === 'wrap' && !o.reset) {
+      warn(`cannot prepare state directory: ${o.stateDir}`);
+      const child = spawn(o.command[0], o.command.slice(1), { stdio: 'inherit' });
+      child.on('exit', code => process.exit(code ?? 1));
+      return;
+    }
+    console.error(`rc-alarm: state dir unusable: ${o.stateDir} (${error.code || 'UNKNOWN'})`);
+    process.exit(1);
+  }
   let release;
   try { release = await lock(o.label, o.stateDir); }
   catch (error) { warn(error.message); if (o.mode === 'wrap' && !o.reset) { const child = spawn(o.command[0], o.command.slice(1), { stdio: 'inherit' }); child.on('exit', code => process.exit(code ?? 1)); return; } process.exit(1); }

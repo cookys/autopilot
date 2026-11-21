@@ -29,7 +29,7 @@ function makeRepo(root) {
   git(repo, ['init', '-q', '-b', 'side']);
   fs.writeFileSync(path.join(repo, 'a.txt'), 'a\n');
   git(repo, ['add', 'a.txt']);
-  git(repo, ['commit', '-q', '-m', 'base']);
+  git(repo, ['-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-q', '-m', 'base']);
   return repo;
 }
 

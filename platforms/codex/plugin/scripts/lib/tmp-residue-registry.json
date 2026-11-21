@@ -3,6 +3,55 @@
   "version": 1,
   "entries": [
     {
+      "pattern": "autopilot-target-precommit-*",
+      "kind": "worktree",
+      "owner": "scripts/dispatch-hetero.sh",
+      "retention_days": null,
+      "reason": "Disposable target pre-commit worktree and sibling output/config files; removed after the check; worktrees require marker-aware cleanup."
+    },
+    {
+      "pattern": "autopilot-local-lease-heartbeats-*",
+      "kind": "live",
+      "owner": "scripts/dispatch-hetero.sh",
+      "retention_days": null,
+      "reason": "Active local lease heartbeat counter; removed when the lease is released."
+    },
+    {
+      "pattern": "autopilot-local-lease-heartbeat-sleep-*",
+      "kind": "live",
+      "owner": "scripts/dispatch-hetero.sh",
+      "retention_days": null,
+      "reason": "Active local lease heartbeat sleep PID file; removed when the lease is released."
+    },
+    {
+      "pattern": "post-merge-suite.*",
+      "kind": "worktree",
+      "owner": "scripts/post-merge-suite.sh",
+      "retention_days": null,
+      "reason": "Temporary parent of detached worktrees and logs; cleanup trap removes worktrees and parent on exit."
+    },
+    {
+      "pattern": "dispatch-panel-res-*",
+      "kind": "scratch",
+      "owner": "scripts/dispatch-panel.js",
+      "retention_days": null,
+      "reason": "dispatch-panel results scratch directory; removed in finally"
+    },
+    {
+      "pattern": "dispatch-panel-cwd-*",
+      "kind": "scratch",
+      "owner": "scripts/dispatch-panel.js",
+      "retention_days": null,
+      "reason": "dispatch-panel per-seat isolated cwd scratch directory; removed in finally"
+    },
+    {
+      "pattern": "post-merge-suite-*",
+      "kind": "scratch",
+      "owner": "scripts/post-merge-suite.sh",
+      "retention_days": null,
+      "reason": "post-merge-suite detached worktree and log scratch directory; removed by cleanup trap on EXIT"
+    },
+    {
       "pattern": "asj.*",
       "kind": "scratch",
       "owner": "scripts/affected-suites.js",

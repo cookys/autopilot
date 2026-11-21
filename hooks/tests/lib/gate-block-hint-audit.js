@@ -28,6 +28,7 @@ const path = require('path');
 
 // [file relative to hooks dir, label, anchor — a RegExp source matched literally (all occurrences)]
 const INVENTORY = [
+  ['bash-test-timeout-guard.js', 'test command without timeout', 'BLOCKED: 測試或檢查指令必須加上 timeout'],
   ['branch-protection.js', 'force-push to protected push target', 'Force push to protected branch'],
   ['branch-protection.js', 'force-push on protected branch', 'Force push on protected branch'],
   ['branch-protection.js', 'direct commit on protected branch', 'Direct commit on protected branch'],
@@ -130,7 +131,8 @@ function coverageFailures(hooksDir, errors) {
     allPositions.sort((a, b) => a - b);
     for (const { label, pos, end } of siteHits) {
       const nextPos = allPositions.find(q => q > end);
-      const to = nextPos !== undefined ? nextPos : src.length;
+      const lineLimit = src.split('\n').slice(0, lineOf(src, end) + 8).join('\n').length;
+      const to = Math.min(nextPos !== undefined ? nextPos : src.length, lineLimit);
       if (!src.slice(end, to).includes('gateHint(')) {
         errors.push(`${file}:${lineOf(src, pos)} block site "${label}" has no gateHint() fix+doc tail`);
       }
@@ -202,7 +204,7 @@ function docFailures(hooksDir, root, errors) {
   walkJs(hooksDir, files);
   for (const p of files) {
     const rel = path.relative(hooksDir, p).split(path.sep).join('/');
-    if (rel.startsWith('tests/')) continue; // the lint itself, not a gate
+    if (rel.startsWith('tests/') || rel === 'lib/gate-hint.js') continue; // lint and helper, not callers
     const src = fs.readFileSync(p, 'utf8');
     for (let i = src.indexOf('gateHint('); i !== -1; i = src.indexOf('gateHint(', i + 1)) {
       if (src.slice(Math.max(0, i - 12), i).includes('function gateHint')) continue; // the definition

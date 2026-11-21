@@ -625,7 +625,6 @@ function fitOpenTaskLines(tasks, avail) {
   let used = 0;
   for (const t of tasks) {
     const line = `${t.id} ${t.state}${t.rawTitle ? ` ${escapeText(t.rawTitle)}` : ''}`;
-    if (t.rawTitle && t.rawTitle.length < 70) continue;
     const cost = Buffer.byteLength(line) + (kept.length ? 1 : 0);
     if (used + cost > avail) break;
     kept.push(line); used += cost;
@@ -798,7 +797,6 @@ function buildHandoff(opts = {}) {
       let used = Math.max(0, allowance - baseBytes - 48);
       const keep = [];
       for (const line of rows) {
-        if (line.length < line.indexOf(' ', line.indexOf(' ') + 1) + 71) continue;
         if (Buffer.byteLength(line) + (keep.length ? 1 : 0) > used) break;
         keep.push(line); used += Buffer.byteLength(line) + 1;
       }

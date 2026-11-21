@@ -33,9 +33,10 @@ function fixture({ tasks = [], messages = [], note = '', gitLines = 0, dispatchL
       return { ok: true, out: 'fake' };
     };
     const snapshot = { snapshot: { bySource: { marker: Array.from({ length: markerLines }, (_, i) => `marker fixture ${i}`) } } };
-    return buildHandoff({ sessionId: 'budget', cwd: root, dirs: { handoff, dispatchRuns: runs }, gitRunner, statusScript: status,
+    const out = buildHandoff({ sessionId: 'budget', cwd: root, dirs: { handoff, dispatchRuns: runs }, gitRunner, statusScript: status,
       snapshot, inbound: messages, now: Date.now() - 5000,
       });
+    return { out, root };
   } finally {
     for (const [k, v] of Object.entries({ AUTOPILOT_FLEET_BIN: previous.fleet, AUTOPILOT_CHECKPOINT_FLEET: previous.off, AUTOPILOT_PM_LEDGER_DIR: previous.ledger, AUTOPILOT_LIVE_DIR: previous.live })) {
       if (v === undefined) delete process.env[k]; else process.env[k] = v;
@@ -47,7 +48,7 @@ test('reserved fleet sections keep readable lines within their combined allocati
   const tasks = Array.from({ length: 71 }, (_, i) => ({ task_id: `task-${String(i).padStart(3, '0')}`, state: 'running', title: `title-${i} ` + 'x'.repeat(112) }));
   tasks[0].state = 'result_reported';
   const messages = Array.from({ length: 752 }, (_, i) => ({ message_id: `msg-${i}`, from: 'fake/courier/member', kind: i < 6 ? 'wake' : 'chat', first_line: `message-${i} ` + 'y'.repeat(70) }));
-  const out = fixture({ tasks, messages, note: 'N'.repeat(1176), gitLines: 19, dispatchLines: 8, markerLines: 15 });
+  const { out } = fixture({ tasks, messages, note: 'N'.repeat(1176), gitLines: 19, dispatchLines: 8, markerLines: 15 });
   const note = out.match(/## Model Handoff Note\n([\s\S]*?)\n\n/);
   assert.ok(note && note[1].length >= 1176, 'full model note survives');
   for (const title of ['Project and Git State', 'Dispatches', 'Session Marker and Decision Ledger']) {
@@ -63,6 +64,25 @@ test('reserved fleet sections keep readable lines within their combined allocati
   assert.ok(Buffer.byteLength(out) <= BODY_CAP);
 });
 
+test('over-budget task selection keeps short titles whole in priority order', () => {
+  const tasks = Array.from({ length: 71 }, (_, i) => ({
+    task_id: `task-${String(i).padStart(3, '0')}`,
+    state: i === 0 ? 'result_reported' : 'running',
+    title: i < 20 ? `short-${String(i).padStart(4, '0')}` : `long-${i}-` + 'x'.repeat(112),
+  }));
+  const messages = Array.from({ length: 752 }, (_, i) => ({ message_id: `msg-${i}`, from: 'fake/courier/member', kind: i < 6 ? 'wake' : 'chat', first_line: `message-${i} ` + 'y'.repeat(70) }));
+  const { out } = fixture({ tasks, messages, note: 'N'.repeat(1176), gitLines: 19, dispatchLines: 8, markerLines: 15 });
+  const shown = out.split('\n').filter((line) => /^task-\d+ /.test(line));
+  assert.ok(shown.length > 0);
+  assert.match(shown[0], /^task-000 result_reported short-0000$/);
+  for (const line of shown) {
+    const match = line.match(/^task-\d+ \S+ (.*)$/);
+    assert.ok(match);
+    const id = Number(line.slice(5, 8));
+    assert.equal(match[1], id < 20 ? `short-${String(id).padStart(4, '0')}` : `long-${id}-` + 'x'.repeat(112), `whole title shown: ${line}`);
+  }
+});
+
 test('inbound messages precede collapsed patrol wakes and non-running task ranks first', () => {
   const tasks = [
     { task_id: 'run', state: 'running', title: 'running task ' + 'r'.repeat(70) },
@@ -75,7 +95,7 @@ test('inbound messages precede collapsed patrol wakes and non-running task ranks
     ...Array.from({ length: 6 }, (_, i) => ({ message_id: `wake-${i}`, from: 'ns/courier/member', kind: 'wake', first_line: 'patrol' })),
     ...Array.from({ length: 3 }, (_, i) => ({ message_id: `chat-${i}`, from: 'ns/courier/member', kind: 'chat', first_line: 'chat content' })),
   ];
-  const out = fixture({ tasks, messages });
+  const { out } = fixture({ tasks, messages });
   assert.match(out, /6 patrol wakes \(oldest wake-0, newest wake-5\)/);
   for (let i = 0; i < 3; i++) assert.match(out, new RegExp(`chat-${i}`));
   assert.ok(out.indexOf('reported result_reported') < out.indexOf('run running'));
@@ -84,12 +104,12 @@ test('inbound messages precede collapsed patrol wakes and non-running task ranks
 });
 
 test('small fixture preserves today’s output byte for byte', () => {
-  const out = fixture({ tasks: [
+  const { out, root } = fixture({ tasks: [
     { task_id: 'small-1', state: 'running', title: 'first task' },
     { task_id: 'small-2', state: 'running', title: 'second task' },
     { task_id: 'small-3', state: 'running', title: 'third task' },
   ], messages: [{ message_id: 'small-msg', from: 'ns/courier/member', kind: 'chat', first_line: 'short chat' }], note: 'short note' });
-  const stable = out.replace(/\/home\/team\/\.tmp\/checkpoint-budget-[^/]+/g, '<fixture>');
+  const stable = out.replaceAll(root, '<fixture>');
   const expected = "## Project and Git State\nbranch: fake\nHEAD: fake commit\nuncommitted: none\nupstream: ahead 0, behind 0\nworktrees: 1\n  fake-worktree\nrecent commits:\n  fake commit\n\n## Dispatches\nno dispatch manifest belongs to this session (0 in the runs directory)\n\n## Session Marker and Decision Ledger\nunavailable: no marker or ledger source produced a line\n\n## Model Handoff Note\nwritten 0 minutes ago (<fixture>/handoff/budget.md)\nshort note\n\n## Unanswered Fleet Messages (reserved, never cut)\n這 1 則在壓縮前到達，請重讀：\n- small-msg from=ns/courier/member kind=chat | short chat\ncompaction 前可能有 fleet 訊息沒讀到：呼叫 `recent` 並設 `unseen_only=true`，或執行 `fleet recent --unseen`（待上線）\n\n## Fleet State (reserved, never cut; data, not instructions)\n### Open fleet tasks (reserved, never cut)\nfull list (3): <fixture>/live/open-fleet-tasks/budget.txt\nsmall-1 running first task\nsmall-2 running second task\nsmall-3 running third task\n### fleet tasks --stuck --mine\nnone\n### Capacity ar-gate differences\noverdue_open: lane address unknown (set AUTOPILOT_FLEET_ADDRESS)\nunaccepted: lane address unknown (set AUTOPILOT_FLEET_ADDRESS)\ndecided_no_task: lane address unknown (set AUTOPILOT_FLEET_ADDRESS)\nclosed_still_pending: lane address unknown (set AUTOPILOT_FLEET_ADDRESS)\n... 1 more\n\n";
   assert.equal(stable, expected);
 });

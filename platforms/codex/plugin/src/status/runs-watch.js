@@ -613,7 +613,7 @@ function createWatcher({
 
   // WATCH-A inputs of one scope (planned / decision / compare / marker stage / sources manifest): src/status/watch-inputs.js
   function watchInputs(root, nowMs, wo) {
-    return readWatchInputs({ env, key, identity, root, nowMs, liveBase: live, autopilotHome, markers: tickMarkers.records, progressReceipt: wo ? wo.value : null });
+    return readWatchInputs({ env, key, identity, root, nowMs, liveBase: live, autopilotHome, markers: tickMarkers(nowMs).records, progressReceipt: wo ? wo.value : null });
   }
 
   function renderSignature(k, rows, nowMs) {
@@ -810,9 +810,16 @@ function createWatcher({
 
   // One observation. Publishes on change; otherwise a 60 s heartbeat that moves only published_at.
   // Returns { exit: 'idle_exit' } when the idle-exit condition holds (the caller does the final publish).
-  let tickMarkers = { records: [], paths: [] };
+  let markerCache = new Map();
+  function tickMarkers(nowMs) {
+    const dir = markerDirOf(env);
+    const cacheKey = JSON.stringify([dir, key, nowMs]);
+    if (!markerCache.has(cacheKey)) markerCache.set(cacheKey, readLiveMarkers(dir, key, nowMs));
+    return markerCache.get(cacheKey);
+  }
   function tick() {
     const nowMs = now();
+    markerCache = new Map();
     let rows;
     const dirsBefore = { manifest: dirMtime(manifestDirOf(env)), marker: dirMtime(markerDirOf(env)) }; // BEFORE collect: a change during the read is seen as newer, never lost
     try {
@@ -832,9 +839,8 @@ function createWatcher({
       log('code changed, exiting');
       return { published: false, exit: 'code_changed' };
     }
-    tickMarkers = readLiveMarkers(markerDirOf(env), key, nowMs);
-    state.lastSources = sourceFingerprint({ env, key, identity, rows, dirs: dirsBefore, startMs: nowMs, liveMarkers: tickMarkers }); // this tick's view (published on change or heartbeat, and by the final publish)
-    const allMarkers = tickMarkers.records;
+    const allMarkers = tickMarkers(nowMs).records;
+    state.lastSources = sourceFingerprint({ env, key, identity, rows, dirs: dirsBefore, startMs: nowMs, liveMarkers: tickMarkers(nowMs) }); // this tick's view (published on change or heartbeat, and by the final publish)
     const markers = allMarkers.filter(isOrchestratorMarker);
     const cost = { ...costs.summary(nowMs, markers.map((m) => m.session_id).filter(Boolean)), ...brainSpend.read() };
     const candidates = new Set(state.roots);

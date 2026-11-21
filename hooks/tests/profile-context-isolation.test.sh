@@ -551,11 +551,12 @@ assert.equal(
 assert.deepEqual(
   guidedBundle.hooks.guidance_hooks,
   [
+    'bg-quiet-sweep',
     'design-quality',
     'suggest-compact',
   ],
 );
-assert.deepEqual(autonomousBundle.hooks.guidance_hooks, []);
+assert.deepEqual(autonomousBundle.hooks.guidance_hooks, ['bg-quiet-sweep']);
 assert.equal(guidedBundle.hooks.invariant_effect_hooks.includes('large-file-warner'), true);
 assert.equal(guidedBundle.hooks.invariant_effect_hooks.includes('session-start'), false);
 assert.equal(guidedBundle.hooks.invariant_effect_hooks.includes('version-drift-check'), false);

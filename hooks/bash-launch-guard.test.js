@@ -34,6 +34,7 @@ function run(cmd, { shell = 'bash', extra = {}, env = {}, lsDefault = false } = 
   const baseEnv = { ...process.env };
   delete baseEnv.AUTOPILOT_BASH_GUARD_PKILL_MODE;
   delete baseEnv.AUTOPILOT_BASH_GUARD_LS_MODE;
+  delete baseEnv.AUTOPILOT_BASH_GUARD_BUSY_LOOP_MODE;
   delete baseEnv.AUTOPILOT_BASH_GUARD_RMVAR_MODE;
   delete baseEnv.AUTOPILOT_BASH_GUARD_SUBAGENT_RM_MODE;
   delete baseEnv.AUTOPILOT_BASH_GUARD_SHARED_RM_MODE;
@@ -2310,4 +2311,27 @@ test('rule9 fails open (no throw) on deeply nested quote/substitution input', ()
   for (const unit of ['a=( "$(', 'x="$(', '"`', '"((', "'((", '"<(', '"a=(']) {
     assert.doesNotThrow(() => detectWrappedRm(`echo rm ${unit.repeat(25000)}`));
   }
+});
+
+test('busy-loop denies the incident and empty-body loops', () => {
+  for (const cmd of ["until grep -q '' /dev/null; do :; done", 'until grep -q x f; do :; done', 'while true; do true; done', 'while false; do ; done', "bash -c 'until false; do :; done'", 'sh -c "until false; do :; done"', 'until grep -q "" /dev/null; do echo x; done']) {
+    const r = run(cmd);
+    assert.strictEqual(r.deny, true, cmd);
+    assert.match(r.reason, /busy-loop/);
+  }
+});
+
+test('busy-loop applies to subagent sessions', () => {
+  assert.match(run('while true; do :; done', { extra: { agent_id: 'child' } }).reason, /busy-loop/);
+});
+
+test('busy-loop allows sleeping loops and quoted mentions, and honors mode', () => {
+  for (const cmd of ['until test -f f; do sleep 5; done', 'echo "do :; done"']) {
+    assert.strictEqual(run(cmd).deny, false, cmd);
+  }
+  const cmd = "until grep -q '' /dev/null; do :; done";
+  const warn = run(cmd, { env: { AUTOPILOT_BASH_GUARD_BUSY_LOOP_MODE: 'warn' } });
+  assert.strictEqual(warn.deny, false);
+  assert.match(warn.ctx, /busy-loop/);
+  assert.strictEqual(run(cmd, { env: { AUTOPILOT_BASH_GUARD_BUSY_LOOP_MODE: 'off' } }).deny, false);
 });

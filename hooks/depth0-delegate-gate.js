@@ -123,6 +123,35 @@ const WAIT_MIN_SLEEP_SECONDS = 20;
 // Executable-text prefixes (post-strip, trimmed) that make a Bash call read-class.
 const BASH_READ_PREFIXES = ['grep ', 'rg ', 'find ', 'cat ', 'sed -n', 'head ', 'tail '];
 
+// Mask quoted data while retaining empty strings used as grep patterns. Shell -c
+// bodies are scanned separately because they are executable scripts.
+function detectBusyLoop(cmd, depth = 0) {
+  if (depth > 5) return false;
+  const text = executableText(cmd);
+  let masked = '';
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '\\' && i + 1 < text.length) { masked += '  '; i++; continue; }
+    if (c !== "'" && c !== '"') { masked += c; continue; }
+    let end = i + 1;
+    while (end < text.length && text[end] !== c) {
+      if (c === '"' && text[end] === '\\') end++;
+      end++;
+    }
+    const body = text.slice(i + 1, end);
+    if (/(?:^|[;&|\s])(?:bash|sh)\s+-c\s*$/.test(masked) && detectBusyLoop(body, depth + 1)) return true;
+    masked += body === '' ? c + c : ' '.repeat(end - i + 1);
+    i = end;
+  }
+  const loop = /\b(while|until)\b([\s\S]*?)(?:;|\n)\s*do\b([\s\S]*?)\bdone\b/g;
+  let m;
+  while ((m = loop.exec(masked))) {
+    if (/^\s*(?:(?::|true)\s*;?)?\s*;?\s*$/.test(m[3])) return true;
+    if (m[1] === 'until' && /(?:^|[\s;&])grep\s+-q\s+(?:''|"")\s+\/dev\/null(?:\s|$)/.test(m[2]) && !/\bsleep\s+\d/.test(m[3])) return true;
+  }
+  return false;
+}
+
 function isBashReadClass(cmd) {
   const text = executableText(typeof cmd === 'string' ? cmd : '').trim();
   return BASH_READ_PREFIXES.some((p) => text.startsWith(p));
@@ -133,6 +162,7 @@ function loadConfig() {
     mode: 'warn',
     pkillMode: 'deny',
     lsMode: 'deny',
+    busyLoopMode: 'deny',
     rmVarMode: 'deny',
     subagentRmMode: 'deny',
     sharedRmMode: 'warn',
@@ -152,6 +182,7 @@ function loadConfig() {
         if (['off', 'warn', 'block'].includes(g.mode)) cfg.mode = g.mode;
         if (['off', 'warn', 'deny'].includes(g.pkill_self_match)) cfg.pkillMode = g.pkill_self_match;
         if (['off', 'warn', 'deny'].includes(g.bare_ls)) cfg.lsMode = g.bare_ls;
+        if (['off', 'warn', 'deny'].includes(g.busy_loop)) cfg.busyLoopMode = g.busy_loop;
         if (['off', 'warn', 'deny'].includes(g.rm_var_target)) cfg.rmVarMode = g.rm_var_target;
         if (['off', 'warn', 'deny'].includes(g.subagent_rm)) cfg.subagentRmMode = g.subagent_rm;
         if (['off', 'warn', 'deny'].includes(g.shared_rm)) cfg.sharedRmMode = g.shared_rm;
@@ -174,6 +205,8 @@ function loadConfig() {
   // Env wins over config; unset/empty leaves config alone, a garbage value maps to the rule's safe default.
   const envPk = process.env.AUTOPILOT_BASH_GUARD_PKILL_MODE;
   if (envPk !== undefined && envPk !== '') cfg.pkillMode = ['off', 'warn', 'deny'].includes(envPk) ? envPk : 'deny';
+  const envBusy = process.env.AUTOPILOT_BASH_GUARD_BUSY_LOOP_MODE;
+  if (envBusy !== undefined && envBusy !== '') cfg.busyLoopMode = ['off', 'warn', 'deny'].includes(envBusy) ? envBusy : 'deny';
   const envLs = process.env.AUTOPILOT_BASH_GUARD_LS_MODE;
   if (envLs !== undefined && envLs !== '') cfg.lsMode = ['off', 'warn', 'deny'].includes(envLs) ? envLs : 'deny';
   const envRv = process.env.AUTOPILOT_BASH_GUARD_RMVAR_MODE;
@@ -306,6 +339,12 @@ function classify(tool, input) {
         process.exit(0);
       }
       if (pk) launchWarns.push(`bash-launch-guard (${pk.rule}): ${pk.why}`);
+      const busy = cfg.busyLoopMode !== 'off' && detectBusyLoop(cmd);
+      if (busy && cfg.busyLoopMode === 'deny') {
+        emitDeny('bash-launch-guard (busy-loop): loop can spin continuously.' + gateHint('Wait with run_in_background plus the completion notification, or fleet watch --until-file / --pid', 'docs/dev/ironlaw-to-gate-map.md'));
+        process.exit(0);
+      }
+      if (busy) launchWarns.push('bash-launch-guard (busy-loop): loop can spin continuously');
       const ls = cfg.lsMode === 'off' ? null : detectBareLs(cmd);
       if (ls && cfg.lsMode === 'deny') {
         emitDeny(`bash-launch-guard (${ls.rule}): ${ls.why}. Set AUTOPILOT_BASH_GUARD_LS_MODE=warn|off `

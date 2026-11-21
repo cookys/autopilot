@@ -59,4 +59,4 @@ OUT="$(node "$CHECK" --root "$FX_SHORT" 2>&1)"
 RC=$?
 assert_eq "0" "$RC" "green: short sleep (<60s) is not flagged"
 
-report_results
+finalize_test "check-test-bg-reap"

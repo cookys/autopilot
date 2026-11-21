@@ -8094,6 +8094,17 @@
       "summary": "Path of the capacity.burn_more/1 list. A listed candidate is reported burn_more and is not reordered or skipped for that reason."
     },
     {
+      "name": "AUTOPILOT_SHED_ROUTE",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "on",
+      "readers": ["scripts/lib/shed-route.js"],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": ["AUTOPILOT_BURN_MORE"],
+      "summary": "Set to 0 to disable seat-scoped mechanical-work shed routing from the fresh capacity.burn_more/1 shed field."
+    },
+    {
       "name": "AUTOPILOT_ENGINE_PREFLIGHT_WINDOW_MIN",
       "kind": "env",
       "audience": "user",

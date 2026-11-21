@@ -842,6 +842,55 @@ process.exit(1);
   });
 }
 
+// Long snake_case refusal/category codes reach the ledger verbatim while credentials
+// beside them are still redacted (Fleet-Task 01M7PKTGE2361M8WGFG99MZ2SE).
+{
+  const logPath = path.join(tempRoot, 'stub-refusal-redact.log');
+  const stub = path.join(tempRoot, 'stub-refusal-redact.js');
+  const stripeLike = `sk_live_${'a'.repeat(14)}`;
+  const keyedSecret = 'very_long_snake_case_secret_val';
+  const line = `cn_model_dispatch_barred minimax review-role client_token_secret_val = ${keyedSecret} ${stripeLike}`;
+  fs.writeFileSync(stub, `'use strict';
+const fs = require('fs');
+fs.writeFileSync(${JSON.stringify(logPath)}, ${JSON.stringify(`${line}\n`)});
+process.stdout.write(JSON.stringify({
+  status: 'precondition_failed',
+  error: ${JSON.stringify(line)},
+  error_category: 'endpoint_unreachable',
+  agent_log: ${JSON.stringify(logPath)},
+  commit: null,
+}) + '\\n');
+process.exit(2);
+`);
+  const wrapper = path.join(tempRoot, 'disp-refusal-redact.sh');
+  fs.writeFileSync(wrapper, `#!/usr/bin/env bash\nexec ${process.execPath} ${stub} "$@"\n`);
+  fs.chmodSync(wrapper, 0o755);
+  withTempHome(() => {
+    const storeR = fs.mkdtempSync(path.join(tempRoot, 'store-refusal-redact-'));
+    const rawR = fs.mkdtempSync(path.join(tempRoot, 'raw-refusal-redact-'));
+    process.env.AUTOPILOT_QUALIFY_SEED = 'refusal-redact-seed';
+    fs.writeFileSync(path.join(tempRoot, 'fake-seed.txt'), 'refusal-redact-seed');
+    try {
+      runImplQualification({
+        ...baseOptions(storeR), dispatchBin: wrapper, rawDir: rawR, testTruncateAfterCases: 1,
+      });
+    } finally {
+      delete process.env.AUTOPILOT_QUALIFY_SEED;
+    }
+    const ledger = readJsonl(path.join(rawR, 'impl-dispatch-ledger.jsonl'));
+    equal(ledger.length, 1, 'refusal-redact stub records one ledger row');
+    check(String(ledger[0].dispatch_error).includes('cn_model_dispatch_barred minimax review-role'),
+      `refusal code survives in dispatch_error (got: ${ledger[0].dispatch_error})`);
+    equal(ledger[0].dispatch_error_class, 'endpoint_unreachable',
+      '20-char snake_case error_category survives in dispatch_error_class');
+    check(String(ledger[0].agent_log_tail).includes('cn_model_dispatch_barred minimax review-role'),
+      'refusal code survives in agent_log_tail');
+    const blob = filesUnder(rawR).map((file) => fs.readFileSync(file, 'utf8')).join('\n');
+    check(!blob.includes(keyedSecret), 'negative control: keyed snake_case secret value is redacted from raw-dir');
+    check(!blob.includes(stripeLike), 'negative control: underscore-prefixed secret token is redacted from raw-dir');
+  });
+}
+
 const grader = require(path.join(__dirname, '..', 'evals', 'impl-eval-grader.js'));
 equal(grader.unparsedToolCallWarning(
   '<tool_call><function= role="Write" file_path>/tmp/src/rate.js</parameter>',

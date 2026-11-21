@@ -456,6 +456,8 @@ child gets a throwaway `CLAUDE_CONFIG_DIR` seeded by `scripts/lib/seed-claude-co
 `.credentials.json` (never the real `~/.claude`), removed when the dispatch ends. Review, consult and discuss
 use of `claude-native` is unchanged.
 
+**Token-seat refusal on a Claude Code seat.** When `AUTOPILOT_TOKEN_SEAT=1` is set but `CLAUDE_CODE_OAUTH_TOKEN` is missing (and no explicit endpoint auth is set), every claude-native spawn rail (`dispatch-author.sh`, `dispatch-hetero.sh`, `dispatch-review.sh`) refuses with `token seat refused: ...` and exit 78 instead of falling back to the host login. The refusal text also says what to do: inside a Claude Code session, use the Agent tool with `model: fable` (or the needed model) instead of a claude-native runner. Do not export a token to get around it.
+
 The value must be an unpadded positive base-10 integer in the inclusive range; missing, zero,
 negative, fractional, non-numeric, or over-range values fail before spend. Omitting the flag adds no
 runner argument, synthesizes no wrapper default, and adds no result field, so each transport keeps

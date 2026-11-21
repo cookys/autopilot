@@ -220,6 +220,27 @@ case "$RUNNER" in
     fi
     ;;
   cc-shim)
+    if [ "${AUTOPILOT_TOKEN_SEAT:-}" = "1" ] && [ "$ENDPOINT_SET" -eq 1 ] && [ "$ENDPOINT" != "@none" ] && [ -z "${ANTHROPIC_BASE_URL:-}" ]; then
+      if [ -r "$SELF_DIR/load-endpoints-env.sh" ]; then
+        # shellcheck source=load-endpoints-env.sh
+        . "$SELF_DIR/load-endpoints-env.sh" && autopilot_load_endpoints_env || true
+      fi
+      if [ -r "$SELF_DIR/resolve-endpoint.sh" ]; then
+        _pre_ep_json="$("$SELF_DIR/resolve-endpoint.sh" "$ENDPOINT" 2>/dev/null)" || _pre_ep_json=""
+        if [ -n "$_pre_ep_json" ]; then
+          _pre_ep_url="$(printf '%s' "$_pre_ep_json" | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{try{const j=JSON.parse(s);process.stdout.write(j.base_url||"");}catch(_e){}})')"
+          _pre_ep_tokenv="$(printf '%s' "$_pre_ep_json" | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{try{const j=JSON.parse(s);process.stdout.write(j.token_env||"");}catch(_e){}})')"
+          [ -n "$_pre_ep_url" ] && export ANTHROPIC_BASE_URL="$_pre_ep_url"
+          if [ -n "$_pre_ep_tokenv" ]; then
+            eval "_pre_ep_token_val=\"\${$_pre_ep_tokenv:-}\""
+            [ -n "$_pre_ep_token_val" ] && export ANTHROPIC_AUTH_TOKEN="$_pre_ep_token_val"
+            unset _pre_ep_token_val
+          fi
+          unset _pre_ep_url _pre_ep_tokenv
+        fi
+        unset _pre_ep_json
+      fi
+    fi
     _ts_msg="$(token_seat_guard)" || { printf '%s\n' "$_ts_msg" >&2; exit 78; }
     if command -v claude >/dev/null 2>&1; then
       BINARY_FOUND=1

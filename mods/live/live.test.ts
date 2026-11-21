@@ -9187,4 +9187,24 @@ for (const surface of SURFACES) {
     expect(list[0]).toContain('要你做')
     void once
   })
+
+  test('tick with 5000 residual markers does not list the session-mode dir (' + surface + ')', async ($, on) => {
+    const files = base()
+    for (let i = 0; i < 5000; i++) {
+      files[AHOME + '/session-mode/residual-' + i + '.json'] = j({
+        session_id: 'residual-' + i,
+        level: 'l5',
+        project_key: KEY,
+        root_run_id: ROOT,
+        expires_at: '2026-10-01T10:00:00.000Z',
+      })
+    }
+    const w = world(on, files)
+    await start($, surface)
+    w.lists.length = 0
+    w.statPaths.length = 0
+    await w.clock.advance(5000)
+    expect(w.lists.filter(p => p.startsWith(AHOME + '/session-mode'))).toEqual([])
+    expect(w.statPaths.length).toBeLessThanOrEqual(5)
+  })
 }

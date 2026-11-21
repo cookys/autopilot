@@ -1,0 +1,11 @@
+---
+id: 01M803ABD3JR1SY9QSE4EG27T0
+kind: issue
+created: 2026-11-21T22:23:34.819Z
+---
+- **Since**: 2026-11-22
+- **Problem**: 派工 hetero 沙箱套件的 transcript 與 transcript-symlink 兩例在基線提交上已經是紅的，不是本次改動引入。
+- **Impact**: 這兩例修好前，套件抓不到那兩條路徑的新回歸。
+- **Trigger**: 下次修改 hetero 沙箱套件的 transcript 用例時
+- **Source**: autopilot lane, 2026-11-22 (01M801WE / 01M7V30B / 01M802A25 follow-ups)
+- **Pointer**: none

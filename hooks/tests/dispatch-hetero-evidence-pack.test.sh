@@ -27,7 +27,10 @@ case " $* " in
 esac
 if [ "${1:-}" = "--version" ]; then echo "grok-cli 0.2.111 (test stub)"; exit 0; fi
 if [ -n "${STUB_PROMPT_CAPTURE:-}" ]; then
-  cat > "$STUB_PROMPT_CAPTURE"
+  while [ "$#" -gt 0 ]; do
+    if [ "$1" = "--prompt-file" ]; then cp "$2" "$STUB_PROMPT_CAPTURE"; break; fi
+    shift
+  done
 fi
 printf 'evidence fixture\n' >> ev-fixture.txt
 git add ev-fixture.txt
@@ -37,8 +40,8 @@ if [ "${STUB_WRITE_NOTES:-1}" = "1" ]; then
   mkdir -p "$(dirname "$NOTES_PATH")"
   cat > "$NOTES_PATH" <<'NOTES'
 ## Tests
-node scripts/evidence-pack.test.js rc=0
-bash hooks/tests/dispatch-hetero-evidence-pack.test.sh rc=0
+0 node scripts/evidence-pack.test.js
+0 bash hooks/tests/dispatch-hetero-evidence-pack.test.sh
 
 ## Risk
 low
@@ -81,7 +84,7 @@ EP_CHECK="$(node -e '
   ].join("|");
   process.stdout.write(out);
 ' "$EP_PATH")"
-assert_eq "true|low|true|0" "$EP_CHECK" "pack has tests_green=true, risk.level=low, mergeable=true, claude_tokens=0"
+assert_eq "$EP_CHECK" "true|low|true|0" "pack has tests_green=true, risk.level=low, mergeable=true, claude_tokens=0"
 
 COMMITTED_FILES="$($GIT -C "$SBX" show --name-only --format= feat/ev-pack-stub)"
 assert_not_contains "$COMMITTED_FILES" "evidence-notes.md" "notes file is not in the commit"
@@ -108,7 +111,7 @@ assert_file_exists "$EP_PATH2" "case 2 result JSON has evidence_pack"
 EP_CHECK2="$(node -e '
   const fs = require("fs");
   const p = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-  const blockers = Array.isArray(p.merge_blockers) ? p.merge_blockers.join(",") : "";
+  const blockers = Array.isArray(p.mergeable_reasons) ? p.mergeable_reasons.join(",") : "";
   process.stdout.write(String(p.mergeable) + "|" + blockers);
 ' "$EP_PATH2")"
 assert_contains "$EP_CHECK2" "false|" "case 2 mergeable is false"

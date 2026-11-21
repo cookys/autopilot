@@ -804,6 +804,7 @@ cleanup() {
   [ "${LOCAL_LEASE_GRANTED:-0}" -eq 1 ] && write_manifest "$$" 2>/dev/null || true
   [ -n "${PACKED_PROMPT_TEMP:-}" ] && rm -f "$PACKED_PROMPT_TEMP"
   [ -n "${CAMPAIGN_PROMPT_FILE:-}" ] && rm -f "$CAMPAIGN_PROMPT_FILE"
+  [ -n "${_ep_prompt_tmp:-}" ] && rm -f "$_ep_prompt_tmp"
   [ -n "${CAMPAIGN_CONTRACT_SNAPSHOT:-}" ] && rm -f "$CAMPAIGN_CONTRACT_SNAPSHOT"
   [ -n "${SKILL_PACK_CONTENT_TEMP:-}" ] && rm -f "$SKILL_PACK_CONTENT_TEMP"
   [ -n "${AGY_ENVELOPE:-}" ] && rm -f "$AGY_ENVELOPE"
@@ -6295,7 +6296,7 @@ fi
 if [ -n "${EVIDENCE_NOTES_PATH:-}" ] && [ -r "${PROMPT_FILE:-}" ]; then
   _ep_prompt_tmp="$(mktemp -t dispatch-hetero-ep-prompt-XXXXXX)"
   cat "$PROMPT_FILE" > "$_ep_prompt_tmp"
-  printf '\nEvidence notes: write %s (not committed) with:\n## Tests\n<command> rc=<n>\n## Risk\nlow|medium|high\n<one-line reason>\n' "$EVIDENCE_NOTES_PATH" >> "$_ep_prompt_tmp"
+  printf '\nEvidence notes: write %s (not committed) with:\n## Tests\n<rc> <command>\n## Risk\nlow|medium|high\n<one-line reason>\n' "$EVIDENCE_NOTES_PATH" >> "$_ep_prompt_tmp"
   PROMPT_FILE="$_ep_prompt_tmp"
 fi
 if [ "$IS_CODEX" -eq 1 ]; then
@@ -7089,7 +7090,7 @@ DIRTY="$(_wt_git status --porcelain --ignore-submodules=dirty)"
   INS="$(printf '%s' "$SHORTSTAT" | grep -o '[0-9]\+ insertion' | grep -o '[0-9]\+' || echo 0)"
   DEL="$(printf '%s' "$SHORTSTAT" | grep -o '[0-9]\+ deletion' | grep -o '[0-9]\+' || echo 0)"
   if [ -n "${EVIDENCE_PACK_FILE:-}" ] && [ -r "$SELF_DIR/evidence-pack.js" ]; then
-    _ep_runner="agy"
+    _ep_runner="${RUNNER:-agy}"
     [ "${IS_CODEX:-0}" -eq 1 ] && _ep_runner="codex"
     [ "${IS_GROK:-0}" -eq 1 ] && _ep_runner="grok"
     [ "${IS_CCSHIM:-0}" -eq 1 ] && _ep_runner="cc-shim"
@@ -7102,7 +7103,7 @@ DIRTY="$(_wt_git status --porcelain --ignore-submodules=dirty)"
     _ep_args=(build --repo "$WT" --base "$DIFF_BASE_SHA" --head "$HEAD_SHA" --run-id "${DISPATCH_RUN_ID:-unknown}" --branch "$BRANCH" --out "$EVIDENCE_PACK_FILE" --runner "$_ep_runner")
     [ -n "${HETERO_FLEET_TASK_ID:-}" ] && _ep_args+=(--fleet-task "$HETERO_FLEET_TASK_ID")
     _ep_notes="${AUTOPILOT_EVIDENCE_NOTES:-}"
-    if [ -z "$_ep_notes" ] && [ -n "${EVIDENCE_NOTES_PATH:-}" ] && [ -s "$EVIDENCE_NOTES_PATH" ]; then
+    if [ ! -s "$_ep_notes" ] && [ -n "${EVIDENCE_NOTES_PATH:-}" ] && [ -s "$EVIDENCE_NOTES_PATH" ]; then
       _ep_notes="$EVIDENCE_NOTES_PATH"
     fi
     [ -n "$_ep_notes" ] && _ep_args+=(--notes "$_ep_notes")

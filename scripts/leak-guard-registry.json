@@ -92,11 +92,6 @@
       "reason": "hash-vector test: fictional /home/<name> fixture paths are the pinned inputs of the sha8 digests"
     },
     {
-      "path": "platforms/codex/plugin/scripts/lib/account-alias.test.js",
-      "category": "home_path",
-      "reason": "codex mirror of scripts/lib/account-alias.test.js"
-    },
-    {
       "path": "hooks/tests/profile-health.test.sh",
       "category": "email",
       "reason": "privacy test: a placeholder .invalid e-mail sentinel is asserted never to appear in output or state"
@@ -113,11 +108,6 @@
     },
     {
       "path": "platforms/codex/plugin/scripts/lib/lane-switch-transcript.js",
-      "category": "home_path",
-      "reason": "synthetic cwd-key example (one-letter placeholder user, no real account) in the 2026-11-13 batch merges; the file itself now uses a neutral path"
-    },
-    {
-      "path": "platforms/codex/plugin/scripts/lib/lane-switch-transcript.test.js",
       "category": "home_path",
       "reason": "synthetic cwd-key example (one-letter placeholder user, no real account) in the 2026-11-13 batch merges; the file itself now uses a neutral path"
     }

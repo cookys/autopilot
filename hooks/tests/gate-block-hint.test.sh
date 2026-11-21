@@ -47,4 +47,36 @@ assert_neq "$RC" 0 "negative control 2: audit is RED when a cited doc does not e
 assert_contains "$OUT" "does not resolve" "negative control 2: audit reports the missing doc"
 assert_contains "$OUT" "docs/guide/does-not-exist.md" "negative control 2: audit prints the bad doc path"
 
+# --- negative control 3: earlier block site in a multi-site file loses its gateHint() ---
+NEG3="$TEST_TMP/neg-earlier-site"
+mkdir -p "$NEG3"
+for f in "$HOOKS_DIR"/*; do ln -s "$f" "$NEG3/$(basename "$f")"; done
+rm "$NEG3/exec-boundary.js"
+cp "$HOOKS_DIR/exec-boundary.js" "$NEG3/exec-boundary.js"
+sed_mutate "$NEG3/exec-boundary.js" \
+  "s|gateHint('Push to a non-protected branch or ask the user to push.', 'hooks/README.md')|''|" \
+  || { echo "FATAL [$TEST_NAME] negative control 3 not applied (mutation missed its anchor)" >&2; exit 1; }
+OUT="$(node "$AUDIT" "$NEG3" "$REPO_ROOT" 2>&1 < /dev/null)"; RC=$?
+assert_neq "$RC" 0 "negative control 3: audit is RED when an earlier site in a multi-site file loses its gateHint()"
+assert_contains "$OUT" "exec-boundary.js" "negative control 3: audit names exec-boundary.js"
+assert_contains "$OUT" "E1 protected-ref force-push" "negative control 3: audit names the stripped earlier site"
+
+# --- negative control 4: a gateHint() in hooks/lib/ citing a doc that does not exist ---
+NEG4="$TEST_TMP/neg-lib-doc"
+mkdir -p "$NEG4/lib"
+for f in "$HOOKS_DIR"/*; do
+  base="$(basename "$f")"
+  [ "$base" = "lib" ] && continue
+  ln -s "$f" "$NEG4/$base"
+done
+for f in "$HOOKS_DIR/lib"/*; do ln -s "$f" "$NEG4/lib/$(basename "$f")"; done
+rm "$NEG4/lib/ask-guard.js"
+cp "$HOOKS_DIR/lib/ask-guard.js" "$NEG4/lib/ask-guard.js"
+sed_mutate "$NEG4/lib/ask-guard.js" "s|'references/[^']*'|'docs/guide/missing-lib-doc.md'|" \
+  || { echo "FATAL [$TEST_NAME] negative control 4 not applied (mutation missed its anchor)" >&2; exit 1; }
+OUT="$(node "$AUDIT" "$NEG4" "$REPO_ROOT" 2>&1 < /dev/null)"; RC=$?
+assert_neq "$RC" 0 "negative control 4: audit is RED when a hooks/lib/ gateHint() cites a missing doc"
+assert_contains "$OUT" "does not resolve" "negative control 4: audit reports the missing doc"
+assert_contains "$OUT" "docs/guide/missing-lib-doc.md" "negative control 4: audit prints the bad doc path"
+
 finalize_test

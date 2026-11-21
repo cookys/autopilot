@@ -99,29 +99,42 @@ function lineOf(src, idx) {
 
 // --- check 1: coverage — every block-message site is followed by gateHint( ---
 function coverageFailures(hooksDir, errors) {
-  const seen = new Map(); // file -> [startIdx] of verified sites (dedupe anchors hitting same line)
+  const seen = new Map(); // file -> count of verified sites
+  const byFile = new Map(); // file -> [{ label, anchor }]
   for (const [file, label, anchor] of INVENTORY) {
+    if (!byFile.has(file)) byFile.set(file, []);
+    byFile.get(file).push({ label, anchor });
+  }
+  for (const [file, entries] of byFile) {
     const p = path.join(hooksDir, file);
     let src;
     try { src = fs.readFileSync(p, 'utf8'); } catch {
       errors.push(`${file}: gate file missing from ${hooksDir}`);
       continue;
     }
-    const hits = [];
-    for (let i = src.indexOf(anchor); i !== -1; i = src.indexOf(anchor, i + 1)) hits.push(i);
-    if (hits.length === 0) {
-      errors.push(`${file}: block site "${label}" not found — anchor stale or site removed; update the INVENTORY with it`);
-      continue;
+    const siteHits = []; // [{ label, pos, end }]
+    const allPositions = [];
+    for (const { label, anchor } of entries) {
+      const hits = [];
+      for (let i = src.indexOf(anchor); i !== -1; i = src.indexOf(anchor, i + 1)) hits.push(i);
+      if (hits.length === 0) {
+        errors.push(`${file}: block site "${label}" not found — anchor stale or site removed; update the INVENTORY with it`);
+        continue;
+      }
+      for (const pos of hits) {
+        siteHits.push({ label, pos, end: pos + anchor.length });
+        allPositions.push(pos);
+      }
+      seen.set(file, (seen.get(file) || 0) + hits.length);
     }
-    const end = src.length;
-    for (let k = 0; k < hits.length; k++) {
-      const from = hits[k] + anchor.length;
-      const to = k + 1 < hits.length ? hits[k + 1] : end;
-      if (!src.slice(from, to).includes('gateHint(')) {
-        errors.push(`${file}:${lineOf(src, hits[k])} block site "${label}" has no gateHint() fix+doc tail`);
+    allPositions.sort((a, b) => a - b);
+    for (const { label, pos, end } of siteHits) {
+      const nextPos = allPositions.find(q => q > end);
+      const to = nextPos !== undefined ? nextPos : src.length;
+      if (!src.slice(end, to).includes('gateHint(')) {
+        errors.push(`${file}:${lineOf(src, pos)} block site "${label}" has no gateHint() fix+doc tail`);
       }
     }
-    seen.set(file, (seen.get(file) || 0) + hits.length);
   }
   return seen;
 }
@@ -176,11 +189,10 @@ function docResolves(doc, root) {
 
 function walkJs(dir, out) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (!e.name.endsWith('.js')) continue;
     const p = path.join(dir, e.name);
     const st = fs.statSync(p); // follows symlinks (the negative-control tree is symlinked)
     if (st.isDirectory()) walkJs(p, out);
-    else out.push(p);
+    else if (e.name.endsWith('.js')) out.push(p);
   }
 }
 

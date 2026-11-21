@@ -91,21 +91,30 @@ if ! command -v "$FLEET_CMD" >/dev/null 2>&1 && [ ! -x "$FLEET_CMD" ]; then
   exit 1
 fi
 
-WATCH_ARGS=(watch --until-file "$FAIL_FILE" --timeout "${WATCH_TIMEOUT_SECS}s")
+WATCH_ARGS=(watch --until-file "$FAIL_FILE" --timeout "$WATCH_TIMEOUT_SECS")
 if [ -n "$TASK_ID" ]; then
   WATCH_ARGS+=(--task "$TASK_ID")
 fi
 
-WATCH_OUT="$("$FLEET_CMD" "${WATCH_ARGS[@]}" 2>&1)"
+WATCH_ERR_FILE="$(mktemp)"
+WATCH_OUT="$("$FLEET_CMD" "${WATCH_ARGS[@]}" 2>"$WATCH_ERR_FILE")"
 WATCH_RC=$?
+WATCH_ERR="$(cat "$WATCH_ERR_FILE" 2>/dev/null || true)"
+rm -f "$WATCH_ERR_FILE"
 if [ "$WATCH_RC" -ne 0 ]; then
-  echo "bg-quiet: warning: fleet watch registration failed (rc=$WATCH_RC): $WATCH_OUT. Use run_in_background instead." >&2
+  echo "bg-quiet: warning: fleet watch registration failed (rc=$WATCH_RC): ${WATCH_ERR:-$WATCH_OUT}. Use run_in_background instead." >&2
   exit 1
 fi
 
-WATCH_ID="${WATCH_OUT%% *}"
+WATCH_ID=""
+for tok in $WATCH_OUT; do
+  if [[ "$tok" =~ ^[0-9A-Z]{26}$ ]]; then
+    WATCH_ID="$tok"
+    break
+  fi
+done
 if [ -z "$WATCH_ID" ]; then
-  echo "bg-quiet: warning: fleet watch returned empty watch_id. Use run_in_background instead." >&2
+  echo "bg-quiet: warning: fleet watch returned no valid watch_id (stdout=${WATCH_OUT}, stderr=${WATCH_ERR}). Use run_in_background instead." >&2
   exit 1
 fi
 
@@ -153,7 +162,9 @@ setsid nohup bash -c '
       .replace(/(?:sk-|ghp_|gho_|xoxb-|Bearer\s+)[A-Za-z0-9._-]+/gi, \"[REDACTED]\")
       .slice(0, 200);
     const receipt = { id, label, rc: Number(rcStr), ended, last_line: lastLine };
-    fs.writeFileSync(target, JSON.stringify(receipt) + \"\\n\", \"utf8\");
+    const tmpTarget = target + \".tmp\";
+    fs.writeFileSync(tmpTarget, JSON.stringify(receipt) + \"\\n\", \"utf8\");
+    fs.renameSync(tmpTarget, target);
   " "$target" "$BG_QUIET_ID" "$BG_QUIET_LABEL" "$rc" "$ended" "$BG_QUIET_LOG"
 ' _ "$@" </dev/null >/dev/null 2>&1 &
 

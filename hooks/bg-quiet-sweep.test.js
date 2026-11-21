@@ -83,7 +83,7 @@ function main() {
     assert.strictEqual(out2, '', 'second sweep should emit nothing');
     assert.strictEqual(fs.readFileSync(fleetLog, 'utf8'), '', 'second sweep should not call fleet');
 
-    // 3. Stop event sweeps silently (no stdout)
+    // 3. Stop event sweeps silently (no stdout) and ignores *.tmp
     fs.writeFileSync(
       path.join(queueDir, 'job-stop.json'),
       JSON.stringify({ id: 'job-stop', watch_id: 'w-stop-1', label: 'stop-suite', log: path.join(queueDir, 'job-stop.log') })
@@ -92,11 +92,31 @@ function main() {
       path.join(queueDir, 'job-stop.ok'),
       JSON.stringify({ id: 'job-stop', label: 'stop-suite', rc: 0 })
     );
+    fs.writeFileSync(
+      path.join(queueDir, 'job-tmp.ok.tmp'),
+      JSON.stringify({ id: 'job-tmp', label: 'tmp-suite', rc: 0 })
+    );
     const outStop = runSweep(env, { hook_event_name: 'Stop', session_id: sessionId });
     assert.strictEqual(outStop, '', 'Stop event should emit nothing');
     assert(fs.existsSync(path.join(queueDir, 'job-stop.ok.swept')), 'Stop should still sweep .ok');
+    assert(fs.existsSync(path.join(queueDir, 'job-tmp.ok.tmp')), '*.tmp files must be ignored');
 
-    console.log('PASS: bg-quiet-sweep.test.js (3/3)');
+    // 4. hooks/hooks.json registers bg-quiet-sweep.js under exactly UserPromptSubmit and Stop
+    const hooksJson = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'hooks', 'hooks.json'), 'utf8'));
+    const eventsWithSweep = [];
+    for (const [event, groups] of Object.entries(hooksJson.hooks || {})) {
+      const hasSweep = (groups || []).some((g) =>
+        (g.hooks || []).some((h) => typeof h.command === 'string' && h.command.includes('bg-quiet-sweep.js'))
+      );
+      if (hasSweep) eventsWithSweep.push(event);
+    }
+    assert.deepStrictEqual(
+      eventsWithSweep.sort(),
+      ['Stop', 'UserPromptSubmit'],
+      `bg-quiet-sweep.js must be registered under exactly UserPromptSubmit and Stop, got: ${eventsWithSweep.join(', ')}`
+    );
+
+    console.log('PASS: bg-quiet-sweep.test.js (4/4)');
   } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }

@@ -20,11 +20,12 @@ STUB_FLEET="${TMP_ROOT}/fleet-stub"
 cat > "$STUB_FLEET" <<'EOF'
 #!/usr/bin/env bash
 echo "$*" >> "$STUB_FLEET_LOG"
+echo "fleet: courier socket mismatch: test" >&2
 if [ "${STUB_FLEET_FAIL:-0}" = "1" ]; then
   echo "simulated watch failure" >&2
   exit 2
 fi
-echo "w-stub-123 (task t-1)"
+echo "01JABCDEFGHJKMNPQRSTVWXYZ0 (task t-1)"
 exit 0
 EOF
 chmod +x "$STUB_FLEET"
@@ -47,7 +48,7 @@ wait_for_file() {
 # 1. Success job -> .ok written, no .fail; stub saw exactly one watch --until-file registration
 : > "$FLEET_LOG"
 OUT="$("$BG_QUIET" --label ok-job -- bash -c 'echo hello-ok')"
-echo "$OUT" | grep -q '^bg-quiet bg-.* watch=w-stub-123 log='
+echo "$OUT" | grep -q '^bg-quiet bg-.* watch=01JABCDEFGHJKMNPQRSTVWXYZ0 log='
 wait_for_file "${QUEUE_DIR}/*.ok"
 if compgen -G "${QUEUE_DIR}/*.fail" >/dev/null 2>&1; then
   echo "FAIL: unexpected .fail file on success" >&2
@@ -55,6 +56,11 @@ if compgen -G "${QUEUE_DIR}/*.fail" >/dev/null 2>&1; then
 fi
 WATCH_COUNT="$(grep -c '^watch --until-file ' "$FLEET_LOG")"
 [ "$WATCH_COUNT" -eq 1 ] || { echo "FAIL: expected 1 watch call, got $WATCH_COUNT" >&2; exit 1; }
+grep -qE -- '--timeout [0-9]+( |$)' "$FLEET_LOG" || { echo "FAIL: expected --timeout <digits> without unit suffix" >&2; exit 1; }
+if grep -qE -- '--timeout [0-9]+[a-zA-Z]' "$FLEET_LOG"; then
+  echo "FAIL: --timeout should not have a unit suffix" >&2
+  exit 1
+fi
 rm -f "${QUEUE_DIR}"/*
 
 # 2. Failing job (exit 3) -> .fail written with rc 3

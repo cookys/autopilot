@@ -56,6 +56,7 @@ function main() {
   const sweptLines = [];
 
   for (const name of entries.sort()) {
+    if (name.endsWith('.tmp')) continue;
     const isOk = name.endsWith('.ok');
     const isFail = name.endsWith('.fail');
     if (!isOk && !isFail) continue;

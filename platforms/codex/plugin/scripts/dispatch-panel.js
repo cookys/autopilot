@@ -791,9 +791,12 @@ async function runPanel(opts, outDir, promptPath) {
         };
         if (!ok) {
           const rawErr = Buffer.concat(errChunks).toString('utf8');
-          const firstLine = rawErr.split(/\r?\n/).map((l) => l.trim()).find((l) => l.length > 0) || '';
-          if (firstLine) {
-            record.error = redactSeatError(firstLine.slice(0, 200));
+          const nonEmptyLines = rawErr.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
+          const errMarkerRe = /^(?:error|fatal|err!|dispatch-author)\b[:\s]?/i;
+          const markerLine = [...nonEmptyLines].reverse().find((l) => errMarkerRe.test(l));
+          const chosenLine = markerLine || nonEmptyLines[nonEmptyLines.length - 1] || '';
+          if (chosenLine) {
+            record.error = redactSeatError(chosenLine.slice(0, 300));
           }
         }
         const resultFile = path.join(resultsDir, `${expectKey}.result.json`);

@@ -49,7 +49,7 @@
    - 判斷：全面改接 ACP 的可靠度證據不足，不應替換已跑通的現行 CLI 包裝路徑。
 
 2. **錯誤可見性**
-   - 事實（repo 實作）：`scripts/dispatch-panel.js` 在 seat 非零退出時，原本只記錄 `rc`（或擷取首行）；Job 1 已將 `dispatch-panel.js` 補齊為擷取 stderr 最後一個錯誤標記行（或最後一個非空行），經 `redactSeatError` 去識別化後寫入 `panel.json` 的 `error` 欄位。
+   - 事實（repo 實作）：`scripts/dispatch-panel.js` 在 seat 非零退出時，原本只記錄 `rc`（或擷取首行）；本次改動已將 `dispatch-panel.js` 補齊為擷取 stderr 最後一個錯誤標記行（或最後一個非空行），經 `redactSeatError` 去識別化後寫入 `panel.json` 的 `error` 欄位。
    - 事實（ACP 調研）：各家 ACP server 透過 JSON-RPC stdio 回報錯誤與事件，但部分家別（如 agy、Qoder、MiniMax）的串流與錯誤事件細節仍未證實。
    - 判斷：面板 `rc=2` 錯誤被吃掉屬於錯誤可見性問題，透過 `dispatch-panel.js` 小修即可直接解決，不需要靠更換底層協定。
 
@@ -78,7 +78,7 @@
 
 ## 5. 建議
 
-不全面改接。現行 CLI 包裝繼續當預設。理由：多數家的 ACP 角色是社群 adapter 或 preview／未證實（見能力表），可靠度證據不足以換掉已跑通的路徑；今晚 panel 回 rc=2 錯誤被吃掉的問題，是錯誤可見性問題，由 Job 1 的小修直接解決，不必靠換協定。部分改接只做一個 opt-in 試驗（spike）：Codex 的 app-server（結構化事件與權限回呼），預設關，不碰現行 runner；是否開工，等 astra 與 carbon 各自獨立評估回來，再由 PM 裁。上線日：待排（取決於上述評估與 PM 裁示，不寫日期）。回滾：試驗是 opt-in 旗標，關掉旗標即回到現行路徑，不需要還原程式。
+不全面改接。現行 CLI 包裝繼續當預設。理由：多數家的 ACP 角色是社群 adapter 或 preview／未證實（見能力表），可靠度證據不足以換掉已跑通的路徑；今晚 panel 回 rc=2 錯誤被吃掉的問題，是錯誤可見性問題，由本次 dispatch-panel.js 的小修直接解決，不必靠換協定。部分改接只做一個 opt-in 試驗（spike）：Codex 的 app-server（結構化事件與權限回呼），預設關，不碰現行 runner；是否開工，等 astra 與 carbon 各自獨立評估回來，再由 PM 裁。上線日：待排（取決於上述評估與 PM 裁示，不寫日期）。回滾：試驗是 opt-in 旗標，關掉旗標即回到現行路徑，不需要還原程式。
 
 ---
 

@@ -96,8 +96,8 @@ function segments(text) {
   let lvlN = 0;
   let inner = 0; // unquoted `(` that is not a subshell opener (`$(`, `f(`)
   let bt = false; // inside an unquoted backtick substitution
-  const push = (bg, endsList = false) => {
-    if (cur.trim()) { out.push({ text: cur.trim(), bg, sub: subDepth > 0, pipe: pipeNext, cond: condNext, or: orNext, list: listN, lvl: lvlStack[lvlStack.length - 1], plvl: lvlStack.length > 1 ? lvlStack[lvlStack.length - 2] : null }); pipeNext = false; condNext = false; }
+  const push = (bg, endsList = false, end = s.length) => {
+    if (cur.trim()) { out.push({ text: cur.trim(), start: end - cur.length + (cur.length - cur.trimStart().length), bg, sub: subDepth > 0, pipe: pipeNext, cond: condNext, or: orNext, list: listN, lvl: lvlStack[lvlStack.length - 1], plvl: lvlStack.length > 1 ? lvlStack[lvlStack.length - 2] : null }); pipeNext = false; condNext = false; }
     cur = '';
     if (bg) {
       for (let k = listStart; k < out.length; k += 1) out[k].bg = true;
@@ -131,25 +131,25 @@ function segments(text) {
     if (c === '(') { inner += 1; cur += c; continue; }
     if (c === ')') {
       if (inner > 0) inner -= 1;
-      else if (subDepth > 0) { push(false); subDepth -= 1; lvlStack.pop(); continue; } // closes a subshell
+      else if (subDepth > 0) { push(false, false, i); subDepth -= 1; lvlStack.pop(); continue; } // closes a subshell
       cur += c; continue;
     }
     // Inside an unquoted `$( … )` or backtick pair the separators belong to that substitution: keep it one segment (it is
     // re-parsed on its own by expandSegments), otherwise `echo $(rail &)` would be torn apart.
     if ((inner > 0 || bt) && (c === '\n' || c === ';' || c === '|' || c === '&')) { cur += c; continue; }
-    if (c === '\n' || c === ';') { push(false, true); continue; }
+    if (c === '\n' || c === ';') { push(false, true, i); continue; }
     if (c === '|' && s[i - 1] === '>') { cur += c; continue; } // `>|` clobber redirect, not a pipe
     if (c === '|') {
-      push(false);
+      push(false, false, i);
       if (s[i + 1] === '|') { i += 1; condNext = true; orNext = true; continue; } // `||`
       if (s[i + 1] === '&') i += 1; // `|&` (pipe stderr too)
       if (out.length) out[out.length - 1].pipe = true; // a pipeline member: `wait | cat` waits for nothing
       pipeNext = true; continue;
     }
     if (c === '&') {
-      if (s[i + 1] === '&') { push(false); i += 1; condNext = true; continue; }
+      if (s[i + 1] === '&') { push(false, false, i); i += 1; condNext = true; continue; }
       if (s[i - 1] === '>' || s[i + 1] === '>') { cur += c; continue; } // `2>&1`, `&>file`
-      push(true, true); continue;
+      push(true, true, i); continue;
     }
     cur += c;
   }
@@ -169,7 +169,7 @@ function tokens(segText) {
   const out = [];
   const re = /\S+/g;
   let m;
-  while ((m = re.exec(masked)) !== null) out.push({ raw: segText.slice(m.index, m.index + m[0].length), masked: m[0] });
+  while ((m = re.exec(masked)) !== null) out.push({ raw: segText.slice(m.index, m.index + m[0].length), masked: m[0], start: m.index });
   return out;
 }
 
@@ -322,6 +322,7 @@ function expandSegmentsUncached(text, depth) {
   const all = [];
   const sid = (scriptSeq += 1);
   for (const seg of segments(text)) {
+    seg.sourceDepth = depth;
     seg.lvl = `${sid}:${seg.lvl}`;
     if (seg.plvl !== null) seg.plvl = `${sid}:${seg.plvl}`;
     all.push(seg);
@@ -1148,15 +1149,20 @@ function detectBareLs(cmd) {
   try { return detectBareLsUnguarded(cmd); } catch { return null; } // pathological nesting overflows the stack: fail open
 }
 function detectBareLsUnguarded(cmd) {
-  const exec = executableText(typeof cmd === 'string' ? cmd : '');
+  const rawCmd = typeof cmd === 'string' ? cmd : '';
+  const exec = executableText(rawCmd);
   if (!exec.includes('ls')) return null; // cheap exit first: this hook runs on every Bash call
   // `<(…)` / `>(…)` process substitution runs its body as a command list, exactly like `$(…)`.
   const text = stripArrayAssigns(stripArithmetic(rewriteProcSubst(exec)));
   if (!/\bls\b/.test(text)) return null;
+  let safeOffsets = text === `${rawCmd}\n`;
+  const offsets = [];
+  let found = false;
   for (const seg of expandSegments(text)) {
     if (seg.sh) continue;
     let afterTime = false; // `time` is a reserved word: its options (`-p`, `--`) are skipped with it, the command after still gets alias expansion
-    const toks = tokens(seg.text).map((t) => t.raw);
+    const tokenInfo = tokens(seg.text);
+    const toks = tokenInfo.map((t) => t.raw);
     for (let i = 0; i < toks.length; i += 1) {
       const raw = toks[i];
       if (afterTime && (raw === '-p' || raw === '--')) continue;
@@ -1173,16 +1179,35 @@ function detectBareLsUnguarded(cmd) {
       // `ls () { … }` defines a function named ls; it is not a call.
       if (raw === 'ls' && /^\(/.test(toks[i + 1] || '')) break;
       if (raw === 'ls') {
-        return {
-          rule: 'bare-ls',
-          why: 'a bare `ls` in the Bash tool runs this machine\'s interactive alias/function (eza or similar) and can hang the whole call. '
-            + 'Use `command ls` or `/bin/ls`, or the Glob / Read tools',
-        };
+        found = true;
+        if (safeOffsets) {
+          const absIdx = seg.start + tokenInfo[i].start;
+          if (seg.sourceDepth === 0 && rawCmd.slice(absIdx, absIdx + 2) === 'ls') offsets.push(absIdx);
+          else safeOffsets = false;
+        }
+        break;
       }
       break;
     }
   }
-  return null;
+  if (!found) return null;
+  let rewrite = null;
+  if (safeOffsets && offsets.length > 0) {
+    const unique = Array.from(new Set(offsets)).sort((a, b) => a - b);
+    let out = '';
+    let last = 0;
+    for (const off of unique) {
+      out += rawCmd.slice(last, off) + 'command ';
+      last = off;
+    }
+    rewrite = out + rawCmd.slice(last);
+  }
+  return {
+    rule: 'bare-ls',
+    why: 'a bare `ls` in the Bash tool runs this machine\'s interactive alias/function (eza or similar) and can hang the whole call. '
+      + 'Use `command ls` or `/bin/ls`, or the Glob / Read tools',
+    rewrite,
+  };
 }
 
 // Rule 5 (rm-var-target): a recursive `rm` (-r -R -rf -fr -Rf --recursive, flags before or after the targets, any

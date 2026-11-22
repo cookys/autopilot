@@ -230,3 +230,82 @@ runTest('aggregate mode ranks seats by whiff_per_100 descending', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+runTest('classifyTranscriptStream with 1 KiB maxChunk matches classifyTranscript on categories.jsonl', async () => {
+  const { classifyTranscriptStream } = require('./lib/wasted-turns-classify.js');
+  const fixturePath = path.join(__dirname, 'fixtures', 'wasted-turns', 'categories.jsonl');
+  const raw = fs.readFileSync(fixturePath, 'utf8');
+  const expected = classifyTranscript(raw);
+  const actual = await classifyTranscriptStream([fixturePath], { maxChunk: 1024 });
+  assert.deepStrictEqual(actual, expected);
+});
+
+runTest('readLinesFromFile skips oversized lines without crashing', async () => {
+  const { readLinesFromFile } = require('./lib/wasted-turns-classify.js');
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-oversized-'));
+  try {
+    const filePath = path.join(tmpDir, 'oversized.jsonl');
+    const bigLine = JSON.stringify({ type: 'assistant', pad: 'x'.repeat(2048) });
+    const smallLine = JSON.stringify({ type: 'assistant', ok: true });
+    fs.writeFileSync(filePath, `${smallLine}\n${bigLine}\n${smallLine}\n`, 'utf8');
+    let oversizedCount = 0;
+    const lines = [];
+    for await (const line of readLinesFromFile(filePath, {
+      maxChunk: 512,
+      maxLineBytes: 1024,
+      onOversized: () => { oversizedCount += 1; },
+    })) {
+      lines.push(line);
+    }
+    assert.strictEqual(oversizedCount, 1);
+    assert.strictEqual(lines.length, 2);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+runTest('3 MB transcript runs under --max-old-space-size=64 in --self and --usage-only modes', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-3mb-'));
+  try {
+    const filePath = path.join(tmpDir, 'large.jsonl');
+    const nowIso = '2026-11-22T12:00:00Z';
+    const rec = JSON.stringify({
+      type: 'assistant',
+      timestamp: nowIso,
+      message: {
+        model: 'claude-sonnet-4-5',
+        usage: { input_tokens: 100, output_tokens: 10, cache_read_input_tokens: 50, cache_creation_input_tokens: 0 },
+        content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'echo ok' } }],
+      },
+    }) + '\n';
+    const targetBytes = 3 * 1024 * 1024;
+    const fd = fs.openSync(filePath, 'w');
+    let written = 0;
+    while (written < targetBytes) {
+      fs.writeSync(fd, rec);
+      written += Buffer.byteLength(rec, 'utf8');
+    }
+    fs.closeSync(fd);
+
+    const env = { ...process.env, HOME: tmpDir, WASTED_TURNS_MAX_CHUNK: '1024' };
+    const selfOut = execFileSync(
+      process.execPath,
+      ['--max-old-space-size=64', CLI_PATH, '--self', '--transcript', filePath, '--now', nowIso],
+      { env, encoding: 'utf8', timeout: 30000 }
+    );
+    const selfParsed = JSON.parse(selfOut);
+    assert.strictEqual(selfParsed.mode, 'self');
+    assert.ok(selfParsed.turns_total > 0);
+
+    const usageOut = execFileSync(
+      process.execPath,
+      ['--max-old-space-size=64', CLI_PATH, '--usage-only', '--transcript', filePath, '--now', nowIso],
+      { env, encoding: 'utf8', timeout: 30000 }
+    );
+    const usageParsed = JSON.parse(usageOut);
+    assert.strictEqual(usageParsed.mode, 'usage-only');
+    assert.ok(usageParsed.turns_total > 0);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});

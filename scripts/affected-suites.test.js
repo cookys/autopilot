@@ -1992,3 +1992,17 @@ test('BL-0467 negative control: threshold 1.01 suppresses the >50% warning', () 
     assert.strictEqual(doc.over_half, undefined);
   } finally { r.cleanup(); }
 });
+
+test('lazy function require does not select an unrelated suite', () => {
+  const r = makeRepo({ ...LAYOUT,
+    'scripts/lib/lazy-target.js': 'module.exports = 1;\n',
+    'scripts/lazy-user.js': "function later() { return require('./lib/lazy-target.js'); }\nmodule.exports = later;\n",
+    'hooks/tests/lazy-user.test.sh': 'node scripts/lazy-user.js\n',
+    'hooks/tests/lazy-target.test.sh': 'node scripts/lib/lazy-target.js\n',
+  });
+  try {
+    const out = r.select(r.change({ 'scripts/lib/lazy-target.js': 'module.exports = 2;\n' }));
+    assert.ok(out.suites.includes('hooks/tests/lazy-target.test.sh'));
+    assert.ok(!out.suites.includes('hooks/tests/lazy-user.test.sh'));
+  } finally { r.cleanup(); }
+});

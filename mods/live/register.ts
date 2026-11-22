@@ -1885,7 +1885,7 @@ async function frameKeyBody($: EngineInterface, k: KeyAction): Promise<void> {
       const prevStyle = decideLocal.style ?? 'A'
       const r = decideReduce({ ...st, ...decideLocal }, k, ctx, nowMs)
       decideLocal = { cursor: r.nav.cursor, folded: r.nav.folded, textMode: r.nav.textMode, textBuf: r.nav.textBuf, opt: r.nav.opt, detailOffset: r.nav.detailOffset, armed: r.nav.armed, snap: r.nav.snap, stale: r.nav.stale, style: r.nav.style, bgOpen: r.nav.bgOpen }
-      if ((r.nav.style ?? 'A') !== prevStyle) void Promise.resolve(($ as { store?: { set?: (k: string, v: unknown) => Promise<void> } }).store?.set?.('decide.style', r.nav.style ?? 'A')).catch(() => undefined)
+      if ((r.nav.style ?? 'A') !== prevStyle) void $.store.set('decide.style', r.nav.style ?? 'A').catch(() => undefined)
       if (k.kind === 'style' || k.kind === 'expand' || k.kind === 'move' || k.kind === 'cursor' || k.kind === 'prev' || k.kind === 'next') pendingScroll.detail.offset = 0
       if (k.kind === 'cursor') {
         void v74Keylog($, {
@@ -1986,7 +1986,7 @@ export async function startLive($: EngineInterface): Promise<void> {
   markPaneClosed()
   panePlacementEpoch = 0
   pageView = {}
-  const savedStyle = await Promise.resolve(($ as { store?: { get?: (k: string) => Promise<unknown> } }).store?.get?.('decide.style')).catch(() => undefined)
+  const savedStyle = await $.store.get('decide.style').catch(() => undefined)
   decideLocal = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt, style: savedStyle === 'C' ? 'C' : 'A', bgOpen: false }
   Object.assign(pendingScroll, { list: newScroll(), detail: newScroll(), cursor: '' })
   resetNoteInputs()

@@ -1,6 +1,6 @@
 # Plan - 白跑輪數改善：量測、逐項選做法、分段上線
 
-> Status: draft（待 PM 判定）。Owner: autopilot lane。Branch: feat/wasted-turns-plan。Fleet-Task: 01M7XSVAGG1J7AZKV3861D2100。Frame: 只寫計畫，本次不改任何 hook 或腳本。Version 維持 3.0.0（版號暫停）。
+> Status: frozen（凍結版：兩代審查到上限，PM 11-22 裁 A，不再開第 3 代審查）。Owner: autopilot lane。Branch: feat/wasted-turns-plan。Fleet-Task: 01M7XSVAGG1J7AZKV3861D2100。Frame: 只寫計畫，本次不改任何 hook 或腳本。Version 維持 3.0.0（版號暫停）。
 
 ## 0. Context / thesis
 
@@ -19,6 +19,26 @@
 - KR1：每席每百輪的白跑輪數，修前、修後各用同一支量測腳本量一次；白跑佔比從 19% 降到 5% 以下。
 - KR2：全機隊每席跑過一次量測，前 N 名排行入庫，之後每週自動跑一次。
 - KR3：納入範圍表（§3）每一項都有一個選定做法加一行理由，或標「外部 lane 負責」。
+- **壓縮次數（每席每 24 小時）**：來源為既有 `bin/claude-seat-ctx.sh` 探針／updater 全機隊掃描所計數之 `compact_boundary` 事件（只取數字欄位，不讀訊息內容）。修前基準（2026-11-21 01:02Z 掃描）：`autopilot--claude` 64、`fleet--claude` 31、`hangar--claude` 28（對照：`alfred` 8、`codeforge` 13、`capacity` 12、`ops` 17、`pm` 1，其餘多為 0–5）。目標：各 lane 席位壓縮次數 <= 15 次 / 24 小時；於 P7 修後重開 session 後，以同一 `claude-seat-ctx.sh` 24 小時掃描重測並與基準對照。
+
+### 2.1 壓縮頻繁的原因與改法
+
+每次壓縮都會重寫整段快取，且壓縮後的接續會遺失細節。以下三席為 24 小時壓縮最高者（除 `autopilot` 的低門檻設定為已知事實外，其餘原因皆為「假設，待量測驗證」）：
+
+- **`autopilot--claude`（64 次 / 24h，ctx 203456 / 1000000 window，未讀到 autoCompactWindow）**：
+  - 最可能原因：**壓縮門檻設太低**（已知設定事實：Fable/Opus 席因單價較高，repo 刻意設低壓縮點，handoff 點 `t2 = 150K` token、`autoCompactWindow` 約 `233K`，相較 Sonnet/Haiku 的 `t2 = 250K`、`333K` 狹窄許多；`150K` hook 提示收尾到 `233K` 之間僅約 `80K` 緩衝，讀大輸出數十輪即觸發）＋ **單次工具輸出過大**（假設，待量測驗證）。
+  - 驗證指標：在 P1 量測窗口內，從該席最後一次 session 的用量／大小欄位統計前 10 大 `tool_result` 位元組／token 數與單輪增量（絕不讀訊息內容）。
+  - 改法（沿用 P2／P5）：不放寬任何 guard，於 P5 將常跑的長輸出指令收斂為只印摘要／行數上限的腳本，減少單輪把整份檔案或長 log 灌進 context。
+
+- **`fleet--claude`（31 次 / 24h，ctx 140440 / 1000000 window）**：
+  - 最可能原因：**subagent 回傳結果過長** 或 **單次工具輸出過大**（假設，待量測驗證：作為調度／派工席，頻繁接收子席回報或長 CLI 輸出易快速推高 context）。
+  - 驗證指標：於 P1 窗口統計該席最後一次 session 中，各 `tool_result` 與 subagent 回傳訊息的 size 欄位分布（只讀大小欄位，不讀內容）。
+  - 改法（沿用 P1／P6）：透過 P6 把量測數據送交 fleet lane，請其於 P5 對應的腳本化／MCP 回傳格式中限制單次狀態查詢與子席回報只回摘要欄位。
+
+- **`hangar--claude`（28 次 / 24h，ctx 171654，autoCompactWindow 250000，佔 68.7%）**：
+  - 最可能原因：**單次工具輸出過大**（假設，待量測驗證：主機側巡檢／維運指令若把整段系統 log 或多步輸出直接印回 context，在 `250K` 上限下極易反覆觸發壓縮）。
+  - 驗證指標：於 P1 窗口統計該席最後一次 session 的最大 `tool_result` size 欄位與 `compact_boundary` 前一輪的單次增量（只讀用量／大小欄位，不讀內容）。
+  - 改法（沿用 P5／P6）：透過 P6 請 hangar lane 依 §3.2「hangar 腳本 (c)+(e)」原則，將多步巡檢 shell 收斂為只輸出異常摘要的腳本，不刪除任何檢查。
 
 ## 2.5 Global Constraints (copied verbatim into every dispatch)
 
@@ -179,3 +199,4 @@
 - plan-review-manifest：待 PM 決定是否送審；`logical_plan_id: 2026-11-21-wasted-turns`。
 - generation 1（astra + grok，皆 STOP），8 項發現全部接受，已折入本次修訂。
 - generation 2 (astra CONDITIONAL, grok STOP): R8 and R5 blockers folded at the cap (deletions moved out of scope to 01M7XQVB; one row per hook); R3, R7 non-blocking folded.
+- PM 11-22 裁 A 後補齊：新增「壓縮次數（每席每 24 小時）」量測項與 `§2.1 壓縮頻繁的原因與改法`（`autopilot`、`fleet`、`hangar`），並依指示將本計畫設為凍結版。

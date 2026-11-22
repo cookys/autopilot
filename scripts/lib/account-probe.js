@@ -29,6 +29,8 @@ const STALE_MINUTES_DEFAULT = 60;
 const TIMEOUT_SECS_DEFAULT = 20;
 const TIGHT = 0.90; // a tight alias is never probed: it needs no refresh and is the one most likely to 429
 const MODES = Object.freeze(['off', 'stale', 'scheduled']);
+const DEMAND_MODES = Object.freeze(['audit', 'registry']);
+const DEMAND_MODE_DEFAULT = 'audit';
 
 function tinyprobe(manifest) {
   const caps = manifest && Array.isArray(manifest.capture) ? manifest.capture : [];
@@ -78,6 +80,7 @@ function resolveProbeMode(manifest, setting) {
 // Returns null when fine, else a short reason code. `a` is the raw `accounts` config object (already an object).
 function checkProbeConfig(a) {
   if (a.quota_probe !== undefined && !MODES.includes(a.quota_probe)) return 'config_quota_probe_invalid';
+  if (a.quota_probe_demand !== undefined && !DEMAND_MODES.includes(a.quota_probe_demand)) return 'config_quota_probe_demand_invalid';
   if (a.quota_probe_stale_minutes !== undefined) {
     const m = a.quota_probe_stale_minutes;
     if (!Number.isInteger(m) || m < STALE_MINUTES_MIN || m > STALE_MINUTES_MAX) return 'config_quota_probe_stale_minutes_invalid';
@@ -118,13 +121,20 @@ function staleCandidates(accounts, merged, cooldowns, exclude, nowS, minutes) {
 
 // Aliases a run used in the last 24 h. `records` are VALIDATED audit records (account-audit.readAudit); a probe's own line
 // (purpose `quota-probe`) and a pre-attempt line (alias `-`) are not demand. Any other input shape yields an empty set.
-function demandAliases(records, nowMs) {
+// When `opts.mode === 'registry'`, unions with every alias in `opts.accounts` so idle host-local aliases are also covered.
+function demandAliases(records, nowMs, opts) {
   const out = new Set();
-  if (!Array.isArray(records) || !Number.isFinite(nowMs)) return out;
-  for (const r of records) {
-    if (!r || typeof r.alias !== 'string' || r.alias === '-' || typeof r.outcome !== 'string' || !r.outcome) continue;
-    if (r.purpose === 'quota-probe' || !Number.isFinite(r.ts)) continue;
-    if (nowMs - r.ts <= DEMAND_SECS * 1000 && r.ts <= nowMs) out.add(r.alias);
+  if (Array.isArray(records) && Number.isFinite(nowMs)) {
+    for (const r of records) {
+      if (!r || typeof r.alias !== 'string' || r.alias === '-' || typeof r.outcome !== 'string' || !r.outcome) continue;
+      if (r.purpose === 'quota-probe' || !Number.isFinite(r.ts)) continue;
+      if (nowMs - r.ts <= DEMAND_SECS * 1000 && r.ts <= nowMs) out.add(r.alias);
+    }
+  }
+  if (opts && opts.mode === 'registry' && Array.isArray(opts.accounts)) {
+    for (const acct of opts.accounts) {
+      if (acct && typeof acct.alias === 'string' && acct.alias.length > 0) out.add(acct.alias);
+    }
   }
   return out;
 }
@@ -138,6 +148,6 @@ function periodicDue(opts) {
 
 module.exports = {
   PROMPT_PLACEHOLDER, PROBE_PROMPT, STALE_MINUTES_MIN, STALE_MINUTES_MAX, STALE_MINUTES_DEFAULT, TIMEOUT_SECS_DEFAULT, MODES,
-  CONFIDENCES, Q5_WINDOWS, PERIODIC_MINUTES,
+  DEMAND_MODES, DEMAND_MODE_DEFAULT, CONFIDENCES, Q5_WINDOWS, PERIODIC_MINUTES,
   probeArgv, probePolicy, probeModeAllowed, resolveProbeMode, checkProbeConfig, staleCandidates, demandAliases, periodicDue,
 };

@@ -94,6 +94,13 @@ runTest('negative control: different command after error must NOT count as error
   assert.strictEqual(res.whiff.error_retry.turns, 0);
 });
 
+runTest('hook name is the trailing [bracket] token of a real PreToolUse denial', () => {
+  const { extractHookBlockName } = require('./lib/wasted-turns-classify.js');
+  const real = 'PreToolUse:Bash hook error: blocked reason text. [claude-home-read-guard]fix: read own files';
+  assert.strictEqual(extractHookBlockName(real, true), 'claude-home-read-guard');
+  assert.strictEqual(extractHookBlockName('PreToolUse:Bash hook error: no name', true), 'Bash');
+});
+
 runTest('usage-only privacy: sentinel string never appears in stdout, stderr, or output JSON', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-priv-'));
   try {

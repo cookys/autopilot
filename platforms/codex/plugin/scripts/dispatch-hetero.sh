@@ -6155,10 +6155,44 @@ _supervise_commit_quiet() {
   done
 }
 
+_hetero_registry_start() {
+  local rp="$1"
+  local reg_js="${SELF_DIR:-}/lib/hetero-run-registry.js"
+  [ -f "$reg_js" ] || return 0
+  local run_id="${WT_RUN_ID:-${RUN_ID:-}}"
+  [ -n "$run_id" ] || return 0
+  local owner="${AUTOPILOT_OWNER_MEMBER:-${FLEET_MEMBER:-${OWNER_MEMBER:-}}}"
+  local engine="${RUNNER:-${MODEL:-}}"
+  local res_path="${RESULT_PATH:-${LOG:-}}"
+  node "$reg_js" write \
+    --run-id "$run_id" \
+    --owner-member "$owner" \
+    --engine "$engine" \
+    --pid "$rp" \
+    --status "running" \
+    --result-path "$res_path" >/dev/null 2>&1 || true
+}
+
+_hetero_registry_end() {
+  local rc="${1:-1}"
+  local reg_js="${SELF_DIR:-}/lib/hetero-run-registry.js"
+  [ -f "$reg_js" ] || return 0
+  local run_id="${WT_RUN_ID:-${RUN_ID:-}}"
+  [ -n "$run_id" ] || return 0
+  local st="failed"
+  [ "$rc" -eq 0 ] 2>/dev/null && st="done"
+  local res_path="${RESULT_PATH:-${LOG:-}}"
+  node "$reg_js" update \
+    --run-id "$run_id" \
+    --status "$st" \
+    --result-path "$res_path" >/dev/null 2>&1 || true
+}
+
 _wait_worker_with_watchdog() {
   local rp="$1"
   local secs=""
   WORKER_RP="$rp"
+  _hetero_registry_start "$rp"
   if [ "${WATCHDOG_DISARMED:-0}" -ne 1 ]; then
     if [ -z "${WATCHDOG_IDLE_S:-}" ]; then
       _hetero_resolve_watch_limits || true
@@ -6313,6 +6347,7 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
     _wait_worker_with_watchdog "$rp"
   fi
   reap_container   # reap on the NORMAL exit path too (catch escaped survivors), set CONTAINED
+  _hetero_registry_end "${AGENT_EXIT:-1}"
 }
 
 # --- the agent runner (its stdout/stderr go to LOG, never our stdout) ---

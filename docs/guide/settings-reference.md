@@ -84,6 +84,8 @@ Claude Code compacts when the context reaches **`autoCompactWindow` minus a fixe
 | `AUTOPILOT_PAST_RECALL` | Set to "off" to stop the UserPromptSubmit hook that, when the prompt mentions the past (之前, 不是說過, 說過, 我有講, 講過, 上次, 又 except 又名, already told, last time), injects up to 5 keyword hits from AUTOPILOT_RECALL_RECORDS_DIR (default ~/projects/pm/.hippo/records) and this session's transcript. | on |  |
 | `AUTOPILOT_SCHEDULED_WAKEUP_GUARD` | Set to "off" to stop the hook that marks a self-scheduled wakeup as not an authorisation, and that warns when a ScheduleWakeup prompt contains a go, an approval word (核准, 批准, 授權), or a card id. | on |  |
 | `AUTOPILOT_DECIDE_REPLY_CLOSE` | Set to "off" to stop a live-panel reply whose first line is [待決回覆] from closing the decision cards it names. | on |  |
+| `AUTOPILOT_HETERO_RUNS_DIR` | Overrides the directory for hetero run registry entries. | sibling `hetero-runs` of the dispatch runs directory | |
+| `AUTOPILOT_OWNER_MEMBER` | Owner member recorded for hetero runs; falls back to `FLEET_MEMBER`, then `OWNER_MEMBER`, then an empty string. | unset | |
 | `AUTOPILOT_LIVE_DIR` | Overrides the directory for the live status files; an explicit value is an isolation request and is never replaced by a fallback. | auto (tmpfs) |  |
 | `AUTOPILOT_CTX_RESET_SOFT` | Soft context-token threshold for `scripts/session-ctx-report.js candidates` (reset reason `soft`). Positive number; CLI `--soft` beats env. See [`references/session-reset.md`](../../references/session-reset.md). | `150000` |  |
 | `AUTOPILOT_CTX_RESET_HARD` | Hard context-token threshold for session-ctx-report candidates (reset reason `hard`). Positive number; CLI `--hard` beats env. | `250000` |  |

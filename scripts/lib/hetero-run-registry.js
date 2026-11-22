@@ -6,6 +6,7 @@
 //
 // Fields: { run_id, owner_member, engine, pid, proc_start, started_at_ms,
 //           status: 'running'|'done'|'failed', result_path }
+// owner_member is an empty string when no owner can be resolved.
 //
 // Liveness rule: a run is inflight iff status === 'running' AND pid exists AND
 // field 22 of /proc/<pid>/stat (proc_start) matches the recorded proc_start.

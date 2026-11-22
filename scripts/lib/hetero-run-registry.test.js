@@ -70,6 +70,26 @@ function testStalePidAndProcStartMismatch() {
       result_path: '',
     }, dir);
     assert.strictEqual(reg.getRun('run-mismatch-start', dir).inflight, false);
+    const mutant = spawnSync(process.execPath, ['-e', `
+      const Module = require('module');
+      const fs = require('fs');
+      const filename = process.argv[1];
+      const source = fs.readFileSync(filename, 'utf8').replace(
+        'return currentStart !== null && currentStart === String(entry.proc_start);',
+        'return currentStart !== null;'
+      );
+      const mod = new Module(filename, module);
+      mod.filename = filename;
+      mod.paths = Module._nodeModulePaths(require('path').dirname(filename));
+      mod._compile(source, filename);
+      const inflight = mod.exports.getRun('run-mismatch-start', process.argv[2]).inflight;
+      console.log('mutant mismatch inflight:', inflight);
+      require('assert').strictEqual(inflight, false);
+    `, require.resolve('./hetero-run-registry'), dir], { encoding: 'utf8' });
+    assert.strictEqual(mutant.status, 1, 'mutant must fail the real assertion');
+    assert.match(mutant.stdout, /mutant mismatch inflight: true/);
+    console.log('mutant mismatch inflight: true (assertion red)');
+    console.log('real mismatch inflight: false (assertion green)');
 
     // Done status even with live PID and matching proc_start
     reg.writeEntryAtomic({

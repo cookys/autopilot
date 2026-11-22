@@ -50,6 +50,24 @@
   },
   "entries": [
     {
+      "kind": "env",
+      "audience": "user",
+      "doc": "docs/guide/settings-reference.md",
+      "name": "AUTOPILOT_HETERO_RUNS_DIR",
+      "default": null,
+      "readers": ["scripts/lib/hetero-run-registry.js"],
+      "summary": "Overrides the hetero run registry directory."
+    },
+    {
+      "kind": "env",
+      "audience": "user",
+      "doc": "docs/guide/settings-reference.md",
+      "name": "AUTOPILOT_OWNER_MEMBER",
+      "default": null,
+      "readers": ["scripts/dispatch-hetero.sh"],
+      "summary": "Sets the owner member recorded for hetero runs."
+    },
+    {
       "kind": "config_key",
       "audience": "user",
       "doc": "docs/guide/settings-reference.md",

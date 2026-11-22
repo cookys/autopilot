@@ -987,3 +987,34 @@ test('codex:astra resolves to gpt-6.2-astra and explicit codex:gpt-6-astra remai
     sb.cleanup();
   }
 });
+
+test('failed seat records last error-marker stderr line in panel.json', () => {
+  const sb = makeSandbox();
+  try {
+    const badAuthor = path.join(sb.binDir, 'rc2-error-author.js');
+    fs.writeFileSync(
+      badAuthor,
+      `#!/usr/bin/env node
+process.stderr.write('some diagnostic preamble\\n');
+process.stderr.write('error: missing Fleet-Task\\n');
+process.exit(2);
+`,
+      { mode: 0o755 },
+    );
+    const promptFile = writePrompt(sb, 'clean-rc2.txt', 'Check rc=2 error line capture.\n');
+    const outDir = path.join(sb.dir, 'out-rc2-err');
+    const res = runPanel(sb, [
+      '--prompt-file', promptFile,
+      '--seat', 'grok:grok-4.7',
+      '--out-dir', outDir,
+      '--author-cmd', badAuthor,
+    ]);
+    assert.equal(res.status, 0, res.stderr);
+    const panel = JSON.parse(fs.readFileSync(path.join(outDir, 'panel.json'), 'utf8'));
+    assert.equal(panel.seats[0].status, 'failed');
+    assert.equal(panel.seats[0].rc, 2);
+    assert.match(panel.seats[0].error || '', /error: missing Fleet-Task/);
+  } finally {
+    sb.cleanup();
+  }
+});

@@ -1005,5 +1005,12 @@
   "v75.toggle_open": "{closed} 展開",
   "page.decide.range": "第 {a} 到 {b} 張，共 {n} 張",
   "page.decide.more_up": "{arrow} 還有 {n} 張",
-  "page.decide.more_down": "{arrow} 還有 {n} 張"
+  "page.decide.more_down": "{arrow} 還有 {n} 張",
+  "v74.d.c_count": "第 {k} 張，共 {n} 張 · p 上一張 · n 下一張",
+  "v74.d.c_expand": "e 展開",
+  "v74.d.c_desc_omitted": "說明已省略",
+  "v74.b.border.decide_c": "p/n 換卡 · a/b/c 選 · e 展開背景 · m 附註 · s 預覽 · v 切回清單版 · {keys} · Esc",
+  "v74.b.short.decide_c": "p/n · a/b/c · e · m · s · v · Esc",
+  "v74.b.border.decide_bg": "e 或 Esc 回到卡片 · {ud} 捲動",
+  "v74.b.short.decide_bg": "Esc · {ud}"
 }

@@ -115,8 +115,10 @@ const keysWord = (ctx: PageCtx): string => (ctx.v74?.keysHeld === true ? ctx.t('
 const cardless = (page: Page, ctx: PageCtx): boolean => (page.id === 'decide' || page.id === 'todo') && ctx.v74 !== undefined && (ctx.v74[page.id] ?? []).length === 0
 // r11 #4: while the send preview is up, Esc means one thing (cancel the preview), so the border says so and nothing else
 const armed = (page: Page, ctx: PageCtx): boolean => page.id === 'decide' && ctx.decide?.armed === true && !cardless(page, ctx)
-export const frameHintText = (page: Page, ctx: PageCtx): string => armed(page, ctx) ? ctx.t('v74.b.border.armed') : ctx.t(cardless(page, ctx) ? 'v74.b.border.cardless' : V74_BORDER_KEY[page.id] ?? 'v74.b.border.default', { ud: GLYPHS.structure.up + GLYPHS.structure.behind, keys: keysWord(ctx) })
-export const frameHintShort = (page: Page, ctx: PageCtx): string => armed(page, ctx) ? ctx.t('v74.b.short.armed') : ctx.t(cardless(page, ctx) ? 'v74.b.short.scroll' : V74_SHORT_KEY[page.id] ?? 'v74.b.short.scroll', { ud: GLYPHS.structure.up + GLYPHS.structure.behind })
+const bgOpen = (page: Page, ctx: PageCtx): boolean => page.id === 'decide' && ctx.decide?.bgOpen === true && !cardless(page, ctx)
+const styleC = (page: Page, ctx: PageCtx): boolean => page.id === 'decide' && ctx.decide?.style === 'C' && !cardless(page, ctx)
+export const frameHintText = (page: Page, ctx: PageCtx): string => armed(page, ctx) ? ctx.t('v74.b.border.armed') : bgOpen(page, ctx) ? ctx.t('v74.b.border.decide_bg', { ud: GLYPHS.structure.up + GLYPHS.structure.behind }) : styleC(page, ctx) ? ctx.t('v74.b.border.decide_c', { keys: keysWord(ctx) }) : ctx.t(cardless(page, ctx) ? 'v74.b.border.cardless' : V74_BORDER_KEY[page.id] ?? 'v74.b.border.default', { ud: GLYPHS.structure.up + GLYPHS.structure.behind, keys: keysWord(ctx) })
+export const frameHintShort = (page: Page, ctx: PageCtx): string => armed(page, ctx) ? ctx.t('v74.b.short.armed') : bgOpen(page, ctx) ? ctx.t('v74.b.short.decide_bg', { ud: GLYPHS.structure.up + GLYPHS.structure.behind }) : styleC(page, ctx) ? ctx.t('v74.b.short.decide_c') : ctx.t(cardless(page, ctx) ? 'v74.b.short.scroll' : V74_SHORT_KEY[page.id] ?? 'v74.b.short.scroll', { ud: GLYPHS.structure.up + GLYPHS.structure.behind })
 export function frameBorderRow(page: Page, ctx: PageCtx): Row {
   return [{ text: GLYPHS.structure.frameBL + GLYPHS.structure.rule + ' ' + frameHintText(page, ctx), dim: true }]
 }

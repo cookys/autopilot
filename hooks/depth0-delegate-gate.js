@@ -328,17 +328,20 @@ function classify(tool, input) {
       if (secret) launchWarns.push(secretReason);
       const detach = detectDetachNoWake(cmd);
       if (detach) {
-        emitDeny(`bash-launch-guard (${detach.rule}): ${detach.why}. ${detach.advice}` + gateHint('用 run_in_background 啟動並等完成通知（或 Monitor 觀測），不要 detach 後沒人等', 'hooks/README.md'));
+        const detachRewrite = detach.rewrite ? `\n改寫後的指令（直接照抄）：${detach.rewrite}` : '';
+        emitDeny(`bash-launch-guard (${detach.rule}): ${detach.why}. ${detach.advice}` + gateHint('用 run_in_background 啟動並等完成通知（或 Monitor 觀測），不要 detach 後沒人等', 'hooks/README.md') + detachRewrite);
         process.exit(0);
       }
       const pk = cfg.pkillMode === 'off' ? null : detectPkillSelfMatch(cmd);
+      const pkRewrite = pk && pk.rewrite ? `\n改寫後的指令（直接照抄）：${pk.rewrite}` : '';
       if (pk && cfg.pkillMode === 'deny') {
         emitDeny(`bash-launch-guard (${pk.rule}): ${pk.why}. Set AUTOPILOT_BASH_GUARD_PKILL_MODE=warn|off `
           + '(or depth0_delegate_gate.pkill_self_match in ~/.autopilot/config.json) to relax.'
-          + gateHint('要殺流程改用 pidfile 或直接 PID；放寬此規則才設 AUTOPILOT_BASH_GUARD_PKILL_MODE=warn', 'hooks/README.md'));
+          + gateHint('要殺流程改用 pidfile 或直接 PID；放寬此規則才設 AUTOPILOT_BASH_GUARD_PKILL_MODE=warn', 'hooks/README.md')
+          + pkRewrite);
         process.exit(0);
       }
-      if (pk) launchWarns.push(`bash-launch-guard (${pk.rule}): ${pk.why}`);
+      if (pk) launchWarns.push(`bash-launch-guard (${pk.rule}): ${pk.why}${pkRewrite}`);
       const busy = cfg.busyLoopMode !== 'off' && detectBusyLoop(cmd);
       if (busy && cfg.busyLoopMode === 'deny') {
         emitDeny('bash-launch-guard (busy-loop): loop can spin continuously.' + gateHint('Wait with run_in_background plus the completion notification, or fleet watch --until-file / --pid', 'docs/dev/ironlaw-to-gate-map.md'));
@@ -358,28 +361,31 @@ function classify(tool, input) {
       }
       if (ls) launchWarns.push(`bash-launch-guard (${ls.rule}): ${ls.why}${lsRewrite}`);
       const rv = cfg.rmVarMode === 'off' ? null : detectRecursiveRmVar(cmd);
+      const rvRewrite = rv && rv.rewrite ? `\n改寫後的指令（直接照抄）：${rv.rewrite}` : '';
       if (rv && cfg.rmVarMode === 'deny') {
-        emitDeny(`bash-launch-guard (${rv.rule}): ${rv.why}` + gateHint('先展開變數確認範圍，再對顯式路徑執行 rm -r', 'hooks/README.md'));
+        emitDeny(`bash-launch-guard (${rv.rule}): ${rv.why}` + gateHint('先展開變數確認範圍，再對顯式路徑執行 rm -r', 'hooks/README.md') + rvRewrite);
         process.exit(0);
       }
-      if (rv) launchWarns.push(`bash-launch-guard (${rv.rule}): ${rv.why}`);
+      if (rv) launchWarns.push(`bash-launch-guard (${rv.rule}): ${rv.why}${rvRewrite}`);
       const rmOpts = {
         agentId: typeof payload.agent_id === 'string' ? payload.agent_id : '',
         sessionId: typeof payload.session_id === 'string' ? payload.session_id : '',
         cwd: typeof payload.cwd === 'string' && payload.cwd ? payload.cwd : process.cwd(),
       };
       const sr = cfg.subagentRmMode === 'off' ? null : detectSubagentRmOutsideScratch(cmd, rmOpts);
+      const srRewrite = sr && sr.rewrite ? `\n改寫後的指令（直接照抄）：${sr.rewrite}` : '';
       if (sr && cfg.subagentRmMode === 'deny') {
-        emitDeny(`bash-launch-guard (${sr.rule}): ${sr.why}` + gateHint('要刪的目錄先建在 session scratchpad（$TMPDIR/claude-*/<sid>/）內再刪', 'hooks/README.md'));
+        emitDeny(`bash-launch-guard (${sr.rule}): ${sr.why}` + gateHint('要刪的目錄先建在 session scratchpad（$TMPDIR/claude-*/<sid>/）內再刪', 'hooks/README.md') + srRewrite);
         process.exit(0);
       }
-      if (sr) launchWarns.push(`bash-launch-guard (${sr.rule}): ${sr.why}`);
+      if (sr) launchWarns.push(`bash-launch-guard (${sr.rule}): ${sr.why}${srRewrite}`);
       const sh = cfg.sharedRmMode === 'off' ? null : detectRmSharedDir(cmd, rmOpts);
+      const shRewrite = sh && sh.rewrite ? `\n改寫後的指令（直接照抄）：${sh.rewrite}` : '';
       if (sh && cfg.sharedRmMode === 'deny') {
-        emitDeny(`bash-launch-guard (${sh.rule}): ${sh.why}` + gateHint('只刪自己擁有且非 world-writable 的目錄；共用目錄先回報操作員', 'hooks/README.md'));
+        emitDeny(`bash-launch-guard (${sh.rule}): ${sh.why}` + gateHint('只刪自己擁有且非 world-writable 的目錄；共用目錄先回報操作員', 'hooks/README.md') + shRewrite);
         process.exit(0);
       }
-      if (sh) launchWarns.push(`bash-launch-guard (${sh.rule}): ${sh.why}`);
+      if (sh) launchWarns.push(`bash-launch-guard (${sh.rule}): ${sh.why}${shRewrite}`);
       const rw = cfg.rmWrappedMode === 'off' ? null : detectWrappedRm(cmd);
       if (rw && cfg.rmWrappedMode === 'deny') {
         emitDeny(`bash-launch-guard (${rw.rule}): ${rw.why}` + gateHint('把 rm -r 從 sh -c / heredoc / 迴圈 / xargs 拉出來，用顯式路徑單獨執行', 'hooks/README.md'));
@@ -387,15 +393,19 @@ function classify(tool, input) {
       }
       if (rw) launchWarns.push(`bash-launch-guard (${rw.rule}): ${rw.why}`);
       const zs = cfg.zshSyntaxMode === 'off' ? null : detectZshSyntax(cmd);
+      const zsRewrite = zs && zs.rewrite ? `\n改寫後的指令（直接照抄）：${zs.rewrite}` : '';
       if (zs && cfg.zshSyntaxMode === 'deny') {
-        emitDeny(`bash-launch-guard (${zs.rule}): ${zs.why}` + gateHint('改用 bash 可解析的語法（zsh 的 = 開頭字元和裸 glob 不支援）', 'hooks/README.md'));
+        emitDeny(`bash-launch-guard (${zs.rule}): ${zs.why}` + gateHint('改用 bash 可解析的語法（zsh 的 = 開頭字元和裸 glob 不支援）', 'hooks/README.md') + zsRewrite);
         process.exit(0);
       }
-      if (zs) launchWarns.push(`bash-launch-guard (${zs.rule}): ${zs.why}`);
+      if (zs) launchWarns.push(`bash-launch-guard (${zs.rule}): ${zs.why}${zsRewrite}`);
       const shellName = path.basename(process.env.AUTOPILOT_BASH_GUARD_SHELL || process.env.SHELL || '');
       if (shellName === 'zsh') {
         const z = detectZshExpansion(cmd, typeof payload.cwd === 'string' ? payload.cwd : process.cwd());
-        if (z) launchWarns.push(`bash-launch-guard (${z.rule}, warn only): ${z.why}`);
+        if (z) {
+          const zRewrite = z.rewrite ? `\n改寫後的指令（直接照抄）：${z.rewrite}` : '';
+          launchWarns.push(`bash-launch-guard (${z.rule}, warn only): ${z.why}${zRewrite}`);
+        }
       }
     }
     const emitAdvisory = (lines) => {

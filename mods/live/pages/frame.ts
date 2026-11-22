@@ -200,6 +200,8 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
   const droppedDecideAct = first.actions.some(x => x.some(s => s.press === 'tab:2:decide'))
   const layout = (r: { body: Row[]; actions: Row[] }, short = false) => {
     const read = page.id === 'decide' || page.id === 'todo' || page.id === 'help'
+    // Dual-column decide (renderBoxD) already lays out left + divider + right to exact ctx.size.cols; wrapping at 80 splits every row in half and hides the bottom scroll hint.
+    const dualDecide = page.id === 'decide' && ctx.v74 !== undefined && ctx.box === true && ctx.size.cols >= 100 && !styleC(page, ctx)
     const body = r.body.filter(x => read || x.some(s => s.text.trim() !== '')).flatMap(x => {
       if (opts.topAnchor === true && x.map(s => s.text).join('').trimStart().startsWith(GLYPHS.structure.open + ' ') && x.map(s => s.text).join('').trimEnd().endsWith(GLYPHS.structure.rule)) { // only section rules (they end in ─); a ▾ legend row is text
         const row = x.map(s => ({ ...s }))
@@ -211,7 +213,7 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
       }
       const joined = x.map(s => s.text).join('')
       const lead = /^ */.exec(joined)?.[0].length ?? 0
-      const width = read ? Math.min(80, ctx.size.cols) : ctx.size.cols
+      const width = read && !dualDecide ? Math.min(80, ctx.size.cols) : ctx.size.cols
       const hang = read ? Math.max(WRAP_HANG, Math.min(lead, Math.max(0, width - 4))) : WRAP_HANG
       return wrapRow(x, width, hang)
     })

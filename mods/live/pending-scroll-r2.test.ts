@@ -53,28 +53,36 @@ async function host($, on, maxRows = 9) {
   return { draw, key, close: async () => { await band.unmount(); await $.session.end({ reason: 'exit' }) } }
 }
 test('pending r2: fullscreen fallback registers n/p in the mounted hotkey path', async ($, on) => {
+  // 已改為雙欄：表頭為 卡 #01 / 21，n/p 仍走 mounted hotkey 切換卡
   const h = await host($, on)
-  expect(text(await h.draw())).toContain('目前第 1 張')
-  expect(text(await h.key('n'))).toContain('目前第 2 張')
-  expect(text(await h.key('p'))).toContain('目前第 1 張')
+  expect(text(await h.draw())).toContain('卡 #01 / 21')
+  expect(text(await h.key('n'))).toContain('卡 #02 / 21')
+  expect(text(await h.key('p'))).toContain('卡 #01 / 21')
   await h.close()
 })
 
 test('pending r2: 120x30 fallback shows the 21-card range and bounded card-count hints at both ends', async ($, on) => {
+  // 已改為雙欄：9 列 fallback 雙欄左欄顯示 2 張卡與雙端張數提示（↓ 下面還有 19 張 / ↑ 上面還有 19 張）
   const h = await host($, on)
   let screen = text(await h.draw())
-  expect(screen).toContain('第 1 到 1 張，共 21 張')
-  expect(screen).toContain('↓ 還有 20 張')
+  expect(screen).toContain('清單 (21)')
+  expect(screen).toContain('卡 #01 / 21')
+  expect(screen).toContain('▸ 01 Card 1')
+  expect(screen).toContain('  02 Card 2')
+  expect(screen).toContain('↓ 下面還有 19 張')
   expect(screen).not.toContain('另有')
   for (let i = 0; i < 20; i++) screen = text(await h.key('n'))
-  expect(screen).toContain('第 21 到 21 張，共 21 張')
-  expect(screen).toContain('↑ 還有 20 張')
+  expect(screen).toContain('卡 #21 / 21')
+  expect(screen).toContain('  20 Card 20')
+  expect(screen).toContain('▸ 21 Card 21')
+  expect(screen).toContain('↑ 上面還有 19 張')
   expect(screen).not.toContain('另有')
   expect(screen).not.toContain('1 2 3 4 5 6 7 8 9 10')
   await h.close()
 })
 
 test('pending r2: fallback PgDn/PgUp change detail offset, reach the end and keep actions at the bottom', async ($, on) => {
+  // 已改為雙欄：9 列 fallback 右欄每頁 2 行（↑ 上面還有 2 行），卡號表頭為 卡 #01 / 21
   const h = await host($, on)
   const footer = tree => (tree.children[0].children.slice(-2)).map(text)
   const initial = await h.draw()
@@ -84,13 +92,13 @@ test('pending r2: fallback PgDn/PgUp change detail offset, reach the end and kee
   await page(9)
   let tree = await h.draw()
   expect(text(tree)).not.toBe(first)
-  expect(text(tree)).toContain('↑ 上面還有 1 行')
+  expect(text(tree)).toContain('↑ 上面還有 2 行')
   const seen = [text(tree)]
   for (let i = 0; i < 100; i++) {
     await page(9)
     tree = await h.draw()
     expect(footer(tree)).toEqual(fixed)
-    expect(text(tree)).toContain('目前第 1 張')
+    expect(text(tree)).toContain('卡 #01 / 21')
     seen.push(text(tree))
   }
   expect(seen.join('\n')).toContain('MOUNTED-END')
@@ -104,45 +112,53 @@ test('pending r2: fallback PgDn/PgUp change detail offset, reach the end and kee
 })
 
 test('pending r2: a fallback wheel scrolls current detail without moving the card queue', async ($, on) => {
+  // 已改為雙欄：滾輪捲右欄詳情，左欄佇列與游標停在卡 #01 / 21
   const h = await host($, on)
   const first = text(await h.draw())
   await $.ui.scroll({ component: 'AbovePrompt', requestId: 'above-prompt', by: 3, offset: 0, bodyRows: 9, contentRows: 9, pointer: { x: 70, y: 18 }, origin: { kind: 'person' } })
   const after = text(await h.draw())
   expect(after).not.toBe(first)
-  expect(after).toContain('第 1 到 1 張，共 21 張')
-  expect(after).toContain('目前第 1 張')
+  expect(after).toContain('▸ 01 Card 1')
+  expect(after).toContain('↓ 下面還有 19 張')
+  expect(after).toContain('卡 #01 / 21')
+  expect(after).toContain('↑ 上面還有 2 行')
   await h.close()
 })
 
 
 test('pending r2: fallback arrow focus steps scroll the current card instead of selecting another', async ($, on) => {
+  // 已改為雙欄：方向鍵焦點步進捲右欄詳情 1 行，卡號停在 卡 #01 / 21
   const h = await host($, on)
   const before = text(await h.draw())
   await $.ui.focus({ component: 'AbovePrompt', requestId: 'above-prompt', element: 'tab:dispatch', origin: { kind: 'person' } })
   const after = text(await h.draw())
   expect(after).not.toBe(before)
-  expect(after).toContain('目前第 1 張')
+  expect(after).toContain('卡 #01 / 21')
   expect(after).toContain('↑ 上面還有 1 行')
   await h.close()
 })
 
 
 test('pending r2: the ten-row host budget captured at 120x30 shows two cards and nineteen hidden', async ($, on) => {
+  // 已改為雙欄：10 列預算在雙欄下左欄可顯示 3 張卡、其餘 18 張隱藏（雙端皆有界提示）
   const h = await host($, on, 10)
   let screen = text(await h.draw())
-  expect(screen).toContain('第 1 到 2 張，共 21 張')
-  expect(screen).toContain('↓ 還有 19 張')
+  expect(screen).toContain('▸ 01 Card 1')
+  expect(screen).toContain('  03 Card 3')
+  expect(screen).toContain('↓ 下面還有 18 張')
   for (let i = 0; i < 20; i++) screen = text(await h.key('n'))
-  expect(screen).toContain('第 20 到 21 張，共 21 張')
-  expect(screen).toContain('↑ 還有 19 張')
+  expect(screen).toContain('  19 Card 19')
+  expect(screen).toContain('▸ 21 Card 21')
+  expect(screen).toContain('↑ 上面還有 18 張')
   expect(screen).not.toContain('另有')
   await h.close()
 })
 
 test('pending r2: arrow focus on a summary cannot undo the card selected by n', async ($, on) => {
+  // 已改為雙欄：n 切到卡 #02 / 21 後，card:0 焦點事件不得把游標拉回
   const h = await host($, on, 10)
-  expect(text(await h.key('n'))).toContain('目前第 2 張')
+  expect(text(await h.key('n'))).toContain('卡 #02 / 21')
   await $.ui.focus({ component: 'AbovePrompt', requestId: 'above-prompt', element: 'card:0', origin: { kind: 'person' } })
-  expect(text(await h.draw())).toContain('目前第 2 張')
+  expect(text(await h.draw())).toContain('卡 #02 / 21')
   await h.close()
 })

@@ -29,8 +29,9 @@ const flat = (n: Node): string => {
 const live = { state: 'ok', text: 'x', header: 'x', band: { kind: 'idle', verdict: '', reason: null, project: 'x', elapsed: '1m', phase: '', slots: [] }, pending: [], project_key: null, root_run_id: null, link: null, rows: null, gates: null, sections: null, review: null, published_at: null, watcher_note: null, session_as_of: null, host_as_of: null, detail: { now_ms: 1 } } as never
 
 function framed() {
+  // 已改為雙欄：v74Box 內框扣 4 欄，外框 120 欄（內框 116 >= 100）才進雙欄左欄 card:N 清單
   const shown = PAGES.map(p => ({ ...p, framed: true as const }))
-  return walk(Pane(EL as never, live, 'decide', () => {}, t, 100, () => {}, new Set(), () => {}, new Set(), null, null, null, null, null, {
+  return walk(Pane(EL as never, live, 'decide', () => {}, t, 120, () => {}, new Set(), () => {}, new Set(), null, null, null, null, null, {
     pages: shown, pageId: 'decide', console: null, nowMs: 1, rows: 24, v74Box: true,
     v74: { pm: null, pmFetchedMs: null, decide: cards, todo: null, nav: { cursor: 0, picks: {}, notes: {}, noteMode: false } },
     decide: { ...NO_NAV },

@@ -733,9 +733,9 @@ function renderBoxC(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
   return { body: padded, actions }
 }
 function padRowTo(row: Row, width: number): Row {
-  const w = widthOf(row)
-  if (w >= width) return truncateSegs(row, width)
-  return [...row, seg(' '.repeat(width - w))]
+  const cut = widthOf(row) > width ? truncateSegs(row, width) : row
+  const w = widthOf(cut)
+  return w >= width ? cut : [...cut, seg(' '.repeat(width - w))]
 }
 
 function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: number, actions: Row[]): { body: Row[]; actions: Row[] } {
@@ -827,52 +827,65 @@ function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
   const headRow: Row = [...leftHead, dimSeg(' ' + GLYPHS.structure.bandSep + ' '), ...rightHead]
   const sepRow: Row = [dimSeg(GLYPHS.structure.rule.repeat(leftW + 3 + rightW))]
 
-  // Left pane with independent scroll + scrollMargin = 2
+  // Left pane with independent scroll + scrollMargin = 2.
+  // Selected card is plain text (not a Button) so host Down/Up is not eaten as cursor-at-self (r7); non-selected cards carry card:N.
+  const renderLeftRow = (item: DecideCard, idx: number): Row => {
+    const isCur = idx === cursor
+    const p = nav.picks[item.id]
+    const hasRec = item.options.some(o => o.recommended)
+    const mark = isCur ? GLYPHS.structure.folded + ' ' : '  '
+    const num = String(idx + 1).padStart(2, '0') + ' '
+    const suffix = (hasRec ? ' ' + GLYPHS.structure.recommend : '') + (p !== undefined ? ' ' + GLYPHS.structure.answer + letterOf(p) : ' ' + GLYPHS.state.pending)
+    const titleRoom = Math.max(4, leftW - displayWidth(mark + num + suffix))
+    const title = truncateToWidth(item.title, titleRoom)
+    const pad = ' '.repeat(Math.max(0, leftW - displayWidth(mark + num + title + suffix)))
+    const row: Row = isCur
+      ? [seg(mark + num + title, { color: PALETTE.here, here: true }), seg(pad + suffix, { color: PALETTE.here })]
+      : [seg(mark + num + title, { press: 'card:' + idx }), dimSeg(pad + suffix)]
+    return padRowTo(row, leftW)
+  }
+
   const leftShown: Row[] = []
+  const needListHint = cards.length > midRoom && midRoom >= 2
+  const listCap = needListHint ? midRoom - 1 : midRoom
+  let listOffset = 0
+  let listCount = Math.min(cards.length, listCap)
+  let listAbove = 0
+  let listBelow = 0
   if (ctx.pendingScroll !== undefined) {
     const listState = ctx.pendingScroll.list
     keyedGrow(listState, cards.map(x => x.id))
-    const margin = Math.min(2, Math.floor(midRoom / 3))
+    const margin = Math.min(2, Math.floor(listCap / 3))
     if (ctx.pendingScroll.cursor !== c.id) {
       if (cursor < listState.offset + margin) listState.offset = Math.max(0, cursor - margin)
-      else if (cursor >= listState.offset + midRoom - margin) listState.offset = Math.max(0, cursor - midRoom + margin + 1)
+      else if (cursor >= listState.offset + listCap - margin) listState.offset = Math.max(0, cursor - listCap + margin + 1)
       ctx.pendingScroll.cursor = c.id
     }
-    const listWin = fixedWindow(cards.length, midRoom, listState)
-    const slice = cards.slice(listWin.offset, listWin.offset + listWin.rows)
-    for (let k = 0; k < slice.length; k++) {
-      const idx = listWin.offset + k
-      const item = slice[k]
-      const isCur = idx === cursor
-      const p = nav.picks[item.id]
-      const hasRec = item.options.some(o => o.recommended)
-      const mark = isCur ? GLYPHS.structure.folded + ' ' : '  '
-      const num = String(idx + 1).padStart(2, '0') + ' '
-      const suffix = (hasRec ? ' ' + GLYPHS.structure.recommend : '') + (p !== undefined ? ' ' + GLYPHS.structure.answer + letterOf(p) : ' ' + GLYPHS.state.pending)
-      const titleRoom = Math.max(4, leftW - displayWidth(mark + num + suffix))
-      const title = truncateToWidth(item.title, titleRoom)
-      const pad = ' '.repeat(Math.max(0, leftW - displayWidth(mark + num + title + suffix)))
-      const row: Row = isCur
-        ? [seg(mark + num + title, { color: PALETTE.here, here: true, press: 'card:' + idx }), seg(pad + suffix, { color: PALETTE.here })]
-        : [seg(mark + num + title, { press: 'card:' + idx }), dimSeg(pad + suffix)]
-      leftShown.push(padRowTo(row, leftW))
-    }
-    if (listWin.hint) {
-      const hintStr = [
-        listWin.above > 0 ? GLYPHS.structure.up + ' 上面還有 ' + listWin.above + ' 張' : '',
-        listWin.below > 0 ? GLYPHS.structure.behind + ' 下面還有 ' + listWin.below + ' 張' : '',
-      ].filter(Boolean).join(' ')
-      leftShown.push(padRowTo([dimSeg(hintStr)], leftW))
-    }
+    const listWin = fixedWindow(cards.length, listCap, listState)
+    listOffset = listWin.offset
+    listCount = listWin.rows
+    listAbove = listWin.above
+    listBelow = listWin.below
   } else {
-    for (let idx = 0; idx < Math.min(cards.length, midRoom); idx++) {
-      const item = cards[idx]
-      const isCur = idx === cursor
-      const mark = isCur ? GLYPHS.structure.folded + ' ' : '  '
-      const num = String(idx + 1).padStart(2, '0') + ' '
-      const title = truncateToWidth(item.title, Math.max(4, leftW - 5))
-      leftShown.push(padRowTo([seg(mark + num + title, isCur ? { color: PALETTE.here, here: true } : {})], leftW))
-    }
+    const maxOff = Math.max(0, cards.length - listCap)
+    listOffset = Math.max(0, Math.min(maxOff, cursor < listCap ? 0 : cursor - listCap + 1))
+    listCount = Math.min(cards.length - listOffset, listCap)
+    listAbove = listOffset
+    listBelow = Math.max(0, cards.length - listOffset - listCount)
+  }
+  for (let k = 0; k < listCount; k++) {
+    leftShown.push(renderLeftRow(cards[listOffset + k], listOffset + k))
+  }
+  if (needListHint && (listAbove > 0 || listBelow > 0)) {
+    const hiddenPicked = cards.filter((x, idx) => (idx < listOffset || idx >= listOffset + listCount) && nav.picks[x.id] !== undefined).length
+    const pickedTail = hiddenPicked > 0 ? '（已選 ' + hiddenPicked + '）' : ''
+    const hintStr = listAbove > 0 && listBelow > 0
+      ? GLYPHS.structure.up + ' ' + listAbove + ' 張 ' + GLYPHS.structure.behind + ' ' + listBelow + ' 張' + pickedTail
+      : [
+          listAbove > 0 ? GLYPHS.structure.up + ' 上面還有 ' + listAbove + ' 張' : '',
+          listBelow > 0 ? GLYPHS.structure.behind + ' 下面還有 ' + listBelow + ' 張' : '',
+        ].filter(Boolean).join(' ') + pickedTail
+    leftShown.push(padRowTo([dimSeg(hintStr)], leftW))
   }
   while (leftShown.length < midRoom) leftShown.push(padRowTo([seg('')], leftW))
 

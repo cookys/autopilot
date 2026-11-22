@@ -101,6 +101,14 @@ runTest('hook name is the trailing [bracket] token of a real PreToolUse denial',
   assert.strictEqual(extractHookBlockName('PreToolUse:Bash hook error: no name', true), 'Bash');
 });
 
+runTest('hook name: leading name, trailing name, and fragments that are not names', () => {
+  const { extractHookBlockName } = require('./lib/wasted-turns-classify.js');
+  assert.strictEqual(extractHookBlockName('PreToolUse:Bash hook error: bash-launch-guard (bare-ls): a bare ls', true), 'bash-launch-guard');
+  assert.strictEqual(extractHookBlockName('PreToolUse:Agent hook error: subagent-budget: runaway ceiling', true), 'subagent-budget');
+  assert.strictEqual(extractHookBlockName('PreToolUse:Read hook error: 含個人資料 [masked: email x3] 直接讀', true), 'Read');
+  assert.strictEqual(extractHookBlockName('PreToolUse:Bash hook error: 說明 [f] [37] [WARN] [x]', true), 'Bash');
+});
+
 runTest('usage-only privacy: sentinel string never appears in stdout, stderr, or output JSON', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-priv-'));
   try {

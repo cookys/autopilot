@@ -158,6 +158,12 @@ ORIG_ARGS=("$@")
 # absent/rejected file = no-op → the cc-shim precondition fires normally). Loaded BEFORE any
 # env consumption. Contract stays AUTOPILOT_ENDPOINT_<NAME>_* env vars.
 _AUTHOR_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+# shellcheck source=lib/agent-event-emit.sh
+[ -r "$_AUTHOR_SELF_DIR/lib/agent-event-emit.sh" ] && . "$_AUTHOR_SELF_DIR/lib/agent-event-emit.sh" && {
+  agent_event_emit_init "author" "${RUNNER:-claude}" ""
+  agent_event_emit_accepted
+  agent_event_emit_register_exit_trap
+} || true
 # shellcheck source=lib/repo-identity.sh
 # Fail-open: a missing helper only degrades the manifest to repo_identity null (telemetry sidecar).
 [ -r "$_AUTHOR_SELF_DIR/lib/repo-identity.sh" ] && . "$_AUTHOR_SELF_DIR/lib/repo-identity.sh" || true

@@ -101,6 +101,12 @@ REPO_ROOT_DEFAULT="$(cd "$SCRIPT_DIR/.." && pwd)"
 . "$SCRIPT_DIR/lib/json-emit.sh"
 # shellcheck source=lib/endpoint-probe.sh
 . "$SCRIPT_DIR/lib/endpoint-probe.sh"
+# shellcheck source=lib/agent-event-emit.sh
+[ -r "$SCRIPT_DIR/lib/agent-event-emit.sh" ] && . "$SCRIPT_DIR/lib/agent-event-emit.sh" && {
+  agent_event_emit_init "consult" "claude" ""
+  agent_event_emit_accepted
+  agent_event_emit_register_exit_trap
+} || true
 
 QUESTION_FILE=""
 LADDER_RECEIPT=""

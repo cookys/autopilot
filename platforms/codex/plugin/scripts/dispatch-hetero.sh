@@ -393,6 +393,13 @@ set -uo pipefail
 if [ "${AUTOPILOT_TEST_ALLOW_HETERO_SEAMS:-}" != "1" ]; then
   unset HETERO_TEST_SYSTEMCTL_KILL_FAIL HETERO_TEST_NO_SETSID HETERO_TEST_NO_JOBCONTROL
 fi
+_HETERO_AEE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+# shellcheck source=lib/agent-event-emit.sh
+[ -r "$_HETERO_AEE_DIR/lib/agent-event-emit.sh" ] && . "$_HETERO_AEE_DIR/lib/agent-event-emit.sh" && {
+  agent_event_emit_init "implementer" "${RUNNER:-claude}" ""
+  agent_event_emit_accepted
+  agent_event_emit_register_exit_trap
+} || true
 
 # qualified default below (grok-4.7, codex gpt-6.1-terra, agy gemini-4-hydrogen-low, opencode beam-free, cursor/kimi
 # broker). Every other runner without a default dies "--model is required". Never default to an expensive seat.

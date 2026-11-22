@@ -42,6 +42,10 @@
 
 const crypto = require('crypto');
 const fs = require('fs');
+const { createEmitter } = require('./lib/agent-event-emit');
+const _aeeEmitter = createEmitter({ role: 'panel', runner: 'claude' });
+_aeeEmitter.accepted();
+process.on('exit', (code) => _aeeEmitter.ended(code));
 const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');

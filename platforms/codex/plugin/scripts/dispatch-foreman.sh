@@ -116,6 +116,12 @@ source "$SELF_DIR/lib/worktree-intent.sh"
 source "$SELF_DIR/lib/dispatch-detach.sh"
 # shellcheck source=lib/worker-containment.sh
 source "$SELF_DIR/lib/worker-containment.sh"
+# shellcheck source=lib/agent-event-emit.sh
+[ -r "$SELF_DIR/lib/agent-event-emit.sh" ] && . "$SELF_DIR/lib/agent-event-emit.sh" && {
+  agent_event_emit_init "foreman" "kimi" "${RUN_ID:-}"
+  agent_event_emit_accepted
+  agent_event_emit_register_exit_trap
+} || true
 
 BRIEF_FILE=""; PLAN_FILE=""; MODEL="kimi-code/k3"; BASE_REF=""; RUN_ID=""; RUN_DIR=""
 LEDGER=""; TOOL_CAP=""; TIMEOUT_SECS=3600; HANDOFF_TIMEOUT=300; POLL=1

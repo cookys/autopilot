@@ -70,6 +70,18 @@ test('(h) a raw local URL is allowed for a Chinese model', () => fixture((root) 
   const got = check({ runner: 'cc-shim', model: 'GLM-5.3', endpoint: 'http://localhost:9876/anthropic', cwd, files: [prompt], env: { AUTOPILOT_LOCAL_GATEWAY_HOSTS: 'localhost' } });
   assert.equal(got.allowed, true);
 }));
+test('(j) a restricted-looking endpoint name that resolves to a local gateway host is allowed (hangar on-prem GLM v4 review)', () => fixture((root) => {
+  const cwd = path.join(root, 'repo'); repo(cwd); const prompt = brief(cwd);
+  const got = check({ runner: 'cc-shim', model: 'GLM-5.3', endpoint: 'glm', cwd, files: [prompt], env: { ...endpointEnv('glm', 'http://10.1.2.3:9876/anthropic'), AUTOPILOT_LOCAL_GATEWAY_HOSTS: '10.1.2.3' } });
+  assert.equal(got.allowed, true);
+}));
+test('(k) the same endpoint name resolving to a private address not listed as local, or to the cloud, stays barred', () => fixture((root) => {
+  const cwd = path.join(root, 'repo'); repo(cwd); const prompt = brief(cwd);
+  const unlisted = check({ runner: 'cc-shim', model: 'GLM-5.3', endpoint: 'glm', cwd, files: [prompt], env: endpointEnv('glm', 'http://10.1.2.3:9876/anthropic') });
+  assert.equal(unlisted.allowed, false);
+  const cloud = check({ runner: 'cc-shim', model: 'GLM-5.3', endpoint: 'glm', cwd, files: [prompt], env: endpointEnv('glm', 'https://open.bigmodel.cn/api') });
+  assert.equal(cloud.allowed, false);
+}));
 test('(i) a raw Chinese cloud URL remains barred', () => fixture((root) => {
   const cwd = path.join(root, 'repo'); repo(cwd); const prompt = brief(cwd);
   const got = check({ runner: 'cc-shim', model: 'GLM-5.3', endpoint: 'https://api.bigmodel.cn/anthropic', cwd, files: [prompt], env: {} });

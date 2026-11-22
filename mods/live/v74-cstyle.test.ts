@@ -139,8 +139,8 @@ async function host($, on, opts: { cols?: number; rows?: number; store?: Map<str
 
 test('c-style: 209x50 shows question, all options, recommendation, count, 1-line bg without scrolling', async ($, on) => {
   const h = await host($, on, { cols: 209, rows: 50 })
-  const styleA = text(await h.draw())
-  expect(styleA).toContain('目前第 1 張')
+  const styleD = text(await h.draw())
+  expect(styleD).toContain('卡 #01 / 3')
 
   const styleC = text(await h.key('v'))
   expect(styleC).toContain('第 1 張，共 3 張')
@@ -157,8 +157,8 @@ test('c-style: 209x50 shows question, all options, recommendation, count, 1-line
 
 test('c-style: 120x30 shows question, all options, recommendation, count, 1-line bg without scrolling', async ($, on) => {
   const h = await host($, on, { cols: 120, rows: 30 })
-  const styleA = text(await h.draw())
-  expect(styleA).toContain('目前第 1 張')
+  const styleD = text(await h.draw())
+  expect(styleD).toContain('卡 #01 / 3')
 
   const styleC = text(await h.key('v'))
   expect(styleC).toContain('第 1 張，共 3 張')
@@ -173,17 +173,17 @@ test('c-style: 120x30 shows question, all options, recommendation, count, 1-line
   await h.close()
 })
 
-test('c-style: v toggles A<->C and store remembers across session restart', async ($, on) => {
+test('c-style: v toggles D<->C and store remembers across session restart', async ($, on) => {
   const store = new Map<string, unknown>()
   const h = await host($, on, { store })
-  expect(text(await h.draw())).toContain('目前第 1 張')
+  expect(text(await h.draw())).toContain('卡 #01 / 3')
   expect(text(await h.key('v'))).toContain('第 1 張，共 3 張')
   expect(store.get('decide.style')).toBe('C')
 
   await h.restart()
   expect(text(await h.draw())).toContain('第 1 張，共 3 張')
-  expect(text(await h.key('v'))).toContain('目前第 1 張')
-  expect(store.get('decide.style')).toBe('A')
+  expect(text(await h.key('v'))).toContain('卡 #01 / 3')
+  expect(store.get('decide.style')).toBe('D')
   await h.close()
 })
 

@@ -43,9 +43,6 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const { createEmitter } = require('./lib/agent-event-emit');
-const _aeeEmitter = createEmitter({ role: 'panel', runner: 'claude' });
-_aeeEmitter.accepted();
-process.on('exit', (code) => _aeeEmitter.ended(code));
 const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
@@ -864,6 +861,10 @@ async function runPanel(opts, outDir, promptPath) {
 
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
+  const panelRunner = (opts.seats && opts.seats[0] && opts.seats[0].runner) || 'claude';
+  const _aeeEmitter = createEmitter({ role: 'panel', runner: panelRunner });
+  _aeeEmitter.accepted();
+  process.on('exit', (code) => _aeeEmitter.ended(code));
   const promptText = readPromptOnce(opts.promptFile);
   const identifiers = loadFleetIdentifiers();
   scanInMemory(promptText, identifiers);

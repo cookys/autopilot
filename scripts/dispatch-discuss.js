@@ -79,9 +79,6 @@
 const fs = require('fs');
 const os = require('os');
 const { createEmitter } = require('./lib/agent-event-emit');
-const _aeeEmitter = createEmitter({ role: 'discuss', runner: 'claude' });
-_aeeEmitter.accepted();
-process.on('exit', (code) => _aeeEmitter.ended(code));
 const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
@@ -401,6 +398,10 @@ function main() {
     process.stderr.write('dispatch-discuss: discuss_dispatch is on but discuss_engine/discuss_runner is empty — resolver should have refused this; refusing here too\n');
     process.exit(3);
   }
+
+  const _aeeEmitter = createEmitter({ role: 'discuss', runner });
+  _aeeEmitter.accepted();
+  process.on('exit', (code) => _aeeEmitter.ended(code));
 
   const promptPath = buildPromptFile(bundle, seatAxis);
   const argv = ['--runner', runner, '--model', engine, '--prompt-file', promptPath, '--timeout', opts.timeout];

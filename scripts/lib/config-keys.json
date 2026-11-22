@@ -50,6 +50,17 @@
   },
   "entries": [
     {
+      "name": "AUTOPILOT_M6_CUTLINE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": ["scripts/lib/m6-cutline.js"],
+      "doc": null,
+      "relates": [],
+      "note": "Test-only override for the M6 cutline day."
+    },
+    {
       "kind": "env",
       "audience": "user",
       "doc": "docs/guide/settings-reference.md",

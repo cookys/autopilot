@@ -7,7 +7,7 @@
 | 工單（tasks） | fleet | `fleet task show <id>`、PM console 的任務清單 |
 | 巡查 / 看板 | fleet | `fleet pm status`(每個 project 一行);stuck/overdue 就 `fleet pm <project> status` 往下查 |
 | 訊息 | fleet | fleet 的 send / messaging(席位間通訊) |
-| 長工作等待(watch)、上傳(upload)、取件(fetch) | fleet | `fleet watch`(完整參數與用法見 fleet plugin 的 `fleet-usage` skill) |
+| 長工作等待(watch)、上傳(upload)、取件(fetch) | fleet | `fleet watch`(完整參數與用法見 repo `skills/fleet-usage`) |
 | session 內 gates(hooks) | autopilot | [hooks/README.md](../../hooks/README.md) |
 | skills(方法論流程) | autopilot | [docs/guide/skills.md](skills.md) |
 | 決策卡 | autopilot | `scripts/open-decision.js` |
@@ -16,7 +16,7 @@
 ## 遇到 X 去哪裡
 
 - **不知道哪些工單在跑、誰卡住** → `fleet pm status`;哪個 project 顯示 stuck/overdue,就用 `fleet pm <project> status` 往下查(project 名稱,或 task id / 8 字以上前綴)。
-- **工作超過 15 分鐘** → 背景起跑 + `fleet watch --pid <pid> --log <abs log> --task <fleet task id>`(session 內用 fleet MCP 的 `watch` tool,傳 pid、log 路徑與 task id),絕不 sleep、不輪詢。完整參數以 fleet plugin 的 `fleet-usage` skill 為準。
+- **工作超過 15 分鐘** → 背景起跑 + `fleet watch --pid <pid> --log <abs log> --task <fleet task id>`(session 內用 fleet MCP 的 `watch` tool,傳 pid、log 路徑與 task id),絕不 sleep、不輪詢。完整參數以 `skills/fleet-usage` 為準。
 - **要傳訊息、下工單、取回產物** → fleet 的 messaging / upload / fetch,不是 autopilot。
 - **派工被擋下** → 看下面的「派工被擋下時」。
 - **要發決策卡 / 問 PM** → `scripts/open-decision.js`。

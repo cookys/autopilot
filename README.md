@@ -11,7 +11,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
   <img src="https://img.shields.io/badge/version-3.0.0--alpha.6-E8A838?style=flat-square" alt="v3.0.0-alpha.6">
-  <img src="https://img.shields.io/badge/skills-31-4A90D9?style=flat-square" alt="31 Skills">
+  <img src="https://img.shields.io/badge/skills-32-4A90D9?style=flat-square" alt="32 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-61-6B8E6B?style=flat-square" alt="61 Hooks">
   <img src="https://img.shields.io/badge/dependencies-zero-A8B5A0?style=flat-square" alt="Zero Dependencies">
@@ -51,7 +51,7 @@ Claude Code is still the most complete host. Autopilot makes AI coding agents **
 - **Catches the "done" that isn't** — a no-stub/no-TODO scan, your tests, and a real code review, run in the quality gate before you merge (and in the optional pre-push hook above).
 - **Remembers, so your repo doesn't rot** — captures the lessons, tracks the project, tells you what to do next, and adapts to your repo from a single markdown file in `.claude/`.
 
-It ships first as a Claude Code plugin — **31 skills, 3 methodology agents, 61 hooks (41 default-on, 19 opt-in), zero dependencies** — and keeps the same methodology portable where other harnesses expose compatible skill, agent, or plugin surfaces. It works fully on its own, and also plays nicely with the [`superpowers`](docs/guide/coexistence.md) plugin if you have it.
+It ships first as a Claude Code plugin — **32 skills, 3 methodology agents, 61 hooks (41 default-on, 19 opt-in), zero dependencies** — and keeps the same methodology portable where other harnesses expose compatible skill, agent, or plugin surfaces. It works fully on its own, and also plays nicely with the [`superpowers`](docs/guide/coexistence.md) plugin if you have it.
 
 > This README was written by Claude and adversarially reviewed by GPT-5.5 and Gemini through Autopilot's own second-engine review flow.
 
@@ -114,7 +114,7 @@ The course-sized idea is simple: teach the agent the collaboration discipline on
 
 ## What It Does
 
-31 skills, grouped by what you're trying to do. Each one triggers from natural language — the **Try saying** lines are real triggers.
+32 skills, grouped by what you're trying to do. Each one triggers from natural language — the **Try saying** lines are real triggers.
 
 ### ✍️ Build code
 
@@ -189,7 +189,7 @@ Claude alone is enough. But point autopilot at a **second engine family** and it
 
 > **Try saying:** *"record this for next time"* · *"回顧這週"* · *"what's the highest priority?"*
 
-**→ Full catalog of all 31 skills, the three cognitive modes, and how they compose: [docs/guide/skills.md](docs/guide/skills.md).**
+**→ Full catalog of all 32 skills, the three cognitive modes, and how they compose: [docs/guide/skills.md](docs/guide/skills.md).**
 
 ### 🔗 Contact a persistent peer
 
@@ -199,7 +199,7 @@ Claude alone is enough. But point autopilot at a **second engine family** and it
 
 ## Install
 
-**Claude Code** (primary) — the two commands above. All 31 skills are available immediately as `autopilot:dev-flow`, `autopilot:survey`, etc.
+**Claude Code** (primary) — the two commands above. All 32 skills are available immediately as `autopilot:dev-flow`, `autopilot:survey`, etc.
 
 > **⚠️ Claude Code ≥ 2.1.233 + Claude 5-era models**: the task tools (`TaskCreate` family)
 > are gated **off** by default on Opus ≥ 4.8 / Sonnet ≥ 5 / Fable ≥ 5 — which silently
@@ -211,7 +211,7 @@ Claude alone is enough. But point autopilot at a **second engine family** and it
 
 | Harness | How to start | Supported today | Known limits |
 |---|---|---|---|
-| **Claude Code** | `/plugin marketplace add cookys/autopilot` then `/plugin install autopilot@autopilot` | Full plugin path: 31 skills, 3 methodology agents, 61 hooks | Primary host; Claude-specific hooks and slash behavior do not automatically transfer to other harnesses |
+| **Claude Code** | `/plugin marketplace add cookys/autopilot` then `/plugin install autopilot@autopilot` | Full plugin path: 32 skills, 3 methodology agents, 61 hooks | Primary host; Claude-specific hooks and slash behavior do not automatically transfer to other harnesses |
 | **Codex** | `.agents/skills/`, or `codex plugin add autopilot@autopilot-local` after adding `platforms/codex` as a marketplace | Skills, generated support payload, and one production `PostCompact` recovery hook (`manual\|auto`) | This is a Codex-native recovery boundary, not Claude hook parity; no Claude hook bundle, apps, or MCP servers are loaded. Subagent model routing via `spawn_agent` needs a user opt-in — see `platforms/codex/README.md` |
 | **OpenCode** | Open this repo with `.agents/skills/`; use `.opencode/opencode.json` for agents | Shared skills, methodology agent bodies, and an OpenCode plugin wrapper | Optional TypeScript deps are only needed when editing the wrapper; hook parity is platform-specific |
 | **Antigravity (`agy`)** | `./scripts/install-antigravity.sh` | Guarded `agy plugin validate` / install / list flow with export-then-install | Runtime hook firing is still unverified; install does not imply hook behavior parity |
@@ -224,7 +224,7 @@ The deep material, moved out of this page so it stays an onboarding tour:
 
 | Topic | Doc |
 |-------|-----|
-| **All 31 skills** + three modes + how they compose | [docs/guide/skills.md](docs/guide/skills.md) |
+| **All 32 skills** + three modes + how they compose | [docs/guide/skills.md](docs/guide/skills.md) |
 | **Superpowers coexistence** — three scenarios, migration | [docs/guide/coexistence.md](docs/guide/coexistence.md) |
 | **Per-project configuration** — the `.claude/` injection model | [docs/guide/configuration.md](docs/guide/configuration.md) |
 | **Installation & development** — every platform, dev mode | [docs/guide/installation.md](docs/guide/installation.md) |
@@ -232,6 +232,7 @@ The deep material, moved out of this page so it stays an onboarding tour:
 | **Architecture & design** — philosophy, methodology agents, credits | [docs/dev/architecture.md](docs/dev/architecture.md) |
 | **Review-only candidate review** — managed review of a range someone else wrote | [docs/guide/review-candidate.md](docs/guide/review-candidate.md) |
 | **fleet and autopilot** — who owns what: work orders, patrol (`fleet pm status`), watch vs in-session gates, skills, decision cards, dispatch rails | [docs/guide/fleet-and-autopilot.md](docs/guide/fleet-and-autopilot.md) |
+| **fleet usage by harness** — where each harness learns watch / upload / task_result after updates | [docs/guide/fleet-usage-by-harness.md](docs/guide/fleet-usage-by-harness.md) |
 | **Hooks** — 57 runtime-enforcement hooks (tiers in the doc) | [hooks/README.md](hooks/README.md) |
 | **Changelog** | [CHANGELOG.md](CHANGELOG.md) |
 

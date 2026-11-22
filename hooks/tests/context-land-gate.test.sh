@@ -151,7 +151,7 @@ chmod +x "$FAKE_FLEET"
 # (j1) ops seat -> exactly one dispatch to hangar, no operator relay
 reset; rm -f "$FLEET_LOG"; use_context 160000; fire >/dev/null; write_handoff
 out="$(FLEET_BIN="$FAKE_FLEET" FAKE_FLEET_LOG="$FLEET_LOG" FLEET_ADDRESS="cookys/openclaw/ops--claude" stop)"
-calls="$(wc -l < "$FLEET_LOG" 2>/dev/null || echo 0)"
+calls="$([ -f "$FLEET_LOG" ] && wc -l < "$FLEET_LOG" || echo 0)"
 [ "$calls" -eq 1 ] && ok "(j1) ops seat: exactly one fleet dispatch" || bad "(j1) expected 1 dispatch, got $calls"
 line="$(cat "$FLEET_LOG" 2>/dev/null || true)"
 has "$line" "cookys/openclaw/hangar--claude" && has "$line" "$HANDOFF" && has "$line" "$SID" && ok "(j1) dispatch targets hangar with handoff and sid" || bad "(j1) bad dispatch argv: $line"
@@ -160,13 +160,13 @@ has "$out" "01M80TESTTASK0000000000001" && ok "(j1) block reason includes task i
 
 # (j4) second Stop after the first -> no second dispatch
 out2="$(FLEET_BIN="$FAKE_FLEET" FAKE_FLEET_LOG="$FLEET_LOG" FLEET_ADDRESS="cookys/openclaw/ops--claude" stop)"
-calls2="$(wc -l < "$FLEET_LOG" 2>/dev/null || echo 0)"
+calls2="$([ -f "$FLEET_LOG" ] && wc -l < "$FLEET_LOG" || echo 0)"
 [ -z "$out2" ] && [ "$calls2" -eq 1 ] && ok "(j4) second Stop is silent and does not re-dispatch" || bad "(j4) out2=$out2 calls2=$calls2"
 
 # (j2) PM seat -> old operator message, zero dispatches
 reset; rm -f "$FLEET_LOG"; use_context 160000; fire >/dev/null; write_handoff
 out="$(FLEET_BIN="$FAKE_FLEET" FAKE_FLEET_LOG="$FLEET_LOG" FLEET_ADDRESS="cookys/aimax395/pm--claude" stop)"
-calls="$(wc -l < "$FLEET_LOG" 2>/dev/null || echo 0)"
+calls="$([ -f "$FLEET_LOG" ] && wc -l < "$FLEET_LOG" || echo 0)"
 [ "$calls" -eq 0 ] && has "$out" "read $HANDOFF 接續" && has "$out" "轉給操作員" && ok "(j2) PM seat keeps operator relay with zero dispatches" || bad "(j2) calls=$calls out=$out"
 
 # (j3) fake fleet exits 1 -> fallback operator message plus failure line

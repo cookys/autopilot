@@ -169,6 +169,8 @@ function fleetChannel(transcriptPath, messageId) {
 function courierReplyDeny(input) {
   if (!input || input.tool_name !== 'mcp__fleet__reply') return null;
   const toolInput = input.tool_input && typeof input.tool_input === 'object' ? input.tool_input : {};
+  // The courier's model-reply probe (message_id model-probe-*) is answered with reply by design; denying it makes the probe retry every few seconds and burn a model turn each time.
+  if (typeof toolInput.message_id === 'string' && toolInput.message_id.startsWith('model-probe-')) return null;
   const hit = fleetChannel(input.transcript_path, toolInput.message_id);
   if (!hit || !hit.from.endsWith('/courier')) return null;
   const id = BODY_TASK_ID_RE.exec(hit.body);

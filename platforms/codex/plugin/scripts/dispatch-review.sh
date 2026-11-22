@@ -1888,6 +1888,16 @@ DERIVED="$(printf 'autopilot-review-v1:%s' "$NONCE" | sha256sum | awk '{print su
 BEGIN="<<<AUTOPILOT-REVIEW-${DERIVED}>>>"
 END="<<<AUTOPILOT-END-${DERIVED}>>>"
 {
+  if [ "$RAW_ANSWER" = 1 ]; then
+    [ -z "$SPEC_FILE" ] || cat "$SPEC_FILE"
+    cat <<'EOF'
+
+Diff under review:
+```
+EOF
+    cat "$DIFF_FILE"
+    printf '\n```\n'
+  else
   cat <<EOF
 You are a code reviewer. Review ONLY the diff for correctness, security, completeness. Do NOT edit/create files or projects, or run commands. Output ONLY a wrapped block (no other text/fences), beginning with:
 ${BEGIN}
@@ -1988,6 +1998,7 @@ Diff under review:
 EOF
   cat "$DIFF_FILE"
   printf '\n```\n%s\n' "$END"
+  fi
 } > "$PROMPT_FILE"
 
 # Heads-up on stderr ONLY (never stdout — that carries the JSON contract): the review call

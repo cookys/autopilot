@@ -2033,3 +2033,48 @@ test('lazy function require does not select an unrelated suite', () => {
     assert.ok(!out.suites.includes('hooks/tests/lazy-user.test.sh'));
   } finally { r.cleanup(); }
 });
+
+test('edge reasons retain overlapping producers and explain per changed file', () => {
+  const r = makeRepo({
+    'scripts/target.js': 'module.exports = 1;\n',
+    'scripts/helper.sh': 'echo helper\n',
+    'scripts/require-user.test.js': "require('./target.js');\nconst files = 'scripts/*.js';\n",
+    'hooks/tests/source-user.test.sh': 'source "$ROOT/scripts/helper.sh"\n',
+    'hooks/tests/weak-user.test.sh': 'echo target.js\n',
+    'hooks/tests/path-user.test.sh': 'echo scripts/target.js\n',
+  });
+  try {
+    const { select, diskTree, reasonsFor } = require('./affected-suites.js');
+    const selected = select(['scripts/target.js', 'scripts/helper.sh'], diskTree(r.dir));
+    assert.deepStrictEqual(reasonsFor('scripts/require-user.test.js', 'scripts/target.js', selected), ['glob', 'require_top', 'weak_mention']);
+    assert.deepStrictEqual(reasonsFor('hooks/tests/source-user.test.sh', 'scripts/helper.sh', selected), ['path_string', 'source', 'weak_mention']);
+    assert.deepStrictEqual(reasonsFor('hooks/tests/weak-user.test.sh', 'scripts/target.js', selected), ['weak_mention']);
+    assert.deepStrictEqual(reasonsFor('hooks/tests/path-user.test.sh', 'scripts/target.js', selected), ['path_string', 'weak_mention']);
+    const explained = spawnSync('node', [SEL, '--root', r.dir, '--files', 'scripts/target.js', '--explain'], { encoding: 'utf8' });
+    assert.strictEqual(explained.status, 0, explained.stderr);
+    assert.match(explained.stdout, /scripts\/require-user\.test\.js: scripts\/target\.js: glob, require_top, weak_mention/);
+  } finally { r.cleanup(); }
+});
+
+test('real-tree golden: suite output matches origin/develop for twelve file sets', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'affected-suites-golden-'));
+  try {
+    const original = path.join(dir, 'affected-suites.js');
+    const source = execFileSync('git', ['show', 'origin/develop:scripts/affected-suites.js'], { cwd: REAL_ROOT, encoding: 'utf8' });
+    fs.writeFileSync(original, source.replace("require('./lib/repo-layout.js')", `require(${JSON.stringify(path.join(REAL_ROOT, 'scripts/lib/repo-layout.js'))})`));
+    const inputs = [
+      ['scripts/lib/jsonl-store.js'], ['scripts/project-record.js'], ['hooks/tests/lib.sh'],
+      ['skills/dev-flow/SKILL.md'], ['docs/dev/architecture.md'], ['scripts/lib/config-keys.json'],
+      ['scripts/affected-suites.js'], ['hooks/hooks.json'], ['scripts/lib/repo-layout.js'],
+      ['scripts/validate.sh'], ['hooks/tests/check-config-docs.test.sh'],
+      ['scripts/lib/jsonl-store.js', 'scripts/project-record.js'],
+    ];
+    for (const files of inputs) {
+      const run = (bin) => spawnSync('node', [bin, '--root', REAL_ROOT, '--files', ...files], { encoding: 'utf8', maxBuffer: 1 << 24 });
+      const before = run(original), after = run(SEL);
+      assert.strictEqual(before.status, 0, `${files}: ${before.stderr}`);
+      assert.strictEqual(after.status, 0, `${files}: ${after.stderr}`);
+      assert.strictEqual(after.stdout, before.stdout, files.join(', '));
+    }
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

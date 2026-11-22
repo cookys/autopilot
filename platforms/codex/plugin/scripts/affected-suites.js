@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 'use strict';
+// Edge reasons: require_top, source, weak_mention, path_string, glob, directory,
+// whole_tree, eval_pack, same_name, self, foreman_exam, mods_tree. Strong: require_top, source.
 // affected-suites.js — select the test files a diff can affect (BL-0001: the quality gate's test step runs it first).
 //
 // Usage:
@@ -495,10 +497,10 @@ function blankFunctionRequires(text, file, imported) {
   return out + text.slice(last);
 }
 function mentions(text) {
-  const exts = new Set(), bares = new Set(), slashBares = new Set(), globs = [], strong = new Set(), segs = new Set(), paths = new Set();
+  const exts = new Set(), bares = new Set(), slashBares = new Set(), globs = [], strong = new Set(), requires = new Set(), sources = new Set(), segs = new Set(), paths = new Set();
   for (const m of text.matchAll(RE_SEG)) segs.add(m[1]);
-  for (const m of text.matchAll(RE_REQ)) if (/^[.\/]/.test(m[1])) strong.add(base(m[1]).replace(/\.(js|mjs|cjs|json)$/, ''));
-  for (const m of text.matchAll(RE_SRC)) strong.add(base(m[1]).replace(/\.(sh|bash|zsh)$/, ''));
+  for (const m of text.matchAll(RE_REQ)) if (/^[.\/]/.test(m[1])) { const stem = base(m[1]).replace(/\.(js|mjs|cjs|json)$/, ''); strong.add(stem); requires.add(stem); }
+  for (const m of text.matchAll(RE_SRC)) { const stem = base(m[1]).replace(/\.(sh|bash|zsh)$/, ''); strong.add(stem); sources.add(stem); }
   for (const m of text.matchAll(RE_EXT)) exts.add(m[0]);
   for (const m of text.matchAll(RE_BARE)) {
     if (m[0].startsWith('/')) {
@@ -508,7 +510,7 @@ function mentions(text) {
   }
   for (const m of text.matchAll(RE_GLOB)) globs.push({ dir: globDir(m[1]), ext: m[2] || '' });
   for (const m of text.matchAll(RE_MIRROR_PATH)) paths.add(m[0]);
-  return { exts, bares, slashBares, globs, strong, segs, paths };
+  return { exts, bares, slashBares, globs, strong, requires, sources, segs, paths };
 }
 
 const GENERIC_DIRS = new Set(['fixtures', 'fixture', 'golden', 'data', 'lib', 'tests', 'scripts', 'hooks', 'src', 'bin', 'docs', 'evals', 'platforms', 'skills', 'agents', 'references', 'schemas', 'profiles', 'mods', 'plugin', 'codex', 'node_modules',
@@ -619,7 +621,7 @@ function buildGraph(tree) {
     stripped.set(f, text);
     for (const stem of mentions(text).strong) imported.add(stem);
   }
-  for (const [f, text] of stripped) refs.set(f, mentions(blankFunctionRequires(text, f, imported)));
+  for (const [f, text] of stripped) refs.set(f, { ...mentions(blankFunctionRequires(text, f, imported)), text });
   const byExt = new Map(), byBare = new Map(), bySlashBare = new Map(), bySeg = new Map(), byPath = new Map(); // token -> Set(referrer)
   const add = (m, k, f) => { if (!m.has(k)) m.set(k, new Set()); m.get(k).add(f); };
   for (const [f, r] of refs) {
@@ -653,37 +655,44 @@ function buildGraph(tree) {
   return { refs, byExt, byBare, bySlashBare, bySeg, byPath, globRefs, genericStems, sourcedHelpers };
 }
 
-// -> Map(referrer -> 'strong'|'weak')
+// -> Map(referrer -> Set(reason)); retain insertion order for the selector's walk.
 function referrersOf(graph, p) {
   const out = new Map();
+  const add = (f, reason) => { if (!out.has(f)) out.set(f, new Set()); out.get(f).add(reason); };
   // A mirror is a byte copy. Match the full path only; the source file's basename is a different seed.
   if (MIRROR.test(p)) {
-    for (const f of graph.byPath.get(p) || []) out.set(f, 'weak');
+    for (const f of graph.byPath.get(p) || []) add(f, 'path_string');
     out.delete(p);
     return out;
   }
   const bareP = base(p).replace(/\.[^.]+$/, '');
   const kind = (f) => (graph.refs.get(f).strong.has(bareP) ? 'strong' : 'weak');
+  const addMention = (f) => {
+    const refs = graph.refs.get(f);
+    if (kind(f) === 'strong' && refs.requires.has(bareP)) add(f, 'require_top');
+    if (kind(f) === 'strong' && refs.sources.has(bareP)) add(f, 'source');
+    add(f, 'weak_mention');
+    if (refs.text.includes(p)) add(f, 'path_string');
+  };
   const b = base(p);
   for (const f of graph.byExt.get(b) || []) {
     // Rule 11: a shared test helper (hooks/tests/lib.sh) naming a prose file (cp README.md ...) serves a few of
     // the suites that source it, not all of them. Prose is a seed only; that mention makes no edge.
     if (/^(md|txt)$/.test(extOf(p)) && isSharedTestHelper(f)) continue;
     if (graph.sourcedHelpers.has(f) && kind(f) === 'weak') continue;
-    out.set(f, kind(f));
+    addMention(f);
   }
   if (isCode(p)) {
     const bare = b.replace(/\.[^.]+$/, '');
     const jsTarget = extOf(p) === 'js' || extOf(p) === 'mjs' || extOf(p) === 'cjs';
     const generic = jsTarget && graph.genericStems.has(bare);
     for (const f of graph.byBare.get(bare) || []) {
-      if (out.has(f)) continue;
       const k = kind(f);
       if (graph.sourcedHelpers.has(f) && k === 'weak') continue;
       if (generic && k !== 'strong') continue;
-      out.set(f, k);
+      addMention(f);
     }
-    for (const f of graph.bySlashBare.get(bare) || []) if (!out.has(f) && !(graph.sourcedHelpers.has(f) && kind(f) === 'weak')) out.set(f, kind(f));
+    for (const f of graph.bySlashBare.get(bare) || []) if (!(graph.sourcedHelpers.has(f) && kind(f) === 'weak')) addMention(f);
   }
   if (!isCode(p)) {
     // data file: any text naming one of its ancestor directories (except generic top-level ones) refers to it
@@ -691,19 +700,21 @@ function referrersOf(graph, p) {
     for (const c of parts) {
       if (GENERIC_DIRS.has(c)) continue;
       if (underProseRoot(p) && isProse(p) && PROSE_DIR_SKIP.has(c)) continue;
-      for (const f of graph.bySeg.get(c) || []) if (!out.has(f)) out.set(f, 'weak');
+      for (const f of graph.bySeg.get(c) || []) add(f, 'directory');
     }
   }
   for (const g of graph.globRefs) {
-    if (!(g.dir && p.slice(0, Math.max(p.lastIndexOf('/'), 0)) === g.dir && (!g.ext || p.endsWith(g.ext)) && !out.has(g.file))) continue;
+    if (!(g.dir && p.slice(0, Math.max(p.lastIndexOf('/'), 0)) === g.dir && (!g.ext || p.endsWith(g.ext)))) continue;
     // docs/plans/* names the category, not one plan. A glob with an extension reads content and stays.
     // A glob that also names a specific directory stays. Category names apply only under docs/.
     if (underProseRoot(p) && isProse(p) && !g.ext && g.dir.split('/').every((c) => !c || GENERIC_DIRS.has(c) || PROSE_DIR_SKIP.has(c))) continue;
-    out.set(g.file, 'weak');
+    add(g.file, 'glob');
   }
   out.delete(p);
   return out;
 }
+
+const edgeKind = (reasons) => reasons.has('require_top') || reasons.has('source') ? 'strong' : 'weak';
 
 // Same bounded reverse walk the selector uses. Cost = weak (mere mention) hops; strong
 // (require/source) hops are free. One parent per node (first accepted cost wins) — that parent
@@ -718,7 +729,8 @@ function walkParents(seeds, graph, maxWeak) {
     while (q.length) {
       const cur = q.shift();
       if (!isCode(cur) && parent.get(cur) !== null) continue; // only code files propagate
-      for (const [r, k] of referrersOf(graph, cur)) {
+      for (const [r, reasons] of referrersOf(graph, cur)) {
+        const k = edgeKind(reasons);
         const nc = w + (k === 'weak' ? 1 : 0);
         if (nc > maxWeak || (cost.has(r) && cost.get(r) <= nc)) continue;
         cost.set(r, nc); parent.set(r, cur);
@@ -741,7 +753,8 @@ function walkStrong(seeds, graph, maxHops) {
     const next = [];
     for (const cur of level) {
       if (!isCode(cur) && parent.get(cur) !== null) continue;
-      for (const [r, k] of referrersOf(graph, cur)) {
+      for (const [r, reasons] of referrersOf(graph, cur)) {
+        const k = edgeKind(reasons);
         if (k !== 'strong' || dist.has(r)) continue;
         dist.set(r, h + 1);
         parent.set(r, cur);
@@ -1022,8 +1035,33 @@ function select(changed, headTree, maxWeak = DEFAULT_MAX_WEAK) {
     ? [...present].filter((p) => /^mods\/tux\/[^/]+\.test\.js$/.test(p)) : [];
   const all = [...new Set([...suites, ...alwaysRun, ...packSuites, ...forcedFiltered, ...tuxSuites])].sort();
   Object.defineProperty(chains, '__hops', { value: shortestHops(changed, graph), enumerable: false });
-  return { suites: all, alwaysRun, chains, fullReasons, unreferenced, graphFiles: graph.refs.size };
+  const result = { suites: all, alwaysRun, chains, fullReasons, unreferenced, graphFiles: graph.refs.size };
+  const walks = new Map();
+  Object.defineProperty(result, 'reasonsFor', { value: (suite, file) => {
+    if (!all.includes(suite) || !changed.includes(file)) return [];
+    const reasons = new Set();
+    if (!walks.has(file)) walks.set(file, walkParents([file], graph, maxWeak));
+    const parents = walks.get(file);
+    if (parents.has(suite)) {
+      let current = suite;
+      if (current === file) reasons.add('self');
+      while (parents.get(current) != null) {
+        const next = parents.get(current);
+        for (const reason of referrersOf(graph, next).get(current) || []) reasons.add(reason);
+        current = next;
+      }
+    }
+    if (alwaysRun.includes(suite) && !isProse(file)) reasons.add('whole_tree');
+    if (packed.get(suite)?.has(file)) reasons.add('eval_pack');
+    if (forcedSuites([file], present).has(suite)) reasons.add(suite === file ? 'self' : 'same_name');
+    if (foremanExamSuites.includes(suite) && (file.startsWith('evals/foreman-') || /^scripts\/engine-qualify/.test(file))) reasons.add('foreman_exam');
+    if (tuxSuites.includes(suite) && file.startsWith('mods/')) reasons.add('mods_tree');
+    return [...reasons].sort();
+  }});
+  return result;
 }
+
+function reasonsFor(suite, changedFile, selection) { return selection.reasonsFor(suite, changedFile); }
 
 function allSuites(tree, release = false) { return tree.files.filter((p) => isDiscoveredSuite(p) && !isEvalSuite(p) && (release || !isSkillOnOffSuite(p))).sort(); }
 
@@ -1650,6 +1688,7 @@ function parseArgs(argv) {
     else if (x === '--root') a.root = argv[++i];
     else if (x === '--allow-missing') a.allowMissing = true;
     else if (x === '--json') a.json = true;
+    else if (x === '--explain') a.explain = true;
     else if (x === '--max-weak') a.maxWeak = Number(argv[++i]);
     else if (x === '--list-all') a.listAll = true;
     else if (x === '--release') a.release = true;
@@ -1892,6 +1931,15 @@ async function main(argv) {
       }
       return code;
     }
+    if (a.explain && doc.mode === 'selective') {
+      if (!tree) tree = gitTree(root, doc.head);
+      const selection = select(doc.changed, tree, maxWeak);
+      for (const suite of doc.suites) for (const file of doc.changed) {
+        const reasons = reasonsFor(suite, file, selection);
+        if (reasons.length) process.stdout.write(`${suite}: ${file}: ${reasons.join(', ')}\n`);
+      }
+      return 0;
+    }
     const extra = doc.extra_runners.map((x) => x + '\n').join('');
     const full = doc.mode === 'full';
     process.stdout.write(a.json ? JSON.stringify(doc, null, 2) + '\n' : (full ? 'FULL\n' : doc.suites.join('\n') + (doc.suites.length ? '\n' : '')) + extra);
@@ -1902,5 +1950,5 @@ async function main(argv) {
   }
 }
 
-module.exports = { ancestorsSafe, extraRunners, select, mentions, buildGraph, isSuite, isProse, entryCommand, computeDoc, FULL_TRIGGERS, gitTree, diskTree };
+module.exports = { reasonsFor, ancestorsSafe, extraRunners, select, mentions, buildGraph, isSuite, isProse, entryCommand, computeDoc, FULL_TRIGGERS, gitTree, diskTree };
 if (require.main === module) main(process.argv.slice(2)).then((c) => { process.exitCode = c; });

@@ -2589,6 +2589,30 @@
       "note": "Hours of recent on-disk activity that keep a clean worktree out of every removal path (default 24); 0 turns it off for fixtures that age nothing."
     },
     {
+      "name": "AUTOPILOT_AGY_FILE_FALLBACK",
+      "kind": "env",
+      "audience": "user",
+      "class": "test_seam",
+      "default": "on",
+      "readers": ["scripts/lib/agy-stream-json.js"],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Enables the agy prompt file fallback unless set to 0, false, no, or off.",
+      "note": "Writes an over-ceiling prompt to a mode-0600 dot file in the cwd and sends a short pointer."
+    },
+    {
+      "name": "AUTOPILOT_AGY_FILE_MAX_BYTES",
+      "kind": "env",
+      "audience": "user",
+      "class": "test_seam",
+      "default": "2097152",
+      "readers": ["scripts/lib/agy-stream-json.js"],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Caps the agy prompt fallback file at 2 MiB by default.",
+      "note": "Caps the size of the agy prompt fallback file in bytes."
+    },
+    {
       "name": "AUTOPILOT_AGY_STDIN_MAX_BYTES",
       "kind": "env",
       "audience": "internal",

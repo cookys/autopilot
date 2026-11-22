@@ -14,6 +14,7 @@
 //   decision supersede <old> <same flags>                adr new --title T --body-file F|- [--status active|open] [--adr-dir D]
 //   adr supersede <old> <same flags>                     lesson new --title T --category build|debug|arch|env|api --body-file F|-
 //   handoff new   --title T --area PROJECT --body-file F|- [--decision-file F]... [--lesson-file F]...
+//   plan upsert --path P --status S [--milestone M] [--owner O] [--frozen-sha SHA]
 //   handoff close <id>                                   where                         flush [--drop <spool key>]
 //
 // A lesson body has "## Context", "## Problem", "## Solution" sections (optional "## Failed attempts", "## Related").
@@ -39,6 +40,7 @@ const { spawnSync } = require('child_process');
 const hippo = require('./lib/hippo.js');
 const rules = require('./lib/backlog-rules.js');
 const rf = require('./lib/record-files.js');
+const { guardedStoreWrite } = require('./lib/m6-cutline.js');
 
 const { HippoError } = hippo;
 const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
@@ -81,10 +83,11 @@ const SUBS = {
   'lesson new': { f: { title: 'v', category: 'v', 'body-file': 'v' }, pos: [0, 0] },
   'handoff new': { f: { title: 'v', area: 'v', origin: 'v', 'body-file': 'v', 'decision-file': '+', 'lesson-file': '+' }, pos: [0, 0] },
   'handoff close': { f: {}, pos: [1, 1] },
+  'plan upsert': { f: { path: 'v', status: 'v', milestone: 'v', owner: 'v', 'frozen-sha': 'v' }, pos: [0, 0] },
   where: { f: {}, pos: [0, 0] },
   flush: { f: { drop: 'v' }, pos: [0, 0] },
 };
-const TWO_WORD = new Set(['backlog', 'decision', 'adr', 'lesson', 'handoff']);
+const TWO_WORD = new Set(['backlog', 'decision', 'adr', 'lesson', 'handoff', 'plan']);
 
 function parseArgs(argv) {
   const g = { json: false };
@@ -116,7 +119,7 @@ function parseArgs(argv) {
       }
     } else pos.push(t);
   }
-  if (!cmd) throw usage('usage: project-record.js [--target <dir>] [--key <k>] [--json] backlog|decision|adr|lesson|handoff <new|...> | where | flush');
+  if (!cmd) throw usage('usage: project-record.js [--target <dir>] [--key <k>] [--json] backlog|decision|adr|lesson|handoff|plan <new|...> | where | flush');
   if (pos.length < spec.pos[0] || pos.length > spec.pos[1]) throw usage(`${cmd}: expected ${spec.pos[0] === spec.pos[1] ? spec.pos[0] : `${spec.pos[0]}..${spec.pos[1]}`} positional argument(s), got ${pos.length}`);
   if (g.key !== undefined && !KEY_RE.test(g.key)) throw usage('--key must be 16 lowercase hex characters');
   return { cmd, g, f, pos };
@@ -960,8 +963,53 @@ function hippoMode(g, cmd, handler, p, det) {
   return 0;
 }
 
+function planUpsert(parsed) {
+  const { g, f } = parsed;
+  const rel = oneLine(f.path, 'path');
+  if (path.isAbsolute(rel) || rel !== path.posix.normalize(rel) || rel === '..' || rel.startsWith('../') || rel === '.') throw usage('--path must be a normalized repo-relative path');
+  const status = oneLine(f.status, 'status');
+  if (!/^[A-Za-z0-9._-]+$/.test(status)) throw usage('--status must be a single word');
+  const owner = f.owner === undefined ? '' : oneLine(f.owner, 'owner');
+  const frozen = f['frozen-sha'] === undefined ? '' : oneLine(f['frozen-sha'], 'frozen-sha');
+  const milestone = f.milestone === undefined ? undefined : oneLine(f.milestone, 'milestone');
+  const root = spawnSync('git', ['-C', path.resolve(g.target || process.cwd()), 'rev-parse', '--show-toplevel'], { encoding: 'utf8' });
+  if (root.status !== 0) throw usage('target is not a git worktree');
+  const repo = root.stdout.trim();
+  const key = 'plan:' + crypto.createHash('sha256').update(rel).digest('hex').slice(0, 16);
+  if (!fs.existsSync(path.join(repo, '.hippo', 'repo.toml'))) {
+    out(JSON.stringify({ ok: true, state: 'files', key, id: null, skipped: 'no-store' }));
+    return 0;
+  }
+  let result;
+  const guard = guardedStoreWrite(repo, rel, () => {
+    const det = hippo.detect(repo);
+    if (det.state === 'files') { result = { ok: true, state: 'files', key, id: null, skipped: 'no-store' }; return; }
+    if (det.state === 'spool') throw new HippoError('plan upsert requires a working hippo store', 5, 'environment');
+    const call = (args, opts) => { const r = hippo.run(repo, args, opts); if (r.exit !== 0) throw new HippoRefusal(r); return r; };
+    const body = `- **Owner**: ${owner}\n- **Path**: ${rel}\n- **Frozen SHA**: ${frozen}\n`;
+    const args = ['new', 'plan', '--key', key, '--title', path.posix.basename(rel)];
+    if (milestone !== undefined) args.push('--milestone', milestone);
+    args.push('--body-file', '-');
+    const created = call(args, { input: body });
+    const id = created.data.ids[0];
+    const rec = call(['show', id]).data.record;
+    const prov = { kind: 'autopilot-plan', value: path.posix.basename(rel, path.posix.extname(rel)), locator: rel };
+    if (!rec.provenance || Object.keys(prov).some(k => rec.provenance[k] !== prov[k])) call(['set', id, 'provenance', '--kind', prov.kind, '--value', prov.value, '--locator', prov.locator]);
+    const old = (rec.tags || []).filter(t => t.startsWith('plan-status:'));
+    const tag = `plan-status:${status.toLowerCase()}`;
+    if (old.length !== 1 || old[0] !== tag) call(['set', id, 'tags', ...old.flatMap(t => ['--remove', t]), '--add', tag]);
+    if (milestone !== undefined && rec.milestone !== milestone) call(['set', id, 'milestone', milestone]);
+    if ((rec.body || '').replace(/\n*$/, '\n') !== body) call(['edit', id, '--body-file', '-'], { input: body });
+    result = { ok: true, state: det.state, key, id, skipped: false };
+  });
+  if (guard.skipped) result = { ok: true, key, id: null, skipped: 'before-cutline' };
+  if (g.json) out(JSON.stringify(result)); else out(JSON.stringify(result));
+  return 0;
+}
+
 function writeCmd(cmd, parsed) {
   const { g, f, pos } = parsed;
+  if (cmd === 'plan upsert') return planUpsert(parsed);
   const handler = H[cmd];
   const p = handler.parse(f, pos);
   const det = hippo.detect(g.target);

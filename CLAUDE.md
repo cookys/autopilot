@@ -28,7 +28,7 @@ Acceptance also requires the change to be merged, live pinned to that SHA, and e
 
 ## Worktree and branch hygiene
 - **先確認分支再動手**：每次開始編輯前，以及恢復 session 或切換情境之後，先跑 `git status` 和 `git branch --show-current`，確認自己在對的分支和對的 worktree。
-- **一件工作一條分支一個 worktree**：分支命名用 `feat/<slug>` 或 `fix/<slug>`，從最新的 develop（或本 repo 的主幹）開出來。hetero worktree 放在 `<repo>/.claude/worktrees/`，由 repo 的 hetero rail script 建立、由 `scripts/reap-dispatch-worktrees.sh` 清理。主 checkout 只用來整合，不在上面直接開發。
+- **一件工作一條分支一個 worktree**：分支命名用 `feat/<slug>` 或 `fix/<slug>`，從最新的 develop（或本 repo 的主幹）開出來。hetero worktree 放在 `<repo>/.claude/worktrees/`，由 repo 的 hetero rail script 建立、由 `scripts/reap-dispatch-worktrees.sh` 清理。主 checkout 只用來整合，不在上面直接開發。同時只留 1～2 個，換單用 `git switch` 重用。
 - **平行 worktree 不共用相依目錄**：每個 worktree 各有自己的 node_modules、venv、build 輸出，不用 symlink。
 - **commit 要帶 trailer**：每個 commit 都加上 `Fleet-Task: <26 碼單號>`。不在 develop 或 main 上直接 commit 功能改動。
 - **合併方式**：用 `git merge --no-ff` 合進 develop，合併訊息寫上審查結論和 tip 測試綠燈。main 只在 PM 給 go 後合併。共用分支一律禁止 force-push 和改寫歷史。
@@ -36,7 +36,6 @@ Acceptance also requires the change to be merged, live pinned to that SHA, and e
 - **不留孤兒**：
   - 超過 3 天沒有 commit、又沒有對應活單的分支或 worktree，要嘛開單接著做，要嘛刪掉。
   - 沒有合併過的工作在刪除前，先推到遠端或打個 tag（`archive/<branch>`），這樣才算 tier 1。
-  - hangar 的 prune-merged-branches 每次合併後都會跑。
 - **不把 stash 當倉庫**：一輪結束時如果還有未提交的工作，就在分支上提交一個 WIP commit，不要留在 stash 裡。
 - **live 只跑 pin 住的 sha 或 tag**，不跑分支的最新 commit。換版走既有的換版流程：每台主機先備份並記下 sha16，寫好回滾指令。
 - **測試不碰正式環境**：worktree 和測試一律用沙箱 HOME 或暫存目錄，不能讀寫 live 的設定、狀態或憑證。

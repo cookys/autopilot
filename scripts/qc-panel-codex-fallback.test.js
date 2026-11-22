@@ -288,3 +288,37 @@ test('formatCodexQuotaNotice and buildSubstitutionRecord emit verbatim Tradition
     notice: 'codex 額度用完，由 grok-4.7@grok 代打',
   });
 });
+
+test('selectCodexQuotaSubstitute refuses a substitute whose family is already seated unless allowSameFamily is true', () => {
+  const panelSeats = [
+    { id: 's0', engine: 'gpt-5.6-sol', runner: 'codex', effort: 'max' },
+    { id: 's1', engine: 'grok-4.7', runner: 'grok', effort: 'high' },
+  ];
+
+  // Default substitutes: grok-4.7/high@grok (xai, already seated) then gemini-4-carbon-high/high@agy (google).
+  // With only grok-4.7/high@grok offered, it must be refused when allowSameFamily is false/omitted.
+  const refused = selectCodexQuotaSubstitute({
+    failedSeat: panelSeats[0],
+    failedIndex: 0,
+    panelSeats,
+    implementerEngine: 'claude-sonnet-4-6',
+    substitutes: ['grok-4.7/high@grok'],
+  });
+  assert.equal(refused, null);
+
+  // With allowSameFamily: true, the already-seated xai family substitute is allowed.
+  const allowed = selectCodexQuotaSubstitute({
+    failedSeat: panelSeats[0],
+    failedIndex: 0,
+    panelSeats,
+    implementerEngine: 'claude-sonnet-4-6',
+    substitutes: ['grok-4.7/high@grok'],
+    allowSameFamily: true,
+  });
+  assert.deepEqual(allowed, {
+    engine: 'grok-4.7',
+    runner: 'grok',
+    effort: 'high',
+    family: 'xai',
+  });
+});

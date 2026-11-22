@@ -45,6 +45,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
+const { findSameFamilyVote } = require('./lib/review-family-gate');
 
 const { CLAUDE_CLI_ALIASES: SEAT_CLAUDE_ALIASES, isClaudeNativeModel } = require('./lib/seat-model-id');
 const NONCQ_POOLS = require('./lib/noncq-pools.json');
@@ -834,18 +835,14 @@ async function main() {
   const promptText = readPromptOnce(opts.promptFile);
   const identifiers = loadFleetIdentifiers();
   scanInMemory(promptText, identifiers);
-  const families = new Map();
-  for (const seat of opts.seats) {
+  const collision = findSameFamilyVote(opts.seats, (seat) => {
     const resolved = resolveSeat(seat, path.resolve(opts.promptFile));
-    if (!resolved.allowed) continue;
-    const first = families.get(resolved.family);
-    if (first) {
-      const message = `same_family_vote: ${first} and ${seat.raw} (${resolved.family})`;
-      if (!opts.allowSameFamily) fail(4, message);
-      process.stderr.write(`dispatch-panel: warning: ${message}\n`);
-      break;
-    }
-    families.set(resolved.family, seat.raw);
+    return resolved.allowed ? resolved.family : '';
+  });
+  if (collision) {
+    const message = `same_family_vote: ${collision.first.raw} and ${collision.second.raw} (${collision.family})`;
+    if (!opts.allowSameFamily) fail(4, message);
+    process.stderr.write(`dispatch-panel: warning: ${message}\n`);
   }
   const { outDir, promptPath } = prepareOutDirAndPrompt(opts.outDir, promptText);
   await runPanel(opts, outDir, promptPath);

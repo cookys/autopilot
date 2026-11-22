@@ -19,6 +19,7 @@ import type { Row } from './rows'
 import { STRIP_SPLIT_COLS } from './layout'
 import { PICK_KEYS } from '../v74/contract'
 import { v75On } from '../v75'
+import { fixedWindow, keyed, keyedGrow, thumbOf } from '../scrollmath'
 import type { DecideCard } from '../v74/contract'
 
 // ---- view state and the key reducer ----
@@ -564,7 +565,8 @@ function boxOpen(c: DecideCard, i: number, nav: DecideNav, ctx: PageCtx, fit: Fi
   const picked = nav.picks[c.id]
   const held = nav.hold?.[c.id] !== undefined
   const sent = nav.sent[c.id] !== undefined && nav.fixing?.[c.id] === undefined
-  const out: Row[] = [wrapRow([seg(GLYPHS.structure.folded + '  ' + String(i + 1) + '. '), seg(c.title, { color: PALETTE.here, here: true }), seg('：' + c.question)], ctx.size.cols, 5)[0], ...gap]
+  const heading = wrapRow([seg(GLYPHS.structure.folded + '  ' + String(i + 1) + '. '), seg(c.title, { color: PALETTE.here, here: true }), seg('：' + c.question)], ctx.pendingScroll === undefined ? ctx.size.cols : width, 5)
+  const out: Row[] = [...(ctx.pendingScroll === undefined ? heading.slice(0, 1) : heading), ...gap]
   out.push(...labelledBox(t('v74.d.bg'), c.background ?? t('v74.d.bg_none'), width), ...gap)
   c.options.forEach((o, k) => {
     if (k > 0 && fit.between) out.push([seg('')])
@@ -572,7 +574,7 @@ function boxOpen(c: DecideCard, i: number, nav: DecideNav, ctx: PageCtx, fit: Fi
     const tone = picked === k ? pickedTone() : o.recommended ? { color: PALETTE.attention } : {}
     const label = (k < THREE ? PICK_KEYS[k] + ': ' : DOT + ' ') + o.label
     const rec = o.recommended ? [seg('  ' + GLYPHS.structure.recommend + ' ' + t('v74.d.rec'), { color: PALETTE.attention })] : []
-    out.push([seg('    '), seg(label + mark, tone), ...rec])
+    out.push([seg('    '), seg(label + mark, { ...tone, ...(ctx.pendingScroll !== undefined && !held && !sent && k < THREE ? { press: 'key:' + PICK_KEYS[k] } : {}) }), ...rec])
     if (o.detail !== '' && fit.desc) out.push(...wrapRow([seg('       '), dimSeg(o.detail)], width, 7))
   })
   if (held) out.push([seg('    '), dimSeg(t('v74.d.held', { k: picked === undefined ? '-' : String(PICK_KEYS[picked] ?? picked + 1) }))])
@@ -581,6 +583,47 @@ function boxOpen(c: DecideCard, i: number, nav: DecideNav, ctx: PageCtx, fit: Fi
   const noteText = nav.textMode ? nav.textBuf + CARET : note === '' ? t('v74.d.note_empty') : note
   out.push(...gap, [seg('    m ' + t('v74.d.note')), seg(noteText)])
   return out
+}
+
+// The host Pane keeps a card's complete text in its own vertical window. Actions
+// remain outside this body and frameRows always places them above the footer.
+function pendingBody(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: number, room: number): Row[] {
+  const state = ctx.pendingScroll!
+  const width = Math.min(80, ctx.size.cols) - 1
+  const listRows = Math.min(cards.length, 8, Math.max(1, Math.floor(room / 2) - 1))
+  keyedGrow(state.list, cards.map(c => c.id))
+  if (state.cursor !== cards[cursor].id) {
+    if (cursor < state.list.offset || cursor >= state.list.offset + listRows) state.list.offset = Math.floor(cursor / listRows) * listRows
+    state.cursor = cards[cursor].id
+  }
+  const list = fixedWindow(cards.length, listRows, state.list)
+  const queue: Row[] = [[dimSeg(ctx.t('page.decide.range', { a: list.offset + 1, b: list.offset + list.rows, n: cards.length }) + (ctx.box === true ? ' · ' + ctx.t('v74.d.head', { n: cards.length, k: cursor + 1 }) : ''))],
+    ...cards.slice(list.offset, list.offset + list.rows).map((c, k) => {
+      const at = list.offset + k
+      const row = truncateSegs(boxSummary(c, at, nav, { ...ctx, size: { ...ctx.size, cols: width } }).map(s => ({ ...s, text: s.text.replace(/\s/g, ' ') })), width)
+      return at === cursor ? row.map(s => ({ ...s, color: PALETTE.here, text: s === row[0] ? GLYPHS.structure.folded + s.text.slice(1) : s.text })) : row
+    }),
+  ]
+  if (list.hint) queue.push([dimSeg([
+    list.above > 0 ? ctx.t('page.decide.more_up', { n: list.above, arrow: GLYPHS.structure.up }) + ctx.t('shell.scroll_key_up') : '',
+    list.below > 0 ? ctx.t('page.decide.more_down', { n: list.below, arrow: GLYPHS.structure.behind }) + ctx.t('shell.scroll_key_down') : '',
+  ].filter(Boolean).join('  '))])
+  room = Math.max(1, room - queue.length)
+  const model = state.detail
+  keyed(model, cards[cursor].id)
+  const full = boxOpen(cards[cursor], cursor, nav, { ...ctx, size: { ...ctx.size, cols: width } }, { loose: false, collapse: false, between: true, desc: true }).flatMap(row => wrapRow(row, width, 5))
+  const win = fixedWindow(full.length, Math.max(1, room - (full.length > room ? 1 : 0)), model)
+  const thumb = thumbOf(full.length, win.rows, win.offset)
+  const shown = full.slice(win.offset, win.offset + win.rows).map((row, i) => {
+    if (thumb === null) return row
+    const on = i >= thumb.top && i < thumb.top + thumb.len
+    return [...row, seg(' '.repeat(Math.max(0, width - row.reduce((n, s) => n + displayWidth(s.text), 0)))), seg(on ? GLYPHS.scrollbar.thumb : GLYPHS.scrollbar.track, { color: on ? PALETTE.here : PALETTE.structure })]
+  })
+  if (win.hint) shown.push([dimSeg([
+    win.above > 0 ? GLYPHS.structure.up + ' ' + ctx.t('shell.more_up', { n: win.above }) : '',
+    win.below > 0 ? GLYPHS.structure.behind + ' ' + ctx.t('shell.more_down', { n: win.below }) : '',
+  ].filter(Boolean).join('  '))])
+  return [...queue, ...shown]
 }
 // The card at the cursor is the open one, at its own place in the list; every other card keeps its order as one summary row. `collapse` folds the cards before it and the cards after it into
 // one row each (`另有 N 張 · ↑↓ 換張`).
@@ -611,6 +654,7 @@ function renderBoxV74(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor:
   const cols = ctx.size.cols
   const head = ruleTo(GLYPHS.structure.open + ' ' + t('v74.d.head', { n: cards.length, k: cursor + 1 }), cols)
   const room = Math.max(1, ctx.size.rows - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - 1 - actions.length) // the head row of the frame, the strip and the key-hint border are not the page's
+  if (ctx.pendingScroll !== undefined) return { body: pendingBody(ctx, cards, nav, cursor, room), actions }
   let body = boxBody(ctx, cards, nav, cursor, FIT_STEPS[0], head)
   for (const fit of FIT_STEPS.slice(1)) if (body.length > room) body = boxBody(ctx, cards, nav, cursor, fit, head)
   return { body, actions }
@@ -659,6 +703,10 @@ function renderV74(ctx: PageCtx): { body: Row[]; actions: Row[] } {
     ])
   }
   const head = ruleTo(GLYPHS.structure.open + ' ' + t('v74.d.head', { n: cards.length, k: cursor + 1 }), cols)
+  if (ctx.pendingScroll !== undefined) {
+    const room = Math.max(1, ctx.size.rows - 1 - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - actions.length)
+    return { body: pendingBody(ctx, cards, nav, cursor, room), actions }
+  }
   const blocks = cards.map((c, i) => [...v74Card(c, i, i === cursor, nav, ctx, nav.picks, nav.notes), [seg('')]])
   // a short allocation: leading cards go first so the selected one stays on screen (the frame cuts the tail)
   const room = Math.max(1, ctx.size.rows - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - actions.length)

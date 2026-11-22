@@ -69,14 +69,14 @@ export function v75Hint(i: { note: boolean; armed: boolean; stale: boolean; send
 }
 
 // ---- scroll (§5): the screen has ONE scrolling part, the Pane's card area. The band never scrolls. ----
-export type V75Scroll = 'cursor' | 'pane' | 'swallow' | 'pass'
-// A one-row step is the arrow: it moves the cursor (the window follows it) wherever the keyboard is. A bigger step (PgUp / PgDn) scrolls the Pane's window, whichever surface it arrived on, and is swallowed when no Pane is open
-// (the band has nothing to scroll, and a band that took it would scroll the chat under the prompt).
-export function v75ScrollRoute(e: { component?: string; by?: number }, s: { paneOpen: boolean; note: boolean }): V75Scroll {
+export type V75Scroll = 'cursor' | 'queue' | 'pane' | 'swallow' | 'pass'
+// Keyboard scrolls move the current card's text. Host wheel events carry a
+// pointer and move the card queue. The fixed band delegates to the open Pane.
+export function v75ScrollRoute(e: { component?: string; by?: number; pointer?: unknown }, s: { paneOpen: boolean; note: boolean }): V75Scroll {
   if (typeof e.by !== 'number' || e.by === 0) return 'pass'
   if (s.note) return 'swallow' // §8 #3: in the note mode the arrows belong to the text field
-  if (Math.abs(e.by) === 1) return 'cursor'
-  return s.paneOpen ? 'pane' : 'swallow'
+  if (!s.paneOpen) return 'swallow'
+  return e.pointer === undefined ? 'pane' : 'queue'
 }
 
 // ---- the band's four card rows (the fifth is the status row the band already draws) ----

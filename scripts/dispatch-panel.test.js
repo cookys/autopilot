@@ -973,6 +973,7 @@ test('codex:astra resolves to gpt-6.2-astra and explicit codex:gpt-6-astra remai
     assert.equal(panel.seats.length, 2);
     assert.equal(panel.seats[0].seat, 'codex:astra');
     assert.equal(panel.seats[0].status, 'ok');
+    assert.equal(Object.hasOwn(panel.seats[0], 'error'), false);
     assert.equal(fs.readFileSync(panel.seats[0].out_path, 'utf8'), 'response-from:codex:gpt-6.2-astra\n');
     assert.equal(panel.seats[1].seat, 'codex:gpt-6-astra');
     assert.equal(panel.seats[1].status, 'ok');

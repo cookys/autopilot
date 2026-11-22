@@ -52,9 +52,6 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const { createEmitter } = require('./lib/agent-event-emit');
-const _aeeEmitter = createEmitter({ role: 'plan-review', runner: 'claude' });
-_aeeEmitter.accepted();
-process.on('exit', (code) => _aeeEmitter.ended(code));
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
@@ -2263,6 +2260,10 @@ function main() {
   // generations read the sealed copy back, so the panel cannot change under a sealed session.
   const effective = effectiveManifest(loaded, manifestCopy, opts);
   const manifest = effective.manifest;
+  const planReviewRunner = (manifest.seats && manifest.seats[0] && manifest.seats[0].runner) || 'claude';
+  const _aeeEmitter = createEmitter({ role: 'plan-review', runner: planReviewRunner });
+  _aeeEmitter.accepted();
+  process.on('exit', (code) => _aeeEmitter.ended(code));
   const manifestSha = sha256(effective.bytes);
   for (const added of effective.added) {
     process.stderr.write(`dispatch-plan-review: seat ${added.seat_id} had no fallbacks; added ${added.fallback_id} (family ${added.family}) from the topology\n`);

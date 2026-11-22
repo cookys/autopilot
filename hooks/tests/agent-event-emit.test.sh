@@ -109,4 +109,22 @@ assert_contains "$line4_2" '"state":"ended"' "case 4 second event is ended"
 assert_contains "$line4_2" '"rc":42' "case 4 ended records nonzero rc 42"
 assert_contains "$line4_2" '"runner":"local"' "case 4 ended runner is local"
 
+# Case 5: caller-style invocation (dispatch-explore.sh --runner agy --model gemini-4-hydrogen-low)
+# produces runner "agy" in both accepted and ended events, and ended fires on nonzero exit
+LOG_FILE_5="$TEST_TMP/fleet-events-5.jsonl"
+(
+  export FAKE_FLEET_LOG="$LOG_FILE_5"
+  bash "$REPO_ROOT/scripts/dispatch-explore.sh" --runner agy --model gemini-4-hydrogen-low --prompt-file /nonexistent-prompt-file >/dev/null 2>&1 || true
+)
+assert_file_exists "$LOG_FILE_5" "case 5 events log created"
+line_count_5="$(wc -l < "$LOG_FILE_5" | tr -d ' ')"
+assert_eq "2" "$line_count_5" "case 5 emits accepted + ended on nonzero exit"
+line5_1="$(sed -n '1p' "$LOG_FILE_5")"
+line5_2="$(sed -n '2p' "$LOG_FILE_5")"
+assert_contains "$line5_1" '"state":"accepted"' "case 5 first event is accepted"
+assert_contains "$line5_1" '"runner":"agy"' "case 5 accepted runner is agy"
+assert_contains "$line5_2" '"state":"ended"' "case 5 second event is ended"
+assert_contains "$line5_2" '"rc":2' "case 5 ended records nonzero rc 2"
+assert_contains "$line5_2" '"runner":"agy"' "case 5 ended runner is agy"
+
 finalize_test

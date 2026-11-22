@@ -25,3 +25,31 @@ test('sorted manifests, filters and log tokens', t => {
   assert.equal(JSON.parse(run('--branch', 'one', '--task', task, '--json')).length, 1);
   assert.equal(JSON.parse(run('--task', '01M81F6G5TWF8AP2EN5PT0T4JK', '--json')).length, 0);
 });
+
+test('pins counts, Taipei day boundary, since, JSON and empty reports', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'round-table-pins-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const manifests = [
+    { started_at: '2025-01-01T15:59:59Z', pinned: true, pin_reason: 'manual', runner: 'codex' },
+    { started_at: '2025-01-01T14:00:00Z', pinned: true, pin_reason: null, runner: 'grok' },
+    { started_at: '2025-01-01T13:00:00Z', pinned: false },
+    { started_at: '2025-01-01T12:00:00Z' },
+    { started_at: '2025-01-01T16:00:00Z', pinned: false },
+  ];
+  manifests.forEach((m, i) => fs.writeFileSync(path.join(dir, `hetero-${i}.manifest.json`), JSON.stringify(m)));
+  const run = (...args) => execFileSync(process.execPath, [script, '--pins', ...args], { env: { ...process.env, AUTOPILOT_DISPATCH_RUNS_DIR: dir, TZ: 'UTC' }, encoding: 'utf8' });
+  const report = JSON.parse(run('--since', '2025-01-01T00:00:00Z', '--json'));
+  assert.deepEqual(report.days[0], { day: '2025-01-01', total: 4, pinned: 2, pool: 1, unknown: 1, pinned_with_reason: 1, pinned_without_reason: 1, top_reasons: [{ reason: 'manual', count: 1 }], runners: ['codex', 'grok'] });
+  assert.equal(report.days[1].day, '2025-01-02');
+  assert.equal(report.days[1].pool, 1);
+  assert.deepEqual([report.totals.total, report.totals.pinned, report.totals.pool, report.totals.unknown], [5, 2, 2, 1]);
+  assert.match(run('--since', '2025-01-01T00:00:00Z'), /pool share: 2\/4 = 50\.00%.*unknown: 1/);
+  assert.equal(JSON.parse(run('--since', '2025-01-01T16:00:00Z', '--json')).totals.total, 1);
+  const empty = JSON.parse(run('--since', '2030-01-01', '--json'));
+  assert.deepEqual(empty.days, []);
+  assert.equal(empty.totals.total, 0);
+  assert.match(run('--since', '2030-01-01'), /pool share: 0\/0 = 0\.00%.*unknown: 0/);
+  for (const file of fs.readdirSync(dir)) fs.unlinkSync(path.join(dir, file));
+  assert.equal(JSON.parse(run('--since', '2025-01-01', '--json')).totals.total, 0);
+  assert.match(run('--since', '2025-01-01'), /pool share: 0\/0 = 0\.00%.*unknown: 0/);
+});

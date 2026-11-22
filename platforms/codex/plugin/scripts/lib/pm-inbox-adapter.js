@@ -299,27 +299,52 @@ function createFixtureAdapter(dir, member, env) {
   };
 }
 
+function resolveInboxCliOnPath(env) {
+  const res = spawnSync('which', ['inbox-cli'], {
+    env: cleanChildEnv(env),
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+    timeout: 5000,
+  });
+  if (res.status !== 0 || !res.stdout) return null;
+  const resolved = res.stdout.trim().split(/\r?\n/)[0].trim();
+  return resolved || null;
+}
+
 function createFleetAdapter(env, member) {
-  const fleetRepo = typeof env.AUTOPILOT_FLEET_REPO === 'string' ? env.AUTOPILOT_FLEET_REPO.trim() : '';
-  if (!fleetRepo) {
-    throw adapterError('AUTOPILOT_FLEET_REPO is unset; set it to the fleet repo path to run in fleet mode', 3, 'FLEET_REPO_UNSET');
-  }
-  const cliPath = path.join(path.resolve(fleetRepo), FLEET_CLI_REL);
-  if (!fs.existsSync(cliPath)) {
-    const err = adapterError(`fleet inbox CLI not found at ${cliPath}`, 3, 'FLEET_CLI_MISSING');
-    err.cliPath = cliPath;
-    throw err;
+  const pathCli = resolveInboxCliOnPath(env);
+  let cliPath = pathCli;
+  let useNodeTransform = false;
+
+  if (!cliPath) {
+    const fleetRepo = typeof env.AUTOPILOT_FLEET_REPO === 'string' ? env.AUTOPILOT_FLEET_REPO.trim() : '';
+    if (!fleetRepo) {
+      throw adapterError(
+        'inbox-cli not found on PATH and AUTOPILOT_FLEET_REPO is unset; put inbox-cli on PATH or set AUTOPILOT_FLEET_REPO to the fleet repo path',
+        3,
+        'FLEET_REPO_UNSET'
+      );
+    }
+    cliPath = path.join(path.resolve(fleetRepo), FLEET_CLI_REL);
+    if (!fs.existsSync(cliPath)) {
+      const err = adapterError(`inbox-cli not found on PATH and fleet inbox CLI not found at ${cliPath}`, 3, 'FLEET_CLI_MISSING');
+      err.cliPath = cliPath;
+      throw err;
+    }
+    useNodeTransform = true;
   }
   const acceptArgv = parseCmdArgv(env.AUTOPILOT_PM_ACCEPT_CMD, 'AUTOPILOT_PM_ACCEPT_CMD', 'INVALID_ACCEPT_CMD');
   const taskShowArgv = parseCmdArgv(env.AUTOPILOT_PM_TASK_SHOW_CMD, 'AUTOPILOT_PM_TASK_SHOW_CMD', 'INVALID_TASK_SHOW_CMD');
 
   function runInboxCli(cliArgs) {
     if (!fs.existsSync(cliPath)) {
-      const err = adapterError(`fleet inbox CLI not found at ${cliPath}`, 3, 'FLEET_CLI_MISSING');
+      const err = adapterError(`inbox-cli not found on PATH and fleet inbox CLI not found at ${cliPath}`, 3, 'FLEET_CLI_MISSING');
       err.cliPath = cliPath;
       throw err;
     }
-    const res = spawnSync(process.execPath, ['--experimental-transform-types', cliPath, ...cliArgs], {
+    const cmd = useNodeTransform ? process.execPath : cliPath;
+    const args = useNodeTransform ? ['--experimental-transform-types', cliPath, ...cliArgs] : cliArgs;
+    const res = spawnSync(cmd, args, {
       env: cleanChildEnv(env),
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],

@@ -3194,7 +3194,8 @@
       "class": "path_seam",
       "default": null,
       "readers": [
-        "scripts/lib/runtime-paths.js"
+        "scripts/lib/runtime-paths.js",
+        "scripts/dispatch-round-table.js"
       ],
       "doc": null,
       "relates": []
@@ -4502,6 +4503,16 @@
       "readers": [
         "src/status/runs-watch.js"
       ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_SESSION",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": ["scripts/lane-ops.sh"],
       "doc": null,
       "relates": []
     },
@@ -8914,6 +8925,19 @@
       "relates": [],
       "note": "Not an autopilot setting: the context-land gate reads task_id from a fleet task JSON payload.",
       "type": "string"
+    },
+    {
+      "name": "AUTOPILOT_DISPATCH_WRAPPER",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-research.sh"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "Test-only wrapper override for dispatch-research.sh dry-run recording."
     }
   ]
 }

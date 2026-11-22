@@ -331,6 +331,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# shellcheck source=lib/agent-event-emit.sh
+[ -r "$_REVIEW_SELF_DIR/lib/agent-event-emit.sh" ] && . "$_REVIEW_SELF_DIR/lib/agent-event-emit.sh" && {
+  agent_event_emit_init "reviewer" "${RUNNER:-claude}" ""
+  agent_event_emit_accepted
+  agent_event_emit_register_exit_trap
+} || true
+
 # Every interpolated value goes through json_escape: an unescaped quote in a message
 # (e.g. a model id quoted inside a reason string) silently produced INVALID JSON, which
 # a parsing caller reads as a transport failure rather than a precondition failure.

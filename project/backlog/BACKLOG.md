@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0506 -->
+<!-- next-id: BL-0508 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -2425,4 +2425,30 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: autopilot lane 2026-11-22
+- **Pointer**: none
+
+### dispatch 乾淨結束無提交時 error_category 誤標
+- **Id**: BL-0506
+- **Status**: open
+- **Since**: 2026-11-22
+- **Origin**: self
+- **Problem**: dispatch 派工乾淨結束但無提交時，error_category 誤標為 auth_failed／rate_limited；應標 agent_declined 並在結果帶 agent 最後一段話。反映：本席 11-22 多次實測。
+- **Impact**: 誤導除錯與重試策略，e2e 實測難以辨識 agent 主動拒絕與基礎設施失敗。
+- **Trigger**: 修 dispatch 結果分類
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: self 2026-11-22
+- **Pointer**: none
+
+### land.sh 失敗時未清 land worktree
+- **Id**: BL-0507
+- **Status**: open
+- **Since**: 2026-11-22
+- **Origin**: self
+- **Problem**: land.sh 落地失敗時不清 land-<label> worktree，殘留要手動 remove --force。反映：本席 11-22。
+- **Impact**: 失敗後殘留 worktree 佔用磁碟並干擾後續 land 與 worktree 衛生檢查。
+- **Trigger**: 修 land.sh 失敗清理
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: self 2026-11-22
 - **Pointer**: none

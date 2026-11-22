@@ -233,6 +233,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# shellcheck source=lib/agent-event-emit.sh
+[ -r "$_AUTHOR_SELF_DIR/lib/agent-event-emit.sh" ] && . "$_AUTHOR_SELF_DIR/lib/agent-event-emit.sh" && {
+  agent_event_emit_init "author" "${RUNNER:-claude}" ""
+  agent_event_emit_accepted
+  agent_event_emit_register_exit_trap
+} || true
+
 SELECTION_SOURCE="explicit_cli"
 if [[ "$STRICT_ROSTER" -eq 1 ]]; then
   SELECTION_SOURCE="strict_roster"

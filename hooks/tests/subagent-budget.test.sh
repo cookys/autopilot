@@ -602,9 +602,15 @@ assert_contains "$__RUN_STDOUT" "Claude 預算已用盡" "ticket deny in Traditi
 # (a) Default per_ticket_usd path with no Claude-Budget line blocks over budget
 AUTOPILOT_SUBAGENT_BUDGET_PER_TICKET_USD="$OVER_BUDGET" AUTOPILOT_SUBAGENT_BUDGET_MODE=warn expect_deny st2 "Engine: sonnet\nLane: tlane\nFleet-Task: $TICKET_ID\ngo" "" "(a) default per_ticket_usd with no Claude-Budget denies over budget"
 assert_contains "$__RUN_STDOUT" "Claude 預算已用盡" "(a) deny reason in Traditional Chinese"
-# (b) Brief Claude-Budget higher than config does NOT raise the cap; lower one does lower it
-AUTOPILOT_SUBAGENT_BUDGET_PER_TICKET_USD="$OVER_BUDGET" AUTOPILOT_SUBAGENT_BUDGET_MODE=warn expect_deny st2 "Engine: sonnet\nLane: tlane\nFleet-Task: $TICKET_ID\nClaude-Budget: 100\ngo" "" "(b) brief Claude-Budget higher than config does not raise cap"
+# (b) Brief Claude-Budget overrides config (both higher and lower)
+AUTOPILOT_SUBAGENT_BUDGET_PER_TICKET_USD="$OVER_BUDGET" AUTOPILOT_SUBAGENT_BUDGET_MODE=warn expect_allow st2 "Engine: sonnet\nLane: tlane\nFleet-Task: $TICKET_ID\nClaude-Budget: 100\ngo" "" "(b) brief Claude-Budget higher than config raises cap"
 AUTOPILOT_SUBAGENT_BUDGET_PER_TICKET_USD=100 AUTOPILOT_SUBAGENT_BUDGET_MODE=warn expect_deny st2 "Engine: sonnet\nLane: tlane\nFleet-Task: $TICKET_ID\nClaude-Budget: $OVER_BUDGET\ngo" "" "(b) brief Claude-Budget lower than config lowers cap"
+assert_contains "$__RUN_STDOUT" "在 Agent 提示詞內加一行「Claude-Budget: <美元數>」（整行、行首，無縮排），或在 ~/.autopilot/config.json 的 subagent_budget.per_ticket_usd 調整預設" "(b) deny reason includes how-to-raise instructions"
+# (b2) Inline-in-header Claude-Budget is NOT parsed (must be standalone line at line start)
+AUTOPILOT_SUBAGENT_BUDGET_PER_TICKET_USD="$OVER_BUDGET" AUTOPILOT_SUBAGENT_BUDGET_MODE=warn expect_deny st2 "Engine: sonnet | Claude-Budget: 100\nLane: tlane\nFleet-Task: $TICKET_ID\ngo" "" "(b2) inline-in-header Claude-Budget is ignored"
+# (b3) Prompt-file referenced brief with Claude-Budget is parsed
+printf 'Engine: sonnet\nLane: tlane\nFleet-Task: %s\nClaude-Budget: 100\n' "$TICKET_ID" >"$REPO/brief.md"
+AUTOPILOT_SUBAGENT_BUDGET_PER_TICKET_USD="$OVER_BUDGET" AUTOPILOT_SUBAGENT_BUDGET_MODE=warn expect_allow st2 "Engine: sonnet\nLane: tlane\nFleet-Task: $TICKET_ID\nRead $REPO/brief.md\n" "" "(b3) prompt-file referenced Claude-Budget raises cap"
 # (c) Spend written by session A blocks session B on the same ticket (cross-session ledger)
 TICKET_CROSS="01M7ZKZ8D4511JJ451P71J73R4"
 mk st_a "[{\"id\":\"ta1\",\"brief\":[\"Lane: tlane\",\"Fleet-Task: $TICKET_CROSS\"],\"turns\":5}]"

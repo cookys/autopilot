@@ -1688,7 +1688,7 @@ const focusRows = (id: string, expanded: boolean): number => {
   if (id === 'spend') return spendFocusRows(snapshot)
   return 1
 }
-let decideLocal: Pick<DecideNav, 'cursor' | 'folded' | 'textMode' | 'textBuf' | 'opt' | 'detailOffset' | 'armed' | 'snap' | 'stale'> = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt }
+let decideLocal: Pick<DecideNav, 'cursor' | 'folded' | 'textMode' | 'textBuf' | 'opt' | 'detailOffset' | 'armed' | 'snap' | 'stale' | 'style' | 'bgOpen'> = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt, style: 'A', bgOpen: false }
 const framePageId = (): string => panePage
 // B56: crossing the side-dock width threshold unmounts `<Pane placement="dock">` and mounts `<Pane placement="inline">` (or back).
 // On CC 2.1.327 that remount drops the pane's keyboard focus to the prompt and collides on the previous placement's Button keys,
@@ -1882,8 +1882,11 @@ async function frameKeyBody($: EngineInterface, k: KeyAction): Promise<void> {
         return
       }
       const ctx = { live: snapshot, console: consoleSnap, size: { cols: decideCols, rows: 24 }, t: tr, nowMs, v74 }
+      const prevStyle = decideLocal.style ?? 'A'
       const r = decideReduce({ ...st, ...decideLocal }, k, ctx, nowMs)
-      decideLocal = { cursor: r.nav.cursor, folded: r.nav.folded, textMode: r.nav.textMode, textBuf: r.nav.textBuf, opt: r.nav.opt, detailOffset: r.nav.detailOffset, armed: r.nav.armed, snap: r.nav.snap, stale: r.nav.stale }
+      decideLocal = { cursor: r.nav.cursor, folded: r.nav.folded, textMode: r.nav.textMode, textBuf: r.nav.textBuf, opt: r.nav.opt, detailOffset: r.nav.detailOffset, armed: r.nav.armed, snap: r.nav.snap, stale: r.nav.stale, style: r.nav.style, bgOpen: r.nav.bgOpen }
+      if ((r.nav.style ?? 'A') !== prevStyle) void Promise.resolve(($ as { store?: { set?: (k: string, v: unknown) => Promise<void> } }).store?.set?.('decide.style', r.nav.style ?? 'A')).catch(() => undefined)
+      if (k.kind === 'style' || k.kind === 'expand' || k.kind === 'move' || k.kind === 'cursor' || k.kind === 'prev' || k.kind === 'next') pendingScroll.detail.offset = 0
       if (k.kind === 'cursor') {
         void v74Keylog($, {
           handler: 'frameKey', component: 'AbovePrompt', key: 'cursor', event: 'cursor',
@@ -1928,6 +1931,7 @@ export async function paneKey($: EngineInterface, key: string, over: { paneFocus
     focusedButton: over.focusedButton ?? false,
     textMode: page === 'decide' && decideLocal.textMode,
     armed: page === 'decide' && decideLocal.armed === true,
+    bgOpen: page === 'decide' && decideLocal.bgOpen === true,
   })
   if (act.kind !== 'none' && act.kind !== 'pass' && act.kind !== 'button') await frameKey($, act)
   return act
@@ -1982,7 +1986,8 @@ export async function startLive($: EngineInterface): Promise<void> {
   markPaneClosed()
   panePlacementEpoch = 0
   pageView = {}
-  decideLocal = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt }
+  const savedStyle = await Promise.resolve(($ as { store?: { get?: (k: string) => Promise<unknown> } }).store?.get?.('decide.style')).catch(() => undefined)
+  decideLocal = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt, style: savedStyle === 'C' ? 'C' : 'A', bgOpen: false }
   Object.assign(pendingScroll, { list: newScroll(), detail: newScroll(), cursor: '' })
   resetNoteInputs()
   consoleReadMs = -Infinity

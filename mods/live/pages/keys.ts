@@ -3,13 +3,13 @@
 // 'pass' hands the key back to Claude Code (Esc interrupts the turn there); 'button' means the host's focused Button takes this Enter and the pane does nothing else with it.
 import { PET_KEY, PICK_KEYS, V74_KEY } from '../v74/contract'
 
-export type KeyState = { page: string; paneFocus: boolean; focusedButton: boolean; textMode: boolean; armed?: boolean }
+export type KeyState = { page: string; paneFocus: boolean; focusedButton: boolean; textMode: boolean; armed?: boolean; bgOpen?: boolean }
 export type KeyAction =
   | { kind: 'page'; to: string } | { kind: 'close' } | { kind: 'pass' } | { kind: 'button' } | { kind: 'submit' } | { kind: 'confirm' } | { kind: 'disarm' }
   | { kind: 'pick'; index: number } | { kind: 'text'; ch: string } | { kind: 'text_save' } | { kind: 'text_cancel' }
   | { kind: 'note' } | { kind: 'undo' } | { kind: 'prev' } | { kind: 'next' } | { kind: 'fill' }
   | { kind: 'move'; by: 1 | -1 } | { kind: 'cursor'; at: number } | { kind: 'fold' } | { kind: 'open' } | { kind: 'none' }
-  | { kind: 'scroll'; by: 1 | -1; page: boolean }
+  | { kind: 'scroll'; by: 1 | -1; page: boolean } | { kind: 'style' } | { kind: 'expand' }
 
 const pageForDigit = (key: string): string | undefined => {
   if (key === PET_KEY) return 'pet'
@@ -24,10 +24,12 @@ const CARD_PAGES = new Set(['decide', 'todo'])
 export function routeKey(key: string, st: KeyState): KeyAction {
   if (!st.paneFocus) return { kind: 'pass' }
   if (st.textMode) return key === 'Enter' ? { kind: 'text_save' } : key === 'Escape' ? { kind: 'text_cancel' } : { kind: 'text', ch: key }
-  if (key === 'Escape') return st.armed === true && st.page === 'decide' ? { kind: 'disarm' } : { kind: 'close' }
+  if (key === 'Escape') return st.page === 'decide' && st.bgOpen === true ? { kind: 'expand' } : st.armed === true && st.page === 'decide' ? { kind: 'disarm' } : { kind: 'close' }
   if (key === 'Enter') return st.focusedButton ? { kind: 'button' } : { kind: 'fold' }
   if (st.page === 'decide') {
     if (key === 'p' || key === 'n') return { kind: 'move', by: key === 'p' ? -1 : 1 }
+    if (key === 'v') return { kind: 'style' }
+    if (key === 'e') return { kind: 'expand' }
     if (key === 'ArrowUp' || key === 'ArrowDown' || key === 'PageUp' || key === 'PageDown') return { kind: 'scroll', by: key === 'ArrowUp' || key === 'PageUp' ? -1 : 1, page: key.startsWith('Page') }
   }
   const moved = V75_MOVED[key] // v7.5: the old shell's r / p / u menus, as page keys (u is 撤回 on 待決, so there it stays undo)

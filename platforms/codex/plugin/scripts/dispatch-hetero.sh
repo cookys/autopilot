@@ -393,13 +393,6 @@ set -uo pipefail
 if [ "${AUTOPILOT_TEST_ALLOW_HETERO_SEAMS:-}" != "1" ]; then
   unset HETERO_TEST_SYSTEMCTL_KILL_FAIL HETERO_TEST_NO_SETSID HETERO_TEST_NO_JOBCONTROL
 fi
-_HETERO_AEE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-# shellcheck source=lib/agent-event-emit.sh
-[ -r "$_HETERO_AEE_DIR/lib/agent-event-emit.sh" ] && . "$_HETERO_AEE_DIR/lib/agent-event-emit.sh" && {
-  agent_event_emit_init "implementer" "${RUNNER:-claude}" ""
-  agent_event_emit_accepted
-  agent_event_emit_register_exit_trap
-} || true
 
 # qualified default below (grok-4.7, codex gpt-6.1-terra, agy gemini-4-hydrogen-low, opencode beam-free, cursor/kimi
 # broker). Every other runner without a default dies "--model is required". Never default to an expensive seat.
@@ -3603,6 +3596,14 @@ esac
 [ -r "$PROMPT_FILE" ] || die_precondition "prompt file not readable: $PROMPT_FILE"
 [ "$SCRATCH" -eq 0 ] || [ -z "$REUSE_WORKTREE" ] || die_precondition "--scratch cannot be combined with --reuse-worktree"
 HETERO_FLEET_TASK_ID="$(node "$SELF_DIR/lib/fleet-task-ref.js" resolve-parent --prompt-file "$PROMPT_FILE" 2>/dev/null || true)"
+_HETERO_AEE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+# shellcheck source=lib/agent-event-emit.sh
+[ -r "$_HETERO_AEE_DIR/lib/agent-event-emit.sh" ] && . "$_HETERO_AEE_DIR/lib/agent-event-emit.sh" && {
+  agent_event_emit_init "implementer" "${RUNNER:-claude}" "" "$HETERO_FLEET_TASK_ID"
+  agent_event_emit_accepted
+  agent_event_emit_register_exit_trap
+} || true
+
 DISPATCH_LANE_JSON=null # read from the original brief before it is repacked; crosses the detach boundary via declare -p
 declare -F dispatch_lane_json >/dev/null 2>&1 && DISPATCH_LANE_JSON="$(dispatch_lane_json "$PROMPT_FILE")"
 declare -F dispatch_export_attribution >/dev/null 2>&1 && dispatch_export_attribution "$PROMPT_FILE" # the child (its cost-tracker rows) inherits lane + fleet task

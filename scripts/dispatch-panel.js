@@ -544,7 +544,7 @@ function resolveSeat(parsedSeat, promptPath, cwd = path.dirname(promptPath)) {
   if (!isKnownModelForRunner(runner, model)) {
     return { allowed: false, runner, model, endpoint, effort: parsedSeat.effort, reason: 'unknown_model' };
   }
-  return { allowed: true, runner, model, endpoint, effort: parsedSeat.effort, family };
+  return { allowed: true, runner, model, endpoint: (alias && alias.endpoint) || parsedSeat.endpoint || '', effort: parsedSeat.effort, family };
 }
 
 function sanitizeOutName(model) {

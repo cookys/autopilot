@@ -38,7 +38,7 @@ export AUTOPILOT_FLEET_TASK="01M81BHZE529XAZ6N0JRR90YAM"
 (
   # shellcheck source=/dev/null
   . "$EMIT_SH"
-  agent_event_emit_init "implementer" "codex" "run-test-1"
+  agent_event_emit_init "implementer" "codex" "run-test-1" "01M81BHZE529XAZ6N0JRR90YAM"
   agent_event_emit_accepted
   agent_event_emit_ended 0 "ok"
 )
@@ -54,7 +54,8 @@ line2="$(sed -n '2p' "$LOG_FILE")"
 
 assert_contains "$line1" '"state":"accepted"' "first event is accepted"
 assert_contains "$line1" '"agent_kind":"dispatch"' "agent_kind is dispatch"
-assert_contains "$line1" '"runner":"codex"' "runner is codex"
+assert_contains "$line1" '"runner":"fleet"' "runner is fleet"
+assert_contains "$line1" '"session_id":"fleet-01M81BHZE529XAZ6N0JRR90YAM"' "session id identifies fleet task"
 assert_contains "$line1" '"stage":"build"' "stage is build"
 assert_contains "$line1" '"run_id":"run-test-1"' "run_id matches"
 assert_contains "$line1" '"task_id":"01M81BHZE529XAZ6N0JRR90YAM"' "task_id matches"
@@ -85,7 +86,7 @@ assert_contains "$(cat "$stderr_file")" "agent-event-emit: fleet event emit fail
 ts_val="$(node -e "const fs=require('fs'); const o=JSON.parse(fs.readFileSync('$LOG_FILE','utf8').trim().split('\n')[0]); process.stdout.write(String(typeof o.ts === 'number' && Number.isInteger(o.ts) && o.ts > 1000000000000));")"
 assert_eq "true" "$ts_val" "ts is positive integer milliseconds"
 
-# Case 4: exit trap emits ended with nonzero rc, preserves rc, and passes runner verbatim
+# Case 4: exit trap emits ended with nonzero rc and preserves rc
 LOG_FILE_4="$TEST_TMP/fleet-events-4.jsonl"
 (
   export FAKE_FLEET_LOG="$LOG_FILE_4"
@@ -104,13 +105,14 @@ assert_eq "2" "$line_count_4" "case 4 emits accepted + ended"
 line4_1="$(sed -n '1p' "$LOG_FILE_4")"
 line4_2="$(sed -n '2p' "$LOG_FILE_4")"
 assert_contains "$line4_1" '"state":"accepted"' "case 4 first event is accepted"
-assert_contains "$line4_1" '"runner":"local"' "case 4 runner passed through verbatim (local)"
+assert_contains "$line4_1" '"runner":"fleet"' "case 4 runner is fleet"
+assert_contains "$line4_1" '"session_id":"sess-test-123"' "no explicit fleet task retains session id"
 assert_contains "$line4_2" '"state":"ended"' "case 4 second event is ended"
 assert_contains "$line4_2" '"rc":42' "case 4 ended records nonzero rc 42"
-assert_contains "$line4_2" '"runner":"local"' "case 4 ended runner is local"
+assert_contains "$line4_2" '"runner":"fleet"' "case 4 ended runner is fleet"
 
 # Case 5: caller-style invocation (dispatch-explore.sh --runner agy --model gemini-4-hydrogen-low)
-# produces runner "agy" in both accepted and ended events, and ended fires on nonzero exit
+# produces runner "fleet" in both events, and ended fires on nonzero exit
 LOG_FILE_5="$TEST_TMP/fleet-events-5.jsonl"
 (
   export FAKE_FLEET_LOG="$LOG_FILE_5"
@@ -122,9 +124,39 @@ assert_eq "2" "$line_count_5" "case 5 emits accepted + ended on nonzero exit"
 line5_1="$(sed -n '1p' "$LOG_FILE_5")"
 line5_2="$(sed -n '2p' "$LOG_FILE_5")"
 assert_contains "$line5_1" '"state":"accepted"' "case 5 first event is accepted"
-assert_contains "$line5_1" '"runner":"agy"' "case 5 accepted runner is agy"
+assert_contains "$line5_1" '"runner":"fleet"' "case 5 accepted runner is fleet"
 assert_contains "$line5_2" '"state":"ended"' "case 5 second event is ended"
 assert_contains "$line5_2" '"rc":2' "case 5 ended records nonzero rc 2"
-assert_contains "$line5_2" '"runner":"agy"' "case 5 ended runner is agy"
+assert_contains "$line5_2" '"runner":"fleet"' "case 5 ended runner is fleet"
+
+# Fleet resolution uses PATH before the local installation, and fails softly when absent.
+mkdir -p "$TEST_TMP/home/.local/bin" "$TEST_TMP/pathbin"
+cp "$FAKE_FLEET" "$TEST_TMP/home/.local/bin/fleet"
+cp "$FAKE_FLEET" "$TEST_TMP/pathbin/fleet"
+(
+  unset AUTOPILOT_FLEET_BIN
+  export PATH="$TEST_TMP/pathbin:/usr/bin:/bin" HOME="$TEST_TMP/missing-home" FAKE_FLEET_LOG="$TEST_TMP/path.jsonl"
+  . "$EMIT_SH"
+  agent_event_emit_init implementer codex path
+  agent_event_emit_accepted
+)
+assert_file_exists "$TEST_TMP/path.jsonl" "fleet on PATH emits"
+(
+  unset AUTOPILOT_FLEET_BIN
+  export PATH=/usr/bin:/bin HOME="$TEST_TMP/home" FAKE_FLEET_LOG="$TEST_TMP/fallback.jsonl"
+  . "$EMIT_SH"
+  agent_event_emit_init implementer codex fallback
+  agent_event_emit_accepted
+)
+assert_file_exists "$TEST_TMP/fallback.jsonl" "local fleet fallback emits"
+(
+  unset AUTOPILOT_FLEET_BIN
+  export PATH=/usr/bin:/bin HOME="$TEST_TMP/missing-home"
+  . "$EMIT_SH"
+  agent_event_emit_init implementer codex missing
+  agent_event_emit_accepted
+) 2>"$TEST_TMP/missing-stderr"
+assert_eq 0 "$?" "missing fleet is fail soft"
+assert_eq 1 "$(wc -l < "$TEST_TMP/missing-stderr" | tr -d ' ')" "missing fleet prints one hint"
 
 finalize_test

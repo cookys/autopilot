@@ -32,15 +32,12 @@ _aee_ts_ms() {
 }
 
 _aee_map_runner() {
-  case "${1:-}" in
-    codex) printf 'codex' ;;
-    grok) printf 'grok' ;;
-    kimi) printf 'kimi' ;;
-    agy) printf 'agy' ;;
-    opencode) printf 'opencode' ;;
-    claude|claude-native|cc-shim|local|anthropic-compatible) printf 'claude' ;;
-    *) printf 'claude' ;;
-  esac
+  local r="${1:-}"
+  if [ -n "$r" ]; then
+    printf '%s' "$r"
+  else
+    printf 'claude'
+  fi
 }
 
 _aee_map_stage() {

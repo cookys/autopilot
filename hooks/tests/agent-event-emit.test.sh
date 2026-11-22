@@ -85,4 +85,28 @@ assert_contains "$(cat "$stderr_file")" "agent-event-emit: fleet event emit fail
 ts_val="$(node -e "const fs=require('fs'); const o=JSON.parse(fs.readFileSync('$LOG_FILE','utf8').trim().split('\n')[0]); process.stdout.write(String(typeof o.ts === 'number' && Number.isInteger(o.ts) && o.ts > 1000000000000));")"
 assert_eq "true" "$ts_val" "ts is positive integer milliseconds"
 
+# Case 4: exit trap emits ended with nonzero rc, preserves rc, and passes runner verbatim
+LOG_FILE_4="$TEST_TMP/fleet-events-4.jsonl"
+(
+  export FAKE_FLEET_LOG="$LOG_FILE_4"
+  # shellcheck source=/dev/null
+  . "$EMIT_SH"
+  agent_event_emit_init "implementer" "local" "run-test-4"
+  agent_event_emit_register_exit_trap
+  agent_event_emit_accepted
+  (exit 42)
+)
+rc4=$?
+assert_eq "42" "$rc4" "exit trap preserves nonzero rc"
+assert_file_exists "$LOG_FILE_4" "case 4 events log created"
+line_count_4="$(wc -l < "$LOG_FILE_4" | tr -d ' ')"
+assert_eq "2" "$line_count_4" "case 4 emits accepted + ended"
+line4_1="$(sed -n '1p' "$LOG_FILE_4")"
+line4_2="$(sed -n '2p' "$LOG_FILE_4")"
+assert_contains "$line4_1" '"state":"accepted"' "case 4 first event is accepted"
+assert_contains "$line4_1" '"runner":"local"' "case 4 runner passed through verbatim (local)"
+assert_contains "$line4_2" '"state":"ended"' "case 4 second event is ended"
+assert_contains "$line4_2" '"rc":42' "case 4 ended records nonzero rc 42"
+assert_contains "$line4_2" '"runner":"local"' "case 4 ended runner is local"
+
 finalize_test

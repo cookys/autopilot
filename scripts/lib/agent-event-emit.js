@@ -10,20 +10,8 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 function mapRunner(runner) {
-  switch (String(runner || '').toLowerCase()) {
-    case 'codex': return 'codex';
-    case 'grok': return 'grok';
-    case 'kimi': return 'kimi';
-    case 'agy': return 'agy';
-    case 'opencode': return 'opencode';
-    case 'claude':
-    case 'claude-native':
-    case 'cc-shim':
-    case 'local':
-    case 'anthropic-compatible':
-    default:
-      return 'claude';
-  }
+  const r = String(runner || '').trim().toLowerCase();
+  return r || 'claude';
 }
 
 function mapStage(role) {

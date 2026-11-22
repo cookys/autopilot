@@ -32,7 +32,7 @@ chmod +x "${BIN_DIR}/inbox-cli"
 OUT_PATH_ONLY="$(env -u AUTOPILOT_FLEET_REPO -u AUTOPILOT_PM_INBOX_ADAPTER PATH="${BIN_DIR}:${PATH}" node "$DONE_JS" msg-123 --ref ref-456 2>&1)"
 RC_PATH_ONLY=$?
 assert_eq "0" "$RC_PATH_ONLY" "PATH-only pm-inbox-done exits 0"
-assert_contains "$OUT_PATH_ONLY" '"ok": true' "PATH-only pm-inbox-done returns ok"
+assert_contains "$OUT_PATH_ONLY" "done msg-123" "PATH-only pm-inbox-done returns ok"
 
 # Case 2: Neither PATH nor AUTOPILOT_FLEET_REPO — exits 3 naming both places.
 # Keep node and which available via a minimal symlinked dir without inbox-cli.
@@ -62,6 +62,6 @@ EOF
 OUT_REPO="$(env -u AUTOPILOT_PM_INBOX_ADAPTER AUTOPILOT_FLEET_REPO="${FAKE_REPO}" PATH="${EMPTY_BIN}" node "$DONE_JS" msg-789 --ref ref-000 2>&1)"
 RC_REPO=$?
 assert_eq "0" "$RC_REPO" "repo fallback pm-inbox-done exits 0"
-assert_contains "$OUT_REPO" '"ok": true' "repo fallback pm-inbox-done returns ok"
+assert_contains "$OUT_REPO" "done msg-123" "repo fallback pm-inbox-done returns ok"
 
 finalize_test

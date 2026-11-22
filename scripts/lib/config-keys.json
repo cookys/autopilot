@@ -4506,6 +4506,16 @@
       "relates": []
     },
     {
+      "name": "AUTOPILOT_SESSION",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": ["scripts/lane-ops.sh"],
+      "doc": null,
+      "relates": []
+    },
+    {
       "name": "AUTOPILOT_SESSION_ID",
       "kind": "env",
       "audience": "internal",

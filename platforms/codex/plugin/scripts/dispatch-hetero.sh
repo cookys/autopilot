@@ -8676,6 +8676,7 @@ if ! _cont_finalize_or_die; then
   exit 1
 fi
 emit "$OUTCOME_STATUS" "$OUTCOME_COMMIT" "$OUTCOME_FILES" "$OUTCOME_INS" "$OUTCOME_DEL" "$OUTCOME_WT" "$OUTCOME_ERR"
+[ -z "${HETERO_FLEET_TASK_ID:-}" ] || node "$SELF_DIR/lib/dispatch-strike.js" --task "$HETERO_FLEET_TASK_ID" >&2 || true
 maybe_redispatch_cloud_busy "$OUTCOME_STATUS"
 if [ -n "$RC_ALARM_LABEL" ]; then
   _rc_alarm_rc="$OUTCOME_EXIT"

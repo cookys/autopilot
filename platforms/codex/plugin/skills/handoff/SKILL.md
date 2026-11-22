@@ -115,7 +115,7 @@ Triggered by "寫 handoff", "寫 handover", "ctx 太滿", "context 快滿", "cle
    Report what you routed in step 4 so the user can see what outlived the handoff.
 
 4. **Response to User**:
-   Reply with the file path, the paste-ready line: `read <path> 接續`, and a reminder that the machine snapshot (`handoff_inject`, see hooks/README.md) is a backup. Auto-compact restores context; keep working.
+   Reply with the file path, and a reminder that the machine snapshot (`handoff_inject`, see hooks/README.md) is a backup. For the PM seat (or when no fleet seat is resolved), include the paste-ready line: `read <path> 接續`. For non-PM fleet seats, do **not** relay a restart line to the operator — `context-land-gate` dispatches the restart task to hangar automatically. Auto-compact restores context; keep working.
 
 ## Resume Mode
 

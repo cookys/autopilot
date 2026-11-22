@@ -174,6 +174,21 @@ reset; rm -f "$FLEET_LOG"; use_context 160000; fire >/dev/null; write_handoff
 out="$(FLEET_BIN="$FAKE_FLEET" FAKE_FLEET_LOG="$FLEET_LOG" FAKE_FLEET_EXIT=1 FLEET_ADDRESS="cookys/openclaw/ops--claude" stop)"
 has "$out" "read $HANDOFF 接續" && has "$out" "轉給操作員" && has "$out" "simulated hub error" && ok "(j3) fleet failure falls back to operator relay with failure reason" || bad "(j3) out=$out"
 
+# (j5) hangar--claude seat -> exactly one dispatch to ops--claude (not hangar--claude as target), no operator relay
+reset; rm -f "$FLEET_LOG"; use_context 160000; fire >/dev/null; write_handoff
+out="$(FLEET_BIN="$FAKE_FLEET" FAKE_FLEET_LOG="$FLEET_LOG" FLEET_ADDRESS="cookys/openclaw/hangar--claude" stop)"
+calls="$([ -f "$FLEET_LOG" ] && wc -l < "$FLEET_LOG" || echo 0)"
+line="$(cat "$FLEET_LOG" 2>/dev/null || true)"
+[ "$calls" -eq 1 ] && has "$line" "dispatch cookys/openclaw/ops--claude " && ! has "$line" "dispatch cookys/openclaw/hangar--claude " && ok "(j5) hangar--claude dispatches to ops--claude (not hangar--claude)" || bad "(j5) calls=$calls line=$line"
+has "$out" "轉給操作員" && bad "(j5) block reason mentions operator relay: $out" || ok "(j5) block reason does not tell model to relay to operator"
+
+# (j6) ops--claude seat -> one dispatch to hangar--claude explicitly
+reset; rm -f "$FLEET_LOG"; use_context 160000; fire >/dev/null; write_handoff
+out="$(FLEET_BIN="$FAKE_FLEET" FAKE_FLEET_LOG="$FLEET_LOG" FLEET_ADDRESS="cookys/openclaw/ops--claude" stop)"
+calls="$([ -f "$FLEET_LOG" ] && wc -l < "$FLEET_LOG" || echo 0)"
+line="$(cat "$FLEET_LOG" 2>/dev/null || true)"
+[ "$calls" -eq 1 ] && has "$line" "dispatch cookys/openclaw/hangar--claude " && ! has "$line" "dispatch cookys/openclaw/ops--claude " && ok "(j6) ops--claude dispatches to hangar--claude" || bad "(j6) calls=$calls line=$line"
+
 printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ] && { echo "PASS [context-land-gate]"; exit 0; }
 echo "FAIL [context-land-gate]"; exit 1

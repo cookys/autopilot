@@ -344,7 +344,7 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
   // The boxed fallback replaces the strip row (and its navHot buttons).
   // Keep card navigation registered on this bottom border too. s stays on the action row.
   const letters = Button === undefined || typing || page.id !== 'decide' ? [] : (['a', 'b', 'c', 'e', 'm', 'n', 'p', 'j', 'k', 'v'] as const).map(letter => (
-    <Box key={'lk' + letter} width={0} height={0} overflow="hidden"><Button key={'letter:' + letter + ep} plain hotkey={letter} onPress={() => frame.onKey?.(keys[letter] ?? { kind: 'none' })}>{letter}</Button></Box>
+    <Box key={'lk' + letter} width={0} height={0} overflow="hidden"><Button key={'letter:' + letter + ep} plain hotkey={letter} onPress={() => frame.onKey?.(keys[letter] ?? (letter === 'j' ? { kind: 'move', by: 1 } : letter === 'k' ? { kind: 'move', by: -1 } : { kind: 'none' }))}>{letter}</Button></Box>
   ))
   const bottom = <Box key="v74-bottom" height={1} width={fullCols} overflow="hidden"><Text {...bc}>{GLYPHS.structure.frameBL + rule + '  ' + fit.hint + '  ' + rule.repeat(padN) + '  '}</Text>{tabs}<Text {...bc}>{'  ' + rule + GLYPHS.structure.frameBR}</Text>{hidden}{letters}</Box>
   return <Box {...(epoch > 0 ? { key: 'v74:' + epoch } : {})} flexDirection="column">{top}{inner}{bottom}</Box>

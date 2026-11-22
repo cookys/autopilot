@@ -220,6 +220,14 @@ test('c-style: p/n switches cards and a/b/c picks option', async ($, on) => {
   await h.close()
 })
 
+test('dual-pane: j and k switch cards like n and p', async ($, on) => {
+  const h = await host($, on)
+  expect(text(await h.draw())).toContain('卡 #01 / 3')
+  expect(text(await h.key('j'))).toContain('卡 #02 / 3')
+  expect(text(await h.key('k'))).toContain('卡 #01 / 3')
+  await h.close()
+})
+
 test('c-style: Esc focus event closes expanded background without changing card', async ($, on) => {
   const h = await host($, on)
   await h.key('v')

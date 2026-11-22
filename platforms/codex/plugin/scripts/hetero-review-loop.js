@@ -276,6 +276,7 @@ Collect flags:
                         warns when it differs from the base..head actually collected; nothing declared,
                         nothing checked.
   --strict-range        Turn the range warning into an error raised before g<N>/ exists
+  --allow-same-family   Allow two seats from the same model family (downgrades same_family_vote refusal to a warning)
   --full-range          Generation > 1 only: review <generation 1 base>..<head> instead of the delta from
                         the previous head. Opt-in; the chain entry and range.json gain range_mode: "full",
                         which only a checker from this version accepts.
@@ -462,7 +463,23 @@ function seatQuotaExhausted(seat) {
   }
 }
 
-function resolveSeatsWithPolicy(seatsArg, repoRoot) {
+function checkSameFamilyVote(seats, allowSameFamily) {
+  const collision = familyGate.findSameFamilyVote(
+    seats,
+    (s) => (s && s.family && s.family !== 'unknown' ? s.family : familyOfEngine(s && s.engine)),
+  );
+  if (!collision) return;
+  const label = (s) => (s && s.runner ? `${s.engine}@${s.runner}` : (s && (s.engine || s.id)) || 'unknown');
+  const message = `same_family_vote: ${label(collision.first)} and ${label(collision.second)} (${collision.family})`;
+  if (!allowSameFamily) {
+    console.error(`ERROR: ${message}`);
+    process.exit(2);
+  }
+  console.error(`hetero-review-loop: warning: ${message}`);
+}
+
+function resolveSeatsWithPolicy(seatsArg, repoRoot, options = {}) {
+  const allowSameFamily = Boolean(options && options.allowSameFamily);
   if (seatsArg) {
     const specs = seatsArg.split(',').map((s) => s.trim()).filter(Boolean);
     const seats = specs.map((spec, idx) => {
@@ -470,6 +487,7 @@ function resolveSeatsWithPolicy(seatsArg, repoRoot) {
       assertSafeSeatId(id);
       return parseSeatSpec(spec, id);
     });
+    checkSameFamilyVote(seats, allowSameFamily);
     return {
       seats,
       policy: {
@@ -523,6 +541,7 @@ function resolveSeatsWithPolicy(seatsArg, repoRoot) {
       family: typeof seatObj.family === 'string' && seatObj.family && seatObj.family !== 'unknown' ? seatObj.family : undefined,
     };
   });
+  checkSameFamilyVote(seats, allowSameFamily);
   return {
     seats,
     policy: {
@@ -1142,7 +1161,9 @@ async function handleCollect(flags) {
   let seats = [];
   let panelPolicy = { crossFamilyRequired: true, requiredReviewFamilies: 1 };
   try {
-    const resolvedSeats = resolveSeatsWithPolicy(flags.seats, repoRoot);
+    const resolvedSeats = resolveSeatsWithPolicy(flags.seats, repoRoot, {
+      allowSameFamily: Boolean(flags['allow-same-family']),
+    });
     seats = resolvedSeats.seats;
     panelPolicy = resolvedSeats.policy;
   } catch (e) {
@@ -1411,6 +1432,7 @@ async function handleCollect(flags) {
       implementerEngine,
       crossFamilyRequired: panelPolicy.crossFamilyRequired,
       requiredReviewFamilies: panelPolicy.requiredReviewFamilies,
+      allowSameFamily: Boolean(flags['allow-same-family']),
     });
     if (!sub) continue;
 

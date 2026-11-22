@@ -233,6 +233,7 @@ function selectCodexQuotaSubstitute({
   requiredReviewFamilies = null,
   minPanelSize = null,
   authorFamilyExcluded = false,
+  allowSameFamily = false,
   substitutes = null,
   configFile = null,
 } = {}) {
@@ -285,6 +286,9 @@ function selectCodexQuotaSubstitute({
 
     // 1. Never pick a substitute whose family equals the implementer's family.
     if (implFamilies.size > 0 && implFamilies.has(candFamily)) continue;
+
+    // 1b. Never pick a substitute whose family is already seated unless --allow-same-family.
+    if (!allowSameFamily && otherFamilies.has(candFamily)) continue;
 
     // 2. Never duplicate an existing seat tuple already in the panel.
     if (otherSeats.some((s) => isSameSeatTuple(s, cand))) continue;

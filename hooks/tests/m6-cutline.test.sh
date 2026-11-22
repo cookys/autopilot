@@ -14,7 +14,7 @@ printf updated > "$R/projects/old.md"
 printf new > "$R/plans/new.md"
 git -C "$R" add plans projects
 GIT_AUTHOR_DATE=2022-01-01T12:00:00Z GIT_COMMITTER_DATE=2022-01-01T12:00:00Z git -C "$R" commit -qm new
-node - "$REPO_ROOT/scripts/lib/m6-cutline.js" "$R" <<'NODE'
+node - "$REPO_ROOT/scripts/lib/m6-cutline.js" "$R" <<'NODE' || fail "cutline assertions failed"
 const assert = require('assert');
 const fs = require('fs');
 const { execFileSync } = require('child_process');
@@ -46,3 +46,4 @@ assert.strictEqual(fs.readFileSync(registry, 'utf8'), after);
 assert.deepStrictEqual(m.list(repo), ['null.md', 'plans/new.md']);
 console.log('PASS m6-cutline');
 NODE
+finalize_test

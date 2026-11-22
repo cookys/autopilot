@@ -544,7 +544,7 @@ function resolveSeat(parsedSeat, promptPath, cwd = path.dirname(promptPath)) {
   if (!isKnownModelForRunner(runner, model)) {
     return { allowed: false, runner, model, endpoint, effort: parsedSeat.effort, reason: 'unknown_model' };
   }
-  return { allowed: true, runner, model, endpoint, effort: parsedSeat.effort, family };
+  return { allowed: true, runner, model, endpoint: (alias && alias.endpoint) || parsedSeat.endpoint || '', effort: parsedSeat.effort, family };
 }
 
 function sanitizeOutName(model) {
@@ -576,6 +576,26 @@ function buildChildEnv() {
     if (key.startsWith('ANTHROPIC_DEFAULT_')) delete env[key];
   }
   return env;
+}
+
+function redactSeatError(rawLine) {
+  if (!rawLine) return '';
+  let text = String(rawLine);
+  try {
+    const ar = require('./ar-redact');
+    const arRes = ar.sanitize([{ text }], undefined, false);
+    if (arRes && Array.isArray(arRes.messages) && arRes.messages[0] && typeof arRes.messages[0].text === 'string') {
+      text = arRes.messages[0].text;
+    }
+  } catch { /* best-effort redaction */ }
+  try {
+    const personalRedact = require('./lib/personal-data-redact');
+    const prRes = personalRedact.redactText(text);
+    if (prRes && typeof prRes.text === 'string') {
+      text = prRes.text;
+    }
+  } catch { /* best-effort redaction */ }
+  return text.slice(0, 200);
 }
 
 function writeAtomic(filePath, content, mode = 0o600) {
@@ -741,8 +761,9 @@ async function runPanel(opts, outDir, promptPath) {
       seatMeta.push({ index: i, barred: false, expectKey, seat: parsed.raw });
 
       const outChunks = [];
+      const errChunks = [];
       child.stdout.on('data', (d) => outChunks.push(d));
-      child.stderr.on('data', () => { /* drain */ });
+      child.stderr.on('data', (d) => errChunks.push(d));
 
       let settled = false;
       const finishSeat = (code) => {
@@ -767,6 +788,13 @@ async function runPanel(opts, outDir, promptPath) {
           out_path: finalOutPath,
           bytes: finalBytes,
         };
+        if (!ok) {
+          const rawErr = Buffer.concat(errChunks).toString('utf8');
+          const firstLine = rawErr.split(/\r?\n/).map((l) => l.trim()).find((l) => l.length > 0) || '';
+          if (firstLine) {
+            record.error = redactSeatError(firstLine.slice(0, 200));
+          }
+        }
         const resultFile = path.join(resultsDir, `${expectKey}.result.json`);
         const exitFile = path.join(resultsDir, `${expectKey}.exit`);
         writeAtomic(resultFile, JSON.stringify(record) + '\n', 0o600);

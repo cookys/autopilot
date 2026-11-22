@@ -19,7 +19,8 @@ CALLS_FILE="$TEST_TMP/calls"
 printf '0' > "$CALLS_FILE"
 
 cutline_node() {
-  node - "$REPO_ROOT/scripts/lib/m6-cutline.js" "$R" "$CALLS_FILE" "$@"
+  local flag="$1" code="$2"; shift 2
+  node "$flag" "$code" -- - "$REPO_ROOT/scripts/lib/m6-cutline.js" "$R" "$CALLS_FILE" "$@"
 }
 
 # 1. Without AUTOPILOT_M6_CUTLINE: CUTLINE is null and guardedStoreWrite writes + registers

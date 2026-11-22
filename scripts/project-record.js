@@ -79,7 +79,7 @@ const SUBS = {
   'adr new': { f: ADR, pos: [0, 0] },
   'adr supersede': { f: ADR, pos: [1, 1] },
   'lesson new': { f: { title: 'v', category: 'v', 'body-file': 'v' }, pos: [0, 0] },
-  'handoff new': { f: { title: 'v', area: 'v', 'body-file': 'v', 'decision-file': '+', 'lesson-file': '+' }, pos: [0, 0] },
+  'handoff new': { f: { title: 'v', area: 'v', origin: 'v', 'body-file': 'v', 'decision-file': '+', 'lesson-file': '+' }, pos: [0, 0] },
   'handoff close': { f: {}, pos: [1, 1] },
   where: { f: {}, pos: [0, 0] },
   flush: { f: { drop: 'v' }, pos: [0, 0] },
@@ -502,13 +502,14 @@ H['handoff new'] = {
     try { secs = rf.parseHandoffBody(body); } catch (e) { throw refuse(e.rule || 'invalid-value', 'body-file', e.message); }
     for (const [key, , required] of rf.HANDOFF_SECTIONS) if (required && !secs[key]) throw refuse('missing-required', 'body-file', `handoff body needs a non-empty "## ${key}" section`);
     return {
-      title: oneLine(f.title, 'title'), area: oneLine(f.area, 'area'), body,
+      title: oneLine(f.title, 'title'), area: oneLine(f.area, 'area'), origin: f.origin || 'manual', body,
       decisions: (f['decision-file'] || []).map((x) => trimEnd(readFileArg(x))),
       lessons: (f['lesson-file'] || []).map((x) => trimEnd(readFileArg(x))),
     };
   },
   files(repo, p) { return rf.handoffNew(repo, { project: p.area, body: p.body, decisions: p.decisions, lessons: p.lessons }, { clock }); },
   validate(repo, p, state) { // parse-level checks of the hippo path (the files path validates in rf.handoffNew)
+    if (!['manual', 'project-file'].includes(p.origin)) throw refuse('invalid-value', 'origin', 'expected manual|project-file');
     if (state === 'files') return null;
     return {
       warnings: [], area: areaOf(p.area, 'area'),
@@ -517,7 +518,7 @@ H['handoff new'] = {
   },
   plan(repo, p, key, v) {
     const area = v.area;
-    const steps = [{ op: 'create', ref: 'root', kind: 'handoff-note', argv: ['--title', p.title, '--area', area, '--status', 'open'], body: `${p.body}\n`, key }];
+    const steps = [{ op: 'create', ref: 'root', kind: 'handoff-note', argv: ['--title', p.title, '--area', 'handoff', '--status', 'open', '--tag', `origin:${p.origin}`], body: `${p.body}\n`, key: `handoff:${key}` }];
     let n = 0;
     const child = (kind, text, title, extra) => {
       n++;

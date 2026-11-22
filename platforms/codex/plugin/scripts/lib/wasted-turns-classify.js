@@ -76,7 +76,9 @@ function extractHookBlockName(resultText, isError) {
   }
   const preToolMatch = trimmed.match(/^PreToolUse:([a-zA-Z0-9_.-]+)/);
   if (preToolMatch) {
-    return preToolMatch[1];
+    // Real shape: "PreToolUse:<Tool> hook error: <message> [hook-name]<fix>"; the hook name is the last [bracket] token.
+    const named = [...trimmed.matchAll(/\[([a-z0-9][a-z0-9_.-]*)\]/g)].map((m) => m[1]);
+    return named.length ? named[named.length - 1] : preToolMatch[1];
   }
   const colonMatch = trimmed.match(/^([a-zA-Z0-9_-]+):\s*(?:deny|denied|block|blocked|hook error)/i);
   if (colonMatch) {

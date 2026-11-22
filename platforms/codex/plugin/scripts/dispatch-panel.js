@@ -5,7 +5,7 @@
  * dispatch-panel.js — parallel consultant barrier with fail-closed de-identification.
  *
  * Usage:
- *   node scripts/dispatch-panel.js --prompt-file F --seat <runner>:<model>[:<effort>] ... --out-dir D [--timeout 15m] [--author-cmd <path>]
+ *   node scripts/dispatch-panel.js --prompt-file F --seat <runner>:<model>[:<effort>] ... --out-dir D [--timeout 15m] [--author-cmd <path>] [--allow-same-family]
  *
  * Flow (fail-closed before any disk write or model call):
  *   1. Read F once into memory; empty, binary, or unreadable -> exit 4.
@@ -15,7 +15,8 @@
  *      `personal-data-patterns.js` (leak-guard host/LAN/email/home/secret rules), and
  *      the `fleet directory` identifier list; any hit, scanner error, or missing rule
  *      file -> exit 4, print rule ids only, write nothing, run zero seats.
- *   4. Only then: refuse a symlinked D, create or chmod D to 0700, write D/prompt.txt (0600).
+ *   4. Resolve seats and refuse duplicate allowed families before writing; --allow-same-family warns and overrides.
+ *      Only then: refuse a symlinked D, create or chmod D to 0700, write D/prompt.txt (0600).
  *   5. Per seat: resolve aliases, check `cn-model-dispatch-gate.js` + known runner/model/family;
  *      barred or unknown seats become {status:'barred'} in panel.json and are never spawned.
  *   6. Spawn `dispatch-author.sh` concurrently for allowed seats, each in a fresh empty 0700
@@ -192,7 +193,7 @@ function isKnownModelForRunner(runner, model) {
 }
 
 function usageText() {
-  return 'usage: dispatch-panel.js --prompt-file F --seat <runner>:<model>[:<effort>] ... --out-dir D [--timeout 15m] [--author-cmd <path>]\n';
+  return 'usage: dispatch-panel.js --prompt-file F --seat <runner>:<model>[:<effort>] ... --out-dir D [--timeout 15m] [--author-cmd <path>] [--allow-same-family]\n';
 }
 
 function fail(code, msg) {
@@ -263,6 +264,7 @@ function parseArgs(argv) {
     else if (a === '--out-dir') opts.outDir = next();
     else if (a === '--timeout') opts.timeout = next();
     else if (a === '--author-cmd') opts.authorCmd = next();
+    else if (a === '--allow-same-family') opts.allowSameFamily = true;
     else if (a === '--seat') {
       const parsed = parseSeat(next());
       if (!parsed) fail(2, 'invalid --seat format (expected <runner>:<model>[:<effort>])');
@@ -832,6 +834,19 @@ async function main() {
   const promptText = readPromptOnce(opts.promptFile);
   const identifiers = loadFleetIdentifiers();
   scanInMemory(promptText, identifiers);
+  const families = new Map();
+  for (const seat of opts.seats) {
+    const resolved = resolveSeat(seat, path.resolve(opts.promptFile));
+    if (!resolved.allowed) continue;
+    const first = families.get(resolved.family);
+    if (first) {
+      const message = `same_family_vote: ${first} and ${seat.raw} (${resolved.family})`;
+      if (!opts.allowSameFamily) fail(4, message);
+      process.stderr.write(`dispatch-panel: warning: ${message}\n`);
+      break;
+    }
+    families.set(resolved.family, seat.raw);
+  }
   const { outDir, promptPath } = prepareOutDirAndPrompt(opts.outDir, promptText);
   await runPanel(opts, outDir, promptPath);
 }

@@ -163,6 +163,49 @@ function writePrompt(sb, name, content) {
   return p;
 }
 
+test('same family vote is refused before any output or seat', () => {
+  const sb = makeSandbox();
+  try {
+    const promptFile = writePrompt(sb, 'clean.txt', 'Compare these proposals.\n');
+    const outDir = path.join(sb.dir, 'out');
+    const res = runPanel(sb, ['--prompt-file', promptFile, '--seat', 'codex:gpt-6-astra',
+      '--seat', 'codex:gpt-6.1-sol', '--out-dir', outDir, '--author-cmd', sb.authorStub]);
+    assert.equal(res.status, 4, `expected refusal; actual status ${res.status}, stderr: ${res.stderr}`);
+    assert.match(res.stderr, /same_family_vote.*codex:gpt-6-astra.*codex:gpt-6\.1-sol/);
+    assert.equal(fs.existsSync(outDir), false);
+    assert.equal(readCalls(sb.logDir).length, 0);
+  } finally { sb.cleanup(); }
+});
+
+test('same family override warns and runs both seats', () => {
+  const sb = makeSandbox();
+  try {
+    const promptFile = writePrompt(sb, 'clean.txt', 'Compare these proposals.\n');
+    const outDir = path.join(sb.dir, 'out');
+    const res = runPanel(sb, ['--prompt-file', promptFile, '--seat', 'codex:gpt-6-astra',
+      '--seat', 'codex:gpt-6.1-sol', '--out-dir', outDir, '--author-cmd', sb.authorStub,
+      '--allow-same-family']);
+    assert.equal(res.status, 0, res.stderr);
+    assert.match(res.stderr, /warning: same_family_vote.*codex:gpt-6-astra.*codex:gpt-6\.1-sol/);
+    assert.equal(readCalls(sb.logDir).length, 2);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(outDir, 'panel.json'))).seats.map(s => s.status), ['ok', 'ok']);
+  } finally { sb.cleanup(); }
+});
+
+test('neon, codex and claude seats run as distinct families', () => {
+  const sb = makeSandbox();
+  try {
+    const promptFile = writePrompt(sb, 'clean.txt', 'Compare these proposals.\n');
+    const outDir = path.join(sb.dir, 'out');
+    const res = runPanel(sb, ['--prompt-file', promptFile, '--seat', 'agy:gemini-4-neon-high',
+      '--seat', 'codex:gpt-6-astra', '--seat', 'claude-native:opus',
+      '--out-dir', outDir, '--author-cmd', sb.authorStub]);
+    assert.equal(res.status, 0, res.stderr);
+    assert.equal(readCalls(sb.logDir).length, 3);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(outDir, 'panel.json'))).seats.map(s => s.status), ['ok', 'ok', 'ok']);
+  } finally { sb.cleanup(); }
+});
+
 test('3 allowed seats run concurrently, wait for slowest, write 0700 D / 0600 prompt & panel.json', () => {
   const sb = makeSandbox();
   try {
@@ -888,10 +931,12 @@ test('codex:astra resolves to gpt-6.2-astra and explicit codex:gpt-6-astra remai
       '--prompt-file', promptFile,
       '--seat', 'codex:astra',
       '--seat', 'codex:gpt-6-astra',
+      '--allow-same-family',
       '--out-dir', outDir,
       '--author-cmd', sb.authorStub,
     ]);
     assert.equal(res.status, 0, res.stderr);
+    assert.match(res.stderr, /warning: same_family_vote.*codex:astra.*codex:gpt-6-astra/);
     const panel = JSON.parse(fs.readFileSync(path.join(outDir, 'panel.json'), 'utf8'));
     assert.equal(panel.complete, true);
     assert.equal(panel.seats.length, 2);

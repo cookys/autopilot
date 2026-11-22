@@ -1148,17 +1148,35 @@ function detectBareLs(cmd) {
   try { return detectBareLsUnguarded(cmd); } catch { return null; } // pathological nesting overflows the stack: fail open
 }
 function detectBareLsUnguarded(cmd) {
-  const exec = executableText(typeof cmd === 'string' ? cmd : '');
+  const rawCmd = typeof cmd === 'string' ? cmd : '';
+  const exec = executableText(rawCmd);
   if (!exec.includes('ls')) return null; // cheap exit first: this hook runs on every Bash call
   // `<(…)` / `>(…)` process substitution runs its body as a command list, exactly like `$(…)`.
   const text = stripArrayAssigns(stripArithmetic(rewriteProcSubst(exec)));
   if (!/\bls\b/.test(text)) return null;
+  let safeOffsets = text.length === rawCmd.length;
+  let segSearchFrom = 0;
+  const offsets = [];
+  let found = false;
   for (const seg of expandSegments(text)) {
     if (seg.sh) continue;
+    let segIdx = -1;
+    if (safeOffsets) {
+      segIdx = text.indexOf(seg.text, segSearchFrom);
+      if (segIdx < 0) safeOffsets = false;
+      else segSearchFrom = segIdx + seg.text.length;
+    }
     let afterTime = false; // `time` is a reserved word: its options (`-p`, `--`) are skipped with it, the command after still gets alias expansion
     const toks = tokens(seg.text).map((t) => t.raw);
+    let tokSearchFrom = 0;
     for (let i = 0; i < toks.length; i += 1) {
       const raw = toks[i];
+      let tokIdx = -1;
+      if (safeOffsets) {
+        tokIdx = seg.text.indexOf(raw, tokSearchFrom);
+        if (tokIdx < 0) safeOffsets = false;
+        else tokSearchFrom = tokIdx + raw.length;
+      }
       if (afterTime && (raw === '-p' || raw === '--')) continue;
       if (raw === 'time') { afterTime = true; continue; }
       if (/^[A-Za-z_]\w*(?:\[[^\]]*\])?\+?=/.test(raw) || KEYWORDS.has(raw)) continue;
@@ -1173,16 +1191,35 @@ function detectBareLsUnguarded(cmd) {
       // `ls () { … }` defines a function named ls; it is not a call.
       if (raw === 'ls' && /^\(/.test(toks[i + 1] || '')) break;
       if (raw === 'ls') {
-        return {
-          rule: 'bare-ls',
-          why: 'a bare `ls` in the Bash tool runs this machine\'s interactive alias/function (eza or similar) and can hang the whole call. '
-            + 'Use `command ls` or `/bin/ls`, or the Glob / Read tools',
-        };
+        found = true;
+        if (safeOffsets) {
+          const absIdx = segIdx + tokIdx;
+          if (rawCmd.slice(absIdx, absIdx + 2) === 'ls') offsets.push(absIdx);
+          else safeOffsets = false;
+        }
+        break;
       }
       break;
     }
   }
-  return null;
+  if (!found) return null;
+  let rewrite = null;
+  if (safeOffsets && offsets.length > 0) {
+    const unique = Array.from(new Set(offsets)).sort((a, b) => a - b);
+    let out = '';
+    let last = 0;
+    for (const off of unique) {
+      out += rawCmd.slice(last, off) + 'command ';
+      last = off;
+    }
+    rewrite = out + rawCmd.slice(last);
+  }
+  return {
+    rule: 'bare-ls',
+    why: 'a bare `ls` in the Bash tool runs this machine\'s interactive alias/function (eza or similar) and can hang the whole call. '
+      + 'Use `command ls` or `/bin/ls`, or the Glob / Read tools',
+    rewrite,
+  };
 }
 
 // Rule 5 (rm-var-target): a recursive `rm` (-r -R -rf -fr -Rf --recursive, flags before or after the targets, any

@@ -346,13 +346,17 @@ function classify(tool, input) {
       }
       if (busy) launchWarns.push('bash-launch-guard (busy-loop): loop can spin continuously');
       const ls = cfg.lsMode === 'off' ? null : detectBareLs(cmd);
+      const lsRewrite = ls && ls.rewrite && ls.rewrite.length <= 600
+        ? `\n改寫後的指令（直接照抄）：${ls.rewrite}`
+        : '';
       if (ls && cfg.lsMode === 'deny') {
         emitDeny(`bash-launch-guard (${ls.rule}): ${ls.why}. Set AUTOPILOT_BASH_GUARD_LS_MODE=warn|off `
           + '(or depth0_delegate_gate.bare_ls in ~/.autopilot/config.json) to relax.'
+          + lsRewrite
           + gateHint('ls 要帶顯式路徑（ls <path>）；要探索目錄改用 Glob/Read 工具', 'hooks/README.md'));
         process.exit(0);
       }
-      if (ls) launchWarns.push(`bash-launch-guard (${ls.rule}): ${ls.why}`);
+      if (ls) launchWarns.push(`bash-launch-guard (${ls.rule}): ${ls.why}${lsRewrite}`);
       const rv = cfg.rmVarMode === 'off' ? null : detectRecursiveRmVar(cmd);
       if (rv && cfg.rmVarMode === 'deny') {
         emitDeny(`bash-launch-guard (${rv.rule}): ${rv.why}` + gateHint('先展開變數確認範圍，再對顯式路徑執行 rm -r', 'hooks/README.md'));

@@ -1108,6 +1108,26 @@ for (const cmd of BL192_ALLOW) {
 }
 
 // ---- Rule 4 (BL-0300): bare `ls` in command position => deny ----
+const BARE_LS_REWRITE_CASES = [
+  ['ls', 'command ls'],
+  ['ls -la src', 'command ls -la src'],
+  ['cd x && ls | head', 'cd x && command ls | head'],
+  ['ls && ls -la', 'command ls && command ls -la'],
+];
+for (const [cmd, expected] of BARE_LS_REWRITE_CASES) {
+  test(`rule4 rewrite in deny message: ${JSON.stringify(cmd)}`, () => {
+    const r = run(cmd);
+    assert.strictEqual(r.deny, true);
+    assert.ok(r.reason.includes(`改寫後的指令（直接照抄）：${expected}`), r.reason);
+  });
+}
+for (const cmd of ['echo "ls"', 'grep ls file', 'command ls', '/bin/ls', "cat <<'EOF'\nls\nEOF"]) {
+  test(`rule4 allows without rewrite: ${JSON.stringify(cmd)}`, () => {
+    const r = run(cmd);
+    assert.strictEqual(r.deny, false);
+  });
+}
+
 const BARE_LS_DENY = [
   'ls',
   'ls -la /tmp',

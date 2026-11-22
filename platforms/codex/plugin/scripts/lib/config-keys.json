@@ -3501,6 +3501,19 @@
       "note": "Set to 1 by dispatch-hetero on the one cloud-seat re-exec after a failed --endpoint pre-probe. The child keeps the caller bwrap and does not retreat again."
     },
     {
+      "name": "AUTOPILOT_HETERO_PIN_ORIGIN",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-hetero.sh"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "Carries the caller's pin provenance across an internal fallback re-exec; cleared before worker dispatch."
+    },
+    {
       "name": "AUTOPILOT_HETERO_FELL_BACK_JSON",
       "kind": "env",
       "audience": "internal",

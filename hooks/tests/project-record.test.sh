@@ -189,6 +189,42 @@ H "$R_H" check >/dev/null; eq 0 "$?" "hippo: hippo check passes after every subc
 BADIDS="$(H "$R_H" list --history | jf 'd.data.records.filter(r=>!/^[0-9A-HJKMNP-TV-Z]{26}$/.test(r.id)).length')"
 eq 0 "$BADIDS" "hippo: every record id is a 26-char ULID"
 
+# Store-backed handoffs must match the existing files-mode golden views.
+R_HV="$(mk_fixture handoff-view store)"
+HF="$R_HV/docs/projects/demo/HANDOFF.md"
+GOLD="$REPO_ROOT/hooks/tests/fixtures/record-files/golden"
+node -e 'const i=require(process.argv[1]).input; require("fs").writeFileSync(process.argv[2], i.body); require("fs").writeFileSync(process.argv[3], i.decisions[0]); require("fs").writeFileSync(process.argv[4], i.lessons[0])' "$REPO_ROOT/hooks/tests/fixtures/record-files/inputs/handoff-new.json" "$TEST_TMP/gold-body" "$TEST_TMP/gold-decision" "$TEST_TMP/gold-lesson"
+pr --target "$R_HV" --json handoff new --title Demo --area demo --body-file "$TEST_TMP/gold-body" --decision-file "$TEST_TMP/gold-decision" --lesson-file "$TEST_TMP/gold-lesson"
+eq 0 "$RC" "handoff view: new succeeds"
+HV_ID="$(printf '%s' "$OUT" | jf d.id)"
+cmp -s "$HF" "$GOLD/handoff-new/files/docs/projects/demo/HANDOFF.md"; eq 0 "$?" "handoff view: new matches golden"
+node -e 'require("fs").writeFileSync(process.argv[2], require(process.argv[1]).input.body)' "$REPO_ROOT/hooks/tests/fixtures/record-files/inputs/handoff-replace.json" "$TEST_TMP/gold-replace"
+pr --target "$R_HV" --json handoff new --title Replacement --area demo --body-file "$TEST_TMP/gold-replace"
+eq 0 "$RC" "handoff view: replacement succeeds"
+HV_ID="$(printf '%s' "$OUT" | jf d.id)"
+cmp -s "$HF" "$GOLD/handoff-replace/files/docs/projects/demo/HANDOFF.md"; eq 0 "$?" "handoff view: replacement matches golden"
+pr --target "$R_HV" --json handoff close "$HV_ID"
+eq 0 "$RC" "handoff view: close succeeds"
+eq done "$(H "$R_HV" show "$HV_ID" | jf d.data.record.status)" "handoff view: store closed"
+[ ! -e "$HF" ]; eq 0 "$?" "handoff view: close removes file like golden"
+
+# A directory at the view path forces real write/remove errors even when running as root.
+mkdir "$HF"
+pr --target "$R_HV" --json handoff new --title "Failed view" --area demo --body-file "$TEST_TMP/gold-body"
+eq 0 "$RC" "handoff view error: new exits successfully"
+eq true "$(printf '%s' "$OUT" | jf d.ok)" "handoff view error: new reports ok"
+assert_contains "$(printf '%s' "$OUT" | jf d.view_error)" "HANDOFF.md" "handoff view error: new reports error"
+assert_contains "$(printf '%s' "$OUT" | jf d.hint)" "Repair" "handoff view error: new provides hint"
+HV_ERROR_ID="$(printf '%s' "$OUT" | jf d.id)"
+eq open "$(H "$R_HV" show "$HV_ERROR_ID" | jf d.data.record.status)" "handoff view error: new record persists"
+pr --target "$R_HV" --json handoff close "$HV_ERROR_ID"
+eq 0 "$RC" "handoff view error: close exits successfully"
+eq true "$(printf '%s' "$OUT" | jf d.ok)" "handoff view error: close reports ok"
+assert_contains "$(printf '%s' "$OUT" | jf d.view_error)" "HANDOFF.md" "handoff view error: close reports error"
+assert_contains "$(printf '%s' "$OUT" | jf d.hint)" "Repair" "handoff view error: close provides hint"
+eq done "$(H "$R_HV" show "$HV_ERROR_ID" | jf d.data.record.status)" "handoff view error: close persists"
+rmdir "$HF"
+
 # --- validation exits 3 in both modes, nothing written
 for MODE in files hippo; do
   if [ "$MODE" = files ]; then RV="$(mk_fixture val-files)"; else RV="$(mk_fixture val-hippo store)"; fi

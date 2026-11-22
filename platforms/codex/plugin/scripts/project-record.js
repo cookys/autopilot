@@ -21,7 +21,7 @@
 // handoff path) where it has none. Where `hippo detect` says `files` (no .hippo/repo.toml) this script writes today's files via
 // lib/record-files.js; in `hippo`/`hippo-problems` it writes through the hippo CLI (lib/hippo.js step runner); in `spool` (binary
 // missing, exit 5) it saves the write under <git common dir>/autopilot/hippo-spool. The state is decided by detect alone: with a store
-// present nothing here ever writes a file-mode target, whatever hippo answers (a refusal exits non-zero, a missing binary spools).
+// present a refusal never writes a file-mode target (a refusal exits non-zero, a missing binary spools).
 //
 // Exit: 0 ok (incl. spooled) | 1 internal or file-mode refusal | 2 usage (unknown flag, bad target, plugin dir) | 3 rule refusal
 // (backlog-entry rules, validation, hippo rules incl. leak) | 4 not found | 5 store unavailable and not spoolable. Hippo's code is kept.
@@ -538,6 +538,24 @@ H['handoff close'] = {
   plan: (repo, p, key) => ({ key, steps: [{ op: 'close', id: ulidArg(p.id, 'handoff close'), status: 'done' }] }),
 };
 
+// Handoff provenance keeps the project available when closing the file view.
+H['handoff new'].after = (repo, p, res) => {
+  const saved = hippo.run(repo, ['set', res.ids.root, 'provenance', '--kind', 'autopilot-handoff', '--value', p.area, '--locator', res.ids.root]);
+  if (saved.exit !== 0) throw new HippoRefusal(saved);
+  const r = H['handoff new'].files(repo, p);
+  return r.info_lines.concat([`handoff view written: ${r.id}`]).join('; ');
+};
+H['handoff close'].after = (repo, p) => {
+  const provenance = showRecord(repo, p.id).provenance;
+  const project = provenance && provenance.kind === 'autopilot-handoff' && provenance.value;
+  if (!project || !AREA_RE.test(project)) throw new rf.RecordError('missing_project', 'handoff record has no project provenance');
+  const r = spawnSync('bash', [path.join(__dirname, 'resolve-project-paths.sh'), '--target', repo, '--field', 'projects_dir'], { encoding: 'utf8' });
+  if (r.status !== 0 || !r.stdout.trim() || r.stdout.trim() === 'none') throw new rf.RecordError('path_unresolved', 'cannot resolve projects directory');
+  const file = path.join(r.stdout.trim(), project, 'HANDOFF.md');
+  const closed = rf.handoffClose(repo, { path: file }, { clock });
+  return `handoff view removed: ${closed.id}`;
+};
+
 // ---- BACKLOG.md as a view of the store ----------------------------------------------------------------------------------
 // Each `after` runs once the store write succeeded (never on a spool or a refusal) and puts the same change into the file with the
 // files-mode writer. It returns an info line (or null) and throws RecordError/RuleViolationError when the file step is refused.
@@ -920,6 +938,13 @@ function hippoMode(g, cmd, handler, p, det) {
       const line = handler.after(repo, p, res, v);
       if (line) info.push(line);
     } catch (e) {
+      if (cmd.startsWith('handoff ')) {
+        const hint = 'Repair the handoff file view manually after fixing the cause.';
+        err(`store written; handoff view was not updated: ${e.message}`);
+        err(hint);
+        emitJson(g, { ok: true, state, key, id, ids: res.ids, view_error: e.message, hint });
+        return 0;
+      }
       if (!(e instanceof HippoRefusal || e instanceof rf.RecordError || e instanceof rules.RuleViolationError)) throw e;
       const target = id || p.id;
       err(`store written${id ? `: ${id}` : ''}; BACKLOG.md was not updated: ${e.message}`);

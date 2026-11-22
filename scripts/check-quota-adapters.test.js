@@ -51,7 +51,7 @@ test('G40-N27 a verified:true capture with no evidence, or a manifest with no ma
 test('G40-N27 a manifest with starts_window missing fails; true or false needs its own evidence', () => {
   assert.ok(has(manifest((m) => { delete m.starts_window; }), 'starts_window', /missing/));
   assert.ok(has(manifest((m) => { m.starts_window = 'maybe'; }), 'starts_window', /enum/));
-  assert.ok(has(manifest((m) => { m.starts_window = true; }), 'starts_window_evidence'));
+  assert.ok(has(manifest((m) => { m.starts_window = true; delete m.starts_window_evidence; delete m.starts_window_confidence; }), 'starts_window_evidence'));
   assert.deepStrictEqual(rules(manifest((m) => { m.starts_window = false; m.starts_window_evidence = m.capture[0].evidence; probe(m).starts_window = false; })), []);
 });
 
@@ -212,7 +212,7 @@ const confirmed = (m) => { m.starts_window = false; m.starts_window_evidence = E
 const POLICY_CHECKS = [
   ['1 confidence enum', (m) => { confirmed(m); m.starts_window_confidence = 'certain'; }, 'starts_window_confidence', /^enum$/,
     ["add('starts_window_confidence', 'enum')", '0']],
-  ['2 unknown has no confidence', (m) => { m.starts_window_confidence = 'low'; }, 'starts_window_confidence', /unknown_has_no_confidence/,
+  ['2 unknown has no confidence', (m) => { m.starts_window = 'unknown'; m.starts_window_confidence = 'low'; delete m.starts_window_evidence; }, 'starts_window_confidence', /unknown_has_no_confidence/,
     ["add('starts_window_confidence', 'unknown_has_no_confidence')", '0']],
   ['3 false+high needs evidence', (m) => { confirmed(m); delete m.starts_window_evidence; }, 'starts_window_confidence', /high_without_evidence/,
     ["add('starts_window_confidence', 'high_without_evidence')", '0']],

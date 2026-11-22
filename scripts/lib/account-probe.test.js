@@ -97,8 +97,8 @@ function redCases(mod) {
 
 test('G40-N13/N66 (BL-0375): the policy table, every red-light case, on the real module', () => {
   assert.deepStrictEqual(redCases(p), []);
-  assert.strictEqual(p.probeModeAllowed(MANIFEST, 'scheduled'), false, 'Claude: unknown');
-  assert.strictEqual(p.resolveProbeMode(MANIFEST, undefined), 'stale', 'Claude unset: on-demand only');
+  assert.strictEqual(p.probeModeAllowed(MANIFEST, 'scheduled'), true, 'Claude: confirmed manifest qualifies for periodic');
+  assert.strictEqual(p.resolveProbeMode(MANIFEST, undefined), 'scheduled', 'Claude confirmed: periodic by default');
   for (const m of ['off', 'stale']) assert.strictEqual(p.probeModeAllowed(MANIFEST, m), true);
   assert.strictEqual(p.probeModeAllowed(MANIFEST, 'always'), false);
   assert.strictEqual(p.probeModeAllowed(undefined, 'scheduled'), false);

@@ -141,6 +141,25 @@ test('reply to a courier wake is denied and names the task_id', () => {
   assert.match(reason, new RegExp(taskId));
 });
 
+test('reply to the courier model-reply probe is allowed (the probe expects a reply and retries without one)', () => {
+  const messageId = 'model-probe-autopilot--claude-1795391717341';
+  const transcript_path = transcriptWith(
+    `<channel source="fleet" from="cookys/aimax395-team/courier" message_id="${messageId}" kind="chat">\n[fleet patrol] model probe: reply with the nonce only\n</channel>`,
+  );
+  assert.equal(guard.decide({
+    tool_name: 'mcp__fleet__reply',
+    transcript_path,
+    tool_input: { message_id: messageId, content: 'abc123' },
+  }), null);
+  // a real courier wake is still denied
+  const wakeId = '01FAKEWAKE0000000000000002';
+  const wakePath = transcriptWith(
+    `<channel source="fleet" from="cookys/aimax395/courier" message_id="${wakeId}" kind="chat">\nwake\n</channel>`,
+  );
+  const out = guard.decide({ tool_name: 'mcp__fleet__reply', transcript_path: wakePath, tool_input: { message_id: wakeId, content: 'x' } });
+  assert.equal(out.hookSpecificOutput.permissionDecision, 'deny');
+});
+
 test('reply to a member message is allowed', () => {
   const messageId = '01FAKEMEMBERMSG00000000001';
   const transcript_path = transcriptWith(

@@ -1,0 +1,12 @@
+# autopilot:dispatch-usage-push/1
+# Template only: the updater installs the timer on each host.
+[Unit]
+Description=Push the autopilot dispatch usage snapshot daily
+
+[Timer]
+Unit=dispatch-usage-push.service
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target

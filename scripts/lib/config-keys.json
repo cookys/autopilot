@@ -6770,6 +6770,19 @@
       "summary": "Set to \"off\" (or 0, false, no) to stop open-decision.js from sending the card open/close notice to the program PM."
     },
     {
+      "name": "AUTOPILOT_USAGE_PUSH_TO",
+      "kind": "env",
+      "audience": "user",
+      "group": "ui",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-usage-push.sh"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Fleet address receiving the daily dispatch usage snapshot; unset or empty disables sending."
+    },
+    {
       "name": "AUTOPILOT_CARD_NOTIFY_TO",
       "kind": "env",
       "audience": "user",

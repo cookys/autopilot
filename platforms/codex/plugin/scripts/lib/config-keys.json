@@ -3194,7 +3194,8 @@
       "class": "path_seam",
       "default": null,
       "readers": [
-        "scripts/lib/runtime-paths.js"
+        "scripts/lib/runtime-paths.js",
+        "scripts/dispatch-round-table.js"
       ],
       "doc": null,
       "relates": []
@@ -4502,6 +4503,16 @@
       "readers": [
         "src/status/runs-watch.js"
       ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_SESSION",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": ["scripts/lane-ops.sh"],
       "doc": null,
       "relates": []
     },

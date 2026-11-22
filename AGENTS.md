@@ -110,4 +110,4 @@ These bind ANY depth-0 controller driving this repo.
 
 ## Cross-Platform Notes (factual)
 
-Platform config files and skill discovery differ; see [`references/multi-agent-portability.md`](references/multi-agent-portability.md) for the verified table with source URLs, and `platforms/CLAUDE.md` for skill-sharing paths and the Codex/OpenCode packages. Fleet watch, upload/fetch, task_result: `skills/fleet-usage/SKILL.md`.
+Platform config and skill discovery differ; see [`references/multi-agent-portability.md`](references/multi-agent-portability.md) for the verified table; see also `platforms/CLAUDE.md` for skill-sharing paths and the Codex/OpenCode packages. Fleet watch, upload/fetch, task_result: `skills/fleet-usage/SKILL.md`.

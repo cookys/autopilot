@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0498 -->
+<!-- next-id: BL-0501 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -2313,4 +2313,43 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: XS
 - **Source**: autopilot lane, 2026-11-22 (01M801WE / 01M7V30B / 01M802A25 follow-ups)
+- **Pointer**: none
+
+### dispatch 無提交誤標 rate_limited
+- **Id**: BL-0498
+- **Status**: open
+- **Since**: 2026-11-22
+- **Origin**: self
+- **Problem**: dispatch-hetero 對乾淨結束卻無提交的派工誤標 error_category 為 auth_failed 或 rate_limited，巡查與人會被誤導去看錯誤類別；應標 agent_declined 並附 agent 最後一段話。autopilot 席 2026-11-22 五次。
+- **Impact**: 誤導判讀派工失敾原因，重派錯引擎
+- **Trigger**: 下次派工乾淨結束卻無提交時
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: self 2026-11-22
+- **Pointer**: none
+
+### land.sh 失敗不清 land-<label> worktree
+- **Id**: BL-0499
+- **Status**: open
+- **Since**: 2026-11-22
+- **Origin**: self
+- **Problem**: par/land.sh 落地失敗時殘留 land-<label> worktree，需手動 git worktree remove --force 才能重跑；影響重跑速度與磁碟。autopilot 席 2026-11-22。
+- **Impact**: 每次落地失敗多一道手動清理
+- **Trigger**: 下次落地失敗時
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: self 2026-11-22
+- **Pointer**: none
+
+### bare-ls 守門誤判 command ls
+- **Id**: BL-0500
+- **Status**: open
+- **Since**: 2026-11-22
+- **Origin**: self
+- **Problem**: bash-footgun-guard 對 $(command ls …) 內的 ls 也誤報，且建議改寫成 command command ls；應放行顯式 command ls 並給正確改寫。autopilot 席 2026-11-22。
+- **Impact**: 守門誤報打斷正常操作
+- **Trigger**: 下次在 Bash 工具用 $(command ls …) 時
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: self 2026-11-22
 - **Pointer**: none

@@ -236,6 +236,10 @@ function readStoreRows(storeDir) {
     } catch (err) {
       fail(`malformed scorecard line ${i + 1} in ${file}: ${err.message}`);
     }
+    // record_kind rows (field-outcome, supersession) are not qualification
+    // evidence: the recipe selects rows by event_id, so they are skipped here
+    // and can never be packaged as an official default.
+    if (parsed && parsed.record_kind !== undefined) continue;
     rows.push(parsed);
   }
   return rows;

@@ -10,8 +10,9 @@
  *   - handoff written after the fire: the first Stop after it blocks once more:
  *     - PM seat (`pm--claude`) or unresolvable fleet seat: tells the model to relay one copyable line to the
  *       operator (`read <path> 接續`, plugin can be updated and the session restarted).
- *     - Any other resolved fleet seat: dispatches one ops task to hangar (`fleet dispatch`) and tells the
- *       model not to relay to the operator; falls back to the operator relay if dispatch fails.
+ *     - Any other resolved fleet seat: dispatches one ops task to hangar (`fleet dispatch`) — or to
+ *       `ops--claude` when the seat itself is `hangar--claude` — and tells the model not to relay to the
+ *       operator; falls back to the operator relay if dispatch fails.
  *     Every later stop is allowed.
  * Handoff file candidates: the path the checklist names ($XDG_RUNTIME_DIR/autopilot/handoff/<sid>.md, else
  * <live base>/handoff/<sid>.md) and the skill's manual route (scripts/resolve-repo-placement.js handoff --route manual).
@@ -34,6 +35,7 @@ const { gateHint } = require('./lib/gate-hint.js');
 const MAX_BLOCKS = 2;
 const TIERS = ['t3', 't2']; // highest first
 const DEFAULT_HANGAR_ADDRESS = 'cookys/openclaw/hangar--claude';
+const DEFAULT_OPS_ADDRESS = 'cookys/openclaw/ops--claude';
 const DISPATCH_TIMEOUT_MS = 20000;
 
 function mtimeMs(p) {
@@ -67,25 +69,30 @@ function parseTaskId(stdout) {
 }
 
 function dispatchHangarRestart(sid, landed) {
-  const hangar = process.env.AUTOPILOT_HANGAR_ADDRESS || DEFAULT_HANGAR_ADDRESS;
   const selfAddr = ownerAddress() || String(process.env.AUTOPILOT_FLEET_ADDRESS || '').replace(/@.*$/, '').trim() || '未知';
+  const member = selfAddr.includes('/') ? selfAddr.slice(selfAddr.lastIndexOf('/') + 1) : selfAddr;
+  const isHangarSelf = member === 'hangar--claude';
+  const target = isHangarSelf
+    ? (process.env.AUTOPILOT_OPS_ADDRESS || DEFAULT_OPS_ADDRESS)
+    : (process.env.AUTOPILOT_HANGAR_ADDRESS || DEFAULT_HANGAR_ADDRESS);
+  const targetLabel = isHangarSelf ? 'ops' : 'hangar';
   const text = `席位 ${selfAddr}（session ${sid}）已完成 handoff（${landed}）。plugin 可以更新、session 可以重啟；重啟後請對該席貼：read ${landed} 接續`;
   const env = { ...process.env };
   delete env.FLEET_AS_CLI;
   delete env.FLEET_FYI;
   const r = spawnSync(
     process.env.FLEET_BIN || 'fleet',
-    ['dispatch', hangar, '--size', 'XS', '--kind', 'ops', '--class', 'chat', '--priority', 'P3', '--priority-reason', 'seat restart request', text],
+    ['dispatch', target, '--size', 'XS', '--kind', 'ops', '--class', 'chat', '--priority', 'P3', '--priority-reason', 'seat restart request', text],
     { encoding: 'utf8', timeout: DISPATCH_TIMEOUT_MS, env }
   );
   if (r.error) {
-    return { ok: false, error: r.error.code === 'ENOENT' ? 'no fleet binary' : r.error.message };
+    return { ok: false, targetLabel, error: r.error.code === 'ENOENT' ? 'no fleet binary' : r.error.message };
   }
   if (r.status !== 0) {
     const firstErr = String(r.stderr || '').trim().split('\n')[0] || 'no output';
-    return { ok: false, error: `fleet dispatch exit ${r.status}: ${firstErr}` };
+    return { ok: false, targetLabel, error: `fleet dispatch exit ${r.status}: ${firstErr}` };
   }
-  return { ok: true, taskId: parseTaskId(r.stdout) };
+  return { ok: true, targetLabel, taskId: parseTaskId(r.stdout) };
 }
 
 function main() {
@@ -128,10 +135,10 @@ function main() {
         const res = dispatchHangarRestart(sid, landed);
         if (res.ok) {
           const taskLabel = res.taskId ? `task ${res.taskId}` : 'task';
-          block(`handoff 已寫好，已自動派單給 hangar 重啟（${taskLabel}），你不必再通知任何人，可以結束 turn。`);
+          block(`handoff 已寫好，已自動派單給 ${res.targetLabel} 重啟（${taskLabel}），你不必再通知任何人，可以結束 turn。`);
           return;
         }
-        block(`${operatorMsg}\n（自動派單給 hangar 失敗：${res.error}）${operatorHint}`);
+        block(`${operatorMsg}\n（自動派單給 ${res.targetLabel || 'hangar'} 失敗：${res.error}）${operatorHint}`);
         return;
       }
       block(operatorMsg + operatorHint);

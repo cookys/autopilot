@@ -451,7 +451,7 @@ test('v74 boxed decide scrolls card detail on ArrowDown/PageDown and resets on p
   let curNav = nav({ cursor: 0 })
   let out = draw(curNav)
   expect(out.join('\n')).toContain('卡 #01 / 2')
-  expect(out.join('\n')).toContain('下面還有')
+  expect(out.join('\n')).toContain('還有')
 
   // ArrowDown scrolls detail, card stays 1
   applyScroll(pendingScroll.detail, { by: 1, contentRows: 0 })
@@ -469,7 +469,7 @@ test('v74 boxed decide scrolls card detail on ArrowDown/PageDown and resets on p
   applyScroll(pendingScroll.detail, { by: 999, contentRows: 0 })
   out = draw(curNav)
   const bottom = pendingScroll.detail.offset
-  expect(out.some(r => r.includes('↓ 下面還有'))).toBe(false)
+  expect(out.some(r => r.includes('↓ 還有'))).toBe(false)
   applyScroll(pendingScroll.detail, { by: 1, contentRows: 0 })
   draw(curNav)
   expect(pendingScroll.detail.offset).toBe(bottom)

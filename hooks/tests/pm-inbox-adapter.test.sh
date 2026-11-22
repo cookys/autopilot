@@ -62,6 +62,6 @@ EOF
 OUT_REPO="$(env -u AUTOPILOT_PM_INBOX_ADAPTER AUTOPILOT_FLEET_REPO="${FAKE_REPO}" PATH="${EMPTY_BIN}" node "$DONE_JS" msg-789 --ref ref-000 2>&1)"
 RC_REPO=$?
 assert_eq "0" "$RC_REPO" "repo fallback pm-inbox-done exits 0"
-assert_contains "$OUT_REPO" "done msg-123" "repo fallback pm-inbox-done returns ok"
+assert_contains "$OUT_REPO" "done msg-789" "repo fallback pm-inbox-done returns ok"
 
 finalize_test

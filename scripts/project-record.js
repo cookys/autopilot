@@ -962,7 +962,9 @@ function main(argv) {
   return writeCmd(cmd, parsed);
 }
 
-try {
+module.exports = { decisionHandler: H['decision new'] };
+
+if (require.main === module) try {
   process.exitCode = main(process.argv.slice(2));
 } catch (e) {
   if (e instanceof HippoRefusal) {

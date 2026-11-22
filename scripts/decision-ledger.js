@@ -64,6 +64,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 const { appendRow, ensureDir, withWriteLock } = require('./lib/jsonl-store');
 
@@ -195,6 +196,34 @@ function readRows(ledger) {
   return rows;
 }
 
+function mirrorDecision(row) {
+  if (row.kind !== 'decision' && row.kind !== 'veto') return;
+  try {
+    const top = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    if (top.status !== 0 || !fs.existsSync(path.join(top.stdout.trim(), '.hippo', 'repo.toml'))) return;
+    const hippo = require('./lib/hippo');
+    let det;
+    try { det = hippo.detect(); } catch (e) {
+      if (e.code === 'not-a-repo' || e.code === 'plugin-dir') return;
+      throw e;
+    }
+    if (det.state === 'files') return;
+    if (det.state !== 'hippo') throw new Error(det.reason);
+    const token = row.kind === 'decision' ? row.decision_id : JSON.stringify(row);
+    const candidate = `ledger:${token}`;
+    const key = /^[a-z0-9:._/-]{1,60}$/.test(candidate) ? candidate
+      : `ledger:${crypto.createHash('sha256').update(token).digest('hex').slice(0, 8)}`;
+    const handler = require('./project-record').decisionHandler;
+    const p = { title: `Ledger ${row.kind}`, rationale: JSON.stringify(row), relates: [], decides: [] };
+    const plan = handler.plan(det.repo_root, p, key);
+    plan.steps[0].argv.push('--tag', 'source:decision-ledger');
+    const result = hippo.execute(det.repo_root, plan, { log: () => {} });
+    if (!result.ok) throw new Error(result.error.message);
+  } catch (e) {
+    process.stderr.write(`decision-ledger: store mirror failed; retry after fixing the store (${String(e.message).replace(/[\r\n]+/g, ' ')})\n`);
+  }
+}
+
 function append(opts) {
   if (!KINDS.has(opts.kind)) usage(`--kind must be one of ${[...KINDS].join('|')}`);
   let row;
@@ -237,6 +266,7 @@ function append(opts) {
     process.stdout.write(`${JSON.stringify(duplicate)}\n`);
     return;
   }
+  mirrorDecision(full);
   process.stdout.write(`${JSON.stringify(full)}\n`);
 }
 
@@ -261,6 +291,7 @@ function veto(opts) {
     { storeDir: path.dirname(path.resolve(opts.ledger)), lockFile: `${path.resolve(opts.ledger)}.lock`, name: 'decision-ledger' },
     () => appendRow(opts.ledger, full),
   );
+  mirrorDecision(full);
   process.stdout.write(`${JSON.stringify(full)}\n`);
 }
 

@@ -2370,3 +2370,77 @@ test('busy-loop allows sleeping loops and quoted mentions, and honors mode', () 
   assert.match(warn.ctx, /busy-loop/);
   assert.strictEqual(run(cmd, { env: { AUTOPILOT_BASH_GUARD_BUSY_LOOP_MODE: 'off' } }).deny, false);
 });
+
+// ---- P2: paste-ready rewrite line in deny/warn messages ----
+function extractRewrite(text) {
+  const m = /\n改寫後的指令（直接照抄）：([^\n]+)$/.exec(text);
+  return m ? m[1] : null;
+}
+
+test('P2 paste-ready rewrites: every changed rule emits a copyable rewrite that passes the guard', () => {
+  // 1. detach-no-wake
+  {
+    const r = run('nohup scripts/dispatch-review.sh --base a --head b > /tmp/x.log 2>&1 &');
+    assert.strictEqual(r.deny, true);
+    const rw = extractRewrite(r.reason);
+    assert.ok(rw, `missing rewrite in: ${r.reason}`);
+    assert.strictEqual(run(rw).deny, false, `rewrite still denied: ${rw}`);
+  }
+  // 2. pkill-self-match
+  {
+    const r = run('pkill -f myworker');
+    assert.strictEqual(r.deny, true);
+    const rw = extractRewrite(r.reason);
+    assert.ok(rw, `missing rewrite in: ${r.reason}`);
+    assert.strictEqual(run(rw).deny, false, `rewrite still denied: ${rw}`);
+  }
+  // 3. zsh-expansion (warn-only)
+  {
+    const r = run('echo *.zzq_nonexistent_p2', { shell: 'zsh' });
+    assert.strictEqual(r.deny, false);
+    assert.match(r.ctx, /zsh-expansion/);
+    const rw = extractRewrite(r.ctx);
+    assert.ok(rw, `missing rewrite in: ${r.ctx}`);
+    assert.doesNotMatch(run(rw, { shell: 'zsh' }).ctx, /zsh-expansion/);
+  }
+  // 4. zsh-only-syntax
+  {
+    const r = run('echo ${(L)e}');
+    assert.strictEqual(r.deny, true);
+    const rw = extractRewrite(r.reason);
+    assert.ok(rw, `missing rewrite in: ${r.reason}`);
+    assert.strictEqual(run(rw).deny, false, `rewrite still denied: ${rw}`);
+  }
+  // 5. rm-var-target (computable inline assignment + uncomputable fallback)
+  {
+    const d = mk('blg-rmvar-');
+    const r1 = run(`TARGET=${d}; rm -rf $TARGET`);
+    assert.strictEqual(r1.deny, true);
+    const rw1 = extractRewrite(r1.reason);
+    assert.ok(rw1, `missing rewrite in: ${r1.reason}`);
+    assert.strictEqual(run(rw1).deny, false, `rewrite still denied: ${rw1}`);
+
+    const r2 = run('rm -rf "$UNSET_P2_DIR"');
+    assert.strictEqual(r2.deny, true);
+    const rw2 = extractRewrite(r2.reason);
+    assert.strictEqual(rw2, 'rm -r <literal path under the scratchpad>');
+  }
+  // 6. subagent-rm-outside-scratch
+  {
+    const r = run('rm -rf /tmp/outside-scratch-p2', { extra: { agent_id: 'sub1', session_id: 'sid-p2' } });
+    assert.strictEqual(r.deny, true);
+    const rw = extractRewrite(r.reason);
+    assert.ok(rw, `missing rewrite in: ${r.reason}`);
+    assert.strictEqual(run(rw, { extra: { agent_id: 'sub1', session_id: 'sid-p2' } }).deny, false, `rewrite still denied: ${rw}`);
+  }
+  // 7. rm-shared-dir
+  {
+    const shared = mk('blg-shared-');
+    fs.chmodSync(shared, 0o777);
+    const r = run(`rm -rf ${shared}`, { env: { AUTOPILOT_BASH_GUARD_SHARED_RM_MODE: 'deny' } });
+    assert.strictEqual(r.deny, true);
+    const rw = extractRewrite(r.reason);
+    assert.ok(rw, `missing rewrite in: ${r.reason}`);
+    assert.strictEqual(run(rw, { env: { AUTOPILOT_BASH_GUARD_SHARED_RM_MODE: 'deny' } }).deny, false, `rewrite still denied: ${rw}`);
+  }
+});

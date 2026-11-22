@@ -534,6 +534,10 @@ function detectDetachNoWake(cmd) {
       && pos.some((q, k) => k > idx && q.head === 'wait' && q.seg.lvl === p.seg.lvl && !q.seg.bg && !q.seg.pipe
         && waitsForAll(q.rest, bv && k > bv.at ? bv.name : null))) continue;
     const rm = /dispatch-([a-z-]+)\.(?:sh|js)$/.exec(railHead);
+    const fgRewrite = String(cmd || '')
+      .replace(/^\s*(?:nohup\s+|setsid\s+(?:--fork|-f)\s+|setsid\s+)+/, '')
+      .replace(/\s*&\s*$/, '')
+      .trim() || `${railHead} ...`;
     return {
       rule: 'detach-no-wake',
       shape,
@@ -541,6 +545,7 @@ function detectDetachNoWake(cmd) {
       why: 'a dispatch rail entrypoint is launched in the background (trailing & / setsid -f) with nothing '
         + 'that can wake the session when it finishes',
       advice: launchAdvice(shape, rm ? rm[1] : null, !!p.seg.sub),
+      rewrite: fgRewrite,
     };
   }
   return null;
@@ -813,6 +818,8 @@ function detectPkillSelfMatch(cmd) {
       if (hit === false) continue;
       // Unjudgeable (unknown $VAR, unparsable regex): keep the old stance — a `[x]` bracket or a `$` means "assume fine".
       if (hit === null && (/\[[^\]\s]\]/.test(pattern) || /\$/.test(pattern))) continue;
+      const bracketed = /^[A-Za-z0-9]/.test(pattern) ? `[${pattern[0]}]${pattern.slice(1)}` : null;
+      const pkRewrite = bracketed ? raw.replace(word, `'${bracketed}'`) : 'kill "$(cat x.pid)"';
       return {
         rule: 'pkill-self-match',
         pattern,
@@ -821,6 +828,7 @@ function detectPkillSelfMatch(cmd) {
           + 'use the PID directly, or assemble the pattern in a variable from pieces so the whole literal never appears '
           + 'in the same command (`a=fo; b=o; pgrep -f "$a$b"`; an unresolvable `$VAR` pattern is not flagged), or bracket one '
           + "character (`'[f]oo'`)",
+        rewrite: pkRewrite,
       };
     }
   }
@@ -892,6 +900,7 @@ function detectZshExpansion(cmd, cwd) {
           rule: 'zsh-expansion', token: raw,
           why: `zsh expands a word starting with "=" (${raw}) as a command-path lookup and aborts the line `
             + `("${raw.replace(/^=+/, '')} not found") — quote it ('${raw}') or use bash -c`,
+          rewrite: String(cmd || '').replace(raw, `'${raw}'`),
         };
       }
       // Drop parameter forms (`$?`, `$*`, `${x:-*}`) and command substitutions before looking for globs.
@@ -913,6 +922,7 @@ function detectZshExpansion(cmd, cwd) {
         rule: 'zsh-expansion', token: raw,
         why: `unquoted glob ${raw} matches nothing: zsh aborts the WHOLE line with "no matches found" `
           + '(bash passes it through literally) — quote it, or setopt nonomatch',
+        rewrite: String(cmd || '').replace(raw, `'${raw}'`),
       };
     }
   }
@@ -974,13 +984,14 @@ function detectZshSyntax(cmd) {
   // The spec reason text: name the match, say why the call would stall, and offer the two rewrites.
   const why = (m) => `zsh-only syntax (${m}) — Claude Code cannot parse it and will hold the call on a permission prompt `
     + 'that auto-denies; rewrite in POSIX/bash (e.g. $(printf %s "$e" | tr A-Z a-z)) or wrap the command in bash -c \'...\'.';
+  const sqRewrite = `bash -c '${raw.replace(/'/g, "'\\''")}'`;
   let match = text.match(/\$\{\s*\([^}]*\)\s*[^}]*\}/);
-  if (match) return { rule: 'zsh-only-syntax', syntax: match[0], why: why(match[0]) };
+  if (match) return { rule: 'zsh-only-syntax', syntax: match[0], why: why(match[0]), rewrite: sqRewrite };
   match = uq.match(/(?<![A-Za-z0-9_\]<])=\([^)]*\)/);
-  if (match) return { rule: 'zsh-only-syntax', syntax: match[0], why: why(match[0]) };
+  if (match) return { rule: 'zsh-only-syntax', syntax: match[0], why: why(match[0]), rewrite: sqRewrite };
   // A glob metacharacter immediately followed by (...) is a zsh qualifier; function definitions and subshells lack a glob.
   match = uq.match(/(?:\*\*?|\?|\[[^\]\s]+\])(?:[^\s'"`()]*)(\([^()\s]*[./NnOmM][^()\s]*\))/);
-  if (match) return { rule: 'zsh-only-syntax', syntax: match[0], why: why(match[0]) };
+  if (match) return { rule: 'zsh-only-syntax', syntax: match[0], why: why(match[0]), rewrite: sqRewrite };
   return null;
 }
 
@@ -1266,6 +1277,7 @@ function detectRecursiveRmVarUnguarded(cmd) {
   if (!raw.includes('rm')) return null; // cheap exit first: this hook runs on every Bash call
   const prep = (e) => expandSegments(stripArrayAssigns(stripArithmetic(rewriteProcSubst(e))));
   const top = prep(exec);
+  const vars = literalAssignments(top);
   // Like rule 2: heredoc bodies the call RUNS (`bash <<EOF`) and the words after `eval` are scripts of their own.
   const scripts = [top];
   for (const body of runHeredocBodies(raw, top)) scripts.push(prep(executableText(body)));
@@ -1279,12 +1291,25 @@ function detectRecursiveRmVarUnguarded(cmd) {
       }
       const bad = rmVarHit(seg);
       if (bad === undefined) continue;
+      let rmRewrite = 'rm -r <literal path under the scratchpad>';
+      if (!/\$\(|`/.test(bad)) {
+        let allResolved = true;
+        const expanded = dequote(bad).replace(/\$(?:([A-Za-z_]\w*)|\{([A-Za-z_]\w*)\})/g, (_, a, b) => {
+          const v = vars.get(a || b);
+          if (v === undefined) { allResolved = false; return ''; }
+          return v;
+        });
+        if (allResolved && expanded && !expanded.includes('$')) {
+          rmRewrite = seg.text.replace(bad, expanded);
+        }
+      }
       return {
         rule: 'rm-var-target',
         why: `recursive rm with the expanding target ${bad} (\`$VAR\`, \`\${VAR}\`, \`$(…)\` or a backtick): what it deletes depends on state the command does not show. `
           + 'Expand the target to a literal path, check it lies under the scratchpad or a repo build directory, then remove that literal path; '
           + 'for a cargo project use `cargo clean` or one shared CARGO_TARGET_DIR across worktrees. '
           + 'Relax with AUTOPILOT_BASH_GUARD_RMVAR_MODE=warn|off (or depth0_delegate_gate.rm_var_target in ~/.autopilot/config.json)',
+        rewrite: rmRewrite,
       };
     }
   }
@@ -1613,6 +1638,7 @@ function detectSubagentRmOutsideScratchUnguarded(cmd, opts = {}) {
           + `(${resolveTmpRoot(env)}/claude-${uid >= 0 ? uid : '<uid>'}/*/${sessionId || '<missing-session-id>'}/). `
           + 'Subagents may only recursively delete inside their session scratchpad. '
           + 'Relax with AUTOPILOT_BASH_GUARD_SUBAGENT_RM_MODE=warn|off (or depth0_delegate_gate.subagent_rm in ~/.autopilot/config.json)',
+        rewrite: `rm -r ${resolveTmpRoot(env)}/claude-${uid >= 0 ? uid : '<uid>'}/<project-slug>/${sessionId || '<session-id>'}/scratchpad/${path.posix.basename(it.raw)}`,
       };
     }
     const ok = it.resolved
@@ -1627,6 +1653,7 @@ function detectSubagentRmOutsideScratchUnguarded(cmd, opts = {}) {
         + `(${resolveTmpRoot(env)}/claude-${uid >= 0 ? uid : '<uid>'}/*/${sessionId || '<missing-session-id>'}/). `
         + 'Subagents may only recursively delete inside their session scratchpad. '
         + 'Relax with AUTOPILOT_BASH_GUARD_SUBAGENT_RM_MODE=warn|off (or depth0_delegate_gate.subagent_rm in ~/.autopilot/config.json)',
+      rewrite: `rm -r ${resolveTmpRoot(env)}/claude-${uid >= 0 ? uid : '<uid>'}/<project-slug>/${sessionId || '<session-id>'}/scratchpad/${path.posix.basename(it.raw)}`,
     };
   }
   return null;
@@ -1674,6 +1701,7 @@ function detectRmSharedDirUnguarded(cmd, opts = {}) {
       why: `recursive rm targets shared/foreign directory ${it.raw} (${it.resolved}: ${reasons.join(', ')}) outside this session's scratchpad. `
         + 'Verify no other account or session shares this directory before deleting it. '
         + 'Configure with AUTOPILOT_BASH_GUARD_SHARED_RM_MODE=off|warn|deny (or depth0_delegate_gate.shared_rm in ~/.autopilot/config.json)',
+      rewrite: `stat ${it.resolved}`,
     };
   }
   return null;

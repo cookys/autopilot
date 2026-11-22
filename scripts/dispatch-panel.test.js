@@ -78,6 +78,10 @@ const val = (flag) => {
 };
 const runner = val('--runner');
 const model = val('--model');
+if (process.env.DP_TEST_REJECT_AGY_ENDPOINT && runner === 'agy' && val('--endpoint')) {
+  process.stderr.write('unexpected agy endpoint\\n');
+  process.exit(2);
+}
 const promptFile = val('--prompt-file');
 const logDir = process.env.DP_TEST_LOG_DIR;
 const seq = process.pid + '-' + Date.now() + '-' + Math.random().toString(16).slice(2, 8);
@@ -175,6 +179,19 @@ function writePrompt(sb, name, content) {
   fs.writeFileSync(p, content, 'utf8');
   return p;
 }
+
+test('agy seat does not pass a synthetic endpoint', () => {
+  const sb = makeSandbox();
+  try {
+    const promptFile = writePrompt(sb, 'clean.txt', 'Reply OK.\n');
+    const outDir = path.join(sb.dir, 'out');
+    const res = runPanel(sb, ['--prompt-file', promptFile, '--seat', 'agy:gemini-4-neon-high',
+      '--out-dir', outDir, '--author-cmd', sb.authorStub], { DP_TEST_REJECT_AGY_ENDPOINT: '1' });
+    assert.equal(res.status, 0, res.stderr);
+    const panel = JSON.parse(fs.readFileSync(path.join(outDir, 'panel.json'), 'utf8'));
+    assert.equal(panel.seats[0].status, 'ok');
+  } finally { sb.cleanup(); }
+});
 
 test('same family vote is refused before any output or seat', () => {
   const sb = makeSandbox();
@@ -630,6 +647,7 @@ test('path traversal ../x in a model name stays inside --out-dir and failed seat
     assert.equal(fs.existsSync(path.join(sb.dir, 'nested', 'x')), false);
     assert.equal(fs.existsSync(path.join(sb.dir, 'nested', 'x.out')), false);
     assert.equal(panel.seats[1].status, 'failed');
+    assert.equal(panel.seats[1].error, 'simulated runner failure');
     assert.equal(panel.seats[1].rc, 3);
     assert.equal(panel.seats[1].out_path, null);
     assert.equal(panel.seats[1].bytes, 0);
@@ -955,6 +973,7 @@ test('codex:astra resolves to gpt-6.2-astra and explicit codex:gpt-6-astra remai
     assert.equal(panel.seats.length, 2);
     assert.equal(panel.seats[0].seat, 'codex:astra');
     assert.equal(panel.seats[0].status, 'ok');
+    assert.equal(Object.hasOwn(panel.seats[0], 'error'), false);
     assert.equal(fs.readFileSync(panel.seats[0].out_path, 'utf8'), 'response-from:codex:gpt-6.2-astra\n');
     assert.equal(panel.seats[1].seat, 'codex:gpt-6-astra');
     assert.equal(panel.seats[1].status, 'ok');

@@ -113,3 +113,71 @@
 ### carbon
 
 待回
+
+---
+
+## 8. lead／PM 席改跑非 Claude Code harness（pi、dsh）
+
+> 「不然我都在想要用 pi/dsh 開發 lead / pm 了，一直被 claude code 安全機制卡脖子有點沒意思」
+
+### 8.1 pi 與 dsh 是什麼
+
+**pi**
+- **事實（`pi-dsh-research.md`，資料日期 2026-11-23）**：
+  - 身分與授權：自稱「minimal, extensible agent harness that you can make your own」，為 coding agent CLI（`pi`）。GitHub 與 npm 指向 `earendil-works` 組織（`github.com/earendil-works/pi`、npm `@earendil-works/pi-coding-agent`；舊版套件名 `@mariozechner/pi-coding-agent`，來源 `badlogic/pi-mono`），文件僅在 sessions 段落提到 "badlogic"，個人或公司歸屬：未證實。授權 MIT（https://unpkg.com/@earendil-works/pi-coding-agent@1.5.2/README.md ）。最新版本與日期：未證實（npm 頁面回 HTTP 403，README 只有版本徽章、文字無版號；本機 repo 記的版本為 v0.80.6）。
+  - 安裝：`curl -fsSL https://pi.dev/install.sh | sh`；`npm install -g --ignore-scripts @earendil-works/pi-coding-agent`；需 Node.js 22.19 以上。
+  - headless 模式：`pi --print "..."` 只輸出最終文字後退出；`pi --mode json "..."` 串流 JSONL；`pi --mode rpc --no-session` 常駐、stdin 收 JSONL 指令（https://docs.pi.dev/latest/cli-integration ；https://unpkg.com/@earendil-works/pi-coding-agent@1.5.2/docs/cli.md ；https://unpkg.com/@earendil-works/pi-coding-agent@1.5.2/docs/rpc.md ）。
+  - 擴充與 MCP 機制：有 extensions、skills、prompt templates、themes，可用 npm 或 git 打包成 Pi package。MCP 有內建 `builtin:mcp` 擴充與 `pi mcp add/remove/list/login/logout` 子命令，`--no-mcp` 可關。hook：未證實；能否接收 fleet MCP channel 的 `notifications/claude/channel` 通知：未證實；prompt cache：未證實；ACP 支援：未證實（`docs/dev/harness-acp-landscape.md:37` 提及 Pi，本次未能從官方來源驗證）。
+  - session resume：有。`-c, --continue` 續接本目錄最近 session；`-r, --resume` 開選單；`--session-dir <dir>`；`--no-session` 不持久化。
+  - 安全備註：預設權限行為（是否逐項確認、是否全自動）未證實；已知工具控制旗標為 `--no-tools`、`--no-builtin-tools`、`--tools`、`--exclude-tools`，沒有 `--allow` 或確認類旗標，`--approve` 是信任專案本地設定而非工具權限。
+- **判斷（能不能當 lead／PM 長駐席）**：pi 有 RPC 常駐模式與 MCP 擴充，但 hook、prompt cache、channel 通知接收皆未證實。
+
+**dsh**
+- **事實（`pi-dsh-research.md`，資料日期 2026-11-23）**：
+  - 身分與狀態：與 coding agent harness 有關的 `dsh` 本次證實只有 `https://github.com/deepseek-ai/deepseek-harness`（CLI `dsh`，npm `@deepseek-ai/dsh`，MIT 授權），狀態為 developer preview，README 寫「THERE WILL BE COMPATIBILITY-BREAKING CHANGES」（https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/HEAD/README.md ）。DeepSeek 目前不接受外部 PR。最新版本與日期：未證實（GitHub Releases 空白，搜尋結果有 `0.1.1-rc.2` 與 `0.1.5-rc.2` 兩種說法，皆不可確認）。
+  - 入口與 headless：可確認的入口是 Web UI（`npx @deepseek-ai/dsh web`，起於 `127.0.0.1:3080`）與 build/dev 指令；headless：未證實。
+  - 擴充／session／安全：架構為 "everything-is-a-plugin"（Cordis 外掛系統），skill／MCP／hook 具體支援：未證實；session resume：未證實；prompt cache：未證實；SAFETY.md（https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/HEAD/SAFETY.md ）寫「approval prompts, and permission controls can reduce risk」，但預設是否逐項確認未證實，官方警語為實驗性、未經安全稽核，建議用一次性 VM 或容器且不要當唯一安全控制。
+- **判斷（能不能當 lead／PM 長駐席）**：dsh 是 developer preview 且 headless 未證實，現在不能當長駐席。
+
+### 8.2 卡脖子清單（今晚實際卡過的事，逐項判斷來源）
+
+| 卡點 | 來源判斷（Claude Code 本身 / 自家 hook / 自家設定） | 依據 | 可不可以拿掉 |
+|---|---|---|---|
+| dev-channels 確認框（重開席位時 `--dangerously-load-development-channels` 的確認） | Claude Code 本身（判斷） | 重開席位時由 Claude Code CLI 跳出確認 | 是否有正式旗標可略過：未證實，需另查官方文件 |
+| 讀真的 `~/.claude` 的守門（`claude-home-read-guard`） | 自家 hook（判斷） | 規則來自全域 `CLAUDE.md` 的紅線，不是 Claude Code 的限制 | 可以（自家 hook） |
+| `bash-footgun-guard`（zsh 未加引號的 glob）、`bash-launch-guard`（bare `ls`、`pkill` 自我比對、`rm` 共用目錄） | 自家 hook（判斷） | repo 自家 PreToolUse hook（`hooks/README.md`） | 可以（改 `warn` 或 `off`） |
+| `depth0-delegate-gate`、`foreman-guard`、`secret-print`、`context-budget` T2 交接擋 | 自家 hook（判斷） | repo 自家 hook（`hooks/README.md`） | 可以（依旋鈕改 `warn` 或 `off`） |
+| 權限確認框 | Claude Code 本身（判斷） | 可由 settings 的 `permissions` 規則調整（具體鍵名未查證，不要編） | 可透過 settings 規則調整 |
+| autocompact | Claude Code 的機制，但觸發點是我們自己設的 | `autoCompactWindow` 233000／333000，交接 t2 150K／250K，見 `docs/guide/settings-reference.md` 與 `docs/plans/2026-11-21-wasted-turns.md` §2.1；頻繁壓縮與我們自設的低門檻有關（假設，待量測驗證） | 可調整門檻 |
+| fleet MCP channel 只在以 channels 旗標啟動的 Claude Code session 收得到通知 | Claude Code 的機制（出處：fleet MCP server 說明） | fleet MCP server 說明 | 屬 Claude Code channels 機制限制 |
+
+- **事實（fleet lane transcript 抽樣，2026-11-23，content-free 類別計數，單一 836 MB session 檔）**：`bash-footgun-guard` rule 3 約 1839 次、`context-budget` T2 約 2005 次、`bash-launch-guard`（bare-ls）約 345 次、（rm-shared-dir）約 146 次、（pkill-self-match）約 140 次、`depth0-delegate-gate` 約 290 次、`foreman-guard` sleep-rule 警告約 227 次、`secret-print` 約 174 次；hangar 席 7 天窗 18432 回合中 `hook_block` 779 回合，名稱以 `bash-launch-guard`、`bash-footgun-guard` 與 `dispatch-model-guard` 為主。
+- **判斷**：窗口內被擋的訊息絕大多數來自自家 hook，不是 Claude Code 本身的安全機制。
+
+### 8.3 換 harness 會失去什麼
+
+- **事實（repo 實作）**：autopilot plugin（`hooks/hooks.json`、`skills/`、`agents`）是 Claude Code plugin 形態。
+- **事實（repo 實作）**：pane mod（`mods/live`）是 Claude Code 專屬。
+- **事實（`pi-dsh-research.md`）**：fleet MCP channel 通知（`notifications/claude/channel`）在 pi 未證實（dsh 亦未證實）。
+- **事實（`pi-dsh-research.md`）**：prompt cache 在 pi、dsh 皆未證實。
+- **判斷**：本 repo 的量測與守門（`wasted-turns-report`、`cost-tracker`、`context-budget`、transcript 讀取）都吃 Claude Code transcript 格式，換了要重寫。
+
+### 8.4 不換的話，怎麼把卡點拿掉
+
+- **判斷**：先瘦自家 hook：依 8.2 次數排名，對「擋下次數多、真正攔住過錯誤少」的 hook 先改 `warn` 模式；已於 `docs/guide/settings-reference.md` 查證之實際環境變數旋鈕包括 `AUTOPILOT_BASH_GUARD_ZSH_MODE`、`AUTOPILOT_BASH_GUARD_LS_MODE`、`AUTOPILOT_BASH_GUARD_PKILL_MODE`、`AUTOPILOT_BASH_GUARD_SHARED_RM_MODE`、`AUTOPILOT_BASH_GUARD_SECRET_MODE`（`block|warn|off`）、`AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE`（`off|warn|block`）、`AUTOPILOT_FOREMAN_GUARD_MODE`（`block|warn|off`）、`AUTOPILOT_CONTEXT_BUDGET_MODE`（`off|warn|once`）。
+- **判斷**：用 `wasted-turns-report` 的 `by_hook` 計數當證據，遵守全域規則「每個檢查要說明它防的具體失敗，否則刪」。
+- **判斷**：settings 調整與 autocompact 門檻調整走既有計畫 `docs/plans/2026-11-21-wasted-turns.md` 的 P2 到 P5，不新增 phase。
+
+### 8.5 建議與代價
+
+不把 lead 和 PM 席換到 pi 或 dsh。理由：多數卡點來自自家 hook，換 harness 不會讓它們消失，只會讓守門機制整套失效或重寫；pi 的 hook、prompt cache、channel 通知接收皆未證實，dsh 是 developer preview 且 headless 未證實。pi 維持現況：它是 dispatch-hetero 已有的 runner 候選，只當 implementer，不當長駐席。先做 hook 瘦身（8.4），代價是少掉部分護欄，要靠 by_hook 證據決定哪些降級。若瘦身後卡點仍是主要成本，再用小範圍試驗評估 pi 當 lead 席，條件是 hook、channel 通知與 prompt cache 先實測。日期：本章與 astra、carbon 兩章同批，最晚 2026-11-24T12:00Z 由 PM 裁；若 PM 同意瘦身，上線日在裁示當天寫進本頁。回滾：hook 降級是旋鈕，改回即可。
+
+### 8.6 未證實
+
+以下彙整 `pi-dsh-research.md`（2026-11-23）中所有標示為「未證實」之項目（已去重）：
+
+1. **pi**：個人或公司歸屬（文件僅提 `earendil-works` 與 "badlogic"）、最新版本與日期（npm 403，README 無版號文字）、完整支援模型／供應商清單、hook 機制、prompt cache 支援、預設權限行為（是否逐項確認或全自動）、ACP 支援（官方 docs 未提，`harness-acp-landscape.md:37` 提及但本次未從官方來源驗證）、能否接收 fleet MCP channel 的 `notifications/claude/channel` 通知。
+2. **dsh（`deepseek-ai/deepseek-harness`）**：非 agent 同名工具（搜尋未出現）、headless 指令、支援模型／供應商、skill／MCP／hook 具體支援、session resume、prompt cache 支援、預設是否逐項確認權限、ACP 支援、能否載入 MCP 伺服器與接收 channel 通知、最新版本與日期（GitHub Releases 空白，搜尋結果版本說法不一）。
+3. **Claude Code**：重開席位時 `--dangerously-load-development-channels` 確認框是否有正式旗標可略過。
+
+本章待 astra、carbon 一併獨立評估。

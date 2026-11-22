@@ -20,6 +20,7 @@
 #
 # USAGE:
 #   scripts/dispatch-hetero.sh --branch <name> --prompt-file <file>
+#       [--pin-reason <text>]                 # 1..200 characters, one line; explain an explicit engine pin
 #       [--model <id>]                        # no built-in model. An implementer call with no --runner,
 #                                             # and no pace selection or strict-contract pin, uses runner local
 #                                             # and, when --model is omitted, model qwen. --runner grok with
@@ -416,6 +417,8 @@ GATE_RULES_FILE=""     # --gate-rules: per-turn gate rule list for ONE claude-na
 GATE_SETTINGS_FILE=""
 GATE_ARMED_SESSION=""
 ROLE_KIT_DIR=""        # --role-kit: per-role kit dir for ONE claude-native hand (lib/role-kit.sh)
+PIN_REASON=""
+PIN_REASON_SUPPLIED=0
 MODEL_SUPPLIED=0
 BASE_SUPPLIED=0
 RUNNER_SUPPLIED=0
@@ -2755,6 +2758,7 @@ process.stdout.write(JSON.stringify({
     args+=(--endpoint "$target_endpoint")
   fi
   unset ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN
+  export AUTOPILOT_HETERO_PIN_ORIGIN="$PINNED"
   export AUTOPILOT_HETERO_FELL_BACK=1
   export AUTOPILOT_HETERO_FELL_BACK_JSON="$FELL_BACK_JSON"
   exec "$0" "${args[@]}" < /dev/null
@@ -2811,6 +2815,7 @@ NODE
     [ -n "${WORKTREE_ROOT_RUN_ID:-}" ] && export AUTOPILOT_WORKTREE_ROOT_RUN_ID="$WORKTREE_ROOT_RUN_ID"
   fi
   unset ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN
+  export AUTOPILOT_HETERO_PIN_ORIGIN="$PINNED"
   export LOCAL_BUSY_REDISPATCH=1
   export AUTOPILOT_LOCAL_FALLBACK_PRESET='{"reason":"no_free_slot","detail":"busy_at_run"}'
   release_local_lease || true
@@ -2985,8 +2990,10 @@ write_manifest() {
   fi
   local effort_manifest_fields=""
   [ -z "${EFFORT_SENT:-}" ] || effort_manifest_fields=", \"effort\": \"$(_flat_json_escape "$EFFORT_SENT")\""
-  local role_kit_manifest_fields=""
-  [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_manifest_fields=", \"role_kit\": $ROLE_KIT_JSON"
+  local pin_json=null pinned_json="$PINNED"
+  [ "$PINNED" = false ] || [ "$PIN_REASON_SUPPLIED" -eq 0 ] || pin_json="\"$(_flat_json_escape "$PIN_REASON")\""
+  local role_kit_manifest_fields=", \"pinned\": $pinned_json, \"pin_reason\": $pin_json"
+  [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"role_kit\": $ROLE_KIT_JSON"
   [ "${SANDBOX:-off}" = "bwrap" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"sandbox\": $(sandbox_json)"
   [ "${LOCAL_RUNNER:-0}" -eq 1 ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"resolved_runner\": \"cc-shim\", \"endpoint\": \"$(_flat_json_escape "$ENDPOINT")\""
   [ "${LOCAL_RUNNER:-0}" -eq 1 ] && [ -n "${GATEWAY_TOKEN_SOURCE:-}" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"gateway_token\": \"$(_flat_json_escape "$GATEWAY_TOKEN_SOURCE")\""
@@ -3107,6 +3114,9 @@ while [ $# -gt 0 ]; do
     --campaign-contract) CAMPAIGN_CONTRACT_FILE="${2:-}"; shift 2 ;;
     --campaign-contract-sha256) CAMPAIGN_CONTRACT_SHA256="${2:-}"; shift 2 ;;
     --campaign-seal) CAMPAIGN_SEAL_FILE="${2:-}"; shift 2 ;;
+    --pin-reason)
+      [ $# -ge 2 ] || die_precondition "--pin-reason requires 1..200 characters on one line"
+      PIN_REASON="$2"; PIN_REASON_SUPPLIED=1; shift 2 ;;
     --model) MODEL="${2:-}"; MODEL_SUPPLIED=1; MODEL_IS_DEFAULT=0; shift 2 ;;
     --runner) RUNNER="${2:-}"; RUNNER_SUPPLIED=1; shift 2 ;;
     --rc-alarm-label) [ $# -ge 2 ] && [ -n "${2:-}" ] || die_precondition "--rc-alarm-label requires a non-empty label"; RC_ALARM_LABEL="$2"; shift 2 ;;
@@ -3192,6 +3202,24 @@ while [ $# -gt 0 ]; do
     *) die_precondition "unknown argument: $1" ;;
   esac
 done
+
+if [ "$PIN_REASON_SUPPLIED" -eq 1 ]; then
+  if [ -z "$PIN_REASON" ] || [ "${#PIN_REASON}" -gt 200 ] || [[ "$PIN_REASON" == *$'\n'* || "$PIN_REASON" == *$'\r'* ]]; then
+    die_precondition "--pin-reason requires 1..200 characters on one line"
+  fi
+fi
+
+PINNED=false
+if [ "$RUNNER_SUPPLIED" -eq 1 ] || [ "$MODEL_SUPPLIED" -eq 1 ]; then PINNED=true; fi
+PIN_REDISPATCH=0
+if { [ "${AUTOPILOT_HETERO_FELL_BACK:-}" = 1 ] || [ "${LOCAL_BUSY_REDISPATCH:-}" = 1 ]; } && [[ "${AUTOPILOT_HETERO_PIN_ORIGIN:-}" =~ ^(true|false)$ ]]; then
+  PINNED="$AUTOPILOT_HETERO_PIN_ORIGIN"
+  PIN_REDISPATCH=1
+fi
+unset AUTOPILOT_HETERO_PIN_ORIGIN
+if [ "$PINNED" = true ] && [ "$PIN_REASON_SUPPLIED" -eq 0 ] && [ "$PIN_REDISPATCH" -eq 0 ]; then
+  echo 'dispatch-hetero: warning: --runner/--model hard pin without --pin-reason (the pool should choose; say why you pinned)' >&2
+fi
 
 # Optional shared consecutive-failure alarm. Check before runner selection or any engine work.
 if [ -n "$RC_ALARM_LABEL" ]; then

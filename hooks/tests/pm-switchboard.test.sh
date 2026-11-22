@@ -1479,4 +1479,47 @@ MUT_NOCLI_OUT="$(AUTOPILOT_FLEET_REPO="$MISSING_FLEET_REPO" AUTOPILOT_PM_INBOX_A
 assert_eq "$MUT_NOCLI_RC" "2" "negative control: reverting FLEET_CLI_MISSING exit code returns 2 instead of 3"
 assert_not_contains "$MUT_NOCLI_OUT" "waiting_on fleet 01M7R4FA" "negative control: reverting FLEET_CLI_MISSING drops waiting_on message"
 
+# Regression inbox-wake-608: 7 items in 3 categories merge into 1 packet (urgent first, category headings); 61 items -> 2 packets (60 + 1).
+PACK_608_OUT="$(node - "$SWITCHBOARD_JS" <<'NODE'
+'use strict';
+const assert = require('assert');
+const { buildPackets } = require(process.argv[2]);
+
+const entries7 = [
+  { rule: 'decision_request', immediate: false, isResidue: false, failedChecks: [], item: { message_id: 'm1', from: 'lane-a', task_id: 't1', content: 'dec 1' } },
+  { rule: 'task_result', immediate: false, isResidue: false, failedChecks: [], item: { message_id: 'm2', from: 'lane-b', task_id: 't2', content: 'res 1' } },
+  { rule: 'decision_request', immediate: false, isResidue: false, failedChecks: [], item: { message_id: 'm3', from: 'lane-a', task_id: 't3', content: 'dec 2' } },
+  { rule: 'credential_redline', immediate: true, isResidue: false, failedChecks: [], item: { message_id: 'm-urgent', from: 'lane-sec', task_id: 't-urg', content: 'urgent redline' } },
+  { rule: 'task_result', immediate: false, isResidue: false, failedChecks: [], item: { message_id: 'm4', from: 'lane-b', task_id: 't4', content: 'res 2' } },
+  { rule: 'decision_request', immediate: false, isResidue: false, failedChecks: [], item: { message_id: 'm5', from: 'lane-a', task_id: 't5', content: 'dec 3' } },
+  { rule: 'task_result', immediate: false, isResidue: false, failedChecks: [], item: { message_id: 'm6', from: 'lane-b', task_id: 't6', content: 'res 3' } },
+];
+
+const pkts7 = buildPackets(entries7);
+assert.strictEqual(pkts7.length, 1, `expected 1 packet for 7 items, got ${pkts7.length}`);
+assert.strictEqual(pkts7[0].item_count, 7, `expected item_count 7, got ${pkts7[0].item_count}`);
+const text7 = pkts7[0].text;
+const idxUrgent = text7.indexOf('m-urgent');
+const idxFirstBatch = text7.indexOf('m1');
+assert.ok(idxUrgent >= 0 && idxFirstBatch >= 0 && idxUrgent < idxFirstBatch, 'urgent item must appear before batch items');
+assert.ok(text7.includes('#### 分類：credential_redline'), 'missing credential_redline category heading');
+assert.ok(text7.includes('#### 分類：decision_request'), 'missing decision_request category heading');
+assert.ok(text7.includes('#### 分類：task_result'), 'missing task_result category heading');
+
+const entries61 = Array.from({ length: 61 }, (_, i) => ({
+  rule: 'decision_request',
+  immediate: false,
+  isResidue: false,
+  failedChecks: [],
+  item: { message_id: `m-${i + 1}`, from: 'lane-a', task_id: `t-${i + 1}`, content: `item ${i + 1}` },
+}));
+const pkts61 = buildPackets(entries61);
+assert.strictEqual(pkts61.length, 2, `expected 2 packets for 61 items, got ${pkts61.length}`);
+assert.strictEqual(pkts61[0].item_count, 60, `expected first packet 60 items, got ${pkts61[0].item_count}`);
+assert.strictEqual(pkts61[1].item_count, 1, `expected second packet 1 item, got ${pkts61[1].item_count}`);
+process.stdout.write('ok\n');
+NODE
+)"
+assert_eq "$PACK_608_OUT" "ok" "inbox-wake-608: 7 items in 3 categories -> 1 packet (urgent first, headings); 61 items -> 2 packets (60 + 1)"
+
 finalize_test

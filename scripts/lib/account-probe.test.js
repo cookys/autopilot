@@ -147,6 +147,25 @@ test('G40-N73: checkProbeConfig range checks', () => {
   for (const m of [4, 361, 5.5, '60', null, NaN]) assert.match(p.checkProbeConfig({ quota_probe_stale_minutes: m }), /stale_minutes/);
   for (const t of ['x', 0, -1, NaN, null, Infinity]) assert.match(p.checkProbeConfig({ quota_probe_timeout_secs: t }), /timeout_secs/);
   assert.match(p.checkProbeConfig({ quota_probe: 'ON' }), /quota_probe_invalid/);
+  assert.strictEqual(p.checkProbeConfig({ quota_probe_demand: 'audit' }), null);
+  assert.strictEqual(p.checkProbeConfig({ quota_probe_demand: 'registry' }), null);
+  assert.match(p.checkProbeConfig({ quota_probe_demand: 'all' }), /quota_probe_demand_invalid/);
   assert.strictEqual(p.STALE_MINUTES_DEFAULT, 60);
   assert.strictEqual(p.TIMEOUT_SECS_DEFAULT, 20);
+});
+
+test('quota_probe_demand: audit excludes idle aliases, registry includes them, excluded/cooling/no-token stay out in both', () => {
+  const now = NOW_S * 1000;
+  const r = (alias, ageS) => ({ ts: now - ageS * 1000, alias, purpose: 'tst', attempt: 1, outcome: 'ok' });
+  const accounts = A('active', 'idle', 'excl', 'cd');
+  const m = { active: merged(0.3, 7200), idle: merged(0.3, 7200), excl: merged(0.3, 7200), cd: merged(0.3, 7200) };
+  const base = { manifest: CONFIRMED, accounts, merged: m, cooldowns: { cd: (NOW_S + 60) * 1000 }, exclude: ['excl'], nowS: NOW_S };
+
+  const auditDemand = p.demandAliases([r('active', 60), r('not_on_host', 60)], now, { mode: 'audit', accounts });
+  assert.deepStrictEqual([...auditDemand].sort(), ['active', 'not_on_host']);
+  assert.deepStrictEqual(p.periodicDue(Object.assign({ demand: auditDemand }, base)), ['active']);
+
+  const regDemand = p.demandAliases([r('active', 60), r('not_on_host', 60)], now, { mode: 'registry', accounts });
+  assert.deepStrictEqual([...regDemand].sort(), ['active', 'cd', 'excl', 'idle', 'not_on_host']);
+  assert.deepStrictEqual(p.periodicDue(Object.assign({ demand: regDemand }, base)), ['active', 'idle']);
 });

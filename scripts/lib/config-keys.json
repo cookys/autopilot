@@ -50,6 +50,33 @@
   },
   "entries": [
       {
+        "name": "accounts.quota_probe_demand",
+        "kind": "config_key",
+        "audience": "user",
+        "type": "enum",
+        "allowed": ["audit", "registry"],
+        "default": "audit",
+        "readers": [
+          "scripts/claude-account.js",
+          "scripts/lib/account-probe.js"
+        ],
+        "doc": "docs/guide/settings-reference.md",
+        "relates": ["AUTOPILOT_QUOTA_PROBE_DEMAND", "accounts.quota_probe"],
+        "summary": "Controls whether periodic quota probes cover only aliases used in the last 24 h (audit) or also idle aliases in the host registry (registry)."
+      },
+      {
+        "name": "AUTOPILOT_QUOTA_PROBE_DEMAND",
+        "kind": "env",
+        "audience": "user",
+        "default": "audit",
+        "readers": [
+          "scripts/claude-account.js"
+        ],
+        "doc": "docs/guide/settings-reference.md",
+        "relates": ["accounts.quota_probe_demand"],
+        "summary": "Overrides accounts.quota_probe_demand (audit or registry)."
+      },
+      {
         "name": "AUTOPILOT_DEP_CACHE",
         "kind": "env",
         "audience": "user",

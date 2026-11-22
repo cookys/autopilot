@@ -328,6 +328,12 @@ function accountsConfig(ctx) {
   }
   cfg.quota_probe_stale_minutes = a.quota_probe_stale_minutes === undefined ? probe.STALE_MINUTES_DEFAULT : a.quota_probe_stale_minutes;
   cfg.quota_probe_timeout_secs = a.quota_probe_timeout_secs === undefined ? probe.TIMEOUT_SECS_DEFAULT : a.quota_probe_timeout_secs;
+  cfg.quota_probe_demand = a.quota_probe_demand === undefined ? probe.DEMAND_MODE_DEFAULT : a.quota_probe_demand;
+  const envDemand = ctx.env.AUTOPILOT_QUOTA_PROBE_DEMAND;
+  if (envDemand !== undefined && envDemand !== '') {
+    if (!probe.DEMAND_MODES.includes(envDemand)) throw new Stop(EXIT.INVALID, 'env_quota_probe_demand_invalid', 'invalid_config');
+    cfg.quota_probe_demand = envDemand;
+  }
   const envMode = ctx.env.AUTOPILOT_ACCOUNT_MODE;
   if (envMode !== undefined && envMode !== '') {
     if (envMode !== 'auto' && envMode !== 'off') throw new Stop(EXIT.INVALID, 'env_accounts_mode_invalid', 'invalid_config');
@@ -799,12 +805,17 @@ function clearRefusalRow(ctx, alias) {
 
 // Demand rule (plan 19.6 A, BL-0375): an alias counts only when a run line with an outcome in the audit log, newer than
 // 24 h, names it. Fail closed: a missing, unreadable, refused or partly damaged log means NO demand, so nothing is probed.
-function readDemand(ctx) {
+function readDemand(ctx, cfg, accounts) {
+  const mode = cfg && cfg.quota_probe_demand;
   try {
     const res = audit.readAudit(ctx.auditFile, {});
-    if (res.refused || res.invalid > 0) return new Set();
-    return probe.demandAliases(res.records, ctx.now());
-  } catch (_) { return new Set(); }
+    if (res.refused || res.invalid > 0) {
+      return mode === 'registry' ? probe.demandAliases([], ctx.now(), { mode, accounts }) : new Set();
+    }
+    return probe.demandAliases(res.records, ctx.now(), { mode, accounts });
+  } catch (_) {
+    return mode === 'registry' ? probe.demandAliases([], ctx.now(), { mode, accounts }) : new Set();
+  }
 }
 
 // `usage-probe --due [--dry-run]`: the periodic entry point an external timer calls. No timer is installed here.
@@ -827,7 +838,7 @@ async function cmdUsageProbeDue(realCtx, opts) {
     const manifest = claudeManifest();
     const merged = {};
     for (const [al, rows] of Object.entries(data.observations || {})) merged[al] = interpret.interpretWindows(rows, manifest, nowS);
-    due = probe.periodicDue({ manifest, accounts: data.accounts, merged, cooldowns: data.cooldowns, exclude: data.exclude, nowS, demand: readDemand(ctx) });
+    due = probe.periodicDue({ manifest, accounts: data.accounts, merged, cooldowns: data.cooldowns, exclude: data.exclude, nowS, demand: readDemand(ctx, cfg, data.accounts) });
   }
   const probed = [];
   if (!opts['dry-run'] && due.length > 0) {

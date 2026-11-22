@@ -1939,6 +1939,7 @@ async function main(argv) {
       writeFastPlan(fastPlan);
     }
     const maxWeak = a.maxWeak == null ? DEFAULT_MAX_WEAK : a.maxWeak;
+    const preCount = doc.suites.length; // the over-half guard below measures the static selection, never the pruned one
     let pruned = [];
     if (!a.noDepCache && process.env.AUTOPILOT_DEP_CACHE !== '0' && doc.mode === 'selective' && doc.suites.length > 0 && !a.onlyGlob) {
       let hasCache = false;
@@ -1950,14 +1951,14 @@ async function main(argv) {
         if (pruned.length > 0) process.stderr.write(`dep-cache: pruned ${pruned.length} suites\n`);
       }
     }
-    if (doc.mode === 'selective' && doc.stats.total_suites > 0 && (doc.suites.length / doc.stats.total_suites) > OVER_HALF_THRESHOLD) {
+    if (doc.mode === 'selective' && doc.stats.total_suites > 0 && (preCount / doc.stats.total_suites) > OVER_HALF_THRESHOLD) {
       if (!tree) tree = gitTree(root, doc.head);
       const widenedBy = doc.changed
         .map((p) => ({ path: p, suites: select([p], tree, maxWeak).suites.length }))
         .filter((w) => w.suites > 0)
         .sort((x, y) => y.suites - x.suites || x.path.localeCompare(y.path))
         .slice(0, 5);
-      const n = doc.suites.length;
+      const n = preCount;
       const total = doc.stats.total_suites;
       const pct = Math.round((n / total) * 100);
       const summary = widenedBy.map((w) => `${w.path} (${w.suites} suites)`).join(', ');

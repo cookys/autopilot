@@ -50,6 +50,18 @@
   },
   "entries": [
       {
+        "name": "AUTOPILOT_DEP_CACHE",
+        "kind": "env",
+        "audience": "user",
+        "default": "1",
+        "readers": [
+          "scripts/affected-suites.js"
+        ],
+        "doc": "docs/guide/settings-reference.md",
+        "relates": [],
+        "summary": "Set to 0 to disable runtime dependency cache pruning in affected-suites.js."
+      },
+      {
         "name": "AUTOPILOT_DEP_TRACE_FILE",
         "kind": "env",
         "audience": "internal",

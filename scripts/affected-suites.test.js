@@ -2083,8 +2083,10 @@ test('dep-cache pruning: sound removal, fail-closed guards, CLI/env flags, and e
   const r = makeRepo({
     'scripts/lib/unused.js': 'module.exports = 1;\n',
     'scripts/lib/used.js': 'module.exports = 2;\n',
-    'scripts/app.test.js': "const u = require('./lib/used.js');\nfunction lazy() { return require('./lib/unused.js'); }\nconsole.log(u);\n",
-    'scripts/mixed.test.js': "function lazy() { return require('./lib/unused.js'); }\nconst p = 'scripts/lib/unused.js';\n",
+    'scripts/app.test.js': "const u = require('./lib/used.js');\nif (process.env.NEVER_SET) { require('./lib/unused.js'); }\nconsole.log(u);\n",
+    'scripts/mixed.test.js': "if (process.env.NEVER_SET) { require('./lib/unused.js'); }\nconst p = 'scripts/lib/unused.js';\n",
+    'scripts/other1.test.js': 'console.log(1);\n',
+    'scripts/other2.test.js': 'console.log(2);\n',
   });
   try {
     const cacheDir = path.join(r.dir, '.git', 'autopilot');

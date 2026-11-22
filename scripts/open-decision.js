@@ -566,6 +566,26 @@ function mirrorCard(cwd, entry) {
   }
 }
 
+function mirrorRuling(cwd, entry, answer) {
+  try {
+    const hippo = require('./lib/hippo');
+    const repo = repoTop(cwd);
+    if (!fs.existsSync(path.join(repo, '.hippo', 'repo.toml'))) return;
+    const detected = hippo.detect(repo);
+    if (detected.state !== 'hippo') throw new Error(detected.reason);
+    const id = answer.answer_id || entry.id;
+    const token = /^[a-z0-9:._/-]{1,52}$/.test(id) ? id : crypto.createHash('sha256').update(id).digest('hex').slice(0, 32);
+    const key = `receipt:${token}`;
+    const ruling = answer.answer_free_text || answer.answer || answer.answer_option;
+    const body = `${ruling}\n\nOption: ${answer.answer_option || '(none)'}\nCard: ${entry.id}`;
+    const plan = { key, steps: [{ op: 'create', ref: 'root', kind: 'decision', key,
+      argv: ['--title', ruling.split(/\r?\n/)[0], '--status', 'open', '--tag', 'source:pm-ruling'], body }] };
+    if (!hippo.execute(repo, plan, { log: () => {} }).ok) throw new Error('store write failed');
+  } catch (_error) {
+    process.stderr.write('open-decision: decision store mirror failed; card remains authoritative\n');
+  }
+}
+
 function parseOptions(raw) {
   return raw.map((o) => {
     const at = o.indexOf('::');
@@ -1424,7 +1444,13 @@ function patchDecision(file, id, patch, { isOurs, any } = {}) {
       const v = JSON.parse(fs.readFileSync(file, 'utf8'));
       writeEntries({ file, scope: { repo_identity: v.repo_identity, project_key: v.project_key } }, v.root_run_id, entries.map((e) => (e === hit ? next : e)));
       const common = commonDirOf(v.repo_identity);
-      if (common) mirrorCard(path.dirname(common), next);
+      if (common) {
+        const cwd = path.dirname(common);
+        mirrorCard(cwd, next);
+        const sent = (Array.isArray(next.answers) ? next.answers : []).filter((a) => a.sent_message_id && !(Array.isArray(hit.answers) ? hit.answers : []).some((old) => old.answer_id === a.answer_id && old.sent_message_id));
+        for (const answer of sent) mirrorRuling(cwd, next, answer);
+        if (!next.answer_id && next.answer && !hit.answer && !isOpenEntry(next)) mirrorRuling(cwd, next, next);
+      }
       return { status: 'updated', entry: next };
     });
   } catch (error) {

@@ -6,10 +6,14 @@
  * Reuses hooks/cost-tracker-lib.js for assistant turn usage deduplication.
  */
 
+const fs = require('fs');
+const { StringDecoder } = require('string_decoder');
 const { parseAssistantTurns } = require('../../hooks/cost-tracker-lib.js');
 
 const DEFAULT_HIT_FACTOR = 0.10;
 const DEFAULT_MISS_FACTOR = 2.0;
+const MAX_LINE_BYTES = 64 * 1024 * 1024; // 64 MB
+const DEFAULT_MAX_CHUNK = 64 * 1024; // 64 KiB
 
 /**
  * Format epoch ms (or Date) as Taipei time (UTC+8) ISO-8601 string, never trailing Z.
@@ -114,6 +118,113 @@ function projectUsageOnly(raw, windowFromMs, windowToMs) {
       cacheWrite: t.cacheWrite,
       ts: t.ts !== undefined ? toTaipeiIso(t.ts) : null,
     })),
+    ctx_tokens: ctxTokens,
+  };
+}
+
+/**
+ * Stream lines from a file without loading the entire file into a single string.
+ * Skips lines exceeding maxLineBytes (default 64 MB).
+ */
+async function* readLinesFromFile(filePath, options = {}) {
+  const envChunk = Number(process.env.WASTED_TURNS_MAX_CHUNK);
+  const maxChunk = Number.isFinite(options.maxChunk) && options.maxChunk > 0
+    ? options.maxChunk
+    : (Number.isFinite(envChunk) && envChunk > 0 ? envChunk : DEFAULT_MAX_CHUNK);
+  const maxLineBytes = Number.isFinite(options.maxLineBytes) && options.maxLineBytes > 0
+    ? options.maxLineBytes
+    : MAX_LINE_BYTES;
+  const onOversized = typeof options.onOversized === 'function' ? options.onOversized : null;
+
+  const stream = fs.createReadStream(filePath, { highWaterMark: maxChunk });
+  const decoder = new StringDecoder('utf8');
+  let carry = '';
+  let carryBytes = 0;
+  let skippingOversized = false;
+
+  for await (const chunk of stream) {
+    const text = decoder.write(chunk);
+    let start = 0;
+    for (let i = 0; i < text.length; i++) {
+      if (text.charCodeAt(i) === 10) {
+        if (skippingOversized) {
+          skippingOversized = false;
+          carry = '';
+          carryBytes = 0;
+        } else {
+          const segment = text.slice(start, i);
+          const line = (carry + segment).replace(/\r$/, '');
+          carry = '';
+          carryBytes = 0;
+          if (Buffer.byteLength(line, 'utf8') > maxLineBytes) {
+            if (onOversized) onOversized();
+          } else {
+            yield line;
+          }
+        }
+        start = i + 1;
+      }
+    }
+    if (start < text.length) {
+      const rem = text.slice(start);
+      if (!skippingOversized) {
+        const remBytes = Buffer.byteLength(rem, 'utf8');
+        if (carryBytes + remBytes > maxLineBytes) {
+          skippingOversized = true;
+          carry = '';
+          carryBytes = 0;
+          if (onOversized) onOversized();
+        } else {
+          carry += rem;
+          carryBytes += remBytes;
+        }
+      }
+    }
+  }
+
+  const tail = decoder.end();
+  if (!skippingOversized) {
+    const line = (carry + tail).replace(/\r$/, '');
+    if (line.length > 0) {
+      if (Buffer.byteLength(line, 'utf8') > maxLineBytes) {
+        if (onOversized) onOversized();
+      } else {
+        yield line;
+      }
+    }
+  }
+}
+
+/**
+ * Streaming usage-only projection: reads ONLY model, token counts, and timestamp.
+ */
+async function projectUsageOnlyStream(filePathOrLines, windowFromMs, windowToMs, options = {}) {
+  const fromMs = Number.isFinite(windowFromMs) ? windowFromMs : -Infinity;
+  const toMs = Number.isFinite(windowToMs) ? windowToMs : Infinity;
+  const lines = typeof filePathOrLines === 'string'
+    ? readLinesFromFile(filePathOrLines, options)
+    : filePathOrLines;
+
+  let turnsTotal = 0;
+  let ctxTokens = 0;
+  for await (const line of lines) {
+    if (!line || !line.trim()) continue;
+    let rec;
+    try { rec = JSON.parse(line); } catch { continue; }
+    if (!rec || rec.type !== 'assistant' || !rec.message || typeof rec.message !== 'object') continue;
+    const u = rec.message.usage;
+    if (!u || typeof u !== 'object') continue;
+    const ts = typeof rec.timestamp === 'string' ? Date.parse(rec.timestamp) : NaN;
+    if (Number.isFinite(ts) && (ts < fromMs || ts > toMs)) continue;
+    const input = Number(u.input_tokens || 0);
+    const cacheRead = Number(u.cache_read_input_tokens || 0);
+    const cacheWrite = Number(u.cache_creation_input_tokens || 0);
+    ctxTokens += input + cacheRead + cacheWrite;
+    turnsTotal += 1;
+  }
+
+  return {
+    turns_total: turnsTotal,
     ctx_tokens: ctxTokens,
   };
 }
@@ -317,13 +428,190 @@ function classifyTranscript(raw, options = {}) {
   };
 }
 
+/**
+ * Classify a transcript from an async iterable of lines or array of file paths.
+ * Returns { turns_total, whiff, whiff_turns, whiff_per_100, whiff_share }.
+ */
+async function classifyTranscriptStream(linesOrPaths, options = {}) {
+  const hitFactor = Number.isFinite(options.hitFactor) ? options.hitFactor : DEFAULT_HIT_FACTOR;
+  const missFactor = Number.isFinite(options.missFactor) ? options.missFactor : DEFAULT_MISS_FACTOR;
+  const windowFromMs = Number.isFinite(options.windowFromMs) ? options.windowFromMs : -Infinity;
+  const windowToMs = Number.isFinite(options.windowToMs) ? options.windowToMs : Infinity;
+
+  const toolEvents = [];
+  const resultById = new Map();
+  let lastAssistantUsage = { input: 0, cacheRead: 0, cacheWrite: 0 };
+  let pendingStopBlock = false;
+
+  const processLine = (line) => {
+    if (!line || !line.trim()) return;
+    let rec;
+    try { rec = JSON.parse(line); } catch { return; }
+    const ts = typeof rec.timestamp === 'string' ? Date.parse(rec.timestamp) : NaN;
+    if (Number.isFinite(ts) && (ts < windowFromMs || ts > windowToMs)) {
+      return;
+    }
+
+    if (
+      (rec.type === 'system' && rec.subtype === 'stop_hook' && rec.decision === 'block') ||
+      (rec.hookEvent === 'Stop' && rec.decision === 'block') ||
+      (rec.stopHookResult && rec.stopHookResult.decision === 'block')
+    ) {
+      pendingStopBlock = true;
+      return;
+    }
+
+    const msg = rec && rec.message;
+    if (rec.type === 'assistant' && msg) {
+      const u = msg.usage;
+      if (u && typeof u === 'object') {
+        lastAssistantUsage = {
+          input: Number(u.input_tokens || 0),
+          cacheRead: Number(u.cache_read_input_tokens || 0),
+          cacheWrite: Number(u.cache_creation_input_tokens || 0),
+        };
+      }
+      const content = Array.isArray(msg.content) ? msg.content : [];
+      for (const blk of content) {
+        if (!blk || typeof blk !== 'object') continue;
+        if (blk.type === 'tool_use') {
+          const cmdText = extractCommandText(blk.name || '', blk.input || {});
+          toolEvents.push({
+            id: blk.id || '',
+            name: blk.name || '<unknown>',
+            cmdText,
+            normCmd: normalizeCommand(cmdText),
+            usage: { ...lastAssistantUsage },
+            afterStopBlock: pendingStopBlock,
+          });
+          pendingStopBlock = false;
+        }
+      }
+      return;
+    }
+
+    if (msg && Array.isArray(msg.content)) {
+      for (const blk of msg.content) {
+        if (!blk || typeof blk !== 'object') continue;
+        if (blk.type === 'tool_result' && blk.tool_use_id) {
+          const text = typeof blk.content === 'string'
+            ? blk.content
+            : Array.isArray(blk.content)
+              ? blk.content.map((c) => (c && typeof c.text === 'string' ? c.text : '')).join('\n')
+              : JSON.stringify(blk.content || '');
+          resultById.set(blk.tool_use_id, {
+            text,
+            isError: blk.is_error === true,
+          });
+        }
+      }
+    }
+  };
+
+  if (Array.isArray(linesOrPaths)) {
+    for (const filePath of linesOrPaths) {
+      for await (const line of readLinesFromFile(filePath, options)) {
+        processLine(line);
+      }
+    }
+  } else {
+    for await (const line of linesOrPaths) {
+      processLine(line);
+    }
+  }
+
+  const stopBlock = emptyBucket();
+  const hookBlock = { turns: 0, by_hook: {}, ctx_tokens: 0, cost_hit: 0, cost_miss: 0 };
+  const helpLookup = emptyBucket();
+  const errorRetry = emptyBucket();
+  const recentErrors = [];
+
+  for (let i = 0; i < toolEvents.length; i++) {
+    const ev = toolEvents[i];
+    const res = resultById.get(ev.id) || { text: '', isError: false };
+    const ctxTokens = ev.usage.input + ev.usage.cacheRead + ev.usage.cacheWrite;
+
+    if (ev.afterStopBlock) {
+      addCost(stopBlock, ctxTokens, ev.usage.cacheRead, hitFactor, missFactor);
+    } else {
+      const hookName = extractHookBlockName(res.text, res.isError);
+      if (hookName) {
+        addCost(hookBlock, ctxTokens, ev.usage.cacheRead, hitFactor, missFactor);
+        hookBlock.by_hook[hookName] = (hookBlock.by_hook[hookName] || 0) + 1;
+      } else if (isHelpLookup(ev.name, ev.cmdText)) {
+        addCost(helpLookup, ctxTokens, ev.usage.cacheRead, hitFactor, missFactor);
+      } else {
+        const matchedError = recentErrors.find(
+          (err) =>
+            i - err.index >= 1 &&
+            i - err.index <= 3 &&
+            err.toolName === ev.name &&
+            err.normCmd !== '' &&
+            err.normCmd === ev.normCmd
+        );
+        if (matchedError) {
+          addCost(errorRetry, ctxTokens, ev.usage.cacheRead, hitFactor, missFactor);
+        }
+      }
+    }
+
+    if (res.isError) {
+      recentErrors.push({ toolName: ev.name, normCmd: ev.normCmd, index: i });
+    }
+  }
+
+  const shellCmds = toolEvents
+    .filter((ev) => ev.name === 'Bash' || ev.name === 'bash' || ev.name === 'shell')
+    .map((ev) => ev.normCmd)
+    .filter(Boolean);
+
+  const chainCounts = new Map();
+  for (const cmd of shellCmds) {
+    if (/&&|;/.test(cmd)) chainCounts.set(cmd, (chainCounts.get(cmd) || 0) + 1);
+  }
+  for (let i = 0; i < shellCmds.length - 1; i++) {
+    const shape = `${shellCmds[i]} && ${shellCmds[i + 1]}`;
+    chainCounts.set(shape, (chainCounts.get(shape) || 0) + 1);
+  }
+  const chains = [];
+  for (const [shape, count] of chainCounts.entries()) {
+    if (count >= 2) {
+      chains.push({ shape, count });
+    }
+  }
+  chains.sort((a, b) => b.count - a.count || a.shape.localeCompare(b.shape));
+
+  const turnsTotal = toolEvents.length;
+  const whiffTurns = stopBlock.turns + hookBlock.turns + helpLookup.turns + errorRetry.turns;
+  const whiffPer100 = turnsTotal > 0 ? Number(((whiffTurns / turnsTotal) * 100).toFixed(2)) : 0;
+  const whiffShare = turnsTotal > 0 ? Number((whiffTurns / turnsTotal).toFixed(4)) : 0;
+
+  return {
+    turns_total: turnsTotal,
+    whiff: {
+      stop_block: stopBlock,
+      hook_block: hookBlock,
+      help_lookup: helpLookup,
+      error_retry: errorRetry,
+      repeat_chain: { chains },
+    },
+    whiff_turns: whiffTurns,
+    whiff_per_100: whiffPer100,
+    whiff_share: whiffShare,
+  };
+}
+
 module.exports = {
   DEFAULT_HIT_FACTOR,
   DEFAULT_MISS_FACTOR,
+  MAX_LINE_BYTES,
   toTaipeiIso,
   normalizeCommand,
   isHelpLookup,
   extractHookBlockName,
+  readLinesFromFile,
   projectUsageOnly,
+  projectUsageOnlyStream,
   classifyTranscript,
+  classifyTranscriptStream,
 };

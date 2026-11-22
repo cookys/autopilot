@@ -30,8 +30,8 @@ const {
   DEFAULT_HIT_FACTOR,
   DEFAULT_MISS_FACTOR,
   toTaipeiIso,
-  projectUsageOnly,
-  classifyTranscript,
+  projectUsageOnlyStream,
+  classifyTranscriptStream,
 } = require('./lib/wasted-turns-classify.js');
 
 function printHelp() {
@@ -191,7 +191,7 @@ function runAggregate(dir, topN) {
   };
 }
 
-function main() {
+async function main() {
   let opts;
   try {
     opts = parseArgs(process.argv.slice(2));
@@ -216,8 +216,7 @@ function main() {
       process.stderr.write('Error: --usage-only requires --transcript <path>\n');
       process.exit(2);
     }
-    const raw = fs.readFileSync(opts.transcript, 'utf8');
-    const proj = projectUsageOnly(raw, windowFromMs, windowToMs);
+    const proj = await projectUsageOnlyStream(opts.transcript, windowFromMs, windowToMs);
     output = {
       schema: 'autopilot.wasted-turns/1',
       seat: opts.seat,
@@ -238,8 +237,7 @@ function main() {
     };
   } else {
     const paths = opts.transcript ? [opts.transcript] : findSelfTranscripts(windowFromMs);
-    const combinedRaw = paths.map((p) => fs.readFileSync(p, 'utf8')).join('\n');
-    const res = classifyTranscript(combinedRaw, {
+    const res = await classifyTranscriptStream(paths, {
       hitFactor: opts.hitFactor,
       missFactor: opts.missFactor,
       windowFromMs,
@@ -268,7 +266,10 @@ function main() {
 }
 
 if (require.main === module) {
-  main();
+  main().catch((err) => {
+    process.stderr.write(`Error: ${err.message}\n`);
+    process.exit(1);
+  });
 }
 
 module.exports = { parseArgs, runAggregate };

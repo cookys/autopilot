@@ -42,9 +42,7 @@ assert_eq "1" "$rc" "private-range http without opt-in exits 1"
 assert_contains "$out" '"ready":false' "private-range http without opt-in is ready:false"
 assert_contains "$out" '"url_unsafe"' "private-range http without opt-in missing[] has url_unsafe"
 assert_contains "$out" '"transport_optin_required"' "private-range http without opt-in missing[] has transport_optin_required"
-if grep -q 'die_precondition "--runner local refuses unlisted --endpoint' "$DISPATCH_SH"; then
-  PASS=$((PASS + 1))
-else
+if ! grep -q 'die_precondition "--runner local refuses unlisted --endpoint' "$DISPATCH_SH"; then
   fail "dispatch-hetero.sh missing L3517 die_precondition path"
 fi
 

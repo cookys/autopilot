@@ -1,0 +1,12 @@
+# autopilot:dispatch-usage-push/1
+# Template only: the updater installs the timer on each host.
+# Substitute @REPO_PATH@ at installation; configure AUTOPILOT_USAGE_PUSH_TO per host.
+[Unit]
+Description=Autopilot dispatch usage snapshot push
+
+[Service]
+Type=oneshot
+UnsetEnvironment=AUTOPILOT_TOKEN_SEAT AUTOPILOT_SESSION_ID
+StandardInput=null
+ExecStart=/usr/bin/env bash @REPO_PATH@/scripts/dispatch-usage-push.sh
+TimeoutStartSec=120

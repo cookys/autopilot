@@ -170,7 +170,8 @@ Legacy compatibility:
   --deep-* flags. --logical-plan-id is recommended; omitted legacy calls use a
   frozen ticket-bound compatibility identity.
 
-Hard limits: 1-4 seats, two attempts per seat, two semantic generations, 7200s.`;
+Hard limits: 1-4 seats, two attempts per seat, two semantic generations, 7200s.
+--allow-same-family: warn instead of refusing when two manifest seats share a model family.`;
 }
 
 function parseArgs(argv) {
@@ -231,6 +232,10 @@ function parseArgs(argv) {
     }
     if (arg === '--no-topology-fallbacks') {
       opts.noTopologyFallbacks = true;
+      continue;
+    }
+    if (arg === '--allow-same-family') {
+      opts.allowSameFamily = true;
       continue;
     }
     const key = flags.get(arg);
@@ -978,6 +983,12 @@ function fillFallbacksFromTopology(manifest, opts) {
   const impl = resolverField('implementer_runner');
   const allowSameRunner = resolverField('allow_same_runner_dual_seat') === 'on';
   const takenIds = new Set();
+  const familyCollision = familyGate.findSameFamilyVote(manifest.seats, familyGate.planSeatFamily);
+  if (familyCollision) {
+    const message = `same_family_vote: ${familyCollision.first.id} and ${familyCollision.second.id} (${familyCollision.family})`;
+    if (!opts.allowSameFamily) throw new CliError(message, 2);
+    process.stderr.write(`dispatch-plan-review: warning: ${message}\n`);
+  }
   for (const seat of manifest.seats) {
     takenIds.add(seat.id);
     for (const fallback of seat.fallbacks) takenIds.add(fallback.id);
@@ -2049,6 +2060,12 @@ function repairedSectionFor(sections, surface) {
 
 function recheckCandidates(manifest) {
   const out = [];
+  const familyCollision = familyGate.findSameFamilyVote(manifest.seats, familyGate.planSeatFamily);
+  if (familyCollision) {
+    const message = `same_family_vote: ${familyCollision.first.id} and ${familyCollision.second.id} (${familyCollision.family})`;
+    if (!opts.allowSameFamily) throw new CliError(message, 2);
+    process.stderr.write(`dispatch-plan-review: warning: ${message}\n`);
+  }
   for (const seat of manifest.seats) {
     for (const candidate of [seat, ...(seat.fallbacks || [])]) {
       if (candidate.readiness_status === 'ready' && candidate.qualification_status === 'qualified') {
@@ -2246,6 +2263,12 @@ function main() {
   const manifestSha = sha256(effective.bytes);
   for (const added of effective.added) {
     process.stderr.write(`dispatch-plan-review: seat ${added.seat_id} had no fallbacks; added ${added.fallback_id} (family ${added.family}) from the topology\n`);
+  }
+  const familyCollision = familyGate.findSameFamilyVote(manifest.seats, familyGate.planSeatFamily);
+  if (familyCollision) {
+    const message = `same_family_vote: ${familyCollision.first.id} and ${familyCollision.second.id} (${familyCollision.family})`;
+    if (!opts.allowSameFamily) throw new CliError(message, 2);
+    process.stderr.write(`dispatch-plan-review: warning: ${message}\n`);
   }
   for (const seat of manifest.seats) {
     if (seat.required && seat.fallbacks.length === 0) {
@@ -2599,7 +2622,13 @@ function main() {
     });
     const seatReviews = [];
     const warnedTimeoutEfforts = new Set();
-    for (const seat of manifest.seats) {
+    const familyCollision = familyGate.findSameFamilyVote(manifest.seats, familyGate.planSeatFamily);
+  if (familyCollision) {
+    const message = `same_family_vote: ${familyCollision.first.id} and ${familyCollision.second.id} (${familyCollision.family})`;
+    if (!opts.allowSameFamily) throw new CliError(message, 2);
+    process.stderr.write(`dispatch-plan-review: warning: ${message}\n`);
+  }
+  for (const seat of manifest.seats) {
       const seatReview = reviewSeat({
         panel,
         manifest,

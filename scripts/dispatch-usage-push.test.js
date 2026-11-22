@@ -11,7 +11,7 @@ test('configured host uploads and sends its snapshot', t => {
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const fake = path.join(dir, 'fleet');
   const log = path.join(dir, 'calls');
-  fs.writeFileSync(fake, `#!/usr/bin/env node\nconst fs=require('fs');\nfs.appendFileSync(process.env.FAKE_LOG, JSON.stringify(process.argv.slice(2))+'\\n');\nif(process.argv[2]==='upload') { fs.writeFileSync(process.env.FAKE_MODE, (fs.statSync(process.argv[3]).mode & 0o777).toString(8)); console.log('${'a'.repeat(64)}'); }\n`, { mode: 0o755 });
+  fs.writeFileSync(fake, `#!/usr/bin/env node\nconst fs=require('fs');\nfs.appendFileSync(process.env.FAKE_LOG, JSON.stringify(process.argv.slice(2))+'\\n');\nif(process.argv[2]==='upload') { const mode = fs.statSync(process.argv[3]).mode & 0o777; fs.writeFileSync(process.env.FAKE_MODE, mode.toString(8)); if (mode === 0o600) { console.error('refusing owner-only file'); process.exit(1); } console.log('${'a'.repeat(64)}'); }\n`, { mode: 0o755 });
   const env = { ...process.env, FLEET_BIN: fake, FAKE_LOG: log, FAKE_MODE: path.join(dir, 'mode'), XDG_RUNTIME_DIR: dir, AUTOPILOT_DISPATCH_RUNS_DIR: path.join(dir, 'runs'), AUTOPILOT_USAGE_PUSH_TO: 'example/host/hangar' };
   const r = spawnSync('bash', [path.join(__dirname, 'dispatch-usage-push.sh')], { env, encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);
@@ -21,8 +21,24 @@ test('configured host uploads and sends its snapshot', t => {
   assert.equal(calls[0][2], '--summary');
   assert.match(calls[0][3], /^dispatch-usage \S+ \d{4}-\d\d-\d\d$/);
   assert.deepEqual(calls[1], ['send', env.AUTOPILOT_USAGE_PUSH_TO, `${calls[0][3]} ref=${'a'.repeat(64)}`]);
-  assert.equal(fs.readFileSync(env.FAKE_MODE, 'utf8'), '600');
+  assert.equal(fs.readFileSync(env.FAKE_MODE, 'utf8'), '644');
   assert.equal(fs.existsSync(calls[0][1]), false, 'snapshot removed');
+
+  const script = fs.readFileSync(path.join(__dirname, 'dispatch-usage-push.sh'), 'utf8');
+  const chmod = 'chmod 0644 "$usage_tmp"\n';
+  assert.equal(script.split(chmod).length, 2, 'expected exactly one chmod line');
+  const broken = path.join(dir, 'broken-push.sh');
+  fs.writeFileSync(broken, script.replace(chmod, ''));
+  fs.symlinkSync(path.join(__dirname, 'dispatch-usage-report.js'), path.join(dir, 'dispatch-usage-report.js'));
+  const red = spawnSync('bash', [broken], { env, encoding: 'utf8' });
+  assert.equal(red.status, 1);
+  assert.equal(red.stderr, 'dispatch-usage-push: upload failed\n');
+  assert.equal(fs.readFileSync(env.FAKE_MODE, 'utf8'), '600');
+  const redCalls = fs.readFileSync(log, 'utf8').trim().split('\n').map(JSON.parse);
+  assert.equal(redCalls.length, 3, 'negative control must stop after upload');
+  assert.equal(fs.existsSync(redCalls[2][1]), false, 'negative-control snapshot removed');
+  t.diagnostic(`positive control: exit ${r.status}, mode 644`);
+  t.diagnostic(`negative control: exit ${red.status}, ${red.stderr.trim()}, mode 600`);
 });
 
 test('unconfigured host exits with one line and no fleet call', t => {

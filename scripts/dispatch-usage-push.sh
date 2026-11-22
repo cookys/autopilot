@@ -18,6 +18,7 @@ if ! node "$script_dir/dispatch-usage-report.js" --since 7d --out "$usage_tmp" >
   printf '%s\n' 'dispatch-usage-push: report failed' >&2
   exit 1
 fi
+chmod 0644 "$usage_tmp"
 summary="dispatch-usage $(hostname) $(date +%F)"
 if ! upload_output=$("${FLEET_BIN:-fleet}" upload "$usage_tmp" --summary "$summary" 2>/dev/null); then
   printf '%s\n' 'dispatch-usage-push: upload failed' >&2

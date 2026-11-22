@@ -346,7 +346,7 @@ function classify(tool, input) {
       }
       if (busy) launchWarns.push('bash-launch-guard (busy-loop): loop can spin continuously');
       const ls = cfg.lsMode === 'off' ? null : detectBareLs(cmd);
-      const lsRewrite = ls && ls.rewrite && ls.rewrite.length <= 600
+      const lsRewrite = ls && ls.rewrite !== null
         ? `\n改寫後的指令（直接照抄）：${ls.rewrite}`
         : '';
       if (ls && cfg.lsMode === 'deny') {

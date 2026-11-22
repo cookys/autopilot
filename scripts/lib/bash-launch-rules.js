@@ -96,8 +96,8 @@ function segments(text) {
   let lvlN = 0;
   let inner = 0; // unquoted `(` that is not a subshell opener (`$(`, `f(`)
   let bt = false; // inside an unquoted backtick substitution
-  const push = (bg, endsList = false) => {
-    if (cur.trim()) { out.push({ text: cur.trim(), bg, sub: subDepth > 0, pipe: pipeNext, cond: condNext, or: orNext, list: listN, lvl: lvlStack[lvlStack.length - 1], plvl: lvlStack.length > 1 ? lvlStack[lvlStack.length - 2] : null }); pipeNext = false; condNext = false; }
+  const push = (bg, endsList = false, end = s.length) => {
+    if (cur.trim()) { out.push({ text: cur.trim(), start: end - cur.length + (cur.length - cur.trimStart().length), bg, sub: subDepth > 0, pipe: pipeNext, cond: condNext, or: orNext, list: listN, lvl: lvlStack[lvlStack.length - 1], plvl: lvlStack.length > 1 ? lvlStack[lvlStack.length - 2] : null }); pipeNext = false; condNext = false; }
     cur = '';
     if (bg) {
       for (let k = listStart; k < out.length; k += 1) out[k].bg = true;
@@ -131,25 +131,25 @@ function segments(text) {
     if (c === '(') { inner += 1; cur += c; continue; }
     if (c === ')') {
       if (inner > 0) inner -= 1;
-      else if (subDepth > 0) { push(false); subDepth -= 1; lvlStack.pop(); continue; } // closes a subshell
+      else if (subDepth > 0) { push(false, false, i); subDepth -= 1; lvlStack.pop(); continue; } // closes a subshell
       cur += c; continue;
     }
     // Inside an unquoted `$( … )` or backtick pair the separators belong to that substitution: keep it one segment (it is
     // re-parsed on its own by expandSegments), otherwise `echo $(rail &)` would be torn apart.
     if ((inner > 0 || bt) && (c === '\n' || c === ';' || c === '|' || c === '&')) { cur += c; continue; }
-    if (c === '\n' || c === ';') { push(false, true); continue; }
+    if (c === '\n' || c === ';') { push(false, true, i); continue; }
     if (c === '|' && s[i - 1] === '>') { cur += c; continue; } // `>|` clobber redirect, not a pipe
     if (c === '|') {
-      push(false);
+      push(false, false, i);
       if (s[i + 1] === '|') { i += 1; condNext = true; orNext = true; continue; } // `||`
       if (s[i + 1] === '&') i += 1; // `|&` (pipe stderr too)
       if (out.length) out[out.length - 1].pipe = true; // a pipeline member: `wait | cat` waits for nothing
       pipeNext = true; continue;
     }
     if (c === '&') {
-      if (s[i + 1] === '&') { push(false); i += 1; condNext = true; continue; }
+      if (s[i + 1] === '&') { push(false, false, i); i += 1; condNext = true; continue; }
       if (s[i - 1] === '>' || s[i + 1] === '>') { cur += c; continue; } // `2>&1`, `&>file`
-      push(true, true); continue;
+      push(true, true, i); continue;
     }
     cur += c;
   }
@@ -169,7 +169,7 @@ function tokens(segText) {
   const out = [];
   const re = /\S+/g;
   let m;
-  while ((m = re.exec(masked)) !== null) out.push({ raw: segText.slice(m.index, m.index + m[0].length), masked: m[0] });
+  while ((m = re.exec(masked)) !== null) out.push({ raw: segText.slice(m.index, m.index + m[0].length), masked: m[0], start: m.index });
   return out;
 }
 
@@ -322,6 +322,7 @@ function expandSegmentsUncached(text, depth) {
   const all = [];
   const sid = (scriptSeq += 1);
   for (const seg of segments(text)) {
+    seg.sourceDepth = depth;
     seg.lvl = `${sid}:${seg.lvl}`;
     if (seg.plvl !== null) seg.plvl = `${sid}:${seg.plvl}`;
     all.push(seg);
@@ -1154,29 +1155,16 @@ function detectBareLsUnguarded(cmd) {
   // `<(…)` / `>(…)` process substitution runs its body as a command list, exactly like `$(…)`.
   const text = stripArrayAssigns(stripArithmetic(rewriteProcSubst(exec)));
   if (!/\bls\b/.test(text)) return null;
-  let safeOffsets = text.length === rawCmd.length;
-  let segSearchFrom = 0;
+  let safeOffsets = text === `${rawCmd}\n`;
   const offsets = [];
   let found = false;
   for (const seg of expandSegments(text)) {
     if (seg.sh) continue;
-    let segIdx = -1;
-    if (safeOffsets) {
-      segIdx = text.indexOf(seg.text, segSearchFrom);
-      if (segIdx < 0) safeOffsets = false;
-      else segSearchFrom = segIdx + seg.text.length;
-    }
     let afterTime = false; // `time` is a reserved word: its options (`-p`, `--`) are skipped with it, the command after still gets alias expansion
-    const toks = tokens(seg.text).map((t) => t.raw);
-    let tokSearchFrom = 0;
+    const tokenInfo = tokens(seg.text);
+    const toks = tokenInfo.map((t) => t.raw);
     for (let i = 0; i < toks.length; i += 1) {
       const raw = toks[i];
-      let tokIdx = -1;
-      if (safeOffsets) {
-        tokIdx = seg.text.indexOf(raw, tokSearchFrom);
-        if (tokIdx < 0) safeOffsets = false;
-        else tokSearchFrom = tokIdx + raw.length;
-      }
       if (afterTime && (raw === '-p' || raw === '--')) continue;
       if (raw === 'time') { afterTime = true; continue; }
       if (/^[A-Za-z_]\w*(?:\[[^\]]*\])?\+?=/.test(raw) || KEYWORDS.has(raw)) continue;
@@ -1193,8 +1181,8 @@ function detectBareLsUnguarded(cmd) {
       if (raw === 'ls') {
         found = true;
         if (safeOffsets) {
-          const absIdx = segIdx + tokIdx;
-          if (rawCmd.slice(absIdx, absIdx + 2) === 'ls') offsets.push(absIdx);
+          const absIdx = seg.start + tokenInfo[i].start;
+          if (seg.sourceDepth === 0 && rawCmd.slice(absIdx, absIdx + 2) === 'ls') offsets.push(absIdx);
           else safeOffsets = false;
         }
         break;

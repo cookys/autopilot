@@ -885,7 +885,7 @@ test('only the first few globs per command are resolved (stay silent past the ca
 
 // Drift guard: every launching rail script in scripts/ is on the guard's explicit list. A new
 // scripts/dispatch-*.sh|js must either be a rail (add it to RAIL_NAMES) or an observer (add it here).
-const OBSERVERS = new Set(['dispatch-status.js', 'dispatch-contract.js', 'dispatch-tree.js']);
+const OBSERVERS = new Set(['dispatch-status.js', 'dispatch-contract.js', 'dispatch-tree.js', 'dispatch-usage-push.sh', 'dispatch-usage-report.js']);
 for (const f of fs.readdirSync(path.join(__dirname, '..', 'scripts'))) {
   if (!/^dispatch-.*\.(sh|js)$/.test(f) || /\.test\./.test(f) || OBSERVERS.has(f)) continue;
   test(`rail on the explicit list: ${f}`, () => {
@@ -1113,17 +1113,32 @@ const BARE_LS_REWRITE_CASES = [
   ['ls -la src', 'command ls -la src'],
   ['cd x && ls | head', 'cd x && command ls | head'],
   ['ls && ls -la', 'command ls && command ls -la'],
+  ['ls a; ls b', 'command ls a; command ls b'],
+  ['echo "ls"; command ls; /bin/ls; ls', 'echo "ls"; command ls; /bin/ls; command ls'],
+  [`ls ${'a'.repeat(650)}`, `command ls ${'a'.repeat(650)}`],
 ];
 for (const [cmd, expected] of BARE_LS_REWRITE_CASES) {
   test(`rule4 rewrite in deny message: ${JSON.stringify(cmd)}`, () => {
-    const r = run(cmd);
+    const r = run(cmd, { lsDefault: true });
     assert.strictEqual(r.deny, true);
     assert.ok(r.reason.includes(`改寫後的指令（直接照抄）：${expected}`), r.reason);
   });
 }
+test('rule4 rewrite in warn message', () => {
+  const r = run('ls a; ls b', { lsDefault: true, env: { AUTOPILOT_BASH_GUARD_LS_MODE: 'warn' } });
+  assert.strictEqual(r.deny, false);
+  assert.ok(r.ctx.includes('改寫後的指令（直接照抄）：command ls a; command ls b'), r.ctx);
+});
+test('rule4 omits unsafe rewrite after preprocessing', () => {
+  const { detectBareLs } = require('../scripts/lib/bash-launch-rules.js');
+  for (const cmd of ['ls $(ls)', "cat <<'EOF'\nls\nEOF\nls"]) {
+    assert.strictEqual(detectBareLs(cmd).rewrite, null);
+    assert.doesNotMatch(run(cmd, { lsDefault: true }).reason, /改寫後的指令/);
+  }
+});
 for (const cmd of ['echo "ls"', 'grep ls file', 'command ls', '/bin/ls', "cat <<'EOF'\nls\nEOF"]) {
   test(`rule4 allows without rewrite: ${JSON.stringify(cmd)}`, () => {
-    const r = run(cmd);
+    const r = run(cmd, { lsDefault: true });
     assert.strictEqual(r.deny, false);
   });
 }

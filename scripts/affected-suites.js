@@ -1747,7 +1747,19 @@ const OVER_HALF_THRESHOLD = process.env.AFFECTED_SUITES_OVER_HALF_THRESHOLD != n
   ? Number(process.env.AFFECTED_SUITES_OVER_HALF_THRESHOLD)
   : 0.5;
 
-const REQUIRE_REASONS = new Set(['require_top', 'source']);
+const REQUIRE_REASONS = new Set(['require_top', 'source', 'require_exported']);
+const SOFT_MENTION_REASONS = new Set(['weak_mention', 'path_string']);
+
+function mentionsOutsideRequires(text, changedFile) {
+  if (typeof text !== 'string') return true;
+  const cleaned = text
+    .replace(/\brequire\(\s*(['"])[^'"\n]*\1\s*\)/g, '')
+    .replace(/\bimport\s+[^'"\n]*?\bfrom\s+(['"])[^'"\n]*\1/g, '')
+    .replace(/\bimport\(\s*(['"])[^'"\n]*\1\s*\)/g, '')
+    .replace(/(^|[;&|(]|\bthen\b|\bdo\b)([ \t]*(?:source|\.)[ \t]+["']?[^\s"';)]+["']?)/gm, '$1');
+  const fileBase = base(changedFile);
+  return cleaned.includes(fileBase) || cleaned.includes(changedFile);
+}
 
 function defaultDepCachePath(root) {
   let common = git(root, ['rev-parse', '--git-common-dir']).toString('utf8').trim();
@@ -1764,7 +1776,7 @@ function loadDepCache(root, depCacheArg) {
   return cache;
 }
 
-function pruneWithDepCache(root, doc, selection, headRef, depCacheArg) {
+function pruneWithDepCache(root, doc, selection, headRef, depCacheArg, tree) {
   const pruned = [];
   try {
     const cache = loadDepCache(root, depCacheArg);
@@ -1788,13 +1800,26 @@ function pruneWithDepCache(root, doc, selection, headRef, depCacheArg) {
       const cachedFiles = new Set(entry.files);
       const causingFiles = [];
       let canPrune = true;
+      let suiteText;
       for (const file of doc.changed) {
         const reasons = reasonsFor(suite, file, selection);
         if (reasons.length === 0) continue;
         causingFiles.push(file);
-        if (reasons.some((r) => !REQUIRE_REASONS.has(r)) || cachedFiles.has(file)) {
+        if (cachedFiles.has(file)) {
           canPrune = false;
           break;
+        }
+        const hasHardOther = reasons.some((r) => !REQUIRE_REASONS.has(r) && !SOFT_MENTION_REASONS.has(r));
+        if (hasHardOther) {
+          canPrune = false;
+          break;
+        }
+        if (reasons.some((r) => SOFT_MENTION_REASONS.has(r))) {
+          if (suiteText === undefined) suiteText = tree ? tree.read(suite) : null;
+          if (mentionsOutsideRequires(suiteText, file)) {
+            canPrune = false;
+            break;
+          }
         }
       }
       if (canPrune && causingFiles.length > 0) {
@@ -1947,7 +1972,7 @@ async function main(argv) {
       if (hasCache) {
         if (!tree) tree = gitTree(root, doc.head || 'HEAD');
         const selection = select(doc.changed, tree, maxWeak);
-        pruned = pruneWithDepCache(root, doc, selection, headRef, a.depCache);
+        pruned = pruneWithDepCache(root, doc, selection, headRef, a.depCache, tree);
         if (pruned.length > 0) process.stderr.write(`dep-cache: pruned ${pruned.length} suites\n`);
       }
     }

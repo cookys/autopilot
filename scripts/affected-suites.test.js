@@ -2195,3 +2195,63 @@ test('dep-cache pruning: sound removal, fail-closed guards, CLI/env flags, and e
     assert.strictEqual(resG.stderr, '');
   } finally { r.cleanup(); }
 });
+
+test('dep-cache pruning: weak_mention/path_string outside requires, shell source, and unreadable text', () => {
+  const r = makeRepo({
+    'scripts/lib/unused.js': 'module.exports = 1;\n',
+    'scripts/lib/x.sh': 'echo x\n',
+    'scripts/req-only.test.js': "if (process.env.NEVER_SET) { require('./lib/unused.js'); }\n",
+    'scripts/echo-mention.test.js': "if (process.env.NEVER_SET) { require('./lib/unused.js'); }\nconst arr = ['unused.js'];\n",
+    'hooks/tests/source-only.test.sh': '#!/usr/bin/env bash\nsource "$ROOT/scripts/lib/x.sh"\n',
+    'hooks/tests/source-and-bash.test.sh': '#!/usr/bin/env bash\nsource "$ROOT/scripts/lib/x.sh"\nbash scripts/lib/x.sh\n',
+  });
+  try {
+    const cacheDir = path.join(r.dir, '.git', 'autopilot');
+    fs.mkdirSync(cacheDir, { recursive: true });
+    const defaultCache = path.join(cacheDir, 'dep-cache.json');
+    const writeCache = (obj) => fs.writeFileSync(defaultCache, JSON.stringify(obj, null, 2));
+
+    const head1 = r.change({ 'scripts/lib/unused.js': 'module.exports = 2;\n' });
+    writeCache({
+      schema: 'dep-cache/1',
+      base_sha: r.base,
+      built_at_utc: new Date().toISOString(),
+      suites: {
+        'scripts/req-only.test.js': { files: [], rc: 0, traced: true },
+        'scripts/echo-mention.test.js': { files: [], rc: 0, traced: true },
+      },
+    });
+    const resJs = spawnSync('node', [SEL, '--root', r.dir, '--base', r.base, '--head', head1], { encoding: 'utf8' });
+    assert.strictEqual(resJs.status, 0, resJs.stderr);
+    assert.strictEqual(resJs.stdout, 'scripts/echo-mention.test.js\n');
+
+    const head2 = r.change({ 'scripts/lib/x.sh': 'echo x2\n' });
+    writeCache({
+      schema: 'dep-cache/1',
+      base_sha: head1,
+      built_at_utc: new Date().toISOString(),
+      suites: {
+        'hooks/tests/source-only.test.sh': { files: [], rc: 0, traced: true },
+        'hooks/tests/source-and-bash.test.sh': { files: [], rc: 0, traced: true },
+      },
+    });
+    const resSh = spawnSync('node', [SEL, '--root', r.dir, '--base', head1, '--head', head2], { encoding: 'utf8' });
+    assert.strictEqual(resSh.status, 0, resSh.stderr);
+    assert.strictEqual(resSh.stdout, 'hooks/tests/source-and-bash.test.sh\n');
+
+    // (4) unreadable suite text => kept (fail closed)
+    const bigHead = r.change({ 'scripts/req-only.test.js': "if (process.env.NEVER_SET) { require('./lib/unused.js'); }\n" + '// ' + 'a'.repeat(1100 * 1024) + '\n' });
+    const head3 = r.change({ 'scripts/lib/unused.js': 'module.exports = 3;\n' });
+    writeCache({
+      schema: 'dep-cache/1',
+      base_sha: bigHead,
+      built_at_utc: new Date().toISOString(),
+      suites: {
+        'scripts/req-only.test.js': { files: [], rc: 0, traced: true },
+      },
+    });
+    const resBig = spawnSync('node', [SEL, '--root', r.dir, '--base', bigHead, '--head', head3], { encoding: 'utf8' });
+    assert.strictEqual(resBig.status, 0, resBig.stderr);
+    assert.strictEqual(resBig.stdout, 'scripts/req-only.test.js\n');
+  } finally { r.cleanup(); }
+});

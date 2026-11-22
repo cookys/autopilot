@@ -262,7 +262,7 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
         const letter = hint !== null && !used.has(hint[1]) ? hint[1] : keyLetter !== null && !used.has(keyLetter) ? keyLetter : null
         if (letter !== null) used.add(letter)
         const cardAt = typeof sg.press === 'string' && sg.press.startsWith('card:') ? Number(sg.press.slice(5)) : null
-        const focusMark = cardAt !== null && box && !typing && sg.text.startsWith(GLYPHS.structure.folded)
+        const focusMark = frame.pendingScroll === undefined && cardAt !== null && box && !typing && sg.text.startsWith(GLYPHS.structure.folded)
         const stripLead = (x: string) => letter === null ? x : x.replace(new RegExp('^\\[' + letter + '\\] |^' + letter + ': |^' + letter + ' '), '')
         const texts = run.map((x, n) => <Text key={'g' + (j + n)} {...drawSeg(x)} wrap="truncate">{n === 0 && letter !== null ? stripLead(x.text) : x.text}</Text>)
         const onKeyPress = () => {
@@ -300,7 +300,7 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
     const navHot = v75On() && i === rows.length - 1 && !typing && Button !== undefined && (page.id === 'decide' || page.id === 'todo')
       ? (page.id === 'decide' && frame.v74 !== undefined ? [['j', 1], ['k', -1], ['n', 1], ['p', -1], ['m', 0]] : [['j', 1], ['k', -1]]).filter(([l]) => !used.has(l as string)).map(([l, by]) => <Box key={'hk:' + l} width={0} height={0} overflow="hidden"><Button key={'pn:' + l + ep} plain hotkey={l as string} onPress={() => frame.onKey?.(keys[l as string] ?? { kind: 'move', by: by as 1 | -1 })}>{l as string}</Button></Box>)
       : []
-    return <Box key={'f' + i} {...(frame.pendingScroll !== undefined && page.id === 'decide' ? { width: fullCols, height: 1, overflow: 'hidden' as const } : {})}>{nodes}{i === rows.length - 1 ? [focusAnchor(el, epoch), ...navHot] : null}</Box>
+    return <Box key={'f' + i} {...(frame.pendingScroll !== undefined && page.id === 'decide' ? { width: cols, height: 1, overflow: 'hidden' as const } : {})}>{nodes}{i === rows.length - 1 ? [focusAnchor(el, epoch), ...navHot] : null}</Box>
   }
   if (!box) return <Box {...(epoch > 0 ? { key: 'frame:' + epoch } : {})} flexDirection="column" height={frame.rows}>{rows.map(drawRow)}</Box>
   const rule = GLYPHS.structure.rule
@@ -341,8 +341,9 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
     const choose = () => (frame.onPage !== undefined ? frame.onPage(tb.id as PageId) : onTab(PAGE_TAB[tb.id]))
     return <Box key={'hk' + j} width={0} height={0} overflow="hidden"><Button key={'hotkey:' + tb.key + ep} plain hotkey={tb.key} onPress={choose}>{tb.key}</Button></Box>
   })
-  // a/b/c/m are not drawn between cards (that ate Up/Down). A zero-size box keeps the hotkey without a painted cell. s stays on the action row.
-  const letters = Button === undefined || typing || page.id !== 'decide' ? [] : (['a', 'b', 'c', 'm'] as const).map(letter => (
+  // The boxed fallback replaces the strip row (and its navHot buttons).
+  // Keep card navigation registered on this bottom border too. s stays on the action row.
+  const letters = Button === undefined || typing || page.id !== 'decide' ? [] : (['a', 'b', 'c', 'm', 'n', 'p', 'j', 'k'] as const).map(letter => (
     <Box key={'lk' + letter} width={0} height={0} overflow="hidden"><Button key={'letter:' + letter + ep} plain hotkey={letter} onPress={() => frame.onKey?.(keys[letter] ?? { kind: 'none' })}>{letter}</Button></Box>
   ))
   const bottom = <Box key="v74-bottom" height={1} width={fullCols} overflow="hidden"><Text {...bc}>{GLYPHS.structure.frameBL + rule + '  ' + fit.hint + '  ' + rule.repeat(padN) + '  '}</Text>{tabs}<Text {...bc}>{'  ' + rule + GLYPHS.structure.frameBR}</Text>{hidden}{letters}</Box>

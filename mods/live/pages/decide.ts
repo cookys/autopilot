@@ -597,7 +597,7 @@ function pendingBody(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: 
     state.cursor = cards[cursor].id
   }
   const list = fixedWindow(cards.length, listRows, state.list)
-  const queue: Row[] = [[dimSeg(ctx.t('page.decide.range', { a: list.offset + 1, b: list.offset + list.rows, n: cards.length }))],
+  const queue: Row[] = [[dimSeg(ctx.t('page.decide.range', { a: list.offset + 1, b: list.offset + list.rows, n: cards.length }) + (ctx.box === true ? ' · ' + ctx.t('v74.d.head', { n: cards.length, k: cursor + 1 }) : ''))],
     ...cards.slice(list.offset, list.offset + list.rows).map((c, k) => {
       const at = list.offset + k
       const row = truncateSegs(boxSummary(c, at, nav, { ...ctx, size: { ...ctx.size, cols: width } }).map(s => ({ ...s, text: s.text.replace(/\s/g, ' ') })), width)
@@ -654,6 +654,7 @@ function renderBoxV74(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor:
   const cols = ctx.size.cols
   const head = ruleTo(GLYPHS.structure.open + ' ' + t('v74.d.head', { n: cards.length, k: cursor + 1 }), cols)
   const room = Math.max(1, ctx.size.rows - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - 1 - actions.length) // the head row of the frame, the strip and the key-hint border are not the page's
+  if (ctx.pendingScroll !== undefined) return { body: pendingBody(ctx, cards, nav, cursor, room), actions }
   let body = boxBody(ctx, cards, nav, cursor, FIT_STEPS[0], head)
   for (const fit of FIT_STEPS.slice(1)) if (body.length > room) body = boxBody(ctx, cards, nav, cursor, fit, head)
   return { body, actions }

@@ -2648,9 +2648,16 @@ export function registerLive(on: Parameters<Register>[0]): void {
     // a render there remounts the tab Buttons and the host's focus lands on a card Button, which wrote the cursor back (r8-1 gate, step 22).
     if (v74Open && !v75PaneOn) { const was = v74KeysHeld; v74KeysHeld = v74KeysHeldNext(was, { kind: 'focus', named, origin: (raw as { origin?: unknown }).origin }); if (was !== v74KeysHeld) void renderLater($) }
     const step = (v75PaneOn && raw.component === 'Pane' && panePage === 'decide') || decideLocal.textMode || bandLegacy || !v74Open ? null : v74TabStep(panePage, named, (raw as { origin?: unknown }).origin)
-    if (step !== null) { void frameKey($, step); return {} } // the ring stays on the current tab
+    if (step !== null) {
+      if (v75On() && panePage === 'decide') {
+        scrollPendingPane($, step.by)
+        void ringToTab($, panePage)
+      } else void frameKey($, step)
+      return {}
+    } // the ring stays on the current tab
     const at = v74FocusAt(raw)
-    if ((v75PaneOn && raw.component === 'Pane' && panePage === 'decide') || at === null || decideLocal.textMode || (panePage !== 'decide' && panePage !== 'todo') || bandLegacy || !v74Open) return next(e)
+    // A summary's focus is a host ring stop, not a request to select that card.
+    if ((v75On() && panePage === 'decide') || at === null || decideLocal.textMode || (panePage !== 'decide' && panePage !== 'todo') || bandLegacy || !v74Open) return next(e)
     const act = v74FocusCursor(decideLocal.cursor, typeof raw.element === 'string' ? raw.element : raw.key)
     if (act !== null) void frameKey($, act)
     return {}
@@ -2661,7 +2668,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const ev = e as { by?: number; component?: string }
     void v74Keylog($, { handler: 'ui.scroll', component: ev.component, by: ev.by, page: panePage, cursor: decideLocal.cursor, focusOwner: decideLocal.textMode ? 'v74-note' : 'band', noteOpen: decideLocal.textMode })
     if (ev.component === 'AbovePrompt' || ev.component === 'Pane') return next(e)
-    if (v75PaneOn && panePage === 'decide') {
+    if ((v75PaneOn || v75On() && v74Open) && panePage === 'decide') {
       if (!decideLocal.textMode && typeof ev.by === 'number') scrollPendingPane($, ev.by)
       return {}
     }
@@ -2671,14 +2678,14 @@ export function registerLive(on: Parameters<Register>[0]): void {
   })
 
   on('ui.scroll', { component: 'AbovePrompt' }, ($, e, next) => {
-    // v7.5 §5: the band never scrolls. One row = the arrow (cursor); PgUp / PgDn scroll only the Pane's card window
+    // The docked Pane and the boxed fallback share the detail window. The fallback's wheel also reads the current card.
     if (v75PaneOn || v75Rows > 0) {
-      const route = v75ScrollRoute(e, { paneOpen: v75PaneOn, note: decideLocal.textMode })
+      const route = v75ScrollRoute(e, { paneOpen: v75PaneOn || v74Open, note: decideLocal.textMode })
       if (route === 'cursor') {
         const arrow = v74HostScroll({ by: e.by }, 'decide', true, bandLegacy, decideLocal.textMode)
         if (arrow !== null) { void (async () => { if (panePage !== 'decide') await panePagePress($, 'decide'); await frameKey($, arrow) })(); return {} }
       }
-      else if ((route === 'pane' || route === 'queue') && panePage === 'decide') { scrollPendingPane($, e.by, route === 'queue'); return {} }
+      else if ((route === 'pane' || route === 'queue') && panePage === 'decide') { scrollPendingPane($, e.by, route === 'queue' && v75PaneOn); return {} }
       else if (route === 'swallow') return {}
     }
     void v74Keylog($, { handler: 'ui.scroll', component: 'AbovePrompt', by: e.by, page: panePage, cursor: decideLocal.cursor, focusOwner: decideLocal.textMode ? 'v74-note' : 'band', noteOpen: decideLocal.textMode })
@@ -2748,7 +2755,7 @@ async function paneTree($: EngineInterface, e: { props: any; surface: string }, 
     folded, boxRows !== null ? null : e.props.scroll ?? null,
     { state: decideState, batch: decideBatch, now: decideNow, inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } },
     decideScroll, fleet, null,
-    legacy ? null : { pages: [...PAGES, ...EXTRA_PAGES], pageId: panePage, ...(boxRows === null && !legacy ? { pendingScroll } : {}), onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, others: fleet?.others ?? null, nowMs: frameNow, rows: boxRows ?? frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), ...(boxRows === null ? {} : { v74Box: true as const }), view: pageView, decide: { ...decideState, ...decideLocal }, v74, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { void v74Keylog($, { handler: 'input', component: 'Input', element: 'v74-note', len: [...v].length, page: panePage, cursor: decideLocal.cursor, focusOwner: 'v74-note', noteOpen: true }); decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(panePage === 'forge' ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}), ...(panePage === 'spend' ? { poolEta: v75On() ? await readPoolEta($) : undefined } : {}), ...(panePage === 'room' ? { room: parseRoom((await readRoomText($)) ?? '') } : {}) },
+    legacy ? null : { pages: [...PAGES, ...EXTRA_PAGES], pageId: panePage, ...(!legacy && (boxRows === null || v75On()) ? { pendingScroll } : {}), onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, others: fleet?.others ?? null, nowMs: frameNow, rows: boxRows ?? frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), ...(boxRows === null ? {} : { v74Box: true as const }), view: pageView, decide: { ...decideState, ...decideLocal }, v74, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { void v74Keylog($, { handler: 'input', component: 'Input', element: 'v74-note', len: [...v].length, page: panePage, cursor: decideLocal.cursor, focusOwner: 'v74-note', noteOpen: true }); decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(panePage === 'forge' ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}), ...(panePage === 'spend' ? { poolEta: v75On() ? await readPoolEta($) : undefined } : {}), ...(panePage === 'room' ? { room: parseRoom((await readRoomText($)) ?? '') } : {}) },
   )
   if (boxRows === null) await probePane($, e as never, tree)
   return tree

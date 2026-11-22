@@ -345,17 +345,19 @@ if (doc.processed !== 27 || doc.accepted !== 1 || doc.no_action !== 7 || doc.pen
 if (doc.residue !== 1 || doc.hidden_pending !== 1) process.exit(20);
 if (JSON.stringify(doc.decision_request_by_lane) !== JSON.stringify({ 'ns/h/lane-b': 1 })) process.exit(21);
 
-// Urgent + credential_redline (7 items -> [5,2]) come FIRST in their own immediate packets, followed by 12 batch items ([5,5,2])
-if (doc.immediate_packets !== 2 || doc.batch_packets !== 3 || doc.packets !== 5 || doc.woke !== true || doc.immediate_wake !== true) {
+// Merged-categories packing (MAX_PACKET_ITEMS=60): all 19 pending items fit into 1 packet with urgent/credential_redline items ordered first
+if (doc.packets !== 1 || doc.woke !== true || doc.immediate_wake !== true) {
   process.exit(22);
 }
-if (JSON.stringify(doc.packet_item_counts) !== JSON.stringify([5, 2, 5, 5, 2])) process.exit(23);
+if (JSON.stringify(doc.packet_item_counts) !== JSON.stringify([19])) process.exit(23);
 const packetParts = wakes[0].content.trim().split('\n\n---\n\n');
-if (packetParts.length !== 5) process.exit(24);
-if (!packetParts[0].startsWith('## PM 收件匣緊急立即喚醒包') || !packetParts[2].startsWith('## PM 收件匣待裁決批次包')) {
-  process.exit(25);
+if (packetParts.length !== 1) process.exit(24);
+const firstBatchIdx = wakes[0].content.indexOf('m-dec-req');
+if (firstBatchIdx < 0) process.exit(25);
+for (const urgId of ['m-urg', 'm-cred-cat', 'm-cred-zh1', 'm-cred-zh2', 'm-cred-tok', 'm-cred-scp', 'm-cred-red']) {
+  const urgIdx = wakes[0].content.indexOf(urgId);
+  if (urgIdx < 0 || urgIdx > firstBatchIdx) process.exit(26);
 }
-if (packetParts[0].includes('m-dec-req') || packetParts[1].includes('m-dec-req')) process.exit(26);
 if (!wakes[0].content.includes('「未分類」') || !wakes[0].content.includes('順手記錄一筆未符合任何固定規則的自由文字訊息')) {
   process.exit(27);
 }
@@ -969,7 +971,7 @@ NODE
 )"
 assert_eq "$DEDUPE_VERIFY" "ok" "dedupe prevents waking twice on same message_id or same task_id + rule"
 
-# --- 8a. Paging: 12 pending items => >= 3 packets, each <= 1500 tokens, zero item text truncated ---
+# --- 8a. Paging: 12 pending items => 1 packet, >60 pending items => 2 packets, zero item text truncated ---
 FX_PKT12="$TEST_TMP/fx-pkt12"
 mkdir -p "$FX_PKT12"
 RECEIPTS_PKT="$TEST_TMP/receipts-pkt"
@@ -993,22 +995,24 @@ NODE
 PKT12_OUT="$(AUTOPILOT_PM_INBOX_ADAPTER="fixture:$FX_PKT12" node "$SWITCHBOARD_JS" run --receipt-dir "$RECEIPTS_PKT" --state-file "$TEST_TMP/s-pkt12.json" < /dev/null 2>&1)"; PKT12_RC=$?
 assert_eq "$PKT12_RC" "0" "12-pending paging run exits 0"
 
-PKT12_VERIFY="$(node - "$FX_PKT12" "$PKT12_OUT" <<'NODE'
+PKT12_VERIFY="$(node - "$FX_PKT12" "$PKT12_OUT" "$SWITCHBOARD_JS" <<'NODE'
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const [fxDir, stdoutText] = process.argv.slice(2);
+const [fxDir, stdoutText, swbPath] = process.argv.slice(2);
+const { MAX_PACKET_TOKENS } = require(swbPath);
 const doc = JSON.parse(stdoutText);
 const wakes = fs.readFileSync(path.join(fxDir, 'wakes.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
 if (wakes.length !== 1) process.exit(1);
-if (doc.packets < 3) process.exit(2);
-if (doc.packet_item_counts.reduce((a, b) => a + b, 0) !== 12) process.exit(3);
+// Merged-categories packing (MAX_PACKET_ITEMS=60): 12 items now fit into 1 packet
+if (doc.packets !== 1) process.exit(2);
+if (JSON.stringify(doc.packet_item_counts) !== JSON.stringify([12])) process.exit(3);
 
 const packetParts = wakes[0].content.trim().split('\n\n---\n\n');
-if (packetParts.length !== doc.packets || packetParts.length < 3) process.exit(4);
+if (packetParts.length !== 1) process.exit(4);
 for (const part of packetParts) {
   const tokEst = Math.ceil(part.length / 3);
-  if (tokEst > 1500) process.exit(5);
+  if (tokEst > MAX_PACKET_TOKENS) process.exit(5);
 }
 const fullWake = wakes[0].content;
 for (let i = 1; i <= 12; i += 1) {
@@ -1020,16 +1024,58 @@ for (const reqLabel of ['編號：', 'lane：', '工單：無', '類型：decisi
 process.stdout.write('ok');
 NODE
 )"
-assert_eq "$PKT12_VERIFY" "ok" "12 pending items page into >=3 packets <=1500 tokens with zero item text truncated"
+assert_eq "$PKT12_VERIFY" "ok" "12 pending items fit into 1 packet <=MAX_PACKET_TOKENS with zero item text truncated"
 
-# --- 8b. Oversized item (> 1500 tokens) gets its own packet and is NEVER truncated ---
-FX_HUGE="$TEST_TMP/fx-huge"
-mkdir -p "$FX_HUGE"
-node - "$FX_HUGE/inbox.json" <<'NODE'
+FX_PKT65="$TEST_TMP/fx-pkt65"
+mkdir -p "$FX_PKT65"
+node - "$FX_PKT65/inbox.json" <<'NODE'
 'use strict';
 const fs = require('fs');
-const longBody = 'HEAD-OVERSIZED-MARKER-' + '長篇記錄內容段落完整保留不截斷。'.repeat(400) + '-TAIL-OVERSIZED-MARKER';
-fs.writeFileSync(process.argv[2], JSON.stringify([
+const items = [];
+for (let i = 1; i <= 65; i += 1) {
+  items.push({
+    message_id: `p65-${i}`,
+    from: `ns/host/lane-${i}`,
+    category: 'decision_request',
+    content: `item ${i} — P65-SENTINEL-${i}-END`,
+  });
+}
+fs.writeFileSync(process.argv[2], JSON.stringify(items, null, 2) + '\n');
+NODE
+
+PKT65_OUT="$(AUTOPILOT_PM_INBOX_ADAPTER="fixture:$FX_PKT65" node "$SWITCHBOARD_JS" run --receipt-dir "$TEST_TMP/receipts-pkt65" --state-file "$TEST_TMP/s-pkt65.json" < /dev/null 2>&1)"; PKT65_RC=$?
+assert_eq "$PKT65_RC" "0" "65-pending paging run exits 0"
+PKT65_VERIFY="$(node - "$FX_PKT65" "$PKT65_OUT" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const [fxDir, stdoutText] = process.argv.slice(2);
+const doc = JSON.parse(stdoutText);
+const wakes = fs.readFileSync(path.join(fxDir, 'wakes.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+if (wakes.length !== 1) process.exit(1);
+if (doc.packets !== 2 || JSON.stringify(doc.packet_item_counts) !== JSON.stringify([60, 5])) process.exit(2);
+const fullWake = wakes[0].content;
+for (let i = 1; i <= 65; i += 1) {
+  if (!fullWake.includes(`P65-SENTINEL-${i}-END`)) process.exit(3);
+}
+process.stdout.write('ok');
+NODE
+)"
+assert_eq "$PKT65_VERIFY" "ok" "65 pending items page into 2 packets (60 + 5) with zero item text truncated"
+
+# --- 8b. Oversized item (> MAX_PACKET_TOKENS) gets its own packet and is NEVER truncated ---
+FX_HUGE="$TEST_TMP/fx-huge"
+mkdir -p "$FX_HUGE"
+node - "$FX_HUGE/inbox.json" "$SWITCHBOARD_JS" <<'NODE'
+'use strict';
+const fs = require('fs');
+const [outPath, swbPath] = process.argv.slice(2);
+const { MAX_PACKET_TOKENS } = require(swbPath);
+// Build oversized body dynamically from MAX_PACKET_TOKENS (48 KB cap) so it never drifts
+const unit = '長篇記錄內容段落完整保留不截斷。';
+const repeats = Math.ceil((MAX_PACKET_TOKENS * 3 + 300) / unit.length);
+const longBody = 'HEAD-OVERSIZED-MARKER-' + unit.repeat(repeats) + '-TAIL-OVERSIZED-MARKER';
+fs.writeFileSync(outPath, JSON.stringify([
   { message_id: 'm-normal-1', from: 'ns/h/lane-a', category: 'decision_request', content: 'short item before oversized' },
   { message_id: 'm-oversized-99', from: 'ns/h/lane-z', category: 'decision_request', content: longBody },
   { message_id: 'm-normal-2', from: 'ns/h/lane-b', category: 'decision_request', content: 'short item after oversized' },
@@ -1038,26 +1084,27 @@ NODE
 
 HUGE_OUT="$(AUTOPILOT_PM_INBOX_ADAPTER="fixture:$FX_HUGE" node "$SWITCHBOARD_JS" run --receipt-dir "$RECEIPTS_PKT" --state-file "$TEST_TMP/s-huge.json" < /dev/null 2>&1)"; HUGE_RC=$?
 assert_eq "$HUGE_RC" "0" "oversized item paging run exits 0"
-HUGE_VERIFY="$(node - "$FX_HUGE" "$HUGE_OUT" <<'NODE'
+HUGE_VERIFY="$(node - "$FX_HUGE" "$HUGE_OUT" "$SWITCHBOARD_JS" <<'NODE'
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const [fxDir, stdoutText] = process.argv.slice(2);
+const [fxDir, stdoutText, swbPath] = process.argv.slice(2);
+const { MAX_PACKET_TOKENS } = require(swbPath);
 const doc = JSON.parse(stdoutText);
 const inbox = JSON.parse(fs.readFileSync(path.join(fxDir, 'inbox.json'), 'utf8'));
 const longBody = inbox[1].content;
 const wake = JSON.parse(fs.readFileSync(path.join(fxDir, 'wakes.jsonl'), 'utf8').trim());
 const parts = wake.content.trim().split('\n\n---\n\n');
 
-// m-normal-1 -> packet 1 (<=1500 tok), m-oversized-99 -> own packet 2 (untruncated), m-normal-2 -> packet 3 (<=1500 tok)
+// m-normal-1 -> packet 1 (<=MAX_PACKET_TOKENS), m-oversized-99 -> own packet 2 (untruncated), m-normal-2 -> packet 3 (<=MAX_PACKET_TOKENS)
 if (doc.packets !== 3 || JSON.stringify(doc.packet_item_counts) !== JSON.stringify([1, 1, 1])) process.exit(1);
-if (Math.ceil(parts[0].length / 3) > 1500 || Math.ceil(parts[2].length / 3) > 1500) process.exit(2);
+if (Math.ceil(parts[0].length / 3) > MAX_PACKET_TOKENS || Math.ceil(parts[2].length / 3) > MAX_PACKET_TOKENS) process.exit(2);
 if (!parts[1].includes(longBody)) process.exit(3);
 if (parts[1].includes('m-normal-1') || parts[1].includes('m-normal-2')) process.exit(4);
 process.stdout.write('ok');
 NODE
 )"
-assert_eq "$HUGE_VERIFY" "ok" "item over 1500 tokens gets its own packet with 100% intact text"
+assert_eq "$HUGE_VERIFY" "ok" "item over MAX_PACKET_TOKENS gets its own packet with 100% intact text"
 
 # --- 8c. Zero pending -> zero wakes; plus residue-report [--since 24h] single-line summary ---
 FX_ZERO="$TEST_TMP/fx-zero"

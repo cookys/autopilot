@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-11-21 | [wasted turns: measure, pick one fix per item, staged rollout](../../docs/plans/2026-11-21-wasted-turns.md) | active | — | [plan](../../docs/plans/2026-11-21-wasted-turns.md) |
 | 2026-11-12 | [ctx-reset W2: sweep lane that resets idle large-context sessions (draft, awaiting plan review)](../plans/2026-11-12-ctx-reset-sweep.md) | active | — | [plan](../plans/2026-11-12-ctx-reset-sweep.md) |
 | 2026-11-11 | [Agent brief Cost line for fable and opus](../plans/2026-11-11-brief-cost-line.md) | active | — | [plan](../plans/2026-11-11-brief-cost-line.md) |
 | 2026-11-10 | [Claude login profile switching (move a lane to the subscription that has room)](../plans/2026-11-10-profile-switch.md) | active | — | [plan](../plans/2026-11-10-profile-switch.md) |

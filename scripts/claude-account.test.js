@@ -9,7 +9,8 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { cli, createScrubber } = require('./claude-account.js');
-const { makeFixture, R401, R429, R429_USAGE, ERR_EXIT0, OK } = require('./lib/account-fixtures/shim-install.js');
+const { makeFixture, loadPatched, R401, R429, R429_USAGE, ERR_EXIT0, OK } = require('./lib/account-fixtures/shim-install.js');
+const audit = require('./lib/account-audit');
 const quota = require('./lib/account-quota.js');
 
 async function go(fx, args, extraEnv, now) {
@@ -28,6 +29,45 @@ const outcomes = (fx) => auditLines(fx).map((r) => `${r.alias}:${r.attempt}:${r.
 const snap = (alias, pct) => ({
   schema: quota.SCHEMA, alias, root: null, written_at_ms: Date.now(),
   five_hour: { pct, resets_at: Math.floor(Date.now() / 1000) + 3600 }, seven_day: null,
+});
+
+async function periodicProbe(response, demand) {
+  const fx = makeFixture({ aliases: [{ alias: 'a' }], responses: { a: response }, probeFromManifest: true });
+  try {
+    const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, 'quota-adapters', 'claude.json'), 'utf8'));
+    const evidence = 'docs/plans/evidence/2026-11-03-g40-agent-lane-quota/capability-matrix.md';
+    Object.assign(manifest, { starts_window: false, starts_window_evidence: evidence, starts_window_confidence: 'high' });
+    manifest.capture.find((x) => x.mode === 'tinyprobe').quota_share_per_probe = { percent: 0.5, window: 'rolling_5h', evidence };
+    const file = path.join(fx.root, 'manifest.json');
+    fs.writeFileSync(file, JSON.stringify(manifest));
+    const patched = loadPatched(path.join(__dirname, 'claude-account.js'), [["path.join(__dirname, 'quota-adapters', 'claude.json')", JSON.stringify(file)]]).cli;
+    const now = Date.now();
+    if (demand) audit.appendAudit({ alias: 'a', purpose: 'tst', attempt: 1, outcome: 'ok' }, { path: fx.auditFile, now: now - 3600000 });
+    let out = ''; let err = '';
+    const code = await patched(['usage-probe', '--due'], { env: fx.env, realHome: fx.realHome, warn: () => {}, now: () => now, write: (fd, d) => { if (fd === 1) out += d; else err += d; } });
+    return { code, out, err, spawns: fx.shim.spawns() };
+  } finally { fx.cleanup(); }
+}
+
+test('periodic due probe failure returns child error and identifies the alias', async () => {
+  const r = await periodicProbe(ERR_EXIT0, true);
+  assert.strictEqual(r.code, 5);
+  assert.deepStrictEqual(JSON.parse(r.out), { due: ['a'], probed: [{ alias: 'a', outcome: 'child_error' }] });
+  assert.match(r.err, /^probe_failed alias=a outcome=child_error\n$/m);
+});
+
+test('periodic due probe succeeds when all probes succeed', async () => {
+  const r = await periodicProbe(OK, true);
+  assert.strictEqual(r.code, 0);
+  assert.deepStrictEqual(JSON.parse(r.out), { due: ['a'], probed: [{ alias: 'a', outcome: 'ok' }] });
+  assert.strictEqual(r.err, '');
+});
+
+test('periodic probe with nothing due succeeds without spawning', async () => {
+  const r = await periodicProbe(OK, false);
+  assert.strictEqual(r.code, 0);
+  assert.deepStrictEqual(JSON.parse(r.out), { due: [], probed: [] });
+  assert.strictEqual(r.spawns, 0);
 });
 function findToken(dir, token, skip) {
   const hits = [];

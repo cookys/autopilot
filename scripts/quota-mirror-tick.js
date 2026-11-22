@@ -129,7 +129,7 @@ function classify(spawned) {
     const reason = reasonText(spawned.stderr);
     const tokenMissing = reason.includes('token_missing') && (spawned.status === 1 || spawned.status === 2);
     const configSkip = spawned.status === 2 && (reason.includes('registry_not_configured') || reason.includes('mode_off'));
-    if (tokenMissing || configSkip) {
+    if (!reason.startsWith('probe_failed') && (tokenMissing || configSkip)) {
       return { ok: false, skip: true, detail: reason };
     }
     const detail = reason ? `exit=${spawned.status} reason=${reason}` : `exit=${spawned.status}`;

@@ -238,11 +238,20 @@ function main(argv) {
     try { prompt += fs.readFileSync(promptFile, 'utf8'); } catch (e) { usage(`cannot read prompt file: ${e.message}`); }
   }
 
-  const prep = preparePrompt(prompt);
+  const cwd = process.cwd();
+  const prep = preparePrompt(prompt, { cwd });
   if (!prep.ok) {
     process.stderr.write(prep.message);
     process.exit(prep.code);
   }
+  const cleanupPromptFile = () => {
+    if (!prep.filePath) return;
+    const resolved = path.resolve(prep.filePath);
+    const cwdPrefix = cwd.endsWith(path.sep) ? cwd : cwd + path.sep;
+    if (!resolved.startsWith(cwdPrefix)) return;
+    try { fs.unlinkSync(resolved); } catch (_e) { /* already removed */ }
+  };
+  process.on('exit', cleanupPromptFile);
   const line = prep.line;
   const child = spawn(cmd[0], [...cmd.slice(1), ...STREAM_FLAGS], { stdio: ['pipe', 'pipe', 'inherit'] });
   const chunks = [];
@@ -253,10 +262,12 @@ function main(argv) {
     process.on(sig, () => { try { child.kill(sig); } catch (_e) { /* gone */ } });
   }
   child.on('error', (e) => {
+    cleanupPromptFile();
     process.stderr.write(`agy-stream-json.js: cannot start ${cmd[0]}: ${e.message}\n`);
     process.exit(127);
   });
   child.on('close', (code, signal) => {
+    cleanupPromptFile();
     const exitCode = () => (code == null ? 128 + ({ SIGTERM: 15, SIGKILL: 9, SIGINT: 2, SIGHUP: 1 }[signal] || 1) : code);
     if (textCompat) { // --text-compat has ONE output rule, see textCompatClose
       const raw = Buffer.concat(chunks);

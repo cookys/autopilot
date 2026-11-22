@@ -127,10 +127,10 @@ OS="$TEST_TMP/loop-over-repo"; mkdir -p "$OS" "$TEST_TMP/oloop-ledger"
 OLOOP_BASE="$(git -C "$OS" rev-parse HEAD~1)"
 OWRAP="$TEST_TMP/review-wrap-over.sh"
 printf '#!/usr/bin/env bash\nout="$(%q "$@" --bin %q)"; rc=$?\nprintf "%%s\\n" "$out" >> %q\nprintf "%%s\\n" "$out"\nexit $rc\n' "$REVIEW" "$(mk_stub oloop AGY_STUB_CAPTURE=1)" "$R/oloopseat.out" > "$OWRAP"; chmod +x "$OWRAP"
-run_case aover env "$AUTHOR" --runner agy --model gemini-3.7-flash-high --prompt-file "$OVER" --bin "$(mk_stub aover AGY_STUB_CAPTURE=1)"
-run_case rover env "$REVIEW" --runner agy --model gemini-3.7-flash-high --diff-file "$OVERDIFF" --bin "$(mk_stub rover AGY_STUB_CAPTURE=1)"
-run_case hover env -C "$TEST_TMP/sbx-hover" "$HETERO" --no-verify-tip --branch t/hover --prompt-file "$OVER" --agy-bin "$(mk_stub hover AGY_STUB_CAPTURE=1)" --model gemini-3.7-flash-high --runner agy
-run_case oloop env -C "$OS" AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$OWRAP" node "$LOOP" collect --implementer-engine claude-sonnet-5 \
+run_case aover env AUTOPILOT_AGY_FILE_FALLBACK=0 "$AUTHOR" --runner agy --model gemini-3.7-flash-high --prompt-file "$OVER" --bin "$(mk_stub aover AGY_STUB_CAPTURE=1)"
+run_case rover env AUTOPILOT_AGY_FILE_FALLBACK=0 "$REVIEW" --runner agy --model gemini-3.7-flash-high --diff-file "$OVERDIFF" --bin "$(mk_stub rover AGY_STUB_CAPTURE=1)"
+run_case hover env -C "$TEST_TMP/sbx-hover" AUTOPILOT_AGY_FILE_FALLBACK=0 "$HETERO" --no-verify-tip --branch t/hover --prompt-file "$OVER" --agy-bin "$(mk_stub hover AGY_STUB_CAPTURE=1)" --model gemini-3.7-flash-high --runner agy
+run_case oloop env -C "$OS" AUTOPILOT_AGY_FILE_FALLBACK=0 AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$OWRAP" node "$LOOP" collect --implementer-engine claude-sonnet-5 \
   --repo-root "$OS" --ledger "$TEST_TMP/oloop-ledger" --phase p_agy --generation 1 --branch work --phase-base "$OLOOP_BASE" \
   --seats "gemini-3.7-flash-high/low@agy" --min-reviewed-seats 1
 # override: raising the limit lets the same prompt through
@@ -193,13 +193,13 @@ done
 
 # --- 4. fail-closed ceiling (BL-0021) -----------------------------------------
 OVERMSG="agy_stdin_ceiling"
-OUT="$(AGY_STUB_RESULT=ok node "$HELPER" run --prompt-file "$OVER" -- "$(mk_stub hlp AGY_STUB_CAPTURE=1)" 2>&1)"; RC=$?
+OUT="$(AGY_STUB_RESULT=ok AUTOPILOT_AGY_FILE_FALLBACK=0 node "$HELPER" run --prompt-file "$OVER" -- "$(mk_stub hlp AGY_STUB_CAPTURE=1)" 2>&1)"; RC=$?
 assert_eq "3" "$RC" "helper: over-ceiling prompt exits 3"
 assert_contains "$OUT" "$OVERMSG" "helper: typed agy_stdin_ceiling reason on stderr"
 [ ! -e "$TEST_TMP/called-hlp" ] && pass "helper: agy never invoked over the ceiling" || fail "helper: agy was invoked over the ceiling"
 OUT="$(AUTOPILOT_AGY_STDIN_MAX_BYTES=400000 node "$HELPER" run --prompt-file "$OVER" -- "$(mk_stub hlp2 AGY_STUB_CAPTURE=1)" 2>&1)"; RC=$?
 assert_eq "0" "$RC" "helper: raised limit lets the prompt through"
-OUT="$(AUTOPILOT_AGY_STDIN_MAX_BYTES=junk node "$HELPER" run --prompt-file "$OVER" -- "$(mk_stub hlp3 AGY_STUB_CAPTURE=1)" 2>&1)"; RC=$?
+OUT="$(AUTOPILOT_AGY_FILE_FALLBACK=0 AUTOPILOT_AGY_STDIN_MAX_BYTES=junk node "$HELPER" run --prompt-file "$OVER" -- "$(mk_stub hlp3 AGY_STUB_CAPTURE=1)" 2>&1)"; RC=$?
 assert_eq "3" "$RC" "NEGATIVE CONTROL: a malformed override falls back to the default (still refused)"
 for c in aover rover hover oloop; do
   # (the stub runs inside bwrap on some rails, where a marker file cannot be written: the stub's own
@@ -218,6 +218,10 @@ assert_contains "$(rail_text hover)" "$OVERMSG" "hetero over-ceiling: reason sur
 assert_not_contains "$(rail_text oloopseat)" "AGY-STUB bytes" "loop over-ceiling: seat prompt never reached agy"
 assert_contains "$(rail_text oloopseat)$(cat "$R/oloop.out")" "$OVERMSG" "loop over-ceiling: reason surfaced"
 assert_contains "$(rail_text araise)" "AGY-STUB bytes" "override: raised limit delivered the over-170000 prompt to agy"
+OVER200="$TEST_TMP/over200.txt"; node -e 'process.stdout.write("z".repeat(200*1024))' > "$OVER200"
+OUT="$(node "$HELPER" run --prompt-file "$OVER200" -- "$(mk_stub hlp_fb AGY_STUB_CAPTURE=1)" 2>&1)"; RC=$?
+assert_eq "0" "$RC" "helper: 200 KB prompt uses file-pointer fallback by default (exits 0)"
+assert_not_contains "$OUT" "$OVERMSG" "helper: 200 KB prompt is not refused by agy_stdin_ceiling"
 
 # --- 5. response-side detection (BL-0021, tokens not bytes) -------------------
 EMPTYMSG="agy_empty_response"; TRUNCMSG="agy_input_truncated"
@@ -294,7 +298,7 @@ assert_contains "$OUT" "PASS" "NEGATIVE CONTROL: without the per-step judgement 
 HUGE="$(printf '9%.0s' $(seq 1 400))"
 OUT="$(AUTOPILOT_AGY_INPUT_TOKEN_CEILING=$HUGE AGY_STUB_INPUT_TOKENS=97652 node "$HELPER" run --prompt-file "$PF" -- "$STUB" 2>&1)"; RC=$?
 assert_eq "1" "$RC" "NEGATIVE CONTROL: a 400-digit token-ceiling override (Infinity) falls back to the default, still refused"
-OUT="$(AUTOPILOT_AGY_STDIN_MAX_BYTES=$HUGE node "$HELPER" run --prompt-file "$OVER" -- "$(mk_stub hlp4 AGY_STUB_CAPTURE=1)" 2>&1)"; RC=$?
+OUT="$(AUTOPILOT_AGY_FILE_FALLBACK=0 AUTOPILOT_AGY_STDIN_MAX_BYTES=$HUGE node "$HELPER" run --prompt-file "$OVER" -- "$(mk_stub hlp4 AGY_STUB_CAPTURE=1)" 2>&1)"; RC=$?
 assert_eq "3" "$RC" "NEGATIVE CONTROL: a 400-digit byte-cap override falls back to the default, still refused"
 
 assert_neq "0" "$(rc aemp)" "author empty response: non-zero exit"

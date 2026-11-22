@@ -11,19 +11,34 @@ const { spawnSync } = require('node:child_process');
 const AGY_STREAM_JS = path.resolve(__dirname, '..', 'lib', 'agy-stream-json.js');
 const QRP_JS = path.resolve(__dirname, '..', 'qualification-review-provider.js');
 
-function makeFakeAgy(dir) {
-  const binPath = path.join(dir, 'fake-agy');
+function makeFakeAgy(dir, opts = {}) {
+  const binPath = path.join(dir, opts.name || 'fake-agy');
+  const exitCode = opts.exitCode == null ? 0 : opts.exitCode;
   const script = `#!/usr/bin/env node
 'use strict';
 const fs = require('fs');
 const path = require('path');
 const stdin = fs.readFileSync(0, 'utf8');
+let pointerContent = null;
+let pointerMode = null;
+try {
+  const parsed = JSON.parse(stdin.trim());
+  const m = String(parsed.message && parsed.message.content || '').match(/\\.agy-prompt-[^\\s]+\\.txt/);
+  if (m) {
+    const p = path.join(process.cwd(), m[0]);
+    pointerContent = fs.readFileSync(p, 'utf8');
+    pointerMode = fs.statSync(p).mode & 0o777;
+  }
+} catch (_e) {}
 const capture = {
   argv: process.argv.slice(2),
   cwd: process.cwd(),
   stdin,
+  pointerContent,
+  pointerMode,
 };
 fs.writeFileSync(path.join(process.cwd(), 'capture.json'), JSON.stringify(capture));
+if (${exitCode} !== 0) process.exit(${exitCode});
 process.stdout.write(JSON.stringify({ event: 'result', result: { status: 'SUCCESS', response: 'OK' } }) + '\\n');
 `;
   fs.writeFileSync(binPath, script, { mode: 0o755 });
@@ -74,10 +89,30 @@ test('200 KB prompt uses file-pointer fallback in seat cwd', () => {
     const match = parsed.message.content.match(/\.agy-prompt-[^\s]+\.txt/);
     assert.ok(match, `pointer prompt should name .agy-prompt-*.txt file: ${parsed.message.content}`);
     const writtenPath = path.join(tmp, match[0]);
-    assert.ok(fs.existsSync(writtenPath), 'pointer file must exist in seat cwd');
-    assert.equal(fs.readFileSync(writtenPath, 'utf8'), prompt);
-    const mode = fs.statSync(writtenPath).mode & 0o777;
-    assert.equal(mode, 0o600);
+    assert.equal(cap.pointerContent, prompt, 'pointer file must contain full prompt during run');
+    assert.equal(cap.pointerMode, 0o600, 'pointer file must have 0600 mode');
+    assert.equal(fs.existsSync(writtenPath), false, 'pointer file must be removed after run');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('200 KB prompt removes pointer file even when agy exits non-zero', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agy-fp-fail-'));
+  try {
+    const fakeAgy = makeFakeAgy(tmp, { name: 'fake-agy-fail', exitCode: 1 });
+    const promptFile = path.join(tmp, 'prompt.txt');
+    const prompt = 'F'.repeat(200 * 1024);
+    fs.writeFileSync(promptFile, prompt);
+    const res = spawnSync(process.execPath, [AGY_STREAM_JS, 'run', '--prompt-file', promptFile, '--', fakeAgy], {
+      cwd: tmp,
+      encoding: 'utf8',
+    });
+    assert.equal(res.status, 1);
+    const cap = JSON.parse(fs.readFileSync(path.join(tmp, 'capture.json'), 'utf8'));
+    assert.equal(cap.pointerContent, prompt);
+    const files = fs.readdirSync(tmp).filter((f) => f.startsWith('.agy-prompt-'));
+    assert.equal(files.length, 0, 'pointer file must be removed after failed run');
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

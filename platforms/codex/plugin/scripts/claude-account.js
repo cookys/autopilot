@@ -831,7 +831,9 @@ async function cmdUsageProbeDue(realCtx, opts) {
     }
   }
   ctx.out(JSON.stringify({ due, probed }));
-  return EXIT.OK;
+  const failed = probed.filter((entry) => entry.outcome !== 'ok');
+  for (const { alias, outcome } of failed) ctx.write(2, `probe_failed alias=${alias} outcome=${outcome}\n`);
+  return failed.length ? EXIT.CHILD_ERROR : EXIT.OK;
 }
 
 async function cmdUsageProbe(ctx, argv) {

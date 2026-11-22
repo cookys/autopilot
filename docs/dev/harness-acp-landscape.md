@@ -147,7 +147,7 @@
 | 讀真的 `~/.claude` 的守門（`claude-home-read-guard`） | 自家 hook（判斷） | 規則來自全域 `CLAUDE.md` 的紅線，不是 Claude Code 的限制 | 可以（自家 hook） |
 | `bash-footgun-guard`（zsh 未加引號的 glob）、`bash-launch-guard`（bare `ls`、`pkill` 自我比對、`rm` 共用目錄） | 自家 hook（判斷） | repo 自家 PreToolUse hook（`hooks/README.md`） | 可以（改 `warn` 或 `off`） |
 | `depth0-delegate-gate`、`foreman-guard`、`secret-print`、`context-budget` T2 交接擋 | 自家 hook（判斷） | repo 自家 hook（`hooks/README.md`） | 可以（依旋鈕改 `warn` 或 `off`） |
-| 權限確認框 | Claude Code 本身（判斷） | 可由 settings 的 `permissions` 規則調整（具體鍵名未查證，不要編） | 可透過 settings 規則調整 |
+| 權限確認框 | Claude Code 本身（判斷） | 可由 settings 的 `permissions` 規則調整（具體鍵名未查證） | 可透過 settings 規則調整 |
 | autocompact | Claude Code 的機制，但觸發點是我們自己設的 | `autoCompactWindow` 233000／333000，交接 t2 150K／250K，見 `docs/guide/settings-reference.md` 與 `docs/plans/2026-11-21-wasted-turns.md` §2.1；頻繁壓縮與我們自設的低門檻有關（假設，待量測驗證） | 可調整門檻 |
 | fleet MCP channel 只在以 channels 旗標啟動的 Claude Code session 收得到通知 | Claude Code 的機制（出處：fleet MCP server 說明） | fleet MCP server 說明 | 屬 Claude Code channels 機制限制 |
 

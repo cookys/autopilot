@@ -80,8 +80,12 @@ function extractHookBlockName(resultText, isError) {
   }
   const preToolMatch = trimmed.match(/^PreToolUse:([a-zA-Z0-9_.-]+)/);
   if (preToolMatch) {
-    // Real shape: "PreToolUse:<Tool> hook error: <message> [hook-name]<fix>"; the hook name is the last [bracket] token.
-    const named = [...trimmed.matchAll(/\[([a-z0-9][a-z0-9_.-]*)\]/g)].map((m) => m[1]);
+    // Two real shapes: "PreToolUse:<Tool> hook error: <hook-name> (detail): ..." (name leads) and
+    // "PreToolUse:<Tool> hook error: <message> [hook-name]<fix>" (name trails). A hook name always has a
+    // hyphen, so fragments such as [f], [x], [37], [WARN] or [masked: ...] are never taken as names.
+    const leading = trimmed.match(/hook error:\s*([a-z][a-z0-9]*(?:-[a-z0-9]+)+)\b/);
+    if (leading) return leading[1];
+    const named = [...trimmed.matchAll(/\[([a-z][a-z0-9]*(?:-[a-z0-9]+)+)\]/g)].map((m) => m[1]);
     return named.length ? named[named.length - 1] : preToolMatch[1];
   }
   const colonMatch = trimmed.match(/^([a-zA-Z0-9_-]+):\s*(?:deny|denied|block|blocked|hook error)/i);

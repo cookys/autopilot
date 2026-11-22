@@ -5379,8 +5379,9 @@ Before finishing, write \$AUTOPILOT_EVIDENCE_NOTES with sections \`## Tests\` (l
 "
   KIMI_ARGV_LIMIT="${KIMI_ARGV_LIMIT:-120000}"
   KIMI_ARGV_BYTES=$(( $(printf '%s' "$KIMI_EDIT_ONLY" | wc -c) + $(wc -c < "$PROMPT_FILE") ))
+  KIMI_INDIRECT=0
   if [ "$KIMI_ARGV_BYTES" -gt "$KIMI_ARGV_LIMIT" ]; then
-    die_precondition "kimi prompt is ${KIMI_ARGV_BYTES} bytes but kimi accepts the prompt only as one -p argv string (Linux MAX_ARG_STRLEN 131072; limit ${KIMI_ARGV_LIMIT}) — split the task into smaller units, or dispatch it to a runner that reads a prompt file (codex, grok, opencode)"
+    KIMI_INDIRECT=1
   fi
 fi
 
@@ -6778,14 +6779,30 @@ elif [ "$IS_KIMI" -eq 1 ] && [ "$BIN_FLAG_KIMI" -eq 1 ]; then
   #   (above) so the run here sends the EXACT bytes that were size-checked.
   KIMI_PROMPT_FILE="$(mktemp -t dispatch-hetero-kimi-prompt-XXXXXX)"
   printf '%s' "${KIMI_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$KIMI_PROMPT_FILE"
-  # -p "$(cat file)" drops trailing newlines. Hash and send those exact argv bytes.
   KIMI_SENT_FILE="$(mktemp -t dispatch-hetero-kimi-sent-XXXXXX)"
-  printf '%s' "$(cat "$KIMI_PROMPT_FILE")" > "$KIMI_SENT_FILE"
+  KIMI_PARTS_DIR=""
+  if [ "${KIMI_INDIRECT:-0}" -eq 1 ]; then
+    # File indirection (BL-0025): split the combined prompt into ~60 KB line-preserving parts
+    # inside a run-scoped scratch dir, and pass a short pointer via -p.
+    KIMI_PART_BYTES="${AUTOPILOT_KIMI_PART_BYTES:-60000}"
+    KIMI_PARTS_DIR="$(mktemp -d -t dispatch-hetero-kimi-parts-XXXXXX)"
+    split -C "$KIMI_PART_BYTES" -d -a 3 "$KIMI_PROMPT_FILE" "$KIMI_PARTS_DIR/autopilot-hetero-prompt.part-" \
+      || die_precondition "could not stage the kimi prompt parts"
+    KIMI_PARTS=""
+    for _kp in "$KIMI_PARTS_DIR"/autopilot-hetero-prompt.part-*; do
+      KIMI_PARTS="${KIMI_PARTS:+$KIMI_PARTS, }$_kp"
+    done
+    printf '%s' "Your complete task is split, in order, across these files: ${KIMI_PARTS}. Each file fits in one Read call: read EVERY file completely, in that order, before starting. Together they form one prompt; then do exactly what it says." > "$KIMI_SENT_FILE"
+  else
+    # -p "$(cat file)" drops trailing newlines. Hash and send those exact argv bytes.
+    printf '%s' "$(cat "$KIMI_PROMPT_FILE")" > "$KIMI_SENT_FILE"
+  fi
   seal_runner_prompt_bytes "$KIMI_SENT_FILE"
   EFFORT_SENT="${KIMI_EFFORT_SEND:-default}"
   run_worker bash -c 'cd "$1" && exec "$2" -m "$4" -p "$(cat "$3")" --output-format text' \
       _ "${WORKER_CWD:-$WT}" "$KIMI_BIN" "$KIMI_SENT_FILE" "$MODEL"
-  rm -f "$KIMI_SENT_FILE" "$KIMI_PROMPT_FILE"
+  rm -rf -- "$KIMI_PARTS_DIR" "$KIMI_SENT_FILE" "$KIMI_PROMPT_FILE"
+  KIMI_PARTS_DIR=""
   # Part 3: kimi has no usage command; its result is the quota signal (429 -> exhausted + reset, clean -> available).
   node "$SELF_DIR/lib/kimi-quota-observe.js" observe --rc "${AGENT_EXIT:-0}" --log-file "$LOG" >/dev/null 2>&1 || true
 elif [ "$IS_CURSOR" -eq 1 ] || [ "$IS_KIMI" -eq 1 ]; then

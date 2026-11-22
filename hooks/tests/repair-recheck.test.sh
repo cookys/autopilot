@@ -130,7 +130,7 @@ done
 
 # ---- (d) never the implementer's family; only same-family seats -> fail closed to the PM ----
 MAN_SAME="$WORK/manifest-same.json"
-make_manifest "$MAN_SAME" anthropic:claude-native:low anthropic:claude-native:high
+make_manifest "$MAN_SAME" anthropic:claude-native:low
 OUT="$(run_recheck "$MAN_SAME" anthropic "$WORK/ans-fixed.json" d recheck_seat0)"; RC=$?
 assert_exit_code "$RC" "5" "(d) only same-family seats exits 5"
 assert_eq "$(json_field "$OUT" recheck.status)" "no_seat" "(d) no eligible seat"
@@ -257,8 +257,12 @@ CODE_LOOP="$REPO_ROOT/scripts/hetero-review-loop.js"
 export AUTOPILOT_STATE_DIR="$STATE"
 export STUB_SEAT_RESPONSE='{"status":"reviewed","verdict":"FIX-THEN-SHIP","findings":"Major: src.txt:3 BAD line breaks the parser\nthe value is wrong","no_finding_proof":null,"usage":{"input_tokens":50,"output_tokens":7}}'
 env -u AUTOPILOT_TOKEN_SEAT -u AUTOPILOT_SESSION_ID node "$CODE_LOOP" collect --implementer-engine claude-sonnet-5 \
+  --repo-root "$CODE" --phase guard --generation 1 --branch work --phase-base "$CBASE" \
+  --seats "gpt-m1/low@codex,gpt-m2/high@codex" </dev/null >"$WORK/guard.out" 2>"$WORK/guard.err"; RC=$?
+assert_eq "$RC:$(cat "$WORK/guard.err")" "2:ERROR: same_family_vote: gpt-m1@codex and gpt-m2@codex (openai)" "(g) same-family collect is refused without override"
+env -u AUTOPILOT_TOKEN_SEAT -u AUTOPILOT_SESSION_ID node "$CODE_LOOP" collect --implementer-engine claude-sonnet-5 \
   --repo-root "$CODE" --phase p1 --generation 1 --branch work --phase-base "$CBASE" \
-  --seats "gpt-m1/low@codex,gpt-m2/high@codex" </dev/null >"$WORK/collect.out" 2>"$WORK/collect.err"
+  --seats "gpt-m1/low@codex,gpt-m2/high@codex" --allow-same-family </dev/null >"$WORK/collect.out" 2>"$WORK/collect.err"
 assert_exit_code "$?" "0" "(g) collect without --ledger exits 0: $(tail -2 "$WORK/collect.err")"
 LD="$STATE/review-ledgers/code/work"
 assert_file_exists "$LD/review-p1/chain.json" "(g) ledger lands under the fixed default dir"
@@ -309,12 +313,12 @@ assert_eq "$(json_field "$OUT" findings.0.id)" "$FID" "(g)(b) it is the right on
 OUT="$(code_recheck "$WORK/code-extra.json" "gpt-m1/high@codex")"; RC=$?
 assert_exit_code "$RC" "5" "(g)(c) extra key exits 5"
 assert_eq "$(json_field "$OUT" recheck.status)" "invalid" "(g)(c) extra key -> invalid, not frozen"
-OUT="$(code_recheck "$WORK/code-fixed.json" "claude-haiku-5/low@claude,claude-opus-5/high@claude")"; RC=$?
+OUT="$(code_recheck "$WORK/code-fixed.json" "claude-haiku-5/low@claude")"; RC=$?
 assert_exit_code "$RC" "5" "(g)(d) only the implementer's family: exits 5"
 assert_eq "$(json_field "$OUT" recheck.status)" "no_seat" "(g)(d) fails closed to PM adjudication"
 
 # ---- (g)(h) transport failure uses one seat, then fails closed to PM ----
-OUT="$(code_recheck "$WORK/code-fixed.json" "gpt-m1/high@codex,gpt-m2/high@codex" 1)"; RC=$?
+OUT="$(code_recheck "$WORK/code-fixed.json" "gpt-m1/high@codex,grok-4/high@grok" 1)"; RC=$?
 assert_exit_code "$RC" "5" "(g)(h) unavailable sole seat exits 5"
 assert_eq "$(json_field "$OUT" recheck.status)" "unavailable" "(g)(h) transport failure adjudicates"
 assert_eq "$(json_field "$OUT" recheck.attempts.length)" "1" "(g)(h) does not dispatch a second seat"

@@ -545,6 +545,27 @@ function writeEntries(sf, root, entries) {
   fs.renameSync(tmp, sf.file);
 }
 
+function mirrorCard(cwd, entry) {
+  try {
+    const hippo = require('./lib/hippo');
+    const repo = repoTop(cwd);
+    if (!fs.existsSync(path.join(repo, '.hippo', 'repo.toml'))) return;
+    const detected = hippo.detect(repo);
+    if (detected.state !== 'hippo') throw new Error(detected.reason);
+    const token = /^[a-z0-9:._/-]{1,55}$/.test(entry.id) ? entry.id : crypto.createHash('sha256').update(entry.id).digest('hex').slice(0, 32);
+    const key = `card:${token}`;
+    const plan = { key, steps: [{ op: 'create', ref: 'root', kind: 'decision', key,
+      argv: ['--title', entry.question.split(/\r?\n/)[0], '--status', 'open', '--tag', 'source:open-decision'], body: entry.question }] };
+    const answer = entry.answer || entry.last_answer;
+    if (answer) plan.steps.push({ op: 'edit', id: 'root', body: `${entry.question}\n\nAnswer: ${answer}` });
+    if (isClosedEntry(entry)) plan.steps.push({ op: 'close', id: 'root', status: entry.closed_via === 'withdrawn' || entry.closed_via === 'panel_dismiss' ? 'cancelled' : 'done' });
+    const result = hippo.execute(repo, plan, { log: () => {} });
+    if (!result.ok) throw new Error('store write failed');
+  } catch (_error) {
+    process.stderr.write('open-decision: decision store mirror failed; card remains authoritative\n');
+  }
+}
+
 function parseOptions(raw) {
   return raw.map((o) => {
     const at = o.indexOf('::');
@@ -1330,6 +1351,7 @@ function openDecision({ cwd, root, session, question, background, options, recom
       }
       return withWriteLock({ storeDir: sf.dir, lockFile: `${sf.file}.lock`, name: path.basename(sf.file), timeoutMs: 5000 }, () => {
         writeEntries(sf, root, [...readFile(sf.file, { all: true }), entry]);
+        mirrorCard(cwd || process.cwd(), entry);
         return { status: 'ok', id: entry.id, file: sf.file, scope_key: sf.key };
       });
     });
@@ -1401,6 +1423,8 @@ function patchDecision(file, id, patch, { isOurs, any } = {}) {
       if (!isOpenEntry(next)) delete next.reask_at;
       const v = JSON.parse(fs.readFileSync(file, 'utf8'));
       writeEntries({ file, scope: { repo_identity: v.repo_identity, project_key: v.project_key } }, v.root_run_id, entries.map((e) => (e === hit ? next : e)));
+      const common = commonDirOf(v.repo_identity);
+      if (common) mirrorCard(path.dirname(common), next);
       return { status: 'updated', entry: next };
     });
   } catch (error) {

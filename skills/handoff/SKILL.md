@@ -58,7 +58,19 @@ Triggered by "寫 handoff", "寫 handover", "ctx 太滿", "context 快滿", "cle
    content in the handoff; do **not** create the directory the reference doc happens to name.
 
 3. **Generate Document**:
-   If `HANDOFF.md` already exists, REPLACE it (a handoff is a snapshot, not a log) and note the replacement in the reply. Write verbatim:
+   Draft the following verbatim in a temporary body file, then detect the target repo's store with
+   `node <plugin>/scripts/project-record.js --target <repo> where`. For `files` (no store), write
+   it directly to the step 2 path: if `HANDOFF.md` already exists, REPLACE it (a handoff is a
+   snapshot, not a log) and note the replacement in the reply. For `hippo`, `hippo-problems`, or
+   `spool`, write through the store instead:
+
+   ```bash
+   node <plugin>/scripts/project-record.js --target <repo> handoff new --title <t> --area handoff --origin manual --body-file <f>
+   ```
+
+   Use `--origin project-file` for project handoff files under `project/handoff/`. Keep the
+   draft for step 3.5; report the store result, including any spool or problem warning. Do not
+   fall back to a direct write when a configured store is degraded.
 
    ```markdown
    ## 目標
@@ -90,7 +102,7 @@ Triggered by "寫 handoff", "寫 handover", "ctx 太滿", "context 快滿", "cle
 3.5. **Route the durable content out** (a handoff is a snapshot and gets deleted — Resume Mode step 5.
    Anything left only in it is scheduled for destruction):
 
-   Walk the document you just wrote **段-by-段** (step 2.5 already swept the session; this pass
+   Walk the document you just drafted **段-by-段** (step 2.5 already swept the session; this pass
    catches what the draft itself surfaced) and ask of each one:
 
    > **「這條超出本次交接嗎?」**

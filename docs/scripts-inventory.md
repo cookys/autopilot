@@ -18,6 +18,7 @@ This repository has its own hippo store at `.hippo/` (id `autopilot`, visibility
 | Script | Purpose |
 |--------|---------|
 | [`scripts/brain-tier-report.js`](../scripts/brain-tier-report.js) | Daily/since brain-tier spend & opus-without-reason report per lane (`--day YYYY-MM-DD \| --since ISO`, `--over-baseline`, `--text`). Reads `costs.jsonl`, `brain-tier-dispatch.jsonl`, and `cost_fuse.brain_share_baseline` (default 0.3). |
+| [`scripts/lane-ops.sh`](../scripts/lane-ops.sh) | e2e lane operations wrapper (`land`, `dispatch`, `wait`, `audit`): wraps `$SCRATCH/par/land.sh`, `sg lanegit` + `dispatch-hetero.sh`, `fleet watch` (replacing polling loops), and the three daily audits. Contract: script header; test: `hooks/tests/lane-ops.test.sh`. |
 | [`scripts/completeness-scan.sh`](../scripts/completeness-scan.sh) | Anti-stub regex (TODO/FIXME/empty-impl/DISABLED_) on staged diff; JSON output; exit 1 ⇒ new findings (quality-pipeline completeness gate). |
 | [`scripts/error-path-scan.sh`](../scripts/error-path-scan.sh) | L0 attention-slip scan for error paths (swallowed errors, broadened catches, untested error branches). JSON output; exit 0 always for findings (they are ADVISORY), exit 2 on usage error. |
 | [`scripts/secret-scan-diff.js`](../scripts/secret-scan-diff.js) | L0 attention-slip scan for secrets. JSON output; exit 1 ⇒ findings (quality-pipeline completeness gate blocking step). |

@@ -1730,6 +1730,12 @@ function parseArgs(argv) {
       a.record = true;
       if (argv[i + 1] && !argv[i + 1].startsWith('--')) a.recordPath = argv[++i];
     }
+    else if (x === '--dep-cache') {
+      const v = argv[++i];
+      if (!v) throw new Error('--dep-cache needs a path');
+      a.depCache = v;
+    }
+    else if (x === '--no-dep-cache') a.noDepCache = true;
     else if (x === '--files') { while (argv[i + 1] && !argv[i + 1].startsWith('--')) a.files.push(argv[++i]); a.useFiles = true; }
     else if (x === '--help' || x === '-h') a.help = true;
     else throw new Error(`unknown argument: ${x}`);
@@ -1740,6 +1746,72 @@ function parseArgs(argv) {
 const OVER_HALF_THRESHOLD = process.env.AFFECTED_SUITES_OVER_HALF_THRESHOLD != null
   ? Number(process.env.AFFECTED_SUITES_OVER_HALF_THRESHOLD)
   : 0.5;
+
+const REQUIRE_REASONS = new Set(['require_top', 'source']);
+
+function defaultDepCachePath(root) {
+  let common = git(root, ['rev-parse', '--git-common-dir']).toString('utf8').trim();
+  if (!path.isAbsolute(common)) common = path.resolve(root, common);
+  return path.join(common, 'autopilot', 'dep-cache.json');
+}
+
+function loadDepCache(root, depCacheArg) {
+  const file = depCacheArg ? path.resolve(depCacheArg) : defaultDepCachePath(root);
+  if (!fs.existsSync(file)) return null;
+  const raw = fs.readFileSync(file, 'utf8');
+  const cache = JSON.parse(raw);
+  if (!cache || typeof cache !== 'object' || cache.schema !== 'dep-cache/1' || typeof cache.base_sha !== 'string' || !cache.base_sha || !cache.suites || typeof cache.suites !== 'object') return null;
+  return cache;
+}
+
+function pruneWithDepCache(root, doc, selection, headRef, depCacheArg) {
+  const pruned = [];
+  try {
+    const cache = loadDepCache(root, depCacheArg);
+    if (!cache) return pruned;
+    const targetHead = headRef || 'HEAD';
+    git(root, ['merge-base', '--is-ancestor', cache.base_sha, targetHead]);
+    const diffFiles = git(root, ['diff', '--name-only', '--no-renames', '-z', cache.base_sha]).toString('utf8').split('\0').filter(Boolean);
+    const untracked = git(root, ['ls-files', '--others', '--exclude-standard', '-z']).toString('utf8').split('\0').filter(Boolean);
+    const dirtySet = new Set([...diffFiles, ...untracked]);
+    const kept = [];
+    for (const suite of doc.suites) {
+      const entry = cache.suites[suite];
+      if (!entry || typeof entry !== 'object' || entry.traced !== true || entry.rc !== 0 || !Array.isArray(entry.files)) {
+        kept.push(suite);
+        continue;
+      }
+      if (dirtySet.has(suite) || entry.files.some((f) => dirtySet.has(f))) {
+        kept.push(suite);
+        continue;
+      }
+      const cachedFiles = new Set(entry.files);
+      const causingFiles = [];
+      let canPrune = true;
+      for (const file of doc.changed) {
+        const reasons = reasonsFor(suite, file, selection);
+        if (reasons.length === 0) continue;
+        causingFiles.push(file);
+        if (reasons.some((r) => !REQUIRE_REASONS.has(r)) || cachedFiles.has(file)) {
+          canPrune = false;
+          break;
+        }
+      }
+      if (canPrune && causingFiles.length > 0) {
+        pruned.push({ suite, files: causingFiles });
+      } else {
+        kept.push(suite);
+      }
+    }
+    if (pruned.length > 0) {
+      doc.suites = kept;
+      doc.stats.selected = kept.length;
+    }
+  } catch {
+    return [];
+  }
+  return pruned;
+}
 
 async function main(argv) {
   let a;
@@ -1867,6 +1939,17 @@ async function main(argv) {
       writeFastPlan(fastPlan);
     }
     const maxWeak = a.maxWeak == null ? DEFAULT_MAX_WEAK : a.maxWeak;
+    let pruned = [];
+    if (!a.noDepCache && process.env.AUTOPILOT_DEP_CACHE !== '0' && doc.mode === 'selective' && doc.suites.length > 0 && !a.onlyGlob) {
+      let hasCache = false;
+      try { hasCache = !!loadDepCache(root, a.depCache); } catch { hasCache = false; }
+      if (hasCache) {
+        if (!tree) tree = gitTree(root, doc.head || 'HEAD');
+        const selection = select(doc.changed, tree, maxWeak);
+        pruned = pruneWithDepCache(root, doc, selection, headRef, a.depCache);
+        if (pruned.length > 0) process.stderr.write(`dep-cache: pruned ${pruned.length} suites\n`);
+      }
+    }
     if (doc.mode === 'selective' && doc.stats.total_suites > 0 && (doc.suites.length / doc.stats.total_suites) > OVER_HALF_THRESHOLD) {
       if (!tree) tree = gitTree(root, doc.head);
       const widenedBy = doc.changed
@@ -1932,11 +2015,14 @@ async function main(argv) {
       return code;
     }
     if (a.explain && doc.mode === 'selective') {
-      if (!tree) tree = gitTree(root, doc.head);
+      if (!tree) tree = gitTree(root, doc.head || 'HEAD');
       const selection = select(doc.changed, tree, maxWeak);
       for (const suite of doc.suites) for (const file of doc.changed) {
         const reasons = reasonsFor(suite, file, selection);
         if (reasons.length) process.stdout.write(`${suite}: ${file}: ${reasons.join(', ')}\n`);
+      }
+      for (const p of pruned) {
+        process.stdout.write(`pruned: ${p.suite} (cache traced, ${p.files.join(', ')} not executed)\n`);
       }
       return 0;
     }

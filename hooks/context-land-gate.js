@@ -128,7 +128,7 @@ function main() {
         const res = dispatchHangarRestart(sid, landed);
         if (res.ok) {
           const taskLabel = res.taskId ? `task ${res.taskId}` : 'task';
-          block(`handoff 已寫好，已自動派單給 hangar 重啟（${taskLabel}），不需要轉給操作員，可以結束 turn。`);
+          block(`handoff 已寫好，已自動派單給 hangar 重啟（${taskLabel}），你不必再通知任何人，可以結束 turn。`);
           return;
         }
         block(`${operatorMsg}\n（自動派單給 hangar 失敗：${res.error}）${operatorHint}`);

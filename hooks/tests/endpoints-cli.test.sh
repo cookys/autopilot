@@ -14,6 +14,13 @@ BASE="$WORK/endpoints.env"
 
 run() { env HOME="$WORK/home" AUTOPILOT_ENDPOINTS_ENV="$BASE" node "$CLI" endpoints "$@"; }
 
+# Hermetic: the loader's precedence is process-env > overlay > base, so endpoint credentials or
+# a lane inherited from the surrounding (operator) environment would shadow $BASE and send the
+# probe to a REAL endpoint. Scrub the ambient names so only what this file wrote resolves.
+# (Names only — values are never inspected, printed, or touched.)
+for _scrub_v in $(env | grep -o '^AUTOPILOT_ENDPOINT_[A-Z0-9_]*=' | cut -d= -f1); do unset "$_scrub_v"; done
+unset AUTOPILOT_LANE ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN ANTHROPIC_CUSTOM_HEADERS
+
 # ── 1. set writes mode-600, token via stdin, NEVER echoes the token ──
 setout="$(printf 'sekret-TOK-123' | run set glm --url https://api.z.ai/api/anthropic --token-stdin 2>&1)"; ec=$?
 assert_exit_code "$ec" 0 "set exits 0"
@@ -222,6 +229,88 @@ timeout_json="$(AUTOPILOT_TEST_TIMEOUT_MS=100 run test stubdelay --json 2>&1)"; 
 assert_exit_code "$ec" 1 "test timeout --json exits 1"
 assert_contains "$timeout_json" '"outcome":"network_failed"' "test timeout --json contains outcome:network_failed"
 assert_not_contains "$timeout_json" "delay-token" "test timeout --json does not leak token"
+
+# ── 8b. x-lane header for local (http://) endpoints ──
+# The local fleet gateway authenticates by the x-lane header + source IP, NOT the bearer token,
+# so the probe must carry x-lane for local endpoints (lane = AUTOPILOT_LANE, else "autopilot").
+# A second fake, shaped like that gateway: 401 unless x-lane is the lane it expects.
+LANE_JS="$WORK/lane_server.js"
+LANE_PORT_FILE="$WORK/lane-port.txt"
+LANE_SEEN="$WORK/lane-seen.txt"
+: > "$LANE_SEEN"
+cat > "$LANE_JS" <<'EOF'
+const http = require('http');
+const fs = require('fs');
+const server = http.createServer((req, res) => {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const lane = req.headers['x-lane'];
+  fs.appendFileSync(process.argv[3], `x-lane=${lane === undefined ? '<absent>' : lane}\n`);
+  let want = 'autopilot';
+  if (url.pathname === '/laney/v1/messages') want = 'my_lane_42';
+  if (url.pathname === '/always401/v1/messages') want = null; // always refused, header or not
+  if (want !== null && lane === want) {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ id: 'msg_1', content: [{ type: 'text', text: 'OK' }] }));
+  } else {
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: { type: 'authentication_error', message: 'x-lane refused' } }));
+  }
+});
+server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.argv[2], String(server.address().port)));
+EOF
+
+node "$LANE_JS" "$LANE_PORT_FILE" "$LANE_SEEN" &
+LANE_PID=$!
+for i in {1..30}; do
+  if [ -f "$LANE_PORT_FILE" ]; then break; fi
+  sleep 0.1
+done
+LANE_PORT="$(cat "$LANE_PORT_FILE")"
+# Extend the EXIT trap to reap the second server (keep chaining cleanup_test_tmp)
+trap 'kill $STUB_PID $LANE_PID 2>/dev/null; rm -rf "$WORK"; cleanup_test_tmp' EXIT
+
+printf 'lane-token' | run set lanedef --url "http://127.0.0.1:$LANE_PORT" --token-stdin >/dev/null
+printf 'lane-token' | run set laneovr --url "http://127.0.0.1:$LANE_PORT/laney" --token-stdin >/dev/null
+printf 'lane-token' | run set lane401 --url "http://127.0.0.1:$LANE_PORT/always401" --token-stdin >/dev/null
+
+# (a) gateway 401s unless x-lane is present: with AUTOPILOT_LANE unset the probe carries the
+# default lane "autopilot" and passes — this case is RED if the x-lane line is removed.
+: > "$LANE_SEEN"
+lanedef_out="$(run test lanedef 2>&1)"; ec=$?
+assert_exit_code "$ec" 0 "x-lane: local endpoint with the default lane exits 0 (probe carried x-lane)"
+assert_contains "$lanedef_out" "ok" "x-lane: default-lane probe replies ok"
+assert_contains "$(cat "$LANE_SEEN")" 'x-lane=autopilot' "x-lane: default lane value observed on the wire"
+
+# AUTOPILOT_LANE override: the header carries exactly the configured lane, and the value never
+# appears in the command output. (export: run() execs `env … node`, which only sees exported vars.)
+: > "$LANE_SEEN"
+laneovr_out="$( ( export AUTOPILOT_LANE=my_lane_42; run test laneovr ) 2>&1 )"; ec=$?
+assert_exit_code "$ec" 0 "x-lane: AUTOPILOT_LANE override exits 0"
+assert_contains "$(cat "$LANE_SEEN")" 'x-lane=my_lane_42' "x-lane: override lane value observed on the wire"
+assert_not_contains "$laneovr_out" 'my_lane_42' "x-lane: lane value is never printed in the output"
+
+# (b) gateway that ALWAYS 401s (valid header or not) -> auth_failed, rc 1; --json keeps its shape.
+lane401_out="$(run test lane401 2>&1)"; ec=$?
+assert_exit_code "$ec" 1 "x-lane: always-401 gateway exits 1"
+assert_contains "$lane401_out" "auth_failed" "x-lane: always-401 prints auth_failed"
+lane401_json="$(run test lane401 --json 2>&1)"; ec=$?
+assert_exit_code "$ec" 1 "x-lane: always-401 --json exits 1"
+assert_contains "$lane401_json" '"outcome":"auth_failed"' "x-lane: always-401 --json keeps its shape"
+
+# (c) unreachable port -> network_failed, rc 1. Free port: bind, record, close, then probe it.
+DEAD_PORT="$(node -e 'const s=require("net").createServer(); s.listen(0,"127.0.0.1",()=>{console.log(s.address().port); s.close();});')"
+printf 'lane-token' | run set lanedead --url "http://127.0.0.1:$DEAD_PORT" --token-stdin >/dev/null
+lanedead_out="$(run test lanedead 2>&1)"; ec=$?
+assert_exit_code "$ec" 1 "x-lane: unreachable port exits 1"
+assert_contains "$lanedead_out" "network_failed" "x-lane: unreachable prints network_failed"
+
+# a set-but-invalid AUTOPILOT_LANE is refused (rc 2) WITHOUT echoing the value — the same
+# refuse-don't-fall-back rule as dispatch-hetero's lane check (an https endpoint never needs
+# the lane, so the refusal only applies where the header would actually be sent).
+badlane_out="$( ( export AUTOPILOT_LANE='bad lane value'; run test lanedef ) 2>&1 )"; ec=$?
+assert_exit_code "$ec" 2 "x-lane: invalid AUTOPILOT_LANE is refused (exit 2)"
+assert_contains "$badlane_out" 'AUTOPILOT_LANE' "x-lane: refusal names the variable"
+assert_not_contains "$badlane_out" 'bad lane value' "x-lane: refusal does not echo the invalid value"
 
 # ── 9. repo-keying UX notes assertions ──
 

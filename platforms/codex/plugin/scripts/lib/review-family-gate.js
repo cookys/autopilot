@@ -21,6 +21,17 @@ const { familyOfEngine } = require('./stage-write');
 const DECISION_CARD = /^d-[0-9a-f]{8}$/;
 const FLEET_MESSAGE_ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 
+function findSameFamilyVote(seats, familyOf) {
+  const seen = new Map();
+  for (const seat of seats) {
+    const family = familyOf(seat);
+    if (!family || family === 'unknown') continue;
+    if (seen.has(family)) return { family, first: seen.get(family), second: seat };
+    seen.set(family, seat);
+  }
+  return null;
+}
+
 // "<source>: <reason>" -> { source, reason } or { error }. source = decision card id or fleet message id.
 function parseException(raw) {
   if (typeof raw !== 'string') return { error: 'needs a value of the form "<source>: <reason>"' };
@@ -137,4 +148,4 @@ function warningFor(res) {
   };
 }
 
-module.exports = { isConsultResult, DEPTH0_FAMILY, planSeatFamily, evaluatePlan, parseException, validRecordedException, familiesOfImplementer, recordedImplementerEngines, seatFamily, evaluate, warningFor };
+module.exports = { findSameFamilyVote, isConsultResult, DEPTH0_FAMILY, planSeatFamily, evaluatePlan, parseException, validRecordedException, familiesOfImplementer, recordedImplementerEngines, seatFamily, evaluate, warningFor };

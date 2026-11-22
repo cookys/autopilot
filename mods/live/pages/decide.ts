@@ -747,7 +747,7 @@ function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
   const held = nav.hold?.[c.id] !== undefined
   const sent = nav.sent[c.id] !== undefined && nav.fixing?.[c.id] === undefined
   const recIx = c.options.findIndex(o => o.recommended)
-  const statusText = sent ? t('v74.d.sent') : held ? t('v74.d.sum_held') : picked !== undefined ? `${GLYPHS.structure.answer} ${letterOf(picked)}` : '○'
+  const statusText = sent ? t('v74.d.sent') : held ? t('v74.d.sum_held') : picked !== undefined ? `${GLYPHS.structure.answer} ${letterOf(picked)}` : GLYPHS.state.pending
   const recText = recIx >= 0 ? ` · ${GLYPHS.structure.recommend} ${letterOf(recIx)}` : ''
   const single = cards.length === 1
 
@@ -825,7 +825,7 @@ function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
   const leftHead = padRowTo([dimSeg(leftW >= 34 ? `待決清單 (${cards.length} 張)` : `清單 (${cards.length})`)], leftW)
   const rightHead = padRowTo([dimSeg(`卡 #${String(cursor + 1).padStart(2, '0')} / ${cards.length} · ${statusText}${recText}`)], rightW)
   const headRow: Row = [...leftHead, dimSeg(' ' + GLYPHS.structure.bandSep + ' '), ...rightHead]
-  const sepRow: Row = [dimSeg(GLYPHS.structure.rule.repeat(leftW) + '─┼─' + GLYPHS.structure.rule.repeat(rightW))]
+  const sepRow: Row = [dimSeg(GLYPHS.structure.rule.repeat(leftW + 3 + rightW))]
 
   // Left pane with independent scroll + scrollMargin = 2
   const leftShown: Row[] = []
@@ -848,7 +848,7 @@ function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
       const hasRec = item.options.some(o => o.recommended)
       const mark = isCur ? GLYPHS.structure.folded + ' ' : '  '
       const num = String(idx + 1).padStart(2, '0') + ' '
-      const suffix = (hasRec ? ' ' + GLYPHS.structure.recommend : '') + (p !== undefined ? ' ' + GLYPHS.structure.answer + letterOf(p) : ' ○')
+      const suffix = (hasRec ? ' ' + GLYPHS.structure.recommend : '') + (p !== undefined ? ' ' + GLYPHS.structure.answer + letterOf(p) : ' ' + GLYPHS.state.pending)
       const titleRoom = Math.max(4, leftW - displayWidth(mark + num + suffix))
       const title = truncateToWidth(item.title, titleRoom)
       const pad = ' '.repeat(Math.max(0, leftW - displayWidth(mark + num + title + suffix)))

@@ -429,6 +429,7 @@ test('decide card answer-area order is background < blocks < options < advice < 
 })
 
 test('v74 boxed decide scrolls card detail on ArrowDown/PageDown and resets on p/n', () => {
+  // 已改為雙欄
   const longBg = Array.from({ length: 16 }, (_, i) => `背景第 ${i + 1} 段說明文字`).join('；')
   const cards = [
     {
@@ -442,21 +443,21 @@ test('v74 boxed decide scrolls card detail on ArrowDown/PageDown and resets on p
   ]
   const pendingScroll = { list: newScroll(), detail: newScroll(), cursor: '' }
   const draw = (curNav: DecideNav) => frameRows(decidePage, {
-    live: live(), console: con([], []), size: { cols: 80, rows: 14 }, t, nowMs,
+    live: live(), console: con([], []), size: { cols: 120, rows: 14 }, t, nowMs,
     box: true, pendingScroll, decide: curNav,
     v74: { decide: cards, nav: { cursor: curNav.cursor, picks: {}, notes: {}, noteMode: false } },
   } as never, { topAnchor: true }).map(text)
 
   let curNav = nav({ cursor: 0 })
   let out = draw(curNav)
-  expect(out.join('\n')).toContain('目前第 1 張')
-  expect(out.join('\n')).toContain('還有')
+  expect(out.join('\n')).toContain('卡 #01 / 2')
+  expect(out.join('\n')).toContain('下面還有')
 
   // ArrowDown scrolls detail, card stays 1
   applyScroll(pendingScroll.detail, { by: 1, contentRows: 0 })
   out = draw(curNav)
   expect(pendingScroll.detail.offset).toBe(1)
-  expect(out.join('\n')).toContain('目前第 1 張')
+  expect(out.join('\n')).toContain('卡 #01 / 2')
 
   // PageDown scrolls by room
   const beforePg = pendingScroll.detail.offset
@@ -464,11 +465,11 @@ test('v74 boxed decide scrolls card detail on ArrowDown/PageDown and resets on p
   out = draw(curNav)
   expect(pendingScroll.detail.offset).toBeGreaterThan(beforePg)
 
-  // Scroll to bottom: ↓ 還有 disappears and further down does not move
+  // Scroll to bottom: ↓ 下面還有 disappears and further down does not move
   applyScroll(pendingScroll.detail, { by: 999, contentRows: 0 })
   out = draw(curNav)
   const bottom = pendingScroll.detail.offset
-  expect(out.some(r => r.includes('↓ 還有'))).toBe(false)
+  expect(out.some(r => r.includes('↓ 下面還有'))).toBe(false)
   applyScroll(pendingScroll.detail, { by: 1, contentRows: 0 })
   draw(curNav)
   expect(pendingScroll.detail.offset).toBe(bottom)
@@ -482,11 +483,11 @@ test('v74 boxed decide scrolls card detail on ArrowDown/PageDown and resets on p
   const nAct = routeKey('n', { page: 'decide', paneFocus: true, focusedButton: false, textMode: false })
   expect(nAct).toEqual({ kind: 'move', by: 1 })
   curNav = decideReduce(curNav, nAct, {
-    live: live(), console: con([], []), size: { cols: 80, rows: 14 }, t, nowMs,
+    live: live(), console: con([], []), size: { cols: 120, rows: 14 }, t, nowMs,
     v74: { decide: cards, nav: { cursor: 0, picks: {}, notes: {}, noteMode: false } },
   } as never, nowMs).nav
   expect(curNav.cursor).toBe(1)
   out = draw(curNav)
-  expect(out.join('\n')).toContain('目前第 2 張')
+  expect(out.join('\n')).toContain('卡 #02 / 2')
   expect(pendingScroll.detail.offset).toBe(0)
 })

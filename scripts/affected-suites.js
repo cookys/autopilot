@@ -1757,8 +1757,9 @@ function mentionsOutsideRequires(text, changedFile) {
     .replace(/\bimport\s+[^'"\n]*?\bfrom\s+(['"])[^'"\n]*\1/g, '')
     .replace(/\bimport\(\s*(['"])[^'"\n]*\1\s*\)/g, '')
     .replace(/(^|[;&|(]|\bthen\b|\bdo\b)([ \t]*(?:source|\.)[ \t]+["']?[^\s"';)]+["']?)/gm, '$1');
-  const fileBase = base(changedFile);
-  return cleaned.includes(fileBase) || cleaned.includes(changedFile);
+  // Edges are built on stems (no extension), so a bare-name mention outside a require must keep the suite too.
+  const stem = base(changedFile).replace(/\.[^.]+$/, '');
+  return (stem !== '' && cleaned.includes(stem)) || cleaned.includes(base(changedFile)) || cleaned.includes(changedFile);
 }
 
 function defaultDepCachePath(root) {
@@ -2062,5 +2063,5 @@ async function main(argv) {
   }
 }
 
-module.exports = { reasonsFor, ancestorsSafe, extraRunners, select, mentions, buildGraph, isSuite, isProse, entryCommand, computeDoc, FULL_TRIGGERS, gitTree, diskTree };
+module.exports = { mentionsOutsideRequires, reasonsFor, ancestorsSafe, extraRunners, select, mentions, buildGraph, isSuite, isProse, entryCommand, computeDoc, FULL_TRIGGERS, gitTree, diskTree };
 if (require.main === module) main(process.argv.slice(2)).then((c) => { process.exitCode = c; });

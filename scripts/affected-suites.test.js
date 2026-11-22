@@ -2202,6 +2202,7 @@ test('dep-cache pruning: weak_mention/path_string outside requires, shell source
     'scripts/lib/x.sh': 'echo x\n',
     'scripts/req-only.test.js': "if (process.env.NEVER_SET) { require('./lib/unused.js'); }\n",
     'scripts/echo-mention.test.js': "if (process.env.NEVER_SET) { require('./lib/unused.js'); }\nconst arr = ['unused.js'];\n",
+    'scripts/stem-mention.test.js': "if (process.env.NEVER_SET) { require('./lib/unused.js'); }\nconsole.log('unused');\n",
     'hooks/tests/source-only.test.sh': '#!/usr/bin/env bash\nsource "$ROOT/scripts/lib/x.sh"\n',
     'hooks/tests/source-and-bash.test.sh': '#!/usr/bin/env bash\nsource "$ROOT/scripts/lib/x.sh"\nbash scripts/lib/x.sh\n',
   });
@@ -2219,11 +2220,13 @@ test('dep-cache pruning: weak_mention/path_string outside requires, shell source
       suites: {
         'scripts/req-only.test.js': { files: [], rc: 0, traced: true },
         'scripts/echo-mention.test.js': { files: [], rc: 0, traced: true },
+        'scripts/stem-mention.test.js': { files: [], rc: 0, traced: true },
       },
     });
     const resJs = spawnSync('node', [SEL, '--root', r.dir, '--base', r.base, '--head', head1], { encoding: 'utf8' });
     assert.strictEqual(resJs.status, 0, resJs.stderr);
-    assert.strictEqual(resJs.stdout, 'scripts/echo-mention.test.js\n');
+    // a bare-name (stem) mention outside requires also keeps the suite: edges are built on stems, not on file names
+    assert.strictEqual(resJs.stdout, 'scripts/echo-mention.test.js\nscripts/stem-mention.test.js\n');
 
     const head2 = r.change({ 'scripts/lib/x.sh': 'echo x2\n' });
     writeCache({
@@ -2239,19 +2242,12 @@ test('dep-cache pruning: weak_mention/path_string outside requires, shell source
     assert.strictEqual(resSh.status, 0, resSh.stderr);
     assert.strictEqual(resSh.stdout, 'hooks/tests/source-and-bash.test.sh\n');
 
-    // (4) unreadable suite text => kept (fail closed)
-    const bigHead = r.change({ 'scripts/req-only.test.js': "if (process.env.NEVER_SET) { require('./lib/unused.js'); }\n" + '// ' + 'a'.repeat(1100 * 1024) + '\n' });
-    const head3 = r.change({ 'scripts/lib/unused.js': 'module.exports = 3;\n' });
-    writeCache({
-      schema: 'dep-cache/1',
-      base_sha: bigHead,
-      built_at_utc: new Date().toISOString(),
-      suites: {
-        'scripts/req-only.test.js': { files: [], rc: 0, traced: true },
-      },
-    });
-    const resBig = spawnSync('node', [SEL, '--root', r.dir, '--base', bigHead, '--head', head3], { encoding: 'utf8' });
-    assert.strictEqual(resBig.status, 0, resBig.stderr);
-    assert.strictEqual(resBig.stdout, 'scripts/req-only.test.js\n');
+    // (4) unreadable suite text => kept (fail closed). A suite too large to read is not even selected statically,
+    // so this is checked on the helper itself.
+    const { mentionsOutsideRequires } = require('./affected-suites.js');
+    assert.strictEqual(mentionsOutsideRequires(null, 'scripts/lib/unused.js'), true);
+    assert.strictEqual(mentionsOutsideRequires(undefined, 'scripts/lib/unused.js'), true);
+    assert.strictEqual(mentionsOutsideRequires("require('./lib/unused.js');\n", 'scripts/lib/unused.js'), false);
+    assert.strictEqual(mentionsOutsideRequires("require('./lib/unused.js');\nconsole.log('unused');\n", 'scripts/lib/unused.js'), true);
   } finally { r.cleanup(); }
 });

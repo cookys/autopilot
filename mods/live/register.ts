@@ -1688,7 +1688,7 @@ const focusRows = (id: string, expanded: boolean): number => {
   if (id === 'spend') return spendFocusRows(snapshot)
   return 1
 }
-let decideLocal: Pick<DecideNav, 'cursor' | 'folded' | 'textMode' | 'textBuf' | 'opt' | 'detailOffset' | 'armed' | 'snap' | 'stale'> = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt }
+let decideLocal: Pick<DecideNav, 'cursor' | 'folded' | 'textMode' | 'textBuf' | 'opt' | 'detailOffset' | 'armed' | 'snap' | 'stale' | 'style' | 'bgOpen'> = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt, style: 'A', bgOpen: false }
 const framePageId = (): string => panePage
 // B56: crossing the side-dock width threshold unmounts `<Pane placement="dock">` and mounts `<Pane placement="inline">` (or back).
 // On CC 2.1.327 that remount drops the pane's keyboard focus to the prompt and collides on the previous placement's Button keys,
@@ -1769,6 +1769,8 @@ export function v74KeysHeldAfter(was: boolean, named: string | undefined, origin
 }
 // r11 #4: while the send preview is up, a focus event that names no band element is the host's Esc handing the keyboard to the prompt; it cancels the preview instead (one meaning for Esc there).
 export const v74EscCancelsPreview = (armed: boolean | undefined, open: boolean, page: string, named: string | undefined): boolean => open && armed === true && page === 'decide' && !bandElement(named)
+export const v74EscClosesBg = (bgOpen: boolean | undefined, textMode: boolean, open: boolean, page: string, named: string | undefined): boolean =>
+  open && bgOpen === true && !textMode && page === 'decide' && !bandElement(named)
 // r11 #2: every change of the border word goes through this one function, so the sequence open -> keys -> send -> Esc is testable without the host.
 // A send posts the [待決回覆] line to the prompt and starts a turn; the host then gives the first Esc to the turn (it stops it) and raises no focus event for it, so the pane cannot tell
 // when the prompt has the keyboard again. After a send the word therefore falls back to `ctrl+x tab` and comes back only on evidence: a key that reached the pane or a focus event of the person.
@@ -1882,8 +1884,11 @@ async function frameKeyBody($: EngineInterface, k: KeyAction): Promise<void> {
         return
       }
       const ctx = { live: snapshot, console: consoleSnap, size: { cols: decideCols, rows: 24 }, t: tr, nowMs, v74 }
+      const prevStyle = decideLocal.style ?? 'A'
       const r = decideReduce({ ...st, ...decideLocal }, k, ctx, nowMs)
-      decideLocal = { cursor: r.nav.cursor, folded: r.nav.folded, textMode: r.nav.textMode, textBuf: r.nav.textBuf, opt: r.nav.opt, detailOffset: r.nav.detailOffset, armed: r.nav.armed, snap: r.nav.snap, stale: r.nav.stale }
+      decideLocal = { cursor: r.nav.cursor, folded: r.nav.folded, textMode: r.nav.textMode, textBuf: r.nav.textBuf, opt: r.nav.opt, detailOffset: r.nav.detailOffset, armed: r.nav.armed, snap: r.nav.snap, stale: r.nav.stale, style: r.nav.style, bgOpen: r.nav.bgOpen }
+      if ((r.nav.style ?? 'A') !== prevStyle) void $.store.set('decide.style', r.nav.style ?? 'A').catch(() => undefined)
+      if (k.kind === 'style' || k.kind === 'expand' || k.kind === 'move' || k.kind === 'cursor' || k.kind === 'prev' || k.kind === 'next') pendingScroll.detail.offset = 0
       if (k.kind === 'cursor') {
         void v74Keylog($, {
           handler: 'frameKey', component: 'AbovePrompt', key: 'cursor', event: 'cursor',
@@ -1928,6 +1933,7 @@ export async function paneKey($: EngineInterface, key: string, over: { paneFocus
     focusedButton: over.focusedButton ?? false,
     textMode: page === 'decide' && decideLocal.textMode,
     armed: page === 'decide' && decideLocal.armed === true,
+    bgOpen: page === 'decide' && decideLocal.bgOpen === true,
   })
   if (act.kind !== 'none' && act.kind !== 'pass' && act.kind !== 'button') await frameKey($, act)
   return act
@@ -1982,7 +1988,8 @@ export async function startLive($: EngineInterface): Promise<void> {
   markPaneClosed()
   panePlacementEpoch = 0
   pageView = {}
-  decideLocal = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt }
+  const savedStyle = await $.store.get('decide.style').catch(() => undefined)
+  decideLocal = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt, style: savedStyle === 'C' ? 'C' : 'A', bgOpen: false }
   Object.assign(pendingScroll, { list: newScroll(), detail: newScroll(), cursor: '' })
   resetNoteInputs()
   consoleReadMs = -Infinity
@@ -2637,6 +2644,10 @@ export function registerLive(on: Parameters<Register>[0]): void {
     if (decideLocal.textMode && noteArmed && named !== 'v74-note' && (named === undefined || named === '')) {
       noteArmed = false
       void frameKey($, { kind: 'text_cancel' }).then(() => { if (v75Esc) void refocusBand($) })
+      return {}
+    }
+    if (v74EscClosesBg(decideLocal.bgOpen, decideLocal.textMode, v74Open, panePage, named)) {
+      void frameKey($, { kind: 'expand' })
       return {}
     }
     if (v74EscCancelsPreview(decideLocal.armed, v74Open, panePage, named) || (v75Esc && decideLocal.armed === true && panePage === 'decide' && (named === undefined || named === '') && v75Was !== 'prompt')) {

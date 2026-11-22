@@ -166,7 +166,7 @@ const DECIDE_KEYS: Record<string, KeyAction> = { ...CARD_KEYS, d: { kind: 'pick'
 // o acts on the focused (▸) row: quota shows / hides that pool's seats. decide has no o (a-e pick there); now has no focused row yet, so o is not bound there
 const OPEN_KEY: Record<string, KeyAction> = { o: { kind: 'open' } }
 const pageKeys = (id: string): Record<string, KeyAction> =>
-  (id === 'decide' ? { ...COMMON_KEYS, ...(v75On() ? DECIDE_KEYS : Object.fromEntries(Object.entries(DECIDE_KEYS).filter(([l]) => l !== 'j' && l !== 'k'))) } : id === 'todo' ? { ...COMMON_KEYS, ...CARD_KEYS } : id === 'fleet' ? {} : id === 'quota' ? { ...COMMON_KEYS, ...OPEN_KEY } : COMMON_KEYS) // v7.4 S8: the 艦隊 page is a plain list with no action rows, so it binds nothing (no fold, no see, no fill)
+  (id === 'decide' ? { ...COMMON_KEYS, ...(v75On() ? DECIDE_KEYS : { ...Object.fromEntries(Object.entries(DECIDE_KEYS).filter(([l]) => l !== 'j' && l !== 'k')), e: { kind: 'expand' }, v: { kind: 'style' } }) } : id === 'todo' ? { ...COMMON_KEYS, ...CARD_KEYS } : id === 'fleet' ? {} : id === 'quota' ? { ...COMMON_KEYS, ...OPEN_KEY } : COMMON_KEYS) // v7.4 S8: the 艦隊 page is a plain list with no action rows, so it binds nothing (no fold, no see, no fill)
 // every hotkey a framed page binds (f on fleet / quota is the page's own fill action): a visible `[x]` key hint must be one of these (frame.test.ts)
 export const pageHotkeys = (id: string): string[] => [...Object.keys(pageKeys(id)), ...(id === 'quota' ? ['f'] : [])]
 // quota renders under spend tab; spend page id maps to spend tab
@@ -343,7 +343,7 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
   })
   // The boxed fallback replaces the strip row (and its navHot buttons).
   // Keep card navigation registered on this bottom border too. s stays on the action row.
-  const letters = Button === undefined || typing || page.id !== 'decide' ? [] : (['a', 'b', 'c', 'm', 'n', 'p', 'j', 'k'] as const).map(letter => (
+  const letters = Button === undefined || typing || page.id !== 'decide' ? [] : (['a', 'b', 'c', 'e', 'm', 'n', 'p', 'j', 'k', 'v'] as const).map(letter => (
     <Box key={'lk' + letter} width={0} height={0} overflow="hidden"><Button key={'letter:' + letter + ep} plain hotkey={letter} onPress={() => frame.onKey?.(keys[letter] ?? { kind: 'none' })}>{letter}</Button></Box>
   ))
   const bottom = <Box key="v74-bottom" height={1} width={fullCols} overflow="hidden"><Text {...bc}>{GLYPHS.structure.frameBL + rule + '  ' + fit.hint + '  ' + rule.repeat(padN) + '  '}</Text>{tabs}<Text {...bc}>{'  ' + rule + GLYPHS.structure.frameBR}</Text>{hidden}{letters}</Box>

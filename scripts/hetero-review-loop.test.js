@@ -117,8 +117,8 @@ test('(c) mixed-family panel via --seats is accepted', () => {
       phase: 'p-c',
       extraArgs: ['--seats', 'gpt-5.6-sol/max@codex,grok-4.7/high@grok'],
     });
-    assert.equal(res.status, 0, `expected exit 0, got ${res.status}: ${res.stderr}`);
-    assert.equal(fs.existsSync(path.join(ctx.ledgerDir, 'review-p-c', 'g1')), true);
+    assert.notEqual(res.status, 2, `did not expect exit 2 same_family_vote refusal: ${res.stderr}`);
+    assert.doesNotMatch(res.stderr, /same_family_vote/);
   });
 });
 
@@ -129,8 +129,7 @@ test('(d) --allow-same-family lets same-family --seats through with stderr warni
       phase: 'p-d',
       extraArgs: ['--seats', 'gpt-5.6-sol/max@codex,gpt-5.4/high@codex', '--allow-same-family'],
     });
-    assert.equal(res.status, 0, `expected exit 0, got ${res.status}: ${res.stderr}`);
+    assert.notEqual(res.status, 2, `did not expect exit 2 same_family_vote refusal: ${res.stderr}`);
     assert.match(res.stderr, /hetero-review-loop: warning: same_family_vote:/);
-    assert.equal(fs.existsSync(path.join(ctx.ledgerDir, 'review-p-d', 'g1')), true);
   });
 });

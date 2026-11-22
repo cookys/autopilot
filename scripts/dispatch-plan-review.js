@@ -975,7 +975,12 @@ function stripAutoFallbacks(manifest) {
 }
 
 function enforceSameFamilyVote(manifest, opts = {}) {
-  enforceSameFamilyVote(manifest, opts);
+  const c = familyGate.findSameFamilyVote(manifest.seats, familyGate.planSeatFamily);
+  if (c) {
+    const message = `same_family_vote: ${c.first.id} and ${c.second.id} (${c.family})`;
+    if (!opts.allowSameFamily) throw new CliError(message, 2);
+    process.stderr.write(`dispatch-plan-review: warning: ${message}\n`);
+  }
 }
 
 function fillFallbacksFromTopology(manifest, opts) {

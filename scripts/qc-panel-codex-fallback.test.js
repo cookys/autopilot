@@ -295,14 +295,15 @@ test('selectCodexQuotaSubstitute refuses a substitute whose family is already se
     { id: 's1', engine: 'grok-4.7', runner: 'grok', effort: 'high' },
   ];
 
-  // Default substitutes: grok-4.7/high@grok (xai, already seated) then gemini-4-carbon-high/high@agy (google).
-  // With only grok-4.7/high@grok offered, it must be refused when allowSameFamily is false/omitted.
+  // With only grok-4.8/high@grok offered (same xai family as s1, distinct tuple),
+  // it must be refused when allowSameFamily is false/omitted.
   const refused = selectCodexQuotaSubstitute({
     failedSeat: panelSeats[0],
     failedIndex: 0,
     panelSeats,
     implementerEngine: 'claude-sonnet-4-6',
-    substitutes: ['grok-4.7/high@grok'],
+    crossFamilyRequired: false,
+    substitutes: ['grok-4.8/high@grok'],
   });
   assert.equal(refused, null);
 
@@ -312,11 +313,12 @@ test('selectCodexQuotaSubstitute refuses a substitute whose family is already se
     failedIndex: 0,
     panelSeats,
     implementerEngine: 'claude-sonnet-4-6',
-    substitutes: ['grok-4.7/high@grok'],
+    crossFamilyRequired: false,
+    substitutes: ['grok-4.8/high@grok'],
     allowSameFamily: true,
   });
   assert.deepEqual(allowed, {
-    engine: 'grok-4.7',
+    engine: 'grok-4.8',
     runner: 'grok',
     effort: 'high',
     family: 'xai',

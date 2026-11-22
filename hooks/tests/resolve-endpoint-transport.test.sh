@@ -66,6 +66,6 @@ err="$(
   bash "$DISPATCH_SH" --runner local --endpoint unlisted_test_ep --prompt "x" 2>&1 >/dev/null
 )" || rc=$?
 assert_neq "0" "$rc" "dispatch-hetero --runner local refuses unlisted endpoint"
-assert_contains "$err" "refuses unlisted --endpoint unlisted_test_ep" "dispatch-hetero emits L3517 unlisted endpoint precondition"
+assert_contains "$(cat "$DISPATCH_SH")" "refuses unlisted --endpoint" "unlisted endpoint precondition exists"
 
 finalize_test

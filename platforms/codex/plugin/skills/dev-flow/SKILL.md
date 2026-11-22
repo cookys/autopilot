@@ -55,7 +55,7 @@ precondition or abort receipt; do not invent another lifecycle authority.
 ## Model Routing (for subagent dispatch)
 !`cat .claude/model-routing-config.md 2>/dev/null || true`
 
-If no project config above, use defaults from [references/model-routing.md](references/model-routing.md).
+If no project config above, use defaults from [references/model-routing.md](references/model-routing.md). XS fixes (one file, about 20 lines including tests) are done directly by the lane seat and noted in one fleet task line, without external engine dispatch; after two failures on the same task, change method or engine.
 
 ## Dispatch Chains (for orchestrator routing)
 !`cat .claude/dispatch-config.md 2>/dev/null || true`

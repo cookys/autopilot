@@ -19,12 +19,12 @@ Acceptance also requires the change to be merged, live pinned to that SHA, and e
 
 ## How we work
 - 工作狀態只記在 fleet task。開工、卡住、改期、交件都寫回單上，不用聊天代替。
-- 能開工的全部同時開工。實作交給便宜席（sonnet、codex terra、grok；機械性的單交給 kimi），每條各用一個 worktree。本席只做判斷、審查和整合，不要把工作排成單線。每條做完就立刻審，不要等全部做完。
+- 可開工的同時開工。實作交便宜席（sonnet、codex terra、grok；機械單交 kimi），每條用一個 worktree。本席判斷、審查和整合；做完立刻審。
+- XS 修正（單檔、約 20 行內、含測試）由本席直接改並在 fleet 單記一行，不派外部引擎；同一件事失敗兩次就換方法或換引擎。
 - 隨時至少保留兩件可以直接開工的工作。手上這件卡住或做完時，下一件要已經準備好（預檢已通過）。
 - 要 go 的時候，同一時間把下一件準備好，不要空等。內部換版的 go 跟 PM 要，先跑 canary，再全面換。
 - KR 和觀察期只量測，不擋上線。計畫要寫上上線日和 fleet 單號，不能一放好幾週。
 - 卡住時只回報一次，附上建議，回報對象是 PM 或你的 lead。在等別人時，寫上帶型別的 waiting_on（等哪張單、哪張卡、哪個人的哪則訊息）。
-- 同一件事失敗兩次，就換做法或換引擎。
 
 ## Worktree and branch hygiene
 - **先確認分支再動手**：每次開始編輯前，以及恢復 session 或切換情境之後，先跑 `git status` 和 `git branch --show-current`，確認自己在對的分支和對的 worktree。

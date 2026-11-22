@@ -378,3 +378,7 @@ These are plain-markdown files you place in a project's `.claude/` directory. Ho
 ## Keeping this page honest
 
 Run `node scripts/check-config-docs.js` (exit 0 in sync, 1 on drift, `--json` for machine output). It also runs in `scripts/preflight-release.sh`. When you add a setting, add it to `scripts/lib/config-keys.json` (`audience: "user"` with a `summary`, or `audience: "internal"` with a `class`) and, for a user setting, to the matching table above.
+
+### Inbox drain gate
+
+- **`inbox_drain_gate_lead`** (`boolean`, default `false`) / **`AUTOPILOT_INBOX_DRAIN_GATE_LEAD`** (`0` | `1`, default `0`): By default `hooks/inbox-drain-gate.js` (Stop) only blocks the PM seat (`pm--claude`) when unread or `pending_decision` inbox items are older than 10 minutes. Set `inbox_drain_gate_lead: true` in `~/.autopilot/config.json` or `AUTOPILOT_INBOX_DRAIN_GATE_LEAD=1` to also cover lead seats.

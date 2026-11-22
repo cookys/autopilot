@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/version-3.0.0--alpha.6-E8A838?style=flat-square" alt="v3.0.0-alpha.6">
   <img src="https://img.shields.io/badge/skills-32-4A90D9?style=flat-square" alt="32 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
-  <img src="https://img.shields.io/badge/hooks-61-6B8E6B?style=flat-square" alt="61 Hooks">
+  <img src="https://img.shields.io/badge/hooks-62-6B8E6B?style=flat-square" alt="62 Hooks">
   <img src="https://img.shields.io/badge/dependencies-zero-A8B5A0?style=flat-square" alt="Zero Dependencies">
   <img src="https://img.shields.io/badge/license-MIT-D4A5A5?style=flat-square" alt="MIT License">
 </p>
@@ -51,7 +51,7 @@ Claude Code 仍是最完整的 host。Autopilot 讓 AI coding agent **把整件�
 - **抓出那種「假完成」** —— 無 stub/TODO 掃描、你的測試、真正的程式碼審查，在 quality gate 合併前跑（以及上面那個可選的 pre-push hook）。
 - **會記住，所以你的 repo 不會爛掉** —— 記下教訓、追蹤專案、告訴你下一步做什麼，並從 `.claude/` 裡一個 markdown 檔適應你的 repo。
 
-它優先以 Claude Code plugin 出貨 —— **32 個 skill、3 個方法論 agent、61 個 hook（41 default-on、19 opt-in）、零相依** —— 並在其他 harness 有相容 skill、agent 或 plugin surface 時，保留同一套方法論的可攜路徑。可完全獨立運作，若你有 [`superpowers`](docs/guide/coexistence.md) 也能並存。
+它優先以 Claude Code plugin 出貨 —— **32 個 skill、3 個方法論 agent、62 個 hook（42 default-on、19 opt-in）、零相依** —— 並在其他 harness 有相容 skill、agent 或 plugin surface 時，保留同一套方法論的可攜路徑。可完全獨立運作，若你有 [`superpowers`](docs/guide/coexistence.md) 也能並存。
 
 > 這份 README 是 Claude 寫的，並透過 Autopilot 自己的「第二引擎審查」流程，由 GPT-5.5 與 Gemini 對抗式審查而成。
 

@@ -116,25 +116,24 @@ test('G40-N28 the checker never opens what a credential_ref points at: judged on
   const touched = [];
   const names = ['openSync', 'readFileSync', 'statSync', 'lstatSync', 'existsSync', 'accessSync', 'readdirSync', 'realpathSync', 'readlinkSync', 'opendirSync'];
   const saved = {};
-  for (const n of names) {
-    saved[n] = fs[n];
-    fs[n] = function spy(p, ...rest) { touched.push(String(p)); return saved[n].call(fs, p, ...rest); };
-  }
+  const spyOn = () => { for (const n of names) { saved[n] = fs[n]; fs[n] = function spy(p, ...rest) { touched.push(String(p)); return saved[n].call(fs, p, ...rest); }; } };
+  const spyOff = () => { for (const n of names) if (saved[n] !== undefined) fs[n] = saved[n]; };
+  // the fixture setup opens files itself; only the checker's own opens are judged
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'g40-n28-'));
+  const tok = path.join(dir, 'token');
+  fs.writeFileSync(tok, 'FAKE-never-read');
+  fs.chmodSync(tok, 0o000);
   try {
-    // an unreadable fixture file sits where a naive checker would resolve the template
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'g40-n28-'));
-    const tok = path.join(dir, 'token');
-    fs.writeFileSync(tok, 'FAKE-never-read');
-    fs.chmodSync(tok, 0o000);
+    const ok = manifest((x) => { x.credential_ref = { kind: 'file', path: '<accounts-dir>/<alias>/token' }; });
+    const bad = manifest((x) => { x.credential_ref = { kind: 'file', path: `${tok}` }; });
+    const env = manifest((x) => { x.credential_ref = { kind: 'env', name: 'SOME_TOKEN', file: '<accounts-dir>/<alias>/env' }; });
+    spyOn();
     try {
-      const ok = manifest((x) => { x.credential_ref = { kind: 'file', path: '<accounts-dir>/<alias>/token' }; });
       assert.deepStrictEqual(c.checkManifest(ok, realCtx()), []);
-      const bad = manifest((x) => { x.credential_ref = { kind: 'file', path: `${tok}` }; });
       assert.ok(c.checkManifest(bad, realCtx()).some((f) => f.rule === 'credential_ref'));
-      const env = manifest((x) => { x.credential_ref = { kind: 'env', name: 'SOME_TOKEN', file: '<accounts-dir>/<alias>/env' }; });
       assert.deepStrictEqual(c.checkManifest(env, realCtx()), []);
-    } finally { fs.chmodSync(tok, 0o600); fs.rmSync(dir, { recursive: true, force: true }); }
-  } finally { for (const n of names) fs[n] = saved[n]; }
+    } finally { spyOff(); }
+  } finally { fs.chmodSync(tok, 0o600); fs.rmSync(dir, { recursive: true, force: true }); }
   const credentialish = touched.filter((p) => /token|accounts|alias|\.env|FAKE|g40-n28/.test(p) && !/capability-matrix/.test(p));
   assert.deepStrictEqual(credentialish, [], 'only evidence files were opened');
   assert.ok(touched.some((p) => /capability-matrix\.md/.test(p)), 'the spy is live: it saw the evidence read');

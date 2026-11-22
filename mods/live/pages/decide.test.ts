@@ -359,8 +359,8 @@ test('decide keys: a-e pick an option of the focused card, a letter past its opt
   expect(undone.nav.hold).toEqual({})
 })
 
-test('decide keys: n opens the note mode; digits and letters are text until Enter saves or Esc drops; page digits win again after', () => {
-  let n = press('n', NO_NAV, C160).nav
+test('decide keys: m opens the note mode; digits and letters are text until Enter saves or Esc drops; page digits win again after', () => {
+  let n = press('m', NO_NAV, C160).nav
   expect(n.textMode).toBe(true)
   for (const ch of ['2', 'a', 'x']) n = press(ch, n, C160).nav
   expect(n.textBuf).toBe('2ax')

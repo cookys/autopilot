@@ -32,12 +32,14 @@ export function V75Band(el: { Box: El; Text: El; Button?: El; Input?: El }, rows
     ...LETTERS.slice(0, nOpts).map((l, k) => hot(l, l, () => acts.onKey({ kind: 'pick', index: k }))),
     hot('j', 'j', () => acts.onKey({ kind: 'move', by: 1 })), // next / previous card: the fallback when the arrows do not reach the page
     hot('k', 'k', () => acts.onKey({ kind: 'move', by: -1 })),
-    hot('n', 'n', () => acts.onKey({ kind: 'note' })),
+    hot('n', 'n', () => acts.onKey({ kind: 'move', by: 1 })),
+    hot('p', 'p', () => acts.onKey({ kind: 'move', by: -1 })),
+    hot('m', 'm', () => acts.onKey({ kind: 'note' })),
     hot('s', 's', () => acts.onKey({ kind: 'submit' })),
     ...(i.armed ? [hot('y', 'y', () => acts.onKey({ kind: 'confirm' })), hot('x', 'x', () => acts.onKey({ kind: 'disarm' }))] : []), // x cancels the preview (a hotkey is one digit or one lowercase letter, d.ts:1391: the band cannot take Esc)
     // §3: in the band a digit means page N: it opens the Pane there (the band has no pages of its own)
     ...Object.entries(V74_KEY).filter(([id]) => id !== 'help').map(([id, d]) => hot('d' + d, d as string, () => acts.onPage(id))),
-    ...Object.entries(V75_MOVED).map(([d, id]) => hot('m' + d, d, () => acts.onPage(id))), // the old shell's menus: r 圓桌, u 用量, p 寵物
+    ...Object.entries(V75_MOVED).filter(([d]) => d !== 'p').map(([d, id]) => hot('m' + d, d, () => acts.onPage(id))), // the old shell's menus: r 圓桌, u 用量, p 寵物
     hot('d0', '0', () => acts.onPage('pet')),
     <Box key="hk:anchor" width={0} height={0} overflow="hidden"><Button key={'v75:anchor' + ep} plain autoFocus onPress={() => undefined}>{' '}</Button></Box>,
   ]

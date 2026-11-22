@@ -71,11 +71,11 @@ test('v75: s only opens the preview, it never sends', () => {
   expect(r.nav.armed).toBe(true)
 })
 
-test('v75: PgUp / PgDn scroll only the Pane; one row is the cursor; the band never scrolls', () => {
+test('v75: arrows and PgUp / PgDn scroll only the current Pane card; the band never scrolls', () => {
   const open = { paneOpen: true, note: false }
   expect(v75ScrollRoute({ component: 'AbovePrompt', by: -10 }, open)).toBe('pane')
   expect(v75ScrollRoute({ component: 'Pane', by: 10 }, open)).toBe('pane')
-  expect(v75ScrollRoute({ component: 'AbovePrompt', by: 1 }, open)).toBe('cursor')
+  expect(v75ScrollRoute({ component: 'AbovePrompt', by: 1 }, open)).toBe('pane')
   expect(v75ScrollRoute({ component: 'AbovePrompt', by: -10 }, { paneOpen: false, note: false })).toBe('swallow')
   expect(v75ScrollRoute({ component: 'AbovePrompt', by: 1 }, { paneOpen: true, note: true })).toBe('swallow')
   expect(v75ScrollRoute({ component: 'AbovePrompt' }, open)).toBe('pass')
@@ -169,6 +169,7 @@ test('v75 old shell menus: usage, pet and roundtable each have a key and a Pane 
   expect(routeKey('r', st)).toEqual({ kind: 'page', to: 'room' })
   expect(routeKey('u', st)).toEqual({ kind: 'page', to: 'spend' })
   expect(routeKey('p', st)).toEqual({ kind: 'page', to: 'pet' })
+  expect(routeKey('p', { ...st, page: 'decide' })).toEqual({ kind: 'move', by: -1 })
   expect(routeKey('0', st)).toEqual({ kind: 'page', to: 'pet' })
   expect(routeKey('u', { ...st, page: 'decide' })).toEqual({ kind: 'undo' })
   const ids = [...PAGES, ...EXTRA_PAGES].map(p => p.id)

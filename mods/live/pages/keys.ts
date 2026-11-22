@@ -9,6 +9,7 @@ export type KeyAction =
   | { kind: 'pick'; index: number } | { kind: 'text'; ch: string } | { kind: 'text_save' } | { kind: 'text_cancel' }
   | { kind: 'note' } | { kind: 'undo' } | { kind: 'prev' } | { kind: 'next' } | { kind: 'fill' }
   | { kind: 'move'; by: 1 | -1 } | { kind: 'cursor'; at: number } | { kind: 'fold' } | { kind: 'open' } | { kind: 'none' }
+  | { kind: 'scroll'; by: 1 | -1; page: boolean }
 
 const pageForDigit = (key: string): string | undefined => {
   if (key === PET_KEY) return 'pet'
@@ -25,6 +26,10 @@ export function routeKey(key: string, st: KeyState): KeyAction {
   if (st.textMode) return key === 'Enter' ? { kind: 'text_save' } : key === 'Escape' ? { kind: 'text_cancel' } : { kind: 'text', ch: key }
   if (key === 'Escape') return st.armed === true && st.page === 'decide' ? { kind: 'disarm' } : { kind: 'close' }
   if (key === 'Enter') return st.focusedButton ? { kind: 'button' } : { kind: 'fold' }
+  if (st.page === 'decide') {
+    if (key === 'p' || key === 'n') return { kind: 'move', by: key === 'p' ? -1 : 1 }
+    if (key === 'ArrowUp' || key === 'ArrowDown' || key === 'PageUp' || key === 'PageDown') return { kind: 'scroll', by: key === 'ArrowUp' || key === 'PageUp' ? -1 : 1, page: key.startsWith('Page') }
+  }
   const moved = V75_MOVED[key] // v7.5: the old shell's r / p / u menus, as page keys (u is 撤回 on 待決, so there it stays undo)
   if (moved !== undefined && !(key === 'u' && st.page === 'decide')) return moved === st.page ? { kind: 'none' } : { kind: 'page', to: moved }
   const target = /^[1-9]$/.test(key) ? pageForDigit(key) : key === PET_KEY ? 'pet' : undefined
@@ -42,7 +47,6 @@ export function routeKey(key: string, st: KeyState): KeyAction {
   }
   if (st.page === 'decide') {
     if (key === 'y') return st.armed === true ? { kind: 'confirm' } : { kind: 'none' } // r11 #12: y confirms the send preview and means nothing else
-    if (key === 'n') return { kind: 'note' }
     if (key === 'u') return { kind: 'undo' }
     if (key === 'x') return st.armed === true ? { kind: 'disarm' } : { kind: 'none' } // x cancels the send preview, as Esc does (a band hotkey cannot be Esc, d.ts:1391)
     if (key === 'h') return { kind: 'prev' }

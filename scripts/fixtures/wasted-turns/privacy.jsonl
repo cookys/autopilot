@@ -1,0 +1,1 @@
+{"type":"assistant","timestamp":"2026-11-22T09:00:00Z","message":{"id":"priv_1","role":"assistant","model":"claude-sonnet-4-6","usage":{"input_tokens":100,"output_tokens":20,"cache_read_input_tokens":500,"cache_creation_input_tokens":0},"content":[{"type":"text","text":"SENTINEL_SECRET_CONTENT_998877"}]}}

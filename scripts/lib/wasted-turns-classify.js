@@ -279,6 +279,10 @@ function classifyTranscript(raw, options = {}) {
     .filter(Boolean);
 
   const chainCounts = new Map();
+  // A single command that already chains two or more steps (a && b, a ; b) is a chain by itself.
+  for (const cmd of shellCmds) {
+    if (/&&|;/.test(cmd)) chainCounts.set(cmd, (chainCounts.get(cmd) || 0) + 1);
+  }
   for (let i = 0; i < shellCmds.length - 1; i++) {
     const shape = `${shellCmds[i]} && ${shellCmds[i + 1]}`;
     chainCounts.set(shape, (chainCounts.get(shape) || 0) + 1);

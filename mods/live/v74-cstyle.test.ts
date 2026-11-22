@@ -248,7 +248,7 @@ test('c-style: options and note sit at bottom of body', async ($, on) => {
   expect(note).toBeGreaterThan(firstOpt)
   expect(send).toBeGreaterThan(note)
   // the spare rows sit between the one-line background and the options, none after the note row
-  expect(t.slice(bg, firstOpt)).toContain('│  │')
+  expect(t.slice(bg, firstOpt)).toMatch(/│ +││/)
   expect(t.slice(note, send).replace(/[│ ]/g, '').length).toBeLessThanOrEqual('m 附註：（空）'.length)
   await h.close()
 })

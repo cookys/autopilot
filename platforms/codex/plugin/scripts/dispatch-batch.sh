@@ -100,6 +100,12 @@ usage() { sed -n '2,84p' "$0" | sed 's/^# \{0,1\}//'; }
 
 # shellcheck source=lib/json-emit.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib/json-emit.sh"
+# shellcheck source=lib/agent-event-emit.sh
+[ -r "$REPO_ROOT_GUESS/scripts/lib/agent-event-emit.sh" ] && . "$REPO_ROOT_GUESS/scripts/lib/agent-event-emit.sh" && {
+  agent_event_emit_init "batch" "claude" "${RUN_ID:-}"
+  agent_event_emit_accepted
+  agent_event_emit_register_exit_trap
+} || true
 # Class A: flatten newlines before shared RFC escape (flatten stays VISIBLE here).
 _flat_json_escape() { json_escape "$(printf '%s' "$1" | tr '\n' ' ')"; }
 

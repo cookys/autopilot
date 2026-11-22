@@ -207,6 +207,12 @@ ORIG_ARGS=("$@")
 # rejected/absent file = no-op → the cc-shim/anthropic precondition fires normally). Loaded
 # BEFORE any endpoint/env consumption. Contract stays AUTOPILOT_ENDPOINT_<NAME>_* env vars.
 _REVIEW_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+# shellcheck source=lib/agent-event-emit.sh
+[ -r "$_REVIEW_SELF_DIR/lib/agent-event-emit.sh" ] && . "$_REVIEW_SELF_DIR/lib/agent-event-emit.sh" && {
+  agent_event_emit_init "reviewer" "${RUNNER:-claude}" ""
+  agent_event_emit_accepted
+  agent_event_emit_register_exit_trap
+} || true
 # shellcheck source=/dev/null
 [ -r "$_REVIEW_SELF_DIR/load-endpoints-env.sh" ] && . "$_REVIEW_SELF_DIR/load-endpoints-env.sh" && autopilot_load_endpoints_env || true
 # shellcheck source=lib/repo-identity.sh

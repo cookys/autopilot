@@ -100,6 +100,12 @@ done
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/runner-fallback-bin.sh"
 # shellcheck source=lib/agy-timeout.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/agy-timeout.sh"
+# shellcheck source=lib/agent-event-emit.sh
+[ -r "$_EXPLORE_SELF_DIR/lib/agent-event-emit.sh" ] && . "$_EXPLORE_SELF_DIR/lib/agent-event-emit.sh" && {
+  agent_event_emit_init "explore" "${RUNNER:-codex}" ""
+  agent_event_emit_accepted
+  agent_event_emit_register_exit_trap
+} || true
 
 die_precondition() { printf '{ "runner": "%s", "model": "%s", "status": "precondition_failed", "read_probe": "skipped", "sandbox": "n/a", "raw_log": null, "error": "%s" }\n' "$(json_escape "$RUNNER")" "$(json_escape "$MODEL")" "$(json_escape "$1")"; exit 2; }
 

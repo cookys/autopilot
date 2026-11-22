@@ -686,5 +686,39 @@ assert_contains "$BL_PG_LATE" "BL-" "pagination: the default list page leaves so
 pr --target "$R_PG" --json backlog new --title "Mentions late row" "${BL_FLAGS[@]}" --context "See $BL_PG_LATE for baseline."; eq 0 "$RC" "pagination: backlog new -> exit 0"
 eq 1 "$(edges "$R_PG" "$(printf '%s' "$OUT" | jf 'd.id')" relates_to)" "pagination: mention of a row beyond the first 50 records creates its relates_to edge"
 
+
+# Plan status cutline: old paths never reach hippo or the registry.
+R_PLAN="$(hs_mkrepo plan-cutline store)"
+mkdir -p "$R_PLAN/docs/plans"
+printf 'old plan text\n' > "$R_PLAN/docs/plans/old.md"
+git -C "$R_PLAN" add docs/plans/old.md
+git -C "$R_PLAN" -c user.name=t -c user.email=t@t commit -q -m old --date='2026-11-18T12:00:00Z' --no-gpg-sign -- docs/plans/old.md
+# Committer date is the date the guard reads; set it explicitly on a separate fixture commit.
+GIT_COMMITTER_DATE='2026-11-18T12:00:00Z' GIT_AUTHOR_DATE='2026-11-18T12:00:00Z' git -C "$R_PLAN" commit -q --amend --no-edit --no-gpg-sign
+printf 'new plan text\n' > "$R_PLAN/docs/plans/new.md"
+git -C "$R_PLAN" add docs/plans/new.md
+GIT_COMMITTER_DATE='2026-11-22T12:00:00Z' GIT_AUTHOR_DATE='2026-11-22T12:00:00Z' git -C "$R_PLAN" commit -q -m new --no-gpg-sign
+export AUTOPILOT_M6_CUTLINE=2026-11-20
+PLAN_BEFORE="$(H "$R_PLAN" list --history)"
+PLAN_HASH="$(sha256sum "$R_PLAN/docs/plans/old.md")"
+pr --target "$R_PLAN" --json plan upsert --path docs/plans/old.md --status Draft
+eq 0 "$RC" "plan cutline: old upsert succeeds"
+eq before-cutline "$(printf '%s' "$OUT" | jf d.skipped)" "plan cutline: old skipped"
+eq "$PLAN_HASH" "$(sha256sum "$R_PLAN/docs/plans/old.md")" "plan cutline: old file unchanged"
+eq "$PLAN_BEFORE" "$(H "$R_PLAN" list --history)" "plan cutline: old store unchanged"
+PLAN_REG="$(git -C "$R_PLAN" rev-parse --path-format=absolute --git-common-dir)/autopilot/m6-registry.json"
+[ ! -f "$PLAN_REG" ] || assert_not_contains "$(cat "$PLAN_REG")" 'docs/plans/old.md' "plan cutline: old not registered"
+pr --target "$R_PLAN" --json plan upsert --path docs/plans/new.md --status Draft --owner Alice --frozen-sha abc --milestone M6
+eq 0 "$RC" "plan cutline: new upsert succeeds"
+PLAN_KEY="$(printf '%s' "$OUT" | jf d.key)"
+PLAN_ID="$(printf '%s' "$OUT" | jf d.id)"
+assert_contains "$PLAN_KEY" 'plan:' "plan cutline: key prefix"
+eq 1 "$(key_count "$R_PLAN" "$PLAN_KEY")" "plan cutline: new record exists"
+assert_contains "$(cat "$PLAN_REG")" 'docs/plans/new.md' "plan cutline: new registered"
+pr --target "$R_PLAN" --json plan upsert --path docs/plans/new.md --status Frozen --owner Alice --frozen-sha abc --milestone M6
+eq 0 "$RC" "plan cutline: status update succeeds"
+eq '["plan-status:frozen"]' "$(H "$R_PLAN" show "$PLAN_ID" | jf 'd.data.record.tags.filter(t=>t.startsWith("plan-status:"))')" "plan cutline: status tag swapped"
+unset AUTOPILOT_M6_CUTLINE
+
 hs_exit_check
 finalize_test

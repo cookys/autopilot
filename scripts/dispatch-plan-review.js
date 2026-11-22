@@ -974,6 +974,10 @@ function stripAutoFallbacks(manifest) {
   };
 }
 
+function enforceSameFamilyVote(manifest, opts = {}) {
+  enforceSameFamilyVote(manifest, opts);
+}
+
 function fillFallbacksFromTopology(manifest, opts) {
   if (opts.noTopologyFallbacks) return { manifest, added: [] };
   const needy = manifest.seats.filter((seat) => seat.fallbacks.length === 0);
@@ -983,12 +987,7 @@ function fillFallbacksFromTopology(manifest, opts) {
   const impl = resolverField('implementer_runner');
   const allowSameRunner = resolverField('allow_same_runner_dual_seat') === 'on';
   const takenIds = new Set();
-  const familyCollision = familyGate.findSameFamilyVote(manifest.seats, familyGate.planSeatFamily);
-  if (familyCollision) {
-    const message = `same_family_vote: ${familyCollision.first.id} and ${familyCollision.second.id} (${familyCollision.family})`;
-    if (!opts.allowSameFamily) throw new CliError(message, 2);
-    process.stderr.write(`dispatch-plan-review: warning: ${message}\n`);
-  }
+  enforceSameFamilyVote(manifest, opts);
   for (const seat of manifest.seats) {
     takenIds.add(seat.id);
     for (const fallback of seat.fallbacks) takenIds.add(fallback.id);
@@ -2058,14 +2057,9 @@ function repairedSectionFor(sections, surface) {
   return picked.map((section) => section.text).join('\n\n').slice(0, SECTION_CAP_CHARS);
 }
 
-function recheckCandidates(manifest) {
+function recheckCandidates(manifest, opts = {}) {
   const out = [];
-  const familyCollision = familyGate.findSameFamilyVote(manifest.seats, familyGate.planSeatFamily);
-  if (familyCollision) {
-    const message = `same_family_vote: ${familyCollision.first.id} and ${familyCollision.second.id} (${familyCollision.family})`;
-    if (!opts.allowSameFamily) throw new CliError(message, 2);
-    process.stderr.write(`dispatch-plan-review: warning: ${message}\n`);
-  }
+  enforceSameFamilyVote(manifest, opts);
   for (const seat of manifest.seats) {
     for (const candidate of [seat, ...(seat.fallbacks || [])]) {
       if (candidate.readiness_status === 'ready' && candidate.qualification_status === 'qualified') {
@@ -2147,7 +2141,7 @@ async function runRepairRecheck(argv) {
     };
   });
   const nonce = crypto.randomBytes(12).toString('hex');
-  const candidates = recheckCandidates(manifest);
+  const candidates = recheckCandidates(manifest, opts);
   const planSeam = testSequence();
   const run = await repairRecheck.runRecheck({
     kind: 'plan',
@@ -2264,12 +2258,7 @@ function main() {
   for (const added of effective.added) {
     process.stderr.write(`dispatch-plan-review: seat ${added.seat_id} had no fallbacks; added ${added.fallback_id} (family ${added.family}) from the topology\n`);
   }
-  const familyCollision = familyGate.findSameFamilyVote(manifest.seats, familyGate.planSeatFamily);
-  if (familyCollision) {
-    const message = `same_family_vote: ${familyCollision.first.id} and ${familyCollision.second.id} (${familyCollision.family})`;
-    if (!opts.allowSameFamily) throw new CliError(message, 2);
-    process.stderr.write(`dispatch-plan-review: warning: ${message}\n`);
-  }
+  enforceSameFamilyVote(manifest, opts);
   for (const seat of manifest.seats) {
     if (seat.required && seat.fallbacks.length === 0) {
       process.stderr.write(`dispatch-plan-review: warning: required seat has no fallback: ${seat.id} (a failed first attempt cannot be substituted)\n`);
@@ -2622,12 +2611,7 @@ function main() {
     });
     const seatReviews = [];
     const warnedTimeoutEfforts = new Set();
-    const familyCollision = familyGate.findSameFamilyVote(manifest.seats, familyGate.planSeatFamily);
-  if (familyCollision) {
-    const message = `same_family_vote: ${familyCollision.first.id} and ${familyCollision.second.id} (${familyCollision.family})`;
-    if (!opts.allowSameFamily) throw new CliError(message, 2);
-    process.stderr.write(`dispatch-plan-review: warning: ${message}\n`);
-  }
+    enforceSameFamilyVote(manifest, opts);
   for (const seat of manifest.seats) {
       const seatReview = reviewSeat({
         panel,

@@ -17,6 +17,9 @@ This repository has its own hippo store at `.hippo/` (id `autopilot`, visibility
 
 | Script | Purpose |
 |--------|---------|
+| [`scripts/build-dep-cache.js`](../scripts/build-dep-cache.js) | Build measured suite dependency caches; use before runtime-based selection. Contract: script header and `--help`. |
+| [`scripts/lib/dep-trace-hook.js`](../scripts/lib/dep-trace-hook.js) | Node preload for dependency cache collection; used by the builder. Contract: script header. |
+| [`scripts/lib/dep-trace-bash.sh`](../scripts/lib/dep-trace-bash.sh) | Bash preload for dependency cache collection; used by the builder. Contract: script header. |
 | [`scripts/brain-tier-report.js`](../scripts/brain-tier-report.js) | Daily/since brain-tier spend & opus-without-reason report per lane (`--day YYYY-MM-DD \| --since ISO`, `--over-baseline`, `--text`). Reads `costs.jsonl`, `brain-tier-dispatch.jsonl`, and `cost_fuse.brain_share_baseline` (default 0.3). |
 | [`scripts/lane-ops.sh`](../scripts/lane-ops.sh) | e2e lane operations wrapper (`land`, `dispatch`, `wait`, `audit`): wraps `$SCRATCH/par/land.sh`, `sg lanegit` + `dispatch-hetero.sh`, `fleet watch` (replacing polling loops), and the three daily audits. Contract: script header; test: `hooks/tests/lane-ops.test.sh`. |
 | [`scripts/dispatch-research.sh`](../scripts/dispatch-research.sh) | Thin wrapper that fans out hard-research dispatches to two independent engines from different model families (`--seats <s1>,<s2> --slug <slug> --brief <file> --base <sha>`). Contract: script header; test: `hooks/tests/dispatch-research.test.sh`. |

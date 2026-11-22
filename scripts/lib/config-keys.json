@@ -49,6 +49,35 @@
     }
   },
   "entries": [
+      {
+        "name": "AUTOPILOT_DEP_TRACE_FILE",
+        "kind": "env",
+        "audience": "internal",
+        "class": "test_seam",
+        "default": null,
+        "readers": [
+          "scripts/lib/dep-trace-hook.js",
+          "scripts/lib/dep-trace-bash.sh",
+          "scripts/build-dep-cache.js"
+        ],
+        "doc": null,
+        "relates": [],
+        "note": "Trace destination for runtime dependency collection."
+      },
+      {
+        "name": "AUTOPILOT_DEP_TRACE_ROOT",
+        "kind": "env",
+        "audience": "internal",
+        "class": "test_seam",
+        "default": null,
+        "readers": [
+          "scripts/lib/dep-trace-hook.js",
+          "scripts/build-dep-cache.js"
+        ],
+        "doc": null,
+        "relates": [],
+        "note": "Repository root for runtime dependency collection."
+      },
     {
       "name": "AUTOPILOT_M6_CUTLINE",
       "kind": "env",

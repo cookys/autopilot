@@ -10,6 +10,7 @@ import { decidePage, decideReduce, NO_NAV } from './decide'
 import type { DecideNav } from './decide'
 import { routeKey } from './keys'
 import { makeT } from '../i18n'
+import { applyScroll, newScroll } from '../scrollmath'
 import { displayWidth } from '../model'
 import { parseConsole } from '../console'
 import full from '../fixtures/console/console-full.fixture'
@@ -425,4 +426,67 @@ test('decide card answer-area order is background < blocks < options < advice < 
     expect(out.join('')).toContain('待決在 band 上（d）')
     expect(out.some(r => r.includes('合成背景') || r.includes('[a] 先跑回歸'))).toBe(false)
   }
+})
+
+test('v74 boxed decide scrolls card detail on ArrowDown/PageDown and resets on p/n', () => {
+  const longBg = Array.from({ length: 16 }, (_, i) => `背景第 ${i + 1} 段說明文字`).join('；')
+  const cards = [
+    {
+      id: 'd-long-1', title: '長卡一', question: '這張長卡要怎麼處理？', background: longBg,
+      options: [{ label: '選項甲', detail: '甲的詳細說明' }, { label: '選項乙', detail: '乙的詳細說明' }],
+    },
+    {
+      id: 'd-short-2', title: '短卡二', question: '第二張卡？', background: '簡短背景',
+      options: [{ label: '好', detail: '' }],
+    },
+  ]
+  const pendingScroll = { list: newScroll(), detail: newScroll(), cursor: '' }
+  const draw = (curNav: DecideNav) => frameRows(decidePage, {
+    live: live(), console: con([], []), size: { cols: 80, rows: 14 }, t, nowMs,
+    box: true, pendingScroll, decide: curNav,
+    v74: { decide: cards, nav: { cursor: curNav.cursor, picks: {}, notes: {}, noteMode: false } },
+  } as never, { topAnchor: true }).map(text)
+
+  let curNav = nav({ cursor: 0 })
+  let out = draw(curNav)
+  expect(out.join('\n')).toContain('目前第 1 張')
+  expect(out.join('\n')).toContain('還有')
+
+  // ArrowDown scrolls detail, card stays 1
+  applyScroll(pendingScroll.detail, { by: 1, contentRows: 0 })
+  out = draw(curNav)
+  expect(pendingScroll.detail.offset).toBe(1)
+  expect(out.join('\n')).toContain('目前第 1 張')
+
+  // PageDown scrolls by room
+  const beforePg = pendingScroll.detail.offset
+  applyScroll(pendingScroll.detail, { by: pendingScroll.detail.room, contentRows: 0 })
+  out = draw(curNav)
+  expect(pendingScroll.detail.offset).toBeGreaterThan(beforePg)
+
+  // Scroll to bottom: ↓ 還有 disappears and further down does not move
+  applyScroll(pendingScroll.detail, { by: 999, contentRows: 0 })
+  out = draw(curNav)
+  const bottom = pendingScroll.detail.offset
+  expect(out.some(r => r.includes('↓ 還有'))).toBe(false)
+  applyScroll(pendingScroll.detail, { by: 1, contentRows: 0 })
+  draw(curNav)
+  expect(pendingScroll.detail.offset).toBe(bottom)
+
+  // ArrowUp / PageUp scrolls back
+  applyScroll(pendingScroll.detail, { by: -1, contentRows: 0 })
+  draw(curNav)
+  expect(pendingScroll.detail.offset).toBe(bottom - 1)
+
+  // p/n switches card and resets detail scroll to 0
+  const nAct = routeKey('n', { page: 'decide', paneFocus: true, focusedButton: false, textMode: false })
+  expect(nAct).toEqual({ kind: 'move', by: 1 })
+  curNav = decideReduce(curNav, nAct, {
+    live: live(), console: con([], []), size: { cols: 80, rows: 14 }, t, nowMs,
+    v74: { decide: cards, nav: { cursor: 0, picks: {}, notes: {}, noteMode: false } },
+  } as never, nowMs).nav
+  expect(curNav.cursor).toBe(1)
+  out = draw(curNav)
+  expect(out.join('\n')).toContain('目前第 2 張')
+  expect(pendingScroll.detail.offset).toBe(0)
 })

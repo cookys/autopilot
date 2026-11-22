@@ -2649,7 +2649,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     if (v74Open && !v75PaneOn) { const was = v74KeysHeld; v74KeysHeld = v74KeysHeldNext(was, { kind: 'focus', named, origin: (raw as { origin?: unknown }).origin }); if (was !== v74KeysHeld) void renderLater($) }
     const step = (v75PaneOn && raw.component === 'Pane' && panePage === 'decide') || decideLocal.textMode || bandLegacy || !v74Open ? null : v74TabStep(panePage, named, (raw as { origin?: unknown }).origin)
     if (step !== null) {
-      if (v75On() && panePage === 'decide') {
+      if (panePage === 'decide') {
         scrollPendingPane($, step.by)
         void ringToTab($, panePage)
       } else void frameKey($, step)
@@ -2689,6 +2689,10 @@ export function registerLive(on: Parameters<Register>[0]): void {
       else if (route === 'swallow') return {}
     }
     void v74Keylog($, { handler: 'ui.scroll', component: 'AbovePrompt', by: e.by, page: panePage, cursor: decideLocal.cursor, focusOwner: decideLocal.textMode ? 'v74-note' : 'band', noteOpen: decideLocal.textMode })
+    if (panePage === 'decide' && v74Open && !decideLocal.textMode && !bandLegacy && typeof e.by === 'number' && Math.abs(e.by) >= 10) {
+      scrollPendingPane($, Math.sign(e.by) * Math.max(1, pendingScroll.detail.room))
+      return {}
+    }
     const arrow = v74HostScroll(e, panePage, v74Open, bandLegacy, decideLocal.textMode)
     if (arrow !== null) { void frameKey($, arrow); return {} }
     const model = shellOn && shellMenu === 'd' ? bandModel('decide') : barTab === null ? undefined : bandScroll[barTab]
@@ -2755,7 +2759,7 @@ async function paneTree($: EngineInterface, e: { props: any; surface: string }, 
     folded, boxRows !== null ? null : e.props.scroll ?? null,
     { state: decideState, batch: decideBatch, now: decideNow, inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } },
     decideScroll, fleet, null,
-    legacy ? null : { pages: [...PAGES, ...EXTRA_PAGES], pageId: panePage, ...(!legacy && (boxRows === null || v75On()) ? { pendingScroll } : {}), onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, others: fleet?.others ?? null, nowMs: frameNow, rows: boxRows ?? frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), ...(boxRows === null ? {} : { v74Box: true as const }), view: pageView, decide: { ...decideState, ...decideLocal }, v74, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { void v74Keylog($, { handler: 'input', component: 'Input', element: 'v74-note', len: [...v].length, page: panePage, cursor: decideLocal.cursor, focusOwner: 'v74-note', noteOpen: true }); decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(panePage === 'forge' ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}), ...(panePage === 'spend' ? { poolEta: v75On() ? await readPoolEta($) : undefined } : {}), ...(panePage === 'room' ? { room: parseRoom((await readRoomText($)) ?? '') } : {}) },
+    legacy ? null : { pages: [...PAGES, ...EXTRA_PAGES], pageId: panePage, ...(!legacy ? { pendingScroll } : {}), onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, others: fleet?.others ?? null, nowMs: frameNow, rows: boxRows ?? frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), ...(boxRows === null ? {} : { v74Box: true as const }), view: pageView, decide: { ...decideState, ...decideLocal }, v74, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { void v74Keylog($, { handler: 'input', component: 'Input', element: 'v74-note', len: [...v].length, page: panePage, cursor: decideLocal.cursor, focusOwner: 'v74-note', noteOpen: true }); decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(panePage === 'forge' ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}), ...(panePage === 'spend' ? { poolEta: v75On() ? await readPoolEta($) : undefined } : {}), ...(panePage === 'room' ? { room: parseRoom((await readRoomText($)) ?? '') } : {}) },
   )
   if (boxRows === null) await probePane($, e as never, tree)
   return tree

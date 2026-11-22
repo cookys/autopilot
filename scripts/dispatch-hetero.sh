@@ -6801,7 +6801,18 @@ elif [ "$IS_KIMI" -eq 1 ] && [ "$BIN_FLAG_KIMI" -eq 1 ]; then
   EFFORT_SENT="${KIMI_EFFORT_SEND:-default}"
   run_worker bash -c 'cd "$1" && exec "$2" -m "$4" -p "$(cat "$3")" --output-format text' \
       _ "${WORKER_CWD:-$WT}" "$KIMI_BIN" "$KIMI_SENT_FILE" "$MODEL"
-  rm -rf -- "$KIMI_PARTS_DIR" "$KIMI_SENT_FILE" "$KIMI_PROMPT_FILE"
+  if [ -n "$KIMI_PARTS_DIR" ]; then
+    node -e '
+      const fs = require("fs"), path = require("path");
+      const dir = process.argv[1];
+      const prefix = path.join(process.env.TMPDIR || "/tmp", "dispatch-hetero-kimi-parts-");
+      if (dir.startsWith(prefix) && path.dirname(dir) === path.dirname(prefix)) {
+        for (const name of fs.readdirSync(dir)) fs.unlinkSync(path.join(dir, name));
+        fs.rmdirSync(dir);
+      }
+    ' "$KIMI_PARTS_DIR"
+  fi
+  rm -f -- "$KIMI_SENT_FILE" "$KIMI_PROMPT_FILE"
   KIMI_PARTS_DIR=""
   # Part 3: kimi has no usage command; its result is the quota signal (429 -> exhausted + reset, clean -> available).
   node "$SELF_DIR/lib/kimi-quota-observe.js" observe --rc "${AGENT_EXIT:-0}" --log-file "$LOG" >/dev/null 2>&1 || true

@@ -118,7 +118,15 @@ export function decideReduce(nav: DecideNav, key: KeyAction, ctx: PageCtx, nowMs
   }
   if (nav.armed === true && key.kind !== 'submit' && key.kind !== 'confirm') return decideReduce({ ...nav, armed: false, snap: undefined, stale: false }, key, ctx, nowMs) // any other key cancels the send preview, then does its own work
   if (key.kind === 'style') return same({ style: (nav.style ?? 'A') === 'A' ? 'C' : 'A', bgOpen: false, detailOffset: 0 })
-  if (key.kind === 'expand') return same({ bgOpen: !nav.bgOpen, detailOffset: 0 })
+  if (key.kind === 'expand') {
+    if (nav.bgOpen) return same({ bgOpen: false, detailOffset: 0 })
+    if (d === null) return same({})
+    const bgRaw = d.background ?? ctx.t('v74.d.bg_none')
+    const bgLines = bgRaw.split('\n')
+    const bgLabelW = displayWidth('  ' + ctx.t('v74.d.bg') + '  ')
+    const hasMoreBg = bgLines.length > 1 || displayWidth(bgLines[0]) > ctx.size.cols - bgLabelW
+    return hasMoreBg ? same({ bgOpen: true, detailOffset: 0 }) : same({})
+  }
   if (v74Cards(ctx) !== null && key.kind === 'move') return same({ cursor: Math.min(Math.max(0, m.all.length - 1), Math.max(0, cursor + key.by)), opt: null, detailOffset: 0, bgOpen: false })
   if (v74Cards(ctx) !== null && key.kind === 'cursor') return same({ cursor: Math.min(Math.max(0, m.all.length - 1), Math.max(0, key.at)), opt: null, detailOffset: 0, bgOpen: false })
   if (v74Cards(ctx) !== null && key.kind === 'confirm' && nav.armed !== true) return same({}) // y means nothing outside the send preview
@@ -679,16 +687,25 @@ function renderBoxC(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
     }
     return { body: [countRow, ...full.slice(0, bgRoom)], actions: [] }
   }
-  const build = (between: boolean, desc: boolean, omitted: boolean): Row[] => {
+  const build = (between: boolean, desc: boolean, omitted: boolean): { rows: Row[]; headEnd: number } => {
     const countText = t('v74.d.c_count', { k: cursor + 1, n: cards.length }) + (omitted ? ' ' + DOT + ' ' + t('v74.d.c_desc_omitted') : '')
     const out: Row[] = [[dimSeg(countText)]]
     out.push(...wrapRow([seg(GLYPHS.structure.folded + '  '), seg(c.title, { color: PALETTE.here, here: true }), seg('：' + c.question)], cols, 3))
-    const bgFirst = (c.background ?? t('v74.d.bg_none')).split('\n')[0]
+    const bgRaw = c.background ?? t('v74.d.bg_none')
+    const bgLines = bgRaw.split('\n')
+    const bgFirst = bgLines[0]
     const expandHint = '  ' + DOT + ' ' + t('v74.d.c_expand')
     const bgLabel = '  ' + t('v74.d.bg') + '  '
-    const bgAvail = Math.max(4, cols - displayWidth(bgLabel) - displayWidth(expandHint))
-    const bgLine = displayWidth(bgFirst) <= bgAvail ? bgFirst : truncateToWidth(bgFirst, bgAvail)
-    out.push([dimSeg(bgLabel), seg(bgLine), dimSeg(expandHint)])
+    const bgLabelW = displayWidth(bgLabel)
+    const hasMoreBg = bgLines.length > 1 || displayWidth(bgFirst) > cols - bgLabelW
+    if (hasMoreBg) {
+      const bgAvail = Math.max(4, cols - bgLabelW - displayWidth(expandHint))
+      const bgLine = displayWidth(bgFirst) <= bgAvail ? bgFirst : truncateToWidth(bgFirst, bgAvail)
+      out.push([dimSeg(bgLabel), seg(bgLine), dimSeg(expandHint)])
+    } else {
+      out.push([dimSeg(bgLabel), seg(bgFirst)])
+    }
+    const headEnd = out.length
     const picked = nav.picks[c.id]
     const held = nav.hold?.[c.id] !== undefined
     const sent = nav.sent[c.id] !== undefined && nav.fixing?.[c.id] === undefined
@@ -706,12 +723,14 @@ function renderBoxC(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
     const note = nav.notes[c.id] ?? ''
     const noteText = nav.textMode ? nav.textBuf + CARET : note === '' ? t('v74.d.note_empty') : note
     out.push([seg('  m ' + t('v74.d.note')), seg(noteText)])
-    return out
+    return { rows: out, headEnd }
   }
   let body = build(true, true, false)
-  if (body.length > room) body = build(false, true, false)
-  if (body.length > room) body = build(false, false, true)
-  return { body, actions }
+  if (body.rows.length > room) body = build(false, true, false)
+  if (body.rows.length > room) body = build(false, false, true)
+  const pad = Math.max(0, room - body.rows.length)
+  const padded = pad > 0 ? [...body.rows.slice(0, body.headEnd), ...Array.from({ length: pad }, (): Row => [seg('')]), ...body.rows.slice(body.headEnd)] : body.rows
+  return { body: padded, actions }
 }
 function renderBoxV74(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: number, actions: Row[]): { body: Row[]; actions: Row[] } {
   if ((nav.style ?? 'A') === 'C') return renderBoxC(ctx, cards, nav, cursor, actions)

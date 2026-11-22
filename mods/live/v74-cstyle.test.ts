@@ -39,11 +39,12 @@ const longCards = [
   },
 ]
 
-async function host($, on, opts: { cols?: number; rows?: number; store?: Map<string, unknown> } = {}) {
+async function host($, on, opts: { cols?: number; rows?: number; store?: Map<string, unknown>; cards?: typeof longCards } = {}) {
   const cols = opts.cols ?? 209
   const rows = opts.rows ?? 50
   const maxRows = Math.min(rows - 16, 34)
   const store = opts.store ?? new Map<string, unknown>()
+  const cards = opts.cards ?? longCards
   const root = '/fixture/v74-cstyle'
   const now = Date.parse('2026-11-01T00:00:00Z')
   const clock = mock.clock(on, { now })
@@ -72,7 +73,7 @@ async function host($, on, opts: { cols?: number; rows?: number; store?: Map<str
     value: {
       exitCode: e.argv.includes('decision') ? 0 : 1,
       stdout: e.argv.includes('decision') ? JSON.stringify({
-        cards: longCards.map(c => ({
+        cards: cards.map(c => ({
           card: {
             card_id: c.card_id,
             title: c.title,
@@ -119,42 +120,71 @@ async function host($, on, opts: { cols?: number; rows?: number; store?: Map<str
 
   await draw()
   await key('2')
-  return { draw, key, close: async () => { await band.unmount(); await $.session.end({ reason: 'exit' }) } }
+  return {
+    draw,
+    key,
+    restart: async () => {
+      await band.unmount()
+      band = undefined
+      await $.session.end({ reason: 'exit' })
+      await $.session.start({ surface: 'terminal', cwd: root })
+      await clock.advance(5000)
+      await $.command.run({ command: 'live-pane', args: '' })
+      await draw()
+      await key('2')
+    },
+    close: async () => { await band.unmount(); await $.session.end({ reason: 'exit' }) },
+  }
 }
 
-test('c-style: 209x50 and 120x30 show question, all options, recommendation, count, 1-line bg without scrolling', async ($, on) => {
-  for (const [cols, rows] of [[209, 50], [120, 30]] as const) {
-    const h = await host($, on, { cols, rows })
-    const styleA = text(await h.draw())
-    expect(styleA).toContain('目前第 1 張')
+test('c-style: 209x50 shows question, all options, recommendation, count, 1-line bg without scrolling', async ($, on) => {
+  const h = await host($, on, { cols: 209, rows: 50 })
+  const styleA = text(await h.draw())
+  expect(styleA).toContain('目前第 1 張')
 
-    const styleC = text(await h.key('v'))
-    expect(styleC).toContain('第 1 張，共 3 張')
-    expect(styleC).toContain('Which approach should we take for the migration?')
-    expect(styleC).toContain('Option Alpha')
-    expect(styleC).toContain('Option Beta')
-    expect(styleC).toContain('Option Gamma')
-    expect(styleC).toContain('建議')
-    expect(styleC).toContain('e 展開')
-    expect(styleC).not.toContain('BG-END-1')
-    expect(styleC).not.toContain('捲卡')
-    await h.close()
-  }
+  const styleC = text(await h.key('v'))
+  expect(styleC).toContain('第 1 張，共 3 張')
+  expect(styleC).toContain('Which approach should we take for the migration?')
+  expect(styleC).toContain('Option Alpha')
+  expect(styleC).toContain('Option Beta')
+  expect(styleC).toContain('Option Gamma')
+  expect(styleC).toContain('建議')
+  expect(styleC).toContain('e 展開')
+  expect(styleC).not.toContain('BG-END-1')
+  expect(styleC).not.toContain('捲卡')
+  await h.close()
+})
+
+test('c-style: 120x30 shows question, all options, recommendation, count, 1-line bg without scrolling', async ($, on) => {
+  const h = await host($, on, { cols: 120, rows: 30 })
+  const styleA = text(await h.draw())
+  expect(styleA).toContain('目前第 1 張')
+
+  const styleC = text(await h.key('v'))
+  expect(styleC).toContain('第 1 張，共 3 張')
+  expect(styleC).toContain('Which approach should we take for the migration?')
+  expect(styleC).toContain('Option Alpha')
+  expect(styleC).toContain('Option Beta')
+  expect(styleC).toContain('Option Gamma')
+  expect(styleC).toContain('建議')
+  expect(styleC).toContain('e 展開')
+  expect(styleC).not.toContain('BG-END-1')
+  expect(styleC).not.toContain('捲卡')
+  await h.close()
 })
 
 test('c-style: v toggles A<->C and store remembers across session restart', async ($, on) => {
   const store = new Map<string, unknown>()
-  const h1 = await host($, on, { store })
-  expect(text(await h1.draw())).toContain('目前第 1 張')
-  expect(text(await h1.key('v'))).toContain('第 1 張，共 3 張')
+  const h = await host($, on, { store })
+  expect(text(await h.draw())).toContain('目前第 1 張')
+  expect(text(await h.key('v'))).toContain('第 1 張，共 3 張')
   expect(store.get('decide.style')).toBe('C')
-  await h1.close()
 
-  const h2 = await host($, on, { store })
-  expect(text(await h2.draw())).toContain('第 1 張，共 3 張')
-  expect(text(await h2.key('v'))).toContain('目前第 1 張')
+  await h.restart()
+  expect(text(await h.draw())).toContain('第 1 張，共 3 張')
+  expect(text(await h.key('v'))).toContain('目前第 1 張')
   expect(store.get('decide.style')).toBe('A')
-  await h2.close()
+  await h.close()
 })
 
 test('c-style: e expands background with scroll, Esc returns to card', async ($, on) => {
@@ -184,8 +214,60 @@ test('c-style: p/n switches cards and a/b/c picks option', async ($, on) => {
   const card2 = text(await h.key('n'))
   expect(card2).toContain('第 2 張，共 3 張')
   const picked = text(await h.key('b'))
-  expect(picked).toContain('已選 b')
+  expect(picked).toContain('b: Warn Only')
+  expect(picked).toContain('→')
   const card1 = text(await h.key('p'))
   expect(card1).toContain('第 1 張，共 3 張')
+  await h.close()
+})
+
+test('c-style: Esc focus event closes expanded background without changing card', async ($, on) => {
+  const h = await host($, on)
+  await h.key('v')
+  await h.key('n')
+  const expanded = text(await h.key('e'))
+  expect(expanded).toContain('Context line 0')
+  expect(expanded).toContain('Esc 回到卡片')
+
+  await $.ui.focus({ component: 'AbovePrompt', requestId: 'above-prompt', element: '', origin: { kind: 'person' } })
+  const back = text(await h.draw())
+  expect(back).toContain('第 2 張，共 3 張')
+  expect(back).toContain('Should we enable strict validation by default?')
+  expect(back).not.toContain('Esc 回到卡片')
+  await h.close()
+})
+
+test('c-style: options and note sit at bottom of body', async ($, on) => {
+  const h = await host($, on, { cols: 209, rows: 50 })
+  const tree = await h.key('v')
+  const rows = text(tree).split('\n')
+  const noteIdx = rows.findIndex(r => r.includes('m 附註：'))
+  const sendIdx = rows.findIndex(r => r.includes('[s]'))
+  expect(noteIdx).toBeGreaterThan(0)
+  expect(sendIdx).toBeGreaterThan(noteIdx)
+  expect(sendIdx - noteIdx).toBeLessThanOrEqual(2)
+  await h.close()
+})
+
+test('c-style: 1-line background hides e expand hint and e is a no-op', async ($, on) => {
+  const shortCards = [
+    {
+      card_id: 'short-1',
+      title: 'Short Card',
+      question: 'Pick one?',
+      background: 'Single line background',
+      options: [
+        { label: 'Yes', detail: 'Do it', recommended: true },
+        { label: 'No', detail: 'Skip it', recommended: false },
+      ],
+    },
+  ]
+  const h = await host($, on, { cards: shortCards })
+  const styleC = text(await h.key('v'))
+  expect(styleC).toContain('Single line background')
+  expect(styleC).not.toContain('e 展開')
+  const afterE = text(await h.key('e'))
+  expect(afterE).not.toContain('Esc 回到卡片')
+  expect(afterE).toContain('Pick one?')
   await h.close()
 })

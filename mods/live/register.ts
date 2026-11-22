@@ -1769,6 +1769,8 @@ export function v74KeysHeldAfter(was: boolean, named: string | undefined, origin
 }
 // r11 #4: while the send preview is up, a focus event that names no band element is the host's Esc handing the keyboard to the prompt; it cancels the preview instead (one meaning for Esc there).
 export const v74EscCancelsPreview = (armed: boolean | undefined, open: boolean, page: string, named: string | undefined): boolean => open && armed === true && page === 'decide' && !bandElement(named)
+export const v74EscClosesBg = (bgOpen: boolean | undefined, textMode: boolean, open: boolean, page: string, named: string | undefined): boolean =>
+  open && bgOpen === true && !textMode && page === 'decide' && !bandElement(named)
 // r11 #2: every change of the border word goes through this one function, so the sequence open -> keys -> send -> Esc is testable without the host.
 // A send posts the [待決回覆] line to the prompt and starts a turn; the host then gives the first Esc to the turn (it stops it) and raises no focus event for it, so the pane cannot tell
 // when the prompt has the keyboard again. After a send the word therefore falls back to `ctrl+x tab` and comes back only on evidence: a key that reached the pane or a focus event of the person.
@@ -2642,6 +2644,10 @@ export function registerLive(on: Parameters<Register>[0]): void {
     if (decideLocal.textMode && noteArmed && named !== 'v74-note' && (named === undefined || named === '')) {
       noteArmed = false
       void frameKey($, { kind: 'text_cancel' }).then(() => { if (v75Esc) void refocusBand($) })
+      return {}
+    }
+    if (v74EscClosesBg(decideLocal.bgOpen, decideLocal.textMode, v74Open, panePage, named)) {
+      void frameKey($, { kind: 'expand' })
       return {}
     }
     if (v74EscCancelsPreview(decideLocal.armed, v74Open, panePage, named) || (v75Esc && decideLocal.armed === true && panePage === 'decide' && (named === undefined || named === '') && v75Was !== 'prompt')) {

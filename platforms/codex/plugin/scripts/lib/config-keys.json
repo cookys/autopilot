@@ -55,7 +55,9 @@
       "doc": "docs/guide/settings-reference.md",
       "name": "AUTOPILOT_HETERO_RUNS_DIR",
       "default": null,
-      "readers": ["scripts/lib/hetero-run-registry.js"],
+      "readers": [
+        "scripts/lib/hetero-run-registry.js"
+      ],
       "summary": "Overrides the hetero run registry directory."
     },
     {
@@ -64,7 +66,9 @@
       "doc": "docs/guide/settings-reference.md",
       "name": "AUTOPILOT_OWNER_MEMBER",
       "default": null,
-      "readers": ["scripts/dispatch-hetero.sh"],
+      "readers": [
+        "scripts/dispatch-hetero.sh"
+      ],
       "summary": "Sets the owner member recorded for hetero runs."
     },
     {
@@ -8835,6 +8839,46 @@
       ],
       "doc": null,
       "relates": []
+    },
+    {
+      "kind": "env",
+      "audience": "internal",
+      "doc": null,
+      "name": "AUTOPILOT_HANGAR_ADDRESS",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "hooks/context-land-gate.js"
+      ],
+      "relates": [],
+      "note": "Fleet address override for the hangar recipient of the context-land gate message."
+    },
+    {
+      "kind": "env",
+      "audience": "internal",
+      "doc": null,
+      "name": "AUTOPILOT_OPS_ADDRESS",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "hooks/context-land-gate.js"
+      ],
+      "relates": [],
+      "note": "Fleet address override for the ops recipient of the context-land gate message."
+    },
+    {
+      "kind": "config_key",
+      "audience": "internal",
+      "doc": null,
+      "name": "task_id",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "hooks/context-land-gate.js"
+      ],
+      "relates": [],
+      "note": "Not an autopilot setting: the context-land gate reads task_id from a fleet task JSON payload.",
+      "type": "string"
     }
   ]
 }

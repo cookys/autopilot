@@ -424,6 +424,76 @@ function blankLazyRequires(raw, file) {
   if (!/\.(js|mjs|cjs)$/.test(file) || !LAZY_MARK.test(raw)) return raw;
   return raw.split('\n').map((l) => (LAZY_MARK.test(l) ? l.replace(LAZY_REQ, 'require(null)') : l)).join('\n');
 }
+// Function-body require (defect 1): a one-line require('./x') inside a NAMED function body that nothing calls from the module's top
+// level (directly or through another live named function) is not loaded when the module loads, so it makes no edge. Anonymous
+// functions, methods and arrow bodies without a name stay transparent (their requires keep their edge), and a require split over
+// lines is left alone. Input is comment-stripped JavaScript.
+const FN_HEAD = /(?:\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:function\b\s*\*?\s*[A-Za-z_$]*[\w$]*\s*\(|(?:\([^()]*\)|[A-Za-z_$][\w$]*)\s*=>\s*\{)|\b(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)\s*\()/g;
+const ONE_LINE_REQ = /require\([ \t]*(['"])[^'"\n]+\1[ \t]*\)/g;
+function blankFunctionRequires(text, file, imported) {
+  if (!/\.(js|mjs|cjs)$/.test(file) || !/\b(?:function|=>)/.test(text) || !ONE_LINE_REQ.test(text)) return text;
+  ONE_LINE_REQ.lastIndex = 0;
+  const n = text.length;
+  // string/template skip map: positions inside strings are not code
+  const code = new Uint8Array(n).fill(1);
+  for (let i = 0; i < n; i++) {
+    const c = text[i];
+    if (c === '"' || c === "'" || c === '`') {
+      let j = i + 1;
+      while (j < n && text[j] !== c && !(c !== '`' && text[j] === '\n')) j += text[j] === '\\' ? 2 : 1;
+      for (let k = i; k <= j && k < n; k++) code[k] = 0;
+      i = j;
+    }
+  }
+  // body '{' index -> name, for named function heads
+  const bodies = new Map();
+  for (const m of text.matchAll(FN_HEAD)) {
+    if (!code[m.index]) continue;
+    const name = m[1] || m[2];
+    let j = m.index + m[0].length;
+    if (!m[0].endsWith('{')) { // skip the parameter list to its closing paren
+      let depth = 1;
+      while (j < n && depth > 0) { if (code[j]) { if (text[j] === '(') depth++; else if (text[j] === ')') depth--; } j++; }
+      while (j < n && /\s/.test(text[j])) j++;
+      if (text[j] !== '{') continue;
+    } else j--;
+    bodies.set(j, name);
+  }
+  if (bodies.size === 0) return text;
+  // walk braces: every position gets its innermost named scope
+  const fns = []; // {name, start, end}
+  const stack = [];
+  for (let i = 0; i < n; i++) {
+    if (!code[i]) continue;
+    if (text[i] === '{') stack.push(bodies.has(i) ? { name: bodies.get(i), start: i, end: n } : null);
+    else if (text[i] === '}' && stack.length) { const t = stack.pop(); if (t) { t.end = i; fns.push(t); } }
+  }
+  for (const t of stack) if (t) fns.push(t);
+  const scopeOf = (pos) => { let best = null; for (const t of fns) if (t.start < pos && pos < t.end && (!best || t.start > best.start)) best = t; return best; };
+  const live = new Set();
+  // An exported function of a module that another file requires is an entry point (the importer calls it): live.
+  if (imported && imported.has(base(file).replace(/\.(js|mjs|cjs)$/, ''))) {
+    for (const m of text.matchAll(/(?:module\.)?exports(?:\.[\w$]+)?\s*=\s*([^;]*)/g)) for (const id of m[1].match(/[A-Za-z_$][\w$]*/g) || []) live.add(id);
+  }
+  const calls = []; // [callerScopeName|null, callee]
+  for (const m of text.matchAll(/(^|[^.\w$])([A-Za-z_$][\w$]*)\s*\(/g)) {
+    const at = m.index + m[1].length;
+    if (!code[at] || /\bfunction\s*\*?\s*$/.test(text.slice(Math.max(0, at - 20), at))) continue;
+    const sc = scopeOf(at);
+    calls.push([sc ? sc.name : null, m[2]]);
+  }
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const [caller, callee] of calls) if ((caller === null || live.has(caller)) && !live.has(callee)) { live.add(callee); grew = true; }
+  }
+  let out = '', last = 0;
+  for (const m of text.matchAll(ONE_LINE_REQ)) {
+    if (!code[m.index]) continue;
+    const sc = scopeOf(m.index);
+    if (sc && !live.has(sc.name)) { out += text.slice(last, m.index) + 'require(null)'; last = m.index + m[0].length; }
+  }
+  return out + text.slice(last);
+}
 function mentions(text) {
   const exts = new Set(), bares = new Set(), slashBares = new Set(), globs = [], strong = new Set(), segs = new Set(), paths = new Set();
   for (const m of text.matchAll(RE_SEG)) segs.add(m[1]);
@@ -540,10 +610,16 @@ const stripComments = (t, file) => {
 function buildGraph(tree) {
   const codeFiles = tree.files.filter((f) => isCode(f) && (isSuite(f) || !NOT_PROPAGATING.test(f)));
   const refs = new Map(); // file -> mentions
+  const stripped = new Map();
+  const imported = new Set(); // stems that another code file requires or sources
   for (const f of codeFiles) {
     const t = tree.read(f);
-    if (t != null) refs.set(f, mentions(stripComments(blankLazyRequires(t, f), f)));
+    if (t == null) continue;
+    const text = stripComments(blankLazyRequires(t, f), f);
+    stripped.set(f, text);
+    for (const stem of mentions(text).strong) imported.add(stem);
   }
+  for (const [f, text] of stripped) refs.set(f, mentions(blankFunctionRequires(text, f, imported)));
   const byExt = new Map(), byBare = new Map(), bySlashBare = new Map(), bySeg = new Map(), byPath = new Map(); // token -> Set(referrer)
   const add = (m, k, f) => { if (!m.has(k)) m.set(k, new Set()); m.get(k).add(f); };
   for (const [f, r] of refs) {
@@ -569,7 +645,12 @@ function buildGraph(tree) {
       globRefs.push({ file: f, ...g });
     }
   }
-  return { refs, byExt, byBare, bySlashBare, bySeg, byPath, globRefs, genericStems };
+  // A sourced helper (defect 2): a non-suite shell file outside the hook-tests directory that a shell file sources. Its incidental
+  // name mentions are not what the sourcing suites depend on, so they make no edge (its own source/require and glob edges stay).
+  const sourced = new Set();
+  for (const [f, r] of refs) if (/\.(sh|bash|zsh)$/.test(f)) for (const stem of r.strong) sourced.add(stem);
+  const sourcedHelpers = new Set(codeFiles.filter((f) => /\.(sh|bash|zsh)$/.test(f) && !isSuite(f) && !f.startsWith(HOOK_TESTS_DIR + '/') && sourced.has(base(f).replace(/\.(sh|bash|zsh)$/, ''))));
+  return { refs, byExt, byBare, bySlashBare, bySeg, byPath, globRefs, genericStems, sourcedHelpers };
 }
 
 // -> Map(referrer -> 'strong'|'weak')
@@ -588,6 +669,7 @@ function referrersOf(graph, p) {
     // Rule 11: a shared test helper (hooks/tests/lib.sh) naming a prose file (cp README.md ...) serves a few of
     // the suites that source it, not all of them. Prose is a seed only; that mention makes no edge.
     if (/^(md|txt)$/.test(extOf(p)) && isSharedTestHelper(f)) continue;
+    if (graph.sourcedHelpers.has(f) && kind(f) === 'weak') continue;
     out.set(f, kind(f));
   }
   if (isCode(p)) {
@@ -597,10 +679,11 @@ function referrersOf(graph, p) {
     for (const f of graph.byBare.get(bare) || []) {
       if (out.has(f)) continue;
       const k = kind(f);
+      if (graph.sourcedHelpers.has(f) && k === 'weak') continue;
       if (generic && k !== 'strong') continue;
       out.set(f, k);
     }
-    for (const f of graph.bySlashBare.get(bare) || []) if (!out.has(f)) out.set(f, kind(f));
+    for (const f of graph.bySlashBare.get(bare) || []) if (!out.has(f) && !(graph.sourcedHelpers.has(f) && kind(f) === 'weak')) out.set(f, kind(f));
   }
   if (!isCode(p)) {
     // data file: any text naming one of its ancestor directories (except generic top-level ones) refers to it

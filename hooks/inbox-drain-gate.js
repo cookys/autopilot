@@ -110,7 +110,8 @@ function main() {
       try { st = JSON.parse(fs.readFileSync(stateFile, 'utf8')); } catch { st = {}; }
     }
     if (!st || typeof st !== 'object') st = {};
-    const blocks = Number.isInteger(st.inboxDrainBlocks) ? st.inboxDrainBlocks : 0;
+    // A fresh Stop (stop_hook_active not set) is a new turn: the 2-block cap counts per turn, not per session.
+    const blocks = payload.stop_hook_active !== true ? 0 : (Number.isInteger(st.inboxDrainBlocks) ? st.inboxDrainBlocks : 0);
     if (blocks >= MAX_BLOCKS) {
       return;
     }

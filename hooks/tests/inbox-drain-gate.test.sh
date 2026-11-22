@@ -25,7 +25,8 @@ STOP_PAYLOAD="{\"session_id\":\"$SID\",\"cwd\":\"$TEST_TMP\",\"hook_event_name\"
 
 run_gate() {
   local sid="${1:-$SID}"
-  local payload="{\"session_id\":\"$sid\",\"cwd\":\"$TEST_TMP\",\"hook_event_name\":\"Stop\"}"
+  local active="${2:-false}"
+  local payload="{\"session_id\":\"$sid\",\"cwd\":\"$TEST_TMP\",\"hook_event_name\":\"Stop\",\"stop_hook_active\":$active}"
   printf '%s' "$payload" | node "$GATE" 2>"$TEST_TMP/gate.err"
 }
 
@@ -66,12 +67,16 @@ assert_not_contains "$out1" "msg-unread-16" "does not list young unread item 16"
 assert_contains "$out1" "scripts/pm-inbox-done.js" "includes pm-inbox-done.js instruction"
 
 # 2nd block in same turn still blocks
-out2="$(AUTOPILOT_FLEET_ADDRESS="cookys/openclaw/pm--claude" run_gate "$SID")"
+out2="$(AUTOPILOT_FLEET_ADDRESS="cookys/openclaw/pm--claude" run_gate "$SID" true)"
 assert_contains "$out2" '"decision":"block"' "PM seat 2nd attempt still blocks"
 
 # 3rd attempt in same turn does NOT block
-out3="$(AUTOPILOT_FLEET_ADDRESS="cookys/openclaw/pm--claude" run_gate "$SID")"
+out3="$(AUTOPILOT_FLEET_ADDRESS="cookys/openclaw/pm--claude" run_gate "$SID" true)"
 assert_eq "" "$out3" "PM seat 3rd attempt does not block"
+
+# New turn (stop_hook_active false) resets the per-turn cap: blocks again (was a per-session cap before)
+out4="$(AUTOPILOT_FLEET_ADDRESS="cookys/openclaw/pm--claude" run_gate "$SID")"
+assert_contains "$out4" '"decision":"block"' "PM seat blocks again on a new turn"
 
 # 2. Non-PM seat is not blocked
 SID_OTHER="22222222-2222-3333-4444-555555555555"

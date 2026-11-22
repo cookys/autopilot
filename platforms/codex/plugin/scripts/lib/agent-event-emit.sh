@@ -6,6 +6,7 @@
 _AEE_SEQ=0
 _AEE_RUN_ID=""
 _AEE_TASK_ID=""
+_AEE_FLEET_TASK_ID=""
 _AEE_STAGE="build"
 _AEE_RUNNER="claude"
 _AEE_SEAT=""
@@ -50,6 +51,18 @@ _aee_map_stage() {
   esac
 }
 
+_aee_fleet_bin() {
+  if [ -n "${AUTOPILOT_FLEET_BIN:-}" ]; then
+    printf '%s' "$AUTOPILOT_FLEET_BIN"
+  elif command -v fleet >/dev/null 2>&1; then
+    command -v fleet
+  elif [ -x "${HOME:-}/.local/bin/fleet" ]; then
+    printf '%s' "$HOME/.local/bin/fleet"
+  else
+    return 1
+  fi
+}
+
 _aee_resolve_seat() {
   if [ -n "${AUTOPILOT_FLEET_ADDRESS:-}" ]; then
     printf '%s' "$AUTOPILOT_FLEET_ADDRESS"
@@ -64,7 +77,8 @@ _aee_resolve_seat() {
       return 0
     fi
   fi
-  local fleet_bin="${AUTOPILOT_FLEET_BIN:-fleet}"
+  local fleet_bin
+  fleet_bin="$(_aee_fleet_bin)" || fleet_bin="fleet"
   local who
   who="$("$fleet_bin" whoami 2>/dev/null | head -n 1 | tr -d '\r\n' || true)"
   if [ -n "$who" ]; then
@@ -91,7 +105,8 @@ agent_event_emit_init() {
 
   _AEE_SEQ=0
   _AEE_STAGE="$(_aee_map_stage "$role")"
-  _AEE_RUNNER="$(_aee_map_runner "$runner")"
+  _AEE_RUNNER="fleet"
+  _AEE_FLEET_TASK_ID="$task_id"
   if [ -n "$run_id" ]; then
     _AEE_RUN_ID="$run_id"
   else
@@ -110,6 +125,7 @@ _aee_emit_line() {
   local ts
   ts="$(_aee_ts_ms)"
   local session_id="${AUTOPILOT_SESSION_ID:-$$}"
+  [ -z "$_AEE_FLEET_TASK_ID" ] || session_id="fleet-$_AEE_FLEET_TASK_ID"
   local lane="${AUTOPILOT_LANE:-autopilot}"
   local event_id="${_AEE_RUN_ID}-${_AEE_SEQ}"
   local seat="${_AEE_SEAT:-$(_aee_resolve_seat)}"
@@ -143,7 +159,8 @@ _aee_emit_line() {
   fi
   json="${json}}"
 
-  local fleet_bin="${AUTOPILOT_FLEET_BIN:-fleet}"
+  local fleet_bin
+  fleet_bin="$(_aee_fleet_bin)" || fleet_bin="fleet"
   if ! printf '%s\n' "$json" | "$fleet_bin" event emit >/dev/null 2>&1; then
     echo "agent-event-emit: fleet event emit failed (state=$state, run_id=$_AEE_RUN_ID)" >&2
   fi

@@ -1157,8 +1157,8 @@ function selectWith(bin, r, head) {
 }
 const LAZY_LAYOUT = {
   'scripts/lib/watcher.js': 'module.exports = 1;\n',
-  'scripts/gate.js': "const on = process.env.GATE_ON;\nfunction start() {\n  if (!on) return;\n  const w = require('./lib/watcher.js'); // affected-suites: lazy\n  return w;\n}\nmodule.exports = { start };\n",
-  'scripts/eager.js': "function run() {\n  const w = require('./lib/watcher.js');\n  return w;\n}\nmodule.exports = { run };\n",
+  'scripts/gate.js': "const on = process.env.GATE_ON;\nfunction start() {\n  if (!on) return;\n  const w = require('./lib/watcher.js'); // affected-suites: lazy\n  return w;\n}\nstart();\nmodule.exports = { start };\n",
+  'scripts/eager.js': "function run() {\n  const w = require('./lib/watcher.js');\n  return w;\n}\nrun();\nmodule.exports = { run };\n",
   'hooks/tests/gate.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/gate.js"\n',
   'hooks/tests/eager.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/eager.js"\n',
   'hooks/tests/watcher.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/lib/watcher.js"\n',
@@ -1253,8 +1253,12 @@ function textTests(re) {
   const out = spawnSync('git', ['grep', '-lE', re, '--', ...ROOTS], { cwd: REPO, stdio: 'pipe' }).stdout.toString();
   return out.split('\n').filter((f) => /\.test\.(js|ts|sh)$/.test(f) && fs.existsSync(path.join(REPO, f)));
 }
+// A mods/ test that only RENDERS the repair command text `autopilot status runs --watch` (the live pane's band and pages) neither runs nor
+// loads runs-watch.js: the mods runners pick it up through the mods tree, not through src/status. Only the run/load patterns count there.
 function runsWatchSuites() {
-  return textTests('AUTOPILOT_RUNS_WATCH_AUTOSTART=1|status runs --watch|startWatcherDetached|runs-watch([^-A-Za-z0-9_]|$)');
+  const all = textTests('AUTOPILOT_RUNS_WATCH_AUTOSTART=1|status runs --watch|startWatcherDetached|runs-watch([^-A-Za-z0-9_]|$)');
+  const strict = new Set(textTests('AUTOPILOT_RUNS_WATCH_AUTOSTART=1|startWatcherDetached|runs-watch([^-A-Za-z0-9_]|$)'));
+  return all.filter((f) => !f.startsWith('mods/') || strict.has(f));
 }
 function missingRunsWatch(bin, seed) {
   const p = spawnSync('node', [bin, '--root', REPO, '--files', seed, '--json'], { stdio: 'pipe', maxBuffer: 1 << 28 });
@@ -1990,5 +1994,42 @@ test('BL-0467 negative control: threshold 1.01 suppresses the >50% warning', () 
     assert.strictEqual(jsonRes.status, 0, jsonRes.stderr);
     const doc = JSON.parse(jsonRes.stdout);
     assert.strictEqual(doc.over_half, undefined);
+  } finally { r.cleanup(); }
+});
+
+const SOURCED_HELPER_LAYOUT = {
+  ...LAYOUT,
+  'scripts/lib/common.sh': '#!/usr/bin/env bash\necho "see other-tool.sh for the sibling"\n',
+  'scripts/other-tool.sh': 'echo tool\n',
+  'hooks/tests/uses-common.test.sh': '#!/usr/bin/env bash\nsource "$ROOT/scripts/lib/common.sh"\necho hi\n',
+  'hooks/tests/other-tool.test.sh': '#!/usr/bin/env bash\nbash "$ROOT/scripts/other-tool.sh"\n',
+};
+
+test('a shell suite that sources a shared helper depends on the helper file, not on the helper\'s incidental mentions', () => {
+  const r = makeRepo(SOURCED_HELPER_LAYOUT);
+  const bin = mutant([["if (graph.sourcedHelpers.has(f) && kind(f) === 'weak') continue;", '']]);
+  try {
+    const mention = r.change({ 'scripts/other-tool.sh': 'echo tool2\n' });
+    const out = r.select(mention);
+    assert.ok(out.suites.includes('hooks/tests/other-tool.test.sh'));
+    assert.ok(!out.suites.includes('hooks/tests/uses-common.test.sh'));
+    assert.ok(selectWith(bin, r, mention).suites.includes('hooks/tests/uses-common.test.sh'), 'negative control: without the rule the sourcing suite is over-selected');
+    // the helper itself still reaches the suites that source it
+    const own = r.select(r.change({ 'scripts/lib/common.sh': '#!/usr/bin/env bash\necho changed\n' }));
+    assert.ok(own.suites.includes('hooks/tests/uses-common.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('lazy function require does not select an unrelated suite', () => {
+  const r = makeRepo({ ...LAYOUT,
+    'scripts/lib/lazy-target.js': 'module.exports = 1;\n',
+    'scripts/lazy-user.js': "function later() { return require('./lib/lazy-target.js'); }\nmodule.exports = later;\n",
+    'hooks/tests/lazy-user.test.sh': 'node scripts/lazy-user.js\n',
+    'hooks/tests/lazy-target.test.sh': 'node scripts/lib/lazy-target.js\n',
+  });
+  try {
+    const out = r.select(r.change({ 'scripts/lib/lazy-target.js': 'module.exports = 2;\n' }));
+    assert.ok(out.suites.includes('hooks/tests/lazy-target.test.sh'));
+    assert.ok(!out.suites.includes('hooks/tests/lazy-user.test.sh'));
   } finally { r.cleanup(); }
 });

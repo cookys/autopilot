@@ -1,0 +1,6 @@
+The autopilot plugin sent a message:
+[待決回覆]
+d-22abf53f｜可以讓 hangar 唯讀收集一次 fleet 席（open… → A 可以
+d-54cf7c0f｜11-23 輪換窗過後，在 NPM 開一個搬遷專用的管理員帳… → 你開好就好 不要交工作給我
+
+This is how Claude Code surfaces a prompt a plugin submits between turns — it starts this turn in the user's place. Address the message above.

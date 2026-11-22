@@ -1,0 +1,6 @@
+The autopilot plugin sent a message:
+[待決回覆]
+d-4723aa10｜ThinkSmart 已經改讀新的儀表板資料，要撤掉它舊的唯… → A｜01M7Y46V22DA34MJATGPSRVSY5
+d-99ab5782｜pico、arm、aliyun-bj 三台雲端主機，要照 f… → A｜01M7Y46V2M30N670GYSFR2RQ9H
+
+This is how Claude Code surfaces a prompt a plugin submits between turns — it starts this turn in the user's place. Address the message above.

@@ -3600,6 +3600,31 @@ DISPATCH_LANE_JSON=null # read from the original brief before it is repacked; cr
 declare -F dispatch_lane_json >/dev/null 2>&1 && DISPATCH_LANE_JSON="$(dispatch_lane_json "$PROMPT_FILE")"
 declare -F dispatch_export_attribution >/dev/null 2>&1 && dispatch_export_attribution "$PROMPT_FILE" # the child (its cost-tracker rows) inherits lane + fleet task
 [ -z "${HETERO_FLEET_TASK_ID:-}" ] || export AUTOPILOT_FLEET_TASK="$HETERO_FLEET_TASK_ID"
+# Cloud fallback through pace-select (fleet task 01M806DD / 01M7QARG): the local fallback
+# reasons (local_ctx_over, no free slot / shed-local, cn_gate_barred) must not hardcode codex
+# any more — pace-select picks the cloud seat the pace ranking wants to spend, and only a
+# pace failure or empty result falls back to codex. Sets RUNNER/MODEL/ENDPOINT and
+# PACE_CHOICE_JSON (manifest pace_choice), keeps the caller's LOCAL_FALLBACK_JSON reason, and
+# raises LOCAL_CTX_CODEX_FALLBACK so the default pace block below does not run a second time.
+pace_cloud_fallback() {
+  _pcf_args=(--dispatch --role "${PACE_ROLE:-implementer}")
+  [ -z "${PROMPT_FILE:-}" ] || _pcf_args+=(--prompt-file "$PROMPT_FILE")
+  local _pcf _pcf_ep
+  if _pcf="$(node "$SELF_DIR/pace-select.js" "${_pcf_args[@]}")" && [ -n "$_pcf" ]; then
+    { IFS= read -r RUNNER; IFS= read -r MODEL; IFS= read -r _pcf_ep; IFS= read -r ENGINE_CHOICE_JSON; IFS= read -r PACE_CHOICE_JSON; } <<< "$_pcf"
+    ENDPOINT="$_pcf_ep"
+    MODEL_IS_DEFAULT=0
+    LOCAL_CTX_CODEX_FALLBACK=1
+    if [ "$MODEL_SUPPLIED" -eq 0 ] && printf '%s' "$MODEL" | grep -qiE 'carbon|argon|astra|fable|opus'; then
+      RUNNER="codex"; MODEL=""; ENDPOINT=""; PACE_CHOICE_JSON=""; ENGINE_CHOICE_JSON=""
+      return 1
+    fi
+    return 0
+  fi
+  RUNNER="codex"; MODEL=""; ENDPOINT=""; PACE_CHOICE_JSON=""; ENGINE_CHOICE_JSON=""
+  LOCAL_CTX_CODEX_FALLBACK=1
+  return 1
+}
 # An unpinned implementer uses an available local qwen or GLM seat when its endpoint
 # is ready, a gateway lease is granted, the estimated prompt context fits, and the CN
 # gate allows that seat (operator via PM 01M7XHF4). Otherwise the unpinned path
@@ -3711,12 +3736,10 @@ if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_S
       release_local_lease || true
       _gate_detail="${_gate_msg%%[[:space:]]*}"
       _gate_detail="${_gate_detail:-cn_model_dispatch_barred}"
-      RUNNER="codex"
-      MODEL=""
-      ENDPOINT=""
+      pace_cloud_fallback || true
       LOCAL_CTX_CODEX_FALLBACK=1
       LOCAL_FALLBACK_JSON="$(node -e 'process.stdout.write(JSON.stringify({reason:"cn_gate_barred",detail:process.argv[1],family:process.argv[2]}))' "$_gate_detail" "$_slot_family")"
-      printf 'local-slot: cn_gate_barred family=%s -> codex\n' "$_slot_family" >&2
+      printf 'local-slot: cn_gate_barred family=%s -> %s\n' "$_slot_family" "$RUNNER" >&2
       unset _gate_detail
     fi
   else
@@ -3725,12 +3748,13 @@ if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_S
     LOCAL_LEASE_DETAIL="$(node -e 'try{const o=JSON.parse(process.argv[1]);process.stdout.write(o&&o.detail||"")}catch{}' "$_lease_json")"
     LOCAL_FALLBACK_JSON="$(printf '%s\n' "$_slot_parsed" | sed -n '6p')"
     LOCAL_SLOTS_JSON=null
-    if [ "$SHED_ROUTE_TARGET" = "local" ]; then RUNNER="codex"; fi
+    if [ "$SHED_ROUTE_TARGET" = "local" ]; then pace_cloud_fallback || true; fi
     if [ "$(node -e 'try{process.stdout.write(JSON.parse(process.argv[1]).reason||"")}catch{}' "$LOCAL_FALLBACK_JSON")" = "local_ctx_over" ]; then
-      printf 'local-slot: local_ctx_over est_tokens=%s limit=%s -> codex\n' \
+      if [ "$RUNNER" = "auto" ]; then pace_cloud_fallback || true; fi
+      printf 'local-slot: local_ctx_over est_tokens=%s limit=%s -> %s\n' \
         "$(node -e 'const o=JSON.parse(process.argv[1]);process.stdout.write(String(o.est_tokens))' "$LOCAL_FALLBACK_JSON")" \
-        "$(node -e 'const o=JSON.parse(process.argv[1]);process.stdout.write(String(o.limit))' "$LOCAL_FALLBACK_JSON")" >&2
-      RUNNER="codex"
+        "$(node -e 'const o=JSON.parse(process.argv[1]);process.stdout.write(String(o.limit))' "$LOCAL_FALLBACK_JSON")" \
+        "$RUNNER" >&2
       LOCAL_CTX_CODEX_FALLBACK=1
     fi
   fi

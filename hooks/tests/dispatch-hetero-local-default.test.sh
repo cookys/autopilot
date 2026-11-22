@@ -644,4 +644,77 @@ FALLBACK_LINES="$(awk '/^local-slot: local_ctx_over / { count++ } END { print co
 assert_eq "1" "$FALLBACK_LINES" "m: exactly one local context fallback line"
 assert_not_contains "$(cat "$LEASE_LOG")" '"method":"POST","url":"/v1/local/lease"' "m: shed/local context fallback never requests a lease"
 
+# (n) the three local fallback reasons route through pace-select (fleet task 01M806DD):
+# with a present pace file the cloud fallback picks the pace seat (grok) and records
+# pace_choice in the manifest; with the pace file missing it falls back to codex
+# (cases l, l2, m above). Explicit --runner cases (j, k) are unchanged.
+PACE_N="$TEST_TMP/pace-n.json"
+node -e 'const fs=require("fs");fs.writeFileSync(process.argv[1],JSON.stringify({schema:"capacity.pace/1",generated_at:new Date().toISOString(),rows:[{pool:"grok-cli",class:"other",stale:false,used_pct:30,expected_pct:40,hours_to_reset:24}]}))' "$PACE_N"
+
+# (n1) local_ctx_over with a live pace file: the fallback seat is the pace pick.
+PROMPT="$TEST_TMP/prompt-n1.txt"
+printf 'Fleet-Task: 01ARZ3NDEKTSV4RRFFQ69G5FAV\nReview `big/generated.ts` and update the implementation.\n' > "$PROMPT"
+RUNS="$TEST_TMP/runs-n1"; mkdir -p "$RUNS"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_PACE_FILE="$PACE_N" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
+  "$SCRIPT" --no-verify-tip --context-window off --grok-bin "$STUB_GROK" --branch feat/local-n1 --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/n1.err")"; EXIT=$?
+MF="$(find "$RUNS" -name "*.manifest.json" | head -1)"
+assert_eq "$EXIT" "0" "n1: local_ctx_over pace fallback exits 0"
+assert_eq "grok" "$(json_get "$OUT" runner)" "n1: local_ctx_over fallback uses the pace seat (grok)"
+assert_eq "$(node -e 'const o=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(o.local_fallback.reason||"")' "$MF")" "local_ctx_over" "n1: manifest keeps the local_ctx_over reason"
+assert_contains "$(cat "$TEST_TMP/n1.err")" 'local-slot: local_ctx_over est_tokens=' "n1: context fallback is reported"
+assert_contains "$(cat "$TEST_TMP/n1.err")" '-> grok' "n1: fallback line names the pace seat"
+
+# (n2) shed-local with a live pace file: the shed fallback also routes through pace.
+PROMPT="$TEST_TMP/prompt-n2.txt"
+printf 'Fleet-Task: 01ARZ3NDEKTSV4RRFFQ69G5FAV\nTask-Class: simple-script\nWork-Class: simple-script\nTask-Shape: from-scratch\nedit impl-defaults-fixture.txt\n' > "$PROMPT"
+CFG="$TEST_TMP/ctx-config-n2.json"
+printf '%s\n' '{"local_context_tokens":1,"local_output_reserve_tokens":0}' > "$CFG"
+BURN_MORE="$TEST_TMP/burn-more-n2.json"
+node -e 'const fs=require("fs");fs.writeFileSync(process.argv[1],JSON.stringify({schema:"capacity.burn_more/1",run_id:"test-n2",generated_at:new Date().toISOString(),shed:{pools:[{pool:"test-pool",seats:["test-lane--claude"]}],rules:{mechanical_classes:["simple-script"],targets_in_order:["local-27b"]}}}))' "$BURN_MORE"
+RUNS="$TEST_TMP/runs-n2"; mkdir -p "$RUNS"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_PACE_FILE="$PACE_N" AUTOPILOT_CONFIG_FILE="$CFG" \
+  AUTOPILOT_BURN_MORE="$BURN_MORE" AUTOPILOT_LANE=test-lane AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
+  "$SCRIPT" --no-verify-tip --context-window off --grok-bin "$STUB_GROK" --branch feat/local-n2 --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/n2.err")"; EXIT=$?
+MF="$(find "$RUNS" -name "*.manifest.json" | head -1)"
+assert_eq "$EXIT" "0" "n2: shed-local pace fallback exits 0"
+assert_eq "grok" "$(json_get "$OUT" runner)" "n2: shed-local fallback uses the pace seat (grok)"
+
+# (n4) an expensive pace pick (model carries an opus/fable/... token) falls back to codex
+# and clears BOTH pace_choice and engine_choice in the manifest.
+ROLES_N4="$TEST_TMP/pace-roles-n4.json"
+PACE_N4="$TEST_TMP/pace-n4.json"
+node -e '
+const fs = require("fs");
+const roles = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+roles.pools["test-expensive"] = { key: "test-key", runner: "codex", model: "opus-expensive-test", effort: "low" };
+roles.priority.implementer = ["test-expensive"];
+fs.writeFileSync(process.argv[2], JSON.stringify(roles));
+' "$REPO_ROOT/scripts/lib/pace-roles.json" "$ROLES_N4"
+node -e 'const fs=require("fs");fs.writeFileSync(process.argv[1],JSON.stringify({schema:"capacity.pace/1",generated_at:new Date().toISOString(),rows:[{pool:"test-expensive",class:"other",stale:false,used_pct:30,expected_pct:40,hours_to_reset:24}]}))' "$PACE_N4"
+PROMPT="$TEST_TMP/prompt-n4.txt"
+printf 'Fleet-Task: 01ARZ3NDEKTSV4RRFFQ69G5FAV\nReview `big/generated.ts` and update the implementation.\n' > "$PROMPT"
+RUNS="$TEST_TMP/runs-n4"; mkdir -p "$RUNS"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_PACE_FILE="$PACE_N4" AUTOPILOT_PACE_ROLES="$ROLES_N4" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
+  "$SCRIPT" --no-verify-tip --context-window off --branch feat/local-n4 --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/n4.err")"; EXIT=$?
+MF="$(find "$RUNS" -name "*.manifest.json" | head -1)"
+assert_eq "$EXIT" "0" "n4: expensive pace pick falls back to codex and exits 0"
+assert_eq "codex" "$(json_get "$OUT" runner)" "n4: expensive pick dispatches codex"
+assert_eq "$(node -e 'const o=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(o.pace_choice===null||o.pace_choice===undefined?"null":"present")' "$MF")" "null" "n4: pace_choice cleared on the expensive fallback"
+assert_not_contains "$(node -e 'process.stdout.write(require("fs").readFileSync(process.argv[1],"utf8"))' "$MF")" '"engine_choice"' "n4: engine_choice cleared on the expensive fallback"
+
+# negative control: a copy with the pace fallback hardcoded back to codex turns n1 red.
+MUT_DH="$TEST_TMP/dispatch-hetero.nopace.sh"
+node -e '
+const fs = require("fs");
+const src = fs.readFileSync(process.argv[1], "utf8");
+const needle = "pace_cloud_fallback || true";
+if (!src.includes(needle)) process.exit(3);
+fs.writeFileSync(process.argv[2], src.split(needle).join("RUNNER=\"codex\"; MODEL=\"\"; ENDPOINT=\"\"; LOCAL_CTX_CODEX_FALLBACK=1;"));
+' "$SCRIPT" "$MUT_DH" || fail "negative control: pace_cloud_fallback anchor not found"
+chmod +x "$MUT_DH"
+RUNS="$TEST_TMP/runs-n-mut"; mkdir -p "$RUNS"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_PACE_FILE="$PACE_N" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
+  "$MUT_DH" --no-verify-tip --context-window off --branch feat/local-n-mut --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/nmut.err")"; EXIT=$?
+assert_neq "grok" "$(json_get "$OUT" runner)" "negative control: hardcoding codex turns the n1 case red (pace seat gone)"
+
 finalize_test

@@ -804,7 +804,7 @@
   "v74.b.border.default": "{ud} 捲動 · {keys} · Esc 還給輸入框",
   "v74.b.border.now": "{ud} 捲動 · {keys} · Esc 還給輸入框",
   "v74.b.border.cardless": "{ud} 捲動 · {keys} · Esc 還給輸入框",
-  "v74.b.border.decide": "{ud} / PgUp/PgDn 捲卡 · p/n 換張 · j/k 換張 · a/b/c 選 · m 附註 · s 預覽 · {keys} · Esc",
+  "v74.b.border.decide": "{ud} / PgUp/PgDn 捲卡 · p/n 換張 · j/k 換張 · a/b/c 選 · m 附註 · s 預覽 · v 單卡版 · {keys} · Esc",
   "v74.b.border.dispatch": "{ud} 捲動 · {keys} · Esc 還給輸入框",
   "v74.b.border.review": "{ud} 捲動 · Enter 摺疊已決列 · {keys} · Esc 還給輸入框",
   "v74.b.border.spend": "{ud} 捲動 · Enter 摺疊花費明細 · {keys} · Esc 還給輸入框",

@@ -73,6 +73,7 @@ Claude Code compacts when the context reaches **`autoCompactWindow` minus a fixe
 | `AUTOPILOT_STUCK_HAND_MINUTES` (env) | Minutes a still-running dispatched hand must show no log or worktree change, no new commit and no CPU growth before the dispatching session is told once (stuck-hand-lib leg of the audit-log hook). `0` or `off` disables the hook. | `30` | Env only. Detection: `scripts/stuck-hand-check.js`. |
 | `AUTOPILOT_SUGGEST_COMPACT` | Set to "false" to turn off the tool-call-count compaction nudge (suggest-compact hook). | on |  |
 | `AUTOPILOT_BASH_TEST_TIMEOUT` | Set to "0" to disable the PreToolUse Bash test/check timeout-prefix guard (`bash-test-timeout-guard` hook). | on |  |
+| `AUTOPILOT_DEP_CACHE` | Set to "0" to disable runtime dependency cache pruning in `scripts/affected-suites.js`. | on |  |
 | `AUTOPILOT_PRECOMPACT_STDOUT` | Set to "0" to stop the PreCompact hook printing its guidance text for the summarizer. | on |  |
 | `handoff_inject` (config.json) | true restores the machine session snapshot after /clear (session-handoff + session-start hooks). | `false` | `AUTOPILOT_HANDOFF_INJECT`: Set to "1" to enable the session snapshot injection (same as handoff_inject: true; either source enables it). |
 | `AUTOPILOT_HANDOFF_MIN_USER_TURNS` | A session needs at least this many user turns before a snapshot is written. | `3` |  |

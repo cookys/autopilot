@@ -1730,6 +1730,12 @@ function parseArgs(argv) {
       a.record = true;
       if (argv[i + 1] && !argv[i + 1].startsWith('--')) a.recordPath = argv[++i];
     }
+    else if (x === '--dep-cache') {
+      const v = argv[++i];
+      if (!v) throw new Error('--dep-cache needs a path');
+      a.depCache = v;
+    }
+    else if (x === '--no-dep-cache') a.noDepCache = true;
     else if (x === '--files') { while (argv[i + 1] && !argv[i + 1].startsWith('--')) a.files.push(argv[++i]); a.useFiles = true; }
     else if (x === '--help' || x === '-h') a.help = true;
     else throw new Error(`unknown argument: ${x}`);
@@ -1740,6 +1746,98 @@ function parseArgs(argv) {
 const OVER_HALF_THRESHOLD = process.env.AFFECTED_SUITES_OVER_HALF_THRESHOLD != null
   ? Number(process.env.AFFECTED_SUITES_OVER_HALF_THRESHOLD)
   : 0.5;
+
+const REQUIRE_REASONS = new Set(['require_top', 'source', 'require_exported']);
+const SOFT_MENTION_REASONS = new Set(['weak_mention', 'path_string']);
+
+function mentionsOutsideRequires(text, changedFile) {
+  if (typeof text !== 'string') return true;
+  const cleaned = text
+    .replace(/\brequire\(\s*(['"])[^'"\n]*\1\s*\)/g, '')
+    .replace(/\bimport\s+[^'"\n]*?\bfrom\s+(['"])[^'"\n]*\1/g, '')
+    .replace(/\bimport\(\s*(['"])[^'"\n]*\1\s*\)/g, '')
+    .replace(/(^|[;&|(]|\bthen\b|\bdo\b)([ \t]*(?:source|\.)[ \t]+["']?[^\s"';)]+["']?)/gm, '$1');
+  // Edges are built on stems (no extension), so a bare-name mention outside a require must keep the suite too.
+  const stem = base(changedFile).replace(/\.[^.]+$/, '');
+  return (stem !== '' && cleaned.includes(stem)) || cleaned.includes(base(changedFile)) || cleaned.includes(changedFile);
+}
+
+function defaultDepCachePath(root) {
+  let common = git(root, ['rev-parse', '--git-common-dir']).toString('utf8').trim();
+  if (!path.isAbsolute(common)) common = path.resolve(root, common);
+  return path.join(common, 'autopilot', 'dep-cache.json');
+}
+
+function loadDepCache(root, depCacheArg) {
+  const file = depCacheArg ? path.resolve(depCacheArg) : defaultDepCachePath(root);
+  if (!fs.existsSync(file)) return null;
+  const raw = fs.readFileSync(file, 'utf8');
+  const cache = JSON.parse(raw);
+  if (!cache || typeof cache !== 'object' || cache.schema !== 'dep-cache/1' || typeof cache.base_sha !== 'string' || !cache.base_sha || !cache.suites || typeof cache.suites !== 'object') return null;
+  return cache;
+}
+
+function pruneWithDepCache(root, doc, selection, headRef, depCacheArg, tree) {
+  const pruned = [];
+  try {
+    const cache = loadDepCache(root, depCacheArg);
+    if (!cache) return pruned;
+    const targetHead = headRef || 'HEAD';
+    git(root, ['merge-base', '--is-ancestor', cache.base_sha, targetHead]);
+    const diffFiles = git(root, ['diff', '--name-only', '--no-renames', '-z', cache.base_sha]).toString('utf8').split('\0').filter(Boolean);
+    const untracked = git(root, ['ls-files', '--others', '--exclude-standard', '-z']).toString('utf8').split('\0').filter(Boolean);
+    const dirtySet = new Set([...diffFiles, ...untracked]);
+    const kept = [];
+    for (const suite of doc.suites) {
+      const entry = cache.suites[suite];
+      if (!entry || typeof entry !== 'object' || entry.traced !== true || entry.rc !== 0 || !Array.isArray(entry.files)) {
+        kept.push(suite);
+        continue;
+      }
+      if (dirtySet.has(suite) || entry.files.some((f) => dirtySet.has(f))) {
+        kept.push(suite);
+        continue;
+      }
+      const cachedFiles = new Set(entry.files);
+      const causingFiles = [];
+      let canPrune = true;
+      let suiteText;
+      for (const file of doc.changed) {
+        const reasons = reasonsFor(suite, file, selection);
+        if (reasons.length === 0) continue;
+        causingFiles.push(file);
+        if (cachedFiles.has(file)) {
+          canPrune = false;
+          break;
+        }
+        const hasHardOther = reasons.some((r) => !REQUIRE_REASONS.has(r) && !SOFT_MENTION_REASONS.has(r));
+        if (hasHardOther) {
+          canPrune = false;
+          break;
+        }
+        if (reasons.some((r) => SOFT_MENTION_REASONS.has(r))) {
+          if (suiteText === undefined) suiteText = tree ? tree.read(suite) : null;
+          if (mentionsOutsideRequires(suiteText, file)) {
+            canPrune = false;
+            break;
+          }
+        }
+      }
+      if (canPrune && causingFiles.length > 0) {
+        pruned.push({ suite, files: causingFiles });
+      } else {
+        kept.push(suite);
+      }
+    }
+    if (pruned.length > 0) {
+      doc.suites = kept;
+      doc.stats.selected = kept.length;
+    }
+  } catch {
+    return [];
+  }
+  return pruned;
+}
 
 async function main(argv) {
   let a;
@@ -1867,14 +1965,26 @@ async function main(argv) {
       writeFastPlan(fastPlan);
     }
     const maxWeak = a.maxWeak == null ? DEFAULT_MAX_WEAK : a.maxWeak;
-    if (doc.mode === 'selective' && doc.stats.total_suites > 0 && (doc.suites.length / doc.stats.total_suites) > OVER_HALF_THRESHOLD) {
+    const preCount = doc.suites.length; // the over-half guard below measures the static selection, never the pruned one
+    let pruned = [];
+    if (!a.noDepCache && process.env.AUTOPILOT_DEP_CACHE !== '0' && doc.mode === 'selective' && doc.suites.length > 0 && !a.onlyGlob) {
+      let hasCache = false;
+      try { hasCache = !!loadDepCache(root, a.depCache); } catch { hasCache = false; }
+      if (hasCache) {
+        if (!tree) tree = gitTree(root, doc.head || 'HEAD');
+        const selection = select(doc.changed, tree, maxWeak);
+        pruned = pruneWithDepCache(root, doc, selection, headRef, a.depCache, tree);
+        if (pruned.length > 0) process.stderr.write(`dep-cache: pruned ${pruned.length} suites\n`);
+      }
+    }
+    if (doc.mode === 'selective' && doc.stats.total_suites > 0 && (preCount / doc.stats.total_suites) > OVER_HALF_THRESHOLD) {
       if (!tree) tree = gitTree(root, doc.head);
       const widenedBy = doc.changed
         .map((p) => ({ path: p, suites: select([p], tree, maxWeak).suites.length }))
         .filter((w) => w.suites > 0)
         .sort((x, y) => y.suites - x.suites || x.path.localeCompare(y.path))
         .slice(0, 5);
-      const n = doc.suites.length;
+      const n = preCount;
       const total = doc.stats.total_suites;
       const pct = Math.round((n / total) * 100);
       const summary = widenedBy.map((w) => `${w.path} (${w.suites} suites)`).join(', ');
@@ -1932,11 +2042,14 @@ async function main(argv) {
       return code;
     }
     if (a.explain && doc.mode === 'selective') {
-      if (!tree) tree = gitTree(root, doc.head);
+      if (!tree) tree = gitTree(root, doc.head || 'HEAD');
       const selection = select(doc.changed, tree, maxWeak);
       for (const suite of doc.suites) for (const file of doc.changed) {
         const reasons = reasonsFor(suite, file, selection);
         if (reasons.length) process.stdout.write(`${suite}: ${file}: ${reasons.join(', ')}\n`);
+      }
+      for (const p of pruned) {
+        process.stdout.write(`pruned: ${p.suite} (cache traced, ${p.files.join(', ')} not executed)\n`);
       }
       return 0;
     }
@@ -1950,5 +2063,5 @@ async function main(argv) {
   }
 }
 
-module.exports = { reasonsFor, ancestorsSafe, extraRunners, select, mentions, buildGraph, isSuite, isProse, entryCommand, computeDoc, FULL_TRIGGERS, gitTree, diskTree };
+module.exports = { mentionsOutsideRequires, reasonsFor, ancestorsSafe, extraRunners, select, mentions, buildGraph, isSuite, isProse, entryCommand, computeDoc, FULL_TRIGGERS, gitTree, diskTree };
 if (require.main === module) main(process.argv.slice(2)).then((c) => { process.exitCode = c; });

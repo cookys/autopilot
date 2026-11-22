@@ -9,7 +9,7 @@
 // USAGE
 //   node scripts/review-jury.js run --pack <file> --implementer-family <family> --out <dir>
 //        [--diff <path in pack>] [--questions <path in pack>] [--methodology <file>] [--spec-file <file>] [--seats grok,kimi,glm,minimax]
-//        [--timeout 15m] [--dispatch-bin <path>] [--scorecard-bin <path>]
+//        [--timeout 15m] [--dispatch-bin <path>] [--scorecard-bin <path>] [--allow-same-family]
 //        [--seat-model <seat>=<model>]... [--seat-effort <seat>=<effort>]... [--seat-max-tokens <seat>=<n>]... [--seat-engine <seat>=<engine>]...
 //   node scripts/review-jury.js merge --out <dir> <run-dir> [<run-dir> ...]
 //
@@ -86,6 +86,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, spawnSync } = require('child_process');
 const { portableRawLogInPlace } = require('./lib/raw-log-path');
+const { findSameFamilyVote } = require('./lib/review-family-gate');
 
 // max_tokens (anthropic-compatible seats only) is dispatch-review's --max-tokens. The runner default is 16384
 // (dispatch-anthropic-review.js:65) and the allowed range is 1..200000 (dispatch-review.sh:462-466, dispatch-anthropic-review.js:632).
@@ -119,6 +120,7 @@ function die(msg) {
 
 function parseArgs(argv) {
   const o = { _: [] };
+  const bools = new Set(['allow-same-family']);
   const takes = new Set(['pack', 'implementer-family', 'out', 'methodology', 'spec-file', 'seats', 'timeout', 'dispatch-bin', 'scorecard-bin', 'diff', 'questions', 'context-max']);
   const repeat = new Set(['seat-model', 'seat-effort', 'seat-max-tokens', 'seat-engine', 'context-exclude']);
   for (const k of repeat) takes.add(k);
@@ -126,6 +128,7 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a.startsWith('--')) {
       const k = a.slice(2);
+      if (bools.has(k)) { o[k] = true; continue; }
       if (!takes.has(k)) die(`unknown flag ${a}`);
       if (i + 1 >= argv.length) die(`${a} needs a value`);
       if (repeat.has(k)) (o[k] = o[k] || []).push(argv[++i]); else o[k] = argv[++i];
@@ -493,6 +496,7 @@ async function cmdRun(o) {
     state[n] = { ...base, state: 'dispatched' };
     todo.push(n);
   }
+  checkSameFamilySeats(todo, seatTable, Boolean(o['allow-same-family']));
   const results = await Promise.all(todo.map((n) => dispatchWithRetry(n, seatTable[n], opts)));
   for (const r of results) {
     let j;
@@ -632,4 +636,17 @@ async function main() {
   die(`unknown command ${cmd}`);
 }
 
-main();
+function checkSameFamilySeats(names, seatTable, allowSameFamily) {
+  const collision = findSameFamilyVote(names, (n) => seatTable[n] && seatTable[n].family);
+  if (collision) {
+    const message = `same_family_vote: ${collision.first} and ${collision.second} (${collision.family})`;
+    if (!allowSameFamily) die(message);
+    process.stderr.write(`review-jury: warning: ${message}\n`);
+  }
+}
+
+if (require.main === module) {
+  main();
+}
+
+module.exports = { SEATS, checkSameFamilySeats };

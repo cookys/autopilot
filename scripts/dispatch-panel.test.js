@@ -22,6 +22,19 @@ require('./lib/test-git-env');
 const REPO_ROOT = path.resolve(__dirname, '..');
 const PANEL_JS = path.join(__dirname, 'dispatch-panel.js');
 
+test('findSameFamilyVote identifies the first known family pair', () => {
+  const { findSameFamilyVote } = require('./lib/review-family-gate');
+  const seats = [
+    { name: 'unknown1', family: 'unknown' }, { name: 'unknown2', family: 'unknown' },
+    { name: 'empty', family: '' }, { name: 'gpt', family: 'openai' },
+    { name: 'grok', family: 'xai' }, { name: 'gpt2', family: 'openai' },
+  ];
+  assert.equal(findSameFamilyVote(seats.slice(0, 5), (seat) => seat.family), null);
+  assert.deepEqual(findSameFamilyVote(seats, (seat) => seat.family), {
+    family: 'openai', first: seats[3], second: seats[5],
+  });
+});
+
 function makeSandbox() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dp-test-'));
   const binDir = path.join(dir, 'bin');

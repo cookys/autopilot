@@ -111,11 +111,16 @@ test('r11 #8: the Enter hint names what it folds and is absent where nothing fol
 })
 
 test('r11 #10: the collapsed "另有 N 張" row lists the hidden cards by their drawn number, →letter when picked', () => {
+  // 已改為雙欄：14 列短框下左欄直接以編號 01/02/03 列出各卡，已選卡帶 →a
   const nav = { ...NO_NAV, cursor: 0, picks: { [decide[2].id]: 0 } }
   const { body } = decidePage.render(ctxOf({}, 14, 100, { decide: nav }))
-  const more = body.map(text).find(r => r.includes('另有'))
-  expect(more, body.map(text).join('\n')).toBeDefined()
-  expect(more).toMatch(/· 2 3→a/) // card 1 is open; 2 and 3 are hidden, 3 picked a (ids share prefixes, so numbers, not codes)
+  const left = body.slice(2).map(r => { const s = text(r); return s.slice(0, s.indexOf(' │ ')) })
+  expect(left.find(r => r.startsWith('▸ 01 '))).toBeDefined()
+  const row2 = left.find(r => r.startsWith('  02 '))
+  const row3 = left.find(r => r.startsWith('  03 '))
+  expect(row2).toBeDefined()
+  expect(row2).not.toContain('→')
+  expect(row3).toContain('→a')
 })
 
 test('r11 #11: the spend chart label states unit and source', () => {

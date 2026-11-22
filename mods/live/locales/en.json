@@ -1009,7 +1009,7 @@
   "v74.d.c_count": "Card {k} of {n} · p prev · n next",
   "v74.d.c_expand": "e expand",
   "v74.d.c_desc_omitted": "details omitted",
-  "v74.b.border.decide_c": "p/n card · a/b/c pick · e expand context · m note · s preview · v list view · {keys} · Esc",
+  "v74.b.border.decide_c": "p/n card · a/b/c pick · e expand context · m note · s preview · v dual view · {keys} · Esc",
   "v74.b.short.decide_c": "p/n · a/b/c · e · m · s · v · Esc",
   "v74.b.border.decide_bg": "e or Esc back to card · {ud} scroll",
   "v74.b.short.decide_bg": "Esc · {ud}"

@@ -88,13 +88,20 @@ test('r10b #2: the send feedback after sending stays', () => {
 
 // ---- #3 the collapsed row keeps the picked answers ----
 test('r10b #3: other cards folded into 另有 N 張 still say how many of them hold a picked answer', () => {
+  // 已改為雙欄：3 張在 13 列左欄全數展開並帶 →a/→b；超過左欄高度時溢出列保留（已選 P）計數
   const nav = { ...NO_NAV, cursor: 0, picks: { [decide[1].id]: 0, [decide[2].id]: 1 } }
-  const body = (rows: number) => decidePage.render({ ...(ctxOf({}, rows) as object), decide: nav } as never).body.map(text).join('\n')
-  expect(body(40)).not.toContain('另有') // roomy: every card keeps its own summary row, with 已選
-  expect(body(13)).toContain('另有 2 張（已選 2）')
+  const leftOf = (rows: number, list: DecideCard[] = decide, dNav = nav) =>
+    decidePage.render({ ...(ctxOf({ decide: list }, rows) as object), decide: dNav } as never).body.slice(2).map(r => { const s = text(r); return s.slice(0, s.indexOf(' │ ')) }).join('\n')
+  expect(leftOf(40)).toContain('→a')
+  expect(leftOf(40)).toContain('→b')
+  expect(leftOf(13)).toContain('→a')
+  expect(leftOf(13)).toContain('→b')
+  const ten = Array.from({ length: 10 }, (_, i) => ({ ...decide[i % decide.length], id: 'd-ten-' + i, title: '卡' + (i + 1) }))
+  const hiddenNav = { ...NO_NAV, cursor: 0, picks: { [ten[7].id]: 0, [ten[8].id]: 1 } }
+  expect(leftOf(11, ten, hiddenNav)).toContain('下面還有 6 張（已選 2）')
   // negative control: nothing picked among the hidden cards keeps the plain wording
-  const plain = decidePage.render({ ...(ctxOf({}, 13) as object), decide: { ...NO_NAV, cursor: 0 } } as never).body.map(text).join('\n')
-  expect(plain).toContain('另有 2 張 ·')
+  const plain = leftOf(11, ten, { ...NO_NAV, cursor: 0 })
+  expect(plain).toContain('下面還有 6 張')
   expect(plain).not.toContain('已選')
 })
 

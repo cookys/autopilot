@@ -86,7 +86,7 @@ async function host($, on, maxRows = 34) {
 test('v7.4 frame: ui.scroll by=50 scrolls detail without changing card, by=-50 returns, bottom clamps', async ($, on) => {
   const h = await host($, on)
   const initial = text(await h.draw())
-  expect(initial).toContain('目前第 1 張')
+  expect(initial).toContain('卡 #01 / 5')
 
   const scroll = by => $.ui.scroll({
     component: 'AbovePrompt',
@@ -101,19 +101,19 @@ test('v7.4 frame: ui.scroll by=50 scrolls detail without changing card, by=-50 r
   await scroll(50)
   const afterDown = text(await h.draw())
   expect(afterDown).not.toBe(initial)
-  expect(afterDown).toContain('目前第 1 張')
+  expect(afterDown).toContain('卡 #01 / 5')
   expect(afterDown).toContain('上面還有')
 
   await scroll(-50)
   const afterUp = text(await h.draw())
-  expect(afterUp).toContain('目前第 1 張')
+  expect(afterUp).toContain('卡 #01 / 5')
   expect(afterUp).not.toContain('上面還有')
 
   let prev = afterUp
   for (let i = 0; i < 20; i++) {
     await scroll(50)
     const cur = text(await h.draw())
-    expect(cur).toContain('目前第 1 張')
+    expect(cur).toContain('卡 #01 / 5')
     if (cur === prev) break
     prev = cur
   }
@@ -126,7 +126,7 @@ test('v7.4 frame: ui.scroll by=50 scrolls detail without changing card, by=-50 r
 test('v7.4 frame: ui.focus step scrolls detail 1 line without changing card, key(n) resets scroll', async ($, on) => {
   const h = await host($, on)
   const before = text(await h.draw())
-  expect(before).toContain('目前第 1 張')
+  expect(before).toContain('卡 #01 / 5')
 
   await $.ui.focus({
     component: 'AbovePrompt',
@@ -136,11 +136,11 @@ test('v7.4 frame: ui.focus step scrolls detail 1 line without changing card, key
   })
   const afterFocus = text(await h.draw())
   expect(afterFocus).not.toBe(before)
-  expect(afterFocus).toContain('目前第 1 張')
+  expect(afterFocus).toContain('卡 #01 / 5')
   expect(afterFocus).toContain('↑ 上面還有 1 行')
 
   const nextCard = text(await h.key('n'))
-  expect(nextCard).toContain('目前第 2 張')
+  expect(nextCard).toContain('卡 #02 / 5')
   expect(nextCard).not.toContain('上面還有')
 
   await h.close()

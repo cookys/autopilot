@@ -8992,6 +8992,35 @@
       "doc": null,
       "relates": [],
       "note": "Test-only wrapper override for dispatch-research.sh dry-run recording."
+    },
+    {
+      "name": "AUTOPILOT_INBOX_DRAIN_GATE_LEAD",
+      "kind": "env",
+      "audience": "user",
+      "default": "0",
+      "readers": [
+        "hooks/inbox-drain-gate.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "inbox_drain_gate_lead"
+      ],
+      "summary": "Set to 1 to also apply hooks/inbox-drain-gate.js to lead seats (default off; PM seat is always covered)."
+    },
+    {
+      "name": "inbox_drain_gate_lead",
+      "kind": "config_key",
+      "audience": "user",
+      "type": "boolean",
+      "default": false,
+      "readers": [
+        "hooks/inbox-drain-gate.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_INBOX_DRAIN_GATE_LEAD"
+      ],
+      "summary": "When true, hooks/inbox-drain-gate.js also blocks lead seats with stale (>10m) unread inbox items (default false)."
     }
   ]
 }

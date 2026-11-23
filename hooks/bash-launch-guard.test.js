@@ -516,15 +516,16 @@ test('rule2 denies in warn and block gate modes alike; gate mode off silences it
   assert.strictEqual(run('pkill -f foo', { env: { AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE: 'off' } }).deny, false);
 });
 
-// ---- Rule 3: zsh only, warn only ----
+// ---- Rule 3: zsh only, warn or auto-rewrite ----
 for (const cmd of ['git config a =b', 'echo foo ==x', 'curl https://x.test/a?b=1', 'ls /nonexistent-dir-blg/*.zzz', 'grep -r foo --include=*.zzz .']) {
-  test(`rule3 warns under zsh: ${cmd}`, () => {
+  test(`rule3 rewrites under zsh: ${cmd}`, () => {
     const r = run(cmd, { shell: 'zsh' });
-    assert.strictEqual(r.deny, false);
-    assert.match(r.ctx, /zsh-expansion/);
+    assert.strictEqual(r.decision, 'allow');
+    assert.ok(r.updatedInput && r.updatedInput.command && r.updatedInput.command !== cmd);
+    assert.match(r.ctx, /已自動改寫/);
   });
   test(`rule3 silent under bash: ${cmd}`, () => {
-    assert.doesNotMatch(run(cmd, { shell: 'bash' }).ctx, /zsh-expansion/);
+    assert.doesNotMatch(run(cmd, { shell: 'bash' }).ctx, /zsh-expansion|已自動改寫/);
   });
 }
 for (const cmd of ["echo '=' x", 'echo "a = b"', 'echo foo = bar', '[ "$x" = y ]', 'test a = a', 'echo "a"=b', 'ls "$HOME"/projects/*', 'ls ~/.claude/*.json', 'ls $HOME/.claude/*.json', 'cd hooks && ls *.test.js', "bash -c 'ls /nonexistent-dir-blg/*.zzz'", "bash -c 'echo =x'", 'ls /*/*/*/*/*/*/*.zzqq', 'ls a*/b*/c*/d*/e*.zzqq', 'ls nonexistent-a*/b*.zzqq', 'ls /nonexistent-dir-blg/**/*.zzz', 'FOO=bar env', 'ls --color=auto', 'grep -E "[a-z]+" f', "ls '*.js'", 'echo $?', '[[ a == b ]] && echo y', 'echo $((1*2))', 'cat <<EOF\n= x\n*.zzz\nEOF', 'case $x in\n  *) echo y;;\nesac', 'case $x in a|*.zzq) echo y;; esac', 'x=*.zzq', 'export X=*.zzq; echo $X']) {
@@ -1120,10 +1121,11 @@ const BARE_LS_REWRITE_CASES = [
   [`ls ${'a'.repeat(650)}`, `command ls ${'a'.repeat(650)}`],
 ];
 for (const [cmd, expected] of BARE_LS_REWRITE_CASES) {
-  test(`rule4 rewrite in deny message: ${JSON.stringify(cmd)}`, () => {
+  test(`rule4 auto-rewrites and allows: ${JSON.stringify(cmd)}`, () => {
     const r = run(cmd, { lsDefault: true });
-    assert.strictEqual(r.deny, true);
-    assert.ok(r.reason.includes(`改寫後的指令（直接照抄）：${expected}`), r.reason);
+    assert.strictEqual(r.decision, 'allow');
+    assert.strictEqual(r.updatedInput && r.updatedInput.command, expected);
+    assert.match(r.ctx, /已自動改寫/);
   });
 }
 test('rule4 rewrite in warn message', () => {

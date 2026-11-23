@@ -317,6 +317,7 @@ function classify(tool, input) {
     // Rule 1 denies here; rules 2/3 only collect warnings, which ride along with whatever the
     // rest of this hook emits (the read counter and the wait advisory still run).
     const launchWarns = [];
+    let rewrittenInput = null;
     if (payload.tool_name === 'Bash' && payload.tool_input && typeof payload.tool_input.command === 'string') {
       const origCmd = payload.tool_input.command;
       let cmd = origCmd;
@@ -423,39 +424,36 @@ function classify(tool, input) {
         }
       }
       if (cmd !== origCmd) {
-        const advisory = launchWarns.join('\n');
-        if (advisory) process.stderr.write(`${advisory}\n`);
-        process.stdout.write(`${JSON.stringify({
-          hookSpecificOutput: {
-            hookEventName: 'PreToolUse',
-            permissionDecision: 'allow',
-            updatedInput: { ...payload.tool_input, command: cmd },
-            additionalContext: advisory,
-          },
-        })}\n`);
-        process.exit(0);
+        rewrittenInput = { ...payload.tool_input, command: cmd };
       }
     }
     const emitAdvisory = (lines) => {
       const advisory = lines.join('\n');
-      process.stderr.write(`${advisory}\n`);
-      process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: advisory } })}\n`);
+      if (advisory) process.stderr.write(`${advisory}\n`);
+      process.stdout.write(`${JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse',
+          ...(rewrittenInput ? { permissionDecision: 'allow', updatedInput: rewrittenInput } : {}),
+          additionalContext: advisory,
+        },
+      })}\n`);
     };
     // Presence, not truthiness: an empty/null agent_id still marks a subagent fire (review 🟠 agent-id-presence).
     if (Object.prototype.hasOwnProperty.call(payload, 'agent_id')) { // depth-1+: foreman-guard's territory
-      if (launchWarns.length) emitAdvisory(launchWarns);
+      if (launchWarns.length || rewrittenInput) emitAdvisory(launchWarns);
       process.exit(0);
     }
 
     const tool = payload.tool_name || '';
-    const kind = classify(tool, payload.tool_input);
+    const effectiveInput = rewrittenInput || payload.tool_input;
+    const kind = classify(tool, effectiveInput);
     // Foreground-wait advisory (advice-only, never a deny): a depth-0 Bash that sleeps >=20 s,
     // loops on sleep, or follows a log in the foreground. Independent of the read counter.
-    const waitRule = tool === 'Bash' && payload.tool_input
-      ? detectForegroundWait(payload.tool_input.command, payload.tool_input.run_in_background, WAIT_MIN_SLEEP_SECONDS)
+    const waitRule = tool === 'Bash' && effectiveInput
+      ? detectForegroundWait(effectiveInput.command, effectiveInput.run_in_background, WAIT_MIN_SLEEP_SECONDS)
       : null;
     if (kind === 'other' && !waitRule) { // no-op: counter untouched
-      if (launchWarns.length) emitAdvisory(launchWarns);
+      if (launchWarns.length || rewrittenInput) emitAdvisory(launchWarns);
       process.exit(0);
     }
 
@@ -520,15 +518,8 @@ function classify(tool, input) {
         + 'with a completion notification, the Monitor tool, or an `until` loop run in the background, '
         + 'instead of holding the turn with sleep/tail polling');
     }
-    if (advisories.length) {
-      const advisory = advisories.join('\n');
-      process.stderr.write(`${advisory}\n`);
-      process.stdout.write(`${JSON.stringify({
-        hookSpecificOutput: {
-          hookEventName: 'PreToolUse',
-          additionalContext: advisory,
-        },
-      })}\n`);
+    if (advisories.length || rewrittenInput) {
+      emitAdvisory(advisories);
     }
     process.exit(0);
   } catch {

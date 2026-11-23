@@ -1031,7 +1031,6 @@
   "v74.c.reason_no_live": "沒有 live 資料",
   "v74.c.reason_no_runs": "沒有派工資料",
   "v74.c.reason_no_hygiene": "沒有殘留資料",
-  "v74.c.header_failed": "資料 {source}（schema {schema}）· 讀取失敗",
   "page.spend.q_meta": "來源 fleet seats --quota · {age}前（>10 分過期）",
   "page.spend.q_meta_live": "來源 session.usage（fleet seats --quota 尚無結果）",
   "page.spend.q_failed_live": "fleet seats --quota 指令失敗，改用本席 session.usage",

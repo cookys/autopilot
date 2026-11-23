@@ -1031,7 +1031,6 @@
   "v74.c.reason_no_live": "no live data",
   "v74.c.reason_no_runs": "no run data",
   "v74.c.reason_no_hygiene": "no hygiene data",
-  "v74.c.header_failed": "data {source} (schema {schema}) · read failed",
   "page.spend.q_meta": "source: fleet seats --quota · {age} ago (stale >10 min)",
   "page.spend.q_meta_live": "source: session.usage (fleet seats --quota has no result yet)",
   "page.spend.q_failed_live": "fleet seats --quota failed, falling back to session.usage",

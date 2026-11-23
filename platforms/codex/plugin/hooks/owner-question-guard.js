@@ -76,7 +76,10 @@ function decide(input, opts = {}) {
   const texts = rules.assistantTextsThisTurn(raw);
   const text = texts.length ? texts[texts.length - 1] : null;
   const prev = texts.length >= 2 ? texts[texts.length - 2] : null;
-  const lang = langOn && text ? rules.languageCheck(text) : null;
+  // S5b: the language check blocks at most once per turn; a retry (stop_hook_active) passes it.
+  // AUTOPILOT_STOP_ONCE=0 restores the old repeat-block behaviour.
+  const stopOnce = input.stop_hook_active === true && String(rules.envBag().AUTOPILOT_STOP_ONCE) !== '0';
+  const lang = langOn && text && !stopOnce ? rules.languageCheck(text) : null;
   if (langOn) {
     const st = text ? rules.stripForLanguage(text) : '';
     const cjk = (st.match(/[\u3400-\u4dbf\u4e00-\u9fff]/g) || []).length;
@@ -86,7 +89,7 @@ function decide(input, opts = {}) {
   if (!text) return null;
   if (!guardOn) return lang ? { decision: 'block', reason: lang.reason + require('./lib/gate-hint.js').gateHint('用正體中文重寫這段回覆（簡體字逐字改回正體）', 'references/owner-question-guard.md') } : null;
   const history = rules.assistantTextsThisTurn(raw, true).slice(-201, -1);
-  const reason = rules.reasonForTurn({ ...input, topicedCardIds: rules.topicedCardIds(history) }, text, prev);
+  const reason = rules.reasonForTurn({ ...input, topicedCardIds: rules.topicedCardIds(history), ...(stopOnce ? { includeLanguage: false } : {}) }, text, prev);
   if (!reason) return null;
   return { decision: 'block', reason: reason + require('./lib/gate-hint.js').gateHint('照上面逐條修正回覆後再結束 turn', 'references/owner-question-guard.md') };
 }

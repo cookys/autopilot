@@ -830,3 +830,20 @@ test('c4140: gated lane seat denied after the window, warned inside it; operator
   assert.match(denied.reason, /request-decision\.js/, 'denied seat is routed to the PM');
   assert.equal(fs.readFileSync(hitsFile, 'utf8').trim().split('\n').length, 1, 'deny appends no new hits line');
 });
+
+test('language check blocks the first Stop only; a retry passes unless AUTOPILOT_STOP_ONCE=0', (t) => {
+  const f = fixture(t);
+  const prev = process.env.AUTOPILOT_REPLY_LANGUAGE;
+  const prevOnce = process.env.AUTOPILOT_STOP_ONCE;
+  process.env.AUTOPILOT_REPLY_LANGUAGE = 'zh-Hant';
+  try {
+    const en = 'This reply is entirely written in English so the language check must flag it.';
+    assert.equal(f.check(en)?.decision, 'block');
+    assert.equal(f.check(en, { stop_hook_active: true }), null);
+    process.env.AUTOPILOT_STOP_ONCE = '0';
+    assert.equal(f.check(en, { stop_hook_active: true })?.decision, 'block');
+  } finally {
+    if (prev === undefined) delete process.env.AUTOPILOT_REPLY_LANGUAGE; else process.env.AUTOPILOT_REPLY_LANGUAGE = prev;
+    if (prevOnce === undefined) delete process.env.AUTOPILOT_STOP_ONCE; else process.env.AUTOPILOT_STOP_ONCE = prevOnce;
+  }
+});

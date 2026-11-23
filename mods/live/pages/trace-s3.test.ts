@@ -12,7 +12,7 @@ import { hygienePage, hygieneView } from './hygiene'
 import { fleetPage, fleetView } from './fleet'
 import type { FleetCtx } from './fleet'
 import { makeT } from '../i18n'
-import { NO_DETAIL, NO_SECTIONS, displayWidth, readLoadSource, readQc, readQcReason } from '../model'
+import { NO_DETAIL, NO_SECTIONS, displayWidth, readLoadSource, readQc, readQcAt, readQcReason } from '../model'
 import type { LiveSnapshot, LoadSourceView, ResidueView } from '../model'
 import type { ConsoleSnapshot } from '../console'
 import type { OthersView } from '../fleet'
@@ -208,6 +208,14 @@ test('G05 decide: card open age displays via openedAtMs or live.pending; null so
 
 // ---- G06 & G12: 審查頁 >5m 過期警示、閾值、code/plan/qc 時間戳與 qc === null 顯性缺失塊 ----
 test('G06 review: live.state === ok with published_at > 5m shows stale warning + 5m/180s threshold; timestamps on code/plan/qc are shown', () => {
+  // readQc preserves exact 4-key P7c shape for watcher checked_at files while readQcAt extracts checked_at for detail.qc_at
+  const checkedJson = JSON.stringify({ schema: 'autopilot.qc-status/1', scope: { project_key: 'proj-alpha', root_run_id: null }, state: 'ok', range: 'abc..HEAD', protected_files_count: 2, evidence: 'trailer', checked_at: iso(14 * MIN) })
+  expect(readQc(checkedJson, { project_key: 'proj-alpha', root_run_id: null })).toEqual({ state: 'ok', range: 'abc..HEAD', protected_files_count: 2, evidence: 'trailer' })
+  expect(readQcAt(checkedJson, { project_key: 'proj-alpha', root_run_id: null })).toBe(iso(14 * MIN))
+  const withDetailQcAt = makeLive({ state: 'ok', published_at: iso(2 * MIN), qc: readQc(checkedJson, { project_key: 'proj-alpha', root_run_id: null }) })
+  withDetailQcAt.detail = { ...withDetailQcAt.detail, qc_at: readQcAt(checkedJson, { project_key: 'proj-alpha', root_run_id: null }) }
+  expect(join(renderReview({ live: withDetailQcAt, console: null, size: { cols: 120, rows: 30 }, t: tZh, nowMs: NOW }).body)).toContain('14')
+
   const qc = readQc(JSON.stringify({ schema: 'autopilot.qc-status/1', scope: { project_key: 'proj-alpha' }, state: 'ok', range: 'aaaa111..bbbb222', protected_files_count: 1, evidence: 'artifact', at: iso(12 * MIN) }), { project_key: 'proj-alpha', root_run_id: null })
   expect(qc?.at).toBe(iso(12 * MIN))
   const staleOkLive = makeLive({

@@ -79,6 +79,7 @@ export type V74Ctx = {
   decideFetchedMs?: number | null
   decideError?: string | null
   fleetError?: string | null
+  fleetSummary?: { fetchedMs: number | null; error: string | null; totals: { stuck: number; running: number; waiting: number; failed: number } } | null
   todo: TodoCard[] | null
   nav: CardNav
   ages?: Record<string, number | null>

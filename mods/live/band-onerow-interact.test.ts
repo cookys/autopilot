@@ -311,7 +311,7 @@ test('R4-Major3.3: click routing for remind, each segment, toggle arrow; decorat
 
   const routes: [string, RegExp][] = [
     ['band:remind', /^╭─ 待決/],
-    ['band:line', /^╭─ 現況/],
+    ['band:line', /^╭─ 派工/],
     ['band:source', /^╭─ 殘留/],
     ['band:pend', /^╭─ 待決/],
     ['band:qc', /^╭─ 審查/],
@@ -526,7 +526,7 @@ test('trace-G15: digit 0 opens 寵物 from both collapsed band (band-hotkey:0) a
   await $.session.end({ reason: 'exit' })
 })
 
-test('trace-G01: clicking line (1 產線 with 99+ overflow) opens 現況 showing fleet pm status source and full unclipped counts', async ($, on) => {
+test('trace-G01: clicking line (3 產線 with 99+ overflow) opens 派工 showing fleet pm status source, full unclipped 4-class counts, and threshold', async ($, on) => {
   const pmProjects = [
     { project: 'autopilot', root_id: 'r1', counts: { stuck: 1, overdue: 0, running: 2, waiting: 1, total: 4 }, tasks: [] },
     ...Array.from({ length: 100 }, (_, i) => ({
@@ -543,7 +543,7 @@ test('trace-G01: clicking line (1 產線 with 99+ overflow) opens 現況 showing
   let band = await mountBand($, 195, 20)
   let tree = await band.drawn()
   const lineText = text(byKey(tree, 'band:line'))
-  expect(lineText).toContain('1 產線')
+  expect(lineText).toContain('3 產線')
   expect(lineText).toContain('●99+')
 
   await band.press({ key: 'band:line' })
@@ -552,13 +552,24 @@ test('trace-G01: clicking line (1 產線 with 99+ overflow) opens 現況 showing
 
   band = await mountBand($, 195, 20)
   tree = await band.drawn()
-  expect(text(byKey(tree, 'v74-top'))).toMatch(/^╭─ 現況 · 資料 fleet pm status --json/)
+  expect(text(byKey(tree, 'v74-top'))).toMatch(/^╭─ 派工 · 資料 autopilot status runs --json/)
   const full = text(tree)
-  expect(full).toContain('全艦隊 fleet pm status --json')
-  expect(full).toContain('101')
+  expect(full).toContain('全艦隊產線 · fleet pm status --json')
+  expect(full).toContain('>5 分過舊')
+  expect(full).toContain('⊘0')
   expect(full).toContain('●100')
   expect(full).toContain('✗1')
-  expect(full).toContain('autopilot')
+  expect(full).toContain('⋯0')
+  expect(full).toContain('共 101 條')
+
+  // Digit key 3 reaches the identical 派工 page
+  await band.press({ key: 'hotkey:3' })
+  await settle(h)
+  await band.unmount()
+
+  band = await mountBand($, 195, 20)
+  tree = await band.drawn()
+  expect(text(byKey(tree, 'v74-top'))).toMatch(/^╭─ 派工 · 資料 autopilot status runs --json/)
 
   await band.unmount()
   await $.session.end({ reason: 'exit' })

@@ -19,7 +19,7 @@ import { commandView } from './commandtab'
 import { consolePage } from './consolepages'
 import type { ConsoleNav, ConsoleTab } from './consoletabs'
 import { keyed, scrollFrame } from './scroll'
-import { TAB_GAP, actionRows, frameBottomFit, frameHintMin, frameHintShort, frameHintText, frameRows, stripRows, STRIP_SPLIT_COLS, v74TitleSegs } from './pages/frame'
+import { TAB_GAP, actionRows, frameBottomFit, frameHintMin, frameHintShort, frameHintText, frameRows, stripRows, STRIP_SPLIT_COLS, v74BodyStatusRow, v74TitleSegs } from './pages/frame'
 import { displayWidth, truncateToWidth } from './model'
 import { fleetView as fleetPageView } from './pages/fleet'
 import { renderQuota } from './pages/quota'
@@ -312,13 +312,21 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
   const titleSegs = fitSegs(v74TitleSegs(page, ctx, (rows[0] ?? [])[0] ?? { text: t('tab.' + page.id) }, titleMax), titleMax)
   const titleW = titleSegs.reduce((n, x) => n + displayWidth(x.text), 0)
   const top = <Box key="v74-top" height={1} width={fullCols} overflow="hidden"><Text {...bc}>{GLYPHS.structure.frameTL + rule + ' '}</Text>{titleSegs.map((x, j) => <Text key={'tt' + j} {...drawSeg(x)} wrap="truncate">{x.text}</Text>)}<Text {...bc}>{' ' + pad(fullCols - 5 - titleW) + GLYPHS.structure.frameTR}</Text></Box>
+  const statusRow = v74BodyStatusRow(page, ctx, cols)
   const rawInner = rows.slice(1, rows.length - stripN - 1).map((r, k) => ({ r, idx: k + 1 }))
   let innerEntries = rawInner
-  // Codex R3 Critical: shrink boxed Decide pane to content height (drop trailing filler gap rows between content and actions).
-  if (page.id === 'decide' && ctx.v74 !== undefined) {
+  if (statusRow !== null) {
     const actStart = rows.length - stripCount - actionCount
     const bodyPart = rawInner.filter(e => e.idx < actStart)
     const actPart = rawInner.filter(e => e.idx >= actStart)
+    const keepBody = bodyPart.length > 0 ? bodyPart.slice(0, bodyPart.length - 1) : []
+    innerEntries = [{ r: statusRow, idx: -2 }, ...keepBody, ...actPart]
+  }
+  // Codex R3 Critical: shrink boxed Decide pane to content height (drop trailing filler gap rows between content and actions).
+  if (page.id === 'decide' && ctx.v74 !== undefined) {
+    const actStart = rows.length - stripCount - actionCount
+    const bodyPart = innerEntries.filter(e => e.idx < actStart)
+    const actPart = innerEntries.filter(e => e.idx >= actStart)
     while (bodyPart.length > 0 && bodyPart.length + actPart.length > 2 && bodyPart[bodyPart.length - 1].r.every(s => s.text.trim() === '')) {
       bodyPart.pop()
     }

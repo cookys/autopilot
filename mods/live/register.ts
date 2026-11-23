@@ -100,7 +100,7 @@ import { reopenLook, showPath } from '../viewer/show'
 import {
   acceptanceToast, autoResidueCount, bandCardNote, decideDialog, decideFillText, decideFixing, decideHeld, decideLine, decideOpen, decidePick, cleanTargets, normalizeAbs, decideReply, NO_DECIDE, makeRecentTracker, bandFactsDocument, bandLine1, bandView, buildSections, checkEnvelope, sourceMoved, sourcesOf, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
   isStepCard, BAND_NARROW_STEPS, displayWidth, fittedBandWidth, layoutBand, layoutBandLine, v74FitBand, slotFleet, headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeDurableDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions, readDurableDecisionFiles,
-  readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
+  readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readQcAt, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
   paneWidth, DEFAULT_PANE_COLS, slotTab, slotUnfolds, sparkText, truncateToWidth, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
 } from './model'
 import type { AccountView, ActivityItem, Counts, DecideState, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveDecision, LiveSnapshot, LookTarget, Manifest, PaneLine, PaneTab, Seg, Slot, SlotId, QuotaWindow, Sources, SourceGroup } from './model'
@@ -241,6 +241,7 @@ async function v74CtxOf($: EngineInterface, withStore = false): Promise<V74Ctx> 
   const pmErr = pmFeed.error()
   const decErr = decideFeed.error()
   const fltErr = fleetFeed.error()
+  const fleetSum = await read($, FLEET)
   return {
     pm: pmFeed.status(),
     pmFetchedMs: pmFeed.fetchedMs(),
@@ -249,6 +250,7 @@ async function v74CtxOf($: EngineInterface, withStore = false): Promise<V74Ctx> 
     decideFetchedMs: decideFeed.fetchedMs(),
     decideError: decErr,
     fleetError: fltErr,
+    fleetSummary: fleetSum,
     todo: V74_TODO,
     nav,
     keysHeld: v74KeysHeld,
@@ -947,7 +949,10 @@ async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{
   }
   // P7: the stage-graph facts. Each is optional; an absent / foreign file reads as null and its slot / tab says "no data".
   const marker = readMarker(scope.marker)
-  const qc = readQc(await readText($, liveBase + '/runs/' + scope.key + '.qc.json'), { project_key: scope.key, root_run_id: null })
+  const qcText = await readText($, liveBase + '/runs/' + scope.key + '.qc.json')
+  const qcScope = { project_key: scope.key, root_run_id: null }
+  const qc = readQc(qcText, qcScope)
+  const qcAt = readQcAt(qcText, qcScope)
   const residue = readResidue(await readText($, liveBase + '/runs/' + scope.key + '.residue.json'), scope.key)
   const stage = readStageWalk(await readText($, liveBase + '/stage/' + fileSid + '.json'), sid)
   const review = readReview(await readText($, liveBase + '/runs/' + scope.key + '.review.json'), scope.key)
@@ -975,7 +980,7 @@ async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{
       review,
       detail: {
         counts: countsOf(env), stalled: stalledCount(env, foreman, nowMs),
-        now_ms: nowMs, project: projectNameOf(identity, scope.key), marker, qc, stage, decisions, load_source: loadSource, residue,
+        now_ms: nowMs, project: projectNameOf(identity, scope.key), marker, qc, ...(qcAt === null ? {} : { qc_at: qcAt }), stage, decisions, load_source: loadSource, residue,
         spend: { session: sessionUsd(env, sid).text, host_all: usd(env.host_today_usd), host_all_n: typeof env.host_today_usd === 'number' && Number.isFinite(env.host_today_usd) ? env.host_today_usd : null, brain: spendOf(env)?.brain ?? null, cap: spendOf(env)?.cap ?? null, mode: await fuseModeOf($, autopilotHome), hourly: hourlySpend(readSpendHistory(await readText($, liveBase + '/runs/spend-history.json')), nowMs) },
       },
     }),

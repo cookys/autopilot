@@ -7,7 +7,7 @@ import { displayWidth, NO_DETAIL, NO_SECTIONS } from '../model'
 import type { LiveSnapshot, Seg } from '../model'
 import { Pane } from '../pane'
 import { PAGES } from './index'
-import { V74_SOURCES, V74_STALE_MS, v74TitleSegs } from './frame'
+import { V74_SOURCES, V74_STALE_MS, v74BodyStatusRow, v74TitleSegs } from './frame'
 import type { PageCtx } from './frame'
 import { makeDecideFeed, makePmFeed, mergeDecideCards, parseDecideList } from '../v74/feeds'
 import type { PmStatus, V74Ctx } from '../v74/contract'
@@ -168,91 +168,97 @@ test('G13 feed: makePmFeed exposes error() and preserves last successful fetched
   expect(feed.fetchedMs()).toBe(NOW)
 })
 
-// ---- G04 (4): V74_SOURCES matches actual data sources ----
-test('G04 (4): V74_SOURCES names real data sources (decide without plural typo + store, spend/quota not codeforge usage summary, fleet not fleet tasks)', () => {
-  expect(V74_SOURCES.decide[0]).toContain('fleet decision list --json')
-  expect(V74_SOURCES.decide[0]).not.toContain('decisions')
-  expect(V74_SOURCES.spend[0]).not.toContain('codeforge usage summary')
-  expect(V74_SOURCES.spend[0]).toContain('seats --quota')
-  expect(V74_SOURCES.quota[0]).not.toContain('codeforge usage summary')
-  expect(V74_SOURCES.fleet[0]).not.toContain('fleet tasks --tree')
-  expect(V74_SOURCES.fleet[0]).toContain('mirror')
-  expect(V74_SOURCES.now[0]).toBe('fleet pm status --json')
+// ---- G04 (4): V74_SOURCES matches the warning-free design titles (no warnings in border) ----
+test('G04 (4): V74_SOURCES matches design titles and v74TitleSegs puts no warnings or thresholds in the top border', () => {
+  expect(V74_SOURCES.now).toEqual(['fleet pm status --json', 'fleet.pm.status v1'])
+  expect(V74_SOURCES.decide).toEqual(['fleet decisions list --json', 'fleet.decisions v1'])
+  expect(V74_SOURCES.dispatch).toEqual(['autopilot status runs --json', 'autopilot.runs v1'])
+  expect(V74_SOURCES.review).toEqual(['autopilot status review --json', 'autopilot.review v1'])
+  expect(V74_SOURCES.spend).toEqual(['codeforge usage summary --json', 'usage.summary v1'])
+  expect(V74_SOURCES.hygiene).toEqual(['autopilot hygiene --json', 'autopilot.hygiene v1'])
+  expect(V74_SOURCES.fleet).toEqual(['fleet tasks --tree --json', 'fleet.tasks v1'])
+  expect(V74_SOURCES.todo).toEqual(['fleet todo --json', 'fleet.todo v1'])
+
+  const staleTitle = v74TitleSegs(pageOf('decide'), ctxOf({
+    v74: v74Of({ decideFetchedMs: NOW - 8 * MIN, ages: { decide: NOW - 8 * MIN } }),
+  }), { text: '待決' })
+  expect(segsText(staleTitle)).toBe('待決 · 資料 fleet decisions list --json（schema fleet.decisions v1）· 8 分')
+  expect(segsText(staleTitle)).not.toContain('>5 分')
+  expect(staleTitle.some(s => s.color === PALETTE.attention || s.color === PALETTE.broken)).toBe(false)
 })
 
-// ---- G04 (1): 5m threshold shown + stale colouring (PALETTE.attention, not dim) ----
-test('G04 (1): v74TitleSegs shows 5m threshold and colours stale (>5m or live.state=stale) in PALETTE.attention in both zh-TW and en', () => {
+// ---- G04 (1): 5m threshold + stale colouring (PALETTE.attention) live on the first body row (v74BodyStatusRow), never the top border ----
+test('G04 (1): v74BodyStatusRow shows 5m threshold and colours stale (>5m or live.state=stale) in PALETTE.attention in both zh-TW and en', () => {
   expect(V74_STALE_MS).toBe(5 * MIN)
 
-  // Boundary: exact 5m is still fresh (dim), 5m + 1ms is stale (PALETTE.attention)
-  const exact5m = v74TitleSegs(pageOf('now'), ctxOf({ v74: v74Of({ pmFetchedMs: NOW - 5 * MIN, ages: { now: NOW - 5 * MIN } }) }), { text: '現況' })
-  expect(segsText(exact5m)).toContain('>5 分過舊')
-  expect(segsText(exact5m)).toMatch(/· 5 分$/)
-  expect(exact5m.some(s => s.color === PALETTE.attention)).toBe(false)
+  // Boundary: exact 5m is still fresh (no warning row), 5m + 1ms is stale (PALETTE.attention)
+  const exact5m = v74BodyStatusRow(pageOf('now'), ctxOf({ v74: v74Of({ pmFetchedMs: NOW - 5 * MIN, ages: { now: NOW - 5 * MIN } }) }))
+  expect(exact5m).toBeNull()
 
-  const stale8mZh = v74TitleSegs(pageOf('now'), ctxOf({ v74: v74Of({ pmFetchedMs: NOW - 8 * MIN, ages: { now: NOW - 8 * MIN } }) }), { text: '現況' })
+  const stale8mZh = v74BodyStatusRow(pageOf('now'), ctxOf({ v74: v74Of({ pmFetchedMs: NOW - 8 * MIN, ages: { now: NOW - 8 * MIN } }) }))!
   const staleSegZh = stale8mZh.find(s => s.color === PALETTE.attention)
-  expect(staleSegZh, 'stale title segment is coloured PALETTE.attention').toBeDefined()
+  expect(staleSegZh, 'stale body status segment is coloured PALETTE.attention').toBeDefined()
   expect(staleSegZh?.dim).not.toBe(true)
   expect(staleSegZh?.text).toContain(GLYPHS.state.stale)
   expect(staleSegZh?.text).toContain('8 分')
   expect(staleSegZh?.text).toContain('>5 分')
 
-  const stale8mEn = v74TitleSegs(pageOf('now'), ctxOf({ t: tEn, v74: v74Of({ pmFetchedMs: NOW - 8 * MIN, ages: { now: NOW - 8 * MIN } }) }), { text: 'Now' })
+  const stale8mEn = v74BodyStatusRow(pageOf('now'), ctxOf({ t: tEn, v74: v74Of({ pmFetchedMs: NOW - 8 * MIN, ages: { now: NOW - 8 * MIN } }) }))!
   const staleSegEn = stale8mEn.find(s => s.color === PALETTE.attention)
   expect(staleSegEn?.text).toContain('8m')
   expect(staleSegEn?.text).toContain('>5m')
 
-  // live.state === 'stale' with no published_at still marks stale with >5m threshold
-  const liveStale = v74TitleSegs(pageOf('dispatch'), ctxOf({ live: liveOf({ state: 'stale', published_at: null }) }), { text: '派工' })
+  // live.state === 'stale' with no published_at still marks stale with >5m threshold on first body row
+  const liveStale = v74BodyStatusRow(pageOf('dispatch'), ctxOf({ live: liveOf({ state: 'stale', published_at: null }) }))!
   const liveStaleSeg = liveStale.find(s => s.color === PALETTE.attention)
   expect(liveStaleSeg?.text).toContain(GLYPHS.state.stale)
   expect(liveStaleSeg?.text).toContain('>5 分')
 })
 
-// ---- G04 (5): failed / missing status for the 5 previously uncovered pages (now, dispatch, review, hygiene, fleet) + error reason + last-success age ----
-test('G04 (5): now, dispatch, review, hygiene and fleet surface broken status, error reason, and last-success age in v74TitleSegs', () => {
+// ---- G04 (5): failed / missing status for now, decide, dispatch, review, hygiene, fleet + error reason + last-success age in v74BodyStatusRow ----
+test('G04 (5): now, decide, dispatch, review, hygiene and fleet surface broken status, error reason, and last-success age in v74BodyStatusRow (not top border)', () => {
   // now: pm missing with error and last-success age
-  const nowFail = v74TitleSegs(pageOf('now'), ctxOf({
+  const nowFailCtx = ctxOf({
     v74: v74Of({ pm: null, pmFetchedMs: NOW - 12 * MIN, pmError: 'pm daemon down', ages: { now: NOW - 12 * MIN }, errors: { now: 'pm daemon down' } }),
-  }), { text: '現況' })
+  })
+  const nowFail = v74BodyStatusRow(pageOf('now'), nowFailCtx)!
   expect(nowFail.some(s => s.color === PALETTE.broken && s.text.includes('pm daemon down'))).toBe(true)
   expect(segsText(nowFail)).toContain('上次 12 分')
+  expect(v74TitleSegs(pageOf('now'), nowFailCtx, { text: '現況' }).some(s => s.color === PALETTE.broken)).toBe(false)
 
   // decide: empty [] is NOT failed; null with decideError IS failed with error + last-success age
-  const decEmpty = v74TitleSegs(pageOf('decide'), ctxOf({
+  const decEmpty = v74BodyStatusRow(pageOf('decide'), ctxOf({
     v74: v74Of({ decide: [], decideFetchedMs: NOW - 20_000, decideError: null, ages: { decide: NOW - 20_000 }, errors: { decide: null } }),
-  }), { text: '待決' })
-  expect(decEmpty.some(s => s.color === PALETTE.broken)).toBe(false)
-  expect(segsText(decEmpty)).toMatch(/· 20 秒$/)
+  }))
+  expect(decEmpty).toBeNull()
 
-  const decFail = v74TitleSegs(pageOf('decide'), ctxOf({
+  const decFail = v74BodyStatusRow(pageOf('decide'), ctxOf({
     v74: v74Of({ decide: null, decideFetchedMs: NOW - 7 * MIN, decideError: 'hub unreachable', ages: { decide: NOW - 7 * MIN }, errors: { decide: 'hub unreachable' } }),
-  }), { text: '待決' })
+  }))!
   expect(decFail.some(s => s.color === PALETTE.broken && s.text.includes('hub unreachable'))).toBe(true)
   expect(segsText(decFail)).toContain('上次 7 分')
 
   // dispatch, review, hygiene, fleet: missing live / missing rows / fleetError all draw PALETTE.broken
   for (const id of ['dispatch', 'review', 'hygiene', 'fleet'] as const) {
-    const segs = v74TitleSegs(pageOf(id), ctxOf({ live: null }), { text: id })
+    const segs = v74BodyStatusRow(pageOf(id), ctxOf({ live: null }))!
     expect(segs.some(s => s.color === PALETTE.broken), id + ' with live=null is broken').toBe(true)
     expect(segsText(segs), id + ' names missing live reason').toContain('沒有 live 資料')
   }
 
-  const fleetErr = v74TitleSegs(pageOf('fleet'), ctxOf({
+  const fleetErr = v74BodyStatusRow(pageOf('fleet'), ctxOf({
     v74: v74Of({ fleetError: 'exit 1', ages: { fleet: NOW - 9 * MIN }, errors: { fleet: 'exit 1' } }),
-  }), { text: '艦隊' })
+  }))!
   expect(fleetErr.some(s => s.color === PALETTE.broken && s.text.includes('exit 1'))).toBe(true)
   expect(segsText(fleetErr)).toContain('上次 9 分')
 
-  const hygMissing = v74TitleSegs(pageOf('hygiene'), ctxOf({
+  const hygMissing = v74BodyStatusRow(pageOf('hygiene'), ctxOf({
     live: liveOf({ detail: { ...NO_DETAIL, now_ms: NOW, residue: null, load_source: null } }),
-  }), { text: '殘留' })
+  }))!
   expect(hygMissing.some(s => s.color === PALETTE.broken)).toBe(true)
   expect(segsText(hygMissing)).toContain('沒有殘留資料')
 })
 
-// ---- G04 (2) & (3): console mostSevere warning restored + narrow 80-col preserves age, threshold, and failure/severe ----
+// ---- G04 (2) & (3): console mostSevere & stale/failure warnings on first body row (v74-row0), clean design title in border (v74-top) ----
 type Node = { kind: string; props: Record<string, any> }
 const mk = (kind: string) => (props: Record<string, any>): Node => ({ kind, props })
 const EL = { Box: mk('Box'), Text: mk('Text'), Button: mk('Button'), Link: mk('Link'), Input: mk('Input') }
@@ -265,40 +271,58 @@ const walk = (n: any, out: Node[] = []): Node[] => {
 }
 const flat = (n: any): string => (typeof n === 'string' ? n : Array.isArray(n) ? n.flat(9).map(flat).join('') : n?.props ? flat(n.props.children) : '')
 
-test('G04 (2): boxed Pane top border surfaces console mostSevere warning and ignores planned no_source keys', () => {
+test('G04 (2): boxed Pane places console mostSevere and stale warnings on first body row (v74-row0), keeping border warning-free', () => {
   const staleCon = conOf({ tasks: { at_ms: NOW - 6 * MIN, state: 'stale' }, slots: { at_ms: null, state: 'no_source' } })
   const tree = walk(Pane(EL as never, liveOf(), 'now', () => {}, tZh, 120, () => {}, new Set(), () => {}, new Set(), null, null, null, null, null, {
     pages: PAGES, pageId: 'now', console: staleCon, nowMs: NOW, rows: 16, v74: v74Of(), v74Box: true,
   } as never))
   const top = tree.find(n => n.kind === 'Box' && n.props.key === 'v74-top') as Node
+  const row0 = tree.find(n => n.kind === 'Box' && n.props.key === 'v74-row0') as Node
   expect(top).toBeDefined()
-  expect(flat(top)).toContain('資料過期，6 分鐘前')
+  expect(row0).toBeDefined()
+  expect(flat(top)).toContain('╭─ 現況 · 資料 fleet pm status --json（schema fleet.pm.status v1）')
+  expect(flat(top)).not.toContain('資料過期')
+  expect(flat(top)).not.toContain('>5 分')
+  expect(flat(row0)).toContain('資料過期，6 分鐘前')
 
-  // Negative control: only planned-unimplemented console sources (slots/metrics/answer_log/changes) no_source draw no warning
+  // Stale decide page puts >5 分過舊 in first body row (v74-row0) while top border stays clean design title
+  const staleDecTree = walk(Pane(EL as never, liveOf(), 'decide', () => {}, tZh, 120, () => {}, new Set(), () => {}, new Set(), null, null, null, null, null, {
+    pages: PAGES, pageId: 'decide', console: conOf(), nowMs: NOW, rows: 16,
+    v74: v74Of({ decideFetchedMs: NOW - 8 * MIN, ages: { decide: NOW - 8 * MIN } }),
+    v74Box: true,
+  } as never))
+  const decTop = flat(staleDecTree.find(n => n.kind === 'Box' && n.props.key === 'v74-top') as Node)
+  const decRow0 = flat(staleDecTree.find(n => n.kind === 'Box' && n.props.key === 'v74-row0') as Node)
+  expect(decTop).toContain('╭─ 待決 · 資料 fleet decisions list --json（schema fleet.decisions v1）')
+  expect(decTop).not.toContain('>5 分')
+  expect(decRow0).toContain('8 分（>5 分過舊）')
+
+  // Negative control: only planned-unimplemented console sources (slots/metrics/answer_log/changes) no_source draw no warning row
   const plannedOnly = conOf({ tasks: { at_ms: NOW - 10_000, state: 'ok' }, slots: { at_ms: null, state: 'no_source' }, metrics: { at_ms: null, state: 'no_source' } })
-  const cleanSegs = v74TitleSegs(pageOf('now'), ctxOf({ console: plannedOnly }), { text: '現況' })
-  expect(cleanSegs.some(s => s.color === PALETTE.broken)).toBe(false)
+  expect(v74BodyStatusRow(pageOf('now'), ctxOf({ console: plannedOnly }))).toBeNull()
 })
 
-test('G04 (3): narrow 80-col boxed top border shrinks source/schema before clipping age, 5m threshold, or failure reason', () => {
-  // 80-col box gives maxCols = 80 - 6 = 74
+test('G04 (3): narrow 80-col boxed top border keeps clean title + age and first body row keeps stale threshold or failure + last-success age within 80 cols', () => {
+  // 80-col box gives titleMax = 80 - 6 = 74, inner cols = 80 - 4 = 76
   for (const id of ['now', 'decide', 'dispatch', 'review', 'spend', 'hygiene', 'fleet'] as const) {
-    const fresh = v74TitleSegs(pageOf(id), ctxOf(), { text: tZh('tab.' + id) }, 74)
-    expect(displayWidth(segsText(fresh)), id + ' fresh fits 74').toBeLessThanOrEqual(74)
-    expect(segsText(fresh), id + ' fresh keeps 30 秒 age at 80 cols').toContain('30 秒')
-    expect(segsText(fresh), id + ' fresh keeps >5 分 threshold at 80 cols').toContain('>5 分')
+    const freshTitle = v74TitleSegs(pageOf(id), ctxOf(), { text: tZh('tab.' + id) }, 74)
+    expect(displayWidth(segsText(freshTitle)), id + ' fresh title fits 74').toBeLessThanOrEqual(74)
+    expect(segsText(freshTitle), id + ' fresh keeps 30 秒 age at 80 cols').toContain('30 秒')
+    expect(segsText(freshTitle), id + ' fresh border has no >5 分 warning').not.toContain('>5 分')
 
-    const stale = v74TitleSegs(pageOf(id), ctxOf({
+    const staleCtx = ctxOf({
       live: liveOf({ published_at: new Date(NOW - 8 * MIN).toISOString() }),
       console: conOf({ tasks: { at_ms: NOW - 8 * MIN, state: 'ok' } }, NOW - 8 * MIN),
       v74: v74Of({ pmFetchedMs: NOW - 8 * MIN, decideFetchedMs: NOW - 8 * MIN, ages: { now: NOW - 8 * MIN, decide: NOW - 8 * MIN, fleet: NOW - 8 * MIN } }),
-    }), { text: tZh('tab.' + id) }, 74)
-    expect(displayWidth(segsText(stale)), id + ' stale fits 74').toBeLessThanOrEqual(74)
-    expect(segsText(stale), id + ' stale keeps 8 分 age at 80 cols').toContain('8 分')
-    expect(stale.some(s => s.color === PALETTE.attention), id + ' stale keeps warning colour at 80 cols').toBe(true)
+    })
+    const staleRow = v74BodyStatusRow(pageOf(id), staleCtx, 76)!
+    expect(displayWidth(segsText(staleRow)), id + ' stale body row fits 76').toBeLessThanOrEqual(76)
+    expect(segsText(staleRow), id + ' stale body row keeps 8 分 age at 80 cols').toContain('8 分')
+    expect(segsText(staleRow), id + ' stale body row keeps >5 分 threshold at 80 cols').toContain('>5 分')
+    expect(staleRow.some(s => s.color === PALETTE.attention), id + ' stale body row keeps warning colour at 80 cols').toBe(true)
   }
 
-  // Long error reason at 80 cols still preserves last-success age and fits <= 80 through real Pane
+  // Long error reason at 80 cols preserves last-success age on first body row (v74-row0) while top border stays warning-free and <= 80 cols
   const longErr = 'fleet pm status failed: ' + 'x'.repeat(80)
   const tree80 = walk(Pane(EL as never, liveOf(), 'now', () => {}, tZh, 80, () => {}, new Set(), () => {}, new Set(), null, null, null, null, null, {
     pages: PAGES, pageId: 'now', console: conOf(), nowMs: NOW, rows: 16,
@@ -306,8 +330,12 @@ test('G04 (3): narrow 80-col boxed top border shrinks source/schema before clipp
     v74Box: true,
   } as never))
   const top80 = tree80.find(n => n.kind === 'Box' && n.props.key === 'v74-top') as Node
+  const row0_80 = tree80.find(n => n.kind === 'Box' && n.props.key === 'v74-row0') as Node
   const topText = flat(top80)
+  const row0Text = flat(row0_80)
   expect(displayWidth(topText)).toBeLessThanOrEqual(80)
-  expect(topText).toContain('讀取失敗')
-  expect(topText).toContain('上次 12 分')
+  expect(topText).not.toContain('讀取失敗')
+  expect(displayWidth(row0Text)).toBeLessThanOrEqual(80)
+  expect(row0Text).toContain('讀取失敗')
+  expect(row0Text).toContain('上次 12 分')
 })

@@ -52,7 +52,7 @@ test('state 1: 80-col (75) simultaneous line ⊘/✗ alert + QC ▲ alert retain
   const qcSeg = lay.segments.find(s => s.id === 'qc')
   const pendSeg = lay.segments.find(s => s.id === 'pend')
   assert.ok(lineSeg && lineSeg.short === true, 'line kept in short alert form')
-  assert.equal(segText(lineSeg), '1 產線 ⊘ 4 ✗ 2')
+  assert.equal(segText(lineSeg), '3 產線 ⊘ 4 ✗ 2')
   assert.ok(segText(lineSeg).indexOf('⊘') < segText(lineSeg).indexOf('✗'), 'narrow alert keeps wide ⊘-before-✗ order')
   assert.ok(qcSeg && segText(qcSeg).includes(G.state.need_you), 'QC alert retained')
   assert.ok(pendSeg && segText(pendSeg).includes('21'), 'pend count retained')

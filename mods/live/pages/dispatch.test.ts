@@ -205,3 +205,116 @@ test('dispatch §5: null live, null rows, and stale live draw red PALETTE.broken
   }
 })
 
+test('dispatch G01: v7.4 top fleet-lines summary shows full 4-class counts, active source (pmFeed / consoleSnap / fleetNow), age, threshold, and missing reasons', () => {
+  const nav = { cursor: 0, picks: {}, notes: {}, noteMode: false }
+  const pmFresh = {
+    schema: 'fleet.pm.status' as const,
+    schema_version: 1 as const,
+    generated_at_ms: NOW - 2 * 60_000,
+    selector: null,
+    projects: [
+      { project: 'p-fail', root_id: null, counts: { stuck: 1, overdue: 0, running: 0, waiting: 0, total: 1 }, tasks: [] },
+      { project: 'p-park', root_id: null, counts: { stuck: 0, overdue: 0, running: 0, waiting: 2, total: 2 }, tasks: [] },
+      { project: 'p-unk', root_id: null, counts: { stuck: null, overdue: 0, running: 1, waiting: 0, total: 1 }, tasks: [] },
+      ...Array.from({ length: 120 }, (_, i) => ({
+        project: 'p-ok-' + i,
+        root_id: null,
+        counts: { stuck: 0, overdue: 0, running: 1, waiting: 0, total: 1 },
+        tasks: [],
+      })),
+    ],
+  }
+
+  // 1. pmFeed active (fresh + >99 unclipped) and stale (>5m)
+  const pmView = dispatchPage.render({ ...ctxOf(120, 30, liveOf(NARROW_RUNS)), v74: { pm: pmFresh, pmFetchedMs: NOW - 2 * 60_000, decide: [], todo: null, nav } })
+  const pmLines = pmView.body.map(text)
+  expect(pmLines[0]).toContain('全艦隊產線 · fleet pm status --json')
+  expect(pmLines[0]).toContain('2 分前')
+  expect(pmLines[0]).toContain('>5 分過舊')
+  expect(pmLines[1]).toContain('⊘1')
+  expect(pmLines[1]).toContain('●120')
+  expect(pmLines[1]).toContain('✗1')
+  expect(pmLines[1]).toContain('⋯1')
+  expect(pmLines[1]).toContain('共 123 條')
+
+  const pmStaleView = dispatchPage.render({
+    ...ctxOf(120, 30, liveOf(NARROW_RUNS)),
+    v74: { pm: { ...pmFresh, generated_at_ms: NOW - 8 * 60_000 }, pmFetchedMs: NOW - 8 * 60_000, decide: [], todo: null, nav },
+  })
+  expect(pmStaleView.body.map(text).join('\n')).toContain('已過期')
+  expect(pmStaleView.body.some(r => r.some(s => s.color === PALETTE.broken && s.text.includes('8 分')))).toBe(true)
+
+  // 2. consoleSnap fallback when pmFeed is null (with pmError + stale tasks source)
+  const staleCon = {
+    ...CALM_CONSOLE,
+    generated_at_ms: NOW - 7 * 60_000,
+    sources: { ...CALM_CONSOLE.sources, tasks: { at_ms: NOW - 7 * 60_000, state: 'stale' as const } },
+    counts: { ...CALM_CONSOLE.counts, summary: { ...CALM_CONSOLE.counts.summary, lines: { running: 14, waiting: 3, stuck: 2, failed: 1 } } },
+  }
+  const conView = dispatchPage.render({
+    ...ctxOf(120, 30, liveOf(NARROW_RUNS), staleCon),
+    v74: { pm: null, pmFetchedMs: null, pmError: 'pm offline', decide: [], todo: null, nav },
+  })
+  const conAll = conView.body.map(text).join('\n')
+  expect(conAll).toContain('全艦隊產線 · fleet console --json')
+  expect(conAll).toContain('⊘2')
+  expect(conAll).toContain('●14')
+  expect(conAll).toContain('✗1')
+  expect(conAll).toContain('⋯3')
+  expect(conAll).toContain('pm offline')
+  expect(conAll).toContain('console 產線來源過期')
+
+  // 3. fleetNow fallback when pmFeed & consoleSnap are both null
+  const fleetView = dispatchPage.render({
+    ...ctxOf(120, 30, liveOf(NARROW_RUNS), null),
+    v74: {
+      pm: null,
+      pmFetchedMs: null,
+      pmError: 'pm timeout',
+      decide: [],
+      todo: null,
+      nav,
+      fleetSummary: { fetchedMs: NOW - 9 * 60_000, error: null, totals: { stuck: 5, running: 7, waiting: 2, failed: 3 } },
+    },
+  })
+  const fleetAll = fleetView.body.map(text).join('\n')
+  expect(fleetAll).toContain('全艦隊產線 · fleet tasks --tree --json')
+  expect(fleetAll).toContain('⊘5')
+  expect(fleetAll).toContain('●7')
+  expect(fleetAll).toContain('✗3')
+  expect(fleetAll).toContain('⋯2')
+  expect(fleetAll).toContain('pm timeout')
+  expect(fleetAll).toContain('已過期')
+
+  // 4. All three sources missing (even with live === null) still renders header, em-dash counts, threshold, and reasons
+  const missView = dispatchPage.render({
+    ...ctxOf(80, 24, null, null),
+    v74: { pm: null, pmFetchedMs: null, pmError: 'pm down', fleetError: 'bus err', fleetSummary: null, decide: [], todo: null, nav },
+  })
+  const missAll = missView.body.map(text).join('\n')
+  expect(missAll).toContain('全艦隊產線 · 無來源（>5 分過舊）')
+  expect(missAll).toContain('⊘—')
+  expect(missAll).toContain('●—')
+  expect(missAll).toContain('✗—')
+  expect(missAll).toContain('⋯—')
+  expect(missAll).toContain('pm down')
+  expect(missAll).toContain('bus err')
+  expect(missAll).toContain('派工：無來源')
+
+  // 5. English locale + fixed frame height & width at 80/120/209
+  const enCtx = {
+    ...ctxOf(80, 24, liveOf(NARROW_RUNS)),
+    t: makeT('en'),
+    v74: { pm: pmFresh, pmFetchedMs: NOW - 2 * 60_000, decide: [], todo: null, nav },
+  }
+  const enAll = dispatchPage.render(enCtx).body.map(text).join('\n')
+  expect(enAll).toContain('Fleet lines · fleet pm status --json')
+  expect(enAll).toContain('>5m stale')
+  expect(enAll).toContain('123 lines')
+  for (const [cols, rows] of [[80, 24], [120, 30], [209, 49]] as const) {
+    const out = frameRows(dispatchPage, { ...ctxOf(cols, rows, liveOf(NARROW_RUNS)), v74: { pm: pmFresh, pmFetchedMs: NOW - 2 * 60_000, decide: [], todo: null, nav } }, { pages: PAGES })
+    expect(out.length).toBe(rows)
+    for (const r of out) expect(displayWidth(text(r))).toBeLessThanOrEqual(cols)
+  }
+})
+

@@ -158,6 +158,7 @@ export type PaneDetail = {
   project: string | null
   marker: MarkerView | null
   qc: QcView | null
+  qc_at?: string | null
   qc_reason?: string | null
   stage: StageWalkView | null
   decisions: DecisionsView | null
@@ -653,6 +654,16 @@ export function readQcReason(text: string | null, want: ScopeWant): QcMissingRea
   return null
 }
 
+// Extract timestamp (at / checked_at / updated_at) from a valid qc fact without altering readQc's external shape.
+export function readQcAt(text: string | null, want: ScopeWant): string | null {
+  if (text === null) return null
+  const parsed = parseJson(text)
+  if (!parsed.ok || !isObject(parsed.value) || parsed.value.schema !== QC_SCHEMA || !scopeMatches(parsed.value, { project_key: want.project_key, root_run_id: null })) return null
+  const v = parsed.value
+  if (v.state !== 'ok' && v.state !== 'owed' && v.state !== 'not_needed' && v.state !== 'unknown') return null
+  return str(v.at) ?? str(v.checked_at) ?? str(v.updated_at)
+}
+
 // <live>/runs/<project_key>.qc.json (stage-graph P7c): the pre-push qc-gate decision for HEAD vs its upstream, re-derived by the watcher
 // (scripts/qc-evidence-status.js). Absent / foreign scope / unknown state = null (nothing to say).
 export function readQc(text: string | null, want: ScopeWant): QcView | null {
@@ -661,7 +672,7 @@ export function readQc(text: string | null, want: ScopeWant): QcView | null {
   if (!parsed.ok || !isObject(parsed.value) || parsed.value.schema !== QC_SCHEMA || !scopeMatches(parsed.value, { project_key: want.project_key, root_run_id: null })) return null
   const v = parsed.value
   if (v.state !== 'ok' && v.state !== 'owed' && v.state !== 'not_needed' && v.state !== 'unknown') return null
-  const qcAt = str(v.at) ?? str(v.checked_at) ?? str(v.updated_at)
+  const qcAt = str(v.at)
   return {
     state: v.state, range: str(v.range), protected_files_count: isCount(v.protected_files_count) ? v.protected_files_count : 0,
     evidence: v.evidence === 'trailer' || v.evidence === 'artifact' ? v.evidence : null,

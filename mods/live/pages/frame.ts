@@ -277,20 +277,21 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
   return [head, ...gap, ...shown, ...actRows, ...foot].map(r => clip(r, ctx.size.cols))
 }
 
-// v7.4 top border title: the page name, data source, schema, staleness threshold (>5m), age/stale/failure state, and console source warning (design S1-S10, trace s2 G04)
+// v7.4 top border title: clean design title (page name, source, schema, optional age) with NO warnings in the border (design S1-S10).
+// Stale (>5m), failure/no-source reasons, last-success age, and console source warnings live inside the page on the first body row (v74BodyStatusRow).
 export const V74_STALE_MS = 5 * 60_000
 const V74_STALE_MIN = 5
 const V74_IGNORED_CONSOLE_SOURCES = new Set(['slots', 'metrics', 'answer_log', 'changes'])
 
 export const V74_SOURCES: Record<string, [string, string]> = {
   now: ['fleet pm status --json', 'fleet.pm.status v1'],
-  decide: ['fleet decision list --json + store', 'fleet.decision v1'],
-  dispatch: ['autopilot status runs', 'autopilot.runs-live/1'],
-  review: ['autopilot status review', 'autopilot.runs-live/1'],
-  spend: ['fleet seats --quota + console + live', 'fleet.console/1'],
-  quota: ['fleet console --json + seats --quota', 'fleet.console/1'],
-  hygiene: ['autopilot hygiene', 'autopilot.runs-live/1'],
-  fleet: ['fleet decision list + mirror + live', 'autopilot.runs-live/1'],
+  decide: ['fleet decisions list --json', 'fleet.decisions v1'],
+  dispatch: ['autopilot status runs --json', 'autopilot.runs v1'],
+  review: ['autopilot status review --json', 'autopilot.review v1'],
+  spend: ['codeforge usage summary --json', 'usage.summary v1'],
+  quota: ['fleet console --json', 'fleet.console v1'],
+  hygiene: ['autopilot hygiene --json', 'autopilot.hygiene v1'],
+  fleet: ['fleet tasks --tree --json', 'fleet.tasks v1'],
   todo: ['fleet todo --json', 'fleet.todo v1'],
 }
 
@@ -376,13 +377,7 @@ function v74PageFailure(page: Page, ctx: PageCtx): TitleFailure | null {
 
 const segsWidth = (segs: readonly Seg[]): number => segs.reduce((n, s) => n + displayWidth(s.text), 0)
 
-export function v74TitleSegs(page: Page, ctx: PageCtx, name: Seg, maxCols?: number): Seg[] {
-  const { t, nowMs } = ctx
-  const src = V74_SOURCES[page.id]
-  if (src === undefined) {
-    const out: Seg[] = [name, { text: ' · ' + t('v74.c.help_src'), dim: true }]
-    return maxCols === undefined ? out : maxCols <= 0 ? [] : clip(out, maxCols)
-  }
+function v74PageAgeMs(page: Page, ctx: PageCtx): number | null {
   const published = ctx.live?.published_at
   const publishedMs = typeof published === 'string' && Number.isFinite(Date.parse(published)) ? Date.parse(published) : null
   const consoleAt = ctx.console !== null && ctx.console !== undefined && ctx.console.generated_at_ms > 0 ? ctx.console.generated_at_ms : null
@@ -393,78 +388,90 @@ export function v74TitleSegs(page: Page, ctx: PageCtx, name: Seg, maxCols?: numb
       : page.id === 'spend' || page.id === 'quota' ? consoleAt
       : page.id === 'fleet' ? publishedMs
       : null)
-  const ageMs = fetched === null || fetched === undefined ? null : Math.max(0, nowMs - fetched)
+  return fetched === null || fetched === undefined ? null : Math.max(0, ctx.nowMs - fetched)
+}
+
+export function v74TitleSegs(page: Page, ctx: PageCtx, name: Seg, maxCols?: number): Seg[] {
+  const { t } = ctx
+  const src = V74_SOURCES[page.id]
+  if (src === undefined) {
+    const out: Seg[] = [name, { text: ' · ' + t('v74.c.help_src'), dim: true }]
+    return maxCols === undefined ? out : maxCols <= 0 ? [] : clip(out, maxCols)
+  }
+  const ageMs = v74PageAgeMs(page, ctx)
+  const fullSrc: Seg = {
+    text: ' · ' + (ageMs !== null ? t('v74.c.header', { source: src[0], schema: src[1], age: ageUnit(t, ageMs) }) : t('v74.c.header_noage', { source: src[0], schema: src[1] })),
+    dim: true,
+  }
+  if (maxCols === undefined) return [name, fullSrc]
+  if (maxCols <= 0) return []
+  if (segsWidth([name, fullSrc]) <= maxCols) return [name, fullSrc]
+
+  const ageSeg: Seg | null = ageMs === null ? null : { text: ' · ' + ageUnit(t, ageMs), dim: true }
+  const shortSrc: Seg = { text: ' · ' + src[0], dim: true }
+  const compact: Seg[] = ageSeg === null ? [name, shortSrc] : [name, shortSrc, ageSeg]
+  if (segsWidth(compact) <= maxCols) return compact
+
+  const ageW = ageSeg === null ? 0 : displayWidth(ageSeg.text)
+  const remForSrc = maxCols - displayWidth(name.text) - ageW
+  if (remForSrc >= 6) {
+    const mid: Seg = { text: ' · ' + truncateToWidth(src[0], remForSrc - 3), dim: true }
+    return ageSeg === null ? [name, mid] : [name, mid, ageSeg]
+  }
+  return clip(ageSeg === null ? [name] : [name, ageSeg], maxCols)
+}
+
+// First body row inside the v7.4 box when a source is stale (>5m or live.state=stale), failed/missing, or has a console source warning.
+// Returns null when the page's data is healthy and fresh so normal pages keep their exact layout and never put warnings in the border.
+export function v74BodyStatusRow(page: Page, ctx: PageCtx, maxCols?: number): Row | null {
+  const { t } = ctx
+  if (V74_SOURCES[page.id] === undefined) return null
+  const ageMs = v74PageAgeMs(page, ctx)
   const failure = v74PageFailure(page, ctx)
   const liveBacked = page.id === 'dispatch' || page.id === 'review' || page.id === 'hygiene' || page.id === 'fleet'
   const liveStale = liveBacked && ctx.live?.state === 'stale'
   const isStale = failure === null && ((ageMs !== null && ageMs > V74_STALE_MS) || liveStale)
   const severe = v74ConsoleSevere(ctx)
+  if (failure === null && !isStale && severe === null) return null
 
-  const shortSrc: Seg = { text: ' · ' + src[0], dim: true }
-  let fullSrc: Seg
-  let shortSrcLimit: Seg | null = null
   const tailSegs: Seg[] = []
-
   if (failure !== null) {
-    fullSrc = { text: ' · ' + t('v74.c.header_noage', { source: src[0], schema: src[1] }), dim: true }
     const failBody = failure.kind === 'failed'
       ? (failure.reason === null ? t('v74.c.title_failed') : t('v74.c.title_failed_why', { reason: failure.reason }))
       : GLYPHS.state.failed + ' ' + (failure.reason === null ? t('v74.c.title_nosrc') : t('v74.c.title_nosrc_why', { reason: failure.reason }))
-    tailSegs.push({ text: ' · ' + failBody, color: PALETTE.broken })
+    tailSegs.push({ text: failBody, color: PALETTE.broken })
     if (ageMs !== null) {
       tailSegs.push({ text: ' · ' + t('v74.c.title_last_ok', { age: ageUnit(t, ageMs) }), dim: true })
     }
   } else if (isStale) {
-    fullSrc = { text: ' · ' + t('v74.c.header_noage', { source: src[0], schema: src[1] }), dim: true }
     const staleText = ageMs !== null
       ? t('v74.c.title_stale', { age: ageUnit(t, ageMs), min: V74_STALE_MIN })
       : t('v74.c.title_stale_noage', { min: V74_STALE_MIN })
-    tailSegs.push({ text: ' · ' + GLYPHS.state.stale + ' ' + staleText, color: PALETTE.attention })
-  } else if (ageMs !== null) {
-    fullSrc = { text: ' · ' + t('v74.c.header_src_limit', { source: src[0], schema: src[1], min: V74_STALE_MIN }), dim: true }
-    shortSrcLimit = { text: ' · ' + t('v74.c.header_short_limit', { source: src[0], min: V74_STALE_MIN }), dim: true }
-    tailSegs.push({ text: ' · ' + ageUnit(t, ageMs), dim: true })
-  } else {
-    fullSrc = { text: ' · ' + t('v74.c.header_noage', { source: src[0], schema: src[1] }), dim: true }
-    shortSrcLimit = { text: ' · ' + t('v74.c.header_short_limit', { source: src[0], min: V74_STALE_MIN }), dim: true }
+    tailSegs.push({ text: GLYPHS.state.stale + ' ' + staleText, color: PALETTE.attention })
   }
 
-  const severeSegs: Seg[] = severe === null ? [] : [{ text: ' · ', dim: true }, severe]
-  const statusSegs: Seg[] = [...tailSegs, ...severeSegs]
+  const all: Seg[] = severe === null
+    ? tailSegs
+    : tailSegs.length === 0
+      ? [severe]
+      : [...tailSegs, { text: ' · ', dim: true }, severe]
 
-  if (maxCols === undefined) return [name, fullSrc, ...statusSegs]
+  if (maxCols === undefined) return all
   if (maxCols <= 0) return []
+  if (segsWidth(all) <= maxCols) return all
 
-  const candidates: Seg[][] = [
-    [name, fullSrc, ...statusSegs],
-    ...(shortSrcLimit === null ? [] : [[name, shortSrcLimit, ...statusSegs]]),
-    [name, shortSrc, ...statusSegs],
-  ]
-  for (const cand of candidates) {
-    if (segsWidth(cand) <= maxCols) return cand
-  }
-
-  const nameW = displayWidth(name.text)
-  const statusW = segsWidth(statusSegs)
-  const remForSrc = maxCols - nameW - statusW
-  if (remForSrc >= 6) {
-    return [name, { text: ' · ' + truncateToWidth(src[0], remForSrc - 3), dim: true }, ...statusSegs]
-  }
-  if (remForSrc >= 0) return [name, ...statusSegs]
-
-  // Even without source, name + status exceeds maxCols: keep tailSegs intact over severe, and keep last-success age over long error text.
   const tailW = segsWidth(tailSegs)
-  if (severe !== null && nameW + tailW <= maxCols) {
-    const remSev = maxCols - nameW - tailW - 3
-    if (remSev >= 4) return [name, ...tailSegs, { text: ' · ', dim: true }, { ...severe, text: truncateToWidth(severe.text, remSev) }]
-    return [name, ...tailSegs]
+  if (severe !== null && tailSegs.length > 0 && tailW <= maxCols) {
+    const remSev = maxCols - tailW - 3
+    if (remSev >= 4) return [...tailSegs, { text: ' · ', dim: true }, { ...severe, text: truncateToWidth(severe.text, remSev) }]
+    return tailSegs
   }
   if (tailSegs.length === 2) {
     const lastW = displayWidth(tailSegs[1].text)
-    const remFail = maxCols - nameW - lastW
+    const remFail = maxCols - lastW
     if (remFail >= 6) {
-      return [name, { ...tailSegs[0], text: truncateToWidth(tailSegs[0].text, remFail) }, tailSegs[1]]
+      return [{ ...tailSegs[0], text: truncateToWidth(tailSegs[0].text, remFail) }, tailSegs[1]]
     }
   }
-  return clip([name, ...statusSegs], maxCols)
+  return clip(all, maxCols)
 }

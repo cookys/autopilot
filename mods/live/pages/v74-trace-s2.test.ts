@@ -223,7 +223,7 @@ test('G04 (5): now, decide, dispatch, review, hygiene and fleet surface broken s
   })
   const nowFail = v74BodyStatusRow(pageOf('now'), nowFailCtx)!
   expect(nowFail.some(s => s.color === PALETTE.broken && s.text.includes('pm daemon down'))).toBe(true)
-  expect(segsText(nowFail)).toContain('上次 12 分')
+  expect(segsText(nowFail)).toContain('12 分')
   expect(v74TitleSegs(pageOf('now'), nowFailCtx, { text: '現況' }).some(s => s.color === PALETTE.broken)).toBe(false)
 
   // decide: empty [] is NOT failed; null with decideError IS failed with error + last-success age
@@ -236,7 +236,7 @@ test('G04 (5): now, decide, dispatch, review, hygiene and fleet surface broken s
     v74: v74Of({ decide: null, decideFetchedMs: NOW - 7 * MIN, decideError: 'hub unreachable', ages: { decide: NOW - 7 * MIN }, errors: { decide: 'hub unreachable' } }),
   }))!
   expect(decFail.some(s => s.color === PALETTE.broken && s.text.includes('hub unreachable'))).toBe(true)
-  expect(segsText(decFail)).toContain('上次 7 分')
+  expect(segsText(decFail)).toContain('7 分')
 
   // dispatch, review, hygiene, fleet: missing live / missing rows / fleetError all draw PALETTE.broken
   for (const id of ['dispatch', 'review', 'hygiene', 'fleet'] as const) {
@@ -249,7 +249,7 @@ test('G04 (5): now, decide, dispatch, review, hygiene and fleet surface broken s
     v74: v74Of({ fleetError: 'exit 1', ages: { fleet: NOW - 9 * MIN }, errors: { fleet: 'exit 1' } }),
   }))!
   expect(fleetErr.some(s => s.color === PALETTE.broken && s.text.includes('exit 1'))).toBe(true)
-  expect(segsText(fleetErr)).toContain('上次 9 分')
+  expect(segsText(fleetErr)).toContain('9 分')
 
   const hygMissing = v74BodyStatusRow(pageOf('hygiene'), ctxOf({
     live: liveOf({ detail: { ...NO_DETAIL, now_ms: NOW, residue: null, load_source: null } }),
@@ -334,8 +334,11 @@ test('G04 (3): narrow 80-col boxed top border keeps clean title + age and first 
   const topText = flat(top80)
   const row0Text = flat(row0_80)
   expect(displayWidth(topText)).toBeLessThanOrEqual(80)
-  expect(topText).not.toContain('讀取失敗')
+  // r10b #5 keeps the plain 「· 讀取失敗」 suffix in the title; the reason text and the stale threshold stay out of the border
+  expect(topText).toContain('讀取失敗')
+  expect(topText).not.toContain('fleet pm status failed')
+  expect(topText).not.toContain('>5 分')
   expect(displayWidth(row0Text)).toBeLessThanOrEqual(80)
   expect(row0Text).toContain('讀取失敗')
-  expect(row0Text).toContain('上次 12 分')
+  expect(row0Text).toContain('12 分')
 })

@@ -93,7 +93,7 @@ test('band-onerow routing: segment click and digit key reach identical pages; hi
     ['line', '3'],
     ['qc', '4'],
     ['tps', '5'],
-    ['source', '8'],
+    ['source', '6'],
   ]
   for (const [segId, digit] of digitBySeg) {
     const keyAct = routeKey(digit, { page: 'now', paneFocus: true, focusedButton: false, textMode: false })

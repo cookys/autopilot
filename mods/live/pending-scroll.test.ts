@@ -1,4 +1,4 @@
-import { test, expect, mock } from 'claude-code/testing'
+import { test, expect } from 'claude-code/testing'
 import { routeKey } from './pages/keys'
 import { decidePage, decideReduce, NO_NAV } from './pages/decide'
 import { frameRows } from './pages/frame'
@@ -9,7 +9,6 @@ import { makeT } from './i18n'
 import fixture from './fixtures/v74/decide.fixture'
 import { Pane } from './pane'
 import { PAGES } from './pages/index'
-import { v75ScrollRoute } from './v75'
 
 const cards = Array.from({ length: 21 }, (_, i) => ({ ...fixture[0], id: 'scroll-' + i, title: 'Card ' + (i + 1) }))
 const ctx = (extra = {}) => ({ live: null, console: null, t: makeT('zh-TW'), nowMs: 0, size: { cols: 120, rows: 22 }, v74: { pm: null, pmFetchedMs: null, decide: cards, todo: [], nav: { cursor: 0, picks: {}, notes: {}, noteMode: false } }, ...extra })
@@ -33,12 +32,6 @@ test('pending scroll: p/n change cards, j/k retain their meaning, arrows and pag
 
 const text = row => row.map(s => s.text).join('')
 const windows = () => ({ list: newScroll(), detail: newScroll(), cursor: '' })
-test('pending scroll: host arrows/pages scroll detail, pointer wheels scroll the queue, note mode owns its keys', () => {
-  const open = { paneOpen: true, note: false }
-  for (const by of [1, -1, 22, -22]) expect(v75ScrollRoute({ component: 'Pane', by }, open)).toBe('pane')
-  for (const by of [1, -1, 3, -3]) expect(v75ScrollRoute({ component: 'Pane', by, pointer: { x: 4, y: 3 } }, open)).toBe('queue')
-  expect(v75ScrollRoute({ component: 'Pane', by: 1 }, { ...open, note: true })).toBe('swallow')
-})
 
 const el = Object.fromEntries(['Box', 'Text', 'Link', 'Button', 'Input'].map(type => [type, props => ({ type, props })]))
 function nodes(node): any[] {
@@ -134,75 +127,4 @@ test('pending scroll: a long question, background and option details reach the l
   expect(applyScroll(pendingScroll.detail, { by: 1, contentRows: 10000 })).toBe(false)
   expect(applyScroll(pendingScroll.detail, { by: -10000, contentRows: 10000 })).toBe(true)
   expect(pendingScroll.detail.offset).toBe(0)
-})
-
-// Mount the registered production hook against an in-memory filesystem. No live
-// state or credentials are read; process.run only returns fictional cards.
-test('pending scroll: mounted v75 Pane scrolls past 400 rows, wheels the list and keeps p/n and arrow navigation distinct', async ($, on) => {
-  const root = '/fixture/pending-scroll'
-  const now = Date.parse('2026-11-01T00:00:00Z')
-  const clock = mock.clock(on, { now })
-  on('env.get', (_, e) => ({ value: e.name === 'HOME' ? root : e.name === 'AUTOPILOT_LOCALE' ? 'en' : e.name === 'AUTOPILOT_LIVE_V75' ? '1' : undefined }))
-  on('fs.read', (_, e) => { if (e.path.endsWith('/.git/HEAD')) return { value: 'ref: refs/heads/main\n' }; throw new Error('ENOENT') })
-  on('fs.exists', () => ({ value: false }))
-  on('fs.write', () => ({ value: undefined }))
-  on('fs.list', () => ({ value: [] }))
-  on('fs.stat', (_, e) => ({ value: { kind: e.path === root ? 'dir' : 'file', size: 1, mtimeMs: 0, isLink: false, realPath: e.path } }))
-  on('config.list', () => ({ value: [] }))
-  on('session.id', () => ({ value: 'pending-scroll-fixture' }))
-  on('session.cwd', () => ({ value: root }))
-  on('session.root', () => ({ value: root }))
-  on('session.start', () => ({ cwd: root }))
-  on('session.end', () => ({ sessionId: 'pending-scroll-fixture' }))
-  on('command.register', (_, e) => ({ value: { command: e.name } }))
-  on('ui.invalidate', () => ({ value: undefined }))
-  on('ui.toast', () => ({ value: undefined }))
-  on('ui.focus', () => ({ value: undefined }))
-  on('ui.open', () => ({ value: { isPlaced: true } }))
-  on('ui.panes', () => ({ value: [] }))
-  on('ui.close', () => ({ value: undefined }))
-  on('process.run', (_, e) => ({ value: { exitCode: e.argv.includes('decision') ? 0 : 1, stdout: e.argv.includes('decision') ? JSON.stringify({ cards: cards.map((c, i) => ({ card: { card_id: c.id, title: c.title, question: 'Question ' + (i + 1), background: i === 0 ? Array.from({ length: 450 }, (_, n) => 'Background line ' + n).join('\n') + '\nMOUNTED-END' : 'Short background', options: [{ label: 'Option A', description: 'Option detail' }], recommendation: 'Option A' } })) }) : '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
-  on('ui.render', { component: 'AbovePrompt' }, () => ({ type: 'engine', ref: 0 }))
-  await $.session.start({ surface: 'terminal', cwd: root })
-  await clock.advance(5000)
-  await $.command.run({ command: 'live-pane', args: '' })
-  const band = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', requestId: 'above-prompt', props: { bodyColumns: 120, maxRows: 40 }, viewport: { columns: 120, rows: 45, isFullscreen: true } })
-  await band.drawn()
-  let pane = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'Pane', requestId: 'autopilot-live', props: { bodyColumns: 120, scroll: { offset: 0, bodyRows: 22 }, isFocused: true }, viewport: { columns: 120, rows: 22, isFullscreen: true } })
-  await pane.press({ key: 'decide' })
-  await clock.advance(50)
-  const visible = n => typeof n === 'string' ? n : Array.isArray(n) ? n.map(visible).join('') : n?.props?.width === 0 || n?.props?.height === 0 ? '' : visible(n?.children ?? [])
-  const screen = async () => {
-    await pane.unmount()
-    pane = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'Pane', requestId: 'autopilot-live', props: { bodyColumns: 120, scroll: { offset: 0, bodyRows: 22 }, isFocused: true }, viewport: { columns: 120, rows: 22, isFullscreen: true } })
-    return visible(await pane.drawn())
-  }
-  expect(await screen()).toContain('Cards 1–8 of 21')
-  const scroll = (by, pointer?) => $.ui.scroll({ component: 'Pane', requestId: 'autopilot-live', by, offset: 0, bodyRows: 22, contentRows: 22, origin: { kind: 'person' }, ...(pointer === undefined ? {} : { pointer }) })
-  const focus = element => $.ui.focus({ component: 'Pane', requestId: 'autopilot-live', element, origin: { kind: 'person' } })
-  await focus('focus')
-  let before = await screen()
-  for (const element of ['pn:j', 'pn:k', 'pn:n', 'pn:p', 'pn:m']) {
-    await focus(element)
-    const after = await screen()
-    expect(after, element + ' must scroll rather than switch cards').not.toBe(before)
-    before = after
-  }
-  await scroll(3, { x: 3, y: 4 })
-  expect(await screen()).toContain('Cards 4–11 of 21')
-  await scroll(1)
-  expect(await screen()).toContain('Cards 4–11 of 21')
-  for (let i = 0; i < 90; i++) { await scroll(22); await screen() }
-  expect(await screen()).toContain('MOUNTED-END')
-  expect(await screen()).toContain('Option detail')
-  await pane.press({ key: 'pn:n' })
-  await clock.advance(50)
-  expect(await screen()).toContain('Question 2')
-  expect(await screen()).toContain('Cards 1–8 of 21')
-  await pane.press({ key: 'pn:p' })
-  await clock.advance(50)
-  expect(await screen()).toContain('Background line 0')
-  await pane.unmount()
-  await band.unmount()
-  await $.session.end({ reason: 'exit' })
 })

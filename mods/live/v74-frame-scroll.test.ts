@@ -8,7 +8,7 @@ async function host($, on, maxRows = 34) {
   const root = '/fixture/v74-frame-scroll'
   const now = Date.parse('2026-11-01T00:00:00Z')
   const clock = mock.clock(on, { now })
-  on('env.get', (_, e) => ({ value: e.name === 'HOME' ? root : e.name === 'AUTOPILOT_LOCALE' ? 'zh-TW' : e.name === 'AUTOPILOT_LIVE_V75' ? '0' : undefined }))
+  on('env.get', (_, e) => ({ value: e.name === 'HOME' ? root : e.name === 'AUTOPILOT_LOCALE' ? 'zh-TW' : undefined }))
   on('fs.read', (_, e) => { if (e.path.endsWith('/.git/HEAD')) return { value: 'ref: refs/heads/main\n' }; throw new Error('ENOENT') })
   on('fs.exists', () => ({ value: false }))
   on('fs.write', () => ({ value: undefined }))

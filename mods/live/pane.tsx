@@ -4,7 +4,6 @@
 // gets its props from `drawSeg` (ui.ts), theme keys as text colour only, no background, no inverse.
 
 import { GLYPHS } from '../tux/glyphs.ts'
-import { v75On } from './v75'
 import { T_EN } from './i18n'
 import type { T } from './i18n'
 import { paneWidth } from './model'
@@ -162,11 +161,11 @@ export const paneRank = new Map<string, number>()
 export type FramePane = { pendingScroll?: PageCtx['pendingScroll']; poolEta?: PoolEta | null; room?: readonly { seq: number; from: string; kind: string; text: string }[]; pages: readonly Page[]; pageId?: PageId; onPage?: (id: PageId) => void; console: ConsoleSnapshot | null; nowMs: number; rows: number; scroll?: number; view?: Record<string, PageView>; decide?: DecideNav; v74?: V74Ctx; v74Box?: true; onPress?: (id: string) => void; onKey?: (k: KeyAction) => void; onText?: (v: string) => void; epoch?: number; steps?: readonly Step[]; pet?: unknown; others?: OthersView | null }
 const COMMON_KEYS: Record<string, KeyAction> = { z: { kind: 'fold' } } // the host takes a digit or a lowercase letter as a hotkey: Space is z here. j / k (next / previous card) are carried by the `[j] [k]` hint Buttons of the 待決 action row
 const CARD_KEYS: Record<string, KeyAction> = { a: { kind: 'pick', index: 0 }, b: { kind: 'pick', index: 1 }, c: { kind: 'pick', index: 2 } }
-const DECIDE_KEYS: Record<string, KeyAction> = { ...CARD_KEYS, d: { kind: 'pick', index: 3 }, e: { kind: 'pick', index: 4 }, j: { kind: 'move', by: 1 }, k: { kind: 'move', by: -1 }, m: { kind: 'note' }, n: { kind: 'move', by: 1 }, p: { kind: 'move', by: -1 }, u: { kind: 'undo' }, h: { kind: 'prev' }, l: { kind: 'next' }, f: { kind: 'fill' }, s: { kind: 'submit' } }
+const DECIDE_KEYS: Record<string, KeyAction> = { ...CARD_KEYS, d: { kind: 'pick', index: 3 }, e: { kind: 'expand' }, v: { kind: 'style' }, j: { kind: 'move', by: 1 }, k: { kind: 'move', by: -1 }, m: { kind: 'note' }, n: { kind: 'move', by: 1 }, p: { kind: 'move', by: -1 }, u: { kind: 'undo' }, h: { kind: 'prev' }, l: { kind: 'next' }, f: { kind: 'fill' }, s: { kind: 'submit' } }
 // o acts on the focused (▸) row: quota shows / hides that pool's seats. decide has no o (a-e pick there); now has no focused row yet, so o is not bound there
 const OPEN_KEY: Record<string, KeyAction> = { o: { kind: 'open' } }
 const pageKeys = (id: string): Record<string, KeyAction> =>
-  (id === 'decide' ? { ...COMMON_KEYS, ...(v75On() ? DECIDE_KEYS : { ...Object.fromEntries(Object.entries(DECIDE_KEYS).filter(([l]) => l !== 'j' && l !== 'k')), e: { kind: 'expand' }, v: { kind: 'style' } }) } : id === 'todo' ? { ...COMMON_KEYS, ...CARD_KEYS } : id === 'fleet' ? {} : id === 'quota' ? { ...COMMON_KEYS, ...OPEN_KEY } : COMMON_KEYS) // v7.4 S8: the 艦隊 page is a plain list with no action rows, so it binds nothing (no fold, no see, no fill)
+  (id === 'decide' ? { ...COMMON_KEYS, ...DECIDE_KEYS } : id === 'todo' ? { ...COMMON_KEYS, ...CARD_KEYS } : id === 'fleet' ? {} : id === 'quota' ? { ...COMMON_KEYS, ...OPEN_KEY } : COMMON_KEYS) // v7.4 S8: the 艦隊 page is a plain list with no action rows, so it binds nothing (no fold, no see, no fill)
 // every hotkey a framed page binds (f on fleet / quota is the page's own fill action): a visible `[x]` key hint must be one of these (frame.test.ts)
 export const pageHotkeys = (id: string): string[] => [...Object.keys(pageKeys(id)), ...(id === 'quota' ? ['f'] : [])]
 // quota renders under spend tab; spend page id maps to spend tab
@@ -292,12 +291,12 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
       }
       nodes.push(text(sg.text, 'g' + j))
     }
-    // F1: j / k (next / previous card) are always carried by a zero-size Button on 待決 and 待辦, whatever the action row says: a letter with no Button in the Pane is handed to the prompt and takes the keyboard with it (gate m75d 12, 14)
+    // F1: j / k (next / previous card) are always carried by a zero-size Button on 待決 and 待辦, whatever the action row says: a letter with no Button in the Pane is handed to the prompt and takes the keyboard with it
     if (i === rows.length - 1) {
       paneRank.set(focusAnchorKey(epoch), rows.length * 1000)
       for (const [at, letter] of ['j', 'k', 'n', 'p', 'm'].entries()) paneRank.set('pn:' + letter + ep, rows.length * 1000 + at + 1)
     }
-    const navHot = v75On() && i === rows.length - 1 && !typing && Button !== undefined && (page.id === 'decide' || page.id === 'todo')
+    const navHot = i === rows.length - 1 && !typing && Button !== undefined && (page.id === 'decide' || page.id === 'todo')
       ? (page.id === 'decide' && frame.v74 !== undefined ? [['j', 1], ['k', -1], ['n', 1], ['p', -1], ['m', 0]] : [['j', 1], ['k', -1]]).filter(([l]) => !used.has(l as string)).map(([l, by]) => <Box key={'hk:' + l} width={0} height={0} overflow="hidden"><Button key={'pn:' + l + ep} plain hotkey={l as string} onPress={() => frame.onKey?.(keys[l as string] ?? { kind: 'move', by: by as 1 | -1 })}>{l as string}</Button></Box>)
       : []
     return <Box key={'f' + i} {...(frame.pendingScroll !== undefined && page.id === 'decide' ? { width: cols, height: 1, overflow: 'hidden' as const } : {})}>{nodes}{i === rows.length - 1 ? [focusAnchor(el, epoch), ...navHot] : null}</Box>

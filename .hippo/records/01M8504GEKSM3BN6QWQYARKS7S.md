@@ -1,0 +1,11 @@
+---
+id: 01M8504GEKSM3BN6QWQYARKS7S
+kind: issue
+created: 2026-11-23T20:04:09.811Z
+---
+- **Since**: 2026-11-23
+- **Problem**: develop 基線一直有十二套測試套件失敗，沒人查過根因，每次合併都要拿基線差集比對，容易誤判。
+- **Impact**: 新紅會被當成舊紅放過，合併審查多一道人工比對
+- **Trigger**: 任何一次要判斷新紅或舊紅時
+- **Source**: autopilot--claude 2026-11-24 對帳
+- **Pointer**: none

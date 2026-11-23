@@ -1,0 +1,11 @@
+---
+id: 01M8504N0DK8PX8XZWJAGAWC5H
+kind: issue
+created: 2026-11-23T20:04:14.478Z
+---
+- **Since**: 2026-11-23
+- **Problem**: codex 沙箱禁止連網，說明裡寫先抓遠端更新會讓它直接停手回報無事可做，連續浪費兩輪派工。派工說明的驗收也必須是它做得到的檢查。
+- **Impact**: 派工白跑，額度與時間浪費
+- **Trigger**: 下次寫派工說明時
+- **Source**: autopilot--claude 2026-11-24 對帳
+- **Pointer**: none

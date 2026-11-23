@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0508 -->
+<!-- next-id: BL-0514 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -2451,4 +2451,83 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: ready
 - **Effort**: S
 - **Source**: self 2026-11-22
+- **Pointer**: none
+
+### 派工驗收的套件跑法要遵守兩套並行上限
+- **Id**: BL-0508
+- **Status**: open
+- **Since**: 2026-11-23
+- **Origin**: self
+- **Problem**: 派工收尾時自動跑的相關測試一次開很多套件，超過這台兩套上限，造成磁碟讀寫過量，被系統通報失控，只能人工用行程編號停掉。
+- **Impact**: 每次派工收尾都要人工停掉，且會拖慢同機其他工作
+- **Trigger**: 下次有 dispatch-hetero 派工完成時就會再發生
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: autopilot--claude 2026-11-24 兩次被 runaway 通報
+- **Pointer**: none
+- **Context**: tip-verify 呼叫 scripts/affected-suites.js --run；基線另有 12 套紅
+
+### 基線有十二套測試套件紅，根因未查
+- **Id**: BL-0509
+- **Status**: open
+- **Since**: 2026-11-23
+- **Origin**: self
+- **Problem**: develop 基線一直有十二套測試套件失敗，沒人查過根因，每次合併都要拿基線差集比對，容易誤判。
+- **Impact**: 新紅會被當成舊紅放過，合併審查多一道人工比對
+- **Trigger**: 任何一次要判斷新紅或舊紅時
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: autopilot--claude 2026-11-24 對帳
+- **Pointer**: none
+
+### 派工時不可叫沙箱引擎先抓遠端更新
+- **Id**: BL-0510
+- **Status**: open
+- **Since**: 2026-11-23
+- **Origin**: self
+- **Problem**: codex 沙箱禁止連網，說明裡寫先抓遠端更新會讓它直接停手回報無事可做，連續浪費兩輪派工。派工說明的驗收也必須是它做得到的檢查。
+- **Impact**: 派工白跑，額度與時間浪費
+- **Trigger**: 下次寫派工說明時
+- **Trigger-Type**: event
+- **Effort**: XS
+- **Source**: autopilot--claude 2026-11-24 對帳
+- **Pointer**: none
+
+### gateway-fill 兩支孤兒腳本要決定留或刪
+- **Id**: BL-0511
+- **Status**: open
+- **Since**: 2026-11-23
+- **Origin**: self
+- **Problem**: gateway-fill 與其試跑腳本已合併但沒有任何呼叫端，是否保留未決。
+- **Impact**: 留著沒人用的程式碼會增加維護與誤用
+- **Trigger**: PM 裁示後
+- **Trigger-Type**: event
+- **Effort**: XS
+- **Source**: autopilot--claude 2026-11-24 對帳
+- **Pointer**: none
+
+### 孤兒的狀態監看行程要清掉並防再發
+- **Id**: BL-0512
+- **Status**: open
+- **Since**: 2026-11-23
+- **Origin**: self
+- **Problem**: 有一個 autopilot status runs --watch 的監看行程在工作結束後仍在跑，沒人收。
+- **Impact**: 長期佔用資源，也可能被誤判為失控行程
+- **Trigger**: 下次發現殘留行程時
+- **Trigger-Type**: event
+- **Effort**: XS
+- **Source**: autopilot--claude 2026-11-24 對帳
+- **Pointer**: none
+
+### 舊分支 feat/pm-replay-slice 系列要封存後刪除
+- **Id**: BL-0513
+- **Status**: open
+- **Since**: 2026-11-23
+- **Origin**: self
+- **Problem**: feat/pm-replay-slice、-2、-4 三條舊分支超過三天沒有對應活單，依規定要先打封存標籤再刪。
+- **Impact**: 孤兒分支累積，違反分支衛生規則
+- **Trigger**: 下次整理分支時
+- **Trigger-Type**: event
+- **Effort**: XS
+- **Source**: autopilot--claude 2026-11-24 對帳
 - **Pointer**: none

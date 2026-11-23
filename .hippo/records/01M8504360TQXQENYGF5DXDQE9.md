@@ -1,0 +1,12 @@
+---
+id: 01M8504360TQXQENYGF5DXDQE9
+kind: issue
+created: 2026-11-23T20:03:56.224Z
+---
+- **Since**: 2026-11-23
+- **Problem**: 派工收尾時自動跑的相關測試一次開很多套件，超過這台兩套上限，造成磁碟讀寫過量，被系統通報失控，只能人工用行程編號停掉。
+- **Impact**: 每次派工收尾都要人工停掉，且會拖慢同機其他工作
+- **Trigger**: 下次有 dispatch-hetero 派工完成時就會再發生
+- **Source**: autopilot--claude 2026-11-24 兩次被 runaway 通報
+- **Pointer**: none
+- **Context**: tip-verify 呼叫 scripts/affected-suites.js --run；基線另有 12 套紅

@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0514 -->
+<!-- next-id: BL-0515 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -2530,4 +2530,17 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: XS
 - **Source**: autopilot--claude 2026-11-24 對帳
+- **Pointer**: none
+
+### 相依剪枝是否放寬 glob 與整棵樹掃描的條件
+- **Id**: BL-0514
+- **Status**: open
+- **Since**: 2026-11-23
+- **Origin**: self
+- **Problem**: 相依剪枝機制正確且保守，但目前測不出省時間。要不要放寬 glob 與整棵樹掃描這兩類的剪枝條件還沒決定。
+- **Impact**: 不放寬就維持現狀，測試選取仍偏多、不省時
+- **Trigger**: 要加快 affected-suites 時再議
+- **Trigger-Type**: owner
+- **Effort**: S
+- **Source**: 單 01M7XY35R2 第二次驗證結論
 - **Pointer**: none

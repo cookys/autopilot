@@ -146,18 +146,19 @@ export function OneRowBand(
       : <Button key="pane-toggle" plain autoFocus onPress={onToggleExpand}>{togTexts}</Button>,
   )
   // §2.3: when the page frame is closed/not drawn, keep page digits (1-9) and w reachable on the band row.
+  // Use empty <Text>{''}</Text> labels (matching focusAnchor in pane.tsx) so tree-text readers do not append hidden hotkey letters to the band row.
   if (hotkeys !== undefined && Button !== undefined) {
     for (const id of V74_PAGES) {
       const digit = V74_KEY[id]
       parts.push(
         <Box key={'band-hk-' + id} width={0} height={0} overflow="hidden">
-          <Button key={'band-hotkey:' + digit} plain hotkey={digit} onPress={() => hotkeys.onPage(id)}>{digit}</Button>
+          <Button key={'band-hotkey:' + digit} plain hotkey={digit} onPress={() => hotkeys.onPage(id)}><Text>{''}</Text></Button>
         </Box>,
       )
     }
     parts.push(
       <Box key="band-hk-w" width={0} height={0} overflow="hidden">
-        <Button key="band-hotkey:w" plain hotkey="w" onPress={onToggleExpand}>w</Button>
+        <Button key="band-hotkey:w" plain hotkey="w" onPress={onToggleExpand}><Text>{''}</Text></Button>
       </Box>,
     )
   }

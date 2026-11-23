@@ -317,8 +317,10 @@ function classify(tool, input) {
     // Rule 1 denies here; rules 2/3 only collect warnings, which ride along with whatever the
     // rest of this hook emits (the read counter and the wait advisory still run).
     const launchWarns = [];
+    let rewrittenInput = null;
     if (payload.tool_name === 'Bash' && payload.tool_input && typeof payload.tool_input.command === 'string') {
-      const cmd = payload.tool_input.command;
+      const origCmd = payload.tool_input.command;
+      let cmd = origCmd;
       const secret = cfg.secretMode === 'off' ? null : detectSecretPrint(cmd);
       const secretReason = secret && `${secret.why} (${secret.rule})`;
       if (secret && cfg.secretMode === 'block') {
@@ -353,13 +355,20 @@ function classify(tool, input) {
         ? `\n改寫後的指令（直接照抄）：${ls.rewrite}`
         : '';
       if (ls && cfg.lsMode === 'deny') {
-        emitDeny(`bash-launch-guard (${ls.rule}): ${ls.why}. Set AUTOPILOT_BASH_GUARD_LS_MODE=warn|off `
-          + '(or depth0_delegate_gate.bare_ls in ~/.autopilot/config.json) to relax.'
-          + lsRewrite
-          + gateHint('ls 要帶顯式路徑（ls <path>）；要探索目錄改用 Glob/Read 工具', 'hooks/README.md'));
-        process.exit(0);
+        if (ls.rewrite && ls.rewrite !== cmd && !detectBareLs(ls.rewrite)) {
+          const prev = cmd;
+          cmd = ls.rewrite;
+          launchWarns.push(`已自動改寫：${prev} → ${cmd}`);
+        } else {
+          emitDeny(`bash-launch-guard (${ls.rule}): ${ls.why}. Set AUTOPILOT_BASH_GUARD_LS_MODE=warn|off `
+            + '(or depth0_delegate_gate.bare_ls in ~/.autopilot/config.json) to relax.'
+            + lsRewrite
+            + gateHint('ls 要帶顯式路徑（ls <path>）；要探索目錄改用 Glob/Read 工具', 'hooks/README.md'));
+          process.exit(0);
+        }
+      } else if (ls) {
+        launchWarns.push(`bash-launch-guard (${ls.rule}): ${ls.why}${lsRewrite}`);
       }
-      if (ls) launchWarns.push(`bash-launch-guard (${ls.rule}): ${ls.why}${lsRewrite}`);
       const rv = cfg.rmVarMode === 'off' ? null : detectRecursiveRmVar(cmd);
       const rvRewrite = rv && rv.rewrite ? `\n改寫後的指令（直接照抄）：${rv.rewrite}` : '';
       if (rv && cfg.rmVarMode === 'deny') {
@@ -401,33 +410,50 @@ function classify(tool, input) {
       if (zs) launchWarns.push(`bash-launch-guard (${zs.rule}): ${zs.why}${zsRewrite}`);
       const shellName = path.basename(process.env.AUTOPILOT_BASH_GUARD_SHELL || process.env.SHELL || '');
       if (shellName === 'zsh') {
-        const z = detectZshExpansion(cmd, typeof payload.cwd === 'string' ? payload.cwd : process.cwd());
+        const zshCwd = typeof payload.cwd === 'string' ? payload.cwd : process.cwd();
+        const z = detectZshExpansion(cmd, zshCwd);
         if (z) {
-          const zRewrite = z.rewrite ? `\n改寫後的指令（直接照抄）：${z.rewrite}` : '';
-          launchWarns.push(`bash-launch-guard (${z.rule}, warn only): ${z.why}${zRewrite}`);
+          if (z.rewrite && z.rewrite !== cmd && !detectZshExpansion(z.rewrite, zshCwd)) {
+            const prev = cmd;
+            cmd = z.rewrite;
+            launchWarns.push(`已自動改寫：${prev} → ${cmd}`);
+          } else {
+            const zRewrite = z.rewrite ? `\n改寫後的指令（直接照抄）：${z.rewrite}` : '';
+            launchWarns.push(`bash-launch-guard (${z.rule}, warn only): ${z.why}${zRewrite}`);
+          }
         }
+      }
+      if (cmd !== origCmd) {
+        rewrittenInput = { ...payload.tool_input, command: cmd };
       }
     }
     const emitAdvisory = (lines) => {
       const advisory = lines.join('\n');
-      process.stderr.write(`${advisory}\n`);
-      process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: advisory } })}\n`);
+      if (advisory) process.stderr.write(`${advisory}\n`);
+      process.stdout.write(`${JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse',
+          ...(rewrittenInput ? { permissionDecision: 'allow', updatedInput: rewrittenInput } : {}),
+          additionalContext: advisory,
+        },
+      })}\n`);
     };
     // Presence, not truthiness: an empty/null agent_id still marks a subagent fire (review 🟠 agent-id-presence).
     if (Object.prototype.hasOwnProperty.call(payload, 'agent_id')) { // depth-1+: foreman-guard's territory
-      if (launchWarns.length) emitAdvisory(launchWarns);
+      if (launchWarns.length || rewrittenInput) emitAdvisory(launchWarns);
       process.exit(0);
     }
 
     const tool = payload.tool_name || '';
-    const kind = classify(tool, payload.tool_input);
+    const effectiveInput = rewrittenInput || payload.tool_input;
+    const kind = classify(tool, effectiveInput);
     // Foreground-wait advisory (advice-only, never a deny): a depth-0 Bash that sleeps >=20 s,
     // loops on sleep, or follows a log in the foreground. Independent of the read counter.
-    const waitRule = tool === 'Bash' && payload.tool_input
-      ? detectForegroundWait(payload.tool_input.command, payload.tool_input.run_in_background, WAIT_MIN_SLEEP_SECONDS)
+    const waitRule = tool === 'Bash' && effectiveInput
+      ? detectForegroundWait(effectiveInput.command, effectiveInput.run_in_background, WAIT_MIN_SLEEP_SECONDS)
       : null;
     if (kind === 'other' && !waitRule) { // no-op: counter untouched
-      if (launchWarns.length) emitAdvisory(launchWarns);
+      if (launchWarns.length || rewrittenInput) emitAdvisory(launchWarns);
       process.exit(0);
     }
 
@@ -492,15 +518,8 @@ function classify(tool, input) {
         + 'with a completion notification, the Monitor tool, or an `until` loop run in the background, '
         + 'instead of holding the turn with sleep/tail polling');
     }
-    if (advisories.length) {
-      const advisory = advisories.join('\n');
-      process.stderr.write(`${advisory}\n`);
-      process.stdout.write(`${JSON.stringify({
-        hookSpecificOutput: {
-          hookEventName: 'PreToolUse',
-          additionalContext: advisory,
-        },
-      })}\n`);
+    if (advisories.length || rewrittenInput) {
+      emitAdvisory(advisories);
     }
     process.exit(0);
   } catch {

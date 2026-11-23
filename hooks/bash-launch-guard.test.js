@@ -58,6 +58,8 @@ function run(cmd, { shell = 'bash', extra = {}, env = {}, lsDefault = false } = 
   const h = out && out.hookSpecificOutput;
   return {
     deny: !!(h && h.permissionDecision === 'deny'),
+    decision: (h && h.permissionDecision) || '',
+    updatedInput: (h && h.updatedInput) || null,
     ctx: (h && h.additionalContext) || '',
     reason: (h && h.permissionDecisionReason) || '',
     status: r.status,
@@ -514,15 +516,16 @@ test('rule2 denies in warn and block gate modes alike; gate mode off silences it
   assert.strictEqual(run('pkill -f foo', { env: { AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE: 'off' } }).deny, false);
 });
 
-// ---- Rule 3: zsh only, warn only ----
+// ---- Rule 3: zsh only, warn or auto-rewrite ----
 for (const cmd of ['git config a =b', 'echo foo ==x', 'curl https://x.test/a?b=1', 'ls /nonexistent-dir-blg/*.zzz', 'grep -r foo --include=*.zzz .']) {
-  test(`rule3 warns under zsh: ${cmd}`, () => {
+  test(`rule3 rewrites under zsh: ${cmd}`, () => {
     const r = run(cmd, { shell: 'zsh' });
-    assert.strictEqual(r.deny, false);
-    assert.match(r.ctx, /zsh-expansion/);
+    assert.strictEqual(r.decision, 'allow');
+    assert.ok(r.updatedInput && r.updatedInput.command && r.updatedInput.command !== cmd);
+    assert.match(r.ctx, /已自動改寫/);
   });
   test(`rule3 silent under bash: ${cmd}`, () => {
-    assert.doesNotMatch(run(cmd, { shell: 'bash' }).ctx, /zsh-expansion/);
+    assert.doesNotMatch(run(cmd, { shell: 'bash' }).ctx, /zsh-expansion|已自動改寫/);
   });
 }
 for (const cmd of ["echo '=' x", 'echo "a = b"', 'echo foo = bar', '[ "$x" = y ]', 'test a = a', 'echo "a"=b', 'ls "$HOME"/projects/*', 'ls ~/.claude/*.json', 'ls $HOME/.claude/*.json', 'cd hooks && ls *.test.js', "bash -c 'ls /nonexistent-dir-blg/*.zzz'", "bash -c 'echo =x'", 'ls /*/*/*/*/*/*/*.zzqq', 'ls a*/b*/c*/d*/e*.zzqq', 'ls nonexistent-a*/b*.zzqq', 'ls /nonexistent-dir-blg/**/*.zzz', 'FOO=bar env', 'ls --color=auto', 'grep -E "[a-z]+" f', "ls '*.js'", 'echo $?', '[[ a == b ]] && echo y', 'echo $((1*2))', 'cat <<EOF\n= x\n*.zzz\nEOF', 'case $x in\n  *) echo y;;\nesac', 'case $x in a|*.zzq) echo y;; esac', 'x=*.zzq', 'export X=*.zzq; echo $X']) {
@@ -1118,10 +1121,11 @@ const BARE_LS_REWRITE_CASES = [
   [`ls ${'a'.repeat(650)}`, `command ls ${'a'.repeat(650)}`],
 ];
 for (const [cmd, expected] of BARE_LS_REWRITE_CASES) {
-  test(`rule4 rewrite in deny message: ${JSON.stringify(cmd)}`, () => {
+  test(`rule4 auto-rewrites and allows: ${JSON.stringify(cmd)}`, () => {
     const r = run(cmd, { lsDefault: true });
-    assert.strictEqual(r.deny, true);
-    assert.ok(r.reason.includes(`改寫後的指令（直接照抄）：${expected}`), r.reason);
+    assert.strictEqual(r.decision, 'allow');
+    assert.strictEqual(r.updatedInput && r.updatedInput.command, expected);
+    assert.match(r.ctx, /已自動改寫/);
   });
 }
 test('rule4 rewrite in warn message', () => {
@@ -1221,15 +1225,38 @@ const BARE_LS_DENY = [
   'if ls; then echo y; fi',
   'ls -la | head',
 ];
+// Bare ls is auto-rewritten to `command ls` when that is mechanically safe; nested contexts
+// ($(ls), `ls`, <(ls), a=( ... ), (( ... ))) offer no safe rewrite and stay denied.
+// The denied count is pinned so a case silently flipping either way turns this red.
+const BARE_LS_NO_REWRITE_COUNT = 32;
+let bareLsDenied = 0;
 for (const cmd of BARE_LS_DENY) {
-  test(`rule4 denies bare ls: ${JSON.stringify(cmd)}`, () => {
+  const r0 = run(cmd, { lsDefault: true });
+  if (r0.deny) {
+    bareLsDenied += 1;
+    test(`rule4 denies bare ls (no safe rewrite): ${JSON.stringify(cmd)}`, () => {
+      assert.strictEqual(r0.deny, true);
+      assert.match(r0.reason, /bare-ls/);
+      assert.match(r0.reason, /command ls/);
+      assert.match(r0.reason, /AUTOPILOT_BASH_GUARD_LS_MODE/);
+    });
+    continue;
+  }
+  test(`rule4 auto-rewrites bare ls: ${JSON.stringify(cmd)}`, () => {
     const r = run(cmd, { lsDefault: true });
-    assert.strictEqual(r.deny, true);
-    assert.match(r.reason, /bare-ls/);
-    assert.match(r.reason, /command ls/);
-    assert.match(r.reason, /AUTOPILOT_BASH_GUARD_LS_MODE/);
+    assert.strictEqual(r.deny, false);
+    assert.strictEqual(r.decision, 'allow');
+    assert.ok(r.updatedInput && r.updatedInput.command, `expected updatedInput.command for ${cmd}`);
+    assert.notStrictEqual(r.updatedInput.command, cmd);
+    assert.match(r.ctx, /已自動改寫/);
+    const recheck = run(r.updatedInput.command, { lsDefault: true });
+    assert.strictEqual(recheck.deny, false);
+    assert.doesNotMatch(recheck.ctx, /bare-ls|已自動改寫/);
   });
 }
+test('rule4 bare-ls no-safe-rewrite set is pinned', () => {
+  assert.strictEqual(bareLsDenied, BARE_LS_NO_REWRITE_COUNT);
+});
 const BARE_LS_ALLOW = [
   'command ls',
   'command ls -la',
@@ -1307,7 +1334,7 @@ test('rule4 knob: env warn advises without denying, off is silent, garbage denie
   const o = run('ls', { lsDefault: true, env: { AUTOPILOT_BASH_GUARD_LS_MODE: 'off' } });
   assert.strictEqual(o.deny, false);
   assert.doesNotMatch(o.ctx, /bare-ls/);
-  assert.strictEqual(run('ls', { lsDefault: true, env: { AUTOPILOT_BASH_GUARD_LS_MODE: 'bogus' } }).deny, true);
+  assert.strictEqual(run('ls $(ls)', { lsDefault: true, env: { AUTOPILOT_BASH_GUARD_LS_MODE: 'bogus' } }).deny, true);
 });
 
 // Cost bound: the hook runs on every Bash call, so crafted unclosed `[a` / `a=(` runs must stay linear.
@@ -2394,14 +2421,16 @@ test('P2 paste-ready rewrites: every changed rule emits a copyable rewrite that 
     assert.ok(rw, `missing rewrite in: ${r.reason}`);
     assert.strictEqual(run(rw).deny, false, `rewrite still denied: ${rw}`);
   }
-  // 3. zsh-expansion (warn-only)
+  // 3. zsh-expansion (auto-rewrite)
   {
     const r = run('echo *.zzq_nonexistent_p2', { shell: 'zsh' });
     assert.strictEqual(r.deny, false);
-    assert.match(r.ctx, /zsh-expansion/);
-    const rw = extractRewrite(r.ctx);
-    assert.ok(rw, `missing rewrite in: ${r.ctx}`);
-    assert.doesNotMatch(run(rw, { shell: 'zsh' }).ctx, /zsh-expansion/);
+    assert.strictEqual(r.decision, 'allow');
+    assert.ok(r.updatedInput && r.updatedInput.command, `missing updatedInput.command in: ${JSON.stringify(r)}`);
+    assert.match(r.ctx, /已自動改寫/);
+    const recheck = run(r.updatedInput.command, { shell: 'zsh' });
+    assert.strictEqual(recheck.deny, false);
+    assert.doesNotMatch(recheck.ctx, /zsh-expansion|已自動改寫/);
   }
   // 4. zsh-only-syntax
   {
@@ -2443,4 +2472,22 @@ test('P2 paste-ready rewrites: every changed rule emits a copyable rewrite that 
     assert.ok(rw, `missing rewrite in: ${r.reason}`);
     assert.strictEqual(run(rw, { env: { AUTOPILOT_BASH_GUARD_SHARED_RM_MODE: 'deny' } }).deny, false, `rewrite still denied: ${rw}`);
   }
+});
+
+test('auto-rewrite: bare-ls returns allow with updatedInput.command and additionalContext', () => {
+  const r = run('ls -la', { lsDefault: true });
+  assert.strictEqual(r.deny, false);
+  assert.strictEqual(r.decision, 'allow');
+  assert.ok(r.updatedInput, 'expected updatedInput');
+  assert.strictEqual(r.updatedInput.command, 'command ls -la');
+  assert.match(r.ctx, /已自動改寫：ls -la → command ls -la/);
+});
+
+test('auto-rewrite: unquoted no-match glob under zsh returns allow with updatedInput.command', () => {
+  const r = run('echo *.nonexistent_ext_xyz', { shell: 'zsh' });
+  assert.strictEqual(r.deny, false);
+  assert.strictEqual(r.decision, 'allow');
+  assert.ok(r.updatedInput, 'expected updatedInput');
+  assert.strictEqual(r.updatedInput.command, "echo '*.nonexistent_ext_xyz'");
+  assert.match(r.ctx, /已自動改寫：echo \*\.nonexistent_ext_xyz → echo '\*\.nonexistent_ext_xyz'/);
 });

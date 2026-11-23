@@ -77,20 +77,41 @@ function collectJsonlFiles(dir) {
   return out;
 }
 
-function readJsonl(filePath) {
-  if (!filePath || !fs.existsSync(filePath)) return [];
-  const raw = fs.readFileSync(filePath, 'utf8');
-  const rows = [];
-  for (const line of raw.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    try {
-      rows.push(JSON.parse(trimmed));
-    } catch {
-      // Skip malformed JSONL lines
+function* iterJsonl(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return;
+  const fd = fs.openSync(filePath, 'r');
+  try {
+    const buf = Buffer.alloc(1 << 20);
+    const dec = new (require('node:string_decoder').StringDecoder)('utf8');
+    let rest = '';
+    let n;
+    while ((n = fs.readSync(fd, buf, 0, buf.length, null)) > 0) {
+      const parts = (rest + dec.write(buf.subarray(0, n))).split('\n');
+      rest = parts.pop();
+      for (const line of parts) {
+        const row = parseLine(line);
+        if (row !== undefined) yield row;
+      }
     }
+    const row = parseLine(rest);
+    if (row !== undefined) yield row;
+  } finally {
+    fs.closeSync(fd);
   }
-  return rows;
+}
+
+function parseLine(line) {
+  const trimmed = line.trim();
+  if (!trimmed) return undefined;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return undefined; // skip malformed JSONL lines
+  }
+}
+
+function readJsonl(filePath) {
+  return [...iterJsonl(filePath)];
 }
 
 function toUtcDay(ts) {
@@ -246,7 +267,7 @@ function computeMetrics(opts) {
   }
 
   for (const file of sessionFiles) {
-    const entries = readJsonl(file);
+    const entries = iterJsonl(file);
     let pendingOperatorPromptTs = null;
 
     for (const entry of entries) {

@@ -174,8 +174,8 @@ describe('pm-seat-cost-metrics', () => {
       const r = rows[0];
       assert.equal(r.calls, 2);
       assert.equal(r.operator_corrections, 1);
-      assert.equal(r.operator_reply_latency_p50_ms, 2000);
-      assert.equal(r.operator_reply_latency_p95_ms, 2000);
+      assert.equal(r.operator_reply_latency_p50_ms, 6000);
+      assert.equal(r.operator_reply_latency_p95_ms, 6000);
       assert.equal(r.mechanical_only_share, 1);
       assert.equal(r.failure_share, 1);
       assert.equal(r.rotations, 1);

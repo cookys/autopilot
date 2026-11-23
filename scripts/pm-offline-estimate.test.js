@@ -73,7 +73,7 @@ try {
   fs.writeFileSync(file, JSON.stringify({ items: [{ message_id: 'id-one', category: 'patrol', disposition: 'no_action' }, { message_id: 'id-two', category: 'patrol', disposition: 'done', fyi: true }] }));
   const output = execFileSync(process.execPath, [path.join(__dirname, 'pm-offline-estimate.js'), '--sessions-dir', privateDir, '--dispositions', file], { encoding: 'utf8' });
   const result = JSON.parse(output);
-  assert.deepEqual(result.s4.find(x => x.name === 'patrol'), { name: 'patrol', messages: 2, turns: 1, weighted_cost: 10, matched: 2, auto_processable: 2, auto_weighted_cost: 10 });
+  assert.deepEqual(result.s4.find(x => x.name === 'patrol'), { name: 'patrol', messages: 2, turns: 1, weighted_cost: 10, matched: 2, auto_processable: 2, auto_weighted_cost: 10, auto_with_side_effect: 0, auto_with_side_effect_weighted_cost: 0 });
   for (const secret of ['SECRET ALPHA', 'SECRET BETA', 'two']) assert(!output.includes(secret));
 } finally { fs.rmSync(privateDir, { recursive: true, force: true }); }
 
@@ -93,10 +93,55 @@ try {
   ] }));
   const output = execFileSync(process.execPath, [path.join(__dirname, 'pm-offline-estimate.js'), '--sessions-dir', s4Dir, '--dispositions', file], { encoding: 'utf8' });
   const result = JSON.parse(output);
-  assert.deepEqual(result.s4.find(x => x.name === 'unmatched_operator'), { name: 'unmatched_operator', messages: 1, turns: 1, weighted_cost: 10, matched: 0, auto_processable: 0, auto_weighted_cost: 0, excluded_from_s4: true });
+  assert.deepEqual(result.s4.find(x => x.name === 'unmatched_operator'), { name: 'unmatched_operator', messages: 1, turns: 1, weighted_cost: 10, matched: 0, auto_processable: 0, auto_weighted_cost: 0, auto_with_side_effect: 0, auto_with_side_effect_weighted_cost: 0, excluded_from_s4: true });
   assert.equal(result.s4.find(x => x.name === 'unmatched_pre_baseline').weighted_cost, 20);
   assert.equal(result.s4.find(x => x.name === 'unmatched_other').weighted_cost, 30);
   assert.equal(result.s4.find(x => x.name === 'matched').auto_weighted_cost, 20);
-  assert.deepEqual(result.s4_summary, { total_weighted_cost: 100, excluded_operator_weighted_cost: 10, s4_base_weighted_cost: 90, auto_weighted_cost: 20, auto_share_of_base: 20 / 90 });
+  assert.deepEqual(result.s4_summary, { bypass_candidates: 0, total_weighted_cost: 100, excluded_operator_weighted_cost: 10, s4_base_weighted_cost: 90, auto_weighted_cost: 20, auto_share_of_base: 20 / 90 });
   assert(!output.includes('PRIVATE'));
 } finally { fs.rmSync(s4Dir, { recursive: true, force: true }); }
+
+const bypassDir = fs.mkdtempSync(path.join(os.tmpdir(), 'offline-bypass-'));
+try {
+  const tools = names => ({ type: 'assistant', message: { content: names.map(name => ({ type: 'tool_use', name, input: { secret: 'PRIVATE TOOL PARAMETER' } })) } });
+  const entries = [];
+  const items = [];
+  for (const [id, category, names, disposition] of [
+    ['read', 'task_result', ['Read', 'Grep', 'Glob', 'LS', 'WebFetch', 'WebSearch', 'TaskGet', 'TaskList', ...['recent', 'directory', 'whoami', 'state', 'fetch', 'watch', 'list_claims', 'task_status'].map(x => `mcp__fleet__${x}`)], 'no_action'],
+    ['write', 'task_result', ['Bash'], 'no_action'],
+    ['credential', 'credential_redline', ['mcp__fleet__send'], 'done'],
+    ['other', 'patrol', ['Edit'], 'no_action'],
+    ['manual', 'patrol', ['Write'], 'action'],
+  ]) {
+    entries.push({ ...user(`<channel message_id="${id}"> PRIVATE MESSAGE </channel>`), timestamp: stamp }, tools(names), turn(10));
+    items.push({ message_id: id, category, disposition, fyi: true });
+  }
+  fs.writeFileSync(path.join(bypassDir, 'fixture.jsonl'), entries.map(JSON.stringify).join('\n'));
+  const file = path.join(bypassDir, 'dispositions.json');
+  fs.writeFileSync(file, JSON.stringify({ items }));
+  const output = execFileSync(process.execPath, [path.join(__dirname, 'pm-offline-estimate.js'), '--sessions-dir', bypassDir, '--dispositions', file], { encoding: 'utf8' });
+  const result = JSON.parse(output);
+  const task = result.s4.find(x => x.name === 'task_result');
+  assert.equal(task.auto_with_side_effect, 1);
+  assert.equal(task.auto_with_side_effect_weighted_cost, 10);
+  assert.equal(task.bypass_candidates, 1);
+  assert.equal(result.s4.find(x => x.name === 'credential_redline').bypass_candidates, 1);
+  assert.equal(result.s4.find(x => x.name === 'patrol').auto_with_side_effect, 1);
+  assert.equal('bypass_candidates' in result.s4.find(x => x.name === 'patrol'), false);
+  assert.equal(result.s4_summary.bypass_candidates, 3);
+  assert(!output.includes('PRIVATE MESSAGE'));
+  assert(!output.includes('PRIVATE TOOL PARAMETER'));
+} finally { fs.rmSync(bypassDir, { recursive: true, force: true }); }
+
+const breakdownDir = fs.mkdtempSync(path.join(os.tmpdir(), 'offline-breakdown-'));
+try {
+  const texts = ['<task-notification PRIVATE>', '<system-reminder>PRIVATE', 'Stop hook PRIVATE', '<channel kind="wake">PRIVATE</channel>', 'PRIVATE rest'];
+  const entries = texts.flatMap((text, i) => [{ type: 'queue-operation', timestamp: stamp, content: text }, turn(i + 1)]);
+  fs.writeFileSync(path.join(breakdownDir, 'fixture.jsonl'), entries.map(JSON.stringify).join('\n'));
+  const file = path.join(breakdownDir, 'dispositions.json');
+  fs.writeFileSync(file, JSON.stringify({ items: [] }));
+  const output = execFileSync(process.execPath, [path.join(__dirname, 'pm-offline-estimate.js'), '--sessions-dir', breakdownDir, '--dispositions', file], { encoding: 'utf8' });
+  const result = JSON.parse(output);
+  assert.deepEqual(result.unmatched_other_breakdown, Object.fromEntries(['task_notification', 'system_reminder', 'hook_feedback', 'channel_other', 'rest'].map((name, i) => [name, { messages: 1, weighted_cost: i + 1 }])));
+  assert(!output.includes('PRIVATE'));
+} finally { fs.rmSync(breakdownDir, { recursive: true, force: true }); }

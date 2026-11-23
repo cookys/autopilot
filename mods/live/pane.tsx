@@ -32,7 +32,7 @@ import type { ConsoleSnapshot } from './console'
 import type { Page, PageCtx, PageId, Row } from './pages/frame'
 import type { ScrollModel } from './scroll'
 import type { Step } from './speed'
-import { V74_KEY } from './v74/contract'
+import { PET_KEY, V74_KEY } from './v74/contract'
 import type { V74Ctx } from './v74/contract'
 
 export type { PaneTab } from './model'
@@ -348,10 +348,15 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
     const btn = Button === undefined ? label : <Button key={'tab:' + tb.id + ep} plain {...(V74_TAB_HOTKEYS ? { hotkey: tb.key } : {})} {...(land ? { autoFocus: true } : {})} onPress={choose}>{label}</Button>
     return <Box key={'tb' + j}>{j === 0 ? null : <Text>{' '.repeat(TAB_GAP)}</Text>}{btn}</Box>
   })
-  const hidden = Button === undefined || frame.decide?.textMode === true ? [] : tabItems.map((tb, j) => {
-    const choose = () => (frame.onPage !== undefined ? frame.onPage(tb.id as PageId) : onTab(PAGE_TAB[tb.id]))
-    return <Box key={'hk' + j} width={0} height={0} overflow="hidden"><Button key={'hotkey:' + tb.key + ep} plain hotkey={tb.key} onPress={choose}>{tb.key}</Button></Box>
-  })
+  const hidden = Button === undefined || frame.decide?.textMode === true ? [] : [
+    ...tabItems.map((tb, j) => {
+      const choose = () => (frame.onPage !== undefined ? frame.onPage(tb.id as PageId) : onTab(PAGE_TAB[tb.id]))
+      return <Box key={'hk' + j} width={0} height={0} overflow="hidden"><Button key={'hotkey:' + tb.key + ep} plain hotkey={tb.key} onPress={choose}>{tb.key}</Button></Box>
+    }),
+    ...(frame.pages.some(p => p.id === 'pet')
+      ? [<Box key="hk-pet" width={0} height={0} overflow="hidden"><Button key={'hotkey:' + PET_KEY + ep} plain hotkey={PET_KEY} onPress={() => (frame.onPage !== undefined ? frame.onPage('pet') : onTab('now'))}><Text>{''}</Text></Button></Box>]
+      : []),
+  ]
   // The boxed fallback replaces the strip row (and its navHot buttons).
   // Keep card navigation registered on this bottom border too. s stays on the action row.
   const letters = Button === undefined || typing || page.id !== 'decide' ? [] : (['a', 'b', 'c', 'e', 'm', 'n', 'p', 'j', 'k', 'v'] as const).map(letter => (

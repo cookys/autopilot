@@ -194,6 +194,7 @@ const DEFAULT_REGISTRY = {
       { name: 'skill-creator-workspace', purpose: 'baseline skill-eval definitions and results (May 2026)' },
       { name: 'skills', purpose: 'skills' },
       { name: 'src', purpose: 'engine and runners' },
+      { name: 'tests', purpose: 'test tree; rule 1 destination tests/unit/ (populated ahead of the P3 activation)' },
       { name: 'tools', purpose: 'developer-only tooling; only the subdirectories listed in tools_subdirs' },
       { name: 'website', purpose: 'product site source' },
     ],
@@ -214,6 +215,7 @@ const DEFAULT_REGISTRY = {
       { name: 'README.zh-TW.md', purpose: 'Traditional Chinese readme' },
       { name: 'SECURITY.md', purpose: 'security policy and leak-guard exemption record' },
       { name: 'settings.example.json', purpose: 'example Claude Code settings referenced by the install docs' },
+      { name: 'tsconfig.json', purpose: 'root TypeScript config extending the plugin types config' },
     ],
   },
 
@@ -254,6 +256,21 @@ const DEFAULT_REGISTRY = {
       path: 'docs/projects/_archive/2026/08/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json',
       rule: 6,
       reason: 'D10.4 / D9.7: dispatch-hetero.sh:2125, dispatch-review.sh:299 and sync-codex-plugin-skills.sh:102 hard-code this path; the C2 lane (D9.7, a or b) decides its future, so it stays and those three scripts are not changed',
+    },
+    {
+      path: 'docs/plans/2026-11-21-wasted-turns.md',
+      rule: 6,
+      reason: 'landed on develop 2026-11-21 and is cross-referenced by project/projects/INDEX.md, docs/scripts-inventory.md and docs/dev/harness-acp-landscape.md; move to project/plans/ waits for those references to be repointed together',
+    },
+    {
+      path: 'docs/plans/2026-11-21-wasted-turns.rubric.md',
+      rule: 6,
+      reason: 'frozen rubric of docs/plans/2026-11-21-wasted-turns.md; moves together with it',
+    },
+    {
+      path: 'docs/plans/2026-11-23-tool-small-model-exam.md',
+      rule: 6,
+      reason: 'landed on develop 2026-11-23 and cross-references docs/plans/2026-11-21-wasted-turns.md; moves together with it',
     },
   ],
 };

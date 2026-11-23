@@ -25,7 +25,7 @@
  *   node scripts/rule-effect-check.js --inventory <file.json> --commit <sha>
  *       [--commit <repo>=<sha> ...] [--host <name>] [--all-hosts]
  *       [--transcript <jsonl> --seat <address>] [--fetch] [--json]
- *   node scripts/rule-effect-check.js --seats <seats.tsv> [--rule-repo <path>]
+ *   node scripts/rule-effect-check.js --seats <seats.tsv|auto> [--rule-repo <path>]
  *       [--rule-ref <ref>] [--projects-dir <dir>] [--host <name>] [--json] [--fetch]
  *
  * Inventory schema: "autopilot.rule-effect-inventory/1"
@@ -92,7 +92,10 @@ function usageText() {
     + '\n'
     + 'Options:\n'
     + '  --inventory <file.json>  Seat inventory (schema autopilot.rule-effect-inventory/1)\n'
-    + '  --seats <seats.tsv>      seat, host, sid TSV (mutually exclusive with --inventory)\n'
+    + '  --seats <seats.tsv|auto>  seat, host, sid TSV, or "auto" to derive the seats from\n'
+    + '                             the fleet directory (`fleet peers --json`, FLEET_BIN overrides\n'
+    + '                             the binary): live claude seats only; host = courier,\n'
+    + '                             sid = generation. Mutually exclusive with --inventory\n'
     + '  --rule-repo <path>       Git checkout whose CLAUDE.md history is the rule (default: this repo)\n'
     + '  --rule-ref <ref>         Ref to search for the newest CLAUDE.md commit (default: origin/develop)\n'
     + '  --projects-dir <dir>     Claude projects dir; transcript is <dir>/*/<sid>.jsonl\n'
@@ -667,6 +670,81 @@ function loadSeatsTsv(seatsPath) {
   return rows;
 }
 
+// --seats auto: derive the seat list from the fleet directory instead of a TSV.
+// Only live claude seats are eligible (the check reads Claude transcripts).
+// The binary comes from FLEET_BIN (tests point it at a stub) so the real fleet
+// is never touched. A directory that cannot be read, or that yields no live
+// claude seat, is a hard usage error (exit 2) — never a silently empty list.
+function fleetPeersCall(args) {
+  const fleetBin = process.env.FLEET_BIN || 'fleet';
+  const res = spawnSync(fleetBin, args, { encoding: 'utf8', timeout: 15000 });
+  if (res.error) {
+    throw new UsageError(`fleet directory unavailable (${fleetBin} ${args.join(' ')}): ${res.error.message}`);
+  }
+  if (res.status !== 0) {
+    const tail = (res.stderr || '').trim().split('\n')[0];
+    throw new UsageError(`fleet directory unavailable (${fleetBin} ${args.join(' ')}): exit ${res.status}${tail ? `: ${tail}` : ''}`);
+  }
+  return res.stdout;
+}
+
+function seatsFromPeersJson(stdout) {
+  // lib/fleet-peers is the one parser for `fleet peers --json`. Resolved lazily
+  // and allowed to fail: the suite's sed-mutant copies live outside scripts/,
+  // where the relative require cannot resolve — those only exercise the
+  // non-auto paths, so falling through to the text parser keeps them copy-safe.
+  let members;
+  try {
+    members = require('./lib/fleet-peers').parsePeers(stdout);
+  } catch (_e) {
+    return null;
+  }
+  if (members === null) return null;
+  const rows = [];
+  for (const row of members) {
+    if (!row || typeof row !== 'object') continue;
+    if (!require('./lib/fleet-peers').isLive(row)) continue;
+    if (row.harness !== 'claude') continue;
+    if (!row.courier || !row.sub) continue;
+    const seat = [row.namespace, row.courier, row.member].filter(Boolean).join('/');
+    if (!seat) continue;
+    rows.push({ seat, host: row.courier, sid: row.sub });
+  }
+  return rows;
+}
+
+function seatsFromPeersText(stdout) {
+  // Older fleets without --json: parse the text listing best-effort. It carries
+  // member, generation, state and harness but no namespace/courier, so the
+  // seat address is the bare member name and host stays unknown — such rows
+  // cannot be host-matched and degrade to the no_local_seats exit.
+  const rows = [];
+  for (const line of String(stdout).split('\n')) {
+    if (!line.trim()) continue;
+    const member = line.trim().split(/\s+/)[0];
+    const generation = (line.match(/\bgeneration=(\S+)/) || [])[1];
+    const state = (line.match(/\bstate=(\S+)/) || [])[1];
+    const harness = (line.match(/\bharness=(\S+)/) || [])[1];
+    if (!member || !generation) continue;
+    if (state !== 'live' || harness !== 'claude') continue;
+    rows.push({ seat: member, host: '', sid: generation });
+  }
+  return rows;
+}
+
+function loadSeatsAuto() {
+  const jsonOut = fleetPeersCall(['peers', '--json']);
+  let rows = seatsFromPeersJson(jsonOut);
+  if (rows === null) {
+    // The fleet does not support --json; fall back to the text listing.
+    rows = seatsFromPeersText(fleetPeersCall(['peers']));
+  }
+  if (rows.length === 0) {
+    throw new UsageError('fleet directory lists no live claude seat');
+  }
+  return rows;
+}
+
 function defaultRuleRepo() {
   const res = runGit(path.dirname(__filename), ['rev-parse', '--show-toplevel']);
   if (res.error || res.status !== 0) {
@@ -733,7 +811,7 @@ function checkSeats(opts, localHostname) {
     ? path.resolve(opts.projectsDir)
     : path.join(os.homedir(), '.claude', 'projects');
   const ruleCommit = resolveRuleCommit(ruleRepo, ruleRef);
-  const rows = loadSeatsTsv(opts.seats);
+  const rows = opts.seats === 'auto' ? loadSeatsAuto() : loadSeatsTsv(opts.seats);
   const localRows = rows.filter((row) => isLocalHost(row.host, localHostname));
   if (localRows.length === 0) {
     return {

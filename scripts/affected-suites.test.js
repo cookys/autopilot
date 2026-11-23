@@ -1157,8 +1157,8 @@ function selectWith(bin, r, head) {
 }
 const LAZY_LAYOUT = {
   'scripts/lib/watcher.js': 'module.exports = 1;\n',
-  'scripts/gate.js': "const on = process.env.GATE_ON;\nfunction start() {\n  if (!on) return;\n  const w = require('./lib/watcher.js'); // affected-suites: lazy\n  return w;\n}\nmodule.exports = { start };\n",
-  'scripts/eager.js': "function run() {\n  const w = require('./lib/watcher.js');\n  return w;\n}\nmodule.exports = { run };\n",
+  'scripts/gate.js': "const on = process.env.GATE_ON;\nfunction start() {\n  if (!on) return;\n  const w = require('./lib/watcher.js'); // affected-suites: lazy\n  return w;\n}\nstart();\nmodule.exports = { start };\n",
+  'scripts/eager.js': "function run() {\n  const w = require('./lib/watcher.js');\n  return w;\n}\nrun();\nmodule.exports = { run };\n",
   'hooks/tests/gate.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/gate.js"\n',
   'hooks/tests/eager.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/eager.js"\n',
   'hooks/tests/watcher.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/lib/watcher.js"\n',
@@ -1253,8 +1253,12 @@ function textTests(re) {
   const out = spawnSync('git', ['grep', '-lE', re, '--', ...ROOTS], { cwd: REPO, stdio: 'pipe' }).stdout.toString();
   return out.split('\n').filter((f) => /\.test\.(js|ts|sh)$/.test(f) && fs.existsSync(path.join(REPO, f)));
 }
+// A mods/ test that only RENDERS the repair command text `autopilot status runs --watch` (the live pane's band and pages) neither runs nor
+// loads runs-watch.js: the mods runners pick it up through the mods tree, not through src/status. Only the run/load patterns count there.
 function runsWatchSuites() {
-  return textTests('AUTOPILOT_RUNS_WATCH_AUTOSTART=1|status runs --watch|startWatcherDetached|runs-watch([^-A-Za-z0-9_]|$)');
+  const all = textTests('AUTOPILOT_RUNS_WATCH_AUTOSTART=1|status runs --watch|startWatcherDetached|runs-watch([^-A-Za-z0-9_]|$)');
+  const strict = new Set(textTests('AUTOPILOT_RUNS_WATCH_AUTOSTART=1|startWatcherDetached|runs-watch([^-A-Za-z0-9_]|$)'));
+  return all.filter((f) => !f.startsWith('mods/') || strict.has(f));
 }
 function missingRunsWatch(bin, seed) {
   const p = spawnSync('node', [bin, '--root', REPO, '--files', seed, '--json'], { stdio: 'pipe', maxBuffer: 1 << 28 });
@@ -1990,5 +1994,260 @@ test('BL-0467 negative control: threshold 1.01 suppresses the >50% warning', () 
     assert.strictEqual(jsonRes.status, 0, jsonRes.stderr);
     const doc = JSON.parse(jsonRes.stdout);
     assert.strictEqual(doc.over_half, undefined);
+  } finally { r.cleanup(); }
+});
+
+const SOURCED_HELPER_LAYOUT = {
+  ...LAYOUT,
+  'scripts/lib/common.sh': '#!/usr/bin/env bash\necho "see other-tool.sh for the sibling"\n',
+  'scripts/other-tool.sh': 'echo tool\n',
+  'hooks/tests/uses-common.test.sh': '#!/usr/bin/env bash\nsource "$ROOT/scripts/lib/common.sh"\necho hi\n',
+  'hooks/tests/other-tool.test.sh': '#!/usr/bin/env bash\nbash "$ROOT/scripts/other-tool.sh"\n',
+};
+
+test('a shell suite that sources a shared helper depends on the helper file, not on the helper\'s incidental mentions', () => {
+  const r = makeRepo(SOURCED_HELPER_LAYOUT);
+  const bin = mutant([["if (graph.sourcedHelpers.has(f) && kind(f) === 'weak') continue;", '']]);
+  try {
+    const mention = r.change({ 'scripts/other-tool.sh': 'echo tool2\n' });
+    const out = r.select(mention);
+    assert.ok(out.suites.includes('hooks/tests/other-tool.test.sh'));
+    assert.ok(!out.suites.includes('hooks/tests/uses-common.test.sh'));
+    assert.ok(selectWith(bin, r, mention).suites.includes('hooks/tests/uses-common.test.sh'), 'negative control: without the rule the sourcing suite is over-selected');
+    // the helper itself still reaches the suites that source it
+    const own = r.select(r.change({ 'scripts/lib/common.sh': '#!/usr/bin/env bash\necho changed\n' }));
+    assert.ok(own.suites.includes('hooks/tests/uses-common.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('lazy function require does not select an unrelated suite', () => {
+  const r = makeRepo({ ...LAYOUT,
+    'scripts/lib/lazy-target.js': 'module.exports = 1;\n',
+    'scripts/lazy-user.js': "function later() { return require('./lib/lazy-target.js'); }\nmodule.exports = later;\n",
+    'hooks/tests/lazy-user.test.sh': 'node scripts/lazy-user.js\n',
+    'hooks/tests/lazy-target.test.sh': 'node scripts/lib/lazy-target.js\n',
+  });
+  try {
+    const out = r.select(r.change({ 'scripts/lib/lazy-target.js': 'module.exports = 2;\n' }));
+    assert.ok(out.suites.includes('hooks/tests/lazy-target.test.sh'));
+    assert.ok(!out.suites.includes('hooks/tests/lazy-user.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('edge reasons retain overlapping producers and explain per changed file', () => {
+  const r = makeRepo({
+    'scripts/target.js': 'module.exports = 1;\n',
+    'scripts/helper.sh': 'echo helper\n',
+    'scripts/require-user.test.js': "require('./target.js');\nconst files = 'scripts/*.js';\n",
+    'hooks/tests/source-user.test.sh': 'source "$ROOT/scripts/helper.sh"\n',
+    'hooks/tests/weak-user.test.sh': 'echo target.js\n',
+    'hooks/tests/path-user.test.sh': 'echo scripts/target.js\n',
+  });
+  try {
+    const { select, diskTree, reasonsFor } = require('./affected-suites.js');
+    const selected = select(['scripts/target.js', 'scripts/helper.sh'], diskTree(r.dir));
+    assert.deepStrictEqual(reasonsFor('scripts/require-user.test.js', 'scripts/target.js', selected), ['glob', 'require_top', 'weak_mention']);
+    assert.deepStrictEqual(reasonsFor('hooks/tests/source-user.test.sh', 'scripts/helper.sh', selected), ['path_string', 'source', 'weak_mention']);
+    assert.deepStrictEqual(reasonsFor('hooks/tests/weak-user.test.sh', 'scripts/target.js', selected), ['weak_mention']);
+    assert.deepStrictEqual(reasonsFor('hooks/tests/path-user.test.sh', 'scripts/target.js', selected), ['path_string', 'weak_mention']);
+    const explained = spawnSync('node', [SEL, '--root', r.dir, '--files', 'scripts/target.js', '--explain'], { encoding: 'utf8' });
+    assert.strictEqual(explained.status, 0, explained.stderr);
+    assert.match(explained.stdout, /scripts\/require-user\.test\.js: scripts\/target\.js: glob, require_top, weak_mention/);
+  } finally { r.cleanup(); }
+});
+
+test('real-tree golden: suite output matches origin/develop for twelve file sets', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'affected-suites-golden-'));
+  try {
+    const original = path.join(dir, 'affected-suites.js');
+    const source = execFileSync('git', ['show', 'origin/develop:scripts/affected-suites.js'], { cwd: REAL_ROOT, encoding: 'utf8' });
+    fs.writeFileSync(original, source.replace("require('./lib/repo-layout.js')", `require(${JSON.stringify(path.join(REAL_ROOT, 'scripts/lib/repo-layout.js'))})`));
+    const inputs = [
+      ['scripts/lib/jsonl-store.js'], ['scripts/project-record.js'], ['hooks/tests/lib.sh'],
+      ['skills/dev-flow/SKILL.md'], ['docs/dev/architecture.md'], ['scripts/lib/config-keys.json'],
+      ['scripts/affected-suites.js'], ['hooks/hooks.json'], ['scripts/lib/repo-layout.js'],
+      ['scripts/validate.sh'], ['hooks/tests/check-config-docs.test.sh'],
+      ['scripts/lib/jsonl-store.js', 'scripts/project-record.js'],
+    ];
+    for (const files of inputs) {
+      const run = (bin) => spawnSync('node', [bin, '--root', REAL_ROOT, '--files', ...files], { encoding: 'utf8', maxBuffer: 1 << 24 });
+      const before = run(original), after = run(SEL);
+      assert.strictEqual(before.status, 0, `${files}: ${before.stderr}`);
+      assert.strictEqual(after.status, 0, `${files}: ${after.stderr}`);
+      assert.strictEqual(after.stdout, before.stdout, files.join(', '));
+    }
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('dep-cache pruning: sound removal, fail-closed guards, CLI/env flags, and explain output', () => {
+  const r = makeRepo({
+    'scripts/lib/unused.js': 'module.exports = 1;\n',
+    'scripts/lib/used.js': 'module.exports = 2;\n',
+    'scripts/app.test.js': "const u = require('./lib/used.js');\nif (process.env.NEVER_SET) { require('./lib/unused.js'); }\nconsole.log(u);\n",
+    'scripts/mixed.test.js': "if (process.env.NEVER_SET) { require('./lib/unused.js'); }\nconst p = 'scripts/lib/unused.js';\n",
+    'scripts/other1.test.js': 'console.log(1);\n',
+    'scripts/other2.test.js': 'console.log(2);\n',
+  });
+  try {
+    const cacheDir = path.join(r.dir, '.git', 'autopilot');
+    fs.mkdirSync(cacheDir, { recursive: true });
+    const defaultCache = path.join(cacheDir, 'dep-cache.json');
+    const writeCache = (obj, p = defaultCache) => fs.writeFileSync(p, JSON.stringify(obj, null, 2));
+
+    // (a) suite selected only via require edge of a changed helper that cached trace never executed => pruned
+    const head1 = r.change({ 'scripts/lib/unused.js': 'module.exports = 10;\n' });
+    writeCache({
+      schema: 'dep-cache/1',
+      base_sha: r.base,
+      built_at_utc: new Date().toISOString(),
+      suites: {
+        'scripts/app.test.js': { files: ['scripts/lib/used.js'], rc: 0, traced: true },
+        'scripts/mixed.test.js': { files: ['scripts/lib/used.js'], rc: 0, traced: true },
+      },
+    });
+    const resA = spawnSync('node', [SEL, '--root', r.dir, '--base', r.base, '--head', head1], { encoding: 'utf8' });
+    assert.strictEqual(resA.status, 0, resA.stderr);
+    assert.strictEqual(resA.stdout, 'scripts/mixed.test.js\n');
+    assert.strictEqual(resA.stderr, 'dep-cache: pruned 1 suites\n');
+
+    // --explain prints pruned line
+    const resExplain = spawnSync('node', [SEL, '--root', r.dir, '--base', r.base, '--head', head1, '--explain'], { encoding: 'utf8' });
+    assert.strictEqual(resExplain.status, 0, resExplain.stderr);
+    assert.match(resExplain.stdout, /pruned: scripts\/app\.test\.js \(cache traced, scripts\/lib\/unused\.js not executed\)/);
+
+    // (h) --no-dep-cache and AUTOPILOT_DEP_CACHE=0 => nothing pruned
+    const resNoFlag = spawnSync('node', [SEL, '--root', r.dir, '--base', r.base, '--head', head1, '--no-dep-cache'], { encoding: 'utf8' });
+    assert.strictEqual(resNoFlag.status, 0, resNoFlag.stderr);
+    assert.strictEqual(resNoFlag.stdout, 'scripts/app.test.js\nscripts/mixed.test.js\n');
+    assert.strictEqual(resNoFlag.stderr, '');
+
+    const resEnv0 = spawnSync('node', [SEL, '--root', r.dir, '--base', r.base, '--head', head1], { encoding: 'utf8', env: { ...process.env, AUTOPILOT_DEP_CACHE: '0' } });
+    assert.strictEqual(resEnv0.status, 0, resEnv0.stderr);
+    assert.strictEqual(resEnv0.stdout, resNoFlag.stdout);
+    assert.strictEqual(resEnv0.stderr, '');
+
+    // (b) changed file IS in cached files => kept
+    writeCache({
+      schema: 'dep-cache/1',
+      base_sha: r.base,
+      built_at_utc: new Date().toISOString(),
+      suites: {
+        'scripts/app.test.js': { files: ['scripts/lib/unused.js', 'scripts/lib/used.js'], rc: 0, traced: true },
+      },
+    });
+    const resB = spawnSync('node', [SEL, '--root', r.dir, '--base', r.base, '--head', head1], { encoding: 'utf8' });
+    assert.strictEqual(resB.stdout, resNoFlag.stdout);
+    assert.strictEqual(resB.stderr, '');
+
+    // (c) second reason kind present (path_string / weak_mention) => kept (mixed.test.js was kept in resA above)
+    // (d) traced false / rc 1 => kept
+    writeCache({
+      schema: 'dep-cache/1',
+      base_sha: r.base,
+      built_at_utc: new Date().toISOString(),
+      suites: {
+        'scripts/app.test.js': { files: ['scripts/lib/used.js'], rc: 0, traced: false },
+      },
+    });
+    assert.strictEqual(spawnSync('node', [SEL, '--root', r.dir, '--base', r.base, '--head', head1], { encoding: 'utf8' }).stdout, resNoFlag.stdout);
+    writeCache({
+      schema: 'dep-cache/1',
+      base_sha: r.base,
+      built_at_utc: new Date().toISOString(),
+      suites: {
+        'scripts/app.test.js': { files: ['scripts/lib/used.js'], rc: 1, traced: true },
+      },
+    });
+    assert.strictEqual(spawnSync('node', [SEL, '--root', r.dir, '--base', r.base, '--head', head1], { encoding: 'utf8' }).stdout, resNoFlag.stdout);
+
+    // (e) base_sha not an ancestor => kept
+    writeCache({
+      schema: 'dep-cache/1',
+      base_sha: '0000000000000000000000000000000000000000',
+      built_at_utc: new Date().toISOString(),
+      suites: {
+        'scripts/app.test.js': { files: ['scripts/lib/used.js'], rc: 0, traced: true },
+      },
+    });
+    assert.strictEqual(spawnSync('node', [SEL, '--root', r.dir, '--base', r.base, '--head', head1], { encoding: 'utf8' }).stdout, resNoFlag.stdout);
+
+    // (f) corrupt JSON and missing file => output byte-identical to --no-dep-cache
+    fs.writeFileSync(defaultCache, '{corrupt json');
+    const resCorrupt = spawnSync('node', [SEL, '--root', r.dir, '--base', r.base, '--head', head1], { encoding: 'utf8' });
+    assert.strictEqual(resCorrupt.stdout, resNoFlag.stdout);
+    assert.strictEqual(resCorrupt.stderr, '');
+    const resMissing = spawnSync('node', [SEL, '--root', r.dir, '--base', r.base, '--head', head1, '--dep-cache', path.join(r.dir, 'no-such.json')], { encoding: 'utf8' });
+    assert.strictEqual(resMissing.stdout, resNoFlag.stdout);
+    assert.strictEqual(resMissing.stderr, '');
+
+    // (g) S itself changed => kept
+    const head2 = r.change({ 'scripts/app.test.js': "const u = require('./lib/used.js');\n// changed\n" });
+    writeCache({
+      schema: 'dep-cache/1',
+      base_sha: head1,
+      built_at_utc: new Date().toISOString(),
+      suites: {
+        'scripts/app.test.js': { files: ['scripts/lib/used.js'], rc: 0, traced: true },
+      },
+    });
+    const resG = spawnSync('node', [SEL, '--root', r.dir, '--base', head1, '--head', head2], { encoding: 'utf8' });
+    assert.strictEqual(resG.stdout, 'scripts/app.test.js\n');
+    assert.strictEqual(resG.stderr, '');
+  } finally { r.cleanup(); }
+});
+
+test('dep-cache pruning: weak_mention/path_string outside requires, shell source, and unreadable text', () => {
+  const r = makeRepo({
+    'scripts/lib/unused.js': 'module.exports = 1;\n',
+    'scripts/lib/x.sh': 'echo x\n',
+    'scripts/req-only.test.js': "if (process.env.NEVER_SET) { require('./lib/unused.js'); }\n",
+    'scripts/echo-mention.test.js': "if (process.env.NEVER_SET) { require('./lib/unused.js'); }\nconst arr = ['unused.js'];\n",
+    'scripts/stem-mention.test.js': "if (process.env.NEVER_SET) { require('./lib/unused.js'); }\nconsole.log('unused');\n",
+    'hooks/tests/source-only.test.sh': '#!/usr/bin/env bash\nsource "$ROOT/scripts/lib/x.sh"\n',
+    'hooks/tests/source-and-bash.test.sh': '#!/usr/bin/env bash\nsource "$ROOT/scripts/lib/x.sh"\nbash scripts/lib/x.sh\n',
+  });
+  try {
+    const cacheDir = path.join(r.dir, '.git', 'autopilot');
+    fs.mkdirSync(cacheDir, { recursive: true });
+    const defaultCache = path.join(cacheDir, 'dep-cache.json');
+    const writeCache = (obj) => fs.writeFileSync(defaultCache, JSON.stringify(obj, null, 2));
+
+    const head1 = r.change({ 'scripts/lib/unused.js': 'module.exports = 2;\n' });
+    writeCache({
+      schema: 'dep-cache/1',
+      base_sha: r.base,
+      built_at_utc: new Date().toISOString(),
+      suites: {
+        'scripts/req-only.test.js': { files: [], rc: 0, traced: true },
+        'scripts/echo-mention.test.js': { files: [], rc: 0, traced: true },
+        'scripts/stem-mention.test.js': { files: [], rc: 0, traced: true },
+      },
+    });
+    const resJs = spawnSync('node', [SEL, '--root', r.dir, '--base', r.base, '--head', head1], { encoding: 'utf8' });
+    assert.strictEqual(resJs.status, 0, resJs.stderr);
+    // a bare-name (stem) mention outside requires also keeps the suite: edges are built on stems, not on file names
+    assert.strictEqual(resJs.stdout, 'scripts/echo-mention.test.js\nscripts/stem-mention.test.js\n');
+
+    const head2 = r.change({ 'scripts/lib/x.sh': 'echo x2\n' });
+    writeCache({
+      schema: 'dep-cache/1',
+      base_sha: head1,
+      built_at_utc: new Date().toISOString(),
+      suites: {
+        'hooks/tests/source-only.test.sh': { files: [], rc: 0, traced: true },
+        'hooks/tests/source-and-bash.test.sh': { files: [], rc: 0, traced: true },
+      },
+    });
+    const resSh = spawnSync('node', [SEL, '--root', r.dir, '--base', head1, '--head', head2], { encoding: 'utf8' });
+    assert.strictEqual(resSh.status, 0, resSh.stderr);
+    assert.strictEqual(resSh.stdout, 'hooks/tests/source-and-bash.test.sh\n');
+
+    // (4) unreadable suite text => kept (fail closed). A suite too large to read is not even selected statically,
+    // so this is checked on the helper itself.
+    const { mentionsOutsideRequires } = require('./affected-suites.js');
+    assert.strictEqual(mentionsOutsideRequires(null, 'scripts/lib/unused.js'), true);
+    assert.strictEqual(mentionsOutsideRequires(undefined, 'scripts/lib/unused.js'), true);
+    assert.strictEqual(mentionsOutsideRequires("require('./lib/unused.js');\n", 'scripts/lib/unused.js'), false);
+    assert.strictEqual(mentionsOutsideRequires("require('./lib/unused.js');\nconsole.log('unused');\n", 'scripts/lib/unused.js'), true);
   } finally { r.cleanup(); }
 });

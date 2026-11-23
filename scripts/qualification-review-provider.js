@@ -225,10 +225,9 @@ const CLI_KINDS = ['codex', 'claude', 'agy', 'kimi', 'grok', 'cursor', 'opencode
 // A credential-only QRP_CLI_HOME seed is ~16 KB; 8 MB leaves room for a config
 // tree while still refusing a real home.
 const CLI_HOME_TEMPLATE_MAX_BYTES = 8 * 1024 * 1024;
-// Conservative ceiling for argv-delivered prompts (kimi only; agy moved to stdin, BL-0298). Linux ARG_MAX is typically
-// ~2MB for the whole argv+environ block; stay well under it so the environment
-// and the other arguments always fit.
-const ARGV_PROMPT_LIMIT_BYTES = 512 * 1024;
+// Conservative ceiling for argv-delivered prompts (kimi only; agy moved to stdin, BL-0298). Linux
+// MAX_ARG_STRLEN is 128 KiB (131071 bytes) for a single argv string; stay under it like dispatch-review.sh.
+const ARGV_PROMPT_LIMIT_BYTES = 120000;
 // Post-exit stdout flush window for the CLI transport (ms). Tunable so the
 // deterministic race test can widen it; production default stays 200.
 const EXIT_FLUSH_MS = (() => {
@@ -1399,15 +1398,14 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
     }
   }
   if (promptViaAgyStream) {
-    // agy no longer has an argv wall (stdin transport), but the stdin path has its own silent wall
-    // (BL-0021): refuse an oversized line here, as a named reason, instead of grading an empty
-    // "SUCCESS" as a model failure.
-    const lineBytes = Buffer.byteLength(agyStream.encodeUserLine(prompt), 'utf8');
-    const maxBytes = agyStream.stdinMaxBytes();
-    if (lineBytes > maxBytes) {
+    // agy no longer has an argv wall (stdin transport), and prompts over stdinMaxBytes fall back
+    // to a 0600 file pointer; still fail closed above the hard file ceiling (2 MB).
+    const maxFileBytes = agyStream.fileMaxBytes();
+    const promptBytes = Buffer.byteLength(prompt, 'utf8');
+    if (promptBytes > maxFileBytes) {
       throw new Error(
-        `agy_stdin_ceiling: this case encodes to ${lineBytes} bytes, over the ${maxBytes}-byte `
-        + 'fail-closed agy stdin ceiling (BL-0021); agy was not run',
+        `agy_file_ceiling: this case is ${promptBytes} bytes, over the ${maxFileBytes}-byte `
+        + 'fail-closed agy file ceiling; agy was not run',
       );
     }
   }

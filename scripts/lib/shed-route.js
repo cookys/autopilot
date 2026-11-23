@@ -26,24 +26,33 @@ function briefHeaders(text) {
   }
   return headers;
 }
-function decide({ env = process.env, briefText = '', now = new Date(), skippedTargets = [] } = {}) {
-  if (env.AUTOPILOT_SHED_ROUTE === '0') return no('off');
+function readBurnMoreSignal({ env = process.env, now = new Date() } = {}) {
+  if (env.AUTOPILOT_SHED_ROUTE === '0') return { ok: false, reason: 'off' };
   let data;
   let raw;
   try { raw = fs.readFileSync(burnMorePath(env), 'utf8'); }
-  catch (error) { return no(error && error.code === 'ENOENT' ? 'no_file' : 'bad_schema'); }
+  catch (error) { return { ok: false, reason: error && error.code === 'ENOENT' ? 'no_file' : 'unreadable' }; }
   try { data = JSON.parse(raw); }
-  catch (_) { return no('bad_schema'); }
+  catch (_) { return { ok: false, reason: 'bad_schema' }; }
   if (!data || typeof data !== 'object' || Array.isArray(data) || data.schema !== SCHEMA
       || typeof data.run_id !== 'string' || !data.run_id || typeof data.generated_at !== 'string'
       || !data.shed || typeof data.shed !== 'object' || !Array.isArray(data.shed.pools)
       || !data.shed.rules || typeof data.shed.rules !== 'object'
       || !Array.isArray(data.shed.rules.mechanical_classes) || !Array.isArray(data.shed.rules.targets_in_order)) {
-    return no('bad_schema');
+    return { ok: false, reason: 'bad_schema' };
   }
   const generated = Date.parse(data.generated_at);
   const nowMs = now instanceof Date ? now.getTime() : Number(now);
-  if (!Number.isFinite(generated) || !Number.isFinite(nowMs) || generated > nowMs || nowMs - generated > MAX_AGE_MS) return no('stale');
+  if (!Number.isFinite(generated) || !Number.isFinite(nowMs) || generated > nowMs || nowMs - generated > MAX_AGE_MS) {
+    return { ok: false, reason: 'stale' };
+  }
+  return { ok: true, data };
+}
+
+function decide({ env = process.env, briefText = '', now = new Date(), skippedTargets = [] } = {}) {
+  const sig = readBurnMoreSignal({ env, now });
+  if (!sig.ok) return no(sig.reason === 'unreadable' ? 'bad_schema' : sig.reason);
+  const data = sig.data;
   const seat = seatOf(env);
   const pool = data.shed.pools.find((p) => p && typeof p.pool === 'string' && Array.isArray(p.seats) && p.seats.includes(seat));
   if (!pool) return no('not_listed');
@@ -70,7 +79,7 @@ function decide({ env = process.env, briefText = '', now = new Date(), skippedTa
   return { ...no(restrictedEligible || skipped.size > 0 || (data.shed.rules.targets_in_order.some((t) => t === 'minimax' || t === 'kimi') && headers['Task-Shape'] !== 'from-scratch') ? 'no_eligible_target' : 'bad_schema'), ...(skipped.size ? { skipped_targets: [...skipped].map(([target, reason]) => ({ target, reason })) } : {}) };
 }
 
-module.exports = { decide, burnMorePath };
+module.exports = { decide, burnMorePath, readBurnMoreSignal };
 
 if (require.main === module) {
   const args = process.argv.slice(2);

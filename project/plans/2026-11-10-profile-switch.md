@@ -1,6 +1,7 @@
 # Plan — Claude login profile switching (move a lane to the subscription that has room)
 
-> Status: r2 (g2 blockers folded; PM adjudicates at the cap) · Owner: autopilot lane · Branch: docs/profileswitch · Frame: PM dispatch 01M70B0J4C · Rubric: `2026-11-10-profile-switch.rubric.md` · Manifest: `2026-11-10-profile-switch.plan-review-manifest.json`
+> Status: shipped (P1-P4; PM ruled at the cap) · Live date: shipped 9bcde4483 (P2), 5bbee87f8 (P3), 66fc4f426 (stack4) · Fleet task: 01M70B0J4C · Owner: autopilot lane · Branch: docs/profileswitch · Frame: PM dispatch 01M70B0J4C · Rubric: `2026-11-10-profile-switch.rubric.md` · Manifest: `2026-11-10-profile-switch.plan-review-manifest.json`
+> 被取代：本計畫已歸檔，由席位切換系統（e833bf9e）取代（PM 裁定 01M832A87M，2026-11-23）；不再待裁，內文只留作歷史。
 > 稽核（2026-11-21，PM 01M7XQRV）：已完成。P1-P4 已出貨：lane-switch、advice、login-checklist、profile-health。證據：5bbee87f8（P3）；9bcde4483（P2）；scripts/login-checklist.js；scripts/profile-health.js。
 
 ## 0. Context / thesis

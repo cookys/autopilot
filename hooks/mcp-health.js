@@ -14,6 +14,8 @@ const { isEnabled } = require('./_shared/opt-in');
 
 if (!isEnabled('mcp-health')) process.exit(0);
 
+const { gateHint } = require('./lib/gate-hint.js');
+
 const CACHE_FILE = path.join(os.homedir(), '.claude', 'mcp-health-cache.json');
 const BASE_BACKOFF_MS = 30000; // 30 seconds
 const MAX_BACKOFF_MS = 600000; // 10 minutes
@@ -64,7 +66,8 @@ try {
       const waitSec = Math.ceil((entry.nextRetry - Date.now()) / 1000);
       const text =
         `MCP server '${server}' is unhealthy (${entry.failures} failures). ` +
-        `Retry in ${waitSec}s. Last error: ${entry.lastError || 'unknown'}\n`;
+        `Retry in ${waitSec}s. Last error: ${entry.lastError || 'unknown'}\n` +
+        gateHint(`等 ${waitSec} 秒後重試，或先檢查該 MCP server 是否正常啟動`, 'hooks/README.md');
       process.stderr.write(text);
       process.exit(2);
     }

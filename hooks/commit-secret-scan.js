@@ -14,6 +14,7 @@ const { isEnabled } = require('./_shared/opt-in');
 if (!isEnabled('commit-secret-scan')) process.exit(0);
 
 const secrets = require('./_shared/secret-patterns');
+const { gateHint } = require('./lib/gate-hint.js');
 
 try {
   // Read fd 0 directly — opening the '/dev/stdin' PATH throws ENXIO in the
@@ -66,7 +67,8 @@ try {
     const names = hits.map(h => `  - ${h.name}: ${h.match}`).join('\n');
     process.stderr.write(
       `BLOCKED: Potential secrets found in staged changes:\n${names}\n` +
-      `Remove secrets before committing. Use \`git diff --cached\` to review.\n`
+      `Remove secrets before committing. Use \`git diff --cached\` to review.\n` +
+      gateHint('把密鑰移出 staged diff（git restore --staged / git rm --cached）；已外洩的憑證要立刻輪換', 'CLAUDE.md') + '\n'
     );
     process.exit(2);
   }

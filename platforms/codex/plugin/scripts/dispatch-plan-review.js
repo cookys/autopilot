@@ -51,6 +51,7 @@
 
 const crypto = require('crypto');
 const fs = require('fs');
+const { createEmitter } = require('./lib/agent-event-emit');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
@@ -170,7 +171,8 @@ Legacy compatibility:
   --deep-* flags. --logical-plan-id is recommended; omitted legacy calls use a
   frozen ticket-bound compatibility identity.
 
-Hard limits: 1-4 seats, two attempts per seat, two semantic generations, 7200s.`;
+Hard limits: 1-4 seats, two attempts per seat, two semantic generations, 7200s.
+--allow-same-family: warn instead of refusing when two manifest seats share a model family.`;
 }
 
 function parseArgs(argv) {
@@ -231,6 +233,10 @@ function parseArgs(argv) {
     }
     if (arg === '--no-topology-fallbacks') {
       opts.noTopologyFallbacks = true;
+      continue;
+    }
+    if (arg === '--allow-same-family') {
+      opts.allowSameFamily = true;
       continue;
     }
     const key = flags.get(arg);
@@ -969,6 +975,15 @@ function stripAutoFallbacks(manifest) {
   };
 }
 
+function enforceSameFamilyVote(manifest, opts = {}) {
+  const c = familyGate.findSameFamilyVote(manifest.seats, familyGate.planSeatFamily);
+  if (c) {
+    const message = `same_family_vote: ${c.first.id} and ${c.second.id} (${c.family})`;
+    if (!opts.allowSameFamily) throw new CliError(message, 2);
+    process.stderr.write(`dispatch-plan-review: warning: ${message}\n`);
+  }
+}
+
 function fillFallbacksFromTopology(manifest, opts) {
   if (opts.noTopologyFallbacks) return { manifest, added: [] };
   const needy = manifest.seats.filter((seat) => seat.fallbacks.length === 0);
@@ -978,6 +993,7 @@ function fillFallbacksFromTopology(manifest, opts) {
   const impl = resolverField('implementer_runner');
   const allowSameRunner = resolverField('allow_same_runner_dual_seat') === 'on';
   const takenIds = new Set();
+  enforceSameFamilyVote(manifest, opts);
   for (const seat of manifest.seats) {
     takenIds.add(seat.id);
     for (const fallback of seat.fallbacks) takenIds.add(fallback.id);
@@ -2047,8 +2063,9 @@ function repairedSectionFor(sections, surface) {
   return picked.map((section) => section.text).join('\n\n').slice(0, SECTION_CAP_CHARS);
 }
 
-function recheckCandidates(manifest) {
+function recheckCandidates(manifest, opts = {}) {
   const out = [];
+  enforceSameFamilyVote(manifest, opts);
   for (const seat of manifest.seats) {
     for (const candidate of [seat, ...(seat.fallbacks || [])]) {
       if (candidate.readiness_status === 'ready' && candidate.qualification_status === 'qualified') {
@@ -2130,7 +2147,7 @@ async function runRepairRecheck(argv) {
     };
   });
   const nonce = crypto.randomBytes(12).toString('hex');
-  const candidates = recheckCandidates(manifest);
+  const candidates = recheckCandidates(manifest, opts);
   const planSeam = testSequence();
   const run = await repairRecheck.runRecheck({
     kind: 'plan',
@@ -2243,10 +2260,15 @@ function main() {
   // generations read the sealed copy back, so the panel cannot change under a sealed session.
   const effective = effectiveManifest(loaded, manifestCopy, opts);
   const manifest = effective.manifest;
+  const planReviewRunner = (manifest.seats && manifest.seats[0] && manifest.seats[0].runner) || 'claude';
+  const _aeeEmitter = createEmitter({ role: 'plan-review', runner: planReviewRunner });
+  _aeeEmitter.accepted();
+  process.on('exit', (code) => _aeeEmitter.ended(code));
   const manifestSha = sha256(effective.bytes);
   for (const added of effective.added) {
     process.stderr.write(`dispatch-plan-review: seat ${added.seat_id} had no fallbacks; added ${added.fallback_id} (family ${added.family}) from the topology\n`);
   }
+  enforceSameFamilyVote(manifest, opts);
   for (const seat of manifest.seats) {
     if (seat.required && seat.fallbacks.length === 0) {
       process.stderr.write(`dispatch-plan-review: warning: required seat has no fallback: ${seat.id} (a failed first attempt cannot be substituted)\n`);
@@ -2599,7 +2621,8 @@ function main() {
     });
     const seatReviews = [];
     const warnedTimeoutEfforts = new Set();
-    for (const seat of manifest.seats) {
+    enforceSameFamilyVote(manifest, opts);
+  for (const seat of manifest.seats) {
       const seatReview = reviewSeat({
         panel,
         manifest,

@@ -110,6 +110,101 @@
       "path": "platforms/codex/plugin/scripts/lib/lane-switch-transcript.js",
       "category": "home_path",
       "reason": "synthetic cwd-key example (one-letter placeholder user, no real account) in the 2026-11-13 batch merges; the file itself now uses a neutral path"
+    },
+    {
+      "path": "hooks/dispatch-model-guard-mechanical-reroute.test.js",
+      "category": "host",
+      "reason": "test fixture: internal host labels as fleet seat addresses, subject under test"
+    },
+    {
+      "path": "hooks/fleet-send-work-order-guard.test.js",
+      "category": "host",
+      "reason": "test fixture: internal host labels as fleet seat addresses, subject under test"
+    },
+    {
+      "path": "hooks/owner-question-guard.test.js",
+      "category": "host",
+      "reason": "test fixture: internal host labels as seat allowlist entries, subject under test"
+    },
+    {
+      "path": "hooks/tests/ask-decision-gate.test.sh",
+      "category": "host",
+      "reason": "test fixture: internal host labels as seat addresses and allowlist entries, subject under test"
+    },
+    {
+      "path": "scripts/open-decision-attach-step.test.js",
+      "category": "host",
+      "reason": "test fixture: internal host labels as executor addresses, subject under test"
+    },
+    {
+      "path": "hooks/lib/ask-guard.js",
+      "category": "host",
+      "reason": "code: default allow_members seat list carries internal host labels by design"
+    },
+    {
+      "path": "hooks/lib/owner-question-rules.js",
+      "category": "host",
+      "reason": "code: default seat allowlist carries internal host labels by design"
+    },
+    {
+      "path": "platforms/codex/plugin/hooks/lib/ask-guard.js",
+      "category": "host",
+      "reason": "codex mirror of hooks/lib/ask-guard.js"
+    },
+    {
+      "path": "platforms/codex/plugin/hooks/lib/owner-question-rules.js",
+      "category": "host",
+      "reason": "codex mirror of hooks/lib/owner-question-rules.js"
+    },
+    {
+      "path": ".hippo/bodies/d122a61783e1be8e5a34d3eedcdd66cdfb7d8dcdfaab82f2667e3d2f56a00d2a.md",
+      "category": "host",
+      "reason": "historical hippo record: host labels are part of the recorded ops fact"
+    },
+    {
+      "path": ".hippo/ops/01M7RP3R55RJT010036DWEGDN7.jsonl",
+      "category": "host",
+      "reason": "historical hippo ops record: host labels are part of the recorded fact"
+    },
+    {
+      "path": ".hippo/ops/01M7RQQFP90N2M467MZ368ME2J.jsonl",
+      "category": "host",
+      "reason": "historical hippo ops record: host labels are part of the recorded fact"
+    },
+    {
+      "path": ".hippo/ops/01M7TEDGDASB2F009NE3NHN2AS.jsonl",
+      "category": "host",
+      "reason": "historical hippo ops record: host labels are part of the recorded fact"
+    },
+    {
+      "path": ".hippo/records/01M7TEDGDASB2F009NE3NHN2AS.md",
+      "category": "host",
+      "reason": "historical hippo record: host labels are part of the recorded ops fact"
+    },
+    {
+      "path": "project/backlog/BACKLOG.md",
+      "category": "host",
+      "reason": "backlog rows reference internal host labels as facts; not credentials"
+    },
+    {
+      "path": "hooks/tests/fixtures/pending-replies-verbatim/2026-11-21T201802.776Z.txt",
+      "category": "host",
+      "reason": "verbatim transcript fixture: internal host labels inside the operator panel excerpts are the subject under test"
+    },
+    {
+      "path": "hooks/tests/fixtures/pending-replies-verbatim/2026-11-21T184537.564Z.txt",
+      "category": "host",
+      "reason": "verbatim transcript fixture: internal host labels inside the operator panel excerpts are the subject under test"
+    },
+    {
+      "path": "hooks/tests/fixtures/pending-replies-verbatim/2026-11-21T180701.546Z.txt",
+      "category": "host",
+      "reason": "verbatim transcript fixture: internal host labels inside the operator panel excerpts are the subject under test"
+    },
+    {
+      "path": "hooks/tests/fixtures/pending-replies-verbatim/2026-11-21T040111.553Z.txt",
+      "category": "host",
+      "reason": "verbatim transcript fixture: internal host labels inside the operator panel excerpts are the subject under test"
     }
   ]
 }

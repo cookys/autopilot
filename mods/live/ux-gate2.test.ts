@@ -34,7 +34,7 @@ function host(on: On, now = NOW, expiredConsole = false, consoleMode = expiredCo
   let open = false
   const scrolls: any[] = []
   const clock = mock.clock(on, { now })
-  on('env.get', (_, e) => ({ value: e.name === 'HOME' ? HOME : e.name === 'AUTOPILOT_LOCALE' ? 'zh-TW' : e.name === 'AUTOPILOT_LIVE_V75' ? '0' : undefined }))
+  on('env.get', (_, e) => ({ value: e.name === 'HOME' ? HOME : e.name === 'AUTOPILOT_LOCALE' ? 'zh-TW' : undefined }))
   on('fs.read', (_, e) => { if (!(e.path in files)) throw new Error('ENOENT'); return { value: files[e.path] } })
   on('fs.exists', (_, e) => ({ value: e.path in files }))
   on('fs.write', () => ({ value: undefined }))

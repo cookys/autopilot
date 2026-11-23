@@ -95,11 +95,30 @@ function projectRoot(payload) {
   const hash = path.resolve(project).replace(/[^a-zA-Z0-9]/g, '-');
   return path.join(realOrLexical(process.env.HOME || require('node:os').homedir()), '.claude', 'projects', hash);
 }
+// d-522f32f4 covers the seat's own sessions even when the tool ran from another cwd
+// (e.g. a jq against the transcript while cd'd elsewhere): the session's project is
+// CLAUDE_PROJECT_DIR, or any ancestor of the cwd, not just the cwd itself.
+function ownProjectRoots(payload) {
+  const home = realOrLexical(process.env.HOME || require('node:os').homedir());
+  const dirs = [];
+  if (process.env.CLAUDE_PROJECT_DIR) dirs.push(path.resolve(process.env.CLAUDE_PROJECT_DIR));
+  let cur = path.resolve(payload.cwd || process.cwd());
+  const stop = path.resolve(home);
+  for (;;) {
+    dirs.push(cur);
+    const parent = path.dirname(cur);
+    if (parent === cur || parent === stop) break;
+    cur = parent;
+  }
+  return dirs.map((d) => path.join(home, '.claude', 'projects', d.replace(/[^a-zA-Z0-9]/g, '-')));
+}
 function targetDecision(raw, payload, { write = false } = {}) {
   if (typeof raw !== 'string' || !raw) return null;
   const p = expand(raw, payload.cwd || process.cwd()); const homes = protectedHomes(); const root = configRoot(p, homes);
   if (!root) return null;
-  if (exceptionAllows(p, projectRoot(payload), write, process.env.AUTOPILOT_CLAUDE_HOME_EXCEPTION)) return null;
+  for (const own of ownProjectRoots(payload)) {
+    if (exceptionAllows(p, own, write, process.env.AUTOPILOT_CLAUDE_HOME_EXCEPTION)) return null;
+  }
   return p;
 }
 function globCanReachClaude(pattern) { return /(?:^|\/)(?:\.claude|\*\*|\*)/.test(pattern || ''); }
@@ -283,7 +302,8 @@ function bashDecision(command, payload, depth = 0) {
 }
 function deny(p) {
   return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason:
-    `這個操作會讀到真正的 Claude 預設設定目錄（${p}）。依紅線要操作員本人的卡才能讀；自己這席的 session 檔案（~/.claude/projects/<本專案>/）不受限。 [claude-home-read-guard]` } };
+    `這個操作會讀到真正的 Claude 預設設定目錄（${p}）。依紅線要操作員本人的卡才能讀；自己這席的 session 檔案（~/.claude/projects/<本專案>/）不受限。 [claude-home-read-guard]`
+    + require('./lib/gate-hint.js').gateHint('只讀自己專案的 session 檔（~/.claude/projects/<本專案>/）；要看別席設定就開 fleet task 請操作員處理', 'hooks/README.md') } };
 }
 function handle(payload) {
   if (payload?.hook_event_name !== 'PreToolUse') return null;

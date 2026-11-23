@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 'use strict';
+// Edge reasons: require_top, source, weak_mention, path_string, glob, directory,
+// whole_tree, eval_pack, same_name, self, foreman_exam, mods_tree. Strong: require_top, source.
 // affected-suites.js — select the test files a diff can affect (BL-0001: the quality gate's test step runs it first).
 //
 // Usage:
@@ -424,11 +426,81 @@ function blankLazyRequires(raw, file) {
   if (!/\.(js|mjs|cjs)$/.test(file) || !LAZY_MARK.test(raw)) return raw;
   return raw.split('\n').map((l) => (LAZY_MARK.test(l) ? l.replace(LAZY_REQ, 'require(null)') : l)).join('\n');
 }
+// Function-body require (defect 1): a one-line require('./x') inside a NAMED function body that nothing calls from the module's top
+// level (directly or through another live named function) is not loaded when the module loads, so it makes no edge. Anonymous
+// functions, methods and arrow bodies without a name stay transparent (their requires keep their edge), and a require split over
+// lines is left alone. Input is comment-stripped JavaScript.
+const FN_HEAD = /(?:\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:function\b\s*\*?\s*[A-Za-z_$]*[\w$]*\s*\(|(?:\([^()]*\)|[A-Za-z_$][\w$]*)\s*=>\s*\{)|\b(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)\s*\()/g;
+const ONE_LINE_REQ = /require\([ \t]*(['"])[^'"\n]+\1[ \t]*\)/g;
+function blankFunctionRequires(text, file, imported) {
+  if (!/\.(js|mjs|cjs)$/.test(file) || !/\b(?:function|=>)/.test(text) || !ONE_LINE_REQ.test(text)) return text;
+  ONE_LINE_REQ.lastIndex = 0;
+  const n = text.length;
+  // string/template skip map: positions inside strings are not code
+  const code = new Uint8Array(n).fill(1);
+  for (let i = 0; i < n; i++) {
+    const c = text[i];
+    if (c === '"' || c === "'" || c === '`') {
+      let j = i + 1;
+      while (j < n && text[j] !== c && !(c !== '`' && text[j] === '\n')) j += text[j] === '\\' ? 2 : 1;
+      for (let k = i; k <= j && k < n; k++) code[k] = 0;
+      i = j;
+    }
+  }
+  // body '{' index -> name, for named function heads
+  const bodies = new Map();
+  for (const m of text.matchAll(FN_HEAD)) {
+    if (!code[m.index]) continue;
+    const name = m[1] || m[2];
+    let j = m.index + m[0].length;
+    if (!m[0].endsWith('{')) { // skip the parameter list to its closing paren
+      let depth = 1;
+      while (j < n && depth > 0) { if (code[j]) { if (text[j] === '(') depth++; else if (text[j] === ')') depth--; } j++; }
+      while (j < n && /\s/.test(text[j])) j++;
+      if (text[j] !== '{') continue;
+    } else j--;
+    bodies.set(j, name);
+  }
+  if (bodies.size === 0) return text;
+  // walk braces: every position gets its innermost named scope
+  const fns = []; // {name, start, end}
+  const stack = [];
+  for (let i = 0; i < n; i++) {
+    if (!code[i]) continue;
+    if (text[i] === '{') stack.push(bodies.has(i) ? { name: bodies.get(i), start: i, end: n } : null);
+    else if (text[i] === '}' && stack.length) { const t = stack.pop(); if (t) { t.end = i; fns.push(t); } }
+  }
+  for (const t of stack) if (t) fns.push(t);
+  const scopeOf = (pos) => { let best = null; for (const t of fns) if (t.start < pos && pos < t.end && (!best || t.start > best.start)) best = t; return best; };
+  const live = new Set();
+  // An exported function of a module that another file requires is an entry point (the importer calls it): live.
+  if (imported && imported.has(base(file).replace(/\.(js|mjs|cjs)$/, ''))) {
+    for (const m of text.matchAll(/(?:module\.)?exports(?:\.[\w$]+)?\s*=\s*([^;]*)/g)) for (const id of m[1].match(/[A-Za-z_$][\w$]*/g) || []) live.add(id);
+  }
+  const calls = []; // [callerScopeName|null, callee]
+  for (const m of text.matchAll(/(^|[^.\w$])([A-Za-z_$][\w$]*)\s*\(/g)) {
+    const at = m.index + m[1].length;
+    if (!code[at] || /\bfunction\s*\*?\s*$/.test(text.slice(Math.max(0, at - 20), at))) continue;
+    const sc = scopeOf(at);
+    calls.push([sc ? sc.name : null, m[2]]);
+  }
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const [caller, callee] of calls) if ((caller === null || live.has(caller)) && !live.has(callee)) { live.add(callee); grew = true; }
+  }
+  let out = '', last = 0;
+  for (const m of text.matchAll(ONE_LINE_REQ)) {
+    if (!code[m.index]) continue;
+    const sc = scopeOf(m.index);
+    if (sc && !live.has(sc.name)) { out += text.slice(last, m.index) + 'require(null)'; last = m.index + m[0].length; }
+  }
+  return out + text.slice(last);
+}
 function mentions(text) {
-  const exts = new Set(), bares = new Set(), slashBares = new Set(), globs = [], strong = new Set(), segs = new Set(), paths = new Set();
+  const exts = new Set(), bares = new Set(), slashBares = new Set(), globs = [], strong = new Set(), requires = new Set(), sources = new Set(), segs = new Set(), paths = new Set();
   for (const m of text.matchAll(RE_SEG)) segs.add(m[1]);
-  for (const m of text.matchAll(RE_REQ)) if (/^[.\/]/.test(m[1])) strong.add(base(m[1]).replace(/\.(js|mjs|cjs|json)$/, ''));
-  for (const m of text.matchAll(RE_SRC)) strong.add(base(m[1]).replace(/\.(sh|bash|zsh)$/, ''));
+  for (const m of text.matchAll(RE_REQ)) if (/^[.\/]/.test(m[1])) { const stem = base(m[1]).replace(/\.(js|mjs|cjs|json)$/, ''); strong.add(stem); requires.add(stem); }
+  for (const m of text.matchAll(RE_SRC)) { const stem = base(m[1]).replace(/\.(sh|bash|zsh)$/, ''); strong.add(stem); sources.add(stem); }
   for (const m of text.matchAll(RE_EXT)) exts.add(m[0]);
   for (const m of text.matchAll(RE_BARE)) {
     if (m[0].startsWith('/')) {
@@ -438,7 +510,7 @@ function mentions(text) {
   }
   for (const m of text.matchAll(RE_GLOB)) globs.push({ dir: globDir(m[1]), ext: m[2] || '' });
   for (const m of text.matchAll(RE_MIRROR_PATH)) paths.add(m[0]);
-  return { exts, bares, slashBares, globs, strong, segs, paths };
+  return { exts, bares, slashBares, globs, strong, requires, sources, segs, paths };
 }
 
 const GENERIC_DIRS = new Set(['fixtures', 'fixture', 'golden', 'data', 'lib', 'tests', 'scripts', 'hooks', 'src', 'bin', 'docs', 'evals', 'platforms', 'skills', 'agents', 'references', 'schemas', 'profiles', 'mods', 'plugin', 'codex', 'node_modules',
@@ -540,10 +612,16 @@ const stripComments = (t, file) => {
 function buildGraph(tree) {
   const codeFiles = tree.files.filter((f) => isCode(f) && (isSuite(f) || !NOT_PROPAGATING.test(f)));
   const refs = new Map(); // file -> mentions
+  const stripped = new Map();
+  const imported = new Set(); // stems that another code file requires or sources
   for (const f of codeFiles) {
     const t = tree.read(f);
-    if (t != null) refs.set(f, mentions(stripComments(blankLazyRequires(t, f), f)));
+    if (t == null) continue;
+    const text = stripComments(blankLazyRequires(t, f), f);
+    stripped.set(f, text);
+    for (const stem of mentions(text).strong) imported.add(stem);
   }
+  for (const [f, text] of stripped) refs.set(f, { ...mentions(blankFunctionRequires(text, f, imported)), text });
   const byExt = new Map(), byBare = new Map(), bySlashBare = new Map(), bySeg = new Map(), byPath = new Map(); // token -> Set(referrer)
   const add = (m, k, f) => { if (!m.has(k)) m.set(k, new Set()); m.get(k).add(f); };
   for (const [f, r] of refs) {
@@ -569,38 +647,52 @@ function buildGraph(tree) {
       globRefs.push({ file: f, ...g });
     }
   }
-  return { refs, byExt, byBare, bySlashBare, bySeg, byPath, globRefs, genericStems };
+  // A sourced helper (defect 2): a non-suite shell file outside the hook-tests directory that a shell file sources. Its incidental
+  // name mentions are not what the sourcing suites depend on, so they make no edge (its own source/require and glob edges stay).
+  const sourced = new Set();
+  for (const [f, r] of refs) if (/\.(sh|bash|zsh)$/.test(f)) for (const stem of r.strong) sourced.add(stem);
+  const sourcedHelpers = new Set(codeFiles.filter((f) => /\.(sh|bash|zsh)$/.test(f) && !isSuite(f) && !f.startsWith(HOOK_TESTS_DIR + '/') && sourced.has(base(f).replace(/\.(sh|bash|zsh)$/, ''))));
+  return { refs, byExt, byBare, bySlashBare, bySeg, byPath, globRefs, genericStems, sourcedHelpers };
 }
 
-// -> Map(referrer -> 'strong'|'weak')
+// -> Map(referrer -> Set(reason)); retain insertion order for the selector's walk.
 function referrersOf(graph, p) {
   const out = new Map();
+  const add = (f, reason) => { if (!out.has(f)) out.set(f, new Set()); out.get(f).add(reason); };
   // A mirror is a byte copy. Match the full path only; the source file's basename is a different seed.
   if (MIRROR.test(p)) {
-    for (const f of graph.byPath.get(p) || []) out.set(f, 'weak');
+    for (const f of graph.byPath.get(p) || []) add(f, 'path_string');
     out.delete(p);
     return out;
   }
   const bareP = base(p).replace(/\.[^.]+$/, '');
   const kind = (f) => (graph.refs.get(f).strong.has(bareP) ? 'strong' : 'weak');
+  const addMention = (f) => {
+    const refs = graph.refs.get(f);
+    if (kind(f) === 'strong' && refs.requires.has(bareP)) add(f, 'require_top');
+    if (kind(f) === 'strong' && refs.sources.has(bareP)) add(f, 'source');
+    add(f, 'weak_mention');
+    if (refs.text.includes(p)) add(f, 'path_string');
+  };
   const b = base(p);
   for (const f of graph.byExt.get(b) || []) {
     // Rule 11: a shared test helper (hooks/tests/lib.sh) naming a prose file (cp README.md ...) serves a few of
     // the suites that source it, not all of them. Prose is a seed only; that mention makes no edge.
     if (/^(md|txt)$/.test(extOf(p)) && isSharedTestHelper(f)) continue;
-    out.set(f, kind(f));
+    if (graph.sourcedHelpers.has(f) && kind(f) === 'weak') continue;
+    addMention(f);
   }
   if (isCode(p)) {
     const bare = b.replace(/\.[^.]+$/, '');
     const jsTarget = extOf(p) === 'js' || extOf(p) === 'mjs' || extOf(p) === 'cjs';
     const generic = jsTarget && graph.genericStems.has(bare);
     for (const f of graph.byBare.get(bare) || []) {
-      if (out.has(f)) continue;
       const k = kind(f);
+      if (graph.sourcedHelpers.has(f) && k === 'weak') continue;
       if (generic && k !== 'strong') continue;
-      out.set(f, k);
+      addMention(f);
     }
-    for (const f of graph.bySlashBare.get(bare) || []) if (!out.has(f)) out.set(f, kind(f));
+    for (const f of graph.bySlashBare.get(bare) || []) if (!(graph.sourcedHelpers.has(f) && kind(f) === 'weak')) addMention(f);
   }
   if (!isCode(p)) {
     // data file: any text naming one of its ancestor directories (except generic top-level ones) refers to it
@@ -608,19 +700,21 @@ function referrersOf(graph, p) {
     for (const c of parts) {
       if (GENERIC_DIRS.has(c)) continue;
       if (underProseRoot(p) && isProse(p) && PROSE_DIR_SKIP.has(c)) continue;
-      for (const f of graph.bySeg.get(c) || []) if (!out.has(f)) out.set(f, 'weak');
+      for (const f of graph.bySeg.get(c) || []) add(f, 'directory');
     }
   }
   for (const g of graph.globRefs) {
-    if (!(g.dir && p.slice(0, Math.max(p.lastIndexOf('/'), 0)) === g.dir && (!g.ext || p.endsWith(g.ext)) && !out.has(g.file))) continue;
+    if (!(g.dir && p.slice(0, Math.max(p.lastIndexOf('/'), 0)) === g.dir && (!g.ext || p.endsWith(g.ext)))) continue;
     // docs/plans/* names the category, not one plan. A glob with an extension reads content and stays.
     // A glob that also names a specific directory stays. Category names apply only under docs/.
     if (underProseRoot(p) && isProse(p) && !g.ext && g.dir.split('/').every((c) => !c || GENERIC_DIRS.has(c) || PROSE_DIR_SKIP.has(c))) continue;
-    out.set(g.file, 'weak');
+    add(g.file, 'glob');
   }
   out.delete(p);
   return out;
 }
+
+const edgeKind = (reasons) => reasons.has('require_top') || reasons.has('source') ? 'strong' : 'weak';
 
 // Same bounded reverse walk the selector uses. Cost = weak (mere mention) hops; strong
 // (require/source) hops are free. One parent per node (first accepted cost wins) — that parent
@@ -635,7 +729,8 @@ function walkParents(seeds, graph, maxWeak) {
     while (q.length) {
       const cur = q.shift();
       if (!isCode(cur) && parent.get(cur) !== null) continue; // only code files propagate
-      for (const [r, k] of referrersOf(graph, cur)) {
+      for (const [r, reasons] of referrersOf(graph, cur)) {
+        const k = edgeKind(reasons);
         const nc = w + (k === 'weak' ? 1 : 0);
         if (nc > maxWeak || (cost.has(r) && cost.get(r) <= nc)) continue;
         cost.set(r, nc); parent.set(r, cur);
@@ -658,7 +753,8 @@ function walkStrong(seeds, graph, maxHops) {
     const next = [];
     for (const cur of level) {
       if (!isCode(cur) && parent.get(cur) !== null) continue;
-      for (const [r, k] of referrersOf(graph, cur)) {
+      for (const [r, reasons] of referrersOf(graph, cur)) {
+        const k = edgeKind(reasons);
         if (k !== 'strong' || dist.has(r)) continue;
         dist.set(r, h + 1);
         parent.set(r, cur);
@@ -939,8 +1035,33 @@ function select(changed, headTree, maxWeak = DEFAULT_MAX_WEAK) {
     ? [...present].filter((p) => /^mods\/tux\/[^/]+\.test\.js$/.test(p)) : [];
   const all = [...new Set([...suites, ...alwaysRun, ...packSuites, ...forcedFiltered, ...tuxSuites])].sort();
   Object.defineProperty(chains, '__hops', { value: shortestHops(changed, graph), enumerable: false });
-  return { suites: all, alwaysRun, chains, fullReasons, unreferenced, graphFiles: graph.refs.size };
+  const result = { suites: all, alwaysRun, chains, fullReasons, unreferenced, graphFiles: graph.refs.size };
+  const walks = new Map();
+  Object.defineProperty(result, 'reasonsFor', { value: (suite, file) => {
+    if (!all.includes(suite) || !changed.includes(file)) return [];
+    const reasons = new Set();
+    if (!walks.has(file)) walks.set(file, walkParents([file], graph, maxWeak));
+    const parents = walks.get(file);
+    if (parents.has(suite)) {
+      let current = suite;
+      if (current === file) reasons.add('self');
+      while (parents.get(current) != null) {
+        const next = parents.get(current);
+        for (const reason of referrersOf(graph, next).get(current) || []) reasons.add(reason);
+        current = next;
+      }
+    }
+    if (alwaysRun.includes(suite) && !isProse(file)) reasons.add('whole_tree');
+    if (packed.get(suite)?.has(file)) reasons.add('eval_pack');
+    if (forcedSuites([file], present).has(suite)) reasons.add(suite === file ? 'self' : 'same_name');
+    if (foremanExamSuites.includes(suite) && (file.startsWith('evals/foreman-') || /^scripts\/engine-qualify/.test(file))) reasons.add('foreman_exam');
+    if (tuxSuites.includes(suite) && file.startsWith('mods/')) reasons.add('mods_tree');
+    return [...reasons].sort();
+  }});
+  return result;
 }
+
+function reasonsFor(suite, changedFile, selection) { return selection.reasonsFor(suite, changedFile); }
 
 function allSuites(tree, release = false) { return tree.files.filter((p) => isDiscoveredSuite(p) && !isEvalSuite(p) && (release || !isSkillOnOffSuite(p))).sort(); }
 
@@ -1567,6 +1688,7 @@ function parseArgs(argv) {
     else if (x === '--root') a.root = argv[++i];
     else if (x === '--allow-missing') a.allowMissing = true;
     else if (x === '--json') a.json = true;
+    else if (x === '--explain') a.explain = true;
     else if (x === '--max-weak') a.maxWeak = Number(argv[++i]);
     else if (x === '--list-all') a.listAll = true;
     else if (x === '--release') a.release = true;
@@ -1608,6 +1730,12 @@ function parseArgs(argv) {
       a.record = true;
       if (argv[i + 1] && !argv[i + 1].startsWith('--')) a.recordPath = argv[++i];
     }
+    else if (x === '--dep-cache') {
+      const v = argv[++i];
+      if (!v) throw new Error('--dep-cache needs a path');
+      a.depCache = v;
+    }
+    else if (x === '--no-dep-cache') a.noDepCache = true;
     else if (x === '--files') { while (argv[i + 1] && !argv[i + 1].startsWith('--')) a.files.push(argv[++i]); a.useFiles = true; }
     else if (x === '--help' || x === '-h') a.help = true;
     else throw new Error(`unknown argument: ${x}`);
@@ -1618,6 +1746,98 @@ function parseArgs(argv) {
 const OVER_HALF_THRESHOLD = process.env.AFFECTED_SUITES_OVER_HALF_THRESHOLD != null
   ? Number(process.env.AFFECTED_SUITES_OVER_HALF_THRESHOLD)
   : 0.5;
+
+const REQUIRE_REASONS = new Set(['require_top', 'source', 'require_exported']);
+const SOFT_MENTION_REASONS = new Set(['weak_mention', 'path_string']);
+
+function mentionsOutsideRequires(text, changedFile) {
+  if (typeof text !== 'string') return true;
+  const cleaned = text
+    .replace(/\brequire\(\s*(['"])[^'"\n]*\1\s*\)/g, '')
+    .replace(/\bimport\s+[^'"\n]*?\bfrom\s+(['"])[^'"\n]*\1/g, '')
+    .replace(/\bimport\(\s*(['"])[^'"\n]*\1\s*\)/g, '')
+    .replace(/(^|[;&|(]|\bthen\b|\bdo\b)([ \t]*(?:source|\.)[ \t]+["']?[^\s"';)]+["']?)/gm, '$1');
+  // Edges are built on stems (no extension), so a bare-name mention outside a require must keep the suite too.
+  const stem = base(changedFile).replace(/\.[^.]+$/, '');
+  return (stem !== '' && cleaned.includes(stem)) || cleaned.includes(base(changedFile)) || cleaned.includes(changedFile);
+}
+
+function defaultDepCachePath(root) {
+  let common = git(root, ['rev-parse', '--git-common-dir']).toString('utf8').trim();
+  if (!path.isAbsolute(common)) common = path.resolve(root, common);
+  return path.join(common, 'autopilot', 'dep-cache.json');
+}
+
+function loadDepCache(root, depCacheArg) {
+  const file = depCacheArg ? path.resolve(depCacheArg) : defaultDepCachePath(root);
+  if (!fs.existsSync(file)) return null;
+  const raw = fs.readFileSync(file, 'utf8');
+  const cache = JSON.parse(raw);
+  if (!cache || typeof cache !== 'object' || cache.schema !== 'dep-cache/1' || typeof cache.base_sha !== 'string' || !cache.base_sha || !cache.suites || typeof cache.suites !== 'object') return null;
+  return cache;
+}
+
+function pruneWithDepCache(root, doc, selection, headRef, depCacheArg, tree) {
+  const pruned = [];
+  try {
+    const cache = loadDepCache(root, depCacheArg);
+    if (!cache) return pruned;
+    const targetHead = headRef || 'HEAD';
+    git(root, ['merge-base', '--is-ancestor', cache.base_sha, targetHead]);
+    const diffFiles = git(root, ['diff', '--name-only', '--no-renames', '-z', cache.base_sha]).toString('utf8').split('\0').filter(Boolean);
+    const untracked = git(root, ['ls-files', '--others', '--exclude-standard', '-z']).toString('utf8').split('\0').filter(Boolean);
+    const dirtySet = new Set([...diffFiles, ...untracked]);
+    const kept = [];
+    for (const suite of doc.suites) {
+      const entry = cache.suites[suite];
+      if (!entry || typeof entry !== 'object' || entry.traced !== true || entry.rc !== 0 || !Array.isArray(entry.files)) {
+        kept.push(suite);
+        continue;
+      }
+      if (dirtySet.has(suite) || entry.files.some((f) => dirtySet.has(f))) {
+        kept.push(suite);
+        continue;
+      }
+      const cachedFiles = new Set(entry.files);
+      const causingFiles = [];
+      let canPrune = true;
+      let suiteText;
+      for (const file of doc.changed) {
+        const reasons = reasonsFor(suite, file, selection);
+        if (reasons.length === 0) continue;
+        causingFiles.push(file);
+        if (cachedFiles.has(file)) {
+          canPrune = false;
+          break;
+        }
+        const hasHardOther = reasons.some((r) => !REQUIRE_REASONS.has(r) && !SOFT_MENTION_REASONS.has(r));
+        if (hasHardOther) {
+          canPrune = false;
+          break;
+        }
+        if (reasons.some((r) => SOFT_MENTION_REASONS.has(r))) {
+          if (suiteText === undefined) suiteText = tree ? tree.read(suite) : null;
+          if (mentionsOutsideRequires(suiteText, file)) {
+            canPrune = false;
+            break;
+          }
+        }
+      }
+      if (canPrune && causingFiles.length > 0) {
+        pruned.push({ suite, files: causingFiles });
+      } else {
+        kept.push(suite);
+      }
+    }
+    if (pruned.length > 0) {
+      doc.suites = kept;
+      doc.stats.selected = kept.length;
+    }
+  } catch {
+    return [];
+  }
+  return pruned;
+}
 
 async function main(argv) {
   let a;
@@ -1745,14 +1965,26 @@ async function main(argv) {
       writeFastPlan(fastPlan);
     }
     const maxWeak = a.maxWeak == null ? DEFAULT_MAX_WEAK : a.maxWeak;
-    if (doc.mode === 'selective' && doc.stats.total_suites > 0 && (doc.suites.length / doc.stats.total_suites) > OVER_HALF_THRESHOLD) {
+    const preCount = doc.suites.length; // the over-half guard below measures the static selection, never the pruned one
+    let pruned = [];
+    if (!a.noDepCache && process.env.AUTOPILOT_DEP_CACHE !== '0' && doc.mode === 'selective' && doc.suites.length > 0 && !a.onlyGlob) {
+      let hasCache = false;
+      try { hasCache = !!loadDepCache(root, a.depCache); } catch { hasCache = false; }
+      if (hasCache) {
+        if (!tree) tree = gitTree(root, doc.head || 'HEAD');
+        const selection = select(doc.changed, tree, maxWeak);
+        pruned = pruneWithDepCache(root, doc, selection, headRef, a.depCache, tree);
+        if (pruned.length > 0) process.stderr.write(`dep-cache: pruned ${pruned.length} suites\n`);
+      }
+    }
+    if (doc.mode === 'selective' && doc.stats.total_suites > 0 && (preCount / doc.stats.total_suites) > OVER_HALF_THRESHOLD) {
       if (!tree) tree = gitTree(root, doc.head);
       const widenedBy = doc.changed
         .map((p) => ({ path: p, suites: select([p], tree, maxWeak).suites.length }))
         .filter((w) => w.suites > 0)
         .sort((x, y) => y.suites - x.suites || x.path.localeCompare(y.path))
         .slice(0, 5);
-      const n = doc.suites.length;
+      const n = preCount;
       const total = doc.stats.total_suites;
       const pct = Math.round((n / total) * 100);
       const summary = widenedBy.map((w) => `${w.path} (${w.suites} suites)`).join(', ');
@@ -1809,6 +2041,18 @@ async function main(argv) {
       }
       return code;
     }
+    if (a.explain && doc.mode === 'selective') {
+      if (!tree) tree = gitTree(root, doc.head || 'HEAD');
+      const selection = select(doc.changed, tree, maxWeak);
+      for (const suite of doc.suites) for (const file of doc.changed) {
+        const reasons = reasonsFor(suite, file, selection);
+        if (reasons.length) process.stdout.write(`${suite}: ${file}: ${reasons.join(', ')}\n`);
+      }
+      for (const p of pruned) {
+        process.stdout.write(`pruned: ${p.suite} (cache traced, ${p.files.join(', ')} not executed)\n`);
+      }
+      return 0;
+    }
     const extra = doc.extra_runners.map((x) => x + '\n').join('');
     const full = doc.mode === 'full';
     process.stdout.write(a.json ? JSON.stringify(doc, null, 2) + '\n' : (full ? 'FULL\n' : doc.suites.join('\n') + (doc.suites.length ? '\n' : '')) + extra);
@@ -1819,5 +2063,5 @@ async function main(argv) {
   }
 }
 
-module.exports = { ancestorsSafe, extraRunners, select, mentions, buildGraph, isSuite, isProse, entryCommand, computeDoc, FULL_TRIGGERS, gitTree, diskTree };
+module.exports = { mentionsOutsideRequires, reasonsFor, ancestorsSafe, extraRunners, select, mentions, buildGraph, isSuite, isProse, entryCommand, computeDoc, FULL_TRIGGERS, gitTree, diskTree };
 if (require.main === module) main(process.argv.slice(2)).then((c) => { process.exitCode = c; });

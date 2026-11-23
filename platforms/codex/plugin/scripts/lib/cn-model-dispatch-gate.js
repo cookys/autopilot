@@ -34,7 +34,7 @@ function repoRootOf(cwd = process.cwd()) {
 function resolveEndpoint(name, env) {
   const script = path.join(__dirname, '..', 'resolve-endpoint.sh');
   const r = spawnSync('bash', [script, name], { cwd: process.cwd(), env: { ...process.env, ...env }, encoding: 'utf8', timeout: 15000 });
-  if (r.status !== 0) return null;
+  // The resolver exits 1 for a non-https LAN gateway (url_unsafe) but still prints the JSON with base_url; the locality decision only needs base_url.
   try { return JSON.parse(String(r.stdout).split('\n').find((s) => s.startsWith('{')) || 'null'); } catch { return null; }
 }
 function hostOf(url) { try { return new URL(url).hostname.toLowerCase(); } catch { return ''; } }
@@ -124,7 +124,8 @@ function check(opts = {}) {
   } catch { /* endpoint names are resolved through the canonical endpoint resolver */ }
   const resolved = rawUrl ? { base_url: rawUrl } : (endpoint ? resolveEndpoint(endpoint, env) : null);
   const host = resolved && hostOf(resolved.base_url);
-  if (rawUrl && host && isLocalHost(host, env)) return { allowed: true, family };
+  // Decisions follow where the payload goes: a raw URL or a resolved endpoint name that points at a local gateway host is allowed, whatever the model family.
+  if (host && isLocalHost(host, env)) return { allowed: true, family };
   const inventory = readJson(OPERATORS_PATH, null);
   const operator = inventory && operatorFor(endpoint, host, inventory);
   if (!operator) return { allowed: false, family, cls: 'restricted_operator_unknown_endpoint', line: refusalLine(family, 'restricted_operator_unknown_endpoint') };

@@ -38,6 +38,8 @@ const { isEnabled } = require('./_shared/opt-in');
 
 if (!isEnabled('exec-boundary')) process.exit(0);
 
+const { gateHint } = require('./lib/gate-hint.js');
+
 function readConfig() {
   const cfg = { protectedRefs: 'main|master', roots: [], allowSql: false };
   try {
@@ -335,7 +337,8 @@ try {
   if (push && /(\s|^)(--force(-with-lease)?|-f)\b/.test(push[0])) {
     const target = push[0].match(/\bgit\s+push\b(?:\s+--?[\w-]+(?:=\S+)?)*\s+\S+\s+(?:\+)?([\w./-]+)/);
     if (target && protectedRe.test(target[1].replace(/^.*:/, ''))) {
-      deny('E1-force-push', `force push to protected ref '${target[1]}' (also guarded by branch-protection.js)`);
+      deny('E1-force-push', `force push to protected ref '${target[1]}' (also guarded by branch-protection.js)`
+        + gateHint('改在 feature 分支上改完再推；保護 ref 不接受 force-push', 'CLAUDE.md'));
     }
   }
 
@@ -356,14 +359,16 @@ try {
   let segments;
   try { segments = commandSegments(command); } catch (e) {
     if (!(e instanceof DepthError)) throw e;
-    deny('E2-nesting', `${e.message}; refused (fail closed) because the nested text cannot be judged`);
+    deny('E2-nesting', `${e.message}; refused (fail closed) because the nested text cannot be judged`
+      + gateHint('把巢狀文字拆成獨立命令執行，或加引號讓它成為字面文字', 'hooks/README.md'));
   }
   for (const [segIdx, seg] of segments.entries()) {
     const toks = seg.split(/\s+/).filter(Boolean);
     if (segments.nested.has(segIdx)) {
       const at = toks.findIndex((t) => t === 'rm' || t.endsWith('/rm'));
       if (at !== -1 && /(^|\s)-[a-zA-Z]*[rR]|--recursive/.test(toks.slice(at + 1).join(' '))) {
-        deny('E2-recursive-rm', 'recursive rm inside a command substitution, arithmetic, process substitution or unquoted heredoc text is refused whatever its target (fail closed; quote the heredoc delimiter to write rm prose, or run the rm as a plain top-level command)');
+        deny('E2-recursive-rm', 'recursive rm inside a command substitution, arithmetic, process substitution or unquoted heredoc text is refused whatever its target (fail closed; quote the heredoc delimiter to write rm prose, or run the rm as a plain top-level command)'
+          + gateHint('rm 改成頂層獨立命令執行；heredoc 內的 rm 文字要加引號', 'hooks/README.md'));
       }
       continue;
     }
@@ -398,19 +403,22 @@ try {
       else if (simCwd !== process.cwd() && !expanded.startsWith('$')) abs = path.resolve(simCwd, expanded); // after a literal cd
       else continue; // relative = inside cwd
       if (!inRoots(abs)) {
-        deny('E2-recursive-rm', `recursive rm targets '${tok}' outside sanctioned roots (cwd, tmp, configured sanctioned_roots)`);
+        deny('E2-recursive-rm', `recursive rm targets '${tok}' outside sanctioned roots (cwd, tmp, configured sanctioned_roots)`
+          + gateHint('只刪 cwd/tmp/已列名目錄內的目標；其他路徑先請操作員核准', 'hooks/README.md'));
       }
     }
   }
 
   // E3 — raw destructive SQL
   if (!cfg.allowSql && /\b(DROP\s+TABLE|TRUNCATE(\s+TABLE)?)\b/i.test(command)) {
-    deny('E3-destructive-sql', 'raw DROP TABLE/TRUNCATE in a shell command (set allow_sql: true in .claude/execution-boundary-config.md if this repo legitimately does this)');
+    deny('E3-destructive-sql', 'raw DROP TABLE/TRUNCATE in a shell command (set allow_sql: true in .claude/execution-boundary-config.md if this repo legitimately does this)'
+      + gateHint('先備份並請操作員核准；確屬合法才在 .claude/execution-boundary-config.md 設 allow_sql: true', 'hooks/README.md'));
   }
 
   // E4 — root-privileged deletion (command-position anchored, same rationale as E2)
   if (/(?:^|[;&|]\s*|\$\(\s*|`\s*)sudo\s+rm\b/.test(command)) {
-    deny('E4-sudo-rm', 'root-privileged deletion');
+    deny('E4-sudo-rm', 'root-privileged deletion'
+      + gateHint('不用 root 權限刪檔案；要刪系統檔案請操作員本人執行', 'hooks/README.md'));
   }
 
   process.exit(0);

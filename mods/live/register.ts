@@ -58,7 +58,7 @@ import type { ConsoleSnapshot } from './console'
 import { consoleSlotTab, nextConsoleTab } from './consoletabs'
 import type { ConsoleNav, ConsoleTab } from './consoletabs'
 
-import { PANE_TOGGLE_CLOSED, BandBar, bandQuotaSeg, BarRule, Shell, barContent, barParts, cardMain, cardQuick, ShellBare, decideContent, progressRow, cardSplit, shellMenuRow, shellNote, speedContent, stackBand, stackRows, usageDraw } from './band'
+import { BandBar, bandQuotaSeg, BarRule, Shell, barContent, barParts, cardMain, cardQuick, ShellBare, decideContent, progressRow, cardSplit, shellMenuRow, shellNote, speedContent, stackBand, stackRows, usageDraw } from './band'
 import type { SpeedPlacement } from './band'
 import { normalizedPools } from './pages/quota-pick'
 import { consoleFleetCounts } from './pages/rows'
@@ -73,14 +73,10 @@ import { collapsedRowMark, initialBandCollapsed, toggleBand, toggleFold, type Ba
 import type { Card } from './shell'
 import type { LeftItem } from './shell'
 import type { FleetLaneSum, RoomRow } from './shell'
-import { focusAnchorKey, Pane, noteInputKey, paneRank, resetNoteInputs } from './pane'
+import { focusAnchorKey, Pane, noteInputKey, resetNoteInputs } from './pane'
 import { routeKey } from './pages/keys'
-import { V75Band } from './band75'
-import type { FlightState } from './v75'
-import { setV75On, v75On, v75SingleFlight, V75_PANE_MIN_ROWS, v75BandRows, v75DetailOffset, v75FocusNext, v75ReopenAfterReload, v75Plan, v75ScrollRoute } from './v75'
-import type { V75Focus } from './v75'
 import type { KeyAction } from './pages/keys'
-import { decideReduce, NO_NAV, previewItems, previewStale, v74Pool } from './pages/decide'
+import { decideReduce, NO_NAV, v74Pool } from './pages/decide'
 import type { DecideNav } from './pages/decide'
 import { SEATS_TIMEOUT_MS, seatQuota, v74PmCounts } from './pages/now'
 import { PAGES, EXTRA_PAGES } from './pages/index'
@@ -92,10 +88,9 @@ import { frameHeight } from './pages/frame'
 import type { PageId } from './pages/frame'
 import { FOLD_AT, rowsOf as fleetRowsOf } from './pages/fleet'
 import { DEFAULT_REVIEW_VIEW } from './pages/review'
-import { parsePoolEta, spendFocusRows } from './pages/spend'
-import type { PoolEta } from './pages/spend'
+import { spendFocusRows } from './pages/spend'
 import { FILL_PRESS } from './commandtab'
-import { type ScrollModel, fixedWindow, keyed, newScroll, scrollHook } from './scroll'
+import { type ScrollModel, applyScroll, fixedWindow, keyed, newScroll, scrollHook } from './scroll'
 import type { ShowRequest } from '../viewer/model'
 import { reopenLook, showPath } from '../viewer/show'
 import {
@@ -323,11 +318,6 @@ let shellDrawnMs = -Infinity
 let shellRoom: { rows: RoomRow[]; raw: string } = { rows: [], raw: '' }
 let shellBaseline: number | undefined // the newest roundtable seq when the shell opened (✦ counts what came after); undefined = taken at the next read
 let panelOpenWrittenMs = -Infinity
-// the owner wants the v7.5 Pane open: written by the open paths, cleared by the 收起 / close paths (never by session.start), read once at the first render after a reload (module variables do not survive it, $.state does)
-const PANE_WANTED = atom({ plugin: 'autopilot', key: 'pane_wanted' } as const, false)
-const setPaneWanted = ($: EngineInterface, v: boolean): Promise<void> => update($, PANE_WANTED, () => v).catch(() => undefined)
-let v75ReloadChecked = false // the reopen check runs once per module load
-let v75OpenQuiet = false // the next Pane open asks no focus (a reopen after a reload must not take the keys)
 const PANEL_OPEN = atom({ plugin: 'autopilot', key: 'panel_open_at_ms' } as const, 0)
 const ROOM_RE = /^[a-z0-9-]+$/
 const MAX_ROOM_BYTES = 2_000_000 // a longer log keeps the last read (the roundtable pane reads it whole; the band does not)
@@ -351,21 +341,6 @@ async function readRoomText($: EngineInterface): Promise<string | null> {
     return String(await $.fs.read(path))
   } catch (_e) {
     return '' // no rooms directory, no log: an empty column, not an error
-  }
-}
-// capacity's pool forecast: AUTOPILOT_POOL_ETA names the file, else HOME/projects/capacity/out/pool-eta.v1.json. null = no file / unreadable / not capacity.pool-eta/1 (the spend page says so).
-const MAX_ETA_BYTES = 1_000_000
-async function readPoolEta($: EngineInterface): Promise<PoolEta | null> {
-  try {
-    const over = await $.env.get('AUTOPILOT_POOL_ETA').catch(() => undefined)
-    const home = await $.env.get('HOME').catch(() => undefined)
-    const path = typeof over === 'string' && over.trim() !== '' ? over.trim() : typeof home === 'string' && home.trim() !== '' ? home.replace(/\/$/, '') + '/projects/capacity/out/pool-eta.v1.json' : null
-    if (path === null) return null
-    const st = await $.fs.stat(path)
-    if (st.kind !== 'file' || !(st.size <= MAX_ETA_BYTES)) return null
-    return parsePoolEta(String(await $.fs.read(path)))
-  } catch (_e) {
-    return null
   }
 }
 async function shellTick($: EngineInterface, nowMs: number): Promise<void> {
@@ -1597,8 +1572,6 @@ const pendingLogs: { name: string; row: Record<string, unknown> }[] = []
 async function flushPendingLogs($: EngineInterface): Promise<void> {
   while (liveBaseSeen !== null && pendingLogs.length > 0) { const p = pendingLogs.shift() as { name: string; row: Record<string, unknown> }; await appendLog($, p.name, p.row) }
 }
-// the host's own word on whether the Pane is seated (isPlaced), never the module state or pane_wanted: the toggle's glyph and its press read this
-const hostPlaced = async ($: EngineInterface): Promise<boolean> => (await $.ui.panes().catch(() => [] as { id: string; isPlaced: boolean }[])).some(p => p.id === PANE_ID && p.isPlaced === true)
 async function appendLog($: EngineInterface, name: string, row: Record<string, unknown>): Promise<void> {
   if (liveBaseSeen === null) { pendingLogs.push({ name, row }); return } // before the first snapshot names the live base: kept, written by flushPendingLogs
   const path = liveBaseSeen + '/' + name
@@ -1642,7 +1615,6 @@ async function panePagePress($: EngineInterface, id: PageId): Promise<void> {
   if (id === panePage) return
   panePage = id
   paneTab = PAGE_TAB_OF[id] ?? paneTab
-  paneBodyOff = 0
   keyed(decideScroll, 'page:' + id) // K1: a different page starts at its first row.
   void $.ui.scroll({ in: PANE_ID, to: 'start' }).catch(() => undefined)
   decideLocal = { ...decideLocal, textMode: false, textBuf: '', armed: false } // a tab press ends a note being typed: the mode must not outlive the page
@@ -1655,7 +1627,7 @@ async function panePagePress($: EngineInterface, id: PageId): Promise<void> {
 async function renderLater($: EngineInterface): Promise<void> {
   await Promise.resolve()
   await Promise.resolve()
-  await $.ui.invalidate('ui.render').catch(() => undefined)
+  await Promise.resolve($.ui.invalidate('ui.render')).catch(() => undefined)
 }
 async function ringToTab($: EngineInterface, id: PageId): Promise<void> {
   await Promise.resolve()
@@ -1667,7 +1639,7 @@ async function ringToTab($: EngineInterface, id: PageId): Promise<void> {
 async function paneTabPress($: EngineInterface, t: PaneTab, legacy = false): Promise<void> {
   if (legacy) {
     if (t === paneTab) {
-      markPaneClosed(); void setPaneWanted($, false)
+      markPaneClosed()
       try { await $.ui.close({ id: PANE_ID }) } catch (_e) { /* already closed */ }
       return
     }
@@ -1689,7 +1661,7 @@ const focusRows = (id: string, expanded: boolean): number => {
   if (id === 'spend') return spendFocusRows(snapshot)
   return 1
 }
-let decideLocal: Pick<DecideNav, 'cursor' | 'folded' | 'textMode' | 'textBuf' | 'opt' | 'detailOffset' | 'armed' | 'snap' | 'stale'> = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt }
+let decideLocal: Pick<DecideNav, 'cursor' | 'folded' | 'textMode' | 'textBuf' | 'opt' | 'detailOffset' | 'armed' | 'snap' | 'stale' | 'style' | 'bgOpen'> = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt, style: 'D', bgOpen: false }
 const framePageId = (): string => panePage
 // B56: crossing the side-dock width threshold unmounts `<Pane placement="dock">` and mounts `<Pane placement="inline">` (or back).
 // On CC 2.1.327 that remount drops the pane's keyboard focus to the prompt and collides on the previous placement's Button keys,
@@ -1707,51 +1679,21 @@ async function openPane($: EngineInterface): Promise<void> {
   else $.ui.invalidate('ui.render')
 }
 async function closePane($: EngineInterface): Promise<void> {
-  if (v75PaneOn) {
-    // v7.5: the host Pane the band opened; a focus that was in it falls back to the band, never to nothing
-    v75PaneOn = false; v75Locked = null; v75NotPlaced = false
-    v75Focus = v75FocusNext(v75Focus, { kind: 'pane-gone' })
-    try { await $.ui.close({ id: PANE_ID }) } catch (_e) { /* already closed */ }
-    $.ui.invalidate('ui.render')
-    void refocusBand($)
-  } else if (bandLegacy === true) { try { await $.ui.close({ id: PANE_ID }) } catch (_e) { /* already closed */ } }
+  if (bandLegacy === true) { try { await $.ui.close({ id: PANE_ID }) } catch (_e) { /* already closed */ } }
   else $.ui.invalidate('ui.render')
 }
-// ---- v7.5: the band (below the chat) and the host Pane (beside it) show ONE pending-card state: the DECIDE atom (picks, notes, sent, hold) + decideLocal (cursor, preview armed/snap/stale, note mode) + panePage.
-// Every key from either place goes through frameKey -> decideReduce, the only writer; the band and the Pane only read (v75.ts, band75.tsx, pages/decide.ts). `v75Focus` is where the keyboard is: prompt, band or Pane.
-let v75Focus: V75Focus = 'prompt'
-let v75RingRank: number | null = null // screen-order rank of the Pane's last ring stop (the arrow = a ring step)
-let v75PaneOn = false // the host Pane opened for v7.5 is open now
 // K1: module level (a re-render must not reset the in-flight flag): one open / close at a time
+type FlightState = { since: number | null }
 const toggleFlightState: FlightState = { since: null } // the flag is the only thing shared between draws; every draw builds its own closure over ITS $ (a press never runs a closure of an older engine)
-const toggleFlight = (run: () => Promise<void>, onBusy: (ageMs: number) => void): (() => Promise<void>) => v75SingleFlight(run, onBusy, 2500, Date.now, toggleFlightState)
-let v75NotPlaced = false // the host answered isPlaced=false: no Pane, the band falls back to the v7.4 box
-let v75Locked: number | null = null // band height held while the Pane is open (0 -> 1 card never moves the layout)
-let v75LockCount = 0
-let v75Rows = 0
-export const v75FocusNow = (): V75Focus => v75Focus
-async function refocusBand($: EngineInterface): Promise<void> {
-  await Promise.resolve()
-  await Promise.resolve()
-  v75Focus = 'band'
-  await $.ui.focus({ requestId: ABOVE_PROMPT, key: 'v75:anchor' }).catch(() => undefined)
+function singleFlight(run: () => Promise<void>, onBusy: (ageMs: number) => void, ttlMs = 2500, now: () => number = Date.now, st: FlightState = { since: null }): () => Promise<void> {
+  return async () => {
+    const t0 = now()
+    if (st.since !== null && t0 - st.since < ttlMs) { onBusy(t0 - st.since); return }
+    st.since = t0
+    try { await run() } finally { if (st.since === t0) st.since = null }
+  }
 }
-// The keyboard is the person's to give (d.ts: `ui.open({focus})` is a request, granted only while the prompt has the keys over an empty composer; `$.ui.focus` needs the site to hold them). So the host's own word for
-// the Pane, `isFocused` (the Pane's render props), is the truth for 'pane'; the band and the input send no event when Esc moves the keys, so a Pane that lost them is read as the prompt.
-let v75PaneHeld = false
-function v75PaneSeen($: EngineInterface, held: boolean): void {
-  if (!v75PaneOn) { v75PaneHeld = held; return }
-  const was = v75PaneHeld
-  v75PaneHeld = held
-  if (was === held) return
-  v74KeysHeld = held // the Pane's own words (`鍵盤在 Pane` / `ctrl+x tab 拿鍵盤`) follow the host's isFocused
-  if (held) { if (v75Focus !== 'pane') v75Focus = 'pane'; void renderLater($); return }
-  // the Pane lost the keyboard: Esc (one Esc, one layer: an open preview closes and the Pane takes the keys back) or ctrl+x tab / a click (then a focus event named the band, v75Focus is already 'band')
-  if (v75Focus !== 'pane') return
-  if (decideLocal.armed === true && panePage === 'decide') void frameKey($, { kind: 'disarm' }) // Esc in the Pane: the preview closes and the keys go to the input (x cancels without leaving)
-  v75Focus = 'prompt'
-  void renderLater($)
-}
+const toggleFlight = (run: () => Promise<void>, onBusy: (ageMs: number) => void): (() => Promise<void>) => singleFlight(run, onBusy, 2500, Date.now, toggleFlightState)
 let panePlacement: 'dock' | 'inline' | null = null
 let panePlacementEpoch = 0
 let paneFocused = false
@@ -1770,6 +1712,8 @@ export function v74KeysHeldAfter(was: boolean, named: string | undefined, origin
 }
 // r11 #4: while the send preview is up, a focus event that names no band element is the host's Esc handing the keyboard to the prompt; it cancels the preview instead (one meaning for Esc there).
 export const v74EscCancelsPreview = (armed: boolean | undefined, open: boolean, page: string, named: string | undefined): boolean => open && armed === true && page === 'decide' && !bandElement(named)
+export const v74EscClosesBg = (bgOpen: boolean | undefined, textMode: boolean, open: boolean, page: string, named: string | undefined): boolean =>
+  open && bgOpen === true && !textMode && page === 'decide' && !bandElement(named)
 // r11 #2: every change of the border word goes through this one function, so the sequence open -> keys -> send -> Esc is testable without the host.
 // A send posts the [待決回覆] line to the prompt and starts a turn; the host then gives the first Esc to the turn (it stops it) and raises no focus event for it, so the pane cannot tell
 // when the prompt has the keyboard again. After a send the word therefore falls back to `ctrl+x tab` and comes back only on evidence: a key that reached the pane or a focus event of the person.
@@ -1848,7 +1792,6 @@ export async function frameKey($: EngineInterface, k: KeyAction): Promise<void> 
 }
 async function frameKeyBody($: EngineInterface, k: KeyAction): Promise<void> {
   const cursorBefore = decideLocal.cursor
-  if (k.kind === 'move' || k.kind === 'cursor') paneBodyOff = 0
   void v74Keylog($, {
     handler: 'frameKey', component: 'AbovePrompt', key: k.kind, event: k.kind,
     len: k.kind === 'text' ? [...k.ch].length : undefined,
@@ -1860,11 +1803,15 @@ async function frameKeyBody($: EngineInterface, k: KeyAction): Promise<void> {
   try {
     if (k.kind === 'page') { await panePagePress($, k.to as PageId); return }
     if (k.kind === 'close') {
-      markPaneClosed(); void setPaneWanted($, false)
+      markPaneClosed()
       await closePane($)
       return
     }
     const id = framePageId()
+    if (id === 'decide' && k.kind === 'scroll') {
+      scrollPendingPane($, k.by * (k.page ? pendingScroll.detail.room : 1))
+      return
+    }
     if (id === 'decide') {
       const nowMs = await $.clock.now()
       const st = await read($, DECIDE)
@@ -1880,8 +1827,11 @@ async function frameKeyBody($: EngineInterface, k: KeyAction): Promise<void> {
         return
       }
       const ctx = { live: snapshot, console: consoleSnap, size: { cols: decideCols, rows: 24 }, t: tr, nowMs, v74 }
+      const prevStyle = decideLocal.style ?? 'D'
       const r = decideReduce({ ...st, ...decideLocal }, k, ctx, nowMs)
-      decideLocal = { cursor: r.nav.cursor, folded: r.nav.folded, textMode: r.nav.textMode, textBuf: r.nav.textBuf, opt: r.nav.opt, detailOffset: r.nav.detailOffset, armed: r.nav.armed, snap: r.nav.snap, stale: r.nav.stale }
+      decideLocal = { cursor: r.nav.cursor, folded: r.nav.folded, textMode: r.nav.textMode, textBuf: r.nav.textBuf, opt: r.nav.opt, detailOffset: r.nav.detailOffset, armed: r.nav.armed, snap: r.nav.snap, stale: r.nav.stale, style: r.nav.style, bgOpen: r.nav.bgOpen }
+      if ((r.nav.style ?? 'D') !== prevStyle) void $.store.set('decide.style', r.nav.style ?? 'D').catch(() => undefined)
+      if (k.kind === 'style' || k.kind === 'expand' || k.kind === 'move' || k.kind === 'cursor' || k.kind === 'prev' || k.kind === 'next') pendingScroll.detail.offset = 0
       if (k.kind === 'cursor') {
         void v74Keylog($, {
           handler: 'frameKey', component: 'AbovePrompt', key: 'cursor', event: 'cursor',
@@ -1926,6 +1876,7 @@ export async function paneKey($: EngineInterface, key: string, over: { paneFocus
     focusedButton: over.focusedButton ?? false,
     textMode: page === 'decide' && decideLocal.textMode,
     armed: page === 'decide' && decideLocal.armed === true,
+    bgOpen: page === 'decide' && decideLocal.bgOpen === true,
   })
   if (act.kind !== 'none' && act.kind !== 'pass' && act.kind !== 'button') await frameKey($, act)
   return act
@@ -1980,7 +1931,9 @@ export async function startLive($: EngineInterface): Promise<void> {
   markPaneClosed()
   panePlacementEpoch = 0
   pageView = {}
-  decideLocal = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt }
+  const savedStyle = await $.store.get('decide.style').catch(() => undefined)
+  decideLocal = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt, style: savedStyle === 'C' ? 'C' : 'D', bgOpen: false }
+  Object.assign(pendingScroll, { list: newScroll(), detail: newScroll(), cursor: '' })
   resetNoteInputs()
   consoleReadMs = -Infinity
   consoleFeed = makeConsoleFeed(undefined, undefined, consoleIngestFrom)
@@ -2007,7 +1960,7 @@ export async function startLive($: EngineInterface): Promise<void> {
 export function registerLive(on: Parameters<Register>[0]): void {
   // /live-pane: the pane is never opened on its own (plan B); this and the band's ⓘ and slots are the ways to open it
   on('command.run', { command: 'live-pane' }, async ($) => {
-    markPaneOpen(); void setPaneWanted($, true)
+    markPaneOpen()
     await openPane($)
     return {}
   })
@@ -2048,7 +2001,15 @@ export function registerLive(on: Parameters<Register>[0]): void {
       if (usage) {
         const outTokens = usage.output_tokens ?? 0
         const { decodeMs, tps } = stepRate({ sent, first, last, outTokens, thinkingStreamed, serverToolMs: serverToolMs(result.serverToolUses) })
-        const step: Step = { at: Date.now(), model: usage.model ?? e.model, isSubagent: e.agentId !== undefined, ttftMs: first !== null ? first - sent : null, decodeMs, outTokens, tps }
+        let agent: string | undefined
+        if (e.agentId !== undefined) {
+          try {
+            const found = (await $.agent.list()).find(a => a.id === e.agentId)
+            const named = found?.description || found?.name || found?.type
+            if (named) agent = named.slice(0, 40)
+          } catch (_e) { /* no agent list: the sample is kept without a name */ }
+        }
+        const step: Step = { at: Date.now(), model: usage.model ?? e.model, isSubagent: e.agentId !== undefined, ttftMs: first !== null ? first - sent : null, decodeMs, outTokens, tps, ...(e.agentId !== undefined ? { agentId: e.agentId } : {}), ...(agent !== undefined ? { agent } : {}), ...(first !== null && !thinkingStreamed ? { floor: true } : {}) }
         await update($, STEPS, list => [...validSteps(list), step].slice(-KEEP_STEPS))
         await $.ui.invalidate('ui.render')
       }
@@ -2090,7 +2051,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       try {
         const tab = await mine
         if (seq === pressSeq) { paneTab = tab; panePage = pageOfTab(tab) }
-        markPaneOpen(); void setPaneWanted($, true)
+        markPaneOpen()
         $.ui.invalidate('ui.render')
         await openPane($)
       } finally {
@@ -2107,7 +2068,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       await panePagePress($, pageId) // K1: band and slot navigation also enter at the top.
       if (unfold !== null) folded.delete(unfold)
       try {
-        markPaneOpen(); void setPaneWanted($, true)
+        markPaneOpen()
         $.ui.invalidate('ui.render')
         await openPane($)
       } finally {
@@ -2129,31 +2090,14 @@ export function registerLive(on: Parameters<Register>[0]): void {
       const nextPage: BandPageId = isOpen && at >= 0 ? BAND_PAGE_TABS[(at + 1) % BAND_PAGE_TABS.length] : 'now'
       await pageOpen(nextPage, null, nextCon)
     }
-    // v7.4 S1: the band's ▴ / ▾ toggle. Closed -> the same open path as the ⓘ (pageOpen('now')); open -> the same close path as a tab press on the showing tab (markPaneClosed + ui.close).
+    // v7.4 S1: the band's ▴ / ▾ toggle. Closed -> the same open path as the ⓘ (pageOpen('now')); open -> the same close path as a tab press on the showing tab (markPaneClosed + closePane).
     const togglePaneRun = async () => {
       const listed = await $.ui.panes().catch(() => [] as { id: string; isShown: boolean; isFocused: boolean; isPlaced: boolean }[])
-      const mine = listed.find(p => p.id === PANE_ID)
-      // J2: the host's list decides, never closePane's module state (after a reload v75PaneOn is false while the host still shows the Pane, and closePane then closed nothing)
-      let action: string
-      if (!v74) { action = listed.some(p => p.id === PANE_ID) ? 'close' : 'open' }
-      else if (mine !== undefined && mine.isPlaced === false && v75NotPlaced) action = 'open-waiting'
-      else action = mine?.isPlaced === true || v75PaneOn || (v74Open && !v75NotPlaced) ? 'close' : 'open'
-      void appendLog($, 'band-reload.log', { step: 'toggle-press', panes: listed, v74Open, v75PaneOn, v75NotPlaced, action })
-      if (action === 'open-waiting') { // the host holds the pane open but undrawn: this press is the person's ask, the host seats it at any width
-        const placed = await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: true }).catch((err: unknown) => ({ isPlaced: false, reason: 'threw: ' + String(err) }) as { isPlaced: boolean; reason?: string })
-        void appendLog($, 'band-reload.log', { step: 'toggle-open', result: placed })
-        if (placed.isPlaced === true) v75NotPlaced = false
-        $.ui.invalidate('ui.render')
-        return
-      }
+      const action = !v74 ? (listed.some(p => p.id === PANE_ID) ? 'close' : 'open') : v74Open ? 'close' : 'open'
+      void appendLog($, 'band-reload.log', { step: 'toggle-press', panes: listed, v74Open, action })
       if (action === 'open') { await pageOpen('now'); return }
-      markPaneClosed(); void setPaneWanted($, false)
-      v75PaneOn = false; v75Locked = null; v75NotPlaced = false
-      v75Focus = v75FocusNext(v75Focus, { kind: 'pane-gone' })
-      try { await $.ui.close({ id: PANE_ID }) } catch (_e) { /* already closed */ }
-      if (bandLegacy === true) await closePane($)
-      $.ui.invalidate('ui.render')
-      void refocusBand($)
+      markPaneClosed()
+      await closePane($)
     }
     const togglePane = toggleFlight(togglePaneRun, (age) => { void appendLog($, 'band-reload.log', { step: 'toggle-busy', ageMs: age }) })
     const slot = (id: SlotId) => (consoleOn ? pageOpen(SLOT_PAGE_OF[id] ?? 'now', slotUnfolds(id), consoleSlotTab(id)) : openOn(slotTab(id), slotUnfolds(id), id === 'spend' ? 'spend' : undefined))
@@ -2277,73 +2221,14 @@ export function registerLive(on: Parameters<Register>[0]): void {
       const answer = await lower(forgeAsk.maxRows, forgeAsk.bodyColumns)
       if (answer !== undefined && answer !== null && (answer as { type?: string }).type !== 'engine') forgeRow = answer
     }
-    setV75On((await $.env.get('AUTOPILOT_LIVE_V75').catch(() => undefined)) !== '0')
-    const placedNow = v74 ? v75PaneOn || await hostPlaced($) || (paneOpen && !v75NotPlaced) : paneOpen // I1: the toggle shows the host's state
-    if (v74 && v75NotPlaced && (v75PaneOn || await hostPlaced($))) v75NotPlaced = false
-    const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge, usageOn, moreTo, con, bandPreset, consoleOn && consoleSnap !== null ? bandQuotaSeg(normalizedPools(consoleSnap), bandNow, t, qSrc) : null, paneOpen || v74, legacyTabs, forgeRow !== null, legacyTabs ? undefined : () => { void togglePane() }, v74 ? placedNow : paneOpen)
+    const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge, usageOn, moreTo, con, bandPreset, consoleOn && consoleSnap !== null ? bandQuotaSeg(normalizedPools(consoleSnap), bandNow, t, qSrc) : null, paneOpen || v74, legacyTabs, forgeRow !== null, legacyTabs ? undefined : () => { void togglePane() }, paneOpen)
     // v7.4: the O4 shell and the two-row band never draw. Closed: the one-line BandBar. Open: the page as a full-width framed tree (title in the top border, hint in the bottom border), the tab row, then the BandBar row.
     if (v74) {
-      if (v75On()) { // AUTOPILOT_LIVE_V75=0: the v7.4 in-band page only (kill switch; the v7.4 host tests run with it)
-      v75Rows = rows
-      if (!v75ReloadChecked) {
-        v75ReloadChecked = true
-        const wanted = await read($, PANE_WANTED).catch(() => false)
-        const panes = await $.ui.panes().catch(() => [] as { id: string; isShown: boolean; isFocused: boolean; isPlaced: boolean }[])
-        const hostOpen = panes.some(p => p.id === PANE_ID && p.isPlaced === true) // a pane the host lists but has not placed is not open
-        const reopen = v75ReopenAfterReload({ wanted, hostOpen, paneOn: v75PaneOn, open: v74Open })
-        void appendLog($, 'band-reload.log', { step: 'first-render', wanted, panes: panes.map(p => ({ id: p.id, isShown: p.isShown, isFocused: p.isFocused, isPlaced: p.isPlaced })), reopen })
-        if (reopen) { v75OpenQuiet = true; markPaneOpen() }
-      }
-      const v75c = await v74CtxOf($)
-      const v75cards = v75c.decide ?? []
-      // G3: isPlaced=false means the pane is open but undrawn (d.ts UiOpenResult): asking again changes nothing, the person's own press on the band's ▴ seats it. Each draw looks at $.ui.panes(); once the host says placed the waiting state ends.
-      if (v75NotPlaced && v74Open && !v75PaneOn) {
-        const listed = await $.ui.panes().catch(() => [] as { id: string; isPlaced: boolean }[])
-        if (listed.some(p => p.id === PANE_ID && p.isPlaced === true)) { v75NotPlaced = false; void appendLog($, 'band-reload.log', { step: 'placed-later', panes: listed }) }
-      }
-      let plan = v75Plan({ maxRows: rows, pending: v75cards.length, paneWanted: v74Open, notPlaced: v75NotPlaced, locked: v75Locked })
-      if (v74Open && plan.pane && !v75PaneOn) {
-        // open the host Pane; refused (isPlaced=false) -> the v7.4 box band, and the keyboard stays in the band
-        const quiet = v75OpenQuiet; v75OpenQuiet = false
-        let openErr: string | undefined
-        const placed = await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: !quiet }).catch((err: unknown) => { openErr = String(err); return { isPlaced: false, reason: 'threw: ' + openErr } as { isPlaced: boolean; reason?: string } }) // a throw has no reason of its own: the log names it
-        if (quiet) void appendLog($, 'band-reload.log', { step: 'open', result: placed, ...(openErr === undefined ? {} : { threw: openErr }), panes: await $.ui.panes().catch(() => []) })
-        if (placed.isPlaced === true) { v75PaneOn = true; v75Focus = quiet ? 'prompt' : 'pane'; v75Locked = v75cards.length > 0 ? 5 : 1; v75LockCount = v75cards.length }
-        else { v75NotPlaced = true; v75Focus = 'band'; plan = v75Plan({ maxRows: rows, pending: v75cards.length, paneWanted: v74Open, notPlaced: true, locked: null }) }
-      } else if (v75PaneOn && !plan.pane) {
-        v75PaneOn = false; v75Locked = null
-        try { await $.ui.close({ id: PANE_ID }) } catch (_e) { /* already closed */ }
-        v75Focus = v75FocusNext(v75Focus, { kind: 'pane-gone' })
-      }
-      if (!(v74Open && !plan.pane)) {
-        // closed, or the Pane is beside the chat: the band is the quick row (+ the cursor's card with a pending card); fixed height, it never scrolls
-        if (plan.bandRows === 1 || v75cards.length === 0 && v75Locked === null) return stackRows(el, [bar.row1])
-        const nowMs = await $.clock.now()
-        const nav = { ...(await read($, DECIDE)), ...decideLocal }
-        const dctx = { live: snapshot, console: consoleSnap, size: { cols: columns, rows: 24 }, t, nowMs, v74: v75c } as never
-        const stale = previewStale(nav as never, dctx)
-        const inp = {
-          cards: v75cards, cursor: nav.cursor, picks: nav.picks, notes: nav.notes, armed: nav.armed === true, stale, noteMode: nav.textMode, noteBuf: nav.textBuf,
-          sending: Object.keys(nav.hold ?? {}).length > 0, held: new Set(Object.keys(nav.hold ?? {})), sent: new Set(Object.keys(nav.sent ?? {})),
-          pane: plan.pane, newCards: v75Locked !== null ? Math.max(0, v75cards.length - v75LockCount) : 0, cols: columns, t,
-          preview: nav.armed === true ? previewItems(nav as never, dctx) : [],
-        }
-        const toDecide = async (k: KeyAction) => { if (panePage !== 'decide') await panePagePress($, 'decide'); v75Focus = 'band'; await frameKey($, k) }
-        const block = V75Band(el as never, v75BandRows(inp), inp, {
-          onKey: k => { void toDecide(k) },
-          onText: v => { decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') },
-          onPage: id => { markPaneOpen(); void setPaneWanted($, true); void panePagePress($, id as PageId); $.ui.invalidate('ui.render') },
-        })
-        await logBandGeometry($, rows, columns, 5)
-        return stackRows(el, [block, bar.row1])
-      }
-      }
-      const waiting = v74Open && v75NotPlaced && !v75PaneOn
-      const height = Math.min(rows - 1 - (waiting ? 1 : 0), V74_FRAME_MAX) // the band row stays; the tab row is the frame's bottom border. Never more than the design's 28 rows.
+      const height = Math.min(rows - 1, V74_FRAME_MAX) // the band row stays; the tab row is the frame's bottom border. Never more than the design's 28 rows.
       if (!v74Open || height < V74_FRAME_MIN) return stackRows(el, [bar.row1])
       const page = await paneTree($, e as never, false, height)
       await logBandGeometry($, rows, columns, height + 2)
-      return stackRows(el, [page, ...(waiting ? shellNote(el, t('v75.waiting', { closed: PANE_TOGGLE_CLOSED })) : []), bar.row1])
+      return stackRows(el, [page, bar.row1])
     }
     if (shellMode && rows < SHELL_MIN_ROWS) {
       const n = snapshot === null ? 0 : new Set(snapshot.pending.filter(d => !isStepCard(d)).map(cardKey)).size
@@ -2615,37 +2500,33 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const named = typeof raw.element === 'string' ? raw.element : typeof raw.key === 'string' ? raw.key : undefined
     void v74Keylog($, { handler: 'ui.focus', component: raw.component, element: named, origin: ((raw as { origin?: { kind?: unknown } }).origin?.kind as string | undefined), page: panePage, cursor: decideLocal.cursor, focusOwner: decideLocal.textMode ? 'v74-note' : 'band', noteOpen: decideLocal.textMode })
     void logFocusStop($, { requestId: (raw as { requestId?: unknown }).requestId, component: raw.component, element: named, origin: (raw as { origin?: { kind?: unknown } }).origin?.kind })
-    if (v75PaneOn && raw.component === 'Pane' && panePage === 'decide' && !decideLocal.textMode && (raw as { origin?: { kind?: unknown } }).origin?.kind === 'person' && named !== undefined) {
-      // the arrow in the Pane walks the host ring over every Button (an option row is one) and sends no ui.scroll: read the walk's direction in screen order as the card arrow
-      // the anchor and the two zero-size j / k Buttons are ring stops too (gate m75e 14: the first arrows landed on pn:j, pn:k, which had no rank): they come first, in ring order
-      const rank = named.startsWith('focus') ? -3 : named.startsWith('pn:j') ? -2 : named.startsWith('pn:k') ? -1 : paneRank.get(named)
-      const prev = v75RingRank
-      v75RingRank = rank ?? null
-      const by = rank !== undefined && prev !== null ? Math.sign(rank - prev) : 0
-      if (by !== 0) { void frameKey($, { kind: 'move', by: by as 1 | -1 }); return {} }
-    }
-    if (raw.component === 'Pane' && named !== undefined && named.startsWith('focus')) v75RingRank = -3 // the Pane just took the keyboard: the ring starts at its anchor
-    const v75Was = v75Focus
-    if (v75On()) v75Focus = v75FocusNext(v75Focus, { kind: 'focus', component: raw.component, named })
-    // v7.5 §7.3: one Esc, one layer. A cancelled note or preview hands the keyboard back to the band, so the next Esc is the next layer
-    const v75Esc = v75PaneOn || (!bandLegacy && v75Rows > 0)
     if (decideLocal.textMode && noteArmed && named !== 'v74-note' && (named === undefined || named === '')) {
       noteArmed = false
-      void frameKey($, { kind: 'text_cancel' }).then(() => { if (v75Esc) void refocusBand($) })
+      void frameKey($, { kind: 'text_cancel' })
       return {}
     }
-    if (v74EscCancelsPreview(decideLocal.armed, v74Open, panePage, named) || (v75Esc && decideLocal.armed === true && panePage === 'decide' && (named === undefined || named === '') && v75Was !== 'prompt')) {
-      void frameKey($, { kind: 'disarm' }).then(() => { if (v75Esc && v75Was !== 'pane') void refocusBand($) })
+    if (v74EscClosesBg(decideLocal.bgOpen, decideLocal.textMode, v74Open, panePage, named)) {
+      void frameKey($, { kind: 'expand' })
       return {}
     }
-    if (v75Was !== v75Focus) void renderLater($)
+    if (v74EscCancelsPreview(decideLocal.armed, v74Open, panePage, named)) {
+      void frameKey($, { kind: 'disarm' })
+      return {}
+    }
     // r8-3: the border word follows the keyboard. It only re-renders when the value really flips, and one tick later (two microtasks, as ringToTab does), never inside the focus event:
     // a render there remounts the tab Buttons and the host's focus lands on a card Button, which wrote the cursor back (r8-1 gate, step 22).
-    if (v74Open && !v75PaneOn) { const was = v74KeysHeld; v74KeysHeld = v74KeysHeldNext(was, { kind: 'focus', named, origin: (raw as { origin?: unknown }).origin }); if (was !== v74KeysHeld) void renderLater($) }
+    if (v74Open) { const was = v74KeysHeld; v74KeysHeld = v74KeysHeldNext(was, { kind: 'focus', named, origin: (raw as { origin?: unknown }).origin }); if (was !== v74KeysHeld) void renderLater($) }
     const step = decideLocal.textMode || bandLegacy || !v74Open ? null : v74TabStep(panePage, named, (raw as { origin?: unknown }).origin)
-    if (step !== null) { void frameKey($, step); return {} } // the ring stays on the current tab
+    if (step !== null) {
+      if (panePage === 'decide') {
+        scrollPendingPane($, step.by)
+        void ringToTab($, panePage)
+      } else void frameKey($, step)
+      return {}
+    } // the ring stays on the current tab
     const at = v74FocusAt(raw)
-    if (at === null || decideLocal.textMode || (panePage !== 'decide' && panePage !== 'todo') || bandLegacy || !v74Open) return next(e)
+    // A summary's focus is a host ring stop, not a request to select that card.
+    if (at === null || decideLocal.textMode || panePage !== 'todo' || bandLegacy || !v74Open) return next(e)
     const act = v74FocusCursor(decideLocal.cursor, typeof raw.element === 'string' ? raw.element : raw.key)
     if (act !== null) void frameKey($, act)
     return {}
@@ -2656,23 +2537,21 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const ev = e as { by?: number; component?: string }
     void v74Keylog($, { handler: 'ui.scroll', component: ev.component, by: ev.by, page: panePage, cursor: decideLocal.cursor, focusOwner: decideLocal.textMode ? 'v74-note' : 'band', noteOpen: decideLocal.textMode })
     if (ev.component === 'AbovePrompt' || ev.component === 'Pane') return next(e)
+    if (panePage === 'decide' && v74Open && !decideLocal.textMode && !bandLegacy && typeof ev.by === 'number' && ev.by !== 0) {
+      scrollPendingPane($, ev.by)
+      return {}
+    }
     const arrow = v74HostScroll(ev, panePage, v74Open, bandLegacy, decideLocal.textMode)
     if (arrow !== null) { void frameKey($, arrow); return {} }
     return next(e)
   })
 
   on('ui.scroll', { component: 'AbovePrompt' }, ($, e, next) => {
-    // v7.5 §5: the band never scrolls. One row = the arrow (cursor); PgUp / PgDn scroll only the Pane's card window
-    if (v75PaneOn || v75Rows > 0) {
-      const route = v75ScrollRoute({ component: 'AbovePrompt', by: e.by }, { paneOpen: v75PaneOn, note: decideLocal.textMode })
-      if (route === 'cursor') {
-        const arrow = v74HostScroll({ by: e.by }, 'decide', true, bandLegacy, decideLocal.textMode)
-        if (arrow !== null) { void (async () => { if (panePage !== 'decide') await panePagePress($, 'decide'); await frameKey($, arrow) })(); return {} }
-      }
-      else if (route === 'pane') return scrollHook(decideScroll, e, next, () => { void $.ui.invalidate('ui.render') })
-      else if (route === 'swallow') return {}
-    }
     void v74Keylog($, { handler: 'ui.scroll', component: 'AbovePrompt', by: e.by, page: panePage, cursor: decideLocal.cursor, focusOwner: decideLocal.textMode ? 'v74-note' : 'band', noteOpen: decideLocal.textMode })
+    if (panePage === 'decide' && v74Open && !decideLocal.textMode && !bandLegacy && typeof e.by === 'number' && e.by !== 0) {
+      scrollPendingPane($, e.by)
+      return {}
+    }
     const arrow = v74HostScroll(e, panePage, v74Open, bandLegacy, decideLocal.textMode)
     if (arrow !== null) { void frameKey($, arrow); return {} }
     const model = shellOn && shellMenu === 'd' ? bandModel('decide') : barTab === null ? undefined : bandScroll[barTab]
@@ -2686,36 +2565,12 @@ export function registerLive(on: Parameters<Register>[0]): void {
       await probePane($, e, tree)
       return tree
     }
-    if (v75PaneOn) { const mine = (e.props as { isFocused?: boolean }).isFocused === true; v75PaneSeen($, mine); v74KeysHeld = mine } // the Pane's words follow the Pane's own isFocused only (no band render, no focus event of another element overwrites it)
     return paneTree($, e, legacy, null)
   })
 
   // All live and console tabs share the bottom window; scroll keys move its
   // offset. A host without a frame still receives the event through next(e).
-  // v7.5: the Pane's own scroll hook; one row is the arrow (the window follows the cursor), a page scrolls the card window
-  on('ui.close', ($, e, next) => {
-    if ((e as { id?: string }).id === PANE_ID && v75PaneOn) {
-      v75PaneOn = false; v75Locked = null; v75NotPlaced = false
-      markPaneClosed()
-      const why = (e as { origin?: { kind?: string } }).origin?.kind
-      void appendLog($, 'band-reload.log', { step: 'ui.close', origin: why })
-      if (why === 'person') void setPaneWanted($, false) // the owner's own close; a plugin close clears it on its own path, an unload (reload) must keep it
-      v75Focus = v75FocusNext(v75Focus, { kind: 'pane-gone' })
-      void renderLater($)
-    }
-    return next(e)
-  })
   on('ui.scroll', { component: 'Pane', requestId: PANE_ID }, ($, e, next) => {
-    void appendLog($, 'band-scroll.log', { component: 'Pane', by: (e as { by?: number }).by, page: panePage, paneOn: v75PaneOn, route: v75ScrollRoute({ component: 'Pane', by: (e as { by?: number }).by }, { paneOpen: v75PaneOn, note: decideLocal.textMode }) })
-    if (v75PaneOn && v75ScrollRoute({ component: 'Pane', by: (e as { by?: number }).by }, { paneOpen: true, note: decideLocal.textMode }) === 'cursor') {
-      const arrow = v74HostScroll({ by: (e as { by?: number }).by }, panePage, v74Open, bandLegacy, decideLocal.textMode)
-      if (arrow !== null && panePage === 'decide') { void frameKey($, arrow); return {} }
-    }
-    if (v75PaneOn && panePage === 'decide' && v75ScrollRoute({ component: 'Pane', by: (e as { by?: number }).by }, { paneOpen: true, note: decideLocal.textMode }) === 'pane') {
-      paneBodyOff = Math.min(400, v75DetailOffset(paneBodyOff, (e as { by: number }).by)); void appendLog($, 'band-scroll.log', { step: 'body-offset', paneBodyOff }) // PgUp / PgDn scroll the framed page body (FrameOpts.scroll clamps it to the body)
-      void $.ui.invalidate('ui.render')
-      return {}
-    }
     return scrollHook(decideScroll, e, next, () => { void $.ui.invalidate('ui.render') })
   })
 }
@@ -2734,7 +2589,6 @@ async function paneTree($: EngineInterface, e: { props: any; surface: string }, 
   const petPanel = !legacy && panePage === 'pet'
     ? await ($.state.get as (ref: { plugin: string; key: string }) => Promise<{ value: unknown }>)({ plugin: 'forge-stats', key: 'panel' }).then(g => g.value, () => null)
     : undefined
-  setV75On((await $.env.get('AUTOPILOT_LIVE_V75').catch(() => undefined)) !== '0')
   const v74 = legacy ? undefined : await v74CtxOf($, boxRows !== null)
   const tree = Pane(
     $.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { void paneTabPress($, t, legacy) }, tr, e.props.bodyColumns,
@@ -2743,13 +2597,18 @@ async function paneTree($: EngineInterface, e: { props: any; surface: string }, 
     folded, boxRows !== null ? null : e.props.scroll ?? null,
     { state: decideState, batch: decideBatch, now: decideNow, inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } },
     decideScroll, fleet, null,
-    legacy ? null : { pages: [...PAGES, ...EXTRA_PAGES], pageId: panePage, onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, others: fleet?.others ?? null, nowMs: frameNow, rows: boxRows ?? frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), ...(boxRows === null ? {} : { v74Box: true as const }), view: pageView, decide: { ...decideState, ...decideLocal }, v74, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { void v74Keylog($, { handler: 'input', component: 'Input', element: 'v74-note', len: [...v].length, page: panePage, cursor: decideLocal.cursor, focusOwner: 'v74-note', noteOpen: true }); decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(panePage === 'forge' ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}), ...(paneBodyOff > 0 ? { scroll: paneBodyOff } : {}), ...(panePage === 'spend' ? { poolEta: v75On() ? await readPoolEta($) : undefined } : {}), ...(panePage === 'room' ? { room: parseRoom((await readRoomText($)) ?? '') } : {}) },
+    legacy ? null : { pages: [...PAGES, ...EXTRA_PAGES], pageId: panePage, ...(!legacy ? { pendingScroll } : {}), onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, others: fleet?.others ?? null, nowMs: frameNow, rows: boxRows ?? frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), ...(boxRows === null ? {} : { v74Box: true as const }), view: pageView, decide: { ...decideState, ...decideLocal }, v74, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { void v74Keylog($, { handler: 'input', component: 'Input', element: 'v74-note', len: [...v].length, page: panePage, cursor: decideLocal.cursor, focusOwner: 'v74-note', noteOpen: true }); decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(panePage === 'forge' ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}), ...(panePage === 'room' ? { room: parseRoom((await readRoomText($)) ?? '') } : {}) },
   )
   if (boxRows === null) await probePane($, e as never, tree)
   return tree
 }
 
-let paneBodyOff = 0 // first body row of the framed page the Pane shows (PgUp / PgDn); 0 on a page or card change
+const pendingScroll = { list: newScroll(), detail: newScroll(), cursor: '' }
+function scrollPendingPane($: EngineInterface, by: number, queue = false): void {
+  const model = queue ? pendingScroll.list : pendingScroll.detail
+  applyScroll(model, { by, contentRows: 0 })
+  void $.ui.invalidate('ui.render')
+}
 const decideScroll = newScroll()
 // The band's own scroll models, one per tab (bandlayout, guideline §13.4): leaving a tab keeps its offset, coming back finds the same row. Only the 待決 card view scrolls so far.
 const bandScroll: Record<string, ScrollModel> = {}

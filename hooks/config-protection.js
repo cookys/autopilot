@@ -13,6 +13,8 @@ const { isEnabled } = require('./_shared/opt-in');
 
 if (!isEnabled('config-protection')) process.exit(0);
 
+const { gateHint } = require('./lib/gate-hint.js');
+
 const PROTECTED_BASENAMES = new Set([
   '.eslintrc', '.eslintrc.js', '.eslintrc.cjs', '.eslintrc.json', '.eslintrc.yaml', '.eslintrc.yml',
   'eslint.config.js', 'eslint.config.mjs', 'eslint.config.ts',
@@ -38,7 +40,8 @@ try {
   const basename = path.basename(filePath);
   if (PROTECTED_BASENAMES.has(basename)) {
     process.stderr.write(
-      `BLOCKED: '${basename}' is a protected config file. Fix the source code instead of weakening rules.\n`
+      `BLOCKED: '${basename}' is a protected config file. Fix the source code instead of weakening rules.\n` +
+      gateHint('改修產品代碼；規則確需調整時走正式流程請操作員核准', 'hooks/README.md') + '\n'
     );
     process.exit(2);
   }

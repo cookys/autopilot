@@ -9,7 +9,7 @@ Codex, agy and OpenCode do not descend into subdirectories: before working in `s
 ## Project Structure (spec)
 
 ```
-skills/              31 lifecycle/methodology skills (SKILL.md format)
+skills/              32 lifecycle/methodology skills (SKILL.md)
 agents/              3 methodology agents (reviewer, debugger, planner) — markdown body + YAML frontmatter
 hooks/               Claude Code hooks (bash + JS) and hooks.json manifest
 platforms/codex/     Codex skills + production PostCompact package + repo-local marketplace
@@ -90,7 +90,7 @@ Codex and OpenCode do not receive the SessionStart injection, so they must read 
 
 ---
 
-## Orchestration Discipline (learned, cross-controller; full text with evidence: `references/CLAUDE.md`)
+## Orchestration Discipline (full text: `references/CLAUDE.md`)
 
 These bind ANY depth-0 controller driving this repo.
 
@@ -110,4 +110,4 @@ These bind ANY depth-0 controller driving this repo.
 
 ## Cross-Platform Notes (factual)
 
-Platform config files and skill discovery differ; see [`references/multi-agent-portability.md`](references/multi-agent-portability.md) for the verified table with source URLs, and `platforms/CLAUDE.md` for skill-sharing paths and the Codex/OpenCode packages.
+Platform config and skill discovery differ; see [`references/multi-agent-portability.md`](references/multi-agent-portability.md) for the verified table; see also `platforms/CLAUDE.md` for skill-sharing paths and the Codex/OpenCode packages. Fleet watch, upload/fetch, task_result: `skills/fleet-usage/SKILL.md`.

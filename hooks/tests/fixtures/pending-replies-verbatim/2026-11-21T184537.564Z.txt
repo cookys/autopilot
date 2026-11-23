@@ -1,0 +1,7 @@
+The autopilot plugin sent a message:
+[待決回覆]
+d-c2bfda0e｜團隊成員改用 sonnet，各專案 lane 席（autop… → A
+d-6b28c37c｜codepower 補助站裡，AI、Option、FPGA … → A
+d-cf2bbabf｜照清單在 DHCP 伺服器補登 26 筆 static ma… → 這些很多本來就是 static mapping , hangar 沒有 dhcp server ro account 嗎?
+
+This is how Claude Code surfaces a prompt a plugin submits between turns — it starts this turn in the user's place. Address the message above.

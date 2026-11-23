@@ -28,6 +28,21 @@ test('incident: Read of another home .claude settings is denied', () => denied(c
 test('own project transcript allowed, other project transcript denied', () => {
   allowed(call('Read', { file_path: `${home}/.claude/projects/${ownHash}/abc.jsonl` }));
   denied(call('Read', { file_path: `${home}/.claude/projects/-elsewhere/abc.jsonl` }));
+  // Regression (PM 工單 01M81G2DR): a jq against the own seat's transcript while the
+  // tool runs from another cwd must stay allowed — CLAUDE_PROJECT_DIR counts, and so
+  // does any ancestor of the cwd, not only the cwd itself.
+  const jq = (dir, projectDir) => {
+    const old = { CLAUDE_PROJECT_DIR: process.env.CLAUDE_PROJECT_DIR, HOME: process.env.HOME, AUTOPILOT_CLAUDE_HOME_ROOTS: process.env.AUTOPILOT_CLAUDE_HOME_ROOTS };
+    if (projectDir === null) delete process.env.CLAUDE_PROJECT_DIR; else if (projectDir) process.env.CLAUDE_PROJECT_DIR = projectDir;
+    process.env.HOME = home; process.env.AUTOPILOT_CLAUDE_HOME_ROOTS = path.join(temp, 'homes');
+    try { return handle({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: `jq -r .model ${home}/.claude/projects/${ownHash}/abc.jsonl` }, cwd: dir }); }
+    finally { for (const [k, v] of Object.entries(old)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } }
+  };
+  const elsewhere = path.join(temp, 'elsewhere'); fs.mkdirSync(elsewhere, { recursive: true });
+  allowed(jq(elsewhere, cwd));
+  const nested = path.join(cwd, 'sub', 'dir'); fs.mkdirSync(nested, { recursive: true });
+  allowed(jq(nested, null));
+  denied(jq(elsewhere, null));
   allowed(call('Read', { file_path: `${home}/.claude/projects/-elsewhere/abc.jsonl` }, { AUTOPILOT_CLAUDE_HOME_EXCEPTION: 'usage' }));
   denied(call('Read', { file_path: `${home}/.claude/projects/-elsewhere/settings.json` }, { AUTOPILOT_CLAUDE_HOME_EXCEPTION: 'usage' }));
 });

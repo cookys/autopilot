@@ -60,11 +60,13 @@
 //   textCompatClose below. Default behaviour (without the flag) is unchanged.
 
 const fs = require('fs');
+const path = require('path');
 const { spawn } = require('child_process');
 
 const STREAM_FLAGS = ['--input-format', 'stream-json', '--output-format', 'stream-json', '--print='];
 
 const DEFAULT_STDIN_MAX_BYTES = 170000;
+const DEFAULT_FILE_MAX_BYTES = 2 * 1024 * 1024;
 // The wall is in TOKENS, not bytes (BL-0021, agy 1.4.6, 2026-10-24): input_tokens 87,366 answered, 97,652 and
 // 97,653 came back SUCCESS with response "" (the model never saw the tail). Token-dense content (base64, some CJK)
 // can cross it inside the byte cap, so the response side is checked too.
@@ -87,6 +89,59 @@ function positiveSafeInt(raw, dflt) {
 function stdinMaxBytes(env = process.env) {
   const raw = env.AUTOPILOT_AGY_STDIN_MAX_BYTES;
   return positiveSafeInt(raw, DEFAULT_STDIN_MAX_BYTES);
+}
+
+function fileMaxBytes(env = process.env) {
+  const raw = env.AUTOPILOT_AGY_FILE_MAX_BYTES;
+  return positiveSafeInt(raw, DEFAULT_FILE_MAX_BYTES);
+}
+
+function fileFallbackEnabled(env = process.env) {
+  const raw = String(env.AUTOPILOT_AGY_FILE_FALLBACK == null ? '' : env.AUTOPILOT_AGY_FILE_FALLBACK).trim().toLowerCase();
+  return !['0', 'false', 'no', 'off'].includes(raw);
+}
+
+function preparePrompt(prompt, opts = {}) {
+  const env = opts.env || process.env;
+  const cwd = opts.cwd || process.cwd();
+  const rawPrompt = String(prompt);
+  const line = encodeUserLine(rawPrompt);
+  const lineBytes = Buffer.byteLength(line, 'utf8');
+  const maxBytes = stdinMaxBytes(env);
+  if (lineBytes <= maxBytes) {
+    return { ok: true, mode: 'inline', line, lineBytes, filePath: null, fileName: null };
+  }
+  if (!fileFallbackEnabled(env)) {
+    return {
+      ok: false,
+      code: 3,
+      reason: 'agy_stdin_ceiling',
+      message: `agy-stream-json.js: agy_stdin_ceiling: the encoded prompt is ${lineBytes} bytes, over the ${maxBytes}-byte fail-closed stdin ceiling; agy was not run. Above roughly 175-200 KB agy can return status SUCCESS with an empty response (BL-0021), so an oversized prompt is refused rather than sent — split the unit, or raise AUTOPILOT_AGY_STDIN_MAX_BYTES on a host where you measured it\n`,
+    };
+  }
+  const promptBytes = Buffer.byteLength(rawPrompt, 'utf8');
+  const maxFileBytes = fileMaxBytes(env);
+  if (promptBytes > maxFileBytes) {
+    return {
+      ok: false,
+      code: 3,
+      reason: 'agy_file_ceiling',
+      message: `agy-stream-json.js: agy_file_ceiling: the prompt is ${promptBytes} bytes, over the ${maxFileBytes}-byte fail-closed file ceiling; agy was not run\n`,
+    };
+  }
+  const fileName = `.agy-prompt-${process.pid}-${Date.now()}.txt`;
+  const filePath = path.join(cwd, fileName);
+  fs.writeFileSync(filePath, rawPrompt, { mode: 0o600 });
+  const pointerPrompt = `Read the file ${fileName} in full using your file-view tool and follow its instructions as your task. The required answer format and output contract are defined inside that file.`;
+  const pointerLine = encodeUserLine(pointerPrompt);
+  return {
+    ok: true,
+    mode: 'file',
+    line: pointerLine,
+    lineBytes: Buffer.byteLength(pointerLine, 'utf8'),
+    filePath,
+    fileName,
+  };
 }
 
 function encodeUserLine(prompt) {
@@ -183,13 +238,21 @@ function main(argv) {
     try { prompt += fs.readFileSync(promptFile, 'utf8'); } catch (e) { usage(`cannot read prompt file: ${e.message}`); }
   }
 
-  const line = encodeUserLine(prompt);
-  const lineBytes = Buffer.byteLength(line, 'utf8');
-  const maxBytes = stdinMaxBytes();
-  if (lineBytes > maxBytes) {
-    process.stderr.write(`agy-stream-json.js: agy_stdin_ceiling: the encoded prompt is ${lineBytes} bytes, over the ${maxBytes}-byte fail-closed stdin ceiling; agy was not run. Above roughly 175-200 KB agy can return status SUCCESS with an empty response (BL-0021), so an oversized prompt is refused rather than sent — split the unit, or raise AUTOPILOT_AGY_STDIN_MAX_BYTES on a host where you measured it\n`);
-    process.exit(3);
+  const cwd = process.cwd();
+  const prep = preparePrompt(prompt, { cwd });
+  if (!prep.ok) {
+    process.stderr.write(prep.message);
+    process.exit(prep.code);
   }
+  const cleanupPromptFile = () => {
+    if (!prep.filePath) return;
+    const resolved = path.resolve(prep.filePath);
+    const cwdPrefix = cwd.endsWith(path.sep) ? cwd : cwd + path.sep;
+    if (!resolved.startsWith(cwdPrefix)) return;
+    try { fs.unlinkSync(resolved); } catch (_e) { /* already removed */ }
+  };
+  process.on('exit', cleanupPromptFile);
+  const line = prep.line;
   const child = spawn(cmd[0], [...cmd.slice(1), ...STREAM_FLAGS], { stdio: ['pipe', 'pipe', 'inherit'] });
   const chunks = [];
   child.stdout.on('data', (d) => chunks.push(d));
@@ -199,10 +262,12 @@ function main(argv) {
     process.on(sig, () => { try { child.kill(sig); } catch (_e) { /* gone */ } });
   }
   child.on('error', (e) => {
+    cleanupPromptFile();
     process.stderr.write(`agy-stream-json.js: cannot start ${cmd[0]}: ${e.message}\n`);
     process.exit(127);
   });
   child.on('close', (code, signal) => {
+    cleanupPromptFile();
     const exitCode = () => (code == null ? 128 + ({ SIGTERM: 15, SIGKILL: 9, SIGINT: 2, SIGHUP: 1 }[signal] || 1) : code);
     if (textCompat) { // --text-compat has ONE output rule, see textCompatClose
       const raw = Buffer.concat(chunks);
@@ -248,5 +313,20 @@ function textCompatClose(raw, agyCode) {
 }
 
 if (require.main === module) main(process.argv.slice(2));
+module.exports = {
+  STREAM_FLAGS,
+  DEFAULT_STDIN_MAX_BYTES,
+  DEFAULT_FILE_MAX_BYTES,
+  DEFAULT_INPUT_TOKEN_CEILING,
+  stdinMaxBytes,
+  fileMaxBytes,
+  fileFallbackEnabled,
+  inputTokenCeiling,
+  encodeUserLine,
+  preparePrompt,
+  parseStream,
+  scanStream,
+  promptTokenGate,
+};
 
 module.exports = { encodeUserLine, parseStream, STREAM_FLAGS, stdinMaxBytes, DEFAULT_STDIN_MAX_BYTES, inputTokenCeiling, DEFAULT_INPUT_TOKEN_CEILING };

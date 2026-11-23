@@ -78,6 +78,7 @@ const { spawnSync } = require('child_process');
 const { isEnabled } = require('./_shared/opt-in.js');
 const { configPath } = require('../scripts/lib/config-path.js');
 const { resolveLiveDir, liveDirCandidates, sanitizeSessionId } = require('../scripts/lib/live-state-dir.js');
+const { gateHint } = require('./lib/gate-hint.js');
 
 const HOOK_STEM = 'per-turn-gate';
 const ID_RE = /^[A-Za-z0-9-]{1,128}$/;
@@ -573,7 +574,7 @@ function main() {
     return;
   }
   log(turn, 'block', blockReason, counterNow);
-  process.stdout.write(`${JSON.stringify({ decision: 'block', reason: text })}\n`);
+  process.stdout.write(`${JSON.stringify({ decision: 'block', reason: text + gateHint('先修好 verifier 指出的問題（或恢復它的執行環境）再結束 turn', 'hooks/README.md') })}\n`);
 }
 
 if (require.main === module) {

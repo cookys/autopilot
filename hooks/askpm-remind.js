@@ -10,6 +10,7 @@
 
 const fs = require('fs');
 const { isEnabled } = require('./_shared/opt-in');
+const { gateHint } = require('./lib/gate-hint.js');
 const { isPmConsole } = require('./_shared/pm-console');
 const {
   SCHEMA,
@@ -94,7 +95,8 @@ function handle(input, env) {
 
   return {
     decision: 'block',
-    reason: `ask_id ${askId} 尚未處置：pm-ask close/progress/supersede`,
+    reason: `ask_id ${askId} 尚未處置：pm-ask close/progress/supersede`
+      + gateHint('用 node scripts/pm-ask.js close|progress|supersede <ask_id> 處置後再結束', 'hooks/README.md'),
   };
 }
 

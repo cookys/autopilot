@@ -134,6 +134,61 @@ EXPECT="$(AUTOPILOT_LIVE_DIR="$ALT_LIVE" node -e 'process.stdout.write(require(p
 AUTOPILOT_LIVE_DIR="$ALT_LIVE" fire >/dev/null; err="$(cat "$TMP/fire.err")"
 has "$err" "$EXPECT" && ok "(i) checklist path equals modelNotePath under a different live dir" || bad "(i) expected $EXPECT in: $err"
 
+# (j) fleet seat routing: non-PM dispatches to hangar; PM keeps operator relay; failure falls back; second Stop does not re-dispatch
+FAKE_FLEET="$TMP/fake-fleet.sh"
+FLEET_LOG="$TMP/fleet-calls.log"
+cat > "$FAKE_FLEET" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$FAKE_FLEET_LOG"
+if [ "${FAKE_FLEET_EXIT:-0}" -ne 0 ]; then
+  echo "simulated hub error" >&2
+  exit "${FAKE_FLEET_EXIT}"
+fi
+echo '{"ok":true,"id":"01M80TESTTASK0000000000001"}'
+SH
+chmod +x "$FAKE_FLEET"
+
+# (j1) ops seat -> exactly one dispatch to hangar, no operator relay
+reset; rm -f "$FLEET_LOG"; use_context 160000; fire >/dev/null; write_handoff
+out="$(FLEET_BIN="$FAKE_FLEET" FAKE_FLEET_LOG="$FLEET_LOG" FLEET_ADDRESS="cookys/openclaw/ops--claude" stop)"
+calls="$([ -f "$FLEET_LOG" ] && wc -l < "$FLEET_LOG" || echo 0)"
+[ "$calls" -eq 1 ] && ok "(j1) ops seat: exactly one fleet dispatch" || bad "(j1) expected 1 dispatch, got $calls"
+line="$(cat "$FLEET_LOG" 2>/dev/null || true)"
+has "$line" "cookys/openclaw/hangar--claude" && has "$line" "$HANDOFF" && has "$line" "$SID" && ok "(j1) dispatch targets hangar with handoff and sid" || bad "(j1) bad dispatch argv: $line"
+has "$out" "轉給操作員" && bad "(j1) block reason still mentions operator relay: $out" || ok "(j1) block reason does not tell model to relay to operator"
+has "$out" "01M80TESTTASK0000000000001" && ok "(j1) block reason includes task id" || bad "(j1) block reason missing task id: $out"
+
+# (j4) second Stop after the first -> no second dispatch
+out2="$(FLEET_BIN="$FAKE_FLEET" FAKE_FLEET_LOG="$FLEET_LOG" FLEET_ADDRESS="cookys/openclaw/ops--claude" stop)"
+calls2="$([ -f "$FLEET_LOG" ] && wc -l < "$FLEET_LOG" || echo 0)"
+[ -z "$out2" ] && [ "$calls2" -eq 1 ] && ok "(j4) second Stop is silent and does not re-dispatch" || bad "(j4) out2=$out2 calls2=$calls2"
+
+# (j2) PM seat -> old operator message, zero dispatches
+reset; rm -f "$FLEET_LOG"; use_context 160000; fire >/dev/null; write_handoff
+out="$(FLEET_BIN="$FAKE_FLEET" FAKE_FLEET_LOG="$FLEET_LOG" FLEET_ADDRESS="cookys/aimax395/pm--claude" stop)"
+calls="$([ -f "$FLEET_LOG" ] && wc -l < "$FLEET_LOG" || echo 0)"
+[ "$calls" -eq 0 ] && has "$out" "read $HANDOFF 接續" && has "$out" "轉給操作員" && ok "(j2) PM seat keeps operator relay with zero dispatches" || bad "(j2) calls=$calls out=$out"
+
+# (j3) fake fleet exits 1 -> fallback operator message plus failure line
+reset; rm -f "$FLEET_LOG"; use_context 160000; fire >/dev/null; write_handoff
+out="$(FLEET_BIN="$FAKE_FLEET" FAKE_FLEET_LOG="$FLEET_LOG" FAKE_FLEET_EXIT=1 FLEET_ADDRESS="cookys/openclaw/ops--claude" stop)"
+has "$out" "read $HANDOFF 接續" && has "$out" "轉給操作員" && has "$out" "simulated hub error" && ok "(j3) fleet failure falls back to operator relay with failure reason" || bad "(j3) out=$out"
+
+# (j5) hangar--claude seat -> exactly one dispatch to ops--claude (not hangar--claude as target), no operator relay
+reset; rm -f "$FLEET_LOG"; use_context 160000; fire >/dev/null; write_handoff
+out="$(FLEET_BIN="$FAKE_FLEET" FAKE_FLEET_LOG="$FLEET_LOG" FLEET_ADDRESS="cookys/openclaw/hangar--claude" stop)"
+calls="$([ -f "$FLEET_LOG" ] && wc -l < "$FLEET_LOG" || echo 0)"
+line="$(cat "$FLEET_LOG" 2>/dev/null || true)"
+[ "$calls" -eq 1 ] && has "$line" "dispatch cookys/openclaw/ops--claude " && ! has "$line" "dispatch cookys/openclaw/hangar--claude " && ok "(j5) hangar--claude dispatches to ops--claude (not hangar--claude)" || bad "(j5) calls=$calls line=$line"
+has "$out" "轉給操作員" && bad "(j5) block reason mentions operator relay: $out" || ok "(j5) block reason does not tell model to relay to operator"
+
+# (j6) ops--claude seat -> one dispatch to hangar--claude explicitly
+reset; rm -f "$FLEET_LOG"; use_context 160000; fire >/dev/null; write_handoff
+out="$(FLEET_BIN="$FAKE_FLEET" FAKE_FLEET_LOG="$FLEET_LOG" FLEET_ADDRESS="cookys/openclaw/ops--claude" stop)"
+calls="$([ -f "$FLEET_LOG" ] && wc -l < "$FLEET_LOG" || echo 0)"
+line="$(cat "$FLEET_LOG" 2>/dev/null || true)"
+[ "$calls" -eq 1 ] && has "$line" "dispatch cookys/openclaw/hangar--claude " && ! has "$line" "dispatch cookys/openclaw/ops--claude " && ok "(j6) ops--claude dispatches to hangar--claude" || bad "(j6) calls=$calls line=$line"
+
 printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ] && { echo "PASS [context-land-gate]"; exit 0; }
 echo "FAIL [context-land-gate]"; exit 1

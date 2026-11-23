@@ -34,6 +34,7 @@ function run(cmd, { shell = 'bash', extra = {}, env = {}, lsDefault = false } = 
   const baseEnv = { ...process.env };
   delete baseEnv.AUTOPILOT_BASH_GUARD_PKILL_MODE;
   delete baseEnv.AUTOPILOT_BASH_GUARD_LS_MODE;
+  delete baseEnv.AUTOPILOT_BASH_GUARD_BUSY_LOOP_MODE;
   delete baseEnv.AUTOPILOT_BASH_GUARD_RMVAR_MODE;
   delete baseEnv.AUTOPILOT_BASH_GUARD_SUBAGENT_RM_MODE;
   delete baseEnv.AUTOPILOT_BASH_GUARD_SHARED_RM_MODE;
@@ -884,7 +885,7 @@ test('only the first few globs per command are resolved (stay silent past the ca
 
 // Drift guard: every launching rail script in scripts/ is on the guard's explicit list. A new
 // scripts/dispatch-*.sh|js must either be a rail (add it to RAIL_NAMES) or an observer (add it here).
-const OBSERVERS = new Set(['dispatch-status.js', 'dispatch-contract.js', 'dispatch-tree.js']);
+const OBSERVERS = new Set(['dispatch-status.js', 'dispatch-contract.js', 'dispatch-tree.js', 'dispatch-usage-push.sh', 'dispatch-usage-report.js']);
 for (const f of fs.readdirSync(path.join(__dirname, '..', 'scripts'))) {
   if (!/^dispatch-.*\.(sh|js)$/.test(f) || /\.test\./.test(f) || OBSERVERS.has(f)) continue;
   test(`rail on the explicit list: ${f}`, () => {
@@ -1107,6 +1108,41 @@ for (const cmd of BL192_ALLOW) {
 }
 
 // ---- Rule 4 (BL-0300): bare `ls` in command position => deny ----
+const BARE_LS_REWRITE_CASES = [
+  ['ls', 'command ls'],
+  ['ls -la src', 'command ls -la src'],
+  ['cd x && ls | head', 'cd x && command ls | head'],
+  ['ls && ls -la', 'command ls && command ls -la'],
+  ['ls a; ls b', 'command ls a; command ls b'],
+  ['echo "ls"; command ls; /bin/ls; ls', 'echo "ls"; command ls; /bin/ls; command ls'],
+  [`ls ${'a'.repeat(650)}`, `command ls ${'a'.repeat(650)}`],
+];
+for (const [cmd, expected] of BARE_LS_REWRITE_CASES) {
+  test(`rule4 rewrite in deny message: ${JSON.stringify(cmd)}`, () => {
+    const r = run(cmd, { lsDefault: true });
+    assert.strictEqual(r.deny, true);
+    assert.ok(r.reason.includes(`改寫後的指令（直接照抄）：${expected}`), r.reason);
+  });
+}
+test('rule4 rewrite in warn message', () => {
+  const r = run('ls a; ls b', { lsDefault: true, env: { AUTOPILOT_BASH_GUARD_LS_MODE: 'warn' } });
+  assert.strictEqual(r.deny, false);
+  assert.ok(r.ctx.includes('改寫後的指令（直接照抄）：command ls a; command ls b'), r.ctx);
+});
+test('rule4 omits unsafe rewrite after preprocessing', () => {
+  const { detectBareLs } = require('../scripts/lib/bash-launch-rules.js');
+  for (const cmd of ['ls $(ls)', "cat <<'EOF'\nls\nEOF\nls"]) {
+    assert.strictEqual(detectBareLs(cmd).rewrite, null);
+    assert.doesNotMatch(run(cmd, { lsDefault: true }).reason, /改寫後的指令/);
+  }
+});
+for (const cmd of ['echo "ls"', 'grep ls file', 'command ls', '/bin/ls', "cat <<'EOF'\nls\nEOF"]) {
+  test(`rule4 allows without rewrite: ${JSON.stringify(cmd)}`, () => {
+    const r = run(cmd, { lsDefault: true });
+    assert.strictEqual(r.deny, false);
+  });
+}
+
 const BARE_LS_DENY = [
   'ls',
   'ls -la /tmp',
@@ -1892,6 +1928,9 @@ test('rules 6 & 7 fail open (no throw) on deeply nested quote/substitution input
 
 // Rule 8: never print secrets into a Bash transcript. Commands are hook input only; never executed.
 const secretDenial = '這個指令會印出秘密。要檢查設定，請用 safe-inspect（自動遮罩），或用 grep -c / -l 只看有沒有、在哪一行。整行指令一起判斷：同一行若也在建檔或寫檔，請把建檔和讀取拆成兩次執行。 (secret-print)';
+// block-mode denial additionally carries the fix+doc tail (hooks/lib/gate-hint.js,
+// Fleet-Task 01M803Z0SF3MQG07WYWH3TH25T); the warn-mode advisory does not.
+const secretDenialBlocked = secretDenial + '修正：改用 node scripts/safe-inspect.js 看秘密（自動遮罩），或 grep -c / -l 只數不讀 參閱：docs/guide/safe-inspect.md';
 const secretDenied = [
   'docker inspect web', 'docker container inspect web',
   "docker inspect --format '{{.Config.Env}}' web",
@@ -1927,7 +1966,7 @@ for (const cmd of secretDenied) {
     const r = run(cmd);
     assert.strictEqual(r.status, 0, 'same exit status as existing guard denials');
     assert.strictEqual(r.deny, true);
-    assert.strictEqual(r.reason, secretDenial, 'one line, without echoing command contents');
+    assert.strictEqual(r.reason, secretDenialBlocked, 'one line, without echoing command contents');
   });
 }
 for (const cmd of [
@@ -1967,7 +2006,7 @@ for (const cmd of [
     const r = run(cmd);
     assert.strictEqual(r.status, 0);
     assert.strictEqual(r.deny, true);
-    assert.strictEqual(r.reason, secretDenial);
+    assert.strictEqual(r.reason, secretDenialBlocked);
   });
 }
 for (const cmd of [
@@ -2045,7 +2084,7 @@ for (const cmd of [
     const r = run(cmd);
     assert.strictEqual(r.status, 0);
     assert.strictEqual(r.deny, true);
-    assert.strictEqual(r.reason, secretDenial);
+    assert.strictEqual(r.reason, secretDenialBlocked);
   });
 }
 for (const cmd of [
@@ -2074,7 +2113,7 @@ for (const cmd of [
     const r = run(cmd);
     assert.strictEqual(r.status, 0);
     assert.strictEqual(r.deny, true);
-    assert.strictEqual(r.reason, secretDenial);
+    assert.strictEqual(r.reason, secretDenialBlocked);
   });
 }
 for (const cmd of [
@@ -2104,7 +2143,7 @@ for (const cmd of [
     const r = run(cmd);
     assert.strictEqual(r.status, 0);
     assert.strictEqual(r.deny, true);
-    assert.strictEqual(r.reason, secretDenial);
+    assert.strictEqual(r.reason, secretDenialBlocked);
   });
 }
 for (const cmd of [
@@ -2306,5 +2345,102 @@ test('rule9 fails open (no throw) on deeply nested quote/substitution input', ()
   const { detectWrappedRm } = require('../scripts/lib/bash-launch-rules.js');
   for (const unit of ['a=( "$(', 'x="$(', '"`', '"((', "'((", '"<(', '"a=(']) {
     assert.doesNotThrow(() => detectWrappedRm(`echo rm ${unit.repeat(25000)}`));
+  }
+});
+
+test('busy-loop denies the incident and empty-body loops', () => {
+  for (const cmd of ["until grep -q '' /dev/null; do :; done", 'until grep -q x f; do :; done', 'while true; do true; done', 'while false; do ; done', "bash -c 'until false; do :; done'", 'sh -c "until false; do :; done"', 'until grep -q "" /dev/null; do echo x; done']) {
+    const r = run(cmd);
+    assert.strictEqual(r.deny, true, cmd);
+    assert.match(r.reason, /busy-loop/);
+  }
+});
+
+test('busy-loop applies to subagent sessions', () => {
+  assert.match(run('while true; do :; done', { extra: { agent_id: 'child' } }).reason, /busy-loop/);
+});
+
+test('busy-loop allows sleeping loops and quoted mentions, and honors mode', () => {
+  for (const cmd of ['until test -f f; do sleep 5; done', 'echo "do :; done"']) {
+    assert.strictEqual(run(cmd).deny, false, cmd);
+  }
+  const cmd = "until grep -q '' /dev/null; do :; done";
+  const warn = run(cmd, { env: { AUTOPILOT_BASH_GUARD_BUSY_LOOP_MODE: 'warn' } });
+  assert.strictEqual(warn.deny, false);
+  assert.match(warn.ctx, /busy-loop/);
+  assert.strictEqual(run(cmd, { env: { AUTOPILOT_BASH_GUARD_BUSY_LOOP_MODE: 'off' } }).deny, false);
+});
+
+// ---- P2: paste-ready rewrite line in deny/warn messages ----
+function extractRewrite(text) {
+  const m = /\n改寫後的指令（直接照抄）：([^\n]+)$/.exec(text);
+  return m ? m[1] : null;
+}
+
+test('P2 paste-ready rewrites: every changed rule emits a copyable rewrite that passes the guard', () => {
+  // 1. detach-no-wake
+  {
+    const r = run('nohup scripts/dispatch-review.sh --base a --head b > /tmp/x.log 2>&1 &');
+    assert.strictEqual(r.deny, true);
+    const rw = extractRewrite(r.reason);
+    assert.ok(rw, `missing rewrite in: ${r.reason}`);
+    assert.strictEqual(run(rw).deny, false, `rewrite still denied: ${rw}`);
+  }
+  // 2. pkill-self-match
+  {
+    const r = run('pkill -f myworker');
+    assert.strictEqual(r.deny, true);
+    const rw = extractRewrite(r.reason);
+    assert.ok(rw, `missing rewrite in: ${r.reason}`);
+    assert.strictEqual(run(rw).deny, false, `rewrite still denied: ${rw}`);
+  }
+  // 3. zsh-expansion (warn-only)
+  {
+    const r = run('echo *.zzq_nonexistent_p2', { shell: 'zsh' });
+    assert.strictEqual(r.deny, false);
+    assert.match(r.ctx, /zsh-expansion/);
+    const rw = extractRewrite(r.ctx);
+    assert.ok(rw, `missing rewrite in: ${r.ctx}`);
+    assert.doesNotMatch(run(rw, { shell: 'zsh' }).ctx, /zsh-expansion/);
+  }
+  // 4. zsh-only-syntax
+  {
+    const r = run('echo ${(L)e}');
+    assert.strictEqual(r.deny, true);
+    const rw = extractRewrite(r.reason);
+    assert.ok(rw, `missing rewrite in: ${r.reason}`);
+    assert.strictEqual(run(rw).deny, false, `rewrite still denied: ${rw}`);
+  }
+  // 5. rm-var-target (computable inline assignment + uncomputable fallback)
+  {
+    const d = mk('blg-rmvar-');
+    const r1 = run(`TARGET=${d}; rm -rf $TARGET`);
+    assert.strictEqual(r1.deny, true);
+    const rw1 = extractRewrite(r1.reason);
+    assert.ok(rw1, `missing rewrite in: ${r1.reason}`);
+    assert.strictEqual(run(rw1).deny, false, `rewrite still denied: ${rw1}`);
+
+    const r2 = run('rm -rf "$UNSET_P2_DIR"');
+    assert.strictEqual(r2.deny, true);
+    const rw2 = extractRewrite(r2.reason);
+    assert.strictEqual(rw2, 'rm -r <literal path under the scratchpad>');
+  }
+  // 6. subagent-rm-outside-scratch
+  {
+    const r = run('rm -rf /tmp/outside-scratch-p2', { extra: { agent_id: 'sub1', session_id: 'sid-p2' } });
+    assert.strictEqual(r.deny, true);
+    const rw = extractRewrite(r.reason);
+    assert.ok(rw, `missing rewrite in: ${r.reason}`);
+    assert.strictEqual(run(rw, { extra: { agent_id: 'sub1', session_id: 'sid-p2' } }).deny, false, `rewrite still denied: ${rw}`);
+  }
+  // 7. rm-shared-dir
+  {
+    const shared = mk('blg-shared-');
+    fs.chmodSync(shared, 0o777);
+    const r = run(`rm -rf ${shared}`, { env: { AUTOPILOT_BASH_GUARD_SHARED_RM_MODE: 'deny' } });
+    assert.strictEqual(r.deny, true);
+    const rw = extractRewrite(r.reason);
+    assert.ok(rw, `missing rewrite in: ${r.reason}`);
+    assert.strictEqual(run(rw, { env: { AUTOPILOT_BASH_GUARD_SHARED_RM_MODE: 'deny' } }).deny, false, `rewrite still denied: ${rw}`);
   }
 });

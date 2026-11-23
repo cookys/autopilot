@@ -40,6 +40,7 @@ const fs = require('fs');
 const { isEnabled } = require('./_shared/opt-in');
 const { isPmConsole } = require('./_shared/pm-console');
 const { parse: parseWorkOrder, isMPlus } = require('../scripts/lib/work-order-plan');
+const { gateHint } = require('./lib/gate-hint.js');
 
 // Deliberately small: only imperative work requests, so a plain fact question still passes.
 // [no-task: ...] is not an exemption.
@@ -49,21 +50,21 @@ const WORK_ORDER_PHRASES = Object.freeze([
 ]);
 
 const HEADER_EXAMPLE = '訊息內文最上面逐行寫：\ntask_id: <26 碼任務 id>\ntag: progress|result|question|ruling|fyi\nwaiting_on: <對方地址>';
-const DENY_REASON = '這則 send 是在派工（要對方現在做事或回交件）。新工作請用 dispatch；既有任務的訊息請用 reply，並用標頭行綁定任務。' + HEADER_EXAMPLE + '\n純資訊才用 send 並設 fyi=true（fyi 不能夾帶要對方做事的指令）。';
-const REPLY_DENY_REASON = '這則 reply 是在派工（要對方現在做事或回交件）。新工作請用 dispatch；若是回答既有任務，請帶任務脈絡。' + HEADER_EXAMPLE + '\n純資訊才設 fyi=true。';
+const DENY_REASON = '這則 send 是在派工（要對方現在做事或回交件）。新工作請用 dispatch；既有任務的訊息請用 reply，並用標頭行綁定任務。' + HEADER_EXAMPLE + '\n純資訊才用 send 並設 fyi=true（fyi 不能夾帶要對方做事的指令）。' + gateHint('新工作用 dispatch；既有任務用 reply（帶 task 標頭）；純資訊 send 才設 fyi=true', 'hooks/README.md');
+const REPLY_DENY_REASON = '這則 reply 是在派工（要對方現在做事或回交件）。新工作請用 dispatch；若是回答既有任務，請帶任務脈絡。' + HEADER_EXAMPLE + '\n純資訊才設 fyi=true。' + gateHint('新工作用 dispatch；回答既有任務要帶 task 標頭；純資訊才設 fyi=true', 'hooks/README.md');
 // 'fyi' means "needs no answer, no action": an ask hiding under it is still a work order. Only the bare
 // noun 回報 (a mention, e.g. "晚點補完整回報") stays allowed under fyi.
 const FYI_BENIGN_PHRASES = Object.freeze(['回報']);
 const HEADER_TASK_ID_RE = /^task_id:\s*[0-9A-HJKMNP-TV-Z]{26}\s*$/m;
 const BODY_TASK_ID_RE = /(?:^|\n)task_id:\s*([0-9A-HJKMNP-TV-Z]{26})\s*(?:\n|$)/;
-const COURIER_REPLY_REASON = 'reply 不能回 courier 的 wake 訊息，請改用 task_comment（task_id 見該訊息的 task_id 行）';
+const COURIER_REPLY_REASON = 'reply 不能回 courier 的 wake 訊息，請改用 task_comment（task_id 見該訊息的 task_id 行）' + gateHint('回 courier 的 wake 訊息改用 task_comment（task_id 見該訊息的 task_id 行）', 'hooks/README.md');
 const CLAUDE_HOME_RE = /(?:~\/|\$HOME\/|\/home\/[^/\s]+\/|\/Users\/[^/\s]+\/)\.claude(?![\w-])(?!\/projects(?:\/|$))/;
 const CLAUDE_NEGATOR_RE = /不需要讀|不必讀|不要讀|不用讀|不能讀|禁止讀|別讀|勿讀|不碰|不讀|never read|do not read|don't read|must not read|do not touch|never/i;
-const CLAUDE_PATH_DENY = '這則訊息要對方讀真實的 ~/.claude。讀取真實 ~/.claude 需要操作員本人的卡。請改請該席用自己被允許的讀取方式提供資料，或拿掉這一步。';
+const CLAUDE_PATH_DENY = '這則訊息要對方讀真實的 ~/.claude。讀取真實 ~/.claude 需要操作員本人的卡。請改請該席用自己被允許的讀取方式提供資料，或拿掉這一步。' + gateHint('改請該席用自己被允許的讀取方式提供資料，或拿掉讀 ~/.claude 這一步', 'hooks/README.md');
 const ULID_IN_TEXT_RE = /\b[0-9A-HJKMNP-TV-Z]{26}\b/;
 const DISPATCH_OPT_IN = 'pm-dispatch-plan-guard';
-const DISPATCH_SIZE_DENY_REASON = '每張派工都要帶 Size（XS|S|M|L|XL），請補上';
-const DISPATCH_PLAN_DENY_REASON = '工單 Size M 以上要帶「Plan: 路徑@sha」或「Plan: plan-first」';
+const DISPATCH_SIZE_DENY_REASON = '每張派工都要帶 Size（XS|S|M|L|XL），請補上' + gateHint('在工單補 Size: XS|S|M|L|XL 再派', 'hooks/README.md');
+const DISPATCH_PLAN_DENY_REASON = '工單 Size M 以上要帶「Plan: 路徑@sha」或「Plan: plan-first」' + gateHint('Size M 以上的工單補 Plan: 路徑@sha 或 Plan: plan-first 再派', 'hooks/README.md');
 
 function envBag() {
   return process.env;
@@ -168,11 +169,13 @@ function fleetChannel(transcriptPath, messageId) {
 function courierReplyDeny(input) {
   if (!input || input.tool_name !== 'mcp__fleet__reply') return null;
   const toolInput = input.tool_input && typeof input.tool_input === 'object' ? input.tool_input : {};
+  // The courier's model-reply probe (message_id model-probe-*) is answered with reply by design; denying it makes the probe retry every few seconds and burn a model turn each time.
+  if (typeof toolInput.message_id === 'string' && toolInput.message_id.startsWith('model-probe-')) return null;
   const hit = fleetChannel(input.transcript_path, toolInput.message_id);
   if (!hit || !hit.from.endsWith('/courier')) return null;
   const id = BODY_TASK_ID_RE.exec(hit.body);
   const reason = id
-    ? `reply 不能回 courier 的 wake 訊息，請改用 task_comment（task_id: ${id[1]}）`
+    ? `reply 不能回 courier 的 wake 訊息，請改用 task_comment（task_id: ${id[1]}）` + gateHint('回 courier 的 wake 訊息改用 task_comment（task_id: ' + id[1] + '）', 'hooks/README.md')
     : COURIER_REPLY_REASON;
   return preToolDeny(reason);
 }

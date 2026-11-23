@@ -117,6 +117,15 @@ test('one step fails: the others still run and the tick exits 0', () => {
   assert.match(r.stdout, /quota-mirror-tick: 3\/4 ok/);
 });
 
+test('failed usage probe reports its last stderr line as a failure', () => {
+  for (const [code, alias] of [[5, 'x'], [1, 'token_missing']]) {
+    const codes = all(0);
+    codes['usage-probe'] = code;
+    const { r } = runTick(codes, { 'usage-probe': `noise\nprobe_failed alias=${alias} outcome=child_error` });
+    assert.match(r.stdout, new RegExp(`usage-probe fail exit=${code} reason=probe_failed alias=${alias} outcome=child_error`));
+  }
+});
+
 test('every step fails: exit non-zero after all of them ran', () => {
   const { r, lines } = runTick(all(1));
   assert.notStrictEqual(r.status, 0);

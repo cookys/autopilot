@@ -74,6 +74,18 @@ const THROTTLE_COOLDOWN_MINUTES = 5; // plain server throttle: shorter than a qu
 const DEFAULT_MAX_ATTEMPTS = 3;
 const TERM_GRACE_MS = 5000; // SIGTERM/SIGINT forwarded to the child; still alive after this => SIGKILL
 
+function resolveClaudeBinary(env, home) {
+  const search = env && typeof env.PATH === 'string' ? env.PATH : '/bin:/usr/bin';
+  const candidates = search.split(path.delimiter).map((dir) => path.resolve(dir || '.', 'claude'));
+  candidates.push(path.join(home, '.local', 'bin', 'claude'));
+  for (const candidate of candidates) {
+    try {
+      if (fs.statSync(candidate).isFile()) { fs.accessSync(candidate, fs.constants.X_OK); return candidate; }
+    } catch (_) { /* try the next candidate */ }
+  }
+  return 'claude';
+}
+
 /**
  * Linux: run the child under `setpriv --pdeathsig KILL` so it is SIGKILLed by the kernel when this wrapper
  * dies by a signal Node cannot catch (SIGKILL from a uutils `timeout`, which signals only its direct child).
@@ -316,6 +328,12 @@ function accountsConfig(ctx) {
   }
   cfg.quota_probe_stale_minutes = a.quota_probe_stale_minutes === undefined ? probe.STALE_MINUTES_DEFAULT : a.quota_probe_stale_minutes;
   cfg.quota_probe_timeout_secs = a.quota_probe_timeout_secs === undefined ? probe.TIMEOUT_SECS_DEFAULT : a.quota_probe_timeout_secs;
+  cfg.quota_probe_demand = a.quota_probe_demand === undefined ? probe.DEMAND_MODE_DEFAULT : a.quota_probe_demand;
+  const envDemand = ctx.env.AUTOPILOT_QUOTA_PROBE_DEMAND;
+  if (envDemand !== undefined && envDemand !== '') {
+    if (!probe.DEMAND_MODES.includes(envDemand)) throw new Stop(EXIT.INVALID, 'env_quota_probe_demand_invalid', 'invalid_config');
+    cfg.quota_probe_demand = envDemand;
+  }
   const envMode = ctx.env.AUTOPILOT_ACCOUNT_MODE;
   if (envMode !== undefined && envMode !== '') {
     if (envMode !== 'auto' && envMode !== 'off') throw new Stop(EXIT.INVALID, 'env_accounts_mode_invalid', 'invalid_config');
@@ -731,6 +749,7 @@ async function probeAttempt(ctx, checked, alias, cfg, scratchRoot, purpose) {
     });
     accountEnv.prepareHome({ homeDir: info.homeDir, realHome: ctx.realHome });
     const argv = probe.probeArgv(claudeManifest(), probe.PROBE_PROMPT);
+    if (argv[0] === 'claude') argv[0] = resolveClaudeBinary(ctx.env, ctx.realHome);
     const dir = path.join(scratchRoot, `probe-${alias}`);
     fs.mkdirSync(dir, { mode: 0o700 });
     const startMs = ctx.now();
@@ -786,12 +805,17 @@ function clearRefusalRow(ctx, alias) {
 
 // Demand rule (plan 19.6 A, BL-0375): an alias counts only when a run line with an outcome in the audit log, newer than
 // 24 h, names it. Fail closed: a missing, unreadable, refused or partly damaged log means NO demand, so nothing is probed.
-function readDemand(ctx) {
+function readDemand(ctx, cfg, accounts) {
+  const mode = cfg && cfg.quota_probe_demand;
   try {
     const res = audit.readAudit(ctx.auditFile, {});
-    if (res.refused || res.invalid > 0) return new Set();
-    return probe.demandAliases(res.records, ctx.now());
-  } catch (_) { return new Set(); }
+    if (res.refused || res.invalid > 0) {
+      return mode === 'registry' ? probe.demandAliases([], ctx.now(), { mode, accounts }) : new Set();
+    }
+    return probe.demandAliases(res.records, ctx.now(), { mode, accounts });
+  } catch (_) {
+    return mode === 'registry' ? probe.demandAliases([], ctx.now(), { mode, accounts }) : new Set();
+  }
 }
 
 // `usage-probe --due [--dry-run]`: the periodic entry point an external timer calls. No timer is installed here.
@@ -814,7 +838,7 @@ async function cmdUsageProbeDue(realCtx, opts) {
     const manifest = claudeManifest();
     const merged = {};
     for (const [al, rows] of Object.entries(data.observations || {})) merged[al] = interpret.interpretWindows(rows, manifest, nowS);
-    due = probe.periodicDue({ manifest, accounts: data.accounts, merged, cooldowns: data.cooldowns, exclude: data.exclude, nowS, demand: readDemand(ctx) });
+    due = probe.periodicDue({ manifest, accounts: data.accounts, merged, cooldowns: data.cooldowns, exclude: data.exclude, nowS, demand: readDemand(ctx, cfg, data.accounts) });
   }
   const probed = [];
   if (!opts['dry-run'] && due.length > 0) {
@@ -831,7 +855,9 @@ async function cmdUsageProbeDue(realCtx, opts) {
     }
   }
   ctx.out(JSON.stringify({ due, probed }));
-  return EXIT.OK;
+  const failed = probed.filter((entry) => entry.outcome !== 'ok');
+  for (const { alias, outcome } of failed) ctx.write(2, `probe_failed alias=${alias} outcome=${outcome}\n`);
+  return failed.length ? EXIT.CHILD_ERROR : EXIT.OK;
 }
 
 async function cmdUsageProbe(ctx, argv) {
@@ -872,6 +898,7 @@ async function cmdRun(ctx, argv) {
   });
   if (opts['pin-default'] === true && opts.alias !== undefined) throw new Stop(EXIT.INVALID, 'pin_default_excludes_alias', null);
   if (cmd.length === 0) throw new Stop(EXIT.INVALID, 'missing_command (use -- claude <argv>)', null);
+  if (cmd[0] === 'claude') cmd[0] = resolveClaudeBinary(ctx.env, ctx.realHome);
   if (opts.purpose === undefined) throw new Stop(EXIT.INVALID, 'purpose_required', null);
   const purpose = checkPurpose(opts.purpose);
   let flagAttempts = null;
@@ -1072,6 +1099,7 @@ function cmdPick(ctx, argv) {
 async function cmdExec(ctx, argv) {
   const { opts, cmd } = parseArgs(argv, { alias: 'value', pick: 'flag', purpose: 'value' });
   if (cmd.length === 0) throw new Stop(EXIT.INVALID, 'missing_command', null);
+  if (cmd[0] === 'claude') cmd[0] = resolveClaudeBinary(ctx.env, ctx.realHome);
   if ((opts.alias === undefined) === (opts.pick !== true)) throw new Stop(EXIT.INVALID, 'exec needs exactly one of --alias or --pick', null);
   const purpose = checkPurpose(opts.purpose, 'exec');
   const cfg = accountsConfig(ctx);
@@ -1294,8 +1322,8 @@ function readObserved(file) {
   } catch (_) { return null; }
 }
 
-function resolveBinaryOpt(v) {
-  if (v === undefined) return 'claude';
+function resolveBinaryOpt(v, ctx) {
+  if (v === undefined) return resolveClaudeBinary(ctx.env, ctx.realHome);
   if (typeof v !== 'string' || v === '') throw new Stop(EXIT.INVALID, 'binary_invalid', null);
   return path.resolve(v);
 }
@@ -1435,8 +1463,8 @@ async function cmdSelftest(ctx, argv) {
   if (opts['real-binary'] && opts['simulate-429'] !== undefined) throw new Stop(EXIT.INVALID, 'selftest: pick one of --real-binary or --simulate-429', null);
   if (opts.binary !== undefined && !opts['real-binary'] && opts['simulate-429'] === undefined) throw new Stop(EXIT.INVALID, 'selftest: --binary needs --real-binary or --simulate-429', null);
   if (rest.length) throw new Stop(EXIT.INVALID, 'selftest: unexpected argument', null);
-  if (opts['real-binary']) return selftestRealBinary(ctx, resolveBinaryOpt(opts.binary));
-  if (opts['simulate-429'] !== undefined) return selftestSimulate429(ctx, opts['simulate-429'], resolveBinaryOpt(opts.binary));
+  if (opts['real-binary']) return selftestRealBinary(ctx, resolveBinaryOpt(opts.binary, ctx));
+  if (opts['simulate-429'] !== undefined) return selftestSimulate429(ctx, opts['simulate-429'], resolveBinaryOpt(opts.binary, ctx));
   const { makeFixture, R401, R429, R429_USAGE, ERR_EXIT0 } = require('./lib/account-fixtures/shim-install');
   const fx = makeFixture({ aliases: [{ alias: 'a', priority: 10 }, { alias: 'b', priority: 20 }] });
   const results = [];
@@ -1504,7 +1532,7 @@ async function cli(argv, deps) {
   }
 }
 
-module.exports = { cli, createScrubber, classifyAttempt, parseEnvelope, judgeRealBinary, preflightExec, PROBE_SRC, EXIT };
+module.exports = { resolveClaudeBinary, cli, createScrubber, classifyAttempt, parseEnvelope, judgeRealBinary, preflightExec, PROBE_SRC, EXIT };
 
 if (require.main === module) {
   cli(process.argv.slice(2)).then((c) => { process.exitCode = c; });

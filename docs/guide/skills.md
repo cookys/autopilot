@@ -2,13 +2,13 @@
 
 > Part of [Autopilot](../../README.md). Detail docs: [Skills](skills.md) · [Coexistence](coexistence.md) · [Configuration](configuration.md) · [Installation](installation.md) · [Architecture](../dev/architecture.md) · [Hooks](../../hooks/README.md)
 
-The full catalog of all 31 skills, the three primary cognitive modes, how skills compose, and the decision table for which to reach for.
+The full catalog of all 32 skills, the three primary cognitive modes, how skills compose, and the decision table for which to reach for.
 
 ---
 
 ## The Solution
 
-Autopilot ships **31 skills** covering lifecycle orchestration, strategic intelligence, methodology, quality gates, persistent-peer coordination, and cross-harness maintenance. Works standalone; coexists with the optional `superpowers` plugin (see [Superpowers Coexistence](coexistence.md)).
+Autopilot ships **32 skills** covering lifecycle orchestration, strategic intelligence, methodology, quality gates, persistent-peer coordination, cross-harness maintenance, and fleet CLI conventions. Works standalone; coexists with the optional `superpowers` plugin (see [Superpowers Coexistence](coexistence.md)).
 
 The catalog is layered by how central a skill is to the daily loop — **core** (the seven you touch on almost every task), **delegation** (the CEO autonomy ladder), and **pioneer** (specialized / lower-frequency capabilities, each with its own owner scenario). Layering is presentation only: every skill is equally installed and invocable.
 
@@ -52,6 +52,7 @@ The catalog is layered by how central a skill is to the daily loop — **core** 
 | **team** | Team allocation decisions: when to組隊, role selection, dependency analysis | `superpowers:dispatching-parallel-agents` (dispatch mechanism — the verb to autopilot:team's noun) |
 | **agent-call** | Exact-target messaging to an already-running persistent peer. Prefers Claude native messaging when available; otherwise sends through fleet messaging v2 (`fleet` CLI / MCP) and fails closed without spawning a worker | fleet messaging v2 (transport) |
 | **lead-watch** | Opt-in for leads only: go and check on the team when a report is overdue or a member idles with a ready next item (evidence time = latest look-back, 30-minute cap while a hand runs) | — (no equivalent) |
+| **fleet-usage** | Fleet CLI/MCP: `fleet watch` (not sleep/poll), `upload` / `fetch` for large content, `task_result` for work-order hand-in; vendored for non-Claude harnesses and dispatch briefs | fleet plugin (Claude Code may still load the plugin copy) |
 | **profiling** | Evidence-first performance profiling (only methodology entry point in the ecosystem) | — (no superpowers equivalent) |
 
 ---

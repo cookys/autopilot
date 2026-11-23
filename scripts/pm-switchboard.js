@@ -35,8 +35,9 @@ const cnGate = require('./lib/cn-model-dispatch-gate.js');
 
 const RECEIPT_SCHEMA = 'autopilot.pm-switchboard/1';
 const STATE_SCHEMA = 'autopilot.pm-switchboard-state/1';
-const MAX_PACKET_ITEMS = 5;
-const MAX_PACKET_TOKENS = 1500;
+const MAX_PACKET_ITEMS = 60;
+// 48 KB = 49,152 bytes; estimateTokens(49152 chars) = Math.ceil(49152 / 3) = 16384 tokens.
+const MAX_PACKET_TOKENS = 16384;
 const MAX_FALLBACK_INPUT_TOKENS = 30000;
 const DEFAULT_FALLBACK_MODEL = 'sonnet';
 const ANTHROPIC_FALLBACK_MODEL_RE = /^(?:sonnet|opus|haiku|claude-(?:sonnet|opus|haiku)-[a-z0-9.-]+(?:\[1m\])?)$/;
@@ -764,49 +765,88 @@ function renderPendingItemBlock(entry, indexOneBased) {
   ].join('\n');
 }
 
-function formatPacket(blocks, packetIndex, totalPackets, kind = 'batch') {
-  const title = kind === 'immediate'
+function formatPacket(items, packetIndex, totalPackets) {
+  const hasImmediate = items.some((it) => Boolean(it && it.immediate));
+  const title = hasImmediate
     ? 'PM 收件匣緊急立即喚醒包'
     : 'PM 收件匣待裁決批次包';
-  const header = `## ${title}（第 ${packetIndex}/${totalPackets} 包，共 ${blocks.length} 筆）`;
-  return `${header}\n\n${blocks.join('\n\n')}`;
+  const header = `## ${title}（第 ${packetIndex}/${totalPackets} 包，共 ${items.length} 筆）`;
+
+  // Group items into sections by category while preserving item order.
+  const sections = [];
+  const sectionByCategory = new Map();
+  for (const it of items) {
+    const cat = (it && it.category) ? it.category : 'other';
+    let sec = sectionByCategory.get(cat);
+    if (!sec) {
+      sec = { category: cat, blocks: [] };
+      sectionByCategory.set(cat, sec);
+      sections.push(sec);
+    }
+    sec.blocks.push(it.block);
+  }
+
+  const body = sections
+    .map((sec) => `#### 分類：${sec.category}\n\n${sec.blocks.join('\n\n')}`)
+    .join('\n\n');
+  return `${header}\n\n${body}`;
 }
 
-function packBlockTier(renderedBlocks, kind) {
+function packBlockTier(renderedItems) {
   const groups = [];
   let current = [];
 
-  for (const block of renderedBlocks) {
-    const soloProbe = formatPacket([block], 999, 999, kind);
+  for (const item of renderedItems) {
+    const soloProbe = formatPacket([item], 999, 999);
     if (estimateTokens(soloProbe) > MAX_PACKET_TOKENS) {
       if (current.length > 0) {
-        groups.push({ kind, blocks: current });
+        groups.push(current);
         current = [];
       }
-      // Item over 1500 tokens gets its own intact packet (never truncated).
-      groups.push({ kind, blocks: [block] });
+      // Item over MAX_PACKET_TOKENS gets its own intact packet (never truncated).
+      groups.push([item]);
       continue;
     }
 
     if (current.length === 0) {
-      current.push(block);
+      current.push(item);
       continue;
     }
 
-    const candidate = [...current, block];
-    const probeText = formatPacket(candidate, 999, 999, kind);
+    const candidate = [...current, item];
+    const probeText = formatPacket(candidate, 999, 999);
     if (candidate.length > MAX_PACKET_ITEMS || estimateTokens(probeText) > MAX_PACKET_TOKENS) {
-      groups.push({ kind, blocks: current });
-      current = [block];
+      groups.push(current);
+      current = [item];
     } else {
       current = candidate;
     }
   }
 
   if (current.length > 0) {
-    groups.push({ kind, blocks: current });
+    groups.push(current);
   }
   return groups;
+}
+
+function groupEntriesByCategory(entries) {
+  const byCat = new Map();
+  const order = [];
+  for (const entry of entries) {
+    const cat = (entry && entry.rule) ? String(entry.rule) : (entry && entry.isResidue ? 'residue' : 'other');
+    if (!byCat.has(cat)) {
+      byCat.set(cat, []);
+      order.push(cat);
+    }
+    byCat.get(cat).push(entry);
+  }
+  const result = [];
+  for (const cat of order) {
+    for (const entry of byCat.get(cat)) {
+      result.push({ entry, category: cat });
+    }
+  }
+  return result;
 }
 
 function buildPackets(pendingEntries) {
@@ -817,27 +857,30 @@ function buildPackets(pendingEntries) {
   const immediateEntries = pendingEntries.filter((e) => Boolean(e && e.immediate));
   const batchEntries = pendingEntries.filter((e) => !e || !e.immediate);
 
-  let itemIndex = 0;
-  const immediateBlocks = immediateEntries.map((entry) => {
-    itemIndex += 1;
-    return renderPendingItemBlock(entry, itemIndex);
-  });
-  const batchBlocks = batchEntries.map((entry) => {
-    itemIndex += 1;
-    return renderPendingItemBlock(entry, itemIndex);
-  });
-
-  const allGroups = [
-    ...packBlockTier(immediateBlocks, 'immediate'),
-    ...packBlockTier(batchBlocks, 'batch'),
+  const ordered = [
+    ...groupEntriesByCategory(immediateEntries),
+    ...groupEntriesByCategory(batchEntries),
   ];
 
+  let itemIndex = 0;
+  const renderedItems = ordered.map(({ entry, category }) => {
+    itemIndex += 1;
+    return {
+      block: renderPendingItemBlock(entry, itemIndex),
+      category,
+      immediate: Boolean(entry && entry.immediate),
+    };
+  });
+
+  const allGroups = packBlockTier(renderedItems);
+
   return allGroups.map((grp, idx) => {
-    const text = formatPacket(grp.blocks, idx + 1, allGroups.length, grp.kind);
+    const text = formatPacket(grp, idx + 1, allGroups.length);
+    const kind = grp.some((it) => it.immediate) ? 'immediate' : 'batch';
     return {
       index: idx + 1,
-      kind: grp.kind,
-      item_count: grp.blocks.length,
+      kind,
+      item_count: grp.length,
       token_estimate: estimateTokens(text),
       text,
     };

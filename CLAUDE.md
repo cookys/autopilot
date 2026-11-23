@@ -19,16 +19,16 @@ Acceptance also requires the change to be merged, live pinned to that SHA, and e
 
 ## How we work
 - 工作狀態只記在 fleet task。開工、卡住、改期、交件都寫回單上，不用聊天代替。
-- 能開工的全部同時開工。實作交給便宜席（sonnet、codex terra、grok；機械性的單交給 kimi），每條各用一個 worktree。本席只做判斷、審查和整合，不要把工作排成單線。每條做完就立刻審，不要等全部做完。
+- 可開工的同時開工。實作交便宜席（sonnet、codex terra、grok；機械單交 kimi），每條用一個 worktree。本席判斷、審查和整合；做完立刻審。
+- XS 修正（單檔、約 20 行內、含測試）由本席直接改並在 fleet 單記一行，不派外部引擎；同一件事失敗兩次就換方法或換引擎。
 - 隨時至少保留兩件可以直接開工的工作。手上這件卡住或做完時，下一件要已經準備好（預檢已通過）。
 - 要 go 的時候，同一時間把下一件準備好，不要空等。內部換版的 go 跟 PM 要，先跑 canary，再全面換。
 - KR 和觀察期只量測，不擋上線。計畫要寫上上線日和 fleet 單號，不能一放好幾週。
 - 卡住時只回報一次，附上建議，回報對象是 PM 或你的 lead。在等別人時，寫上帶型別的 waiting_on（等哪張單、哪張卡、哪個人的哪則訊息）。
-- 同一件事失敗兩次，就換做法或換引擎。
 
 ## Worktree and branch hygiene
 - **先確認分支再動手**：每次開始編輯前，以及恢復 session 或切換情境之後，先跑 `git status` 和 `git branch --show-current`，確認自己在對的分支和對的 worktree。
-- **一件工作一條分支一個 worktree**：分支命名用 `feat/<slug>` 或 `fix/<slug>`，從最新的 develop（或本 repo 的主幹）開出來。hetero worktree 放在 `<repo>/.claude/worktrees/`，由 repo 的 hetero rail script 建立、由 `scripts/reap-dispatch-worktrees.sh` 清理。主 checkout 只用來整合，不在上面直接開發。
+- **一件工作一條分支一個 worktree**：分支命名用 `feat/<slug>` 或 `fix/<slug>`，從最新的 develop（或本 repo 的主幹）開出來。hetero worktree 放在 `<repo>/.claude/worktrees/`，由 repo 的 hetero rail script 建立、由 `scripts/reap-dispatch-worktrees.sh` 清理。主 checkout 只用來整合，不在上面直接開發。同時只留 1～2 個，換單用 `git switch` 重用。
 - **平行 worktree 不共用相依目錄**：每個 worktree 各有自己的 node_modules、venv、build 輸出，不用 symlink。
 - **commit 要帶 trailer**：每個 commit 都加上 `Fleet-Task: <26 碼單號>`。不在 develop 或 main 上直接 commit 功能改動。
 - **合併方式**：用 `git merge --no-ff` 合進 develop，合併訊息寫上審查結論和 tip 測試綠燈。main 只在 PM 給 go 後合併。共用分支一律禁止 force-push 和改寫歷史。
@@ -36,7 +36,6 @@ Acceptance also requires the change to be merged, live pinned to that SHA, and e
 - **不留孤兒**：
   - 超過 3 天沒有 commit、又沒有對應活單的分支或 worktree，要嘛開單接著做，要嘛刪掉。
   - 沒有合併過的工作在刪除前，先推到遠端或打個 tag（`archive/<branch>`），這樣才算 tier 1。
-  - hangar 的 prune-merged-branches 每次合併後都會跑。
 - **不把 stash 當倉庫**：一輪結束時如果還有未提交的工作，就在分支上提交一個 WIP commit，不要留在 stash 裡。
 - **live 只跑 pin 住的 sha 或 tag**，不跑分支的最新 commit。換版走既有的換版流程：每台主機先備份並記下 sha16，寫好回滾指令。
 - **測試不碰正式環境**：worktree 和測試一律用沙箱 HOME 或暫存目錄，不能讀寫 live 的設定、狀態或憑證。
@@ -50,7 +49,7 @@ For Claude Code sessions working **on** the autopilot plugin itself. Other agent
 
 See the [project overview](docs/dev/_archive/entry-docs/claude-md-detail.md#what-this-repo-is).
 
-31 skills, 3 methodology agents, 61 hooks (41 default-on, 19 opt-in).
+32 skills, 3 methodology agents, 62 hooks (42 default-on, 19 opt-in).
 
 ## Scripts (prefer over LLM judgment)
 

@@ -69,6 +69,7 @@ const HOUR_MS = 3600000;
 const DEFAULTS = { mode: 'warn', lane_dispatch_max: 4, lane_turns_max: 300, root_turns_per_hour_max: 400, runaway_multiple: 3, concurrent_advise_max: 3, per_ticket_usd: 5 };
 const { LANE_RE, headerDenialSuffix } = require('./lib/brief-header-template.js');
 const { findTaskId } = require('../scripts/lib/fleet-task-ref.js');
+const { gateHint } = require('./lib/gate-hint.js');
 const REVIEWER_RE = /^Role:[ \t]*reviewer[ \t]*$/;
 const ACK_RE = /^Budget-Ack:[ \t]*(.*)$/;
 const CLAUDE_BUDGET_RE = /^Claude-Budget:[ \t]*(.+)$/;
@@ -236,6 +237,32 @@ function claudeBudgetFromBrief(text) {
   for (const line of text.replace(/\r\n/g, '\n').split('\n')) {
     const m = CLAUDE_BUDGET_RE.exec(line);
     if (m) return usdValue(m[1].trim());
+  }
+  return null;
+}
+
+function isUnderDir(filePath, dir) {
+  if (!dir) return false;
+  const rel = path.relative(path.resolve(dir), path.resolve(filePath));
+  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+}
+
+function claudeBudgetFromPromptOrFile(brief, cwd) {
+  const direct = claudeBudgetFromBrief(brief);
+  if (direct !== null) return direct;
+  if (typeof brief !== 'string' || !brief) return null;
+  const os = require('os');
+  const tmpDir = os.tmpdir();
+  const matches = brief.match(/[^\s"'`<>|;]+\.(?:md|txt)/g) || [];
+  for (const rawPath of matches) {
+    try {
+      const resolved = path.isAbsolute(rawPath) ? path.resolve(rawPath) : (cwd ? path.resolve(cwd, rawPath) : null);
+      if (!resolved) continue;
+      if (!isUnderDir(resolved, cwd) && !isUnderDir(resolved, tmpDir) && !isUnderDir(resolved, '/tmp')) continue;
+      const content = fs.readFileSync(resolved, 'utf8');
+      const fromFile = claudeBudgetFromBrief(content);
+      if (fromFile !== null) return fromFile;
+    } catch { /* fail-open on unreadable or missing prompt file */ }
   }
   return null;
 }
@@ -658,13 +685,15 @@ function run(payload) {
   let ticketAdvisory = '';
   if (ticket && ticketBudgetEnabled) {
     try {
-      const briefBudget = claudeBudgetFromBrief(brief);
-      const ticketBudget = briefBudget === null ? cfg.per_ticket_usd : Math.min(briefBudget, cfg.per_ticket_usd);
+      const briefBudget = claudeBudgetFromPromptOrFile(brief, typeof payload.cwd === 'string' ? payload.cwd : '');
+      const ticketBudget = briefBudget !== null ? briefBudget : cfg.per_ticket_usd;
       const spentUsd = Math.max(c.ticketUsd, ticketLedgerSpend(ticket));
       if (spentUsd >= ticketBudget) {
         emit({
           permissionDecision: 'deny',
-          permissionDecisionReason: `票務 ${ticket} 的 Claude 預算已用盡（已花費 $${spentUsd.toFixed(2)} / 上限 $${ticketBudget.toFixed(2)}）。請立即回報此票務的進度，並改派便宜的非 Claude 引擎（如 codex / grok / agy）。`,
+          permissionDecisionReason: `票務 ${ticket} 的 Claude 預算已用盡（已花費 $${spentUsd.toFixed(2)} / 上限 $${ticketBudget.toFixed(2)}）。請立即回報此票務的進度，並改派便宜的非 Claude 引擎（如 codex / grok / agy）。`
+            + '若已核准加碼，請在 Agent 提示詞內加一行「Claude-Budget: <美元數>」（整行、行首，無縮排），或在 ~/.autopilot/config.json 的 subagent_budget.per_ticket_usd 調整預設。'
+            + gateHint('回報進度並改派便宜引擎（codex / grok / agy）；要繼續用 Claude 才請操作員調高 per-ticket 上限', 'hooks/README.md'),
         });
         return;
       }
@@ -724,6 +753,7 @@ function run(payload) {
         + '(it is logged to the decision ledger); otherwise stop re-dispatching this lane and report to the owner. '
         + 'Tuning: raise the ceilings (lane_dispatch_max, lane_turns_max, root_turns_per_hour_max) or runaway_multiple (0 turns this guard off) in subagent_budget in ~/.autopilot/config.json, '
         + 'or AUTOPILOT_SUBAGENT_BUDGET_RUNAWAY_MULTIPLE; AUTOPILOT_SUBAGENT_BUDGET_MODE=remind|warn|off.'
+        + gateHint('要繼續就加 "Budget-Ack: <理由>" 行（≥8 字）再派；否則停止重派並回報操作員', 'hooks/README.md')
         + headerDenialSuffix(brief, input.model, { engineBy: 'other', laneBy: 'self', includeLane: false }),
     });
     return;
@@ -751,6 +781,7 @@ function run(payload) {
       + `${laneNote}${ackNote}To proceed anyway, re-dispatch with a line "Budget-Ack: <reason, at least 8 characters>" in the first 10 lines of the brief `
       + '(it is logged to the decision ledger); otherwise stop re-dispatching this lane and report to the owner. '
       + `${cardNote} Tuning: subagent_budget in ~/.autopilot/config.json, or AUTOPILOT_SUBAGENT_BUDGET_MODE=remind|warn|off.`
+      + gateHint('要繼續就加 "Budget-Ack: <理由>" 行（≥8 字）再派；否則停下來回報操作員', 'hooks/README.md')
       + headerDenialSuffix(brief, input.model, { engineBy: 'other', laneBy: 'self', includeLane: laneMissing }),
   });
 }

@@ -229,7 +229,7 @@ test('Stop 1 blocks undisposed ask; Stop 2 never blocks and writes Stop 1 pendin
     assert.equal(remindStop1.status, 0, remindStop1.stderr);
     const blockJson = JSON.parse(remindStop1.stdout);
     assert.equal(blockJson.decision, 'block');
-    assert.equal(blockJson.reason, `ask_id ${askRow.ask_id} 尚未處置：pm-ask close/progress/supersede`);
+    assert.equal(blockJson.reason, `ask_id ${askRow.ask_id} 尚未處置：pm-ask close/progress/supersede` + '修正：用 node scripts/pm-ask.js close|progress|supersede <ask_id> 處置後再結束 參閱：hooks/README.md');
 
     const remindedRow = s.readRows().find((r) => r.kind === 'reminded');
     assert.ok(remindedRow);

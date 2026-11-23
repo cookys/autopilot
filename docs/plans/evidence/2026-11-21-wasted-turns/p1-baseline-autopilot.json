@@ -1,0 +1,53 @@
+{
+  "schema": "autopilot.wasted-turns/1",
+  "seat": "autopilot--claude",
+  "mode": "self",
+  "window": {
+    "from": "2026-11-16T06:32:34+08:00",
+    "to": "2026-11-23T06:32:34+08:00"
+  },
+  "turns_total": 1377,
+  "whiff": {
+    "stop_block": {
+      "turns": 0,
+      "ctx_tokens": 0,
+      "cost_hit": 0,
+      "cost_miss": 0
+    },
+    "hook_block": {
+      "turns": 50,
+      "by_hook": {
+        "bash-launch-guard": 13,
+        "bash-footgun-guard": 15,
+        "claude-home-read-guard": 5,
+        "mcp__fleet__send": 7,
+        "mcp__fleet__reply": 4,
+        "Bash": 1,
+        "mcp__fleet__task_comment": 1,
+        "dispatch-model-guard": 1,
+        "mcp__fleet__dispatch": 3
+      },
+      "ctx_tokens": 10072168,
+      "cost_hit": 1007219,
+      "cost_miss": 0
+    },
+    "help_lookup": {
+      "turns": 0,
+      "ctx_tokens": 0,
+      "cost_hit": 0,
+      "cost_miss": 0
+    },
+    "error_retry": {
+      "turns": 0,
+      "ctx_tokens": 0,
+      "cost_hit": 0,
+      "cost_miss": 0
+    },
+    "repeat_chain": {
+      "chains": []
+    }
+  },
+  "whiff_turns": 50,
+  "whiff_per_100": 3.63,
+  "whiff_share": 0.0363
+}

@@ -60,6 +60,7 @@ const {
   isOpusFableModel,
 } = require('./lib/brief-header-template.js');
 const { BRIEF_HEAD_WINDOW, headLines, findHeadMatch } = require('./lib/brief-head.js');
+const { gateHint } = require('./lib/gate-hint.js');
 const { isPmConsole, pmConsoleStatus } = require('./_shared/pm-console.js');
 const { findTaskId, checkTaskOpen } = require('../scripts/lib/fleet-task-ref.js');
 const { resolveFleetSeat } = require('./_shared/fleet-seat.js');
@@ -307,7 +308,7 @@ function checkPmFleetTask(input, toolInput, prompt) {
   warnIfPmSeatUndetermined(input);
   if (!isPmConsole(input)) return;
   const subagentType = String(toolInput.subagent_type || '').trim();
-  if (PM_READ_ONLY_SUBAGENT_TYPES.has(subagentType) || String(toolInput.model || '').toLowerCase().includes('haiku')) return;
+  if (PM_READ_ONLY_SUBAGENT_TYPES.has(subagentType)) return;
   const hasEngine = Boolean(engineTokenFromPrompt(prompt))
     || Boolean(findHeadMatch(prompt, /^Engine:\s*\S/));
   if (!hasEngine) return;
@@ -317,6 +318,7 @@ function checkPmFleetTask(input, toolInput, prompt) {
   if (!taskId) {
     emitDeny(
       'PM Console 派工硬阻擋：此 subagent brief 帶有 Engine: 標頭，但前 10 行缺少 Fleet-Task: <26-char id> 綁定。請先開啟或挑選對應的 fleet 任務（使用 fleet task show <id> 確認狀態為 open），並將「Fleet-Task: <id>」加入 brief 前 10 行後再重新派工。'
+      + gateHint('先開或挑一個 open 的 fleet 任務，把 Fleet-Task: <id> 放進 brief 前 10 行再派工', 'hooks/README.md')
     );
   }
 
@@ -329,10 +331,12 @@ function checkPmFleetTask(input, toolInput, prompt) {
   if (probe.state === 'not_found') {
     emitDeny(
       `PM Console 派工硬阻擋：查無此單 Fleet-Task: ${taskId}。PM 席位自己的 courier 沒有此任務；若任務開在其他 courier，請綁定此 courier 持有的 open 任務，並將「Fleet-Task: <id>」加入 brief 前 10 行後再重新派工。`
+      + gateHint('改綁此 courier 持有的 open 任務（fleet task show <id> 確認），把新的 Fleet-Task: <id> 放進 brief 前 10 行', 'hooks/README.md')
     );
   }
   emitDeny(
     `PM Console 派工硬阻擋：brief 中的 Fleet-Task: ${taskId} 已結束（closed: done/failed/cancelled）。請開啟或挑選進行中的 open 任務（使用 fleet task show ${taskId} 確認），並將新的「Fleet-Task: <id>」加入 brief 前 10 行後再重新派工。`
+    + gateHint('改綁進行中的 open 任務，把新的 Fleet-Task: <id> 放進 brief 前 10 行再派工', 'hooks/README.md')
   );
 }
 
@@ -433,6 +437,7 @@ function mechanicalReroute(input, toolInput, prompt) {
     + (isReadOnly ? '；此為唯讀類工作，brief 內寫明「不得修改檔案，結果寫在回覆」，並用拋棄式分支' : '');
   emitDeny(
     `PM / Lead 席位機械性工作轉派阻擋：偵測到 ${seat} 席位以 Claude subagent 執行機械性任務（Role: ${matchedRole}）。請改用低成本引擎派工：${cmd}；若確有必要使用 Claude subagent，請在 brief 的 Engine: 行加上 (intentional: <原因>)。`
+    + gateHint('用 scripts/dispatch-hetero.sh 改派低成本引擎；非用 Claude 不可時在 Engine: 行加 (intentional: <原因>)', 'hooks/README.md')
   );
 }
 
@@ -498,7 +503,8 @@ function checkOverloadedClaudeMechanical(toolInput, prompt, advisories) {
     : [];
   const suggested = targets.find((t) => !overCeilingPools.has(t.toLowerCase())) || targets[0] || 'agy';
 
-  const msg = `dispatch-model-guard: Claude pool is overloaded; mechanical subagent (Role: ${matchedRole}) must not land on Claude. Use ${suggested} instead (set AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=warn to warn only).`;
+  const msg = `dispatch-model-guard: Claude pool is overloaded; mechanical subagent (Role: ${matchedRole}) must not land on Claude. Use ${suggested} instead (set AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=warn to warn only).`
+    + gateHint(`改派 ${suggested} 引擎；要降級為警示才設 AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=warn`, 'hooks/README.md');
   if (process.env.AUTOPILOT_DISPATCH_MODEL_GUARD_MODE === 'warn') {
     advisories.push(msg);
     return;
@@ -515,7 +521,8 @@ function denyIfMissingCostLine(config, prompt, modelForCost) {
   if (!missingCostLine(prompt, modelForCost)) return;
   const line = costLineFor(modelForCost);
   handleDeny(
-    'dispatch-model-guard: require_cost_line: add this line within the first 6 lines: ' + line,
+    'dispatch-model-guard: require_cost_line: add this line within the first 6 lines: ' + line
+    + gateHint('在 brief 前 6 行補上這行 Cost line 再派工', 'hooks/README.md'),
     config.mode,
   );
 }
@@ -595,7 +602,8 @@ function checkBriefSizeUsedByStages(config, prompt, advisories) {
   if (!usedByOk) missing.push('Used-by: user|e2e|n/a <reason>');
   if (missing.length > 0) {
     const reason = 'dispatch-model-guard: brief_size_used_by: autopilot brief (Lane: present) is missing '
-      + missing.join(' and ') + '.\n' + BRIEF_HEADER_TEMPLATE;
+      + missing.join(' and ') + '.\n' + BRIEF_HEADER_TEMPLATE
+      + gateHint('照模板在 brief 頭部補上缺的 Size / Used-by 行再派工', 'hooks/README.md');
     if (config.brief_size_used_by === 'deny') {
       handleDeny(reason, config.mode);
     } else {
@@ -727,7 +735,8 @@ try {
       const got = firstLine !== null ? firstLine : '(none)';
       handleDeny(
         `dispatch-model-guard: prompt line 1 must be "Engine: <model>…" matching model: ${modelRaw} (got: ${got})`
-        + headerDenialSuffix(promptRaw, modelRaw, { engineBy: 'self', laneBy: 'other' }),
+        + headerDenialSuffix(promptRaw, modelRaw, { engineBy: 'self', laneBy: 'other' })
+        + gateHint('brief 第 1 行改成與 model: 一致的 "Engine: <model>"', 'hooks/README.md'),
         config.mode
       );
     }
@@ -737,7 +746,7 @@ try {
   // `(intentional: …)` does not skip it: handleGuard's allow path is below.
   denyIfMissingCostLine(config, promptRaw, modelRaw);
 
-  // PM Console hard block: Engine dispatches require an open Fleet-Task, except read-only types and Haiku models.
+  // PM Console hard block: Engine dispatches require an open Fleet-Task, except read-only types.
   checkPmFleetTask(input, toolInput, promptRaw);
 
   // Mechanical subagent reroute on PM / lead seats.
@@ -761,7 +770,8 @@ try {
     if (brainReason === null) {
       handleDeny(
         `dispatch-model-guard: model '${modelRaw}' (opus/fable) requires its justification — add a non-empty `
-        + '"Model-Reason: <why>" line within the first 8 lines of the brief and re-dispatch',
+        + '"Model-Reason: <why>" line within the first 8 lines of the brief and re-dispatch'
+        + gateHint('在 brief 前 8 行補一行 "Model-Reason: <why>" 再重新派工', 'hooks/README.md'),
         config.mode,
       );
     }
@@ -779,7 +789,8 @@ try {
       && /^Engine:/.test(firstLine)
       && (INTENTIONAL_RE.test(firstLine) || brainReason !== null);
     handleGuard(
-      `dispatch-model-guard: model '${modelRaw}' is a guarded expensive engine`,
+      `dispatch-model-guard: model '${modelRaw}' is a guarded expensive engine`
+      + gateHint('改派便宜引擎（scripts/resolve-dispatch.sh --role <role>），或保留此引擎並在 Engine: 行加 (intentional: <why>)', 'hooks/README.md'),
       config.mode,
       { acknowledged, onAllow: exitAllow },
     );

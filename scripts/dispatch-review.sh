@@ -331,6 +331,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# shellcheck source=lib/agent-event-emit.sh
+[ -r "$_REVIEW_SELF_DIR/lib/agent-event-emit.sh" ] && . "$_REVIEW_SELF_DIR/lib/agent-event-emit.sh" && {
+  agent_event_emit_init "reviewer" "${RUNNER:-claude}" ""
+  agent_event_emit_accepted
+  agent_event_emit_register_exit_trap
+} || true
+
 # Every interpolated value goes through json_escape: an unescaped quote in a message
 # (e.g. a model id quoted inside a reason string) silently produced INVALID JSON, which
 # a parsing caller reads as a transport failure rather than a precondition failure.
@@ -1888,6 +1895,16 @@ DERIVED="$(printf 'autopilot-review-v1:%s' "$NONCE" | sha256sum | awk '{print su
 BEGIN="<<<AUTOPILOT-REVIEW-${DERIVED}>>>"
 END="<<<AUTOPILOT-END-${DERIVED}>>>"
 {
+  if [ "$RAW_ANSWER" = 1 ]; then
+    [ -z "$SPEC_FILE" ] || cat "$SPEC_FILE"
+    cat <<'EOF'
+
+Diff under review:
+```
+EOF
+    cat "$DIFF_FILE"
+    printf '\n```\n'
+  else
   cat <<EOF
 You are a code reviewer. Review ONLY the diff for correctness, security, completeness. Do NOT edit/create files or projects, or run commands. Output ONLY a wrapped block (no other text/fences), beginning with:
 ${BEGIN}
@@ -1988,6 +2005,7 @@ Diff under review:
 EOF
   cat "$DIFF_FILE"
   printf '\n```\n%s\n' "$END"
+  fi
 } > "$PROMPT_FILE"
 
 # Heads-up on stderr ONLY (never stdout — that carries the JSON contract): the review call

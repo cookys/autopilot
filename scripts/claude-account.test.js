@@ -8,8 +8,9 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { cli, createScrubber } = require('./claude-account.js');
-const { makeFixture, R401, R429, R429_USAGE, ERR_EXIT0, OK } = require('./lib/account-fixtures/shim-install.js');
+const { cli, createScrubber, resolveClaudeBinary } = require('./claude-account.js');
+const { makeFixture, loadPatched, R401, R429, R429_USAGE, ERR_EXIT0, OK } = require('./lib/account-fixtures/shim-install.js');
+const audit = require('./lib/account-audit');
 const quota = require('./lib/account-quota.js');
 
 async function go(fx, args, extraEnv, now) {
@@ -28,6 +29,75 @@ const outcomes = (fx) => auditLines(fx).map((r) => `${r.alias}:${r.attempt}:${r.
 const snap = (alias, pct) => ({
   schema: quota.SCHEMA, alias, root: null, written_at_ms: Date.now(),
   five_hour: { pct, resets_at: Math.floor(Date.now() / 1000) + 3600 }, seven_day: null,
+});
+
+test('Claude binary resolution prefers PATH, then local bin, then bare name', () => {
+  const fx = makeFixture();
+  try {
+    const empty = path.join(fx.root, 'empty');
+    const local = path.join(fx.realHome, '.local', 'bin', 'claude');
+    fs.mkdirSync(empty);
+    fs.mkdirSync(path.dirname(local), { recursive: true });
+    fs.copyFileSync(fx.shim.shimPath, local);
+    fs.chmodSync(local, 0o755);
+    assert.strictEqual(resolveClaudeBinary({ PATH: empty }, fx.realHome), local);
+    assert.strictEqual(resolveClaudeBinary({ PATH: `${empty}:${fx.shim.binDir}` }, fx.realHome), fx.shim.shimPath);
+    fs.chmodSync(local, 0o644);
+    assert.strictEqual(resolveClaudeBinary({ PATH: empty }, fx.realHome), 'claude');
+  } finally { fx.cleanup(); }
+});
+
+async function periodicProbe(response, demand, localBinary = false) {
+  const fx = makeFixture({ aliases: [{ alias: 'a' }], responses: { a: response }, probeFromManifest: true });
+  try {
+    if (localBinary) {
+      const bin = path.join(fx.realHome, '.local', 'bin');
+      fs.mkdirSync(bin, { recursive: true });
+      fs.writeFileSync(path.join(bin, 'claude'), fs.readFileSync(fx.shim.shimPath, 'utf8').replace('#!/usr/bin/env node', `#!${process.execPath}`), { mode: 0o755 });
+      fs.copyFileSync(fx.shim.controlFile, path.join(bin, 'shim-control.json'));
+      fx.env.PATH = path.join(fx.root, 'empty');
+      fs.mkdirSync(fx.env.PATH);
+    }
+    const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, 'quota-adapters', 'claude.json'), 'utf8'));
+    const evidence = 'docs/plans/evidence/2026-11-03-g40-agent-lane-quota/capability-matrix.md';
+    Object.assign(manifest, { starts_window: false, starts_window_evidence: evidence, starts_window_confidence: 'high' });
+    manifest.capture.find((x) => x.mode === 'tinyprobe').quota_share_per_probe = { percent: 0.5, window: 'rolling_5h', evidence };
+    const file = path.join(fx.root, 'manifest.json');
+    fs.writeFileSync(file, JSON.stringify(manifest));
+    const patched = loadPatched(path.join(__dirname, 'claude-account.js'), [["path.join(__dirname, 'quota-adapters', 'claude.json')", JSON.stringify(file)]]).cli;
+    const now = Date.now();
+    if (demand) audit.appendAudit({ alias: 'a', purpose: 'tst', attempt: 1, outcome: 'ok' }, { path: fx.auditFile, now: now - 3600000 });
+    let out = ''; let err = '';
+    const code = await patched(['usage-probe', '--due'], { env: fx.env, realHome: fx.realHome, warn: () => {}, now: () => now, write: (fd, d) => { if (fd === 1) out += d; else err += d; } });
+    return { code, out, err, spawns: fx.shim.spawns() };
+  } finally { fx.cleanup(); }
+}
+
+test('periodic due probe failure returns child error and identifies the alias', async () => {
+  const r = await periodicProbe(ERR_EXIT0, true);
+  assert.strictEqual(r.code, 5);
+  assert.deepStrictEqual(JSON.parse(r.out), { due: ['a'], probed: [{ alias: 'a', outcome: 'child_error' }] });
+  assert.match(r.err, /^probe_failed alias=a outcome=child_error\n$/m);
+});
+
+test('periodic due probe succeeds when all probes succeed', async () => {
+  const r = await periodicProbe(OK, true);
+  assert.strictEqual(r.code, 0);
+  assert.deepStrictEqual(JSON.parse(r.out), { due: ['a'], probed: [{ alias: 'a', outcome: 'ok' }] });
+  assert.strictEqual(r.err, '');
+});
+
+test('periodic due probe finds the local binary with an empty PATH', async () => {
+  const r = await periodicProbe(OK, true, true);
+  assert.strictEqual(r.code, 0);
+  assert.deepStrictEqual(JSON.parse(r.out), { due: ['a'], probed: [{ alias: 'a', outcome: 'ok' }] });
+});
+
+test('periodic probe with nothing due succeeds without spawning', async () => {
+  const r = await periodicProbe(OK, false);
+  assert.strictEqual(r.code, 0);
+  assert.deepStrictEqual(JSON.parse(r.out), { due: [], probed: [] });
+  assert.strictEqual(r.spawns, 0);
 });
 function findToken(dir, token, skip) {
   const hits = [];

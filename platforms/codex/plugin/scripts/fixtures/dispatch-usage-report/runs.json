@@ -1,0 +1,6 @@
+[
+  {"age_days":1,"runner":"codex","model":"alpha","final_status":"committed","usage":{"input_tokens":12,"output_tokens":4}},
+  {"age_days":2,"runner":"codex","model":"alpha","final_status":"no_op"},
+  {"age_days":3,"runner":"grok","model":"beta","final_status":"failed","error_category":"timeout"},
+  {"age_days":8,"runner":"grok","model":"beta","final_status":"committed"}
+]

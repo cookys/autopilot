@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0501 -->
+<!-- next-id: BL-0508 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -2315,41 +2315,140 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: autopilot lane, 2026-11-22 (01M801WE / 01M7V30B / 01M802A25 follow-ups)
 - **Pointer**: none
 
-### dispatch 無提交誤標 rate_limited
+### CN 閘門擋下本地席位後的雲端備援，帶 pace 檔的情形沒有測試
 - **Id**: BL-0498
 - **Status**: open
 - **Since**: 2026-11-22
 - **Origin**: self
-- **Problem**: dispatch-hetero 對乾淨結束卻無提交的派工誤標 error_category 為 auth_failed 或 rate_limited，巡查與人會被誤導去看錯誤類別；應標 agent_declined 並附 agent 最後一段話。autopilot 席 2026-11-22 五次。
-- **Impact**: 誤導判讀派工失敾原因，重派錯引擎
-- **Trigger**: 下次派工乾淨結束卻無提交時
+- **Problem**: CN 模型閘門把本地席位判為擋下、改送雲端席位時，若派工帶了 pace 檔，這條路徑沒有測試；共用的沙箱環境還會把閘門的判定從擋下翻成放行，讓測試重現不了擋下的情境。
+- **Impact**: 閘門擋下後的 pace 選座路徑沒有回歸保護，改壞時沒有人知道。
+- **Trigger**: 下次修改 CN 模型閘門或雲端備援選座邏輯時
 - **Trigger-Type**: event
 - **Effort**: S
-- **Source**: self 2026-11-22
+- **Source**: autopilot lane (reviewer 01M806DD), 2026-11-22
 - **Pointer**: none
 
-### land.sh 失敗不清 land-<label> worktree
+### pace 雲端備援選中的席位沒有套用該席位的工作量
 - **Id**: BL-0499
 - **Status**: open
 - **Since**: 2026-11-22
 - **Origin**: self
-- **Problem**: par/land.sh 落地失敗時殘留 land-<label> worktree，需手動 git worktree remove --force 才能重跑；影響重跑速度與磁碟。autopilot 席 2026-11-22。
-- **Impact**: 每次落地失敗多一道手動清理
-- **Trigger**: 下次落地失敗時
+- **Problem**: 本地原因觸發備援、改由 pace 選出雲端席位時，這條選座路徑沒有像預設的 pace 區塊那樣套用選中席位該跑的工作量（effort），兩條路徑的行為不一致。
+- **Impact**: 備援改跑的座次可能用錯工作量，成本或品質與 pace 的安排不符。
+- **Trigger**: 下次修改 pace 雲端備援或工作量套用邏輯時
 - **Trigger-Type**: event
 - **Effort**: S
-- **Source**: self 2026-11-22
+- **Source**: autopilot lane (reviewer 01M806DD), 2026-11-22
 - **Pointer**: none
 
-### bare-ls 守門誤判 command ls
+### 本地席位預探不查端點活性，跑一半斷線不轉雲端
 - **Id**: BL-0500
 - **Status**: open
 - **Since**: 2026-11-22
 - **Origin**: self
-- **Problem**: bash-footgun-guard 對 $(command ls …) 內的 ls 也誤報，且建議改寫成 command command ls；應放行顯式 command ls 並給正確改寫。autopilot 席 2026-11-22。
-- **Impact**: 守門誤報打斷正常操作
-- **Trigger**: 下次在 Bash 工具用 $(command ls …) 時
+- **Problem**: 挑本地席位前的預探只看就緒標記檔，不確認端點實際有回應；跑工中途端點斷線時，也沒有備援改送雲端 runner 的路徑。
+- **Impact**: 本地端點中途掛掉時，該單會中斷或卡住，沒有後備路徑接住。
+- **Trigger**: 下次修改本地席位預探或備援改送邏輯時
 - **Trigger-Type**: event
+- **Effort**: M
+- **Source**: autopilot lane (01M7ZMCG / 01M7Y9PS), 2026-11-22
+- **Pointer**: none
+
+### 子代理預算不認單行的 Engine 欄位頭，lane 上限不生效
+- **Id**: BL-0501
+- **Status**: open
+- **Since**: 2026-11-22
+- **Origin**: self
+- **Problem**: 開工提示會登上一行式欄位頭（Engine、Role、Lane 併成一行），但子代理預算守衛只認分行寫法，遇到單行頭就讀不到 lane，該 lane 的預算上限悄悄不生效。
+- **Impact**: 用單行頭開工子代理時沒有 lane 上限保護，超額不會被擋。
+- **Trigger**: 下次修改子代理預算守衛或開工提示的欄位頭寫法時
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: autopilot seat, 2026-11-22
+- **Pointer**: none
+- **Context**: 與 BL-0338（單行提示模板被守衛擋）同一家族，本列是 lane 上限靜默失靈的一面。
+
+### fleet 的 task_result 對不上的任務號回 unknown_message
+- **Id**: BL-0502
+- **Status**: open
+- **Since**: 2026-11-22
+- **Origin**: peer
+- **Reporter**: fleet
+- **Report**: 01M7R4PE
+- **Reply**: none
+- **Problem**: 查詢用的任務號與派工訊息的號不一致時，fleet 端的 task_result 直接回 unknown_message，拿不到那張單的結果。這是 fleet 側的問題，本列僅回報。
+- **Impact**: 部分單無法以任務號對帳結果，派工端查不到回報。
+- **Trigger**: fleet 端下次處理結果查詢的號對映時
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: fleet 01M7R4PE 2026-11-22
+- **Pointer**: none
+
+### glm 席位工作目錄必須指向主複本，可能誤切正式複本
+- **Id**: BL-0503
+- **Status**: open
+- **Since**: 2026-11-22
+- **Origin**: peer
+- **Reporter**: hangar
+- **Report**: 01M8064F
+- **Reply**: none
+- **Problem**: 為了共享記憶，glm 席位的工作目錄要指到主複本，這樣席位就可能誤在正式複本上切分支。建議加一道鉤子，對 glm 席位拒絕在主複本上切分支與清庫動作。
+- **Impact**: 一旦誤切，host 所 pin 的正式版本會被動到，影響所有讀主複本的流程。
+- **Trigger**: 下次修改 glm 席位目錄政策或主複本保護時
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: PEER-REPORTED hangar 2026-11-22
+- **Pointer**: none
+
+### cursor 成功送達的單被標成認證失敗
+- **Id**: BL-0504
+- **Status**: open
+- **Since**: 2026-11-22
+- **Origin**: self
+- **Problem**: 派工把 cursor 引擎成功送達的單標成認證失敗（auth_failed），失敗分類標錯，實際上是成功的送達。
+- **Impact**: 成功單被計入失敗分類，人會去查登入，失敗統計失真。
+- **Trigger**: 下次修改派工失敗分類標記邏輯時
+- **Trigger-Type**: event
+- **Effort**: XS
+- **Source**: autopilot lane 2026-11-22 (run hetero-1795275899-3318601-9099)
+- **Pointer**: none
+- **Context**: 與 BL-0441（auth_failed 誤標）同一家族，本列是 cursor 成功送達被誤標的實例。
+
+### 經 hippo 寫目標端 backlog 會撞上寫外檢查，合併要多帶原號
+- **Id**: BL-0505
+- **Status**: open
+- **Since**: 2026-11-22
+- **Origin**: self
+- **Problem**: 手用 hippo 把 backlog 列寫進目標 repo 時，會碰到目標端 pre-commit 的寫外檢查（hippo 日誌不在 worktree 裡），之後每次合併都要用原提交號做非快進合併才能過。
+- **Impact**: 每次合併都多一道手工步驟，跳過就會被擋或弄壞單一寫者對帳。
+- **Trigger**: 下次修改 hippo 寫入路徑或目標端寫外檢查時
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: autopilot lane 2026-11-22
+- **Pointer**: none
+
+### dispatch 乾淨結束無提交時 error_category 誤標
+- **Id**: BL-0506
+- **Status**: open
+- **Since**: 2026-11-22
+- **Origin**: self
+- **Problem**: dispatch 派工乾淨結束但無提交時，error_category 誤標為 auth_failed／rate_limited；應標 agent_declined 並在結果帶 agent 最後一段話。反映：本席 11-22 多次實測。
+- **Impact**: 誤導除錯與重試策略，e2e 實測難以辨識 agent 主動拒絕與基礎設施失敗。
+- **Trigger**: 修 dispatch 結果分類
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: self 2026-11-22
+- **Pointer**: none
+
+### land.sh 失敗時未清 land worktree
+- **Id**: BL-0507
+- **Status**: open
+- **Since**: 2026-11-22
+- **Origin**: self
+- **Problem**: land.sh 落地失敗時不清 land-<label> worktree，殘留要手動 remove --force。反映：本席 11-22。
+- **Impact**: 失敗後殘留 worktree 佔用磁碟並干擾後續 land 與 worktree 衛生檢查。
+- **Trigger**: 修 land.sh 失敗清理
+- **Trigger-Type**: ready
 - **Effort**: S
 - **Source**: self 2026-11-22
 - **Pointer**: none

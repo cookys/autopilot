@@ -18,12 +18,12 @@ import { brokenRow, pendingMissingReason, pendingSourceMissing, wrapRow } from '
 import type { Row } from './rows'
 import { STRIP_SPLIT_COLS } from './layout'
 import { PICK_KEYS } from '../v74/contract'
-import { v75On } from '../v75'
+import { fixedWindow, keyed, keyedGrow, thumbOf } from '../scrollmath'
 import type { DecideCard } from '../v74/contract'
 
 // ---- view state and the key reducer ----
 // DecideState (model.ts) carries picks, notes, sent and hold (the 10 s undo window, by card id); the rest is this page's own: which card shows in full, whether the others are folded, the note mode and its buffer, the focused option beyond a)–e)
-export type DecideNav = DecideState & { cursor: number; folded: boolean; textMode: boolean; textBuf: string; opt: number | null; detailOffset?: number; armed?: boolean; snap?: string; stale?: boolean }
+export type DecideNav = DecideState & { cursor: number; folded: boolean; textMode: boolean; textBuf: string; opt: number | null; detailOffset?: number; armed?: boolean; snap?: string; stale?: boolean; style?: 'D' | 'C'; bgOpen?: boolean }
 export const NO_NAV: DecideNav = { ...NO_DECIDE, cursor: 0, folded: false, textMode: false, textBuf: '', opt: null }
 export type DecideCtx = PageCtx & { decide?: DecideNav }
 export type DecideEffect = { kind: 'send'; id: string; line: string } | { kind: 'undo'; id: string } | { kind: 'fill'; text: string } | null
@@ -77,7 +77,7 @@ export const v74Pool = (pending: readonly LiveDecision[], feed: readonly DecideC
   return [...pending, ...(feed ?? []).filter(c => !held.has(c.id)).map(cardToLive)]
 }
 
-// v7.5 §7.2: the preview is bound to the whole send list. One item per card that would go out: its id, its version (a hash of what the owner read: question, background, option labels), the letter and the note.
+// The preview is bound to the whole send list. One item per card that would go out: its id, its version (a hash of what the owner read: question, background, option labels), the letter and the note.
 const djb = (x: string): string => { let h = 5381; for (const ch of x) h = ((h * 33) ^ ch.codePointAt(0)!) >>> 0; return h.toString(36) }
 export const cardVersion = (d: LiveDecision): string => djb([d.question, d.background ?? '', ...d.options.map(o => o.label)].join('\u0001'))
 export function decideReadySig(nav: DecideNav, ctx: PageCtx): string {
@@ -85,15 +85,6 @@ export function decideReadySig(nav: DecideNav, ctx: PageCtx): string {
   const items = m.all.flatMap(it => (it.kind === 'own' && it.d.id !== null && nav.hold?.[it.d.id] === undefined && !(nav.sent[it.d.id] !== undefined && nav.fixing?.[it.d.id] === undefined) && decideLine(it.d, nav) !== null
     ? [[it.d.id, cardVersion(it.d), decidePick(it.d, nav), nav.notes[it.d.id] ?? ''] as const] : []))
   return JSON.stringify(items)
-}
-// the cards a send would carry, in card order, as the preview and the band's third row name them (v7.5 §7.2)
-export function previewItems(nav: DecideNav, ctx: PageCtx): { n: number; title: string; letter: string; label: string; note: string }[] {
-  const m = modelOf(ctx)
-  return m.all.flatMap((it, i) => {
-    if (it.kind !== 'own' || it.d.id === null || nav.hold?.[it.d.id] !== undefined || (nav.sent[it.d.id] !== undefined && nav.fixing?.[it.d.id] === undefined) || decideLine(it.d, nav) === null) return []
-    const at = decidePick(it.d, nav)
-    return at === null ? [] : [{ n: i + 1, title: it.d.title ?? it.d.id, letter: letterOf(at), label: it.d.options[at]?.label ?? '', note: (nav.notes[it.d.id] ?? '').trim() }]
-  })
 }
 // a preview that is open but whose list no longer matches the frozen one
 export const previewStale = (nav: DecideNav, ctx: PageCtx): boolean => nav.armed === true && nav.snap !== undefined && (nav.stale === true || nav.snap !== decideReadySig(nav, ctx))
@@ -110,16 +101,26 @@ export function decideReduce(nav: DecideNav, key: KeyAction, ctx: PageCtx, nowMs
   const heldNow = d !== null && d.id !== null && nav.hold?.[d.id] !== undefined
   const sentNow = d !== null && d.id !== null && nav.sent[d.id] !== undefined && nav.fixing?.[d.id] === undefined
   if (key.kind === 'disarm') return same({ armed: false, snap: undefined, stale: false })
-  // v7.5 gate 21: a pick (or a saved note) under an open preview does not close it: the preview stays and is stale, y is refused with the reason until `s` previews again
+  // A pick (or a saved note) under an open preview does not close it: the preview stays and is stale, y is refused with the reason until `s` previews again
   if (nav.armed === true && nav.snap !== undefined && (key.kind === 'pick' || key.kind === 'text_save')) {
     const r = decideReduce({ ...nav, armed: false, snap: undefined, stale: false }, key, ctx, nowMs)
     return { nav: { ...r.nav, armed: true, snap: nav.snap, stale: nav.stale === true }, effect: r.effect }
   }
   if (nav.armed === true && key.kind !== 'submit' && key.kind !== 'confirm') return decideReduce({ ...nav, armed: false, snap: undefined, stale: false }, key, ctx, nowMs) // any other key cancels the send preview, then does its own work
-  if (v74Cards(ctx) !== null && key.kind === 'move') return same({ cursor: Math.min(Math.max(0, m.all.length - 1), Math.max(0, cursor + key.by)), opt: null, detailOffset: 0 })
-  if (v74Cards(ctx) !== null && key.kind === 'cursor') return same({ cursor: Math.min(Math.max(0, m.all.length - 1), Math.max(0, key.at)), opt: null, detailOffset: 0 })
+  if (key.kind === 'style') return same({ style: (nav.style ?? 'D') === 'D' ? 'C' : 'D', bgOpen: false, detailOffset: 0 })
+  if (key.kind === 'expand') {
+    if (nav.bgOpen) return same({ bgOpen: false, detailOffset: 0 })
+    if (d === null) return same({})
+    const bgRaw = d.background ?? ctx.t('v74.d.bg_none')
+    const bgLines = bgRaw.split('\n')
+    const bgLabelW = displayWidth('  ' + ctx.t('v74.d.bg') + '  ')
+    const hasMoreBg = bgLines.length > 1 || displayWidth(bgLines[0]) > ctx.size.cols - bgLabelW
+    return hasMoreBg ? same({ bgOpen: true, detailOffset: 0 }) : same({})
+  }
+  if (v74Cards(ctx) !== null && key.kind === 'move') return same({ cursor: Math.min(Math.max(0, m.all.length - 1), Math.max(0, cursor + key.by)), opt: null, detailOffset: 0, bgOpen: false })
+  if (v74Cards(ctx) !== null && key.kind === 'cursor') return same({ cursor: Math.min(Math.max(0, m.all.length - 1), Math.max(0, key.at)), opt: null, detailOffset: 0, bgOpen: false })
   if (v74Cards(ctx) !== null && key.kind === 'confirm' && nav.armed !== true) return same({}) // y means nothing outside the send preview
-  if (v74Cards(ctx) !== null && (key.kind === 'submit' || key.kind === 'confirm')) { // s only opens (or redraws) the preview; y sends every answered card of the FROZEN preview list (v7.5 §7.2)
+  if (v74Cards(ctx) !== null && (key.kind === 'submit' || key.kind === 'confirm')) { // s only opens (or redraws) the preview; y sends every answered card of the FROZEN preview list
     const ready = m.all.flatMap(it => (it.kind === 'own' && it.d.id !== null && nav.hold?.[it.d.id] === undefined && !(nav.sent[it.d.id] !== undefined && nav.fixing?.[it.d.id] === undefined) ? [it.d] : []))
       .flatMap(c => { const line = decideLine(c, nav); return line === null ? [] : [{ id: c.id as string, line }] })
     if (ready.length === 0) return same({ armed: false, snap: undefined, stale: false })
@@ -485,7 +486,7 @@ function v74Card(c: DecideCard, i: number, selected: boolean, nav: DecideNav, ct
   // with its own card:N, so the cursor event writes the index the ▸ already has.
   const head = box
     ? [seg(mark + '  ' + String(i + 1) + '. ', selected ? {} : { press: 'card:' + i }), title, seg('：' + c.question)]
-    : [seg(mark + '  ' + String(i + 1) + '. ', selected || !v75On() ? {} : { press: 'card:' + i }), title, seg('：' + c.question)] // v7.5: the card number on the Pane's left edge is the click target (fullscreen only; elsewhere a label)
+    : [seg(mark + '  ' + String(i + 1) + '. '), title, seg('：' + c.question)]
   out.push(box ? head : truncateSegs(head, cols))
   const bg = c.background ?? t('v74.d.bg_none')
   // J1: the real Pane draws cards through this path (not boxOpen): the open card's background is shown in full (one row per line, wrapped on the label's hanging indent, never cut), the frame scrolls it; the other cards keep one cut row
@@ -564,7 +565,8 @@ function boxOpen(c: DecideCard, i: number, nav: DecideNav, ctx: PageCtx, fit: Fi
   const picked = nav.picks[c.id]
   const held = nav.hold?.[c.id] !== undefined
   const sent = nav.sent[c.id] !== undefined && nav.fixing?.[c.id] === undefined
-  const out: Row[] = [wrapRow([seg(GLYPHS.structure.folded + '  ' + String(i + 1) + '. '), seg(c.title, { color: PALETTE.here, here: true }), seg('：' + c.question)], ctx.size.cols, 5)[0], ...gap]
+  const heading = wrapRow([seg(GLYPHS.structure.folded + '  ' + String(i + 1) + '. '), seg(c.title, { color: PALETTE.here, here: true }), seg('：' + c.question)], ctx.pendingScroll === undefined ? ctx.size.cols : width, 5)
+  const out: Row[] = [...(ctx.pendingScroll === undefined ? heading.slice(0, 1) : heading), ...gap]
   out.push(...labelledBox(t('v74.d.bg'), c.background ?? t('v74.d.bg_none'), width), ...gap)
   c.options.forEach((o, k) => {
     if (k > 0 && fit.between) out.push([seg('')])
@@ -572,7 +574,7 @@ function boxOpen(c: DecideCard, i: number, nav: DecideNav, ctx: PageCtx, fit: Fi
     const tone = picked === k ? pickedTone() : o.recommended ? { color: PALETTE.attention } : {}
     const label = (k < THREE ? PICK_KEYS[k] + ': ' : DOT + ' ') + o.label
     const rec = o.recommended ? [seg('  ' + GLYPHS.structure.recommend + ' ' + t('v74.d.rec'), { color: PALETTE.attention })] : []
-    out.push([seg('    '), seg(label + mark, tone), ...rec])
+    out.push([seg('    '), seg(label + mark, { ...tone, ...(ctx.pendingScroll !== undefined && !held && !sent && k < THREE ? { press: 'key:' + PICK_KEYS[k] } : {}) }), ...rec])
     if (o.detail !== '' && fit.desc) out.push(...wrapRow([seg('       '), dimSeg(o.detail)], width, 7))
   })
   if (held) out.push([seg('    '), dimSeg(t('v74.d.held', { k: picked === undefined ? '-' : String(PICK_KEYS[picked] ?? picked + 1) }))])
@@ -581,6 +583,47 @@ function boxOpen(c: DecideCard, i: number, nav: DecideNav, ctx: PageCtx, fit: Fi
   const noteText = nav.textMode ? nav.textBuf + CARET : note === '' ? t('v74.d.note_empty') : note
   out.push(...gap, [seg('    m ' + t('v74.d.note')), seg(noteText)])
   return out
+}
+
+// The host Pane keeps a card's complete text in its own vertical window. Actions
+// remain outside this body and frameRows always places them above the footer.
+function pendingBody(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: number, room: number): Row[] {
+  const state = ctx.pendingScroll!
+  const width = Math.min(80, ctx.size.cols) - 1
+  const listRows = Math.min(cards.length, 8, Math.max(1, Math.floor(room / 2) - 1))
+  keyedGrow(state.list, cards.map(c => c.id))
+  if (state.cursor !== cards[cursor].id) {
+    if (cursor < state.list.offset || cursor >= state.list.offset + listRows) state.list.offset = Math.floor(cursor / listRows) * listRows
+    state.cursor = cards[cursor].id
+  }
+  const list = fixedWindow(cards.length, listRows, state.list)
+  const queue: Row[] = [[dimSeg(ctx.t('page.decide.range', { a: list.offset + 1, b: list.offset + list.rows, n: cards.length }) + (ctx.box === true ? ' · ' + ctx.t('v74.d.head', { n: cards.length, k: cursor + 1 }) : ''))],
+    ...cards.slice(list.offset, list.offset + list.rows).map((c, k) => {
+      const at = list.offset + k
+      const row = truncateSegs(boxSummary(c, at, nav, { ...ctx, size: { ...ctx.size, cols: width } }).map(s => ({ ...s, text: s.text.replace(/\s/g, ' ') })), width)
+      return at === cursor ? row.map(s => ({ ...s, color: PALETTE.here, text: s === row[0] ? GLYPHS.structure.folded + s.text.slice(1) : s.text })) : row
+    }),
+  ]
+  if (list.hint) queue.push([dimSeg([
+    list.above > 0 ? ctx.t('page.decide.more_up', { n: list.above, arrow: GLYPHS.structure.up }) + ctx.t('shell.scroll_key_up') : '',
+    list.below > 0 ? ctx.t('page.decide.more_down', { n: list.below, arrow: GLYPHS.structure.behind }) + ctx.t('shell.scroll_key_down') : '',
+  ].filter(Boolean).join('  '))])
+  room = Math.max(1, room - queue.length)
+  const model = state.detail
+  keyed(model, cards[cursor].id)
+  const full = boxOpen(cards[cursor], cursor, nav, { ...ctx, size: { ...ctx.size, cols: width } }, { loose: false, collapse: false, between: true, desc: true }).flatMap(row => wrapRow(row, width, 5))
+  const win = fixedWindow(full.length, Math.max(1, room - (full.length > room ? 1 : 0)), model)
+  const thumb = thumbOf(full.length, win.rows, win.offset)
+  const shown = full.slice(win.offset, win.offset + win.rows).map((row, i) => {
+    if (thumb === null) return row
+    const on = i >= thumb.top && i < thumb.top + thumb.len
+    return [...row, seg(' '.repeat(Math.max(0, width - row.reduce((n, s) => n + displayWidth(s.text), 0)))), seg(on ? GLYPHS.scrollbar.thumb : GLYPHS.scrollbar.track, { color: on ? PALETTE.here : PALETTE.structure })]
+  })
+  if (win.hint) shown.push([dimSeg([
+    win.above > 0 ? GLYPHS.structure.up + ' ' + ctx.t('shell.more_up', { n: win.above }) : '',
+    win.below > 0 ? GLYPHS.structure.behind + ' ' + ctx.t('shell.more_down', { n: win.below }) : '',
+  ].filter(Boolean).join('  '))])
+  return [...queue, ...shown]
 }
 // The card at the cursor is the open one, at its own place in the list; every other card keeps its order as one summary row. `collapse` folds the cards before it and the cards after it into
 // one row each (`另有 N 張 · ↑↓ 換張`).
@@ -606,14 +649,249 @@ function boxBody(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: numb
   if (fit.collapse) return [head, ...more(cards.slice(0, cursor), 0), ...boxOpen(cards[cursor], cursor, nav, ctx, fit), ...more(cards.slice(cursor + 1), cursor + 1)]
   return [head, ...cards.flatMap((c, i) => (i === cursor ? boxOpen(c, i, nav, ctx, fit) : [boxSummary(c, i, nav, ctx)]))]
 }
-function renderBoxV74(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: number, actions: Row[]): { body: Row[]; actions: Row[] } {
+function renderBoxC(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: number, actions: Row[]): { body: Row[]; actions: Row[] } {
   const { t } = ctx
   const cols = ctx.size.cols
-  const head = ruleTo(GLYPHS.structure.open + ' ' + t('v74.d.head', { n: cards.length, k: cursor + 1 }), cols)
-  const room = Math.max(1, ctx.size.rows - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - 1 - actions.length) // the head row of the frame, the strip and the key-hint border are not the page's
-  let body = boxBody(ctx, cards, nav, cursor, FIT_STEPS[0], head)
-  for (const fit of FIT_STEPS.slice(1)) if (body.length > room) body = boxBody(ctx, cards, nav, cursor, fit, head)
+  const c = cards[cursor]
+  const room = Math.max(1, ctx.size.rows - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - 1 - actions.length)
+  if (nav.bgOpen === true) {
+    const width = Math.max(20, Math.min(80, cols) - 1)
+    const countRow: Row = [dimSeg(t('v74.d.c_count', { k: cursor + 1, n: cards.length }))]
+    const full = labelledBox(t('v74.d.bg'), c.background ?? t('v74.d.bg_none'), width).flatMap(r => wrapRow(r, width, BOX_LABEL_HANG))
+    const bgRoom = Math.max(1, ctx.size.rows - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - 1 - 1)
+    if (ctx.pendingScroll !== undefined) {
+      const model = ctx.pendingScroll.detail
+      keyed(model, c.id + ':bg')
+      const win = fixedWindow(full.length, Math.max(1, bgRoom - (full.length > bgRoom ? 1 : 0)), model)
+      const thumb = thumbOf(full.length, win.rows, win.offset)
+      const shown = full.slice(win.offset, win.offset + win.rows).map((row, i) => {
+        if (thumb === null) return row
+        const on = i >= thumb.top && i < thumb.top + thumb.len
+        return [...row, seg(' '.repeat(Math.max(0, width - row.reduce((n, s) => n + displayWidth(s.text), 0)))), seg(on ? GLYPHS.scrollbar.thumb : GLYPHS.scrollbar.track, { color: on ? PALETTE.here : PALETTE.structure })]
+      })
+      if (win.hint) shown.push([dimSeg([
+        win.above > 0 ? GLYPHS.structure.up + ' ' + t('shell.more_up', { n: win.above }) : '',
+        win.below > 0 ? GLYPHS.structure.behind + ' ' + t('shell.more_down', { n: win.below }) : '',
+      ].filter(Boolean).join('  '))])
+      return { body: [countRow, ...shown], actions: [] }
+    }
+    return { body: [countRow, ...full.slice(0, bgRoom)], actions: [] }
+  }
+  const build = (between: boolean, desc: boolean, omitted: boolean): { rows: Row[]; headEnd: number } => {
+    const countText = t('v74.d.c_count', { k: cursor + 1, n: cards.length }) + (omitted ? ' ' + DOT + ' ' + t('v74.d.c_desc_omitted') : '')
+    const out: Row[] = [[dimSeg(countText)]]
+    out.push(...wrapRow([seg(GLYPHS.structure.folded + '  '), seg(c.title, { color: PALETTE.here, here: true }), seg('：' + c.question)], cols, 3))
+    const bgRaw = c.background ?? t('v74.d.bg_none')
+    const bgLines = bgRaw.split('\n')
+    const bgFirst = bgLines[0]
+    const expandHint = '  ' + DOT + ' ' + t('v74.d.c_expand')
+    const bgLabel = '  ' + t('v74.d.bg') + '  '
+    const bgLabelW = displayWidth(bgLabel)
+    const hasMoreBg = bgLines.length > 1 || displayWidth(bgFirst) > cols - bgLabelW
+    if (hasMoreBg) {
+      const bgAvail = Math.max(4, cols - bgLabelW - displayWidth(expandHint))
+      const bgLine = displayWidth(bgFirst) <= bgAvail ? bgFirst : truncateToWidth(bgFirst, bgAvail)
+      out.push([dimSeg(bgLabel), seg(bgLine), dimSeg(expandHint)])
+    } else {
+      out.push([dimSeg(bgLabel), seg(bgFirst)])
+    }
+    const headEnd = out.length
+    const picked = nav.picks[c.id]
+    const held = nav.hold?.[c.id] !== undefined
+    const sent = nav.sent[c.id] !== undefined && nav.fixing?.[c.id] === undefined
+    c.options.forEach((o, k) => {
+      if (k > 0 && between) out.push([seg('')])
+      const mark = picked === k ? ' ' + GLYPHS.structure.answer : ''
+      const tone = picked === k ? pickedTone() : o.recommended ? { color: PALETTE.attention } : {}
+      const label = (k < THREE ? PICK_KEYS[k] + ': ' : DOT + ' ') + o.label
+      const rec = o.recommended ? [seg('  ' + GLYPHS.structure.recommend + ' ' + t('v74.d.rec'), { color: PALETTE.attention })] : []
+      out.push([seg('  '), seg(label + mark, { ...tone, ...(ctx.pendingScroll !== undefined && !held && !sent && k < THREE ? { press: 'key:' + PICK_KEYS[k] } : {}) }), ...rec])
+      if (o.detail !== '' && desc) out.push(...wrapRow([seg('     '), dimSeg(o.detail)], cols, 5))
+    })
+    if (held) out.push([seg('  '), dimSeg(t('v74.d.held', { k: picked === undefined ? '-' : String(PICK_KEYS[picked] ?? picked + 1) }))])
+    else if (sent) out.push([seg('  '), dimSeg(t('v74.d.sent'))])
+    const note = nav.notes[c.id] ?? ''
+    const noteText = nav.textMode ? nav.textBuf + CARET : note === '' ? t('v74.d.note_empty') : note
+    out.push([seg('  m ' + t('v74.d.note')), seg(noteText)])
+    return { rows: out, headEnd }
+  }
+  let body = build(true, true, false)
+  if (body.rows.length > room) body = build(false, true, false)
+  if (body.rows.length > room) body = build(false, false, true)
+  const pad = Math.max(0, room - body.rows.length)
+  const padded = pad > 0 ? [...body.rows.slice(0, body.headEnd), ...Array.from({ length: pad }, (): Row => [seg('')]), ...body.rows.slice(body.headEnd)] : body.rows
+  return { body: padded, actions }
+}
+function padRowTo(row: Row, width: number): Row {
+  const cut = widthOf(row) > width ? truncateSegs(row, width) : row
+  const w = widthOf(cut)
+  return w >= width ? cut : [...cut, seg(' '.repeat(width - w))]
+}
+
+function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: number, actions: Row[]): { body: Row[]; actions: Row[] } {
+  const { t } = ctx
+  const cols = ctx.size.cols
+  const c = cards[cursor]
+  const room = Math.max(1, ctx.size.rows - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - 1 - actions.length)
+  const picked = nav.picks[c.id]
+  const held = nav.hold?.[c.id] !== undefined
+  const sent = nav.sent[c.id] !== undefined && nav.fixing?.[c.id] === undefined
+  const recIx = c.options.findIndex(o => o.recommended)
+  const statusText = sent ? t('v74.d.sent') : held ? t('v74.d.sum_held') : picked !== undefined ? `${GLYPHS.structure.answer} ${letterOf(picked)}` : GLYPHS.state.pending
+  const recText = recIx >= 0 ? ` · ${GLYPHS.structure.recommend} ${letterOf(recIx)}` : ''
+  const single = cards.length === 1
+
+  // Build right-pane detail lines for `c`
+  const buildDetail = (detailW: number): Row[] => {
+    const innerW = Math.max(10, detailW - 2)
+    const out: Row[] = []
+    out.push(...wrapRow([seg(c.title, { color: PALETTE.here, here: true }), seg('：' + c.question)], innerW, 2))
+    out.push([seg('')])
+    c.options.forEach((o, k) => {
+      if (k > 0) out.push([seg('')])
+      const mark = picked === k ? ' ' + GLYPHS.structure.answer : ''
+      const tone = picked === k ? pickedTone() : o.recommended ? { color: PALETTE.attention } : {}
+      const keyLabel = (k < PICK_KEYS.length ? PICK_KEYS[k] : letterOf(k))
+      const rec = o.recommended ? [seg('  ' + GLYPHS.structure.recommend + ' ' + t('v74.d.rec'), { color: PALETTE.attention })] : []
+      out.push(...wrapRow([seg('  '), seg(`[${keyLabel}] ${o.label}${mark}`, { ...tone, ...(ctx.pendingScroll !== undefined && !held && !sent && k < PICK_KEYS.length ? { press: 'key:' + PICK_KEYS[k] } : {}) }), ...rec], innerW, 6))
+      if (o.detail !== '') out.push(...wrapRow([seg('      '), dimSeg(o.detail)], innerW, 6))
+    })
+    out.push([seg('')])
+    out.push(...labelledBox(t('v74.d.bg'), c.background ?? t('v74.d.bg_none'), innerW))
+    out.push([seg('')])
+    if (held) out.push([seg('  '), dimSeg(t('v74.d.held', { k: picked === undefined ? '-' : String(PICK_KEYS[picked] ?? picked + 1) }))])
+    else if (sent) out.push([seg('  '), dimSeg(t('v74.d.sent'))])
+    const note = nav.notes[c.id] ?? ''
+    const noteText = nav.textMode ? nav.textBuf + CARET : note === '' ? t('v74.d.note_empty') : note
+    out.push(...wrapRow([seg('  m ' + t('v74.d.note')), seg(noteText)], innerW, 6))
+    return out
+  }
+
+  const scrollDetail = (detailRows: Row[], detailW: number, visRows: number): Row[] => {
+    const innerW = Math.max(10, detailW - 2)
+    if (ctx.pendingScroll === undefined) {
+      return Array.from({ length: visRows }, (_, i) => padRowTo(detailRows[i] ?? [seg('')], detailW))
+    }
+    const model = ctx.pendingScroll.detail
+    keyed(model, c.id)
+    const needHint = detailRows.length > visRows
+    const win = fixedWindow(detailRows.length, Math.max(1, visRows - (needHint ? 1 : 0)), model)
+    const thumb = thumbOf(detailRows.length, win.rows, win.offset)
+    const shown: Row[] = []
+    for (let i = 0; i < win.rows; i++) {
+      const row = detailRows[win.offset + i] ?? [seg('')]
+      if (thumb === null) {
+        shown.push(padRowTo(row, detailW))
+      } else {
+        const on = i >= thumb.top && i < thumb.top + thumb.len
+        shown.push([...padRowTo(row, innerW + 1), seg(on ? GLYPHS.scrollbar.thumb : GLYPHS.scrollbar.track, { color: on ? PALETTE.here : PALETTE.structure })])
+      }
+    }
+    if (win.hint) {
+      const hintText = [
+        win.above > 0 ? GLYPHS.structure.up + ' ' + t('shell.more_up', { n: win.above }) : '',
+        win.below > 0 ? GLYPHS.structure.behind + ' ' + t('shell.more_down', { n: win.below }) : '',
+      ].filter(Boolean).join('  ')
+      shown.push(padRowTo([dimSeg(hintText)], detailW))
+    }
+    while (shown.length < visRows) shown.push(padRowTo([seg('')], detailW))
+    return shown
+  }
+
+  if (single) {
+    const headRow: Row = truncateSegs([dimSeg(`${ctx.t('v74.d.card_single')} · ${statusText}${recText}`)], cols)
+    const sepRow: Row = [dimSeg(GLYPHS.structure.rule.repeat(cols))]
+    const midRoom = Math.max(1, room - 2)
+    const detailRows = buildDetail(cols)
+    const rightShown = scrollDetail(detailRows, cols, midRoom)
+    return { body: [headRow, sepRow, ...rightShown], actions }
+  }
+
+  const leftW = cols >= 160 ? 44 : cols >= 120 ? 34 : 28
+  const rightW = Math.max(20, cols - leftW - 3)
+  const midRoom = Math.max(1, room - 2)
+
+  // Left + Right header
+  const leftHead = padRowTo([dimSeg(leftW >= 34 ? ctx.t('v74.d.list_long', { n: cards.length }) : ctx.t('v74.d.list_short', { n: cards.length }))], leftW)
+  const rightHead = padRowTo([dimSeg(`${ctx.t('v74.d.card_of', { k: String(cursor + 1).padStart(2, '0'), n: cards.length })} · ${statusText}${recText}`)], rightW)
+  const headRow: Row = [...leftHead, dimSeg(' ' + GLYPHS.structure.bandSep + ' '), ...rightHead]
+  const sepRow: Row = [dimSeg(GLYPHS.structure.rule.repeat(leftW + 3 + rightW))]
+
+  // Left pane with independent scroll + scrollMargin = 2.
+  // Selected card is plain text (not a Button) so host Down/Up is not eaten as cursor-at-self (r7); non-selected cards carry card:N.
+  const renderLeftRow = (item: DecideCard, idx: number): Row => {
+    const isCur = idx === cursor
+    const p = nav.picks[item.id]
+    const hasRec = item.options.some(o => o.recommended)
+    const mark = isCur ? GLYPHS.structure.folded + ' ' : '  '
+    const num = String(idx + 1).padStart(2, '0') + ' '
+    const suffix = (hasRec ? ' ' + GLYPHS.structure.recommend : '') + (p !== undefined ? ' ' + GLYPHS.structure.answer + letterOf(p) : ' ' + GLYPHS.state.pending)
+    const titleRoom = Math.max(4, leftW - displayWidth(mark + num + suffix))
+    const title = truncateToWidth(item.title, titleRoom)
+    const pad = ' '.repeat(Math.max(0, leftW - displayWidth(mark + num + title + suffix)))
+    const row: Row = isCur
+      ? [seg(mark + num + title, { color: PALETTE.here, here: true }), seg(pad + suffix, { color: PALETTE.here })]
+      : [seg(mark + num + title, { press: 'card:' + idx }), dimSeg(pad + suffix)]
+    return padRowTo(row, leftW)
+  }
+
+  const leftShown: Row[] = []
+  const needListHint = cards.length > midRoom && midRoom >= 2
+  const listCap = needListHint ? midRoom - 1 : midRoom
+  let listOffset = 0
+  let listCount = Math.min(cards.length, listCap)
+  let listAbove = 0
+  let listBelow = 0
+  if (ctx.pendingScroll !== undefined) {
+    const listState = ctx.pendingScroll.list
+    keyedGrow(listState, cards.map(x => x.id))
+    const margin = Math.min(2, Math.floor(listCap / 3))
+    if (ctx.pendingScroll.cursor !== c.id) {
+      if (cursor < listState.offset + margin) listState.offset = Math.max(0, cursor - margin)
+      else if (cursor >= listState.offset + listCap - margin) listState.offset = Math.max(0, cursor - listCap + margin + 1)
+      ctx.pendingScroll.cursor = c.id
+    }
+    const listWin = fixedWindow(cards.length, listCap, listState)
+    listOffset = listWin.offset
+    listCount = listWin.rows
+    listAbove = listWin.above
+    listBelow = listWin.below
+  } else {
+    const maxOff = Math.max(0, cards.length - listCap)
+    listOffset = Math.max(0, Math.min(maxOff, cursor < listCap ? 0 : cursor - listCap + 1))
+    listCount = Math.min(cards.length - listOffset, listCap)
+    listAbove = listOffset
+    listBelow = Math.max(0, cards.length - listOffset - listCount)
+  }
+  for (let k = 0; k < listCount; k++) {
+    leftShown.push(renderLeftRow(cards[listOffset + k], listOffset + k))
+  }
+  if (needListHint && (listAbove > 0 || listBelow > 0)) {
+    const hiddenPicked = cards.filter((x, idx) => (idx < listOffset || idx >= listOffset + listCount) && nav.picks[x.id] !== undefined).length
+    const pickedTail = hiddenPicked > 0 ? '（已選 ' + hiddenPicked + '）' : ''
+    const hintStr = listAbove > 0 && listBelow > 0
+      ? GLYPHS.structure.up + ' ' + listAbove + ' 張 ' + GLYPHS.structure.behind + ' ' + listBelow + ' 張' + pickedTail
+      : [
+          listAbove > 0 ? GLYPHS.structure.up + ' 上面還有 ' + listAbove + ' 張' : '',
+          listBelow > 0 ? GLYPHS.structure.behind + ' 下面還有 ' + listBelow + ' 張' : '',
+        ].filter(Boolean).join(' ') + pickedTail
+    leftShown.push(padRowTo([dimSeg(hintStr)], leftW))
+  }
+  while (leftShown.length < midRoom) leftShown.push(padRowTo([seg('')], leftW))
+
+  const detailRows = buildDetail(rightW)
+  const rightShown = scrollDetail(detailRows, rightW, midRoom)
+
+  const body: Row[] = [headRow, sepRow]
+  for (let i = 0; i < midRoom; i++) {
+    body.push([...leftShown[i], dimSeg(' ' + GLYPHS.structure.bandSep + ' '), ...rightShown[i]])
+  }
   return { body, actions }
+}
+
+function renderBoxV74(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: number, actions: Row[]): { body: Row[]; actions: Row[] } {
+  if (ctx.size.cols < 100 || (nav.style ?? 'D') === 'C') return renderBoxC(ctx, cards, nav, cursor, actions)
+  return renderBoxD(ctx, cards, nav, cursor, actions)
 }
 
 function renderV74(ctx: PageCtx): { body: Row[]; actions: Row[] } {
@@ -630,8 +908,7 @@ function renderV74(ctx: PageCtx): { body: Row[]; actions: Row[] } {
   const left = cards.length - ready
   // `s` sends the picked cards only: say how many go and how many stay (nothing after the `·` when none stay)
   const sendText = '[s] ' + t('v74.d.send_all', { n: ready }) + (left > 0 ? ' ' + DOT + ' ' + t('v74.d.unpicked', { n: left }) : '')
-  // v7.5: the host Pane holds no preview of its own (it is drawn in the band, one list for both places); with one open this row says where it is and that y sends it
-  const actions: Row[] = [[ctx.box !== true && nav.armed === true && ready > 0 ? seg(previewStale({ ...nav, snap: dn?.snap, stale: dn?.stale }, ctx) ? t('v75.stale') : t('v75.pane_armed', { n: ready }), { press: 'key:y', color: PALETTE.attention }) : seg(sendText, { press: 'key:s' })]]
+  const actions: Row[] = [[seg(sendText, { press: 'key:s' })]]
   if (ctx.box === true) {
     const m = ctx.v74?.sendResult
     // r11 #3: after the first s the preview lists every card that goes out: number, title, letter, option name, note (cut by chars). Rows beyond the action area end in 「…另 N 張」.
@@ -659,6 +936,10 @@ function renderV74(ctx: PageCtx): { body: Row[]; actions: Row[] } {
     ])
   }
   const head = ruleTo(GLYPHS.structure.open + ' ' + t('v74.d.head', { n: cards.length, k: cursor + 1 }), cols)
+  if (ctx.pendingScroll !== undefined) {
+    const room = Math.max(1, ctx.size.rows - 1 - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - actions.length)
+    return { body: pendingBody(ctx, cards, nav, cursor, room), actions }
+  }
   const blocks = cards.map((c, i) => [...v74Card(c, i, i === cursor, nav, ctx, nav.picks, nav.notes), [seg('')]])
   // a short allocation: leading cards go first so the selected one stays on screen (the frame cuts the tail)
   const room = Math.max(1, ctx.size.rows - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - actions.length)

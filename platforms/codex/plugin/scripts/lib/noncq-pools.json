@@ -31,6 +31,20 @@
     "model": "gemini-4-hydrogen-low",
     "max_parallel": 2
   },
+  "agyneon": {
+    "key": "agyneon",
+    "runner": "agy",
+    "model": "gemini-4-neon-high",
+    "max_parallel": 2,
+    "verified_at": "2026-11-22T10:15:00+08:00",
+    "verified_by": "agy --output-format stream-json --model gemini-4-neon-high -p='...' init.model = gemini-4-neon-high (live call 2026-11-22, conversation b99bab9b-91c6-41d9-899d-1a5a589df5d7)"
+  },
+  "agyneon-medium": {
+    "key": "agyneon-medium",
+    "runner": "agy",
+    "model": "gemini-4-neon-medium",
+    "max_parallel": 2
+  },
   "agyclaude": {
     "key": "agyclaude",
     "runner": "agy",

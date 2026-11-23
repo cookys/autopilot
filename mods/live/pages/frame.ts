@@ -22,9 +22,12 @@ import type { Row } from './rows'
 import type { Step } from '../speed'
 import type { PoolEta } from './spend'
 import type { V74Ctx } from '../v74/contract'
+import type { ScrollModel } from '../scrollmath'
+
+export type PendingScroll = { list: ScrollModel; detail: ScrollModel; cursor: string }
 
 export type { Row } from './rows'
-export interface PageCtx { poolEta?: PoolEta | null; room?: readonly { seq: number; from: string; kind: string; text: string }[]; live: LiveSnapshot | null; console: ConsoleSnapshot | null; size: { cols: number; rows: number }; t: T; nowMs: number; shortBody?: boolean; steps?: readonly Step[]; pet?: unknown; v74?: V74Ctx; box?: true } // box: drawn inside the v7.4 band frame (not the host Pane)
+export interface PageCtx { pendingScroll?: PendingScroll; poolEta?: PoolEta | null; room?: readonly { seq: number; from: string; kind: string; text: string }[]; live: LiveSnapshot | null; console: ConsoleSnapshot | null; size: { cols: number; rows: number }; t: T; nowMs: number; shortBody?: boolean; steps?: readonly Step[]; pet?: unknown; v74?: V74Ctx; box?: true } // box: drawn inside the v7.4 band frame (not the host Pane)
 export type PageId = 'now' | 'decide' | 'fleet' | 'quota' | 'dispatch' | 'review' | 'spend' | 'hygiene' | 'pet' | 'room' | 'forge' | 'help' | 'todo'
 // `framed` (optional, additive): true once the page is filled in; pane.tsx draws a framed page through frameRows and an unframed shell the old way, so S0 changes nothing on screen
 export interface Page { id: PageId; key: string; title: string; framed?: true; render(ctx: PageCtx): { body: Row[]; actions: Row[]; overflow?: true } }
@@ -112,8 +115,10 @@ const keysWord = (ctx: PageCtx): string => (ctx.v74?.keysHeld === true ? ctx.t('
 const cardless = (page: Page, ctx: PageCtx): boolean => (page.id === 'decide' || page.id === 'todo') && ctx.v74 !== undefined && (ctx.v74[page.id] ?? []).length === 0
 // r11 #4: while the send preview is up, Esc means one thing (cancel the preview), so the border says so and nothing else
 const armed = (page: Page, ctx: PageCtx): boolean => page.id === 'decide' && ctx.decide?.armed === true && !cardless(page, ctx)
-export const frameHintText = (page: Page, ctx: PageCtx): string => armed(page, ctx) ? ctx.t('v74.b.border.armed') : ctx.t(cardless(page, ctx) ? 'v74.b.border.cardless' : V74_BORDER_KEY[page.id] ?? 'v74.b.border.default', { ud: GLYPHS.structure.up + GLYPHS.structure.behind, keys: keysWord(ctx) })
-export const frameHintShort = (page: Page, ctx: PageCtx): string => armed(page, ctx) ? ctx.t('v74.b.short.armed') : ctx.t(cardless(page, ctx) ? 'v74.b.short.scroll' : V74_SHORT_KEY[page.id] ?? 'v74.b.short.scroll', { ud: GLYPHS.structure.up + GLYPHS.structure.behind })
+const bgOpen = (page: Page, ctx: PageCtx): boolean => page.id === 'decide' && ctx.decide?.bgOpen === true && !cardless(page, ctx)
+const styleC = (page: Page, ctx: PageCtx): boolean => page.id === 'decide' && ctx.decide?.style === 'C' && !cardless(page, ctx)
+export const frameHintText = (page: Page, ctx: PageCtx): string => armed(page, ctx) ? ctx.t('v74.b.border.armed') : bgOpen(page, ctx) ? ctx.t('v74.b.border.decide_bg', { ud: GLYPHS.structure.up + GLYPHS.structure.behind }) : styleC(page, ctx) ? ctx.t('v74.b.border.decide_c', { keys: keysWord(ctx) }) : ctx.t(cardless(page, ctx) ? 'v74.b.border.cardless' : V74_BORDER_KEY[page.id] ?? 'v74.b.border.default', { ud: GLYPHS.structure.up + GLYPHS.structure.behind, keys: keysWord(ctx) })
+export const frameHintShort = (page: Page, ctx: PageCtx): string => armed(page, ctx) ? ctx.t('v74.b.short.armed') : bgOpen(page, ctx) ? ctx.t('v74.b.short.decide_bg', { ud: GLYPHS.structure.up + GLYPHS.structure.behind }) : styleC(page, ctx) ? ctx.t('v74.b.short.decide_c') : ctx.t(cardless(page, ctx) ? 'v74.b.short.scroll' : V74_SHORT_KEY[page.id] ?? 'v74.b.short.scroll', { ud: GLYPHS.structure.up + GLYPHS.structure.behind })
 export function frameBorderRow(page: Page, ctx: PageCtx): Row {
   return [{ text: GLYPHS.structure.frameBL + GLYPHS.structure.rule + ' ' + frameHintText(page, ctx), dim: true }]
 }
@@ -195,6 +200,8 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
   const droppedDecideAct = first.actions.some(x => x.some(s => s.press === 'tab:2:decide'))
   const layout = (r: { body: Row[]; actions: Row[] }, short = false) => {
     const read = page.id === 'decide' || page.id === 'todo' || page.id === 'help'
+    // Dual-column decide (renderBoxD) already lays out left + divider + right to exact ctx.size.cols; wrapping at 80 splits every row in half and hides the bottom scroll hint.
+    const dualDecide = page.id === 'decide' && ctx.v74 !== undefined && ctx.box === true && ctx.size.cols >= 100 && !styleC(page, ctx)
     const body = r.body.filter(x => read || x.some(s => s.text.trim() !== '')).flatMap(x => {
       if (opts.topAnchor === true && x.map(s => s.text).join('').trimStart().startsWith(GLYPHS.structure.open + ' ') && x.map(s => s.text).join('').trimEnd().endsWith(GLYPHS.structure.rule)) { // only section rules (they end in ─); a ▾ legend row is text
         const row = x.map(s => ({ ...s }))
@@ -206,7 +213,7 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
       }
       const joined = x.map(s => s.text).join('')
       const lead = /^ */.exec(joined)?.[0].length ?? 0
-      const width = read ? Math.min(80, ctx.size.cols) : ctx.size.cols
+      const width = read && !dualDecide ? Math.min(80, ctx.size.cols) : ctx.size.cols
       const hang = read ? Math.max(WRAP_HANG, Math.min(lead, Math.max(0, width - 4))) : WRAP_HANG
       return wrapRow(x, width, hang)
     })

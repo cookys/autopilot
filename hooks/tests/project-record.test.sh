@@ -189,6 +189,42 @@ H "$R_H" check >/dev/null; eq 0 "$?" "hippo: hippo check passes after every subc
 BADIDS="$(H "$R_H" list --history | jf 'd.data.records.filter(r=>!/^[0-9A-HJKMNP-TV-Z]{26}$/.test(r.id)).length')"
 eq 0 "$BADIDS" "hippo: every record id is a 26-char ULID"
 
+# Store-backed handoffs must match the existing files-mode golden views.
+R_HV="$(mk_fixture handoff-view store)"
+HF="$R_HV/docs/projects/demo/HANDOFF.md"
+GOLD="$REPO_ROOT/hooks/tests/fixtures/record-files/golden"
+node -e 'const i=require(process.argv[1]).input; require("fs").writeFileSync(process.argv[2], i.body); require("fs").writeFileSync(process.argv[3], i.decisions[0]); require("fs").writeFileSync(process.argv[4], i.lessons[0])' "$REPO_ROOT/hooks/tests/fixtures/record-files/inputs/handoff-new.json" "$TEST_TMP/gold-body" "$TEST_TMP/gold-decision" "$TEST_TMP/gold-lesson"
+pr --target "$R_HV" --json handoff new --title Demo --area demo --body-file "$TEST_TMP/gold-body" --decision-file "$TEST_TMP/gold-decision" --lesson-file "$TEST_TMP/gold-lesson"
+eq 0 "$RC" "handoff view: new succeeds"
+HV_ID="$(printf '%s' "$OUT" | jf d.id)"
+cmp -s "$HF" "$GOLD/handoff-new/files/docs/projects/demo/HANDOFF.md"; eq 0 "$?" "handoff view: new matches golden"
+node -e 'require("fs").writeFileSync(process.argv[2], require(process.argv[1]).input.body)' "$REPO_ROOT/hooks/tests/fixtures/record-files/inputs/handoff-replace.json" "$TEST_TMP/gold-replace"
+pr --target "$R_HV" --json handoff new --title Replacement --area demo --body-file "$TEST_TMP/gold-replace"
+eq 0 "$RC" "handoff view: replacement succeeds"
+HV_ID="$(printf '%s' "$OUT" | jf d.id)"
+cmp -s "$HF" "$GOLD/handoff-replace/files/docs/projects/demo/HANDOFF.md"; eq 0 "$?" "handoff view: replacement matches golden"
+pr --target "$R_HV" --json handoff close "$HV_ID"
+eq 0 "$RC" "handoff view: close succeeds"
+eq done "$(H "$R_HV" show "$HV_ID" | jf d.data.record.status)" "handoff view: store closed"
+[ ! -e "$HF" ]; eq 0 "$?" "handoff view: close removes file like golden"
+
+# A directory at the view path forces real write/remove errors even when running as root.
+mkdir "$HF"
+pr --target "$R_HV" --json handoff new --title "Failed view" --area demo --body-file "$TEST_TMP/gold-body"
+eq 0 "$RC" "handoff view error: new exits successfully"
+eq true "$(printf '%s' "$OUT" | jf d.ok)" "handoff view error: new reports ok"
+assert_contains "$(printf '%s' "$OUT" | jf d.view_error)" "HANDOFF.md" "handoff view error: new reports error"
+assert_contains "$(printf '%s' "$OUT" | jf d.hint)" "Repair" "handoff view error: new provides hint"
+HV_ERROR_ID="$(printf '%s' "$OUT" | jf d.id)"
+eq open "$(H "$R_HV" show "$HV_ERROR_ID" | jf d.data.record.status)" "handoff view error: new record persists"
+pr --target "$R_HV" --json handoff close "$HV_ERROR_ID"
+eq 0 "$RC" "handoff view error: close exits successfully"
+eq true "$(printf '%s' "$OUT" | jf d.ok)" "handoff view error: close reports ok"
+assert_contains "$(printf '%s' "$OUT" | jf d.view_error)" "HANDOFF.md" "handoff view error: close reports error"
+assert_contains "$(printf '%s' "$OUT" | jf d.hint)" "Repair" "handoff view error: close provides hint"
+eq done "$(H "$R_HV" show "$HV_ERROR_ID" | jf d.data.record.status)" "handoff view error: close persists"
+rmdir "$HF"
+
 # --- validation exits 3 in both modes, nothing written
 for MODE in files hippo; do
   if [ "$MODE" = files ]; then RV="$(mk_fixture val-files)"; else RV="$(mk_fixture val-hippo store)"; fi
@@ -401,16 +437,16 @@ for P in after-create after-first-link after-first-child; do
   fault_run "$P" --target "$R_F" handoff new --title "Fault handoff $P" --area proj --body-file "$TEST_TMP/handoff.md" --decision-file "$TEST_TMP/hd.md" --lesson-file "$TEST_TMP/hl.md"
   pr --target "$R_F" --key "$KEY" handoff new --title "Fault handoff $P" --area proj --body-file "$TEST_TMP/handoff.md" --decision-file "$TEST_TMP/hd.md" --lesson-file "$TEST_TMP/hl.md"
   eq 0 "$RC" "handoff new: rerun after $P succeeds"
-  eq 1 "$(key_count "$R_F" "$KEY")" "handoff new: one note after $P rerun"
+  eq 1 "$(key_count "$R_F" "handoff:$KEY")" "handoff new: one note after $P rerun"
   eq 1 "$(key_count "$R_F" "$KEY.1")" "handoff new: first child once after $P rerun"
   eq 1 "$(key_count "$R_F" "$KEY.2")" "handoff new: second child once after $P rerun"
-  eq 2 "$(edges "$R_F" "$(key_id "$R_F" "$KEY")" relates_to)" "handoff new: both child edges after $P rerun"
+  eq 2 "$(edges "$R_F" "$(key_id "$R_F" "handoff:$KEY")" relates_to)" "handoff new: both child edges after $P rerun"
 done
 HIPPO_BIN="$HS_ROOT/does-not-exist" pr --target "$R_F" handoff new --title "Spooled handoff" --area proj --body-file "$TEST_TMP/handoff.md" --decision-file "$TEST_TMP/hd.md" --lesson-file "$TEST_TMP/hl.md"
 KEY="$(key_of)"
 PROJECT_RECORD_FAULT=before-spool-remove pr --target "$R_F" flush; eq 70 "$RC" "handoff: fault before-spool-remove exit 70"
 pr --target "$R_F" flush; eq 0 "$RC" "handoff: flush rerun"
-eq 111 "$(key_count "$R_F" "$KEY")$(key_count "$R_F" "$KEY.1")$(key_count "$R_F" "$KEY.2")" "handoff: before-spool-remove rerun ends with the exact set"
+eq 111 "$(key_count "$R_F" "handoff:$KEY")$(key_count "$R_F" "$KEY.1")$(key_count "$R_F" "$KEY.2")" "handoff: before-spool-remove rerun ends with the exact set"
 
 OLD="$(H "$R_F" new decision --title "Old decision" --status active | jf 'd.data.ids[0]')"
 for P in after-create after-first-link; do
@@ -439,13 +475,13 @@ KEY="$(key_of)"
 assert_contains "$ERR" "step 3 (create) failed: exit 3" "refused child: the failed step is printed"
 assert_contains "$ERR" "created so far:" "refused child: created ids are printed"
 assert_contains "$ERR" "retry with --key $KEY" "refused child: retry key printed"
-eq 1 "$(key_count "$R_RC" "$KEY")" "refused child: the note exists"
+eq 1 "$(key_count "$R_RC" "handoff:$KEY")" "refused child: the note exists"
 eq 1 "$(key_count "$R_RC" "$KEY.1")" "refused child: first child exists"
 eq 0 "$(key_count "$R_RC" "$KEY.2")" "refused child: second child absent"
 C1="$(key_id "$R_RC" "$KEY.1")"
 pr --target "$R_RC" --key "$KEY" handoff new --title "Refused child" --area proj --body-file "$TEST_TMP/handoff.md" --lesson-file "$TEST_TMP/l1.md" --lesson-file "$TEST_TMP/l2ok.md"
 eq 0 "$RC" "refused child: --key retry succeeds"
-eq 1 "$(key_count "$R_RC" "$KEY")" "refused child: still one note"
+eq 1 "$(key_count "$R_RC" "handoff:$KEY")" "refused child: still one note"
 eq "$C1" "$(key_id "$R_RC" "$KEY.1")" "refused child: first child unchanged"
 eq 1 "$(key_count "$R_RC" "$KEY.2")" "refused child: second child created"
 eq 3 "$(all_count "$R_RC")" "refused child: three records in all"
@@ -649,6 +685,40 @@ BL_PG_LATE="$(H "$R_PG" list --history | jf 'Array.from({length:55},(_,i)=>"BL-"
 assert_contains "$BL_PG_LATE" "BL-" "pagination: the default list page leaves some row out ($BL_PG_LATE)"
 pr --target "$R_PG" --json backlog new --title "Mentions late row" "${BL_FLAGS[@]}" --context "See $BL_PG_LATE for baseline."; eq 0 "$RC" "pagination: backlog new -> exit 0"
 eq 1 "$(edges "$R_PG" "$(printf '%s' "$OUT" | jf 'd.id')" relates_to)" "pagination: mention of a row beyond the first 50 records creates its relates_to edge"
+
+
+# Plan status cutline: old paths never reach hippo or the registry.
+R_PLAN="$(hs_mkrepo plan-cutline store)"
+mkdir -p "$R_PLAN/docs/plans"
+printf 'old plan text\n' > "$R_PLAN/docs/plans/old.md"
+git -C "$R_PLAN" add docs/plans/old.md
+git -C "$R_PLAN" -c user.name=t -c user.email=t@t commit -q -m old --date='2026-11-18T12:00:00Z' --no-gpg-sign -- docs/plans/old.md
+# Committer date is the date the guard reads; set it explicitly on a separate fixture commit.
+GIT_COMMITTER_DATE='2026-11-18T12:00:00Z' GIT_AUTHOR_DATE='2026-11-18T12:00:00Z' git -C "$R_PLAN" commit -q --amend --no-edit --no-gpg-sign
+printf 'new plan text\n' > "$R_PLAN/docs/plans/new.md"
+git -C "$R_PLAN" add docs/plans/new.md
+GIT_COMMITTER_DATE='2026-11-22T12:00:00Z' GIT_AUTHOR_DATE='2026-11-22T12:00:00Z' git -C "$R_PLAN" commit -q -m new --no-gpg-sign
+export AUTOPILOT_M6_CUTLINE=2026-11-20
+PLAN_BEFORE="$(H "$R_PLAN" list --history)"
+PLAN_HASH="$(sha256sum "$R_PLAN/docs/plans/old.md")"
+pr --target "$R_PLAN" --json plan upsert --path docs/plans/old.md --status Draft
+eq 0 "$RC" "plan cutline: old upsert succeeds"
+eq before-cutline "$(printf '%s' "$OUT" | jf d.skipped)" "plan cutline: old skipped"
+eq "$PLAN_HASH" "$(sha256sum "$R_PLAN/docs/plans/old.md")" "plan cutline: old file unchanged"
+eq "$PLAN_BEFORE" "$(H "$R_PLAN" list --history)" "plan cutline: old store unchanged"
+PLAN_REG="$(git -C "$R_PLAN" rev-parse --path-format=absolute --git-common-dir)/autopilot/m6-registry.json"
+[ ! -f "$PLAN_REG" ] || assert_not_contains "$(cat "$PLAN_REG")" 'docs/plans/old.md' "plan cutline: old not registered"
+pr --target "$R_PLAN" --json plan upsert --path docs/plans/new.md --status Draft --owner Alice --frozen-sha abc --milestone M6
+eq 0 "$RC" "plan cutline: new upsert succeeds"
+PLAN_KEY="$(printf '%s' "$OUT" | jf d.key)"
+PLAN_ID="$(printf '%s' "$OUT" | jf d.id)"
+assert_contains "$PLAN_KEY" 'plan:' "plan cutline: key prefix"
+eq 1 "$(key_count "$R_PLAN" "$PLAN_KEY")" "plan cutline: new record exists"
+assert_contains "$(cat "$PLAN_REG")" 'docs/plans/new.md' "plan cutline: new registered"
+pr --target "$R_PLAN" --json plan upsert --path docs/plans/new.md --status Frozen --owner Alice --frozen-sha abc --milestone M6
+eq 0 "$RC" "plan cutline: status update succeeds"
+eq '["plan-status:frozen"]' "$(H "$R_PLAN" show "$PLAN_ID" | jf 'd.data.record.tags.filter(t=>t.startsWith("plan-status:"))')" "plan cutline: status tag swapped"
+unset AUTOPILOT_M6_CUTLINE
 
 hs_exit_check
 finalize_test

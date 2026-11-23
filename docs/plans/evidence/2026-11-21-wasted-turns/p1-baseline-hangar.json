@@ -1,0 +1,228 @@
+{
+  "schema": "autopilot.wasted-turns/1",
+  "seat": "hangar--claude",
+  "mode": "self",
+  "window": {
+    "from": "2026-11-16T06:39:06+08:00",
+    "to": "2026-11-23T06:39:06+08:00"
+  },
+  "turns_total": 19457,
+  "whiff": {
+    "stop_block": {
+      "turns": 0,
+      "ctx_tokens": 0,
+      "cost_hit": 0,
+      "cost_miss": 0
+    },
+    "hook_block": {
+      "turns": 806,
+      "by_hook": {
+        "37": 1,
+        "bash-launch-guard": 165,
+        "bash-footgun-guard": 442,
+        "mcp__fleet__dispatch": 10,
+        "mcp__fleet__reply": 6,
+        "claude-home-read-guard": 9,
+        "Bash": 68,
+        "Read": 1,
+        "dispatch-model-guard": 13,
+        "WARN": 1,
+        "mcp__fleet__send": 86,
+        "FAIL": 1,
+        "mcp__fleet__task_comment": 1,
+        "PII:email": 1,
+        "Agent": 1
+      },
+      "ctx_tokens": 143891480,
+      "cost_hit": 14370368,
+      "cost_miss": 376542
+    },
+    "help_lookup": {
+      "turns": 0,
+      "ctx_tokens": 0,
+      "cost_hit": 0,
+      "cost_miss": 0
+    },
+    "error_retry": {
+      "turns": 19,
+      "ctx_tokens": 4639828,
+      "cost_hit": 430749,
+      "cost_miss": 664684
+    },
+    "repeat_chain": {
+      "chains": [
+        {
+          "shape": "tail -1 /tmp/bundle7.log; /bin/ls -t /home/cookys/projects/fleet/dist/fleet-v2-*.tar.gz | head -1",
+          "count": 12
+        },
+        {
+          "shape": "sleep 2400; echo WAKE",
+          "count": 10
+        },
+        {
+          "shape": "sleep 3000; echo WAKE",
+          "count": 9
+        },
+        {
+          "shape": "grep -aE 'probe (OK|FAIL)|batch done' /tmp/roll-next3.log 2>/dev/null | awk '!seen[$0]++' | tail -3; pgrep -f 'rollout-batc[h]' >/dev/null && echo STILL_RUNNING || echo ENDED",
+          "count": 8
+        },
+        {
+          "shape": "sleep 2700; echo WAKE",
+          "count": 8
+        },
+        {
+          "shape": "tail -1 /tmp/bundle7.log; /bin/ls -t /home/cookys/projects/fleet/dist/fleet-v2-*.tar.gz | head -1 && tail -1 /tmp/bundle7.log; /bin/ls -t /home/cookys/projects/fleet/dist/fleet-v2-*.tar.gz | head -1",
+          "count": 7
+        },
+        {
+          "shape": "grep -aE 'probe (OK|FAIL)|batch done' /tmp/roll-next3.log 2>/dev/null | awk '!seen[$0]++' | tail -3; pgrep -f 'rollout-batc[h]' >/dev/null && echo STILL_RUNNING || echo ENDED && grep -aE 'probe (OK|FAIL)|batch done' /tmp/roll-next3.log 2>/dev/null | awk '!seen[$0]++' | tail -3; pgrep -f 'rollout-batc[h]' >/dev/null && echo STILL_RUNNING || echo ENDED",
+          "count": 6
+        },
+        {
+          "shape": "sleep 1800; echo WAKE",
+          "count": 6
+        },
+        {
+          "shape": "sleep 1500; echo WAKE",
+          "count": 5
+        },
+        {
+          "shape": "sleep 3600; echo WAKE",
+          "count": 5
+        },
+        {
+          "shape": "fleet task show 01M811948M4WCF1XRQX510Z8RD 2>&1 | grep -v '^fleet:' | grep -E '^state' | head -1 && fleet task show 01M811948M4WCF1XRQX510Z8RD 2>&1 | grep -v '^fleet:' | grep -E '^state' | head -1",
+          "count": 3
+        },
+        {
+          "shape": "sleep 1200; echo WAKE",
+          "count": 3
+        },
+        {
+          "shape": "sleep 3300; echo WAKE",
+          "count": 3
+        },
+        {
+          "shape": "bash -c 'L=/tmp/claude-1000/-home-cookys-projects-fleet/506f335d-8848-4ee1-9d8e-9d1c7caefe6c/scratchpad/lanes; bash $L/launch-fix.sh sweep-u8-r7 feat/sweep-u8-r7 cbcf2145 > $L/fx1.log 2>&1 & bash $L/launch-fix.sh dl-sync-r2 fix/dl-sync-r2 163d1a4b > $L/fx2.log 2>&1 & bash $L/launch-fix.sh sg-u4a-r5 feat/sg-u4a-r5 d25588b1 > $L/fx3.log 2>&1 & bash $L/launch-fix.sh sg-u9-r5 feat/sg-u9-r5 6ab8c1ed > $L/fx4.log 2>&1 & wait; cat $L/fx1.log $L/fx2.log $L/fx3.log $L/fx4.log; echo FIX_LAUNCH_DONE'",
+          "count": 2
+        },
+        {
+          "shape": "bash -c 'L=/tmp/claude-1000/-home-cookys-projects-fleet/506f335d-8848-4ee1-9d8e-9d1c7caefe6c/scratchpad/lanes; bash $L/launch-fix.sh sweep-u8-r7 feat/sweep-u8-r7 cbcf2145 > $L/fx1.log 2>&1 & bash $L/launch-fix.sh dl-sync-r2 fix/dl-sync-r2 163d1a4b > $L/fx2.log 2>&1 & bash $L/launch-fix.sh sg-u4a-r5 feat/sg-u4a-r5 d25588b1 > $L/fx3.log 2>&1 & wait; cat $L/fx1.log $L/fx2.log $L/fx3.log; echo FIX_LAUNCH_DONE'",
+          "count": 2
+        },
+        {
+          "shape": "cat /tmp/claude-1000/-home-cookys-projects-fleet/506f335d-8848-4ee1-9d8e-9d1c7caefe6c/scratchpad/r59.out; date +%H:%M",
+          "count": 2
+        },
+        {
+          "shape": "cat >> /run/user/1000/autopilot/handoff/1fe47a06-f269-474e-babf-6c4647ea8ba9.md <<'EOF' ## 收斂完成（09:3xZ）——本席交齊待關 - compact done(90847c36):ctx_nag 巡查(ctx_pct 走 live usage cache 進 Presence;FLEET_CTX_NAG_PCT 預設 95)。worktree/branch 清掉。 - 三張全交:compact/mech/journal。已通知 fleet--claude 轉 hangar 關席。狀態 idle。 - 本日 develop 合併:f2e34fec、47acb943、ca3e3477、2afa2dd1、e5af5f33、79849ac1、90847c36、a0aa8ce2(evidence)。 - 記憶新增:merge_trailer_and_cwd_lessons(12-hex Reviewed-Sha 連續 trailer;git -C 明確)。 - 未竟(供後席或 owner 参考):parity 乾淨輪(等 fleet--claude 班次落定)、10 個 courierd patrol 整合紅(建議開單)、PM 追加兩項(result_reported 催收切 requester、self-close 自動化)、q4-q8(若仍要)。 EOF echo ok",
+          "count": 2
+        },
+        {
+          "shape": "cd /home/cookys/projects/fleet/.claude/worktrees/integ; L=/tmp/claude-1000/-home-cookys-projects-fleet/506f335d-8848-4ee1-9d8e-9d1c7caefe6c/scratchpad/lanes; flock $L/cargo-gate.lock env -i HOME=$HOME PATH=$PATH CARGO_HOME=/home/cookys/.cargo RUSTUP_HOME=/home/cookys/.rustup LANG=C.UTF-8 make courier-test > $L/pace-dup-gate.log 2>&1; echo \"gate rc=$?\"; grep -E \"^error|FAILED|panicked\" $L/pace-dup-gate.log | head -8 | cut -c1-200; tail -1 $L/pace-dup-gate.log | cut -c1-150",
+          "count": 2
+        },
+        {
+          "shape": "cd /tmp/wt-deaf/courier && timeout 300 cargo test -p fleet-courierd --lib 2>&1 | grep -E 'test result' | tail -1",
+          "count": 2
+        },
+        {
+          "shape": "export XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus; systemctl --user daemon-reload && systemctl --user restart fleet-courier.service && sleep 3 && systemctl --user is-active fleet-courier.service && readlink ~/.local/share/fleet/current | xargs -r basename && fleet doctor 2>&1 | grep -c '\\[FAIL\\]'",
+          "count": 2
+        },
+        {
+          "shape": "export XDG_RUNTIME_DIR=/run/user/1000; fleet status --sessions 2>/dev/null | rg \"glm2|fleet--claude\" | head -5",
+          "count": 2
+        },
+        {
+          "shape": "git status --short && git branch --show-current && git log --oneline -3",
+          "count": 2
+        },
+        {
+          "shape": "grep -aE 'probe (OK|FAIL)|batch done' /tmp/roll-next3.log 2>/dev/null | awk '!seen[$0]++' | tail -4; pgrep -f 'rollout-batc[h]' >/dev/null && echo STILL_RUNNING || echo ENDED",
+          "count": 2
+        },
+        {
+          "shape": "grep -aE 'probe (OK|FAIL)|batch done' /tmp/roll-next3.log 2>/dev/null | awk '!seen[$0]++' | tail -5; pgrep -f 'rollout-batc[h]' >/dev/null && echo STILL_RUNNING || echo ENDED",
+          "count": 2
+        },
+        {
+          "shape": "L=/tmp/claude-1000/-home-cookys-projects-fleet/506f335d-8848-4ee1-9d8e-9d1c7caefe6c/scratchpad/lanes; bash $L/launch-par.sh waitfp fix/patrol-wait-note agy gemini-4-hydrogen-high",
+          "count": 2
+        },
+        {
+          "shape": "L=/tmp/claude-1000/-home-cookys-projects-fleet/506f335d-8848-4ee1-9d8e-9d1c7caefe6c/scratchpad/lanes; cd $L/wt-par; for c in CLAUDECODE CLAUDE_CODE_ENTRYPOINT CLAUDE_PID CLAUDE_CODE_SESSION_ID; do unset $c; done; export FLEET_GATE_REMOTE=$(awk -F'|' '$2 ~ /7840hs\\/cookys/{print $3}' $L/courier-flags.md | xargs); s=$(date +%s); bash deploy/gate-remote-courier.sh > $L/remote-ct.log 2>&1; echo rc=$? secs=$(( $(date +%s)-s )); grep -E '^gate-select:|courier-test.sh: (PASS|FAIL)|test result: FAILED' $L/remote-ct.log | sed \"s/$FLEET_GATE_REMOTE/<remote>/g\" | head -8; grep -c 'test result: ok' $L/remote-ct.log",
+          "count": 2
+        },
+        {
+          "shape": "S=/tmp/claude-1000/-home-cookys-projects-fleet/506f335d-8848-4ee1-9d8e-9d1c7caefe6c/scratchpad; (bash $S/r61.sh; echo exit=$?) > $S/r61.out 2>&1",
+          "count": 2
+        },
+        {
+          "shape": "S=/tmp/claude-1000/-home-cookys-projects-fleet/506f335d-8848-4ee1-9d8e-9d1c7caefe6c/scratchpad; $S/r80.sh > $S/r80.out 2>&1; cat $S/r80.out",
+          "count": 2
+        },
+        {
+          "shape": "S=/tmp/claude-1000/-home-cookys-projects-fleet/506f335d-8848-4ee1-9d8e-9d1c7caefe6c/scratchpad; A=/home/cookys/projects/autopilot; cd /home/cookys/projects/fleet || exit 1; env -u CLAUDECODE -u CLAUDE_PID node $A/scripts/dispatch-plan-review.js --repo-root . --plan-file docs/plans/2026-11-16-fleet-status-board.md --rubric-file $S/board/rubric.md --ticket fleet-status-board --session-id 506f335d-board --generation 1 --manifest-file $S/board/manifest.json --context-file courier/crates/courierd/src/usage_wiring.rs --context-file hub/src/usage.ts --context-file hub/src/tasks.ts --timeout 20m --expect-revision HEAD --allow-unregistered > $S/board/pr-g1.out 2>&1; echo rc=$? >> $S/board/pr-g1.out; tail -3 $S/board/pr-g1.out",
+          "count": 2
+        },
+        {
+          "shape": "S=/tmp/claude-1000/-home-cookys-projects-fleet/506f335d-8848-4ee1-9d8e-9d1c7caefe6c/scratchpad; bash $S/r38.sh > $S/r38.out 2>&1; echo \"rc=$?\" >> $S/r38.out; cat $S/r38.out",
+          "count": 2
+        },
+        {
+          "shape": "S=/tmp/claude-1000/-home-cookys-projects-fleet/506f335d-8848-4ee1-9d8e-9d1c7caefe6c/scratchpad; cat $S/r58.out; tail -3 /tmp/claude-1000/-home-cookys-projects-fleet/506f335d-8848-4ee1-9d8e-9d1c7caefe6c/tasks/bhpvseo0h.output",
+          "count": 2
+        },
+        {
+          "shape": "S=/tmp/claude-1000/-home-cookys-projects-fleet/506f335d-8848-4ee1-9d8e-9d1c7caefe6c/scratchpad; W=/home/cookys/projects/fleet/.claude/worktrees/agent-addf6a478c6d129ff; cd $W && node /home/cookys/projects/autopilot/scripts/dispatch-plan-review.js --repo-root $W --plan-file docs/plans/2026-11-19-pm-inbox-issue-model.md --rubric-file docs/plans/2026-11-19-pm-inbox-issue-model.rubric.md --ticket 01M7RAMY9SV5PGJ5ZAC0KQWPP5 --session-id 506f335d-8848-4ee1-9d8e-9d1c7caefe6c --generation 1 --manifest-file $S/issue-review/manifest.json --context-file courier/crates/courierd/src/task_scan.rs --allow-unregistered --expect-revision HEAD --timeout 20m > $S/issue-review/g1.out 2>&1; echo \"EXIT $?\" >> $S/issue-review/g1.out; tail -25 $S/issue-review/g1.out",
+          "count": 2
+        },
+        {
+          "shape": "S=/tmp/claude-1000/-home-cookys-projects-fleet/506f335d-8848-4ee1-9d8e-9d1c7caefe6c/scratchpad; W=$S/lanes/wt-dev-sq11; GATE_TARGET=$S/lanes/target-devsq11 bash $S/integ-gates.sh $W; rc=$?; if [ $rc = 0 ]; then cd $W && git fetch -q origin && git merge-base --is-ancestor origin/develop HEAD && git push -q origin HEAD:develop && echo \"pushed $(git rev-parse --short=8 HEAD)\"; fi",
+          "count": 2
+        },
+        {
+          "shape": "S=/tmp/claude-1000/-home-cookys-projects-fleet/506f335d-8848-4ee1-9d8e-9d1c7caefe6c/scratchpad/sg-review; W=/home/cookys/projects/fleet/.claude/worktrees/agent-a89f251cbe2d7365b; cd /home/cookys/projects/autopilot && node scripts/dispatch-plan-review.js --repo-root $W --plan-file docs/plans/2026-11-18-schedule-gate.md --rubric-file $S/rubric.md --ticket 01M7PMGYS50QEN5JSE8A1K39FA --session-id sg-plan-1118 --generation 2 --manifest-file $S/manifest.json --disposition-file $S/dispositions-g1.json --allow-unregistered --timeout 25m --state-dir $S/state > $S/g2.out 2>&1; echo rc=$?",
+          "count": 2
+        },
+        {
+          "shape": "sleep 3600; echo WAKE-workers-deadman",
+          "count": 2
+        },
+        {
+          "shape": "sleep 3600; echo WAKE-workers-deadman-2",
+          "count": 2
+        },
+        {
+          "shape": "sleep 40; systemctl is-active fleet-hub.service; sudo journalctl -u fleet-hub.service --since 07:47:45 --no-pager | grep -iE 'listening|error|feed|warn' | grep -v 'legacy courier' | head -8; fleet peers 2>/dev/null | grep -c 'via=hub-directory'",
+          "count": 2
+        },
+        {
+          "shape": "sleep 900; echo WAKE",
+          "count": 2
+        },
+        {
+          "shape": "tail -2 /tmp/bundle7.log; /bin/ls -t /home/cookys/projects/fleet/dist/fleet-v2-*.tar.gz | head -1",
+          "count": 2
+        },
+        {
+          "shape": "tail -2 /tmp/roll-47d.log; pgrep -f 'rollout-batc[h]' | head -1 || echo BATCH_ENDED",
+          "count": 2
+        },
+        {
+          "shape": "timeout 30 fleet reply model-probe-fleet-glm--claude-1795386345692 x8z8w3kfbd56 2>&1 | head -2; timeout 30 fleet reply model-probe-fleet-glm--claude-1795386356222 m2pndyftxtjg 2>&1 | head -2",
+          "count": 2
+        },
+        {
+          "shape": "timeout 420 cargo test -p fleet-cli --lib pm_resume 2>&1 | tail -4; timeout 240 cargo test -p fleet-cli --test pm_resume 2>&1 | tail -3",
+          "count": 2
+        }
+      ]
+    }
+  },
+  "whiff_turns": 825,
+  "whiff_per_100": 4.24,
+  "whiff_share": 0.0424
+}

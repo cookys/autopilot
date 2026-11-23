@@ -639,11 +639,15 @@ if (args[0] === 'engine') {
           parsed.missionPrepared,
         );
       }
+      const { createEmitter } = require('../scripts/lib/agent-event-emit');
+      const _aeeEmitter = createEmitter({ role: reviewCandidateMode ? 'reviewer' : 'implementer', runner: 'claude' });
+      _aeeEmitter.accepted();
       const implementReviewEngine = new AutopilotEngine(engineOptions);
       const result = implementReviewEngine
         .runImplementationReviewLoop(strictL5Bootstrap
           ? { ...parsed, roster: strictL5Bootstrap.roster }
           : parsed);
+      _aeeEmitter.ended(result.status === 'converged' ? 0 : 1, result.status || '');
       // Stage graph (plan §2.7 writers): the per-deliverable review converged = that unit's `verify`. Fail-open.
       if (!reviewCandidateMode) implementReviewEngine.stageVerifyOnConverge(result);
       for (const line of formatCampaignAdvisories(result.campaign_control)) process.stderr.write(`${line}\n`);

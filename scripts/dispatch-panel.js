@@ -5,7 +5,7 @@
  * dispatch-panel.js — parallel consultant barrier with fail-closed de-identification.
  *
  * Usage:
- *   node scripts/dispatch-panel.js --prompt-file F --seat <runner>:<model>[:<effort>] ... --out-dir D [--timeout 15m] [--author-cmd <path>]
+ *   node scripts/dispatch-panel.js --prompt-file F --seat <runner>:<model>[:<effort>] ... --out-dir D [--timeout 15m] [--author-cmd <path>] [--allow-same-family]
  *
  * Flow (fail-closed before any disk write or model call):
  *   1. Read F once into memory; empty, binary, or unreadable -> exit 4.
@@ -15,7 +15,8 @@
  *      `personal-data-patterns.js` (leak-guard host/LAN/email/home/secret rules), and
  *      the `fleet directory` identifier list; any hit, scanner error, or missing rule
  *      file -> exit 4, print rule ids only, write nothing, run zero seats.
- *   4. Only then: refuse a symlinked D, create or chmod D to 0700, write D/prompt.txt (0600).
+ *   4. Resolve seats and refuse duplicate allowed families before writing; --allow-same-family warns and overrides.
+ *      Only then: refuse a symlinked D, create or chmod D to 0700, write D/prompt.txt (0600).
  *   5. Per seat: resolve aliases, check `cn-model-dispatch-gate.js` + known runner/model/family;
  *      barred or unknown seats become {status:'barred'} in panel.json and are never spawned.
  *   6. Spawn `dispatch-author.sh` concurrently for allowed seats, each in a fresh empty 0700
@@ -41,9 +42,11 @@
 
 const crypto = require('crypto');
 const fs = require('fs');
+const { createEmitter } = require('./lib/agent-event-emit');
 const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
+const { findSameFamilyVote } = require('./lib/review-family-gate');
 
 const { CLAUDE_CLI_ALIASES: SEAT_CLAUDE_ALIASES, isClaudeNativeModel } = require('./lib/seat-model-id');
 const NONCQ_POOLS = require('./lib/noncq-pools.json');
@@ -192,7 +195,7 @@ function isKnownModelForRunner(runner, model) {
 }
 
 function usageText() {
-  return 'usage: dispatch-panel.js --prompt-file F --seat <runner>:<model>[:<effort>] ... --out-dir D [--timeout 15m] [--author-cmd <path>]\n';
+  return 'usage: dispatch-panel.js --prompt-file F --seat <runner>:<model>[:<effort>] ... --out-dir D [--timeout 15m] [--author-cmd <path>] [--allow-same-family]\n';
 }
 
 function fail(code, msg) {
@@ -263,6 +266,7 @@ function parseArgs(argv) {
     else if (a === '--out-dir') opts.outDir = next();
     else if (a === '--timeout') opts.timeout = next();
     else if (a === '--author-cmd') opts.authorCmd = next();
+    else if (a === '--allow-same-family') opts.allowSameFamily = true;
     else if (a === '--seat') {
       const parsed = parseSeat(next());
       if (!parsed) fail(2, 'invalid --seat format (expected <runner>:<model>[:<effort>])');
@@ -541,7 +545,7 @@ function resolveSeat(parsedSeat, promptPath, cwd = path.dirname(promptPath)) {
   if (!isKnownModelForRunner(runner, model)) {
     return { allowed: false, runner, model, endpoint, effort: parsedSeat.effort, reason: 'unknown_model' };
   }
-  return { allowed: true, runner, model, endpoint, effort: parsedSeat.effort, family };
+  return { allowed: true, runner, model, endpoint: (alias && alias.endpoint) || parsedSeat.endpoint || '', effort: parsedSeat.effort, family };
 }
 
 function sanitizeOutName(model) {
@@ -573,6 +577,26 @@ function buildChildEnv() {
     if (key.startsWith('ANTHROPIC_DEFAULT_')) delete env[key];
   }
   return env;
+}
+
+function redactSeatError(rawLine) {
+  if (!rawLine) return '';
+  let text = String(rawLine);
+  try {
+    const ar = require('./ar-redact');
+    const arRes = ar.sanitize([{ text }], undefined, false);
+    if (arRes && Array.isArray(arRes.messages) && arRes.messages[0] && typeof arRes.messages[0].text === 'string') {
+      text = arRes.messages[0].text;
+    }
+  } catch { /* best-effort redaction */ }
+  try {
+    const personalRedact = require('./lib/personal-data-redact');
+    const prRes = personalRedact.redactText(text);
+    if (prRes && typeof prRes.text === 'string') {
+      text = prRes.text;
+    }
+  } catch { /* best-effort redaction */ }
+  return text.slice(0, 200);
 }
 
 function writeAtomic(filePath, content, mode = 0o600) {
@@ -738,8 +762,9 @@ async function runPanel(opts, outDir, promptPath) {
       seatMeta.push({ index: i, barred: false, expectKey, seat: parsed.raw });
 
       const outChunks = [];
+      const errChunks = [];
       child.stdout.on('data', (d) => outChunks.push(d));
-      child.stderr.on('data', () => { /* drain */ });
+      child.stderr.on('data', (d) => errChunks.push(d));
 
       let settled = false;
       const finishSeat = (code) => {
@@ -764,6 +789,16 @@ async function runPanel(opts, outDir, promptPath) {
           out_path: finalOutPath,
           bytes: finalBytes,
         };
+        if (!ok) {
+          const rawErr = Buffer.concat(errChunks).toString('utf8');
+          const nonEmptyLines = rawErr.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
+          const errMarkerRe = /^(?:error|fatal|err!|dispatch-author)\b[:\s]?/i;
+          const markerLine = [...nonEmptyLines].reverse().find((l) => errMarkerRe.test(l));
+          const chosenLine = markerLine || nonEmptyLines[nonEmptyLines.length - 1] || '';
+          if (chosenLine) {
+            record.error = redactSeatError(chosenLine.slice(0, 300));
+          }
+        }
         const resultFile = path.join(resultsDir, `${expectKey}.result.json`);
         const exitFile = path.join(resultsDir, `${expectKey}.exit`);
         writeAtomic(resultFile, JSON.stringify(record) + '\n', 0o600);
@@ -829,9 +864,22 @@ async function runPanel(opts, outDir, promptPath) {
 
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
+  const panelRunner = (opts.seats && opts.seats[0] && opts.seats[0].runner) || 'claude';
+  const _aeeEmitter = createEmitter({ role: 'panel', runner: panelRunner });
+  _aeeEmitter.accepted();
+  process.on('exit', (code) => _aeeEmitter.ended(code));
   const promptText = readPromptOnce(opts.promptFile);
   const identifiers = loadFleetIdentifiers();
   scanInMemory(promptText, identifiers);
+  const collision = findSameFamilyVote(opts.seats, (seat) => {
+    const resolved = resolveSeat(seat, path.resolve(opts.promptFile));
+    return resolved.allowed ? resolved.family : '';
+  });
+  if (collision) {
+    const message = `same_family_vote: ${collision.first.raw} and ${collision.second.raw} (${collision.family})`;
+    if (!opts.allowSameFamily) fail(4, message);
+    process.stderr.write(`dispatch-panel: warning: ${message}\n`);
+  }
   const { outDir, promptPath } = prepareOutDirAndPrompt(opts.outDir, promptText);
   await runPanel(opts, outDir, promptPath);
 }

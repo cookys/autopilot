@@ -51,7 +51,7 @@ test('G40-N27 a verified:true capture with no evidence, or a manifest with no ma
 test('G40-N27 a manifest with starts_window missing fails; true or false needs its own evidence', () => {
   assert.ok(has(manifest((m) => { delete m.starts_window; }), 'starts_window', /missing/));
   assert.ok(has(manifest((m) => { m.starts_window = 'maybe'; }), 'starts_window', /enum/));
-  assert.ok(has(manifest((m) => { m.starts_window = true; }), 'starts_window_evidence'));
+  assert.ok(has(manifest((m) => { m.starts_window = true; delete m.starts_window_evidence; delete m.starts_window_confidence; }), 'starts_window_evidence'));
   assert.deepStrictEqual(rules(manifest((m) => { m.starts_window = false; m.starts_window_evidence = m.capture[0].evidence; probe(m).starts_window = false; })), []);
 });
 
@@ -116,25 +116,24 @@ test('G40-N28 the checker never opens what a credential_ref points at: judged on
   const touched = [];
   const names = ['openSync', 'readFileSync', 'statSync', 'lstatSync', 'existsSync', 'accessSync', 'readdirSync', 'realpathSync', 'readlinkSync', 'opendirSync'];
   const saved = {};
-  for (const n of names) {
-    saved[n] = fs[n];
-    fs[n] = function spy(p, ...rest) { touched.push(String(p)); return saved[n].call(fs, p, ...rest); };
-  }
+  const spyOn = () => { for (const n of names) { saved[n] = fs[n]; fs[n] = function spy(p, ...rest) { touched.push(String(p)); return saved[n].call(fs, p, ...rest); }; } };
+  const spyOff = () => { for (const n of names) if (saved[n] !== undefined) fs[n] = saved[n]; };
+  // the fixture setup opens files itself; only the checker's own opens are judged
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'g40-n28-'));
+  const tok = path.join(dir, 'token');
+  fs.writeFileSync(tok, 'FAKE-never-read');
+  fs.chmodSync(tok, 0o000);
   try {
-    // an unreadable fixture file sits where a naive checker would resolve the template
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'g40-n28-'));
-    const tok = path.join(dir, 'token');
-    fs.writeFileSync(tok, 'FAKE-never-read');
-    fs.chmodSync(tok, 0o000);
+    const ok = manifest((x) => { x.credential_ref = { kind: 'file', path: '<accounts-dir>/<alias>/token' }; });
+    const bad = manifest((x) => { x.credential_ref = { kind: 'file', path: `${tok}` }; });
+    const env = manifest((x) => { x.credential_ref = { kind: 'env', name: 'SOME_TOKEN', file: '<accounts-dir>/<alias>/env' }; });
+    spyOn();
     try {
-      const ok = manifest((x) => { x.credential_ref = { kind: 'file', path: '<accounts-dir>/<alias>/token' }; });
       assert.deepStrictEqual(c.checkManifest(ok, realCtx()), []);
-      const bad = manifest((x) => { x.credential_ref = { kind: 'file', path: `${tok}` }; });
       assert.ok(c.checkManifest(bad, realCtx()).some((f) => f.rule === 'credential_ref'));
-      const env = manifest((x) => { x.credential_ref = { kind: 'env', name: 'SOME_TOKEN', file: '<accounts-dir>/<alias>/env' }; });
       assert.deepStrictEqual(c.checkManifest(env, realCtx()), []);
-    } finally { fs.chmodSync(tok, 0o600); fs.rmSync(dir, { recursive: true, force: true }); }
-  } finally { for (const n of names) fs[n] = saved[n]; }
+    } finally { spyOff(); }
+  } finally { fs.chmodSync(tok, 0o600); fs.rmSync(dir, { recursive: true, force: true }); }
   const credentialish = touched.filter((p) => /token|accounts|alias|\.env|FAKE|g40-n28/.test(p) && !/capability-matrix/.test(p));
   assert.deepStrictEqual(credentialish, [], 'only evidence files were opened');
   assert.ok(touched.some((p) => /capability-matrix\.md/.test(p)), 'the spy is live: it saw the evidence read');
@@ -213,7 +212,7 @@ const confirmed = (m) => { m.starts_window = false; m.starts_window_evidence = E
 const POLICY_CHECKS = [
   ['1 confidence enum', (m) => { confirmed(m); m.starts_window_confidence = 'certain'; }, 'starts_window_confidence', /^enum$/,
     ["add('starts_window_confidence', 'enum')", '0']],
-  ['2 unknown has no confidence', (m) => { m.starts_window_confidence = 'low'; }, 'starts_window_confidence', /unknown_has_no_confidence/,
+  ['2 unknown has no confidence', (m) => { m.starts_window = 'unknown'; m.starts_window_confidence = 'low'; delete m.starts_window_evidence; }, 'starts_window_confidence', /unknown_has_no_confidence/,
     ["add('starts_window_confidence', 'unknown_has_no_confidence')", '0']],
   ['3 false+high needs evidence', (m) => { confirmed(m); delete m.starts_window_evidence; }, 'starts_window_confidence', /high_without_evidence/,
     ["add('starts_window_confidence', 'high_without_evidence')", '0']],

@@ -167,7 +167,7 @@ test('key hints: every [x] in a framed page string is one of that page\'s bound 
   }
   expect(bad).toEqual([])
   expect(pageHotkeys('decide')).toContain('h')
-  expect(pageHotkeys('decide')).not.toContain('p')
+  expect(pageHotkeys('decide')).toContain('p')
 })
 
 // Every fleet line and every quota pool is its own Button (Tab walks the rows, Enter presses the focused one): pressing row 2 sees line 2 / opens pool 2. There is no j / k, and no

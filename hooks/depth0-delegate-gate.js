@@ -106,6 +106,7 @@ const path = require('path');
 const { resolveLiveDir, sanitizeSessionId, readLive, modelFamily } = require('../scripts/lib/live-state-dir.js');
 // Executable-text lexer + foreground-wait rules are shared with foreman-guard.js.
 const { executableText, detectForegroundWait } = require('../scripts/lib/bash-wait-rules.js');
+const { gateHint } = require('./lib/gate-hint.js');
 // Bash-launch hazards (BL-0019): detach-without-wake, pkill -f self-match, bare ls, recursive rm guards, zsh syntax.
 const {
   detectDetachNoWake, detectPkillSelfMatch, detectZshExpansion, detectZshSyntax,
@@ -122,6 +123,35 @@ const WAIT_MIN_SLEEP_SECONDS = 20;
 // Executable-text prefixes (post-strip, trimmed) that make a Bash call read-class.
 const BASH_READ_PREFIXES = ['grep ', 'rg ', 'find ', 'cat ', 'sed -n', 'head ', 'tail '];
 
+// Mask quoted data while retaining empty strings used as grep patterns. Shell -c
+// bodies are scanned separately because they are executable scripts.
+function detectBusyLoop(cmd, depth = 0) {
+  if (depth > 5) return false;
+  const text = executableText(cmd);
+  let masked = '';
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '\\' && i + 1 < text.length) { masked += '  '; i++; continue; }
+    if (c !== "'" && c !== '"') { masked += c; continue; }
+    let end = i + 1;
+    while (end < text.length && text[end] !== c) {
+      if (c === '"' && text[end] === '\\') end++;
+      end++;
+    }
+    const body = text.slice(i + 1, end);
+    if (/(?:^|[;&|\s])(?:bash|sh)\s+-c\s*$/.test(masked) && detectBusyLoop(body, depth + 1)) return true;
+    masked += body === '' ? c + c : ' '.repeat(end - i + 1);
+    i = end;
+  }
+  const loop = /\b(while|until)\b([\s\S]*?)(?:;|\n)\s*do\b([\s\S]*?)\bdone\b/g;
+  let m;
+  while ((m = loop.exec(masked))) {
+    if (/^\s*(?:(?::|true)\s*;?)?\s*;?\s*$/.test(m[3])) return true;
+    if (m[1] === 'until' && /(?:^|[\s;&])grep\s+-q\s+(?:''|"")\s+\/dev\/null(?:\s|$)/.test(m[2]) && !/\bsleep\s+\d/.test(m[3])) return true;
+  }
+  return false;
+}
+
 function isBashReadClass(cmd) {
   const text = executableText(typeof cmd === 'string' ? cmd : '').trim();
   return BASH_READ_PREFIXES.some((p) => text.startsWith(p));
@@ -132,6 +162,7 @@ function loadConfig() {
     mode: 'warn',
     pkillMode: 'deny',
     lsMode: 'deny',
+    busyLoopMode: 'deny',
     rmVarMode: 'deny',
     subagentRmMode: 'deny',
     sharedRmMode: 'warn',
@@ -151,6 +182,7 @@ function loadConfig() {
         if (['off', 'warn', 'block'].includes(g.mode)) cfg.mode = g.mode;
         if (['off', 'warn', 'deny'].includes(g.pkill_self_match)) cfg.pkillMode = g.pkill_self_match;
         if (['off', 'warn', 'deny'].includes(g.bare_ls)) cfg.lsMode = g.bare_ls;
+        if (['off', 'warn', 'deny'].includes(g.busy_loop)) cfg.busyLoopMode = g.busy_loop;
         if (['off', 'warn', 'deny'].includes(g.rm_var_target)) cfg.rmVarMode = g.rm_var_target;
         if (['off', 'warn', 'deny'].includes(g.subagent_rm)) cfg.subagentRmMode = g.subagent_rm;
         if (['off', 'warn', 'deny'].includes(g.shared_rm)) cfg.sharedRmMode = g.shared_rm;
@@ -173,6 +205,8 @@ function loadConfig() {
   // Env wins over config; unset/empty leaves config alone, a garbage value maps to the rule's safe default.
   const envPk = process.env.AUTOPILOT_BASH_GUARD_PKILL_MODE;
   if (envPk !== undefined && envPk !== '') cfg.pkillMode = ['off', 'warn', 'deny'].includes(envPk) ? envPk : 'deny';
+  const envBusy = process.env.AUTOPILOT_BASH_GUARD_BUSY_LOOP_MODE;
+  if (envBusy !== undefined && envBusy !== '') cfg.busyLoopMode = ['off', 'warn', 'deny'].includes(envBusy) ? envBusy : 'deny';
   const envLs = process.env.AUTOPILOT_BASH_GUARD_LS_MODE;
   if (envLs !== undefined && envLs !== '') cfg.lsMode = ['off', 'warn', 'deny'].includes(envLs) ? envLs : 'deny';
   const envRv = process.env.AUTOPILOT_BASH_GUARD_RMVAR_MODE;
@@ -288,68 +322,90 @@ function classify(tool, input) {
       const secret = cfg.secretMode === 'off' ? null : detectSecretPrint(cmd);
       const secretReason = secret && `${secret.why} (${secret.rule})`;
       if (secret && cfg.secretMode === 'block') {
-        emitDeny(secretReason);
+        emitDeny(secretReason + gateHint('改用 node scripts/safe-inspect.js 看秘密（自動遮罩），或 grep -c / -l 只數不讀', 'docs/guide/safe-inspect.md'));
         process.exit(0);
       }
       if (secret) launchWarns.push(secretReason);
       const detach = detectDetachNoWake(cmd);
       if (detach) {
-        emitDeny(`bash-launch-guard (${detach.rule}): ${detach.why}. ${detach.advice}`);
+        const detachRewrite = detach.rewrite ? `\n改寫後的指令（直接照抄）：${detach.rewrite}` : '';
+        emitDeny(`bash-launch-guard (${detach.rule}): ${detach.why}. ${detach.advice}` + gateHint('用 run_in_background 啟動並等完成通知（或 Monitor 觀測），不要 detach 後沒人等', 'hooks/README.md') + detachRewrite);
         process.exit(0);
       }
       const pk = cfg.pkillMode === 'off' ? null : detectPkillSelfMatch(cmd);
+      const pkRewrite = pk && pk.rewrite ? `\n改寫後的指令（直接照抄）：${pk.rewrite}` : '';
       if (pk && cfg.pkillMode === 'deny') {
         emitDeny(`bash-launch-guard (${pk.rule}): ${pk.why}. Set AUTOPILOT_BASH_GUARD_PKILL_MODE=warn|off `
-          + '(or depth0_delegate_gate.pkill_self_match in ~/.autopilot/config.json) to relax.');
+          + '(or depth0_delegate_gate.pkill_self_match in ~/.autopilot/config.json) to relax.'
+          + gateHint('要殺流程改用 pidfile 或直接 PID；放寬此規則才設 AUTOPILOT_BASH_GUARD_PKILL_MODE=warn', 'hooks/README.md')
+          + pkRewrite);
         process.exit(0);
       }
-      if (pk) launchWarns.push(`bash-launch-guard (${pk.rule}): ${pk.why}`);
+      if (pk) launchWarns.push(`bash-launch-guard (${pk.rule}): ${pk.why}${pkRewrite}`);
+      const busy = cfg.busyLoopMode !== 'off' && detectBusyLoop(cmd);
+      if (busy && cfg.busyLoopMode === 'deny') {
+        emitDeny('bash-launch-guard (busy-loop): loop can spin continuously.' + gateHint('Wait with run_in_background plus the completion notification, or fleet watch --until-file / --pid', 'docs/dev/ironlaw-to-gate-map.md'));
+        process.exit(0);
+      }
+      if (busy) launchWarns.push('bash-launch-guard (busy-loop): loop can spin continuously');
       const ls = cfg.lsMode === 'off' ? null : detectBareLs(cmd);
+      const lsRewrite = ls && ls.rewrite !== null
+        ? `\n改寫後的指令（直接照抄）：${ls.rewrite}`
+        : '';
       if (ls && cfg.lsMode === 'deny') {
         emitDeny(`bash-launch-guard (${ls.rule}): ${ls.why}. Set AUTOPILOT_BASH_GUARD_LS_MODE=warn|off `
-          + '(or depth0_delegate_gate.bare_ls in ~/.autopilot/config.json) to relax.');
+          + '(or depth0_delegate_gate.bare_ls in ~/.autopilot/config.json) to relax.'
+          + lsRewrite
+          + gateHint('ls 要帶顯式路徑（ls <path>）；要探索目錄改用 Glob/Read 工具', 'hooks/README.md'));
         process.exit(0);
       }
-      if (ls) launchWarns.push(`bash-launch-guard (${ls.rule}): ${ls.why}`);
+      if (ls) launchWarns.push(`bash-launch-guard (${ls.rule}): ${ls.why}${lsRewrite}`);
       const rv = cfg.rmVarMode === 'off' ? null : detectRecursiveRmVar(cmd);
+      const rvRewrite = rv && rv.rewrite ? `\n改寫後的指令（直接照抄）：${rv.rewrite}` : '';
       if (rv && cfg.rmVarMode === 'deny') {
-        emitDeny(`bash-launch-guard (${rv.rule}): ${rv.why}`);
+        emitDeny(`bash-launch-guard (${rv.rule}): ${rv.why}` + gateHint('先展開變數確認範圍，再對顯式路徑執行 rm -r', 'hooks/README.md') + rvRewrite);
         process.exit(0);
       }
-      if (rv) launchWarns.push(`bash-launch-guard (${rv.rule}): ${rv.why}`);
+      if (rv) launchWarns.push(`bash-launch-guard (${rv.rule}): ${rv.why}${rvRewrite}`);
       const rmOpts = {
         agentId: typeof payload.agent_id === 'string' ? payload.agent_id : '',
         sessionId: typeof payload.session_id === 'string' ? payload.session_id : '',
         cwd: typeof payload.cwd === 'string' && payload.cwd ? payload.cwd : process.cwd(),
       };
       const sr = cfg.subagentRmMode === 'off' ? null : detectSubagentRmOutsideScratch(cmd, rmOpts);
+      const srRewrite = sr && sr.rewrite ? `\n改寫後的指令（直接照抄）：${sr.rewrite}` : '';
       if (sr && cfg.subagentRmMode === 'deny') {
-        emitDeny(`bash-launch-guard (${sr.rule}): ${sr.why}`);
+        emitDeny(`bash-launch-guard (${sr.rule}): ${sr.why}` + gateHint('要刪的目錄先建在 session scratchpad（$TMPDIR/claude-*/<sid>/）內再刪', 'hooks/README.md') + srRewrite);
         process.exit(0);
       }
-      if (sr) launchWarns.push(`bash-launch-guard (${sr.rule}): ${sr.why}`);
+      if (sr) launchWarns.push(`bash-launch-guard (${sr.rule}): ${sr.why}${srRewrite}`);
       const sh = cfg.sharedRmMode === 'off' ? null : detectRmSharedDir(cmd, rmOpts);
+      const shRewrite = sh && sh.rewrite ? `\n改寫後的指令（直接照抄）：${sh.rewrite}` : '';
       if (sh && cfg.sharedRmMode === 'deny') {
-        emitDeny(`bash-launch-guard (${sh.rule}): ${sh.why}`);
+        emitDeny(`bash-launch-guard (${sh.rule}): ${sh.why}` + gateHint('只刪自己擁有且非 world-writable 的目錄；共用目錄先回報操作員', 'hooks/README.md') + shRewrite);
         process.exit(0);
       }
-      if (sh) launchWarns.push(`bash-launch-guard (${sh.rule}): ${sh.why}`);
+      if (sh) launchWarns.push(`bash-launch-guard (${sh.rule}): ${sh.why}${shRewrite}`);
       const rw = cfg.rmWrappedMode === 'off' ? null : detectWrappedRm(cmd);
       if (rw && cfg.rmWrappedMode === 'deny') {
-        emitDeny(`bash-launch-guard (${rw.rule}): ${rw.why}`);
+        emitDeny(`bash-launch-guard (${rw.rule}): ${rw.why}` + gateHint('把 rm -r 從 sh -c / heredoc / 迴圈 / xargs 拉出來，用顯式路徑單獨執行', 'hooks/README.md'));
         process.exit(0);
       }
       if (rw) launchWarns.push(`bash-launch-guard (${rw.rule}): ${rw.why}`);
       const zs = cfg.zshSyntaxMode === 'off' ? null : detectZshSyntax(cmd);
+      const zsRewrite = zs && zs.rewrite ? `\n改寫後的指令（直接照抄）：${zs.rewrite}` : '';
       if (zs && cfg.zshSyntaxMode === 'deny') {
-        emitDeny(`bash-launch-guard (${zs.rule}): ${zs.why}`);
+        emitDeny(`bash-launch-guard (${zs.rule}): ${zs.why}` + gateHint('改用 bash 可解析的語法（zsh 的 = 開頭字元和裸 glob 不支援）', 'hooks/README.md') + zsRewrite);
         process.exit(0);
       }
-      if (zs) launchWarns.push(`bash-launch-guard (${zs.rule}): ${zs.why}`);
+      if (zs) launchWarns.push(`bash-launch-guard (${zs.rule}): ${zs.why}${zsRewrite}`);
       const shellName = path.basename(process.env.AUTOPILOT_BASH_GUARD_SHELL || process.env.SHELL || '');
       if (shellName === 'zsh') {
         const z = detectZshExpansion(cmd, typeof payload.cwd === 'string' ? payload.cwd : process.cwd());
-        if (z) launchWarns.push(`bash-launch-guard (${z.rule}, warn only): ${z.why}`);
+        if (z) {
+          const zRewrite = z.rewrite ? `\n改寫後的指令（直接照抄）：${z.rewrite}` : '';
+          launchWarns.push(`bash-launch-guard (${z.rule}, warn only): ${z.why}${zRewrite}`);
+        }
       }
     }
     const emitAdvisory = (lines) => {
@@ -419,7 +475,8 @@ function classify(tool, input) {
       if (modelId && family !== 'unknown' && cfg.guardedModels.includes(family)) {
         emitDeny(`depth0-delegate-gate: ${verdict.reads} consecutive read-class calls at depth-0 on a `
           + `guarded model (family "${family}") — delegate to an Explore/survey subagent (model: sonnet) `
-          + 'and read only its conclusion.');
+          + 'and read only its conclusion.'
+          + gateHint('改派 Explore/survey subagent（model: sonnet）做大量閱讀，本席只讀其結論', 'hooks/README.md'));
         process.exit(0);
       }
       // unguarded / unknown model past 2x: only the periodic nudge rule applies

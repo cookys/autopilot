@@ -35,6 +35,7 @@ const path = require('path');
 const { isEnabled } = require('./_shared/opt-in');
 const { decide, isAllowlisted } = require('./orchestrator-edit-gate-lib.js');
 const { readMarker } = require('../scripts/session-mode.js');
+const { gateHint } = require('./lib/gate-hint.js');
 const { mainCheckout } = require('../scripts/resolve-repo-placement.js');
 
 function gateMode() {
@@ -137,7 +138,7 @@ function inMarkedNestedWorktree(repoRoot, target) {
 
     if (d.action === 'gate') {
       if (mode === 'block') {
-        const text = `${d.reason}\n`;
+        const text = `${d.reason}\n` + gateHint('改派 dispatch（dispatch-hetero.sh / Agent tool）去改；要 depth-0 親自動手才用 --solo 進場', 'hooks/README.md') + '\n';
         process.stderr.write(text);
         exitCode = 2; // PreToolUse exit 2 ⇒ deny the tool call
       } else {

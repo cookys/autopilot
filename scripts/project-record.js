@@ -14,6 +14,7 @@
 //   decision supersede <old> <same flags>                adr new --title T --body-file F|- [--status active|open] [--adr-dir D]
 //   adr supersede <old> <same flags>                     lesson new --title T --category build|debug|arch|env|api --body-file F|-
 //   handoff new   --title T --area PROJECT --body-file F|- [--decision-file F]... [--lesson-file F]...
+//   plan upsert --path P --status S [--milestone M] [--owner O] [--frozen-sha SHA]
 //   handoff close <id>                                   where                         flush [--drop <spool key>]
 //
 // A lesson body has "## Context", "## Problem", "## Solution" sections (optional "## Failed attempts", "## Related").
@@ -21,7 +22,7 @@
 // handoff path) where it has none. Where `hippo detect` says `files` (no .hippo/repo.toml) this script writes today's files via
 // lib/record-files.js; in `hippo`/`hippo-problems` it writes through the hippo CLI (lib/hippo.js step runner); in `spool` (binary
 // missing, exit 5) it saves the write under <git common dir>/autopilot/hippo-spool. The state is decided by detect alone: with a store
-// present nothing here ever writes a file-mode target, whatever hippo answers (a refusal exits non-zero, a missing binary spools).
+// present a refusal never writes a file-mode target (a refusal exits non-zero, a missing binary spools).
 //
 // Exit: 0 ok (incl. spooled) | 1 internal or file-mode refusal | 2 usage (unknown flag, bad target, plugin dir) | 3 rule refusal
 // (backlog-entry rules, validation, hippo rules incl. leak) | 4 not found | 5 store unavailable and not spoolable. Hippo's code is kept.
@@ -39,6 +40,7 @@ const { spawnSync } = require('child_process');
 const hippo = require('./lib/hippo.js');
 const rules = require('./lib/backlog-rules.js');
 const rf = require('./lib/record-files.js');
+const { guardedStoreWrite } = require('./lib/m6-cutline.js');
 
 const { HippoError } = hippo;
 const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
@@ -79,12 +81,13 @@ const SUBS = {
   'adr new': { f: ADR, pos: [0, 0] },
   'adr supersede': { f: ADR, pos: [1, 1] },
   'lesson new': { f: { title: 'v', category: 'v', 'body-file': 'v' }, pos: [0, 0] },
-  'handoff new': { f: { title: 'v', area: 'v', 'body-file': 'v', 'decision-file': '+', 'lesson-file': '+' }, pos: [0, 0] },
+  'handoff new': { f: { title: 'v', area: 'v', origin: 'v', 'body-file': 'v', 'decision-file': '+', 'lesson-file': '+' }, pos: [0, 0] },
   'handoff close': { f: {}, pos: [1, 1] },
+  'plan upsert': { f: { path: 'v', status: 'v', milestone: 'v', owner: 'v', 'frozen-sha': 'v' }, pos: [0, 0] },
   where: { f: {}, pos: [0, 0] },
   flush: { f: { drop: 'v' }, pos: [0, 0] },
 };
-const TWO_WORD = new Set(['backlog', 'decision', 'adr', 'lesson', 'handoff']);
+const TWO_WORD = new Set(['backlog', 'decision', 'adr', 'lesson', 'handoff', 'plan']);
 
 function parseArgs(argv) {
   const g = { json: false };
@@ -116,7 +119,7 @@ function parseArgs(argv) {
       }
     } else pos.push(t);
   }
-  if (!cmd) throw usage('usage: project-record.js [--target <dir>] [--key <k>] [--json] backlog|decision|adr|lesson|handoff <new|...> | where | flush');
+  if (!cmd) throw usage('usage: project-record.js [--target <dir>] [--key <k>] [--json] backlog|decision|adr|lesson|handoff|plan <new|...> | where | flush');
   if (pos.length < spec.pos[0] || pos.length > spec.pos[1]) throw usage(`${cmd}: expected ${spec.pos[0] === spec.pos[1] ? spec.pos[0] : `${spec.pos[0]}..${spec.pos[1]}`} positional argument(s), got ${pos.length}`);
   if (g.key !== undefined && !KEY_RE.test(g.key)) throw usage('--key must be 16 lowercase hex characters');
   return { cmd, g, f, pos };
@@ -502,13 +505,14 @@ H['handoff new'] = {
     try { secs = rf.parseHandoffBody(body); } catch (e) { throw refuse(e.rule || 'invalid-value', 'body-file', e.message); }
     for (const [key, , required] of rf.HANDOFF_SECTIONS) if (required && !secs[key]) throw refuse('missing-required', 'body-file', `handoff body needs a non-empty "## ${key}" section`);
     return {
-      title: oneLine(f.title, 'title'), area: oneLine(f.area, 'area'), body,
+      title: oneLine(f.title, 'title'), area: oneLine(f.area, 'area'), origin: f.origin || 'manual', body,
       decisions: (f['decision-file'] || []).map((x) => trimEnd(readFileArg(x))),
       lessons: (f['lesson-file'] || []).map((x) => trimEnd(readFileArg(x))),
     };
   },
   files(repo, p) { return rf.handoffNew(repo, { project: p.area, body: p.body, decisions: p.decisions, lessons: p.lessons }, { clock }); },
   validate(repo, p, state) { // parse-level checks of the hippo path (the files path validates in rf.handoffNew)
+    if (!['manual', 'project-file'].includes(p.origin)) throw refuse('invalid-value', 'origin', 'expected manual|project-file');
     if (state === 'files') return null;
     return {
       warnings: [], area: areaOf(p.area, 'area'),
@@ -517,7 +521,7 @@ H['handoff new'] = {
   },
   plan(repo, p, key, v) {
     const area = v.area;
-    const steps = [{ op: 'create', ref: 'root', kind: 'handoff-note', argv: ['--title', p.title, '--area', area, '--status', 'open'], body: `${p.body}\n`, key }];
+    const steps = [{ op: 'create', ref: 'root', kind: 'handoff-note', argv: ['--title', p.title, '--area', 'handoff', '--status', 'open', '--tag', `origin:${p.origin}`], body: `${p.body}\n`, key: `handoff:${key}` }];
     let n = 0;
     const child = (kind, text, title, extra) => {
       n++;
@@ -535,6 +539,24 @@ H['handoff close'] = {
   files: (repo, p) => rf.handoffClose(repo, { path: p.id }, { clock }),
   validate(repo, p, state) { if (state !== 'files') ulidArg(p.id, 'handoff close'); return null; },
   plan: (repo, p, key) => ({ key, steps: [{ op: 'close', id: ulidArg(p.id, 'handoff close'), status: 'done' }] }),
+};
+
+// Handoff provenance keeps the project available when closing the file view.
+H['handoff new'].after = (repo, p, res) => {
+  const saved = hippo.run(repo, ['set', res.ids.root, 'provenance', '--kind', 'autopilot-handoff', '--value', p.area, '--locator', res.ids.root]);
+  if (saved.exit !== 0) throw new HippoRefusal(saved);
+  const r = H['handoff new'].files(repo, p);
+  return r.info_lines.concat([`handoff view written: ${r.id}`]).join('; ');
+};
+H['handoff close'].after = (repo, p) => {
+  const provenance = showRecord(repo, p.id).provenance;
+  const project = provenance && provenance.kind === 'autopilot-handoff' && provenance.value;
+  if (!project || !AREA_RE.test(project)) throw new rf.RecordError('missing_project', 'handoff record has no project provenance');
+  const r = spawnSync('bash', [path.join(__dirname, 'resolve-project-paths.sh'), '--target', repo, '--field', 'projects_dir'], { encoding: 'utf8' });
+  if (r.status !== 0 || !r.stdout.trim() || r.stdout.trim() === 'none') throw new rf.RecordError('path_unresolved', 'cannot resolve projects directory');
+  const file = path.join(r.stdout.trim(), project, 'HANDOFF.md');
+  const closed = rf.handoffClose(repo, { path: file }, { clock });
+  return `handoff view removed: ${closed.id}`;
 };
 
 // ---- BACKLOG.md as a view of the store ----------------------------------------------------------------------------------
@@ -919,6 +941,13 @@ function hippoMode(g, cmd, handler, p, det) {
       const line = handler.after(repo, p, res, v);
       if (line) info.push(line);
     } catch (e) {
+      if (cmd.startsWith('handoff ')) {
+        const hint = 'Repair the handoff file view manually after fixing the cause.';
+        err(`store written; handoff view was not updated: ${e.message}`);
+        err(hint);
+        emitJson(g, { ok: true, state, key, id, ids: res.ids, view_error: e.message, hint });
+        return 0;
+      }
       if (!(e instanceof HippoRefusal || e instanceof rf.RecordError || e instanceof rules.RuleViolationError)) throw e;
       const target = id || p.id;
       err(`store written${id ? `: ${id}` : ''}; BACKLOG.md was not updated: ${e.message}`);
@@ -934,8 +963,53 @@ function hippoMode(g, cmd, handler, p, det) {
   return 0;
 }
 
+function planUpsert(parsed) {
+  const { g, f } = parsed;
+  const rel = oneLine(f.path, 'path');
+  if (path.isAbsolute(rel) || rel !== path.posix.normalize(rel) || rel === '..' || rel.startsWith('../') || rel === '.') throw usage('--path must be a normalized repo-relative path');
+  const status = oneLine(f.status, 'status');
+  if (!/^[A-Za-z0-9._-]+$/.test(status)) throw usage('--status must be a single word');
+  const owner = f.owner === undefined ? '' : oneLine(f.owner, 'owner');
+  const frozen = f['frozen-sha'] === undefined ? '' : oneLine(f['frozen-sha'], 'frozen-sha');
+  const milestone = f.milestone === undefined ? undefined : oneLine(f.milestone, 'milestone');
+  const root = spawnSync('git', ['-C', path.resolve(g.target || process.cwd()), 'rev-parse', '--show-toplevel'], { encoding: 'utf8' });
+  if (root.status !== 0) throw usage('target is not a git worktree');
+  const repo = root.stdout.trim();
+  const key = 'plan:' + crypto.createHash('sha256').update(rel).digest('hex').slice(0, 16);
+  if (!fs.existsSync(path.join(repo, '.hippo', 'repo.toml'))) {
+    out(JSON.stringify({ ok: true, state: 'files', key, id: null, skipped: 'no-store' }));
+    return 0;
+  }
+  let result;
+  const guard = guardedStoreWrite(repo, rel, () => {
+    const det = hippo.detect(repo);
+    if (det.state === 'files') { result = { ok: true, state: 'files', key, id: null, skipped: 'no-store' }; return; }
+    if (det.state === 'spool') throw new HippoError('plan upsert requires a working hippo store', 5, 'environment');
+    const call = (args, opts) => { const r = hippo.run(repo, args, opts); if (r.exit !== 0) throw new HippoRefusal(r); return r; };
+    const body = `- **Owner**: ${owner}\n- **Path**: ${rel}\n- **Frozen SHA**: ${frozen}\n`;
+    const args = ['new', 'plan', '--key', key, '--title', path.posix.basename(rel)];
+    if (milestone !== undefined) args.push('--milestone', milestone);
+    args.push('--body-file', '-');
+    const created = call(args, { input: body });
+    const id = created.data.ids[0];
+    const rec = call(['show', id]).data.record;
+    const prov = { kind: 'autopilot-plan', value: path.posix.basename(rel, path.posix.extname(rel)), locator: rel };
+    if (!rec.provenance || Object.keys(prov).some(k => rec.provenance[k] !== prov[k])) call(['set', id, 'provenance', '--kind', prov.kind, '--value', prov.value, '--locator', prov.locator]);
+    const old = (rec.tags || []).filter(t => t.startsWith('plan-status:'));
+    const tag = `plan-status:${status.toLowerCase()}`;
+    if (old.length !== 1 || old[0] !== tag) call(['set', id, 'tags', ...old.flatMap(t => ['--remove', t]), '--add', tag]);
+    if (milestone !== undefined && rec.milestone !== milestone) call(['set', id, 'milestone', milestone]);
+    if ((rec.body || '').replace(/\n*$/, '\n') !== body) call(['edit', id, '--body-file', '-'], { input: body });
+    result = { ok: true, state: det.state, key, id, skipped: false };
+  });
+  if (guard.skipped) result = { ok: true, key, id: null, skipped: 'before-cutline' };
+  if (g.json) out(JSON.stringify(result)); else out(JSON.stringify(result));
+  return 0;
+}
+
 function writeCmd(cmd, parsed) {
   const { g, f, pos } = parsed;
+  if (cmd === 'plan upsert') return planUpsert(parsed);
   const handler = H[cmd];
   const p = handler.parse(f, pos);
   const det = hippo.detect(g.target);
@@ -961,7 +1035,9 @@ function main(argv) {
   return writeCmd(cmd, parsed);
 }
 
-try {
+module.exports = { decisionHandler: H['decision new'] };
+
+if (require.main === module) try {
   process.exitCode = main(process.argv.slice(2));
 } catch (e) {
   if (e instanceof HippoRefusal) {

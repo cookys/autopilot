@@ -65,6 +65,30 @@ function isUrlSafe(u, transport) {
   return false;
 }
 
+// x-lane condition for `test`: the local fleet gateway authenticates by the x-lane request
+// header + source IP, NOT by the bearer token — so a probe to a LOCAL endpoint must carry the
+// header or it is refused (auth_failed) even with a valid token. Same condition as
+// dispatch-hetero.sh's local arm: only the http:// URL classes this system admits as local
+// (loopback) or plaintext-private (PRIVATE-RANGE IP literal) get the header; https endpoints
+// (first-party APIs, TLS gateways) never do.
+function isLocalHttpEndpoint(u) {
+  if (!u || !/^http:\/\//.test(u)) return false;
+  if (/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/.test(u)) return true;
+  const m = /^http:\/\/(\[[^\]/]+\]|[^/:\[]+)(:\d+)?(\/|$)/.exec(u);
+  return !!m && isPrivateIpLiteral(m[1]);
+}
+
+// dispatch-hetero.sh (apply_runner_local, ~line 3528) lane rule, mirrored: lane =
+// $AUTOPILOT_LANE, else "autopilot". A SET value must match ^[A-Za-z0-9._-]+$ and not be "."
+// or ".." (the class also excludes CR/LF); set-but-invalid is refused, never printed.
+// Returns { lane } or { invalid: true }.
+function resolveTestLane(env) {
+  if (!Object.prototype.hasOwnProperty.call(env, 'AUTOPILOT_LANE')) return { lane: 'autopilot' };
+  const lane = String(env.AUTOPILOT_LANE);
+  if (!/^[A-Za-z0-9._-]+$/.test(lane) || lane === '.' || lane === '..') return { invalid: true };
+  return { lane };
+}
+
 function basePath(env) {
   return env.AUTOPILOT_ENDPOINTS_ENV || path.join(os.homedir(), '.autopilot', 'endpoints.env');
 }
@@ -374,6 +398,23 @@ function cmdTest(io, rest) {
     return { status: 2 };
   }
 
+  // Local (http://) endpoints authenticate to the fleet gateway by x-lane + source IP, not the
+  // bearer token — same rule as dispatch-hetero's local arm. The lane value is passed to the
+  // probe via env and is NEVER printed in any output.
+  let testLane = '';
+  if (isLocalHttpEndpoint(url)) {
+    const lr = resolveTestLane(io.env);
+    if (lr.invalid) {
+      if (jsonMode) {
+        io.stdout.write(JSON.stringify({ outcome: 'not_configured' }) + '\n');
+      } else {
+        io.stderr.write('ERROR: local endpoint test refused: AUTOPILOT_LANE is set to an invalid value (must match [A-Za-z0-9._-]+, not "." or ".."; unset means "autopilot")\n');
+      }
+      return { status: 2 };
+    }
+    testLane = lr.lane;
+  }
+
   const childCode = `
 const { URL } = require('url');
 const url = process.env.TEST_URL;
@@ -395,7 +436,7 @@ let parsedUrl;
 try {
   parsedUrl = new URL(resolveEndpointUrl(url));
 } catch (err) {
-  console.log(JSON.stringify({ outcome: 'not_configured', status: 2 }));
+  console.log(JSON.stringify({ outcome: 'not_configured' }));
   process.exit(0);
 }
 
@@ -424,6 +465,10 @@ const req = transport.request(
       authorization: 'Bearer ' + token,
       'anthropic-version': '2023-06-01',
       connection: 'close',
+      // Local (http://) endpoints authenticate by x-lane + source IP, not the bearer token.
+      // TEST_LANE is set only for local endpoints (the parent resolved + validated it); the
+      // value is never printed here or by the parent.
+      ...(process.env.TEST_LANE ? { 'x-lane': process.env.TEST_LANE } : {}),
     },
   },
   (res) => {
@@ -440,21 +485,21 @@ const req = transport.request(
       const latency = Date.now() - startTime;
       const statusCode = res.statusCode;
       if (statusCode >= 200 && statusCode < 300) {
-        console.log(JSON.stringify({ outcome: 'ok', latency, status: 0 }));
+        console.log(JSON.stringify({ outcome: 'ok', latency }));
       } else if (statusCode === 401 || statusCode === 403) {
-        console.log(JSON.stringify({ outcome: 'auth_failed', latency, status: 1 }));
+        console.log(JSON.stringify({ outcome: 'auth_failed', latency }));
       } else if (statusCode === 408 || statusCode === 429 || statusCode >= 500) {
         // Retryable / server-side conditions are NOT credential failures
-        console.log(JSON.stringify({ outcome: 'network_failed', http_status: statusCode, latency, status: 1 }));
+        console.log(JSON.stringify({ outcome: 'network_failed', http_status: statusCode, latency }));
       } else {
-        console.log(JSON.stringify({ outcome: 'auth_failed', http_status: statusCode, latency, status: 1 }));
+        console.log(JSON.stringify({ outcome: 'auth_failed', http_status: statusCode, latency }));
       }
       process.exit(0);
     });
     res.on('error', (err) => {
       if (responseClosed) return;
       responseClosed = true;
-      console.log(JSON.stringify({ outcome: 'network_failed', latency: Date.now() - startTime, status: 1 }));
+      console.log(JSON.stringify({ outcome: 'network_failed', latency: Date.now() - startTime }));
       process.exit(0);
     });
   }
@@ -467,7 +512,7 @@ const timer = setTimeout(() => {
 req.on('error', (err) => {
   clearTimeout(timer);
   const latency = Date.now() - startTime;
-  console.log(JSON.stringify({ outcome: 'network_failed', latency, status: 1 }));
+  console.log(JSON.stringify({ outcome: 'network_failed', latency }));
   process.exit(0);
 });
 
@@ -482,6 +527,7 @@ req.end();
       TEST_URL: url,
       TEST_TOKEN: token,
       TEST_MODEL: model,
+      TEST_LANE: testLane,
     }),
     encoding: 'utf8',
     timeout: 18000,
@@ -492,10 +538,10 @@ req.end();
     try {
       res = JSON.parse(r.stdout.trim());
     } catch (e) {
-      res = { outcome: 'network_failed', status: 1 };
+      res = { outcome: 'network_failed' };
     }
   } else {
-    res = { outcome: 'network_failed', status: 1 };
+    res = { outcome: 'network_failed' };
   }
 
   if (jsonMode) {
@@ -511,7 +557,10 @@ req.end();
       io.stdout.write(`${res.outcome}\n`);
     }
   }
-  return { status: res.status };
+  // rc is derived from the outcome, never from a child-reported field: 0 only on a
+  // successful reply, 1 on any failed reply (auth_failed / network_failed / timeout /
+  // unreachable), 2 on a not-configured endpoint (bad name, missing url/token, bad lane).
+  return { status: res.outcome === 'ok' ? 0 : (res.outcome === 'not_configured' ? 2 : 1) };
 }
 
 function printHelp(io) {
@@ -523,7 +572,9 @@ function printHelp(io) {
                                 write url (+ token via STDIN only) to base or the per-repo overlay;
                                 plaintext-private permits http:// to a PRIVATE-RANGE IP literal
                                 (local model on your own LAN) and is disclosed in list/which/doctor
-  test <name> [--json] [--model <id>]  sends one tiny live request; costs tokens (verify auth + latency)
+  test <name> [--json] [--model <id>]  sends one tiny live request; costs tokens (verify auth + latency);
+                                      local (http://) endpoints carry the x-lane header (AUTOPILOT_LANE,
+                                      else "autopilot") — exit 0 on ok, 1 on a failed reply, 2 if not configured
   doctor [--json]               diagnose file perms + unresolved endpoints (no network)
 Tokens are NEVER printed and NEVER read from argv.
 `);

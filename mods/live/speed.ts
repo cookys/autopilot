@@ -19,6 +19,12 @@ export type Step = {
   outTokens: number
   /** outTokens / decode time; null when the window is too short to measure or nothing was written. */
   tps: number | null
+  /** Subagent id (the loop's `agentId`); absent on the main loop and on samples stored before per-agent rates. */
+  agentId?: string
+  /** The subagent's description or name when the engine listed it; a label for the view, never an identity. */
+  agent?: string
+  /** True when the window started at `sent` (no thinking text streamed): it holds prompt processing, so `tps` is a lower bound. */
+  floor?: boolean
 }
 
 /** Only the most recent samples are kept. */
@@ -74,6 +80,53 @@ export function summarize(list: readonly Step[]): Summary {
   }
 }
 
+/** A subagent that made no request for this long is not running any more: its row folds away. */
+export const AGENT_ACTIVE_MS = 90_000
+
+/** One agent's line: the main conversation, or a subagent that is still making requests. */
+export type AgentRow = {
+  /** null = the main conversation. */
+  id: string | null
+  label: string | null
+  model: string
+  latestTps: number | null
+  /** Median request-sent -> first-chunk delay: the part of a slow answer that is prompt processing. */
+  ttftMs: number | null
+  outTokens: number
+  /** True when any of its timed requests started its window at `sent` (the rate holds prompt processing: a lower bound). */
+  floor: boolean
+  at: number
+}
+
+/** Main first (always, once it made a request), then the subagents active in the last AGENT_ACTIVE_MS, newest first. Every agent is timed from its own requests only. */
+export function agentRows(list: readonly Step[], now: number): AgentRow[] {
+  const groups = new Map<string, Step[]>()
+  for (const s of list) {
+    const key = s.isSubagent ? 'sub:' + (s.agentId ?? s.agent ?? s.model) : 'main'
+    const g = groups.get(key)
+    if (g) g.push(s)
+    else groups.set(key, [s])
+  }
+  const rows = [...groups.entries()].map(([key, steps]): AgentRow => {
+    const sum = summarize(steps)
+    const timed = steps.filter(s => s.tps !== null)
+    const last = steps[steps.length - 1]
+    return {
+      id: key === 'main' ? null : (last.agentId ?? key.slice(4)),
+      label: [...steps].reverse().find(s => s.agent !== undefined)?.agent ?? null,
+      model: last.model,
+      latestTps: sum.latestTps,
+      ttftMs: sum.medianTtft,
+      outTokens: sum.outTokens,
+      floor: timed.some(s => s.floor === true),
+      at: last.at,
+    }
+  })
+  const main = rows.filter(r => r.id === null)
+  const subs = rows.filter(r => r.id !== null && now - r.at <= AGENT_ACTIVE_MS).sort((a, b) => b.at - a.at)
+  return [...main, ...subs]
+}
+
 /** The main conversation's requests (a subagent's are counted apart). */
 export const mainSteps = (list: readonly Step[]): Step[] => list.filter(s => !s.isSubagent)
 /** The last `n` main requests long enough to time; most steps of a working turn are a lone tool call with no rate. */
@@ -121,7 +174,7 @@ const nonNegOrNull = (v: unknown): v is number | null => v === null || nonNeg(v)
 export function isStep(s: unknown): s is Step {
   if (typeof s !== 'object' || s === null) return false
   const o = s as Record<string, unknown>
-  return nonNeg(o.at) && typeof o.model === 'string' && o.model !== '' && typeof o.isSubagent === 'boolean' && nonNegOrNull(o.ttftMs) && nonNegOrNull(o.decodeMs) && nonNeg(o.outTokens) && nonNegOrNull(o.tps)
+  return nonNeg(o.at) && typeof o.model === 'string' && o.model !== '' && typeof o.isSubagent === 'boolean' && (o.agentId === undefined || typeof o.agentId === 'string') && (o.agent === undefined || typeof o.agent === 'string') && (o.floor === undefined || typeof o.floor === 'boolean') && nonNegOrNull(o.ttftMs) && nonNegOrNull(o.decodeMs) && nonNeg(o.outTokens) && nonNegOrNull(o.tps)
 }
 /** The `$.state` value: the samples that pass `isStep`, or an empty list when it is not a list. One bad sample does not void the rest. */
 export const validSteps = (raw: unknown): Step[] => (Array.isArray(raw) ? raw.filter(isStep) : [])

@@ -281,6 +281,13 @@ if [ -z "$CONSULT_ENGINE" ] || [ -z "$CONSULT_RUNNER" ] || [ -z "$CONSULT_EFFORT
   emit "qualification_failed" "$CONSULT_ENGINE" "$CONSULT_RUNNER" "$CONSULT_EFFORT" "$CONSULT_ENDPOINT" "" "consult seat unresolved" 3
 fi
 
+# shellcheck source=lib/agent-event-emit.sh
+[ -r "$SCRIPT_DIR/lib/agent-event-emit.sh" ] && . "$SCRIPT_DIR/lib/agent-event-emit.sh" && {
+  agent_event_emit_init "consult" "${CONSULT_RUNNER:-claude}" ""
+  agent_event_emit_accepted
+  agent_event_emit_register_exit_trap
+} || true
+
 # d-1dfcf757 / 01M7E2A1: operator-based cloud gate checks endpoint, workdir and brief before spawn.
 if ! _tfg_msg="$(node "$SCRIPT_DIR/lib/cn-model-dispatch-gate.js" check --runner "$CONSULT_RUNNER" --model "$CONSULT_ENGINE" --endpoint "${CONSULT_ENDPOINT:-$CONSULT_RUNNER}" ${QUESTION_FILE:+--prompt-file "$QUESTION_FILE"} --cwd "$(pwd)" 2>&1 >/dev/null)"; then
   echo "dispatch-consult: $_tfg_msg" >&2

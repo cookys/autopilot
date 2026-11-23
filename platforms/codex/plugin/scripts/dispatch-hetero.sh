@@ -20,6 +20,7 @@
 #
 # USAGE:
 #   scripts/dispatch-hetero.sh --branch <name> --prompt-file <file>
+#       [--pin-reason <text>]                 # 1..200 characters, one line; explain an explicit engine pin
 #       [--model <id>]                        # no built-in model. An implementer call with no --runner,
 #                                             # and no pace selection or strict-contract pin, uses runner local
 #                                             # and, when --model is omitted, model qwen. --runner grok with
@@ -416,6 +417,8 @@ GATE_RULES_FILE=""     # --gate-rules: per-turn gate rule list for ONE claude-na
 GATE_SETTINGS_FILE=""
 GATE_ARMED_SESSION=""
 ROLE_KIT_DIR=""        # --role-kit: per-role kit dir for ONE claude-native hand (lib/role-kit.sh)
+PIN_REASON=""
+PIN_REASON_SUPPLIED=0
 MODEL_SUPPLIED=0
 BASE_SUPPLIED=0
 RUNNER_SUPPLIED=0
@@ -2755,6 +2758,7 @@ process.stdout.write(JSON.stringify({
     args+=(--endpoint "$target_endpoint")
   fi
   unset ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN
+  export AUTOPILOT_HETERO_PIN_ORIGIN="$PINNED"
   export AUTOPILOT_HETERO_FELL_BACK=1
   export AUTOPILOT_HETERO_FELL_BACK_JSON="$FELL_BACK_JSON"
   exec "$0" "${args[@]}" < /dev/null
@@ -2811,6 +2815,7 @@ NODE
     [ -n "${WORKTREE_ROOT_RUN_ID:-}" ] && export AUTOPILOT_WORKTREE_ROOT_RUN_ID="$WORKTREE_ROOT_RUN_ID"
   fi
   unset ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN
+  export AUTOPILOT_HETERO_PIN_ORIGIN="$PINNED"
   export LOCAL_BUSY_REDISPATCH=1
   export AUTOPILOT_LOCAL_FALLBACK_PRESET='{"reason":"no_free_slot","detail":"busy_at_run"}'
   release_local_lease || true
@@ -2985,8 +2990,10 @@ write_manifest() {
   fi
   local effort_manifest_fields=""
   [ -z "${EFFORT_SENT:-}" ] || effort_manifest_fields=", \"effort\": \"$(_flat_json_escape "$EFFORT_SENT")\""
-  local role_kit_manifest_fields=""
-  [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_manifest_fields=", \"role_kit\": $ROLE_KIT_JSON"
+  local pin_json=null pinned_json="$PINNED"
+  [ "$PINNED" = false ] || [ "$PIN_REASON_SUPPLIED" -eq 0 ] || pin_json="\"$(_flat_json_escape "$PIN_REASON")\""
+  local role_kit_manifest_fields=", \"pinned\": $pinned_json, \"pin_reason\": $pin_json"
+  [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"role_kit\": $ROLE_KIT_JSON"
   [ "${SANDBOX:-off}" = "bwrap" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"sandbox\": $(sandbox_json)"
   [ "${LOCAL_RUNNER:-0}" -eq 1 ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"resolved_runner\": \"cc-shim\", \"endpoint\": \"$(_flat_json_escape "$ENDPOINT")\""
   [ "${LOCAL_RUNNER:-0}" -eq 1 ] && [ -n "${GATEWAY_TOKEN_SOURCE:-}" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"gateway_token\": \"$(_flat_json_escape "$GATEWAY_TOKEN_SOURCE")\""
@@ -3107,6 +3114,9 @@ while [ $# -gt 0 ]; do
     --campaign-contract) CAMPAIGN_CONTRACT_FILE="${2:-}"; shift 2 ;;
     --campaign-contract-sha256) CAMPAIGN_CONTRACT_SHA256="${2:-}"; shift 2 ;;
     --campaign-seal) CAMPAIGN_SEAL_FILE="${2:-}"; shift 2 ;;
+    --pin-reason)
+      [ $# -ge 2 ] || die_precondition "--pin-reason requires 1..200 characters on one line"
+      PIN_REASON="$2"; PIN_REASON_SUPPLIED=1; shift 2 ;;
     --model) MODEL="${2:-}"; MODEL_SUPPLIED=1; MODEL_IS_DEFAULT=0; shift 2 ;;
     --runner) RUNNER="${2:-}"; RUNNER_SUPPLIED=1; shift 2 ;;
     --rc-alarm-label) [ $# -ge 2 ] && [ -n "${2:-}" ] || die_precondition "--rc-alarm-label requires a non-empty label"; RC_ALARM_LABEL="$2"; shift 2 ;;
@@ -3192,6 +3202,24 @@ while [ $# -gt 0 ]; do
     *) die_precondition "unknown argument: $1" ;;
   esac
 done
+
+if [ "$PIN_REASON_SUPPLIED" -eq 1 ]; then
+  if [ -z "$PIN_REASON" ] || [ "${#PIN_REASON}" -gt 200 ] || [[ "$PIN_REASON" == *$'\n'* || "$PIN_REASON" == *$'\r'* ]]; then
+    die_precondition "--pin-reason requires 1..200 characters on one line"
+  fi
+fi
+
+PINNED=false
+if [ "$RUNNER_SUPPLIED" -eq 1 ] || [ "$MODEL_SUPPLIED" -eq 1 ]; then PINNED=true; fi
+PIN_REDISPATCH=0
+if { [ "${AUTOPILOT_HETERO_FELL_BACK:-}" = 1 ] || [ "${LOCAL_BUSY_REDISPATCH:-}" = 1 ]; } && [[ "${AUTOPILOT_HETERO_PIN_ORIGIN:-}" =~ ^(true|false)$ ]]; then
+  PINNED="$AUTOPILOT_HETERO_PIN_ORIGIN"
+  PIN_REDISPATCH=1
+fi
+unset AUTOPILOT_HETERO_PIN_ORIGIN
+if [ "$PINNED" = true ] && [ "$PIN_REASON_SUPPLIED" -eq 0 ] && [ "$PIN_REDISPATCH" -eq 0 ]; then
+  echo 'dispatch-hetero: warning: --runner/--model hard pin without --pin-reason (the pool should choose; say why you pinned)' >&2
+fi
 
 # Optional shared consecutive-failure alarm. Check before runner selection or any engine work.
 if [ -n "$RC_ALARM_LABEL" ]; then
@@ -3596,10 +3624,43 @@ esac
 [ -r "$PROMPT_FILE" ] || die_precondition "prompt file not readable: $PROMPT_FILE"
 [ "$SCRATCH" -eq 0 ] || [ -z "$REUSE_WORKTREE" ] || die_precondition "--scratch cannot be combined with --reuse-worktree"
 HETERO_FLEET_TASK_ID="$(node "$SELF_DIR/lib/fleet-task-ref.js" resolve-parent --prompt-file "$PROMPT_FILE" 2>/dev/null || true)"
+_HETERO_AEE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+# shellcheck source=lib/agent-event-emit.sh
+[ -r "$_HETERO_AEE_DIR/lib/agent-event-emit.sh" ] && . "$_HETERO_AEE_DIR/lib/agent-event-emit.sh" && {
+  agent_event_emit_init "implementer" "${RUNNER:-claude}" "" "$HETERO_FLEET_TASK_ID"
+  agent_event_emit_accepted
+  agent_event_emit_register_exit_trap
+} || true
+
 DISPATCH_LANE_JSON=null # read from the original brief before it is repacked; crosses the detach boundary via declare -p
 declare -F dispatch_lane_json >/dev/null 2>&1 && DISPATCH_LANE_JSON="$(dispatch_lane_json "$PROMPT_FILE")"
 declare -F dispatch_export_attribution >/dev/null 2>&1 && dispatch_export_attribution "$PROMPT_FILE" # the child (its cost-tracker rows) inherits lane + fleet task
 [ -z "${HETERO_FLEET_TASK_ID:-}" ] || export AUTOPILOT_FLEET_TASK="$HETERO_FLEET_TASK_ID"
+# Cloud fallback through pace-select (fleet task 01M806DD / 01M7QARG): the local fallback
+# reasons (local_ctx_over, no free slot / shed-local, cn_gate_barred) must not hardcode codex
+# any more — pace-select picks the cloud seat the pace ranking wants to spend, and only a
+# pace failure or empty result falls back to codex. Sets RUNNER/MODEL/ENDPOINT and
+# PACE_CHOICE_JSON (manifest pace_choice), keeps the caller's LOCAL_FALLBACK_JSON reason, and
+# raises LOCAL_CTX_CODEX_FALLBACK so the default pace block below does not run a second time.
+pace_cloud_fallback() {
+  _pcf_args=(--dispatch --role "${PACE_ROLE:-implementer}")
+  [ -z "${PROMPT_FILE:-}" ] || _pcf_args+=(--prompt-file "$PROMPT_FILE")
+  local _pcf _pcf_ep
+  if _pcf="$(node "$SELF_DIR/pace-select.js" "${_pcf_args[@]}")" && [ -n "$_pcf" ]; then
+    { IFS= read -r RUNNER; IFS= read -r MODEL; IFS= read -r _pcf_ep; IFS= read -r ENGINE_CHOICE_JSON; IFS= read -r PACE_CHOICE_JSON; } <<< "$_pcf"
+    ENDPOINT="$_pcf_ep"
+    MODEL_IS_DEFAULT=0
+    LOCAL_CTX_CODEX_FALLBACK=1
+    if [ "$MODEL_SUPPLIED" -eq 0 ] && printf '%s' "$MODEL" | grep -qiE 'carbon|argon|astra|fable|opus'; then
+      RUNNER="codex"; MODEL=""; ENDPOINT=""; PACE_CHOICE_JSON=""; ENGINE_CHOICE_JSON=""
+      return 1
+    fi
+    return 0
+  fi
+  RUNNER="codex"; MODEL=""; ENDPOINT=""; PACE_CHOICE_JSON=""; ENGINE_CHOICE_JSON=""
+  LOCAL_CTX_CODEX_FALLBACK=1
+  return 1
+}
 # An unpinned implementer uses an available local qwen or GLM seat when its endpoint
 # is ready, a gateway lease is granted, the estimated prompt context fits, and the CN
 # gate allows that seat (operator via PM 01M7XHF4). Otherwise the unpinned path
@@ -3711,12 +3772,10 @@ if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_S
       release_local_lease || true
       _gate_detail="${_gate_msg%%[[:space:]]*}"
       _gate_detail="${_gate_detail:-cn_model_dispatch_barred}"
-      RUNNER="codex"
-      MODEL=""
-      ENDPOINT=""
+      pace_cloud_fallback || true
       LOCAL_CTX_CODEX_FALLBACK=1
       LOCAL_FALLBACK_JSON="$(node -e 'process.stdout.write(JSON.stringify({reason:"cn_gate_barred",detail:process.argv[1],family:process.argv[2]}))' "$_gate_detail" "$_slot_family")"
-      printf 'local-slot: cn_gate_barred family=%s -> codex\n' "$_slot_family" >&2
+      printf 'local-slot: cn_gate_barred family=%s -> %s\n' "$_slot_family" "$RUNNER" >&2
       unset _gate_detail
     fi
   else
@@ -3725,12 +3784,13 @@ if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_S
     LOCAL_LEASE_DETAIL="$(node -e 'try{const o=JSON.parse(process.argv[1]);process.stdout.write(o&&o.detail||"")}catch{}' "$_lease_json")"
     LOCAL_FALLBACK_JSON="$(printf '%s\n' "$_slot_parsed" | sed -n '6p')"
     LOCAL_SLOTS_JSON=null
-    if [ "$SHED_ROUTE_TARGET" = "local" ]; then RUNNER="codex"; fi
+    if [ "$SHED_ROUTE_TARGET" = "local" ]; then pace_cloud_fallback || true; fi
     if [ "$(node -e 'try{process.stdout.write(JSON.parse(process.argv[1]).reason||"")}catch{}' "$LOCAL_FALLBACK_JSON")" = "local_ctx_over" ]; then
-      printf 'local-slot: local_ctx_over est_tokens=%s limit=%s -> codex\n' \
+      if [ "$RUNNER" = "auto" ]; then pace_cloud_fallback || true; fi
+      printf 'local-slot: local_ctx_over est_tokens=%s limit=%s -> %s\n' \
         "$(node -e 'const o=JSON.parse(process.argv[1]);process.stdout.write(String(o.est_tokens))' "$LOCAL_FALLBACK_JSON")" \
-        "$(node -e 'const o=JSON.parse(process.argv[1]);process.stdout.write(String(o.limit))' "$LOCAL_FALLBACK_JSON")" >&2
-      RUNNER="codex"
+        "$(node -e 'const o=JSON.parse(process.argv[1]);process.stdout.write(String(o.limit))' "$LOCAL_FALLBACK_JSON")" \
+        "$RUNNER" >&2
       LOCAL_CTX_CODEX_FALLBACK=1
     fi
   fi
@@ -5355,8 +5415,9 @@ Before finishing, write \$AUTOPILOT_EVIDENCE_NOTES with sections \`## Tests\` (l
 "
   KIMI_ARGV_LIMIT="${KIMI_ARGV_LIMIT:-120000}"
   KIMI_ARGV_BYTES=$(( $(printf '%s' "$KIMI_EDIT_ONLY" | wc -c) + $(wc -c < "$PROMPT_FILE") ))
+  KIMI_INDIRECT=0
   if [ "$KIMI_ARGV_BYTES" -gt "$KIMI_ARGV_LIMIT" ]; then
-    die_precondition "kimi prompt is ${KIMI_ARGV_BYTES} bytes but kimi accepts the prompt only as one -p argv string (Linux MAX_ARG_STRLEN 131072; limit ${KIMI_ARGV_LIMIT}) — split the task into smaller units, or dispatch it to a runner that reads a prompt file (codex, grok, opencode)"
+    KIMI_INDIRECT=1
   fi
 fi
 
@@ -6131,10 +6192,44 @@ _supervise_commit_quiet() {
   done
 }
 
+_hetero_registry_start() {
+  local rp="$1"
+  local reg_js="${SELF_DIR:-}/lib/hetero-run-registry.js"
+  [ -f "$reg_js" ] || return 0
+  local run_id="${WT_RUN_ID:-${RUN_ID:-}}"
+  [ -n "$run_id" ] || return 0
+  local owner="${AUTOPILOT_OWNER_MEMBER:-${FLEET_MEMBER:-${OWNER_MEMBER:-}}}"
+  local engine="${RUNNER:-${MODEL:-}}"
+  local res_path="${RESULT_PATH:-${LOG:-}}"
+  node "$reg_js" write \
+    --run-id "$run_id" \
+    --owner-member "$owner" \
+    --engine "$engine" \
+    --pid "$rp" \
+    --status "running" \
+    --result-path "$res_path" >/dev/null 2>&1 || true
+}
+
+_hetero_registry_end() {
+  local rc="${1:-1}"
+  local reg_js="${SELF_DIR:-}/lib/hetero-run-registry.js"
+  [ -f "$reg_js" ] || return 0
+  local run_id="${WT_RUN_ID:-${RUN_ID:-}}"
+  [ -n "$run_id" ] || return 0
+  local st="failed"
+  [ "$rc" -eq 0 ] 2>/dev/null && st="done"
+  local res_path="${RESULT_PATH:-${LOG:-}}"
+  node "$reg_js" update \
+    --run-id "$run_id" \
+    --status "$st" \
+    --result-path "$res_path" >/dev/null 2>&1 || true
+}
+
 _wait_worker_with_watchdog() {
   local rp="$1"
   local secs=""
   WORKER_RP="$rp"
+  _hetero_registry_start "$rp"
   if [ "${WATCHDOG_DISARMED:-0}" -ne 1 ]; then
     if [ -z "${WATCHDOG_IDLE_S:-}" ]; then
       _hetero_resolve_watch_limits || true
@@ -6289,6 +6384,7 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
     _wait_worker_with_watchdog "$rp"
   fi
   reap_container   # reap on the NORMAL exit path too (catch escaped survivors), set CONTAINED
+  _hetero_registry_end "${AGENT_EXIT:-1}"
 }
 
 # --- the agent runner (its stdout/stderr go to LOG, never our stdout) ---
@@ -6719,14 +6815,41 @@ elif [ "$IS_KIMI" -eq 1 ] && [ "$BIN_FLAG_KIMI" -eq 1 ]; then
   #   (above) so the run here sends the EXACT bytes that were size-checked.
   KIMI_PROMPT_FILE="$(mktemp -t dispatch-hetero-kimi-prompt-XXXXXX)"
   printf '%s' "${KIMI_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$KIMI_PROMPT_FILE"
-  # -p "$(cat file)" drops trailing newlines. Hash and send those exact argv bytes.
   KIMI_SENT_FILE="$(mktemp -t dispatch-hetero-kimi-sent-XXXXXX)"
-  printf '%s' "$(cat "$KIMI_PROMPT_FILE")" > "$KIMI_SENT_FILE"
+  KIMI_PARTS_DIR=""
+  if [ "${KIMI_INDIRECT:-0}" -eq 1 ]; then
+    # File indirection (BL-0025): split the combined prompt into ~60 KB line-preserving parts
+    # inside a run-scoped scratch dir, and pass a short pointer via -p.
+    KIMI_PART_BYTES="${AUTOPILOT_KIMI_PART_BYTES:-60000}"
+    KIMI_PARTS_DIR="$(mktemp -d -t dispatch-hetero-kimi-parts-XXXXXX)"
+    split -C "$KIMI_PART_BYTES" -d -a 3 "$KIMI_PROMPT_FILE" "$KIMI_PARTS_DIR/autopilot-hetero-prompt.part-" \
+      || die_precondition "could not stage the kimi prompt parts"
+    KIMI_PARTS=""
+    for _kp in "$KIMI_PARTS_DIR"/autopilot-hetero-prompt.part-*; do
+      KIMI_PARTS="${KIMI_PARTS:+$KIMI_PARTS, }$_kp"
+    done
+    printf '%s' "Your complete task is split, in order, across these files: ${KIMI_PARTS}. Each file fits in one Read call: read EVERY file completely, in that order, before starting. Together they form one prompt; then do exactly what it says." > "$KIMI_SENT_FILE"
+  else
+    # -p "$(cat file)" drops trailing newlines. Hash and send those exact argv bytes.
+    printf '%s' "$(cat "$KIMI_PROMPT_FILE")" > "$KIMI_SENT_FILE"
+  fi
   seal_runner_prompt_bytes "$KIMI_SENT_FILE"
   EFFORT_SENT="${KIMI_EFFORT_SEND:-default}"
   run_worker bash -c 'cd "$1" && exec "$2" -m "$4" -p "$(cat "$3")" --output-format text' \
       _ "${WORKER_CWD:-$WT}" "$KIMI_BIN" "$KIMI_SENT_FILE" "$MODEL"
-  rm -f "$KIMI_SENT_FILE" "$KIMI_PROMPT_FILE"
+  if [ -n "$KIMI_PARTS_DIR" ]; then
+    node -e '
+      const fs = require("fs"), path = require("path");
+      const dir = process.argv[1];
+      const prefix = path.join(process.env.TMPDIR || "/tmp", "dispatch-hetero-kimi-parts-");
+      if (dir.startsWith(prefix) && path.dirname(dir) === path.dirname(prefix)) {
+        for (const name of fs.readdirSync(dir)) fs.unlinkSync(path.join(dir, name));
+        fs.rmdirSync(dir);
+      }
+    ' "$KIMI_PARTS_DIR"
+  fi
+  rm -f -- "$KIMI_SENT_FILE" "$KIMI_PROMPT_FILE"
+  KIMI_PARTS_DIR=""
   # Part 3: kimi has no usage command; its result is the quota signal (429 -> exhausted + reset, clean -> available).
   node "$SELF_DIR/lib/kimi-quota-observe.js" observe --rc "${AGENT_EXIT:-0}" --log-file "$LOG" >/dev/null 2>&1 || true
 elif [ "$IS_CURSOR" -eq 1 ] || [ "$IS_KIMI" -eq 1 ]; then
@@ -8400,7 +8523,7 @@ dispatch_detached_run() {
     # token_seat_guard (lib/token-seat.sh) is called inside run_agent's claude branches; without it the
     # detached child dies with "command not found" before the claude worker starts.
     declare -f token_seat_guard 2>/dev/null || true
-    declare -f agy_print_timeout agy_assert_disposable_home die_precondition fell_back_json_suffix hetero_log_fallback child_session_env_setup repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_worker_alive _watchdog_signal_worker _hetero_resolve_watch_limits _watchdog_sleep_sample _watchdog_progress_sample _watchdog_fire _arm_worker_watchdog _worker_has_busy_descendant _supervise_commit_quiet _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts capture_structured_provider_error _prefer_structured_classified_error passive_capture \
+    declare -f agy_print_timeout agy_assert_disposable_home die_precondition fell_back_json_suffix hetero_log_fallback child_session_env_setup repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_worker_alive _watchdog_signal_worker _hetero_resolve_watch_limits _watchdog_sleep_sample _watchdog_progress_sample _watchdog_fire _arm_worker_watchdog _worker_has_busy_descendant _supervise_commit_quiet _hetero_registry_start _hetero_registry_end _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts capture_structured_provider_error _prefer_structured_classified_error passive_capture \
       _is_engine_unavailable _hetero_runner_token _capability_write_note _capability_write_suppress_now seat_strike_capture classify_outcome _emit_question_waiting_event heartbeat_loop detached_main seal_runner_prompt_bytes write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks resolve_tip_verify_commands run_tip_verify _fp_unverifiable main_checkout_fingerprint main_checkout_parts_digest main_checkout_describe_delta main_checkout_wt_symlink_leaks check_main_checkout_boundary run_hands_content_gate run_hands_backlog_gate run_hands_backlog_reconcile_gate \
       capture_scratch_files _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \
@@ -8582,6 +8705,7 @@ if ! _cont_finalize_or_die; then
   exit 1
 fi
 emit "$OUTCOME_STATUS" "$OUTCOME_COMMIT" "$OUTCOME_FILES" "$OUTCOME_INS" "$OUTCOME_DEL" "$OUTCOME_WT" "$OUTCOME_ERR"
+[ -z "${HETERO_FLEET_TASK_ID:-}" ] || node "$SELF_DIR/lib/dispatch-strike.js" --task "$HETERO_FLEET_TASK_ID" >&2 || true
 maybe_redispatch_cloud_busy "$OUTCOME_STATUS"
 if [ -n "$RC_ALARM_LABEL" ]; then
   _rc_alarm_rc="$OUTCOME_EXIT"

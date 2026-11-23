@@ -2274,6 +2274,14 @@
         "20d72d785f12a400449e62a1365411059a4c66052965291a7a4e3068f5d090ef"
       ],
       "rationale": "P0 skills/ceo-agent/SKILL.md:407 ('| Context near limit | Produce handoff, suggest new session |'). Rewritten in place at current skills/ceo-agent/SKILL.md:376 (and the same line in platforms/codex/plugin/skills/ceo-agent/SKILL.md); no line was inserted or removed, so segment ceo.circuit-and-quality stays 367-383 and duplicate_rule_sets line numbers stay put. The change only retargets the handoff wording: the circuit breaker still fires when context is near the limit, and the action is now to write the handoff as a backup and keep working (auto-compact restores context) instead of suggesting a new session. Successor is the rewritten line."
+    },
+    {
+      "content_hash": "a6ffc2eb0059f8c9818c84e094cfef70997cad82cc2fcb4e96d757d0cba03616",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "69a39c2667d4642f2b43119a8fb50da99f05e62d81d4334988bfdb8f894c5e04"
+      ],
+      "rationale": "skills/dev-flow/SKILL.md:20 retains the routing default and adds the XS lane-seat rule and two-failure escalation."
     }
   ]
 }

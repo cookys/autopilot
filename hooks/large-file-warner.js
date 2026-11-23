@@ -11,6 +11,8 @@ const { isEnabled } = require('./_shared/opt-in');
 
 if (!isEnabled('large-file-warner')) process.exit(0);
 
+const { gateHint } = require('./lib/gate-hint.js');
+
 const WARN_BYTES = 500 * 1024;
 const BLOCK_BYTES = 2 * 1024 * 1024;
 
@@ -48,7 +50,8 @@ try {
   if (size >= BLOCK_BYTES) {
     process.stderr.write(
       `BLOCKED: ${filePath} is ${formatSize(size)} (limit: ${formatSize(BLOCK_BYTES)}). ` +
-      `Use offset/limit to read specific sections.\n`
+      `Use offset/limit to read specific sections.\n` +
+      gateHint('用 Read 的 offset/limit 參數分段讀取需要的部分', 'hooks/README.md') + '\n'
     );
     process.exit(2);
   }

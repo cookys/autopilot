@@ -17,8 +17,8 @@ const pageForDigit = (key: string): string | undefined => {
   return hit?.[0]
 }
 
-// v7.5 draws no O4 shell: its menus d 待決 / r 圓桌 / u 用量 / p 寵物 / h 說明 live on in the Pane and the band as keys (d is the 2 page, h is the 9 page, the rest are here)
-export const V75_MOVED: Record<string, string> = { r: 'room', u: 'spend', p: 'pet' }
+// shell menus d 待決 / r 圓桌 / u 用量 / p 寵物 / h 說明 as page keys (d is page 2, h is page 9, the rest are here)
+export const SHELL_MENU_PAGES: Record<string, string> = { r: 'room', u: 'spend', p: 'pet' }
 const CARD_PAGES = new Set(['decide', 'todo'])
 
 export function routeKey(key: string, st: KeyState): KeyAction {
@@ -32,7 +32,7 @@ export function routeKey(key: string, st: KeyState): KeyAction {
     if (key === 'e') return { kind: 'expand' }
     if (key === 'ArrowUp' || key === 'ArrowDown' || key === 'PageUp' || key === 'PageDown') return { kind: 'scroll', by: key === 'ArrowUp' || key === 'PageUp' ? -1 : 1, page: key.startsWith('Page') }
   }
-  const moved = V75_MOVED[key] // v7.5: the old shell's r / p / u menus, as page keys (u is 撤回 on 待決, so there it stays undo)
+  const moved = SHELL_MENU_PAGES[key] // r / p / u page keys (u stays undo on 待決)
   if (moved !== undefined && !(key === 'u' && st.page === 'decide')) return moved === st.page ? { kind: 'none' } : { kind: 'page', to: moved }
   const target = /^[1-9]$/.test(key) ? pageForDigit(key) : key === PET_KEY ? 'pet' : undefined
   if (target !== undefined) return target === st.page ? { kind: 'none' } : { kind: 'page', to: target }

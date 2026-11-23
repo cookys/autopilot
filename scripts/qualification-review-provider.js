@@ -1977,6 +1977,21 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
   });
 }
 
+function cnGateRefusal(runner, model, endpoint, content) {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qrp-cn-'));
+  try {
+    const file = path.join(dir, 'case.txt');
+    fs.writeFileSync(file, content);
+    const c = require('./lib/cn-model-dispatch-gate').check({ runner, model, endpoint, cwd: dir, files: [file] });
+    return c.allowed ? '' : c.line;
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 async function main() {
   agyRetryDelaysResolved = parseAgyRetryDelays(process.env.QRP_AGY_RETRY_DELAYS_MS);
   const transport = process.env.QRP_TRANSPORT || 'http';
@@ -2137,6 +2152,11 @@ async function main() {
       fail('discuss prompt mode requires a case envelope JSON object with transcript and bundle');
     }
   }
+  // CN gate (01M83DHGJ4): the host sends this case to a model operator, so the gate that
+  // follows the receiving operator applies here too, with the payload as the brief.
+  const cnRefusal = cnGateRefusal(transport === 'http' ? 'qrp-http' : cliKind, model,
+    transport === 'http' ? baseUrl : '', request.payload.content);
+  if (cnRefusal) fail(cnRefusal);
   let foremanCaseIntro = 'This is the campaign brief. Call shell, dispatch, request_capability, or return_verdict. A tool result continues this same campaign. A restart starts a new session that sees only the brief, the worktree and .autopilot/.';
   if (promptMode === 'foreman') {
     let brief;

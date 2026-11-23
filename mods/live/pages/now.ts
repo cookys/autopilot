@@ -701,7 +701,8 @@ type V74NowTrace = {
   pmError?: string | null
   fleetError?: string | null
   fleetSummary?: { fetchedMs: number | null; error: string | null; totals: { stuck: number; running: number; waiting: number; failed: number } } | null
-  errors?: { pm?: string | null; fleet?: string | null }
+  // now = PM feed error message (aligned with V74Ctx.errors / ages keyed by page id).
+  errors?: { now?: string | null; fleet?: string | null }
 }
 
 const brokenWrapped = (text: string, cols: number): Row[] => wrapRow(broken(text), Math.max(8, cols), WRAP_HANG)
@@ -725,7 +726,7 @@ function v74FleetSection(ctx: PageCtx, wide: boolean): Row[] {
   const { t, v74, console: con, size, nowMs } = ctx
   const pm = v74!.pm
   const vExt = v74 as V74NowTrace
-  const pmErr = (vExt.pmError ?? vExt.errors?.pm ?? '').trim()
+  const pmErr = (vExt.pmError ?? vExt.errors?.now ?? '').trim()
   const fleetSum = vExt.fleetSummary ?? null
   const fleetErr = (vExt.fleetError ?? vExt.errors?.fleet ?? fleetSum?.error ?? '').trim()
   if (pm === null) {

@@ -115,7 +115,7 @@ test('r11 #10: the collapsed "另有 N 張" row lists the hidden cards by their 
   const nav = { ...NO_NAV, cursor: 0, picks: { [decide[2].id]: 0 } }
   const { body } = decidePage.render(ctxOf({}, 14, 100, { decide: nav }))
   const left = body.slice(2).map(r => { const s = text(r); return s.slice(0, s.indexOf(' │ ')) })
-  expect(left.find(r => r.startsWith('▸ 01 '))).toBeDefined()
+  expect(left.find(r => r.startsWith('‣ 01 '))).toBeDefined()
   const row2 = left.find(r => r.startsWith('  02 '))
   const row3 = left.find(r => r.startsWith('  03 '))
   expect(row2).toBeDefined()

@@ -234,7 +234,7 @@ test('now R3: a seat_blocked pool is the red worst pool on 現況 and the first 
   const seg = nowPage.render(ctxOf(160, 40, c)).body.flat().find(s => s.text.includes('codex'))
   expect(seg, '現況 names codex').toBeDefined()
   expect(seg?.color, '現況 paints it red').toBe(PALETTE.broken)
-  const q = renderQuota(ctxOf(160, 40, c)).body.map(text).find(l => l.startsWith('▸')) as string
+  const q = renderQuota(ctxOf(160, 40, c)).body.map(text).find(l => l.startsWith('‣')) as string
   expect(q, '額度 ranks codex first and red').toContain('codex')
   expect(q).toContain('✗')
 })

@@ -26,8 +26,9 @@ test('v74-d: 待決 draws every card; only the selected card has a/b/c Buttons (
   const { body, actions } = decidePage.render(ctxOf({ nav: { cursor: 2, picks: {}, notes: {}, noteMode: false } }))
   const all = body.map(text).join('\n')
   for (const c of decide) expect(all).toContain(c.title)
-  expect(all).toContain('▸  3. 預覽先拍幾欄')
-  expect(all).not.toContain('▸  1.')
+  expect(all).toContain('‣  3. 預覽先拍幾欄')
+  expect(all).not.toContain('‣  1.')
+  expect(all).not.toContain('▸  3.')
   expect(all).toContain('· 合併 ✧') // card 1: plain text with the recommended mark
   expect(all).toContain('a: 80 欄')
   expect(all).toContain('b: 120 欄 ✧')

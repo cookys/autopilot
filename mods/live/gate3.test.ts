@@ -64,11 +64,11 @@ test('gate3 item 1: quota draws exactly one row per pool at 160x40, 120x30, 80x2
       const focusIdx = bodyRows.findIndex((l, i) => i >= tableStart && l.includes('──'))
       const tableRegion = focusIdx >= 0 ? bodyRows.slice(tableStart, focusIdx) : bodyRows.slice(tableStart)
       expect(bodyRows.slice(tableStart).some(l => l.trim() === ''), 'X5: no internal padding').toBe(false)
-      const poolRows = bodyRows.filter(l => /^[▸ ] [✗?⏶✓] \S/.test(l))
+      const poolRows = bodyRows.filter(l => /^[‣ ] [✗?⏶✓] \S/.test(l))
       expect(tableRegion.length, cols + 'x' + rows + ': table region rows == pools shown').toBe(POOLS.length)
       expect(poolRows.length, cols + 'x' + rows + ': pool rows drawn == pools shown').toBe(POOLS.length)
       for (const r of tableRegion) {
-        expect(/^[▸ ] [✗?⏶✓] \S/.test(r), cols + 'x' + rows + ': not a continuation row: ' + r).toBe(true)
+        expect(/^[‣ ] [✗?⏶✓] \S/.test(r), cols + 'x' + rows + ': not a continuation row: ' + r).toBe(true)
         expect(/^\s*[）)：；，]/.test(r), cols + 'x' + rows + ': no punctuation continuation fragment: ' + r).toBe(false)
         expect(displayWidth(r)).toBeLessThanOrEqual(cols)
       }
@@ -110,7 +110,7 @@ test('gate3 item 2: when body has 4 rows or fewer, no section title and no colum
     expect(qBody.some(l => l.includes('重置') || l.includes('7 天')), 'H=' + H + ' quota: no column header').toBe(false)
     // M2: a cut narrow table uses a pool-count hint once two pool-area rows fit; a pool row still stays visible.
     expect(qBody.some(l => /↓ 還有 \d+ 池（/.test(l)), 'H=' + H + ' quota: hidden-pool hint').toBe(H >= 7)
-    expect(qBody.filter(l => /^[▸ ] [✗?⏶✓] \S/.test(l)).length, 'H=' + H + ' quota: >= 1 pool row').toBeGreaterThanOrEqual(1)
+    expect(qBody.filter(l => /^[‣ ] [✗?⏶✓] \S/.test(l)).length, 'H=' + H + ' quota: >= 1 pool row').toBeGreaterThanOrEqual(1)
   }
   // 現況 with no pending cards, 1 red pool, 1 unknown pool, and 1 offline/stuck line in a short body (C1: one summary row per class: fleet -> quota -> 另有 N 項)
   const oneRedOneUnknown = [

@@ -82,8 +82,8 @@ export type V74Ctx = {
   fleetSummary?: { fetchedMs: number | null; error: string | null; totals: { stuck: number; running: number; waiting: number; failed: number } } | null
   todo: TodoCard[] | null
   nav: CardNav
-  ages?: Record<string, number | null>
-  errors?: Record<string, string | null>
+  ages?: Record<string, number | null> // keyed by page id (now = PM feed fetchedMs, decide, fleet, ...)
+  errors?: Record<string, string | null> // keyed by page id (now = PM feed error, decide, fleet, ...)
   keysHeld?: boolean
   sendResult?: { n: number; left: number } | null
 }

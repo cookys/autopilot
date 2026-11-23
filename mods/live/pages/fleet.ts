@@ -27,7 +27,8 @@ export type FleetFeedInfo = {
   totals?: { stuck: number; running: number; waiting: number; failed: number } | null
 }
 export type FleetCtx = PageCtx & { others?: OthersView | null; fleetFeed?: FleetFeedInfo | null }
-type V74FleetTrace = { pmError?: string | null; fleetError?: string | null; fleetSummary?: FleetFeedInfo | null; errors?: { pm?: string | null; fleet?: string | null } }
+// now = PM feed error message (aligned with V74Ctx.errors / ages keyed by page id).
+type V74FleetTrace = { pmError?: string | null; fleetError?: string | null; fleetSummary?: FleetFeedInfo | null; errors?: { now?: string | null; fleet?: string | null } }
 
 type FleetRow = { line: ConsoleLine; sid: StateId; word: string; worst: ConsoleLine['issues'][number] | null }
 const RANK: Record<string, number> = { failed: 0, stalled: 1 }
@@ -97,7 +98,7 @@ function lineSummaryBlock(ctx: FleetCtx, wide: boolean): Row[] {
   const { t, nowMs, size, console: con } = ctx
   const vExt = ctx.v74 as V74FleetTrace | undefined
   const pm = ctx.v74?.pm ?? null
-  const pmErr = (vExt?.pmError ?? vExt?.errors?.pm ?? '').trim()
+  const pmErr = (vExt?.pmError ?? vExt?.errors?.now ?? '').trim()
   const fleetInfo = ctx.fleetFeed ?? vExt?.fleetSummary ?? null
   const fleetErr = (fleetInfo?.error ?? vExt?.fleetError ?? vExt?.errors?.fleet ?? '').trim()
   const out: Row[] = []

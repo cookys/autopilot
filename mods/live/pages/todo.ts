@@ -1,5 +1,6 @@
 // mods/live/pages/todo.ts — v7.4 S9 待辦 (page id 'todo', key 8). Cards come from ctx.v74.todo (the source is not live yet: null at runtime -> the broken row; tests build it from fixtures/v74/todo.json).
 // Every card top to bottom with its due date; the a/b/c options belong to the card at the cursor and sit in the action rows under it. Pure: rows in, rows out.
+// Glyph usage: ▸ (GLYPHS.structure.folded) is reserved for folded sections/disclosures; selected card cursor uses ‣ (U+2023, EAW=N, width=1).
 import { GLYPHS } from '../../tux/glyphs.ts'
 import { PALETTE } from '../../tux/palette.ts'
 import { displayWidth, truncateToWidth } from '../model'
@@ -14,6 +15,7 @@ import type { Row } from './rows'
 const seg = (text: string, o: Partial<Seg> = {}): Seg => ({ text, ...o })
 const dimSeg = (text: string): Seg => ({ text, dim: true })
 const CARD_MARK = GLYPHS.structure.bullet
+const CURSOR_MARK = '\u2023' // ‣ (U+2023, EAW=N, width=1): selected card cursor, distinct from fold glyph ▸
 const widthOf = (r: Row): number => r.reduce((w, s) => w + displayWidth(s.text), 0)
 function fit(row: Row, cols: number): Row {
   if (widthOf(row) <= cols) return row
@@ -35,7 +37,7 @@ function todoCard(c: TodoCard, i: number, n: number, selected: boolean, notes: R
   const due = dueText(c.dueMs)
   const label = t('v74.d.todo_head', { k: i + 1, n }) + ' ' + (due === null ? t('v74.d.todo_no_due') : t('v74.d.todo_due', { date: due }))
   const head: Row = [dimSeg(GLYPHS.structure.open + ' ' + label + ' ' + GLYPHS.structure.rule.repeat(Math.max(0, ctx.size.cols - displayWidth(label) - 4)))]
-  const title: Row = [seg((selected ? GLYPHS.structure.folded : ' ') + CARD_MARK + ' '), seg(c.title, selected ? { color: PALETTE.here, here: true } : {})]
+  const title: Row = [seg((selected ? CURSOR_MARK : ' ') + CARD_MARK + ' '), seg(c.title, selected ? { color: PALETTE.here, here: true } : {})]
   const back: Row = [seg('  '), dimSeg(t('v74.d.todo_back')), seg(' ' + (due === null ? t('v74.d.todo_no_due_note') : due))]
   const note = notes[c.id] ?? ''
   return [head, title, back, [seg('  '), dimSeg(t('v74.d.note')), seg(note === '' ? t('v74.d.note_empty') : note)]].map(r => fit(r, ctx.size.cols))

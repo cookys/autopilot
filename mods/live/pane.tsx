@@ -181,6 +181,7 @@ const HINT_SPLIT = /(?<=^|\s)(?=\[[a-z]\] \S)/
 // as a separate last row under the box (the caller counts it in its own height). The page renderers are the same: they are asked for a frame of `frame.rows + strip` rows
 // (head + body + actions + hint border + strip, `cols - 4` wide) and the head, the hint border and the strip are cut off the result and redrawn as the box's borders and the tab row.
 const V74_TAB_HOTKEYS = false // the host draws a hotkey Button as `1: 現況`; the design's tab row is `1 現況`, so the tab buttons carry no hotkey (click only)
+const CURSOR_MARK = '\u2023' // ‣ (U+2023, EAW=N): active item cursor; distinct from fold marker ▸ (GLYPHS.structure.folded)
 function fitSegs(segs: Seg[], max: number): Seg[] {
   const out: Seg[] = []
   let used = 0
@@ -202,18 +203,26 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
   const frameRowsN = box ? frame.rows + stripN : frame.rows // what the page renderers are asked for (box: the inner rows + head + hint border + strip)
   const epoch = frame.epoch ?? 0
   const ep = epoch > 0 ? ':' + epoch : ''
-  const ctx = { pendingScroll: frame.pendingScroll, live: snap, console: frame.console, size: { cols, rows: frameRowsN }, bodyColumns: frame.bodyColumns ?? fullCols, ...(frame.maxRows !== undefined ? { maxRows: frame.maxRows } : {}), t, nowMs: frame.nowMs, steps: frame.steps, pet: frame.pet, ...(frame.room !== undefined ? { room: frame.room } : {}), ...(frame.poolEta !== undefined ? { poolEta: frame.poolEta } : {}), ...(box ? { box: true as const } : {}), ...(page.id === 'fleet' ? { others: frame.others ?? null } : {}), ...(frame.v74 !== undefined ? { v74: frame.v74 } : {}), ...(page.id === 'decide' && frame.decide !== undefined ? { decide: frame.decide } : {}) }
+  const baseCtx = { pendingScroll: frame.pendingScroll, live: snap, console: frame.console, size: { cols, rows: frameRowsN }, bodyColumns: frame.bodyColumns ?? fullCols, ...(frame.maxRows !== undefined ? { maxRows: frame.maxRows } : {}), t, nowMs: frame.nowMs, steps: frame.steps, pet: frame.pet, ...(frame.room !== undefined ? { room: frame.room } : {}), ...(frame.poolEta !== undefined ? { poolEta: frame.poolEta } : {}), ...(box ? { box: true as const } : {}), ...(page.id === 'fleet' ? { others: frame.others ?? null } : {}), ...(frame.v74 !== undefined ? { v74: frame.v74 } : {}), ...(page.id === 'decide' && frame.decide !== undefined ? { decide: frame.decide } : {}) }
+  const statusRow = box ? v74BodyStatusRow(page, baseCtx, cols) : null
+  const hasStatusRow = box && frame.rows >= 3 && statusRow !== null && statusRow.some(s => s.text.trim() !== '')
+  // Reserve 1 row inside frameRows only when statusRow is actually drawn so body/overflow never lose their last row.
+  const effFrameRows = hasStatusRow && frameRowsN > 4 ? frameRowsN - 1 : frameRowsN
+  const ctx = effFrameRows === frameRowsN ? baseCtx : { ...baseCtx, size: { cols, rows: effFrameRows } }
   const view = frame.view?.[page.id] ?? (page.id === 'review' ? DEFAULT_REVIEW_VIEW : { focus: 0, expanded: false })
   // the pages that take a view are drawn through their view functions; the registry's render() keeps the default view
   const drawn: Page = page.id === 'fleet' ? { ...page, render: c => fleetPageView(c, view) } : page.id === 'quota' ? { ...page, render: c => renderQuota(c, view) } : page.id === 'review' ? { ...page, render: c => renderReview(c, view) } : page.id === 'spend' ? { ...page, render: c => renderSpend(c, view) } : page
   // free rows go to content first: a folded page (fleet lines, a pool's seats, spend details) is drawn open when the open body fits whole in the rows the surface has left, unless folded by key
   const unfold = view.expanded || view.folded === true ? undefined : page.id === 'fleet' ? (c: PageCtx) => fleetPageView(c, { ...view, expanded: true }) : page.id === 'quota' ? (c: PageCtx) => renderQuota(c, { ...view, expanded: true }) : page.id === 'spend' ? (c: PageCtx) => renderSpend(c, { ...view, expanded: true }) : undefined
   const rows: Row[] = frameRows(drawn, ctx, { ...(box ? { topAnchor: true as const } : {}), pages: frame.pages, ...(unfold === undefined ? {} : { unfold }), ...(frame.scroll === undefined ? {} : { scroll: frame.scroll }) })
-  const stripCount = (cols < STRIP_SPLIT_COLS ? 2 : 1) + 1 // bottom border row + tab strip
+  const stripCount = effFrameRows <= 3 ? stripN : stripN + 1 // bottom border row (omitted at <= 3 rows) + tab strip
   // the action rows are exactly the ones the page returned (the frame pads nothing): only those rows may bind a `[x]` hint, never the body rows above them
-  const avail = Math.max(0, frameRowsN - 1 - stripCount)
-  const firstActs = drawn.render(ctx).actions.length
-  const effActs = avail - Math.min(Math.max(1, firstActs), avail) <= 4 ? drawn.render({ ...ctx, shortBody: true }).actions.length : Math.max(firstActs, unfold === undefined ? 0 : unfold(ctx).actions.length)
+  const avail = Math.max(0, effFrameRows - 1 - stripCount)
+  const countActs = (acts: Row[]): number => (box
+    ? acts.filter(row => row.some(s => s.press !== undefined) || row.map(s => s.text).join('').trim() !== t('frame.unknown')).length
+    : acts.length)
+  const firstActs = countActs(drawn.render(ctx).actions)
+  const effActs = avail - Math.min(Math.max(1, firstActs), avail) <= 4 ? countActs(drawn.render({ ...ctx, shortBody: true }).actions) : Math.max(firstActs, unfold === undefined ? 0 : countActs(unfold(ctx).actions))
   const actionCount = Math.max(0, Math.min(effActs, avail))
   const press = (id: string) => { frame.onPress?.(id) }
   const noteAt = page.id === 'decide' && frame.decide?.textMode === true && el.Input !== undefined ? rows.length - stripCount - 1 : -1
@@ -261,7 +270,7 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
         const letter = hint !== null && !used.has(hint[1]) ? hint[1] : keyLetter !== null && !used.has(keyLetter) ? keyLetter : null
         if (letter !== null) used.add(letter)
         const cardAt = typeof sg.press === 'string' && sg.press.startsWith('card:') ? Number(sg.press.slice(5)) : null
-        const focusMark = frame.pendingScroll === undefined && cardAt !== null && box && !typing && sg.text.startsWith(GLYPHS.structure.folded)
+        const focusMark = frame.pendingScroll === undefined && cardAt !== null && box && !typing && (sg.text.startsWith(CURSOR_MARK) || sg.text.startsWith(GLYPHS.structure.folded))
         const stripLead = (x: string) => letter === null ? x : x.replace(new RegExp('^\\[' + letter + '\\] |^' + letter + ': |^' + letter + ' '), '')
         const texts = run.map((x, n) => <Text key={'g' + (j + n)} {...drawSeg(x)} wrap="truncate">{n === 0 && letter !== null ? stripLead(x.text) : x.text}</Text>)
         const onKeyPress = () => {
@@ -312,15 +321,19 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
   const titleSegs = fitSegs(v74TitleSegs(page, ctx, (rows[0] ?? [])[0] ?? { text: t('tab.' + page.id) }, titleMax), titleMax)
   const titleW = titleSegs.reduce((n, x) => n + displayWidth(x.text), 0)
   const top = <Box key="v74-top" height={1} width={fullCols} overflow="hidden"><Text {...bc}>{GLYPHS.structure.frameTL + rule + ' '}</Text>{titleSegs.map((x, j) => <Text key={'tt' + j} {...drawSeg(x)} wrap="truncate">{x.text}</Text>)}<Text {...bc}>{' ' + pad(fullCols - 5 - titleW) + GLYPHS.structure.frameTR}</Text></Box>
-  const statusRow = v74BodyStatusRow(page, ctx, cols)
-  const rawInner = rows.slice(1, rows.length - stripN - 1).map((r, k) => ({ r, idx: k + 1 }))
+  const rawInner = rows.slice(1, Math.max(1, rows.length - stripCount)).map((r, k) => ({ r, idx: k + 1 }))
   let innerEntries = rawInner
-  if (statusRow !== null) {
-    const actStart = rows.length - stripCount - actionCount
-    const bodyPart = rawInner.filter(e => e.idx < actStart)
-    const actPart = rawInner.filter(e => e.idx >= actStart)
-    const keepBody = bodyPart.length > 0 ? bodyPart.slice(0, bodyPart.length - 1) : []
-    innerEntries = [{ r: statusRow, idx: -2 }, ...keepBody, ...actPart]
+  if (hasStatusRow) {
+    const maxInner = Math.max(0, frame.rows - 2)
+    if (effFrameRows < frameRowsN) {
+      innerEntries = [{ r: statusRow!, idx: -2 }, ...rawInner]
+    } else {
+      const actStart = rows.length - stripCount - actionCount
+      const bodyPart = rawInner.filter(e => e.idx < actStart)
+      const actPart = rawInner.filter(e => e.idx >= actStart)
+      const keepBody = bodyPart.slice(0, Math.max(0, maxInner - 1 - actPart.length))
+      innerEntries = [{ r: statusRow!, idx: -2 }, ...keepBody, ...actPart].slice(0, maxInner)
+    }
   }
   // Codex R3 Critical: shrink boxed Decide pane to content height (drop trailing filler gap rows between content and actions).
   if (page.id === 'decide' && ctx.v74 !== undefined) {

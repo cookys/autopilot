@@ -4,6 +4,7 @@
 //   pace missing (sources.quota_forecast is not ok): rate, projection and verdict columns read "✗ 無來源：capacity pace 未接", except limit_hit (a fact) and a stale pool (a fact)
 //   stale (> 10 min or flagged): the row is red with the full reason, the numbers stay and carry a ✗ (A1, A10); 80x24 writes the reason in a row under the table, untruncated
 //   Enter (A3) expands the focused pool's seats from `fleet seats --quota --json`; the page draws them from `quota.seats` when the feed carries them
+//   Glyph usage: ▸ (GLYPHS.structure.folded) is reserved for folded sections/disclosures; focused pool cursor uses ‣ (U+2023, EAW=N, width=1).
 import { STRIP_SPLIT_COLS } from './layout'
 import type { Page, PageCtx } from './frame'
 import { WRAP_HANG, brokenRow, wrapRow } from './rows'
@@ -23,6 +24,7 @@ export type { QuotaSeat }
 
 // ---- drawing helpers ----
 const DASH = GLYPHS.structure.empty
+const CURSOR_MARK = '\u2023' // ‣ (U+2023, EAW=N, width=1): focused pool cursor, distinct from fold glyph ▸
 const bad = GLYPHS.state.failed
 const unk = GLYPHS.state.unknown // r11 #6: no source / no forecast is not a failure (the help page: ✗ = ended in failure)
 const padR = (text: string, w: number): string => text + ' '.repeat(Math.max(0, w - displayWidth(text)))
@@ -210,7 +212,7 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
     const mark = (x: string): Seg => seg(x, isStale ? PALETTE.broken : undefined)
     const icon = isUnknownPool(v) ? GLYPHS.state.unknown : roleGlyph(v.role)
     const row: Seg[] = [
-      seg(i === focus ? GLYPHS.structure.folded + ' ' : '  '),
+      seg(i === focus ? CURSOR_MARK + ' ' : '  '),
       seg(icon + ' ', roleColor(v.role)),
       seg(fitCellR(poolLabel(v.pool), c.pool)),
       mark(numCell(p.seven_day_pct === null ? DASH : Math.round(p.seven_day_pct) + '%', isStale, c.d7)),

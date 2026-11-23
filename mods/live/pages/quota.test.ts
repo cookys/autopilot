@@ -24,7 +24,7 @@ const GOLDEN = {
   wide: [
       "── 額度池（預測由 fleet 算，面板不重算；近 6 時） ───────────────────────────────────────────────────────────────────────────────────────────────── 資料 40 秒前",
       "    池                     7 天      5 時  重置（台北）         近 6 時     預測  用完時間      席數   判定",
-      "▸ ✗ trinity                 31%✗       0%✗ 11-20 週五 06:00    +0.3%/時✗     47%✗ —             1 席   ✗ 180 分未更新",
+      "‣ ✗ trinity                 31%✗       0%✗ 11-20 週五 06:00    +0.3%/時✗     47%✗ —             1 席   ✗ 180 分未更新",
       "  ✗ twgame                  49%        0%  11-19 週四 09:00    +1.4%/時      94%  —             2 席   ✗ 席過期 14 分",
       "  ? team                    68%       17%  11-21 週六 12:00    +1.9%/時    >100%  11-18 18:00   3 席   未知·17時用完",
       "  ? personal               100%      100%  11-19 週四 08:00    +1.1%/時     100%  已用完        5 席   未知·缺換池",
@@ -41,7 +41,7 @@ const GOLDEN = {
   mid: [
       "── 額度池 · 預測由 fleet 算 · 近 6 時 ───────────────────────────────────────────────────────────────────── 資料 40 秒前",
       "    池              7 天      5 時  重置（台北）    近 6 時     預測  判定",
-      "▸ ✗ trinity          31%✗       0%✗ 週五 06:00     +0.3%/時✗     47%✗ ✗ 180 分未更新",
+      "‣ ✗ trinity          31%✗       0%✗ 週五 06:00     +0.3%/時✗     47%✗ ✗ 180 分未更新",
       "  ✗ twgame           49%        0%  週四 09:00     +1.4%/時      94%  ✗ 席過期 14 分",
       "  ? team             68%       17%  週六 12:00     +1.9%/時    >100%  未知·17時用完",
       "  ? personal        100%      100%  週四 08:00     +1.1%/時     100%  未知·缺換池",
@@ -57,7 +57,7 @@ const GOLDEN = {
   narrow: [
       "── 額度池 · 預測由 fleet 算 · 近 6 時 ───────────────────────────── 資料 40 秒前",
       "    池         7 天  5 時  重置    近 6 時    預測  判定",
-      "▸ ✗ trinity     31%✗   0%✗ 週五06 +0.3%/時✗    47%✗ ✗ 180 分未更新",
+      "‣ ✗ trinity     31%✗   0%✗ 週五06 +0.3%/時✗    47%✗ ✗ 180 分未更新",
       "  ✗ twgame      49%    0%  週四09 +1.4%/時     94%  ✗ 席過期 14 分",
       "  ? team        68%   17%  週六12 +1.9%/時   >100%  未知·17時用完",
       "  ? personal   100%  100%  週四08 +1.1%/時    100%  未知·缺換池",
@@ -72,7 +72,7 @@ const GOLDEN = {
   nopaceNarrow: [
       "── 額度池 · ? 無來源：用量預測未接通 ────────────────────────────── 資料 40 秒前",
       "    池         7 天  5 時  重置   速率 · 預測 · 判定",
-      "▸ ✗ trinity     31%✗   0%✗ 週五06 ✗ 180 分未更新",
+      "‣ ✗ trinity     31%✗   0%✗ 週五06 ✗ 180 分未更新",
       "  ✗ twgame      49%    0%  週四09 ✗ 席過期 14 分",
       "  ✗ codex       80%   12%  週四21 ? 無預測來源",
       "  ✗ team        68%   17%  週六12 ? 無預測來源",
@@ -88,7 +88,7 @@ const GOLDEN = {
     "── 額度池 · ? 無來源：用量預測未接通 ────────────────────────────────────────────────────────────────────────────────────────────────────────────── 資料 40 秒前",
     "(逐席列出，依額度池分組；池取席內最大值)",
     "    池                     7 天      5 時  重置（台北）      速率 · 預測 · 判定",
-    "▸ ✗ trinity                 31%✗       0%✗ 11-20 週五 06:00  ✗ 180 分未更新",
+    "‣ ✗ trinity                 31%✗       0%✗ 11-20 週五 06:00  ✗ 180 分未更新",
     "  ✗ twgame                  49%        0%  11-19 週四 09:00  ✗ 席過期 14 分",
     "  ✗ codex                   80%       12%  11-19 週四 21:00  ? 無預測來源",
     "  ✗ team                    68%       17%  11-21 週六 12:00  ? 無預測來源",
@@ -105,7 +105,7 @@ const GOLDEN = {
   expanded: [
       "── 額度池（預測由 fleet 算，面板不重算；近 6 時） ───────────────────────────────────────────────────────────────────────────────────────────────── 資料 40 秒前",
       "    池                     7 天      5 時  重置（台北）         近 6 時     預測  用完時間      席數   判定",
-      "▸ ✗ trinity                 31%✗       0%✗ 11-20 週五 06:00    +0.3%/時✗     47%✗ —             1 席   ✗ 180 分未更新",
+      "‣ ✗ trinity                 31%✗       0%✗ 11-20 週五 06:00    +0.3%/時✗     47%✗ —             1 席   ✗ 180 分未更新",
       "  ✗ twgame                  49%        0%  11-19 週四 09:00    +1.4%/時      94%  —             2 席   ✗ 席過期 14 分",
       "  ? team                    68%       17%  11-21 週六 12:00    +1.9%/時    >100%  11-18 18:00   3 席   未知·17時用完",
       "  ? personal               100%      100%  11-19 週四 08:00    +1.1%/時     100%  已用完        5 席   未知·缺換池",
@@ -205,7 +205,7 @@ test('quota: the action area holds only the [f] switch advice, and only when cap
 
 test('quota: the page row order and the band pick agree (rank 0 = worstPool), and a pool past 10 minutes is stale without the feed flag', () => {
   const w = worstPool(POOLS as never, NOW) as { pool: string }
-  expect(body(160, 40, consoleOf(POOLS)).find(l => l.startsWith('▸'))).toContain(w.pool)
+  expect(body(160, 40, consoleOf(POOLS)).find(l => l.startsWith('‣'))).toContain(w.pool)
   const aged = POOLS.map(p => (p.pool === 'codex' ? { ...p, observed_at_ms: NOW - 12 * MIN } : p))
   const line = body(160, 40, consoleOf(aged)).find(l => l.includes('codex')) as string
   expect(line).toContain('12 分未更新')
@@ -217,7 +217,7 @@ test('quota: a stale pool with unknown age uses plain full and short verdicts', 
   const v = classify(normalizedPools(ctx.console)![0], NOW, true, ctx.t)
   expect(v.kind).toBe('stale')
   expect(v.staleMin).toBeNull()
-  const row = renderQuota(ctx).body.find(r => text(r).startsWith('▸'))!
+  const row = renderQuota(ctx).body.find(r => text(r).startsWith('‣'))!
   for (const verdict of [v.text, text(row)]) {
     expect(verdict).toContain('年紀不明')
     expect(verdict).not.toMatch(/[-—]\s*分/)

@@ -40,7 +40,11 @@ const TRIGGER_TYPE_WORDS = ['owner', 'event', 'ready', 'peer'];
 const NEW_FIELDS = ['Id', 'Since', 'Origin', 'Reporter', 'Report', 'Reply', 'Problem', 'Impact'];
 // Queue-form fields are always read on a heading row. They are not part of the reporter-field
 // opt-in (do not add them to NEW_FIELDS). A heading row that carries any of them is queue-form.
-const QUEUE_FIELDS = ['Done-Check', 'Artifact', 'Needs', 'after', 'Due', 'ms', 'Used-by', 'Queued-By', 'Prompt', 'Inputs', 'Feeds'];
+const QUEUE_FIELDS = ['Done-Check', 'Artifact', 'Needs', 'after', 'Due', 'ms', 'Used-by', 'Queued-By', 'Prompt', 'Inputs', 'Feeds', 'Priority', 'Engine-Class'];
+// Dispatch hints: read like queue fields but never make a row queue-form on their own.
+const DISPATCH_HINT_FIELDS = ['Priority', 'Engine-Class'];
+const PRIORITY_VALUES = ['P1', 'P2', 'P3'];
+const ENGINE_CLASS_VALUES = ['cheap'];
 const QUEUE_TEXT_FIELDS = ['Prompt', 'Inputs', 'Feeds'];
 const QUEUE_EFFORT = new Set(['XS', 'S', 'M']);
 const QUEUE_ARTIFACTS = ['code', 'text', 'run'];
@@ -117,6 +121,8 @@ const DEFAULT_CAPS = {
   'Used-by': 120,
   'Queued-By': 120,
   Prompt: 200,
+  Priority: 8,
+  'Engine-Class': 32,
   Inputs: 300,
   // `entry` caps a legacy row (no reporter field); `row` caps a row carrying any reporter field;
   // `queue` caps a queue-form row. A config may only lower these.
@@ -391,7 +397,7 @@ function checkReporterFields(entry, fields, title, cfg) {
 function isQueueForm(entry) {
   const fields = entry && entry.fields;
   if (!fields) return false;
-  return QUEUE_FIELDS.some((f) => fields[f] != null);
+  return QUEUE_FIELDS.some((f) => !DISPATCH_HINT_FIELDS.includes(f) && fields[f] != null);
 }
 
 function queuePresent(fields, f) {
@@ -591,6 +597,12 @@ function checkQueueEntry(entry, cfg, repoRoot, existsFn) {
   }
   if (queuePresent(fields, 'Queued-By') && !queuedByOk(fields['Queued-By'])) {
     push('bad_queued_by', 'Queued-By', `${String(fields['Queued-By']).trim()} (expected <ns>/<courier>/<member> <message-id|self> or <member> <message-id|self>)`);
+  }
+  if (queuePresent(fields, 'Priority') && !PRIORITY_VALUES.includes(String(fields.Priority).trim())) {
+    push('bad_priority', 'Priority', `${String(fields.Priority).trim()} (expected ${PRIORITY_VALUES.join('|')})`);
+  }
+  if (queuePresent(fields, 'Engine-Class') && !ENGINE_CLASS_VALUES.includes(String(fields['Engine-Class']).trim())) {
+    push('bad_engine_class', 'Engine-Class', `${String(fields['Engine-Class']).trim()} (expected ${ENGINE_CLASS_VALUES.join('|')})`);
   }
   if (artifact === 'text') {
     if (!queuePresent(fields, 'Prompt')) push('text_row_missing_inputs', 'Prompt', 'Prompt missing');
@@ -1102,7 +1114,7 @@ function assertPeerClosable(fields) {
 }
 
 module.exports = {
-  KNOWN_FIELDS, REQUIRED, TRIGGER_TYPE_WORDS, NEW_FIELDS, QUEUE_FIELDS, QUEUE_TEXT_FIELDS, REQUIRABLE, PEER_FIELDS, ALL_FIELDS, ORIGINS,
+  KNOWN_FIELDS, REQUIRED, TRIGGER_TYPE_WORDS, NEW_FIELDS, QUEUE_FIELDS, DISPATCH_HINT_FIELDS, QUEUE_TEXT_FIELDS, REQUIRABLE, PEER_FIELDS, ALL_FIELDS, ORIGINS,
   BL_ID_RE, NEXT_ID_RE, MULTI_SEP, WARN_CODES, URGENT_SUFFIXES, LEGACY_EFFORT_MAP, DEFAULT_CAPS, POINTER_THRESHOLD, STATUS_RE,
   ROW_ORDER, WRITER_REQUIRED,
   loadSizes, parseEffortValue, badEffortDetail, byteLen, realCalendarDate, triggerTypeCode, pointerOk, statusDate, daysAgo,

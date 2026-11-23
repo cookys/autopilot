@@ -37,6 +37,8 @@ Caps are UTF-8 **bytes**. The instrument is `scripts/check-backlog-entries.js`; 
 | Prompt | 200 | `Artifact: text` only. One existing relative path that does not escape the repo root |
 | Inputs | 300 | `Artifact: text` only. `;`-separated existing relative paths, at least one |
 | Feeds | — | `Artifact: text` only. One Id of a row in the same file |
+| Priority | 8 | dispatch hint, optional. `P1`, `P2` or `P3`; absent means P3. Does not make a row queue-form |
+| Engine-Class | 32 | dispatch hint, optional. `cheap` marks a row the gateway-fill dispatcher may hand to a cheap engine; absent means never auto-dispatched. Does not make a row queue-form |
 
 Several reporters on one row: `；`-separated in Reporter, Report and Reply, positionally aligned (`cuda；openclaw` · `msg_01…；2026-09-05 fleet` · `2026-09-06 msg_01…；none`).
 
@@ -150,6 +152,8 @@ The code is blocking, so a flagged row is not listed by `--ready`.
 | bad_ms | block | ms is not a milestone-step token |
 | bad_used_by | block | Used-by is not `user`, `e2e` or `n/a <reason of 8 or more characters>` |
 | bad_queued_by | block | Queued-By is not `<ns>/<courier>/<member> <message-id|self>` or `<member> <message-id|self>` |
+| bad_priority | block | Priority is not `P1`, `P2` or `P3` |
+| bad_engine_class | block | Engine-Class is not `cheap` |
 | text_row_missing_inputs | block | `Artifact: text` is missing Prompt, Inputs or Feeds, or a path does not exist |
 | after_cycle | block | `after` ids cycle, including a self-reference; the detail names the cycle |
 | after_broken | block | an `after` id is malformed, empty, at or above next-id, absent with no next-id mark, or Status `dropped`. An empty `;`-segment is its own id |

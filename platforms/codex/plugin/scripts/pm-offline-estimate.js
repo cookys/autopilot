@@ -77,6 +77,7 @@ function prescreen(sessions, rules, dispositions = null) {
   if (!rules && !dispositions) return null;
   const rows = dispositions && (Array.isArray(dispositions) ? dispositions : dispositions.items);
   const lookup = rows && new Map(rows.map(row => [String(row.message_id), row]));
+  const baseline = rows ? Math.min(...rows.map(row => Date.parse(row.delivered_at)).filter(Number.isFinite)) : Infinity;
   const classes = rules && !lookup ? rules.auto_classes.map(c => ({ rule: c.match, result: { name: c.name, messages: 0, turns: 0, weighted_cost: 0 } })) : [];
   const totals = new Map();
   for (const session of sessions) {
@@ -90,11 +91,14 @@ function prescreen(sessions, rules, dispositions = null) {
         if (lookup) {
           const id = text.match(/\bmessage_id="([^"]+)"/)?.[1];
           const row = id && lookup.get(id);
-          const name = row?.category || 'unmatched';
-          if (!totals.has(name)) totals.set(name, { name, messages: 0, turns: 0, weighted_cost: 0, matched: 0, auto_processable: 0 });
+          const channel = /<channel\s/i.test(message.text);
+          const packed = /\[inbox batch\b|PM 收件匣[^\n]*批次包/i.test(message.text);
+          const operator = session[message.index].type === 'user' && !channel && !packed;
+          const name = row ? (row.category || 'unmatched_other') : operator ? 'unmatched_operator' : channel && Number.isFinite(baseline) && Date.parse(message.timestamp) < baseline ? 'unmatched_pre_baseline' : 'unmatched_other';
+          if (!totals.has(name)) totals.set(name, { name, messages: 0, turns: 0, weighted_cost: 0, matched: 0, auto_processable: 0, auto_weighted_cost: 0, ...(name === 'unmatched_operator' && !row ? { excluded_from_s4: true } : {}) });
           const result = totals.get(name);
           result.messages++; result.turns += turns.length / items.length; result.weighted_cost += cost / items.length;
-          if (row) { result.matched++; if (row.disposition === 'no_action' || (row.disposition === 'done' && (row.fyi === true || !!row.no_action_reason))) result.auto_processable++; }
+          if (row) { result.matched++; if (row.disposition === 'no_action' || (row.disposition === 'done' && (row.fyi === true || !!row.no_action_reason))) { result.auto_processable++; result.auto_weighted_cost += cost / items.length; } }
         } else {
           const entry = session[message.index];
           const metadata = fields(entry);
@@ -219,6 +223,13 @@ if (require.main === module) {
   }
   dirs.forEach(visit);
   const result = { autocompact: windows.map(window => ({ window, ...autocompact(sessions, window, summary, prefix) })), s4: prescreen(sessions, rules, dispositions), s5a: batch(sessions, batchWindow), s2: failures(sessions) };
+  if (dispositions) {
+    const total_weighted_cost = result.s4.reduce((sum, row) => sum + row.weighted_cost, 0);
+    const excluded_operator_weighted_cost = result.s4.filter(row => row.excluded_from_s4).reduce((sum, row) => sum + row.weighted_cost, 0);
+    const s4_base_weighted_cost = total_weighted_cost - excluded_operator_weighted_cost;
+    const auto_weighted_cost = result.s4.reduce((sum, row) => sum + row.auto_weighted_cost, 0);
+    result.s4_summary = { total_weighted_cost, excluded_operator_weighted_cost, s4_base_weighted_cost, auto_weighted_cost, auto_share_of_base: s4_base_weighted_cost ? auto_weighted_cost / s4_base_weighted_cost : 0 };
+  }
   const json = JSON.stringify(result, null, 2) + '\n';
   if (out) fs.writeFileSync(out, json); else process.stdout.write(json);
 }

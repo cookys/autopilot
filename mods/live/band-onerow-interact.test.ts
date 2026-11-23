@@ -6,7 +6,7 @@
 //   4. Narrow 75-col hidden segments remain reachable through digit hotkeys both collapsed and expanded.
 // Picked up automatically by `claude plugin test` in `mods/live/run-tests.sh`.
 import { test, expect, mock } from 'claude-code/testing'
-import type { On } from 'claude-code'
+import type { EngineInterface, On } from 'claude-code'
 import { displayWidth } from '../tux/width.ts'
 import { bandBottomHint } from './band-onerow'
 import { makeT } from './i18n'
@@ -115,6 +115,16 @@ function host(on: On, opts: HostOpts = {}) {
   return { clock }
 }
 
+// paneKey / frameKey take the mod's EngineInterface (not the test harness $); matches pane-poll.test.ts keyEngine.
+const keyEngine = {
+  env: { get: async () => undefined },
+  ui: {
+    invalidate: () => undefined,
+    scroll: async () => undefined,
+    focus: async () => undefined,
+  },
+} as unknown as EngineInterface
+
 const mountBand = ($: any, columns: number, maxRows = 20) => $.ui.mount({
   plugin: 'autopilot',
   surface: 'terminal',
@@ -212,7 +222,7 @@ test('R4-Major3.2: manual collapse/expand preference survives refresh, page swit
   await band.unmount()
 
   // (b) Page change while collapsed preserves manual collapse
-  await paneKey($, '4')
+  await paneKey(keyEngine, '4')
   await settle(h)
   band = await mountBand($, 195, 20)
   tree = await band.drawn()

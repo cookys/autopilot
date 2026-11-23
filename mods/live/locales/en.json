@@ -866,6 +866,7 @@
   "v74.c.header_noage": "data {source} (schema {schema})",
   "v74.c.help_src": "local help (no data source) · icons and keys",
   "v74.c.header": "data {source} (schema {schema}) · {age}",
+  "v74.c.header_failed": "data {source} (schema {schema}) · read failed",
   "v74.c.src_missing": "now page source missing",
   "v74.e.section": "Dispatch {n}",
   "v74.e.col_line": "line",

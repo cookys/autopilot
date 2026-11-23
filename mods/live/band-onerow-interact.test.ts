@@ -2,9 +2,9 @@
 // Exercises the real register.ts AbovePrompt hook via $.ui.mount (`mountBand`):
 //   1. `w` collapse <-> expand round-trip (toggle arrow ▾展開 <-> ▴收合 consistent with frame bottom hint and bandBottomHint).
 //   2. Manual collapse / expand preference preserved across refresh, page switch, and narrow <-> widen resize (auto-dropped segments do not overwrite manual state).
-//   3. Click routing table aligned per trace-inventory G01/G02 (remind, line -> now, source -> hygiene, pend, qc, tps, toggle arrow; non-clickable pet/sep/idle).
+//   3. Click routing table aligned per trace-inventory G01/G02 (remind, line -> dispatch, source -> hygiene, pend, qc, tps, toggle arrow; non-clickable pet/sep/idle).
 //   4. Narrow 75-col hidden segments remain reachable through digit hotkeys both collapsed and expanded.
-//   5. Traceability s1 evidence: G01 (1 產線 -> 現況), G02 (6 來源 -> 殘留), G15 (digit 0 -> 寵物 in collapsed & expanded v7.4 box).
+//   5. Traceability s1 evidence: G01 (3 產線 -> 派工), G02 (6 來源 -> 殘留), G15 (digit 0 -> 寵物 in collapsed & expanded v7.4 box).
 // Picked up automatically by `claude plugin test` in `mods/live/run-tests.sh`.
 import { test, expect, mock } from 'claude-code/testing'
 import type { EngineInterface, On } from 'claude-code'

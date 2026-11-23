@@ -249,7 +249,7 @@ test('dispatch G01: v7.4 top fleet-lines summary shows full 4-class counts, acti
     ...CALM_CONSOLE,
     generated_at_ms: NOW - 7 * 60_000,
     sources: { ...CALM_CONSOLE.sources, tasks: { at_ms: NOW - 7 * 60_000, state: 'stale' as const } },
-    counts: { ...CALM_CONSOLE.counts, summary: { ...CALM_CONSOLE.counts.summary, lines: { running: 14, waiting: 3, stuck: 2, failed: 1 } } },
+    counts: { ...CALM_CONSOLE.counts, summary: { ...CALM_CONSOLE.counts.summary, lines: { running: 14, waiting: 3, stalled: 2, failed: 1 } } },
   }
   const conView = dispatchPage.render({
     ...ctxOf(120, 30, liveOf(NARROW_RUNS), staleCon),

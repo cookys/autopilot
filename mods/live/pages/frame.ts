@@ -399,26 +399,36 @@ export function v74TitleSegs(page: Page, ctx: PageCtx, name: Seg, maxCols?: numb
     return maxCols === undefined ? out : maxCols <= 0 ? [] : clip(out, maxCols)
   }
   const ageMs = v74PageAgeMs(page, ctx)
+  const failure = v74PageFailure(page, ctx)
+  const failed = failure?.kind === 'failed'
   const fullSrc: Seg = {
-    text: ' · ' + (ageMs !== null ? t('v74.c.header', { source: src[0], schema: src[1], age: ageUnit(t, ageMs) }) : t('v74.c.header_noage', { source: src[0], schema: src[1] })),
+    text: ' · ' + (failed
+      ? t('v74.c.header_failed', { source: src[0], schema: src[1] })
+      : ageMs !== null
+        ? t('v74.c.header', { source: src[0], schema: src[1], age: ageUnit(t, ageMs) })
+        : t('v74.c.header_noage', { source: src[0], schema: src[1] })),
     dim: true,
   }
   if (maxCols === undefined) return [name, fullSrc]
   if (maxCols <= 0) return []
   if (segsWidth([name, fullSrc]) <= maxCols) return [name, fullSrc]
 
-  const ageSeg: Seg | null = ageMs === null ? null : { text: ' · ' + ageUnit(t, ageMs), dim: true }
+  const tailSeg: Seg | null = failed
+    ? { text: ' · ' + t('v74.c.title_failed'), dim: true }
+    : ageMs === null
+      ? null
+      : { text: ' · ' + ageUnit(t, ageMs), dim: true }
   const shortSrc: Seg = { text: ' · ' + src[0], dim: true }
-  const compact: Seg[] = ageSeg === null ? [name, shortSrc] : [name, shortSrc, ageSeg]
+  const compact: Seg[] = tailSeg === null ? [name, shortSrc] : [name, shortSrc, tailSeg]
   if (segsWidth(compact) <= maxCols) return compact
 
-  const ageW = ageSeg === null ? 0 : displayWidth(ageSeg.text)
-  const remForSrc = maxCols - displayWidth(name.text) - ageW
+  const tailW = tailSeg === null ? 0 : displayWidth(tailSeg.text)
+  const remForSrc = maxCols - displayWidth(name.text) - tailW
   if (remForSrc >= 6) {
     const mid: Seg = { text: ' · ' + truncateToWidth(src[0], remForSrc - 3), dim: true }
-    return ageSeg === null ? [name, mid] : [name, mid, ageSeg]
+    return tailSeg === null ? [name, mid] : [name, mid, tailSeg]
   }
-  return clip(ageSeg === null ? [name] : [name, ageSeg], maxCols)
+  return clip(tailSeg === null ? [name] : [name, tailSeg], maxCols)
 }
 
 // First body row inside the v7.4 box when a source is stale (>5m or live.state=stale), failed/missing, or has a console source warning.
@@ -430,7 +440,7 @@ export function v74BodyStatusRow(page: Page, ctx: PageCtx, maxCols?: number): Ro
   const failure = v74PageFailure(page, ctx)
   const liveBacked = page.id === 'dispatch' || page.id === 'review' || page.id === 'hygiene' || page.id === 'fleet'
   const liveStale = liveBacked && ctx.live?.state === 'stale'
-  const isStale = failure === null && ((ageMs !== null && ageMs > V74_STALE_MS) || liveStale)
+  const isStale = (ageMs !== null && ageMs > V74_STALE_MS) || liveStale
   const severe = v74ConsoleSevere(ctx)
   if (failure === null && !isStale && severe === null) return null
 
@@ -440,7 +450,13 @@ export function v74BodyStatusRow(page: Page, ctx: PageCtx, maxCols?: number): Ro
       ? (failure.reason === null ? t('v74.c.title_failed') : t('v74.c.title_failed_why', { reason: failure.reason }))
       : GLYPHS.state.failed + ' ' + (failure.reason === null ? t('v74.c.title_nosrc') : t('v74.c.title_nosrc_why', { reason: failure.reason }))
     tailSegs.push({ text: failBody, color: PALETTE.broken })
-    if (ageMs !== null) {
+    if (isStale) {
+      const staleText = ageMs !== null
+        ? t('v74.c.title_stale', { age: ageUnit(t, ageMs), min: V74_STALE_MIN })
+        : t('v74.c.title_stale_noage', { min: V74_STALE_MIN })
+      tailSegs.push({ text: ' · ', dim: true })
+      tailSegs.push({ text: GLYPHS.state.stale + ' ' + staleText, color: PALETTE.attention })
+    } else if (ageMs !== null) {
       tailSegs.push({ text: ' · ' + t('v74.c.title_last_ok', { age: ageUnit(t, ageMs) }), dim: true })
     }
   } else if (isStale) {
@@ -466,11 +482,12 @@ export function v74BodyStatusRow(page: Page, ctx: PageCtx, maxCols?: number): Ro
     if (remSev >= 4) return [...tailSegs, { text: ' · ', dim: true }, { ...severe, text: truncateToWidth(severe.text, remSev) }]
     return tailSegs
   }
-  if (tailSegs.length === 2) {
-    const lastW = displayWidth(tailSegs[1].text)
-    const remFail = maxCols - lastW
+  if (tailSegs.length >= 2) {
+    const suffix = tailSegs.slice(1)
+    const suffixW = segsWidth(suffix)
+    const remFail = maxCols - suffixW
     if (remFail >= 6) {
-      return [{ ...tailSegs[0], text: truncateToWidth(tailSegs[0].text, remFail) }, tailSegs[1]]
+      return [{ ...tailSegs[0], text: truncateToWidth(tailSegs[0].text, remFail) }, ...suffix]
     }
   }
   return clip(all, maxCols)

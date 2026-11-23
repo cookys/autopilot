@@ -4,7 +4,7 @@
 //
 // Import order: pages/frame.ts imports ./index, which imports this file; import ./frame (or ./index) before ./hygiene in tests.
 import type { LoadSourceView, NeedsHumanEntry, ResidueView } from '../model'
-import { displayWidth, residueTally } from '../model'
+import { DEFAULT_VALID_FOR_S, TRACE_STALE_MIN, TRACE_STALE_MS, displayWidth, liveAgeMs, residueTally } from '../model'
 import { GLYPHS } from '../../tux/glyphs.ts'
 import { PALETTE } from '../../tux/palette.ts'
 import { residueNameOf, residueWhy, wrapPlain } from '../ui'
@@ -153,8 +153,14 @@ function loadSourceBody(ls: LoadSourceView | null, cols: number, t: T): Row[] {
   return [[{ text: ' ' + base + detailSuffix, ...(loadSourceIsClean(ls) ? {} : { color: PALETTE.attention }) }]]
 }
 
+const isoAgeMs = (iso: string | null | undefined, nowMs: number): number | null => {
+  if (iso == null) return null
+  const ms = Date.parse(iso)
+  return Number.isFinite(ms) ? Math.max(0, nowMs - ms) : null
+}
+
 export function hygieneView(ctx: HygieneCtx, _view?: Partial<HygieneView>): { body: Row[]; actions: Row[] } {
-  const { t, size, live } = ctx
+  const { t, size, live, nowMs } = ctx
   const cols = size.cols
   const wide = cols >= WIDE_COLS
 
@@ -163,13 +169,32 @@ export function hygieneView(ctx: HygieneCtx, _view?: Partial<HygieneView>): { bo
   }
 
   const body: Row[] = []
+  const liveAge = liveAgeMs(live, nowMs)
   if (live.state !== 'ok') {
-    body.push(...brokenRows(GLYPHS.state.failed + ' ' + t('residue.why.hyg_stale_live', { why: live.header }), cols))
+    const thresh = liveAge !== null
+      ? t('trace.age_threshold', { age: ageUnit(t, liveAge), limit: TRACE_STALE_MIN, validS: DEFAULT_VALID_FOR_S })
+      : t('trace.threshold_only', { limit: TRACE_STALE_MIN, validS: DEFAULT_VALID_FOR_S })
+    body.push(...brokenRows(GLYPHS.state.failed + ' ' + t('residue.why.hyg_stale_live', { why: live.header }) + ' · ' + thresh, cols))
+  } else if (liveAge !== null && liveAge > TRACE_STALE_MS) {
+    body.push(...brokenRows(GLYPHS.state.failed + ' ' + t('trace.hygiene_age_stale', { age: ageUnit(t, liveAge), limit: TRACE_STALE_MIN, validS: DEFAULT_VALID_FOR_S }), cols))
   }
 
   const residue = live.detail.residue
   const ls = live.detail.load_source
-  const sourceBlock = (): Row[] => [openRule(t('hygiene.load'), wide), ...loadSourceBody(ls, cols, t)]
+  const sourceBlock = (): Row[] => {
+    const lsAge = isoAgeMs(ls?.at, nowMs)
+    const lsHead = lsAge === null ? t('hygiene.load') : t('hygiene.load') + ' · ' + ageAgo(t, lsAge)
+    const out: Row[] = [openRule(lsHead, wide)]
+    if (lsAge !== null && lsAge > TRACE_STALE_MS) {
+      out.push(...brokenRows(GLYPHS.state.failed + ' ' + t('trace.hygiene_src_stale', { source: 'load-source.json', age: ageUnit(t, lsAge), limit: TRACE_STALE_MIN }), cols))
+    }
+    out.push(...loadSourceBody(ls, cols, t))
+    if (ls !== null && ls.flags.length > 0) {
+      const shownFlags = ls.flags.length > 10 ? [...ls.flags.slice(0, 10), '…'] : ls.flags
+      out.push([{ text: ' ' + t('trace.hygiene_flags_total', { n: ls.flags.length, flags: shownFlags.join(t('sep.list')) }), dim: true }])
+    }
+    return out
+  }
   if (residue === null) {
     if (live.state === 'ok') body.push(...brokenRows(GLYPHS.state.failed + ' ' + t('residue.why.hyg_no_residue'), cols))
     body.push(...sourceBlock())
@@ -182,7 +207,15 @@ export function hygieneView(ctx: HygieneCtx, _view?: Partial<HygieneView>): { bo
   const needTitle = tl.judgeCount === 0
     ? t('hygiene.need_you')
     : kinds.length === 1 && tl.unlisted === 0 ? t('v74.f.need_kind', { n: tl.judgeCount, kind: kinds[0] }) : t('v74.f.need_n', { n: tl.judgeCount })
-  body.push(openRule(needTitle, wide))
+  const resAge = isoAgeMs(residue.at, nowMs)
+  const needHead = resAge === null ? needTitle : needTitle + ' · ' + ageAgo(t, resAge)
+  body.push(openRule(needHead, wide))
+  if (resAge !== null && resAge > TRACE_STALE_MS) {
+    body.push(...brokenRows(GLYPHS.state.failed + ' ' + t('trace.hygiene_src_stale', { source: 'residue.json', age: ageUnit(t, resAge), limit: TRACE_STALE_MIN }), cols))
+  }
+  if (tl.cleanCount > 0) {
+    body.push([{ text: ' ' + t('trace.hygiene_total_breakdown', { total: residue.needs_human_count, judge: tl.judgeCount, clean: tl.cleanCount }), dim: true }])
+  }
   if (tl.judgeCount === 0) body.push([{ text: ' ' + GLYPHS.state.done + ' ', color: PALETTE.done }, { text: t('v74.f.need_none'), dim: true }])
   for (const e of tl.judge) body.push(judgeRow(e, true, t, ctx.box === true))
   if (tl.unlisted > 0) body.push([{ text: ' ' + t('hygiene.more', { n: tl.unlisted }), dim: true }])

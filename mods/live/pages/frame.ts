@@ -15,7 +15,8 @@ import { GLYPHS } from '../../tux/glyphs.ts'
 import { PALETTE } from '../../tux/palette.ts'
 import { PAGES } from './index'
 import { ageUnit } from './now'
-import { PAGE_KEYS, STRIP_SPLIT_COLS, V74_STRIP_ORDER, actionRows } from './layout'
+import { DECIDE_COMPACT_MAX_ROWS, PAGE_KEYS, STRIP_SPLIT_COLS, V74_STRIP_ORDER, actionRows, decideLayoutMode } from './layout'
+import type { DecideLayoutMode } from './layout'
 import { V74_KEY } from '../v74/contract'
 import { WRAP_HANG, brokenRow, decisionCount, poolsNeedLook, sourceMissing, staleBadge, unknownPoolCount, wrapRow } from './rows'
 import type { Row } from './rows'
@@ -27,7 +28,7 @@ import type { ScrollModel } from '../scrollmath'
 export type PendingScroll = { list: ScrollModel; detail: ScrollModel; cursor: string }
 
 export type { Row } from './rows'
-export interface PageCtx { pendingScroll?: PendingScroll; poolEta?: PoolEta | null; room?: readonly { seq: number; from: string; kind: string; text: string }[]; live: LiveSnapshot | null; console: ConsoleSnapshot | null; size: { cols: number; rows: number }; t: T; nowMs: number; shortBody?: boolean; steps?: readonly Step[]; pet?: unknown; v74?: V74Ctx; box?: true } // box: drawn inside the v7.4 band frame (not the host Pane)
+export interface PageCtx { pendingScroll?: PendingScroll; poolEta?: PoolEta | null; room?: readonly { seq: number; from: string; kind: string; text: string }[]; live: LiveSnapshot | null; console: ConsoleSnapshot | null; size: { cols: number; rows: number }; bodyColumns?: number; maxRows?: number; t: T; nowMs: number; shortBody?: boolean; steps?: readonly Step[]; pet?: unknown; v74?: V74Ctx; box?: true; decide?: { cursor?: number; picks?: Record<string, number>; notes?: Record<string, string>; textMode?: boolean; snap?: string; stale?: boolean; armed?: boolean; bgOpen?: boolean; style?: 'D' | 'C'; layoutMode?: DecideLayoutMode | null; compactExpanded?: boolean } } // box: drawn inside the v7.4 band frame (not the host Pane)
 export type PageId = 'now' | 'decide' | 'fleet' | 'quota' | 'dispatch' | 'review' | 'spend' | 'hygiene' | 'pet' | 'room' | 'forge' | 'help' | 'todo'
 // `framed` (optional, additive): true once the page is filled in; pane.tsx draws a framed page through frameRows and an unframed shell the old way, so S0 changes nothing on screen
 export interface Page { id: PageId; key: string; title: string; framed?: true; render(ctx: PageCtx): { body: Row[]; actions: Row[]; overflow?: true } }
@@ -201,7 +202,9 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
   const layout = (r: { body: Row[]; actions: Row[] }, short = false) => {
     const read = page.id === 'decide' || page.id === 'todo' || page.id === 'help'
     // Dual-column decide (renderBoxD) already lays out left + divider + right to exact ctx.size.cols; wrapping at 80 splits every row in half and hides the bottom scroll hint.
-    const dualDecide = page.id === 'decide' && ctx.v74 !== undefined && ctx.box === true && ctx.size.cols >= 100 && !styleC(page, ctx)
+    const bodyCols = ctx.bodyColumns ?? ctx.size.cols
+    const effMaxRows = ctx.maxRows ?? ctx.size.rows
+    const dualDecide = page.id === 'decide' && ctx.v74 !== undefined && ctx.box === true && effMaxRows >= DECIDE_COMPACT_MAX_ROWS && decideLayoutMode(bodyCols, ctx.decide?.layoutMode ?? null) === 'dual' && !styleC(page, ctx)
     const body = r.body.filter(x => read || x.some(s => s.text.trim() !== '')).flatMap(x => {
       if (opts.topAnchor === true && x.map(s => s.text).join('').trimStart().startsWith(GLYPHS.structure.open + ' ') && x.map(s => s.text).join('').trimEnd().endsWith(GLYPHS.structure.rule)) { // only section rules (they end in ─); a ▾ legend row is text
         const row = x.map(s => ({ ...s }))

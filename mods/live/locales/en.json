@@ -1000,5 +1000,18 @@
   "v74.d.card_single": "Card #01/1 · only 1 pending · clears on send",
   "v74.d.list_long": "Pending list ({n})",
   "v74.d.list_short": "List ({n})",
-  "v74.d.card_of": "Card #{k} / {n}"
+  "v74.d.card_of": "Card #{k} / {n}",
+  "band.onerow.line": "Line",
+  "band.onerow.source": "Src",
+  "band.onerow.pend": "Dec",
+  "band.onerow.qc": "QC",
+  "band.onerow.tps_unit": "tok/s",
+  "band.onerow.expand": "Open",
+  "band.onerow.collapse": "Fold",
+  "band.onerow.idle": "No pending",
+  "band.onerow.remind_prefix": "Needs you: ",
+  "band.onerow.hint_full": "2 Decide 3 Dispatch 4 Review 5 Spend 8 Todo w {toggle}",
+  "band.onerow.hint_short": "2/3/4/5/8 w {toggle}",
+  "band.onerow.hint_min": "2/3/4/5/8 w",
+  "v74.d.compact_hint": "Enter expand card · {k}/{n}"
 }

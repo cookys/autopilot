@@ -1,0 +1,253 @@
+'use strict'
+// Pure unit tests for single-row band layout (2026-11-23-band-layout v4, Fleet-Task 01M837HGTX)
+// and Decide page C degradation / hysteresis rules (Fleet-Task 01M837ZECP).
+// Run: node --test mods/live/band-onerow.test.js (wired into mods/live/run-tests.sh).
+const test = require('node:test')
+const assert = require('node:assert/strict')
+const path = require('node:path')
+
+let B, L, W, G, P, tZh, tEn
+
+test.before(async () => {
+  B = await import(path.join(__dirname, 'band-onerow.ts'))
+  L = await import(path.join(__dirname, 'pages', 'layout.ts'))
+  W = await import(path.join(__dirname, '..', 'tux', 'width.ts'))
+  G = (await import(path.join(__dirname, '..', 'tux', 'glyphs.ts'))).GLYPHS
+  P = (await import(path.join(__dirname, '..', 'tux', 'palette.ts'))).PALETTE
+  const { makeT } = await import(path.join(__dirname, 'i18n.ts'))
+  tZh = makeT('zh-TW')
+  tEn = makeT('en')
+})
+
+const segText = seg => seg.segs.map(s => s.text).join('')
+
+const sampleInput = (over = {}) => ({
+  reminder: { text: '要你決定：合併 shared-tui plan 進 develop？', cardId: 'd-001', state: 'normal', hasRec: true, ...(over.reminder || {}) },
+  line: { stalled: 4, running: 3, failed: 2, waiting: 0, state: 'normal', ...(over.line || {}) },
+  source: { label: '開發', flags: 1, state: 'normal', ...(over.source || {}) },
+  pend: { count: 21, hasRec: true, state: 'normal', ...(over.pend || {}) },
+  qc: { status: 'alert', state: 'normal', ...(over.qc || {}) },
+  tps: { value: 78, state: 'normal', ...(over.tps || {}) },
+  spark: { bars: '▇█▆▅▆', state: 'normal', ...(over.spark || {}) },
+  pet: { text: 'Ferris Lv.1', state: 'normal', ...(over.pet || {}) },
+  expanded: over.expanded ?? false,
+})
+
+// Carbon Critical (a): 80-col (bodyColumns = 75) with failed (✗) and stalled (⊘) alerts retains alerts
+test('carbon-critical-a: 80-col bodyColumns=75 with failed & stalled keeps shortened alert line and QC alert', () => {
+  const lay = B.layoutOneRowBand(sampleInput(), 75, tZh)
+  const text = B.oneRowText(lay)
+  assert.ok(W.displayWidth(text) <= 75, 'total display width <= 75, got ' + W.displayWidth(text))
+  assert.equal(text.includes('\n'), false, 'single row, no newline')
+  const lineSeg = lay.segments.find(s => s.id === 'line')
+  const qcSeg = lay.segments.find(s => s.id === 'qc')
+  assert.ok(lineSeg, 'alerting line segment MUST NOT be dropped at 75 cols')
+  assert.equal(lineSeg.short, true, 'alerting line uses shortened form at 75 cols')
+  assert.ok(lineSeg.width <= 14, 'shortened line width <= 14, got ' + lineSeg.width)
+  assert.ok(segText(lineSeg).includes(G.state.failed + '2'), 'shortened line contains failed alert')
+  assert.ok(segText(lineSeg).includes(G.state.stalled + '4'), 'shortened line contains stalled alert')
+  assert.ok(qcSeg, 'alerting QC segment MUST NOT be dropped at 75 cols')
+  assert.ok(segText(qcSeg).includes(G.state.need_you), 'QC alert mark retained')
+  assert.ok(lay.remind.width >= 20, 'reminder keeps readable width >= 20, got ' + lay.remind.width)
+})
+
+// Carbon Critical (b): max values match §2.2 column width table, total <= bodyColumns, invariant separators across 1/9/10/99/100
+test('carbon-critical-b: max values match §2.2 column widths, no wrap, and separators stay fixed across 1/9/10/99/100', () => {
+  const maxInp = sampleInput({
+    line: { stalled: 120, running: 250, failed: 999, waiting: 100 },
+    source: { label: '開發', flags: 300 },
+    pend: { count: 210 },
+    tps: { value: 1250 },
+  })
+  const layMax = B.layoutOneRowBand(maxInp, 195, tZh)
+  const textMax = B.oneRowText(layMax)
+  assert.ok(W.displayWidth(textMax) <= 195, 'total width <= 195')
+  assert.equal(textMax.includes('\n'), false, 'no line wrap')
+  const byId = Object.fromEntries(layMax.segments.map(s => [s.id, s]))
+  assert.equal(W.displayWidth(segText(byId.line)), 26, 'line width 26')
+  assert.equal(W.displayWidth(segText(byId.source)), 16, 'source width 16')
+  assert.equal(W.displayWidth(segText(byId.pend)), 10, 'pend width 10')
+  assert.equal(W.displayWidth(segText(byId.qc)), 8, 'qc width 8')
+  assert.equal(W.displayWidth(segText(byId.tps)), 14, 'tps width 14')
+  assert.equal(W.displayWidth(segText(byId.spark)), 6, 'spark width 6')
+  assert.equal(W.displayWidth(segText(byId.pet)), 12, 'pet width 12')
+  assert.ok(segText(byId.pend).includes('99+'), 'pend 210 -> 99+')
+  assert.ok(segText(byId.tps).includes('1k+'), 'tps 1250 -> 1k+')
+  assert.equal((segText(byId.line).match(/99\+/g) || []).length, 4, 'all 4 line counts cap at 99+')
+
+  // Incremental growth 1 -> 9 -> 10 -> 99 -> 100: separator positions NEVER move
+  const baseline = B.layoutOneRowBand(sampleInput({ line: { stalled: 1, running: 1, failed: 1, waiting: 1 }, source: { flags: 1 }, pend: { count: 1 }, tps: { value: 1 } }), 195, tZh).sepPositions
+  for (const n of [1, 9, 10, 99, 100, 210]) {
+    const cur = B.layoutOneRowBand(sampleInput({
+      line: { stalled: n, running: n, failed: n, waiting: n },
+      source: { label: '開發', flags: n },
+      pend: { count: n },
+      tps: { value: n * 10 },
+    }), 195, tZh)
+    assert.deepEqual(cur.sepPositions, baseline, 'separator positions invariant at n=' + n)
+    assert.equal(W.displayWidth(B.oneRowText(cur)), 195, 'exact full width at n=' + n)
+  }
+})
+
+// Codex Major (1): width table, abbreviations, and 160-col decoration drop rule
+test('codex-major-1: width table matches both zh-TW and en; 160-col drops decorations before truncating reminder', () => {
+  for (const t of [tZh, tEn]) {
+    const lay = B.layoutOneRowBand(sampleInput({ reminder: { text: 'Short' } }), 195, t)
+    const widths = Object.fromEntries(lay.segments.map(s => [s.id, W.displayWidth(segText(s))]))
+    assert.deepEqual(widths, { line: 26, source: 16, pend: 10, qc: 8, tps: 14, spark: 6, pet: 12 })
+  }
+  // 155 cols with 43-col reminder: full reminder does not fit with pet (36 < 43), so pet drops first
+  const lay155 = B.layoutOneRowBand(sampleInput(), 155, tZh)
+  assert.ok(lay155.dropped.includes('pet'), 'pet dropped at 155 cols when reminder would truncate')
+  assert.equal(segText(lay155.remind).includes('\u2026'), false, 'reminder fits in full once pet dropped')
+})
+
+// Codex Major (2): data 3-states (normal / stale / missing) keep identical widths, no emoji, idle shows 無待決
+test('codex-major-2: data 3-states keep exact fixed widths with no emoji; idle shows 無待決', () => {
+  const EMOJI_RE = /[\u{1F300}-\u{1FAFF}\u26A0\u25B6]/u
+  for (const st of ['normal', 'stale', 'missing']) {
+    const lay = B.layoutOneRowBand(sampleInput({
+      reminder: { state: st },
+      line: { state: st, stalled: st === 'missing' ? null : 4, running: st === 'missing' ? null : 3, failed: st === 'missing' ? null : 2, waiting: st === 'missing' ? null : 0 },
+      source: { state: st, label: st === 'missing' ? null : '開發', flags: st === 'missing' ? null : 1 },
+      pend: { state: st, count: st === 'missing' ? null : 21 },
+      qc: { state: st, status: st === 'missing' ? 'none' : 'alert' },
+      tps: { state: st, value: st === 'missing' ? null : 83 },
+      spark: { state: st, bars: st === 'missing' ? null : '▇█▆▅▆' },
+      pet: { state: st, text: st === 'missing' ? null : 'Ferris Lv.1' },
+    }), 195, tZh)
+    const widths = Object.fromEntries(lay.segments.map(s => [s.id, W.displayWidth(segText(s))]))
+    assert.deepEqual(widths, { line: 26, source: 16, pend: 10, qc: 8, tps: 14, spark: 6, pet: 12 }, 'widths unchanged in state ' + st)
+    const full = B.oneRowText(lay)
+    assert.equal(EMOJI_RE.test(full), false, 'no emoji in state ' + st)
+    if (st === 'stale') {
+      for (const seg of lay.segments) {
+        assert.ok(segText(seg).startsWith('~'), seg.id + ' stale starts with ~')
+        assert.ok(segText(seg).includes('?'), seg.id + ' stale includes ?')
+        for (const s of seg.segs) {
+          assert.equal(s.color, P.idle, seg.id + ' stale uses PALETTE.idle')
+          assert.notEqual(s.dim, true, seg.id + ' stale does not stack dim')
+        }
+      }
+    }
+    if (st === 'missing') {
+      for (const seg of lay.segments) {
+        assert.ok(segText(seg).includes(G.structure.empty), seg.id + ' missing shows em-dash')
+      }
+    }
+  }
+  const idle = B.layoutOneRowBand(sampleInput({ reminder: { text: null }, pend: { count: 0 } }), 195, tZh)
+  assert.ok(segText(idle.remind).includes('無待決'), 'idle shows 無待決')
+  assert.equal(idle.remind.clickable, false, 'idle reminder is not clickable')
+})
+
+// Codex Major (3): routing table & bottom hint row
+test('codex-major-3: routing table maps every clickable segment to its digit page; decorations/sep non-clickable; bottom hint lists page digits', () => {
+  assert.equal(B.bandSlotPage('remind', false), 'decide')
+  assert.equal(B.bandSlotPage('remind', true), null)
+  assert.equal(B.bandSlotPage('line'), 'dispatch')
+  assert.equal(B.bandSlotPage('source'), 'todo')
+  assert.equal(B.bandSlotPage('pend'), 'decide')
+  assert.equal(B.bandSlotPage('qc'), 'review')
+  assert.equal(B.bandSlotPage('tps'), 'spend')
+  assert.equal(B.bandSlotPage('spark'), null)
+  assert.equal(B.bandSlotPage('pet'), null)
+  assert.equal(B.bandSlotPage('sep'), null)
+  assert.equal(B.bandSlotPage('blank'), null)
+
+  const lay = B.layoutOneRowBand(sampleInput(), 195, tZh)
+  for (const id of ['spark', 'pet']) {
+    const seg = lay.segments.find(s => s.id === id)
+    assert.equal(seg.clickable, false, id + ' is non-clickable')
+    assert.equal(seg.page, null, id + ' has no route page')
+  }
+  const hintWide = B.bandBottomHint(120, false, tZh)
+  for (const k of ['2', '3', '4', '5', '8', 'w']) assert.ok(hintWide.includes(k), 'wide hint includes ' + k)
+  const hintNarrow = B.bandBottomHint(20, false, tZh)
+  for (const k of ['2', '3', '4', '5', '8', 'w']) assert.ok(hintNarrow.includes(k), 'narrow hint still includes ' + k)
+  assert.ok(W.displayWidth(hintNarrow) <= 20, 'narrow hint fits width')
+})
+
+// Codex Major (4): expand/collapse model + 3 regression cases
+test('codex-major-4: expand/collapse arrows and 3 regression cases (refresh, narrow->widen, page switch)', () => {
+  const closedLay = B.layoutOneRowBand(sampleInput({ expanded: false }), 195, tZh)
+  assert.equal(segText(closedLay.toggle).trim(), '\u25BE展開')
+  const openLay = B.layoutOneRowBand(sampleInput({ expanded: true }), 195, tZh)
+  assert.equal(segText(openLay.toggle).trim(), '\u25B4收合')
+
+  // Regression 1: manual collapse -> refresh -> still collapsed
+  let st = B.initialBandExpand('decide')
+  st = B.toggleBandExpand(st)
+  assert.equal(st.expanded, true)
+  assert.equal(st.activePage, 'now')
+  assert.equal(st.prevPage, 'decide')
+  st = B.toggleBandExpand(st)
+  assert.equal(st.expanded, false)
+  assert.equal(st.activePage, 'decide')
+  st = B.bandExpandOnRefresh(st)
+  assert.equal(st.expanded, false, 'regression 1: manual collapse survives refresh')
+
+  // Regression 2: narrow -> widen -> restored (manual state intact, segments return)
+  let st2 = B.toggleBandExpand(B.initialBandExpand('now'))
+  st2 = B.bandExpandOnResize(st2, 75)
+  assert.equal(st2.expanded, true, 'resize narrow does not overwrite manual expand')
+  const narrow = B.layoutOneRowBand(sampleInput({ expanded: st2.expanded }), 75, tZh)
+  assert.ok(narrow.dropped.length > 0, 'narrow drops segments')
+  st2 = B.bandExpandOnResize(st2, 195)
+  assert.equal(st2.expanded, true, 'resize widen preserves manual expand')
+  const wide = B.layoutOneRowBand(sampleInput({ expanded: st2.expanded }), 195, tZh)
+  assert.equal(wide.dropped.length, 0, 'regression 2: widen restores all segments')
+
+  // Regression 3: switch page -> expanded state unchanged
+  let st3 = B.toggleBandExpand(B.initialBandExpand('now'))
+  st3 = B.bandExpandOnPageChange(st3, 'decide')
+  assert.equal(st3.expanded, true, 'regression 3a: switch page while expanded keeps expanded')
+  st3 = B.toggleBandExpand(st3)
+  assert.equal(st3.expanded, false)
+  st3 = B.bandExpandOnPageChange(st3, 'review')
+  assert.equal(st3.expanded, false, 'regression 3b: switch page while collapsed keeps collapsed')
+})
+
+// Codex Major (5): right alignment — tok/s 9 -> 78 -> 120 keeps suffix and following segments stationary
+test('codex-major-5: right alignment keeps tok/s suffix and subsequent separators stationary across 9 -> 78 -> 120', () => {
+  const pos = (v) => {
+    const lay = B.layoutOneRowBand(sampleInput({ tps: { value: v } }), 195, tZh)
+    const text = B.oneRowText(lay)
+    const idx = text.indexOf(' tok/s')
+    return { suffixCol: W.displayWidth(text.slice(0, idx)), seps: lay.sepPositions }
+  }
+  const p9 = pos(9)
+  const p78 = pos(78)
+  const p120 = pos(120)
+  const p1250 = pos(1250)
+  assert.equal(p78.suffixCol, p9.suffixCol, 'tok/s suffix col unchanged 9 -> 78')
+  assert.equal(p120.suffixCol, p9.suffixCol, 'tok/s suffix col unchanged 78 -> 120')
+  assert.equal(p1250.suffixCol, p9.suffixCol, 'tok/s suffix col unchanged 120 -> 1k+')
+  assert.deepEqual(p78.seps, p9.seps)
+  assert.deepEqual(p120.seps, p9.seps)
+  assert.deepEqual(p1250.seps, p9.seps)
+})
+
+// Decide C dual-column rules: 82/83/84 threshold, +/-2 hysteresis, equal column widths (>=40 each + 3 sep)
+test('decide-c-layout: 82/83/84 threshold, +/-2 hysteresis, and equal column widths', () => {
+  assert.equal(L.decideLayoutMode(82, null), 'single')
+  assert.equal(L.decideLayoutMode(83, null), 'dual')
+  assert.equal(L.decideLayoutMode(84, null), 'dual')
+
+  // Hysteresis from dual: stays dual at 82 and 81, switches single at 80
+  assert.equal(L.decideLayoutMode(82, 'dual'), 'dual')
+  assert.equal(L.decideLayoutMode(81, 'dual'), 'dual')
+  assert.equal(L.decideLayoutMode(80, 'dual'), 'single')
+
+  // Hysteresis from single: stays single at 83 and 84, switches dual at 85
+  assert.equal(L.decideLayoutMode(83, 'single'), 'single')
+  assert.equal(L.decideLayoutMode(84, 'single'), 'single')
+  assert.equal(L.decideLayoutMode(85, 'single'), 'dual')
+
+  // Equal widths: at 83 -> 40 + 3 + 40 = 83
+  const w83 = L.decideColumnWidths(83)
+  assert.deepEqual(w83, { leftW: 40, rightW: 40, sepW: 3 })
+  const w120 = L.decideColumnWidths(120)
+  assert.equal(Math.abs(w120.leftW - w120.rightW) <= 1, true, 'equal columns at 120')
+  assert.equal(w120.leftW + w120.sepW + w120.rightW, 120)
+})

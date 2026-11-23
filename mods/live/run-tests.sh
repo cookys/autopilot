@@ -36,6 +36,8 @@ node --test "$here/band-no-error-text.test.js"
 node --test "$here/shell.test.js"
 # the band fold (default one row, one click, the new-card mark): pure, imports the real bandfold.ts
 node --test "$here/bandfold.test.js"
+# single-row fixed-column band layout + decide C dual-column/hysteresis rules: pure, imports band-onerow.ts & pages/layout.ts
+node --test "$here/band-onerow.test.js"
 # the P2 pet tab & panel/1 tuple reader (sprite, 79 vs 80 fallback, negative controls, usage/side poison isolation): pure, imports real panel.ts & pettab.ts
 node --test "$here/pettab.test.js"
 # the operator-console snapshot (the fleet.console/1 trust-boundary parser, the console.json mode reader, fictional fixtures): pure, imports the real console.ts

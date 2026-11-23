@@ -23,6 +23,8 @@ import { COL_GAP } from './speedview'
 import type { SpeedColumn } from './speedview'
 import type { BandPageId, BarStrip, BarTabId } from './tabs'
 import { foldPlace } from './bandfold'
+import { BAND_SEP_SEG } from './band-onerow'
+import type { BandSegmentId, OneRowLayout } from './band-onerow'
 import { isBriefStale, staleBadge } from './pages/rows'
 import { mostSevere } from './pages/frame'
 
@@ -87,7 +89,7 @@ export function stackRows(el: { Box: El }, rows: unknown[]) {
 
 // the scroll hint row of a window that holds more than it shows (guideline §13.3): `↑ 還有 N 行 · k 往上` and `↓ 還有 M 行 · j 往下`, each half a `[ … ]` Button (BarButton's look) that moves the window a page (a click, or Tab and
 // Enter, or the j/k hotkeys cardSplit draws, reach what the wheel and the scroll keys also do), a half with nothing in that direction is not drawn
-export function scrollHint(el: { Box: El; Text: El; Button?: El }, t: T, above: number, below: number, onUp: () => void, onDown: () => void): unknown {
+export function scrollHint(el: { Box: El; Text: El; Button?: El }, t: T, above: number, below: number, onUp: () => void, onDown: () => void, extra: unknown[] = []): unknown {
   const { Box, Text, Button } = el
   const half = (k: string, text: string, press: () => void) => {
     const label = '[ ' + text + ' ]' // the same look as BarButton: the action colour and the [ ] frame, so it reads as a Button
@@ -100,8 +102,47 @@ export function scrollHint(el: { Box: El; Text: El; Button?: El }, t: T, above: 
       {above > 0 ? half('scroll:up', t('shell.more_up', { n: above }) + t('shell.scroll_key_up'), onUp) : <Text key="nu">{''}</Text>}
       {above > 0 && below > 0 ? <Text key="sep">{' '}</Text> : <Text key="ns">{''}</Text>}
       {below > 0 ? half('scroll:down', t('shell.more_down', { n: below }) + t('shell.scroll_key_down'), onDown) : <Text key="nd">{''}</Text>}
+      {extra}
     </Box>
   )
+}
+
+// Single-row fixed-column band (2026-11-23-band-layout v4, Fleet-Task 01M837HGTX).
+// Pure view over OneRowLayout from band-onerow.ts: colours come only from drawSeg(seg), never raw literals.
+export function OneRowBand(
+  el: { Box: El; Text: El; Button?: El },
+  layout: OneRowLayout,
+  onSegment: (id: BandSegmentId) => void,
+  onToggleExpand: () => void,
+): unknown {
+  const { Box, Text, Button } = el
+  const drawSegList = (segs: readonly Seg[], prefix: string) =>
+    segs.map((s, i) => <Text key={prefix + i} {...drawSeg(s)} wrap="truncate">{s.text}</Text>)
+  const parts: unknown[] = []
+  if (layout.remind.segs.length > 0) {
+    const remTexts = drawSegList(layout.remind.segs, 'rem-')
+    parts.push(
+      layout.remind.clickable && Button !== undefined
+        ? <Button key="band:remind" plain onPress={() => onSegment('remind')}>{remTexts}</Button>
+        : <Box key="band:remind-plain">{remTexts}</Box>,
+    )
+  }
+  layout.segments.forEach((seg, idx) => {
+    parts.push(<Text key={'sep-' + idx} {...drawSeg(BAND_SEP_SEG)}>{BAND_SEP_SEG.text}</Text>)
+    const texts = drawSegList(seg.segs, 'seg-' + seg.id + '-')
+    parts.push(
+      seg.clickable && Button !== undefined
+        ? <Button key={'band:' + seg.id} plain onPress={() => onSegment(seg.id)}>{texts}</Button>
+        : <Box key={'band:' + seg.id + '-plain'}>{texts}</Box>,
+    )
+  })
+  const togTexts = drawSegList(layout.toggle.segs, 'tog-')
+  parts.push(
+    Button === undefined
+      ? <Box key="pane-toggle-plain">{togTexts}</Box>
+      : <Button key="pane-toggle" plain autoFocus onPress={onToggleExpand}>{togTexts}</Button>,
+  )
+  return <Box key="onerow-band" height={1} width={layout.columns} overflow="hidden">{parts}</Box>
 }
 
 // consecutive segs of one slot become one Button; a seg with no slot (a separator) stays a bare Text
@@ -707,10 +748,8 @@ export function cardSplit(el: { Box: El; Text: El; Button?: El }, t: T, o: { top
     ...(win.below > 0 ? [hot('down', 'j', () => o.onPage(1))] : []),
   ]
   const rule = GLYPHS.structure.rule.repeat(Math.max(1, o.cells - 1))
-  rows.push(scrollKeys.length > 0
-    ? <Box key="rule"><Text key="r" color={PALETTE.structure}>{rule}</Text>{scrollKeys}</Box>
-    : <Text key="rule" color={PALETTE.structure}>{rule}</Text>)
-  if (win.hint) rows.push(scrollHint(el, t, win.above, win.below, () => o.onPage(-1), () => o.onPage(1)))
+  rows.push(<Text key="rule" color={PALETTE.structure}>{rule}</Text>)
+  if (win.hint) rows.push(scrollHint(el, t, win.above, win.below, () => o.onPage(-1), () => o.onPage(1), scrollKeys))
   rows.push(...o.strip)
   return { rows, from: win.offset, to: win.offset + win.rows } // [from, to): the rows of `top` the window shows
 }

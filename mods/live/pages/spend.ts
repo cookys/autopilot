@@ -4,9 +4,12 @@ import type { Seg } from '../model'
 import { displayWidth, sparkText } from '../model'
 import { GLYPHS } from '../../tux/glyphs.ts'
 import { PALETTE } from '../../tux/palette.ts'
+import { BAND_STALE_MS } from '../band-onerow'
+import { MIN_DECODE_MS, fmtTps, mainSteps, summarize } from '../speed'
+import { sparkline } from '../speedview'
 import { meterKey } from '../ui'
 import type { Page, PageCtx } from './frame'
-import { SEATS_RED_AFTER_MS, seatQuota } from './now'
+import { SEATS_RED_AFTER_MS, ageUnit, seatQuota } from './now'
 import { ROLE_WARNING, isUnknownPool, normalizedPools, poolKey, poolLabel, rankPools } from './quota-pick'
 import type { QuotaPool } from './quota-pick'
 import { shortVerdict } from './quota'
@@ -71,7 +74,9 @@ function poolRows(ctx: PageCtx): Row[] {
     const pct = p.five_hour_pct ?? p.seven_day_pct
     const verdict = ok && pct !== null ? Math.round(pct) + '%' : shortVerdict(p, v, nowMs, paceOk, t)
     const noForecast = verdict.startsWith(GLYPHS.state.unknown + ' ')
-    const state = verdict.startsWith(GLYPHS.state.failed + ' ') || noForecast ? verdict.slice(2) : verdict
+    const stateBase = verdict.startsWith(GLYPHS.state.failed + ' ') || noForecast ? verdict.slice(2) : verdict
+    const isPoolStale = v.kind === 'stale' || v.kind === 'stale_seat'
+    const state = isPoolStale ? stateBase + ' (' + t('page.spend.pool_stale_thr') + ')' : stateBase
     out.push([{ text: ' ' }, { text: glyphOf(verdict) + ' ', color }, { text: padR(poolLabel(v.pool), labelWidth) }, { text: state, ...(v.role === 'broken' ? { color: PALETTE.broken } : {}) }])
   }
   return out
@@ -109,7 +114,10 @@ export function poolEtaRows(eta: PoolEta | null, nowMs: number, t: PageCtx['t'])
   if (eta === null) return [brokenRow(' ' + GLYPHS.state.failed + ' ' + t('v75.eta.none'))]
   const feedStale = eta.generated_at_ms + eta.stale_after_s * 1000 < nowMs // the only clock comparison on this page
   const out: Row[] = []
-  if (feedStale) out.push(brokenRow(' ' + GLYPHS.state.failed + ' ' + t('v75.eta.feed_stale')))
+  if (feedStale) {
+    const etaAge = ageUnit(t, Math.max(0, nowMs - eta.generated_at_ms))
+    out.push(brokenRow(' ' + GLYPHS.state.failed + ' ' + t('v75.eta.feed_stale') + ' · ' + t('page.spend.eta_stale_detail', { age: etaAge, s: eta.stale_after_s })))
+  }
   const labelWidth = Math.max(0, ...eta.pools.map(p => displayWidth(poolLabel(p.pool)))) + 1
   for (const p of eta.pools) {
     const label: Seg = { text: padR(poolLabel(p.pool), labelWidth) }
@@ -126,6 +134,46 @@ export function poolEtaRows(eta: PoolEta | null, nowMs: number, t: PageCtx['t'])
       { text: padL(pct === null ? DASH : Math.round(pct) + '%', 4) + '  ', ...bad }, { text: padL(burn, 8) + '  ' + t('page.spend.reset', { t: resetIn(p.resets_at_ms, nowMs, t) }) + '  ', ...bad }, { text: exhaust, ...(alert && !feedStale ? { color: PALETTE.attention } : {}) },
       ...(feedStale ? [staleBadge(' ' + t('v75.eta.row_stale'))] : []),
     ])
+  }
+  return out
+}
+
+function speedSection(ctx: PageCtx): Row[] {
+  const { t, nowMs } = ctx
+  const steps = ctx.steps ?? []
+  const out: Row[] = [openRule(t('page.spend.sec_speed'))]
+  if (steps.length === 0) {
+    out.push([{ text: ' ' + DASH + ' ' + t('page.spend.speed_none'), dim: true }])
+    return out
+  }
+  const lastStep = steps[steps.length - 1]
+  const ageMs = Math.max(0, nowMs - lastStep.at)
+  const age = ageUnit(t, ageMs)
+  const isStale = ageMs > BAND_STALE_MS
+  if (lastStep.tps !== null) {
+    const exactTps = fmtTps(lastStep.tps, DASH)
+    const lineText = t('page.spend.speed_latest', { tps: exactTps, age })
+    out.push(isStale ? [{ text: ' ' }, staleBadge(lineText + ' ' + GLYPHS.state.failed)] : [{ text: ' ' + lineText }])
+  } else {
+    const reason = lastStep.decodeMs === null
+      ? t('page.spend.speed_no_stream', { age })
+      : lastStep.decodeMs < MIN_DECODE_MS
+        ? t('page.spend.speed_short_window', { ms: Math.round(lastStep.decodeMs), min: MIN_DECODE_MS, age })
+        : t('page.spend.speed_no_tokens', { age })
+    out.push([{ text: ' ' + DASH + ' ' + reason, dim: true }])
+  }
+  if (isStale) {
+    out.push(brokenRow(' ' + GLYPHS.state.failed + ' ' + t('page.spend.speed_stale', { age })))
+  }
+  const main = mainSteps(steps)
+  const basis = main.length > 0 ? main : steps
+  const sum = summarize(basis)
+  const recent = steps.slice(-5)
+  const hasTimed = sum.avgTps !== null || sum.bestTps !== null
+  if (hasTimed) {
+    const bars = sparkline(recent.map(s => s.tps))
+    const stats = t('page.spend.speed_stats', { avg: fmtTps(sum.avgTps, DASH), best: fmtTps(sum.bestTps, DASH), n: sum.requests })
+    out.push([{ text: ' ' }, { text: bars, color: isStale ? PALETTE.idle : PALETTE.running }, { text: '  ' + stats, dim: true }])
   }
   return out
 }
@@ -149,7 +197,19 @@ export function renderSpend(ctx: PageCtx, _view: SpendViewOpts = DEFAULT_VIEW): 
     })()
     body.push(meterRow(t('label.quota_5h'), row?.five_hour_pct ?? win5?.pct ?? null, resetIn(win5?.resetsAtMs ?? null, nowMs, t), stale, t))
     body.push(meterRow(t('label.quota_7d'), row?.seven_day_pct ?? win7?.pct ?? null, resetIn(win7?.resetsAtMs ?? poolReset, nowMs, t), stale, t))
-    if (stale) body.push(brokenRow(' ' + GLYPHS.state.failed + ' ' + t(ageMs !== null && ageMs >= 60_000 ? 'page.spend.q_stale' : 'page.spend.q_stale_plain', { min: Math.floor((ageMs ?? 0) / 60_000) })))
+    if (stale) {
+      body.push(brokenRow(' ' + GLYPHS.state.failed + ' ' + t(ageMs !== null && ageMs >= 60_000 ? 'page.spend.q_stale' : 'page.spend.q_stale_plain', { min: Math.floor((ageMs ?? 0) / 60_000) })))
+      if (qFeed.failed) {
+        body.push(brokenRow(' ' + GLYPHS.state.failed + ' ' + t('page.spend.q_failed_stale', { age: ageMs === null ? DASH : ageUnit(t, ageMs) })))
+      }
+    } else if (row !== null && qFeed.failed) {
+      body.push([{ text: ' ' + GLYPHS.state.need_you + ' ' + t('page.spend.q_failed_cached', { age: ageMs === null ? DASH : ageUnit(t, ageMs) }), color: PALETTE.attention }])
+    } else if (row !== null && ageMs !== null) {
+      body.push([{ text: ' ' + t('page.spend.q_meta', { age: ageUnit(t, ageMs) }), dim: true }])
+    } else if (row === null) {
+      if (qFeed.failed) body.push([{ text: ' ' + GLYPHS.state.need_you + ' ' + t('page.spend.q_failed_live'), color: PALETTE.attention }])
+      else body.push([{ text: ' ' + t('page.spend.q_meta_live'), dim: true }])
+    }
   } else {
     body.push(brokenRow(' ' + GLYPHS.state.failed + ' ' + t(qFeed.failed ? 'page.now.q_failed_none' : 'page.now.q_none')))
   }
@@ -157,13 +217,18 @@ export function renderSpend(ctx: PageCtx, _view: SpendViewOpts = DEFAULT_VIEW): 
 
   body.push(openRule(t('v74.f.sec_today')))
   const sp = live?.detail.spend ?? null
+  const publishedMs = live?.published_at != null && Number.isFinite(Date.parse(live.published_at)) ? Date.parse(live.published_at) : null
+  const liveAgeStale = live !== null && live.state === 'ok' && publishedMs !== null && Math.max(0, nowMs - publishedMs) > BAND_STALE_MS
   if (live === null) body.push(brokenRow(' ' + GLYPHS.state.failed + ' ' + t('page.now.no_live')))
   else if (sp === null) body.push(brokenRow(' ' + GLYPHS.state.failed + ' ' + t('page.spend.no_spend')))
   else {
     const n = sp.tok?.host ?? sp.tok?.session ?? null // the real token fields; host_all_n / brain are money and never drawn
-    const val: Seg = n === null ? { text: t('v74.f.tok_unknown'), dim: true } : live.state !== 'ok' ? staleBadge(tokLabel(n, t) + ' ' + GLYPHS.state.failed) : { text: tokLabel(n, t) }
+    const val: Seg = n === null
+      ? { text: t('v74.f.tok_unknown') + ' · ' + t('page.spend.tok_no_feed'), dim: true }
+      : live.state !== 'ok' || liveAgeStale ? staleBadge(tokLabel(n, t) + ' ' + GLYPHS.state.failed) : { text: tokLabel(n, t) }
     body.push([{ text: ' ' + padR(t('page.spend.today_label'), 8) }, val])
     if (live.state !== 'ok') body.push(brokenRow(' ' + GLYPHS.state.failed + ' ' + t('page.spend.stale_live', { why: (live.header ?? '').trim() || live.state })))
+    else if (liveAgeStale && publishedMs !== null) body.push(brokenRow(' ' + GLYPHS.state.failed + ' ' + t('page.spend.live_age_stale', { age: ageUnit(t, Math.max(0, nowMs - publishedMs)) })))
   }
 
   body.push(openRule(t('v74.f.sec_24h')))
@@ -174,8 +239,12 @@ export function renderSpend(ctx: PageCtx, _view: SpendViewOpts = DEFAULT_VIEW): 
     body.push([{ text: ' ' + t('v74.f.chart_note', { n: last.length }), dim: true }])
     if ((sp?.tok?.host ?? sp?.tok?.session ?? null) === null) body.push([{ text: ' ' + t('v74.f.chart_note_notoday'), dim: true }])
     body.push([{ text: ' ' + sparkText(last) }])
+  } else {
+    const no24h = live === null ? t('page.spend.no_24h_nolive') : sp === null ? t('page.spend.no_24h_nospend') : t('page.spend.no_24h_reason')
+    body.push([{ text: ' ' + DASH + ' ' + no24h, dim: true }])
   }
-  else body.push([{ text: ' ' + DASH, dim: true }])
+
+  body.push([{ text: '' }], ...speedSection(ctx))
 
   const broken = row === null || stale || live === null || live.state !== 'ok' || sp === null || con === null
   return { body, actions: broken ? [[{ text: t('frame.unknown'), dim: true }]] : [] }

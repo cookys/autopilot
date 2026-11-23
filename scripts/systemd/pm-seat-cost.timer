@@ -1,0 +1,9 @@
+[Unit]
+Description=PM seat daily cost row, 00:30 Taipei
+
+[Timer]
+OnCalendar=*-*-* 00:30:00 Asia/Taipei
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,8 @@
+[Unit]
+Description=PM seat daily cost row (autopilot S1)
+
+[Service]
+Type=oneshot
+# Edit the two paths for the PM host; the PM installs this unit with its own OS account.
+ExecStart=%h/projects/autopilot/scripts/pm-seat-cost-daily.sh --sessions-dir %h/.claude/projects/PM_PROJECT_DIR --out-dir %h/projects/pm/knowledge/sources/pm-seat-cost
+Nice=10

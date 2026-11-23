@@ -1,7 +1,13 @@
 # PM 席省額度計畫的 replay 量測：同一批輸入量出每個開關 ON 和 OFF 的差
 
-Status: 計畫 v3（第 1、2 代 plan review 的阻擋已摺入，見 §10；已到世代上限，等 PM 裁定凍結）；fleet 單 01M838P3WFXNM885HK3S6ZGSXP；量測對象是 PM 省額度計畫 01M8350QM7GTW20VH5YP2EAK0H。
+Status: 計畫 v4（v3 的 plan review 阻擋已摺入，見 §10；v4 加入第 0 段離線估算與第 1 段 replay 分段，等 PM 裁定凍結）；fleet 單 01M838P3WFXNM885HK3S6ZGSXP；量測對象是 PM 省額度計畫 01M8350QM7GTW20VH5YP2EAK0H。
 出處：操作員 11-23 原話「你如果是要比量，每天的任務也不同，這樣比也沒意義吧？想辦法設計 replay 方式？」
+
+## 0. 分段（PM 第二次裁定：離線優先）
+
+- **第 0 段（離線估算，零 token）**：`scripts/pm-offline-estimate.js` 讀 PM 席的 session jsonl，只出彙總數字：autocompact 視窗模擬、S4 預篩、S5a 批次、S2 失敗回合。由 PM 在 PM 席執行，數字貼回單；本席不讀原始 transcript。
+- **第 1 段（replay，≤10 段事件、≤5M）**：只在 PM 看過第 0 段數字、認為有疑問的開關才跑。下文 §3 隔離、§6 的 80M 總額與白名單池只適用第 1 段；第 0 段不用模型、不佔池。
+- 第 1 段的預算以 5M 為上限，超過要回 PM 重裁，不沿用 §6 的 80M。
 
 ## 1. 問題
 

@@ -182,6 +182,10 @@
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/subagent-budget.js",
             "timeout": 5,
             "onFailure": "continue"
+          },
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/agent-dispatch-shed.js"
           }
         ]
       },

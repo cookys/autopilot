@@ -119,6 +119,28 @@ test('allocate prioritizes P1 over P2, earlier due first, respects quota, eligib
   assert.deepEqual(allocate({ fill, ready: [] }), { assignments: [], skipped: [] });
 });
 
+test('allocate follows capacity rules: resident excluded, most remaining first with glm on ties, flashnext-b capped at 3', () => {
+  const fill = {
+    backends: [
+      { name: 'resident', eligible: true, quota: 11 },
+      { name: 'flashnext-b', eligible: true, quota: 5 },
+      { name: 'glm', eligible: true, quota: 4 },
+    ],
+    total_quota: 20,
+  };
+  const ready = Array.from({ length: 9 }, (_, i) => ({ id: 't' + i, lane: 'l', priority: 'P2', due: null, engineClass: 'cheap' }));
+  const res = allocate({ fill, ready });
+  assert.deepEqual(res.assignments.map((a) => a.backend), [
+    'glm', 'glm', 'flashnext-b', 'glm', 'flashnext-b', 'glm', 'flashnext-b',
+  ]);
+  assert.deepEqual(res.skipped, [{ id: 't7', reason: 'no_quota' }, { id: 't8', reason: 'no_quota' }]);
+  assert.equal(res.assignments.some((a) => a.backend === 'resident'), false);
+
+  // Overrides: nothing excluded and no caps gives resident the most room.
+  const open = allocate({ fill, ready: ready.slice(0, 1), exclude: [], caps: {} });
+  assert.equal(open.assignments[0].backend, 'resident');
+});
+
 test('auditLine formats single-line dispatch record without brief', () => {
   const line = auditLine({ id: 't-1', lane: 'autopilot', backend: 'resident' }, 'run-1', '2026-11-23T13:30:03.000Z');
   assert.equal(line, 'gateway-fill dispatch id=t-1 lane=autopilot backend=resident ts=2026-11-23T13:30:03.000Z');

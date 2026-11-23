@@ -86,7 +86,18 @@ function compareReady(a, b) {
   return 0;
 }
 
-function allocate({ fill, ready = [], maxPerRound } = {}) {
+// Capacity's rules (task 01M8492MGT): resident is kept for main work, so it never takes
+//dispatch; flashnext-b answers 429 when full, so its quota is capped. Ties go to glm, then by name.
+const DEFAULT_EXCLUDE = ['resident'];
+const DEFAULT_CAPS = { 'flashnext-b': 3 };
+const TIE_FIRST = 'glm';
+
+function betterTie(a, b) {
+  if ((a.name === TIE_FIRST) !== (b.name === TIE_FIRST)) return a.name === TIE_FIRST;
+  return a.name < b.name;
+}
+
+function allocate({ fill, ready = [], maxPerRound, exclude = DEFAULT_EXCLUDE, caps = DEFAULT_CAPS } = {}) {
   const assignments = [];
   const skipped = [];
   const cheap = [];
@@ -102,30 +113,29 @@ function allocate({ fill, ready = [], maxPerRound } = {}) {
   cheap.sort(compareReady);
 
   const backends = (fill && Array.isArray(fill.backends) ? fill.backends : [])
-    .filter((b) => b && b.eligible === true && Number.isInteger(b.quota) && b.quota > 0)
-    .map((b) => ({ name: b.name, remaining: b.quota }));
+    .filter((b) => b && b.eligible === true && Number.isInteger(b.quota) && b.quota > 0 && !exclude.includes(b.name))
+    .map((b) => ({ name: b.name, remaining: Number.isInteger(caps[b.name]) ? Math.min(b.quota, caps[b.name]) : b.quota }));
 
   const limit = maxPerRound !== undefined && maxPerRound !== null
     ? maxPerRound
     : (fill && Number.isInteger(fill.total_quota) && fill.total_quota >= 0 ? fill.total_quota : Infinity);
 
-  let backendIdx = 0;
   for (const item of cheap) {
     if (assignments.length >= limit) {
       skipped.push({ id: item.id, reason: 'no_quota' });
       continue;
     }
 
-    while (backendIdx < backends.length && backends[backendIdx].remaining <= 0) {
-      backendIdx += 1;
+    let backend = null;
+    for (const b of backends) {
+      if (b.remaining <= 0) continue;
+      if (!backend || b.remaining > backend.remaining
+        || (b.remaining === backend.remaining && betterTie(b, backend))) backend = b;
     }
-
-    if (backendIdx >= backends.length) {
+    if (!backend) {
       skipped.push({ id: item.id, reason: 'no_quota' });
       continue;
     }
-
-    const backend = backends[backendIdx];
     backend.remaining -= 1;
     assignments.push({ id: item.id, lane: item.lane, backend: backend.name });
   }

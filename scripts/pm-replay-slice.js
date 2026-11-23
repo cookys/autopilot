@@ -2,6 +2,8 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
 const { incomingMessages } = require('./pm-offline-estimate.js');
 const { scanText } = require('./lib/outbound-secret-scan.js');
 const { redactText } = require('./lib/personal-data-redact.js');
@@ -305,6 +307,350 @@ function scanAndSampleEvents(events, quota = DEFAULT_QUOTA, seed = 1, options = 
   };
 }
 
+function sha256Hex(content) {
+  return crypto.createHash('sha256').update(content).digest('hex');
+}
+
+function estimateTurnTokens(entry) {
+  const usage = entry?.message?.usage;
+  if (!usage || typeof usage !== 'object') return 0;
+  return (
+    (Number(usage.input_tokens) || 0) +
+    (Number(usage.cache_creation_input_tokens) || 0) +
+    (Number(usage.cache_read_input_tokens) || 0) +
+    (Number(usage.output_tokens) || 0)
+  );
+}
+
+/**
+ * Extract a prefill prefix from turns before `firstSelectedIndex`,
+ * starting from an event boundary, accumulating usage tokens up to `level`,
+ * and never splitting a tool_use / tool_result pair.
+ */
+function buildPrefillPrefix(session, firstSelectedIndex, level, incomingIndices = [], options = {}) {
+  const limit = Math.max(0, Math.min(firstSelectedIndex, session.length));
+  const boundaries = incomingIndices.filter((idx) => idx >= 0 && idx < limit);
+  const startIndex = boundaries.length > 0 ? boundaries[0] : 0;
+
+  const pendingToolUseIds = new Set();
+  let lastSafeEndIndex = startIndex;
+  let lastSafeTokens = 0;
+  let runningTokens = 0;
+
+  for (let i = startIndex; i < limit; i++) {
+    const entry = session[i];
+    const content = entry?.message?.content;
+    if (Array.isArray(content)) {
+      for (const block of content) {
+        if (block?.type === 'tool_use' && block.id) {
+          pendingToolUseIds.add(block.id);
+        } else if (block?.type === 'tool_result' && block.tool_use_id) {
+          pendingToolUseIds.delete(block.tool_use_id);
+        }
+      }
+    }
+
+    runningTokens += estimateTurnTokens(entry);
+
+    if (pendingToolUseIds.size === 0) {
+      if (runningTokens <= level || lastSafeEndIndex === startIndex) {
+        lastSafeEndIndex = i + 1;
+        lastSafeTokens = runningTokens;
+      }
+      if (runningTokens >= level) {
+        break;
+      }
+    }
+  }
+
+  const rawTurns = session.slice(startIndex, lastSafeEndIndex);
+  const scanRes = scanCandidateItem({ level, turns: rawTurns }, options);
+  if (!scanRes.passed) {
+    throw new Error(`Prefix for level ${level} failed Level-1 secret scan`);
+  }
+
+  return {
+    level,
+    startIndex,
+    endIndex: lastSafeEndIndex,
+    estimatedTokens: lastSafeTokens,
+    turnCount: scanRes.item.turns.length,
+    turns: scanRes.item.turns,
+    scanRes,
+  };
+}
+
+function normalizeParams(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return input ?? {};
+  const sorted = {};
+  for (const key of Object.keys(input).sort()) {
+    sorted[key] = input[key];
+  }
+  return sorted;
+}
+
+const READ_ONLY_TOOLS = new Set([
+  'Read',
+  'Glob',
+  'Grep',
+  'LS',
+  'WebFetch',
+  'WebSearch',
+  'TodoRead',
+]);
+
+function extractToolCallsAndDecision(turns) {
+  const resultByToolUseId = new Map();
+  for (const turn of turns) {
+    const content = turn?.message?.content;
+    if (!Array.isArray(content)) continue;
+    for (const block of content) {
+      if (block?.type === 'tool_result' && block.tool_use_id) {
+        resultByToolUseId.set(block.tool_use_id, block.content ?? null);
+      }
+    }
+  }
+
+  const toolCalls = [];
+  const intents = [];
+  let hasAssistantText = false;
+
+  for (const turn of turns) {
+    if (turn?.type !== 'assistant') continue;
+    const content = turn?.message?.content;
+    if (!Array.isArray(content)) continue;
+    for (const block of content) {
+      if (block?.type === 'text' && String(block.text || '').trim()) {
+        hasAssistantText = true;
+      } else if (block?.type === 'tool_use') {
+        const normalizedInput = normalizeParams(block.input);
+        const rawResult = resultByToolUseId.has(block.id)
+          ? resultByToolUseId.get(block.id)
+          : null;
+        toolCalls.push({
+          id: block.id || null,
+          name: block.name,
+          normalizedInput,
+          rawResult,
+        });
+        if (!READ_ONLY_TOOLS.has(block.name)) {
+          const target =
+            normalizedInput.file_path ||
+            normalizedInput.path ||
+            normalizedInput.command ||
+            normalizedInput.url ||
+            null;
+          intents.push({
+            actionCategory: block.name,
+            target,
+            keyParams: normalizedInput,
+          });
+        }
+      }
+    }
+  }
+
+  return {
+    toolCalls,
+    decision: {
+      intents,
+      replyCategory: intents.length > 0 ? 'tool_action' : hasAssistantText ? 'text_reply' : 'no_reply',
+    },
+  };
+}
+
+function serializeEvent(ev) {
+  const { toolCalls, decision } = extractToolCallsAndDecision(ev.turns || []);
+  return {
+    id: ev.id,
+    type: ev.type,
+    timestamp: ev.timestamp,
+    inputText: ev.text,
+    toolCalls,
+    decision,
+  };
+}
+
+function ensureEmptyOutDir(outDir) {
+  if (fs.existsSync(outDir)) {
+    const entries = fs.readdirSync(outDir);
+    if (entries.length > 0) {
+      throw new Error(`Output directory is not empty: ${outDir}`);
+    }
+  } else {
+    fs.mkdirSync(outDir, { recursive: true });
+  }
+}
+
+function writeSliceOutput(outDir, session, sampleResult, options = {}) {
+  ensureEmptyOutDir(outDir);
+  const eventsDir = path.join(outDir, 'events');
+  fs.mkdirSync(eventsDir, { recursive: true });
+
+  const seed = options.seed ?? 1;
+  const levels = options.levels ?? [200000, 300000];
+  const incomingIndices = incomingMessages(session).map((m) => m.index);
+  const firstSelectedIndex =
+    sampleResult.selected.length > 0
+      ? Math.min(...sampleResult.selected.map((e) => e.index))
+      : session.length;
+
+  const files = {};
+  const writeJson = (relPath, data) => {
+    const content = JSON.stringify(data, null, 2) + '\n';
+    fs.writeFileSync(path.join(outDir, relPath), content, 'utf8');
+    files[relPath] = sha256Hex(content);
+  };
+
+  for (const ev of sampleResult.selected) {
+    const relPath = `events/${ev.id}.json`;
+    writeJson(relPath, serializeEvent(ev));
+  }
+
+  const prefixes = [];
+  let prefixLevel2Replacements = 0;
+  const prefixLevel2ByCategory = {};
+
+  for (const level of levels) {
+    const prefix = buildPrefillPrefix(session, firstSelectedIndex, level, incomingIndices, options);
+    prefixLevel2Replacements += prefix.scanRes.level2Replacements;
+    for (const [cat, count] of Object.entries(prefix.scanRes.level2ByCategory)) {
+      prefixLevel2ByCategory[cat] = (prefixLevel2ByCategory[cat] || 0) + count;
+    }
+    const relPath = `prefix-${level}.json`;
+    writeJson(relPath, {
+      level: prefix.level,
+      startIndex: prefix.startIndex,
+      endIndex: prefix.endIndex,
+      estimatedTokens: prefix.estimatedTokens,
+      turns: prefix.turns,
+    });
+    prefixes.push({
+      level: prefix.level,
+      file: relPath,
+      startIndex: prefix.startIndex,
+      endIndex: prefix.endIndex,
+      estimatedTokens: prefix.estimatedTokens,
+      turnCount: prefix.turnCount,
+    });
+  }
+
+  const scanReport = {
+    level1: {
+      discardedCount: sampleResult.scanSummary.discardedCount,
+      discardedByCategory: sampleResult.scanSummary.discardedByCategory,
+    },
+    level2: {
+      replacements: sampleResult.scanSummary.level2Replacements + prefixLevel2Replacements,
+      byCategory: { ...sampleResult.scanSummary.level2ByCategory },
+    },
+  };
+  for (const [cat, count] of Object.entries(prefixLevel2ByCategory)) {
+    scanReport.level2.byCategory[cat] = (scanReport.level2.byCategory[cat] || 0) + count;
+  }
+  writeJson('scan-report.json', scanReport);
+
+  const classificationRulesSha256 = sha256Hex(
+    JSON.stringify(CLASSIFICATION_RULES.map((r) => ({ type: r.type, description: r.description })))
+  );
+  const scanRulesSha256 = sha256Hex(
+    JSON.stringify(
+      SUPPLEMENTARY_REDACT_RULES.map((r) => ({
+        category: r.category,
+        pattern: r.pattern.source,
+        placeholder: r.placeholder,
+      }))
+    )
+  );
+  const scriptSha256 = sha256Hex(fs.readFileSync(__filename, 'utf8'));
+  const sortedFiles = {};
+  for (const k of Object.keys(files).sort()) {
+    sortedFiles[k] = files[k];
+  }
+  const batchSha256 = sha256Hex(JSON.stringify(sortedFiles));
+
+  const manifest = {
+    seed,
+    classificationRulesSha256,
+    scanRulesSha256,
+    scriptSha256,
+    files: sortedFiles,
+    batchSha256,
+    candidateCounts: sampleResult.candidateCounts,
+    selectedCounts: sampleResult.selectedCounts,
+    otherCount: sampleResult.otherCount,
+    discardedCount: sampleResult.scanSummary.discardedCount,
+    level2Replacements: scanReport.level2.replacements,
+    prefixes,
+  };
+  fs.writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', 'utf8');
+
+  return { manifest, scanReport };
+}
+
+function parseArgs(argv) {
+  const args = {
+    sessionsDirs: [],
+    out: null,
+    seed: 1,
+    levels: [200000, 300000],
+    quota: { ...DEFAULT_QUOTA },
+    since: null,
+  };
+
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === '--sessions-dir' && argv[i + 1]) {
+      args.sessionsDirs.push(argv[++i]);
+    } else if (arg === '--out' && argv[i + 1]) {
+      args.out = argv[++i];
+    } else if (arg === '--seed' && argv[i + 1]) {
+      args.seed = Number(argv[++i]);
+    } else if (arg === '--levels' && argv[i + 1]) {
+      args.levels = argv[++i].split(',').map((s) => Number(s.trim())).filter(Number.isFinite);
+    } else if (arg === '--quota' && argv[i + 1]) {
+      const q = {};
+      for (const pair of argv[++i].split(',')) {
+        const [k, v] = pair.split('=').map((s) => s.trim());
+        if (k && Number.isFinite(Number(v))) q[k] = Number(v);
+      }
+      args.quota = q;
+    } else if (arg === '--since' && argv[i + 1]) {
+      args.since = argv[++i];
+    }
+  }
+  return args;
+}
+
+function loadSessionsFromDirs(dirs) {
+  const combined = [];
+  for (const dir of dirs) {
+    const files = fs.readdirSync(dir).filter((f) => f.endsWith('.jsonl')).sort();
+    for (const file of files) {
+      const lines = fs.readFileSync(path.join(dir, file), 'utf8').split('\n').filter(Boolean);
+      for (const line of lines) {
+        combined.push(JSON.parse(line));
+      }
+    }
+  }
+  return combined;
+}
+
+function main(argv = process.argv.slice(2)) {
+  const args = parseArgs(argv);
+  if (!args.out || args.sessionsDirs.length === 0) {
+    throw new Error('Usage: pm-replay-slice.js --sessions-dir <dir> --out <dir> [--seed N] [--levels 200000,300000] [--quota ...] [--since ISO]');
+  }
+  const session = loadSessionsFromDirs(args.sessionsDirs);
+  const events = sliceEvents(session, { since: args.since });
+  const sampleResult = scanAndSampleEvents(events, args.quota, args.seed);
+  writeSliceOutput(args.out, session, sampleResult, { seed: args.seed, levels: args.levels });
+}
+
+if (require.main === module) {
+  main();
+}
+
 module.exports = {
   DEFAULT_QUOTA,
   CLASSIFICATION_RULES,
@@ -316,4 +662,8 @@ module.exports = {
   scanCandidateItem,
   scanAndSampleEvents,
   createRng,
+  buildPrefillPrefix,
+  serializeEvent,
+  writeSliceOutput,
+  parseArgs,
 };

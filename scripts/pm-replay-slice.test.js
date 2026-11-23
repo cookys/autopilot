@@ -2,11 +2,18 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const {
   classifyEvent,
   sliceEvents,
   scanCandidateItem,
   scanAndSampleEvents,
+  buildPrefillPrefix,
+  writeSliceOutput,
+  parseArgs,
 } = require('./pm-replay-slice.js');
 
 function makeUserEntry(text, timestamp = '2026-11-23T10:00:00Z') {
@@ -117,4 +124,111 @@ test('scanAndSampleEvents: deterministic with fixed seed and aborts on insuffici
     () => scanAndSampleEvents(events, { operator: 2, lane_result: 2 }, 42),
     /Insufficient quota.*lane_result/
   );
+});
+
+test('buildPrefillPrefix never splits tool_use and tool_result pair', () => {
+  const session = [
+    makeUserEntry('prefix start', '2026-11-23T09:00:00Z'),
+    {
+      type: 'assistant',
+      timestamp: '2026-11-23T09:00:01Z',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'tool_use', id: 'tu_1', name: 'Read', input: { file_path: 'a.js' } }],
+        usage: { input_tokens: 150, output_tokens: 50 },
+      },
+    },
+    {
+      type: 'user',
+      timestamp: '2026-11-23T09:00:02Z',
+      message: {
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: 'tu_1', content: 'ok' }],
+      },
+    },
+    makeUserEntry('selected event', '2026-11-23T10:00:00Z'),
+  ];
+
+  // Level 150 is hit at assistant turn (200 tokens), but tool_use is open so it must include tool_result
+  const prefix = buildPrefillPrefix(session, 3, 150, [0, 3]);
+  assert.equal(prefix.endIndex, 3);
+  assert.equal(prefix.turns.length, 3);
+});
+
+test('writeSliceOutput: writes deterministic files, verifies sha256, rejects non-empty dir, and leaks no matched content', () => {
+  const fakeToken = ['sk', 'ant', 'api03', 'secretkeyvalue1234567890abcdefgh'].join('-');
+  const session = [
+    makeUserEntry('prefix turn for /home/alice/repo', '2026-11-23T09:00:00Z'),
+    makeAssistantEntry('prefix reply', '2026-11-23T09:00:01Z'),
+    makeUserEntry(`secret prompt ${fakeToken}`, '2026-11-23T09:30:00Z'),
+    makeUserEntry('operator prompt from alice@corp.example.net', '2026-11-23T10:00:00Z'),
+    {
+      type: 'assistant',
+      timestamp: '2026-11-23T10:00:05Z',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'tool_use', id: 'tu_2', name: 'Edit', input: { file_path: '/home/alice/x.js' } }],
+        usage: { input_tokens: 50, output_tokens: 10 },
+      },
+    },
+    {
+      type: 'user',
+      timestamp: '2026-11-23T10:00:06Z',
+      message: {
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: 'tu_2', content: 'edited' }],
+      },
+    },
+  ];
+
+  const events = sliceEvents(session);
+  const sample1 = scanAndSampleEvents(events, { operator: 1 }, 7);
+  const sample2 = scanAndSampleEvents(events, { operator: 1 }, 7);
+
+  const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-replay-b-'));
+  const out1 = path.join(tmpBase, 'out1');
+  const out2 = path.join(tmpBase, 'out2');
+
+  writeSliceOutput(out1, session, sample1, { seed: 7, levels: [100] });
+  writeSliceOutput(out2, session, sample2, { seed: 7, levels: [100] });
+
+  // Non-empty directory must be rejected
+  assert.throws(
+    () => writeSliceOutput(out1, session, sample1, { seed: 7, levels: [100] }),
+    /not empty/
+  );
+
+  const manifest1 = JSON.parse(fs.readFileSync(path.join(out1, 'manifest.json'), 'utf8'));
+  const manifest2 = JSON.parse(fs.readFileSync(path.join(out2, 'manifest.json'), 'utf8'));
+  assert.deepEqual(manifest1, manifest2);
+
+  // Verify every file sha256 matches manifest and no matched secret/PII appears in any output file
+  for (const [relPath, expectedHash] of Object.entries(manifest1.files)) {
+    const raw = fs.readFileSync(path.join(out1, relPath), 'utf8');
+    const actualHash = crypto.createHash('sha256').update(raw).digest('hex');
+    assert.equal(actualHash, expectedHash);
+    assert.ok(!raw.includes(fakeToken));
+    assert.ok(!raw.includes('/home/alice'));
+    assert.ok(!raw.includes('alice@corp.example.net'));
+  }
+
+  fs.rmSync(tmpBase, { recursive: true, force: true });
+});
+
+test('parseArgs parses repeatable --sessions-dir and options', () => {
+  const args = parseArgs([
+    '--sessions-dir', '/tmp/a',
+    '--sessions-dir', '/tmp/b',
+    '--out', '/tmp/out',
+    '--seed', '9',
+    '--levels', '100,200',
+    '--quota', 'operator=2,patrol=1',
+    '--since', '2026-11-23T00:00:00Z',
+  ]);
+  assert.deepEqual(args.sessionsDirs, ['/tmp/a', '/tmp/b']);
+  assert.equal(args.out, '/tmp/out');
+  assert.equal(args.seed, 9);
+  assert.deepEqual(args.levels, [100, 200]);
+  assert.deepEqual(args.quota, { operator: 2, patrol: 1 });
+  assert.equal(args.since, '2026-11-23T00:00:00Z');
 });

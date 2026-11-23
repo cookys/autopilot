@@ -112,7 +112,7 @@ const CODES = [
   'bad_id', 'bad_since', 'bad_origin', 'bad_reply', 'bad_trigger_type', 'bad_trigger_date', 'peer_field_missing',
   'peer_closed_unanswered', 'problem_has_identifier',
   'effort_too_large', 'done_check_unrunnable', 'bad_artifact', 'bad_needs', 'bad_ms', 'bad_used_by',
-  'bad_queued_by', 'text_row_missing_inputs', 'after_cycle', 'after_broken', 'feeds_broken',
+  'bad_queued_by', 'text_row_missing_inputs', 'after_cycle', 'after_broken', 'feeds_broken', 'bad_priority', 'bad_engine_class',
   'PADDED_DEADLINE',
 ];
 
@@ -996,7 +996,7 @@ function miniHeading(fields) {
   const title = fields.Title;
   const keys = ['Id', 'Status', 'Since', 'Origin', 'Reporter', 'Report', 'Reply', 'Problem', 'Impact',
     'Trigger', 'Trigger-Type', 'Effort', 'Source', 'Pointer', 'Context',
-    'Done-Check', 'Artifact', 'Needs', 'after', 'Due', 'ms', 'Used-by', 'Queued-By', 'Prompt', 'Inputs', 'Feeds'];
+    'Done-Check', 'Artifact', 'Needs', 'after', 'Due', 'ms', 'Used-by', 'Queued-By', 'Prompt', 'Inputs', 'Feeds', 'Priority', 'Engine-Class'];
   const bullets = keys
     .filter((k) => fields[k] != null)
     .map((k) => `- **${k}**: ${fields[k]}`)
@@ -1263,6 +1263,10 @@ function runSelfTest() {
     }), ['PADDED_DEADLINE']);
     add('bad_ms', 'heading', mark(2) + miniHeading({ ...qBase, ms: 'Step' }), ['bad_ms']);
     add('bad_used_by', 'heading', mark(2) + miniHeading({ ...qBase, 'Used-by': 'n/a short' }), ['bad_used_by']);
+    add('dispatch-hints-ok', 'heading', mark(2) + miniHeading({ ...qBase, Priority: 'P2', 'Engine-Class': 'cheap' }), []);
+    add('hint-alone-not-queue-form', 'heading', mark(2) + miniHeading({ ...base, Title: 'Hint only row', Id: 'BL-0001', Priority: 'P2', 'Engine-Class': 'cheap' }), []);
+    add('bad_priority', 'heading', mark(2) + miniHeading({ ...qBase, Priority: 'P0' }), ['bad_priority']);
+    add('bad_engine_class', 'heading', mark(2) + miniHeading({ ...qBase, 'Engine-Class': 'premium' }), ['bad_engine_class']);
     add('bad_queued_by', 'heading', mark(2) + miniHeading({ ...qBase, 'Queued-By': 'ns/c/m' }), ['bad_queued_by']);
     add('text_row_missing_inputs', 'heading', mark(3) + miniHeading(host) + '\n' + miniHeading({
       ...qBase, Title: 'Queue text row', Id: 'BL-0002', Artifact: 'text', Prompt: 'docs/plans/ok.md', Feeds: 'BL-0001',

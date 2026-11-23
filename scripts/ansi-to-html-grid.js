@@ -52,7 +52,7 @@ function render(input) {
   }
   add(input.slice(pos));
   if (input.endsWith('\n')) rows.pop();
-  return '<!doctype html><meta charset="utf-8"><style>body{margin:0;background:#1e1e1e}.grid{font-family:monospace;white-space:pre;line-height:1.25}.row{height:1.25em}.row span{display:inline-block;text-align:center}</style><div class="grid">'+rows.map(row=>'<div class="row">'+row+'</div>').join('\n')+'</div>\n';
+  return '<!doctype html><meta charset="utf-8"><style>body{margin:0;background:#1e1e1e}.grid{font-family:monospace;white-space:pre;line-height:1.25}.row{height:1.25em}.row span{display:inline-block;text-align:center}</style><div class="grid">'+rows.map(row=>'<div class="row">'+row+'</div>').join('')+'</div>\n';
 }
 if (require.main===module) {
   if (process.argv.length>3) { console.error('Usage: ansi-to-html-grid.js [input-file]'); process.exitCode=2; }

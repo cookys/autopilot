@@ -41,3 +41,8 @@ test('CLI accepts stdin and a file and escapes HTML', () => {
     }
   } finally { fs.rmSync(dir, {recursive:true,force:true}); }
 });
+
+test("rows are not separated by a newline (white-space:pre would draw a blank line between rows)", () => {
+  const html = render("a\nb\nc");
+  assert.equal(html.includes("</div>\n<div"), false);
+});

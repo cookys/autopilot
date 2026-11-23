@@ -784,6 +784,8 @@ function runCheck(opts, at) {
         Needs: f.Needs == null ? '' : String(f.Needs),
         ms: f.ms == null ? '' : String(f.ms),
         Feeds: f.Feeds == null ? '' : String(f.Feeds),
+        Priority: f.Priority == null ? '' : String(f.Priority).trim(),
+        'Engine-Class': f['Engine-Class'] == null ? '' : String(f['Engine-Class']).trim(),
       });
     }
     report.ready = ready;
@@ -1612,7 +1614,7 @@ function runReconcile(args) {
 // after these lines, and the process exit stays report.exit.
 function printReadyText(report) {
   const rows = Array.isArray(report.ready) ? report.ready : [];
-  const keys = ['Id', 'Title', 'Artifact', 'Needs', 'ms', 'Feeds'];
+  const keys = ['Id', 'Title', 'Artifact', 'Needs', 'ms', 'Feeds', 'Priority', 'Engine-Class'];
   for (const row of rows) {
     for (const key of keys) {
       const value = row[key] == null ? '' : String(row[key]);

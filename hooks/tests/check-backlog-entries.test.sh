@@ -748,6 +748,13 @@ assert_eq "$(exact_line "$HUMAN_OUT" "ready.Artifact code")" "yes" "non-JSON --r
 assert_eq "$(exact_line "$HUMAN_OUT" "ready.Needs none")" "yes" "non-JSON --ready prints Needs"
 assert_eq "$(exact_line "$HUMAN_OUT" "ready.ms d1.queue")" "yes" "non-JSON --ready prints ms"
 assert_eq "$(exact_line "$HUMAN_OUT" "ready.Feeds ")" "yes" "non-JSON --ready prints Feeds"
+# Dispatch hints reach the READY lines. Negative control: drop the two keys from printReadyText's list and these go red.
+assert_eq "$(exact_line "$HUMAN_OUT" "ready.Priority ")" "yes" "non-JSON --ready prints an empty Priority when the row has none"
+d="$(repo q-ready-hints)"
+{ printf '<!-- next-id: BL-0002 -->\n\n'; qhead 'Queue hint row' BL-0001; printf -- '- **Priority**: P2\n- **Engine-Class**: cheap\n'; } > "$d/docs/BACKLOG.md"
+HINT_OUT="$(node "$GATE" --backlog "$d/docs/BACKLOG.md" --mode block --ready 2>/dev/null)"
+assert_eq "$(exact_line "$HINT_OUT" "ready.Priority P2")" "yes" "--ready prints Priority"
+assert_eq "$(exact_line "$HINT_OUT" "ready.Engine-Class cheap")" "yes" "--ready prints Engine-Class"
 assert_eq "$(exact_line "$HUMAN_OUT" "ready_count 1")" "yes" "non-JSON --ready prints ready_count"
 HUMAN_JSON="$(printf '%s\n' "$HUMAN_OUT" | tail -n 1)"
 assert_eq "$(json_exit "$HUMAN_JSON")" "0" "non-JSON --ready keeps the lint JSON exit"

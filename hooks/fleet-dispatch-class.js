@@ -274,5 +274,6 @@ module.exports = {
   VALID_CLASSES,
   extractRoleHeader,
   resolveClassFromRole,
+  applyShedRouting,
   decide,
 };

@@ -91,7 +91,7 @@
 | fleet CLI 與 MCP | fleet lane | (a)：MCP 工具說明寫必填欄位與拒絕碼；requester 四個（task_status、task_accept、task_progress、task_comment）已在 fleet 單 01M7XSNQ | 工具說明每輪只幾十 token，勝過每次查 help |
 | inbox-cli | fleet lane | (a) 或 (e) | 同上 |
 | 各 repo 的 ledger.sh（本 repo 以外） | 各 repo 的 lane | (e) | 各自的用法錯誤印可貼範例 |
-| hangar、capacity 的腳本 | hangar lane、capacity 負責人 | (c)+(e) | 重複的多步 shell 變成一支腳本，帶 usage 範例（hangar 只能從 cookys-openclaw 讀，本席不碰） |
+| hangar、capacity 的腳本 | hangar lane、capacity 負責人 | (c)+(e) | 重複的多步 shell 變成一支腳本，帶 usage 範例（hangar 只能從 <host> 讀，本席不碰） |
 | fleet hook stop 的判定 | fleet lane | 與 01M7XQVB 對接 | 判定在 fleet 二進位內 |
 
 ## 4. 分段與上線

@@ -8,6 +8,7 @@ In `hooks/harness-support-evidence.json`, a `fired` row (a probe run saw the eve
 | Hook | Claude Code | Codex | OpenCode | agy |
 |---|---|---|---|---|
 | `advisory-relay` | UserPromptSubmit<br>未驗證 | — | — | — |
+| `agent-dispatch-shed` | PreToolUse<br>未驗證 | — | — | — |
 | `ask-decision` | PreToolUse<br>未驗證 | — | — | — |
 | `askpm-remind` | Stop<br>未驗證 | — | — | — |
 | `audit-log` | PostToolUse<br>未驗證 | — | — | — |
@@ -17,7 +18,6 @@ In `hooks/harness-support-evidence.json`, a `fired` row (a probe run saw the eve
 | `claude-home-read-guard` | PreToolUse<br>未驗證 | — | — | — |
 | `context-budget` | PostToolUse<br>未驗證 | — | — | — |
 | `context-land-gate` | Stop<br>未驗證 | — | — | — |
-| `cost-fuse` | PreToolUse<br>未驗證 | — | — | — |
 | `cost-tracker` | Stop<br>未驗證 | — | — | — |
 | `depth0-delegate-gate` | PreToolUse<br>未驗證 | — | — | — |
 | `dirty-protected-paths` | Stop<br>未驗證 | SessionEnd, Stop<br>未驗證 | — | — |
@@ -27,8 +27,11 @@ In `hooks/harness-support-evidence.json`, a `fired` row (a probe run saw the eve
 | `fleet-send-work-order-guard` | PreToolUse<br>未驗證 | — | — | — |
 | `fleet-stop` | Stop<br>未驗證 | — | — | — |
 | `foreman-guard` | PreToolUse<br>未驗證 | — | — | — |
+| `inbox-drain-gate` | Stop<br>未驗證 | — | — | — |
 | `intent-capture` | PostToolUse<br>未驗證 | — | — | — |
 | `log-error` | PostToolUse<br>未驗證 | — | — | — |
+| `native-msg-flush` | PostToolUse<br>未驗證 | — | — | — |
+| `native-msg-record` | PostToolUse, Stop<br>未驗證 | — | — | — |
 | `opt-in-multiplexer` | PostToolUse, PostToolUseFailure, PreToolUse, Stop<br>未驗證 | — | — | — |
 | `owner-question-guard` | Stop<br>未驗證 | — | — | — |
 | `past-reference-recall` | UserPromptSubmit<br>未驗證 | — | — | — |
@@ -49,7 +52,7 @@ In `hooks/harness-support-evidence.json`, a `fired` row (a probe run saw the eve
 | `session-start` | SessionStart<br>未驗證 | — | — | — |
 | `session-tasks` | PostToolUse, TaskCompleted, TaskCreated<br>未驗證 | — | — | — |
 | `state-checkpoint` | PostCompact, PreCompact<br>未驗證 | — | — | — |
-| `subagent-budget` | PreToolUse<br>未驗證 | — | — | — |
+| `subagent-budget` | PostToolUse, PreToolUse, SubagentStop<br>未驗證 | — | — | — |
 | `subagent-fleet-task` | PostToolUse, SubagentStop<br>未驗證 | — | — | — |
 | `suggest-compact` | PostToolUse<br>未驗證 | — | — | — |
 | `unmerged-ship-advisory` | Stop<br>未驗證 | — | — | — |

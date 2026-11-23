@@ -18,7 +18,7 @@ function run(env, content) {
 }
 const REMOTE = { QRP_BASE_URL: 'https://open.bigmodel.cn/api/anthropic' };
 const LOCAL = { QRP_BASE_URL: 'http://127.0.0.1:9' };
-const DIRTY = 'diff --git a/a.js b/a.js\n+// see /home/team/projects/autopilot/secret and host cookys-openclaw.internal\n';
+const DIRTY = 'diff --git a/a.js b/a.js\n+// see $HOME/projects/autopilot/secret and host <host>.internal\n';
 let passed = 0;
 function check(cond, msg) { assert.ok(cond, msg); passed += 1; }
 

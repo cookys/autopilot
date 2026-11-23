@@ -161,9 +161,25 @@ function batch(sessions, seconds = 300) {
   }
   return { already_batched_items, saved_turns, weighted_cost };
 }
+const crypto = require('node:crypto');
 const HOOK_BLOCK_RE = /(?:^PreToolUse:|hook (?:error|blocked|denied)|\b(?:blocked|denied|not allowed) by hook\b)/i;
 const HOOK_NAME_RE = /^[a-z][a-z0-9-]{0,63}$/;
 const KEBAB_HOOK_RE = /(?<![/\\\w.-])[a-z][a-z0-9]*(?:-[a-z0-9]+)+(?![/\\\w-]|\.\w)/;
+const MESSAGE_SIGNATURES = [
+  { prefix: '這個操作會讀到真正的 Claude', hook: 'claude-home-read-guard', source: 'hooks/claude-home-read-guard.js' },
+  { prefix: '這個指令會印出秘密', hook: 'secret-print', source: 'scripts/lib/bash-launch-rules.js' },
+  { prefix: '這則 send 是在派工', hook: 'fleet-send-work-order-guard', source: 'hooks/fleet-send-work-order-guard.js' },
+];
+
+function stripHookHeader(text) {
+  if (typeof text !== 'string') return '';
+  return text.replace(/^PreToolUse:[^\s]+\s+hook\s+error:\s*/, '').trimStart();
+}
+
+function headHash(text) {
+  const head = stripHookHeader(text).slice(0, 16);
+  return crypto.createHash('sha1').update(head).digest('hex').slice(0, 8);
+}
 
 function sanitizeHookName(name) {
   return typeof name === 'string' && HOOK_NAME_RE.test(name) ? name : 'unknown';
@@ -180,7 +196,10 @@ function extractHookFromText(text) {
     if (bracketed.length) return bracketed[bracketed.length - 1][1];
   }
   const kebab = text.match(KEBAB_HOOK_RE);
-  return kebab ? kebab[0] : null;
+  if (kebab) return kebab[0];
+  const body = stripHookHeader(text);
+  const sig = MESSAGE_SIGNATURES.find(s => body.startsWith(s.prefix));
+  return sig ? sig.hook : null;
 }
 
 const KNOWN_BLOCK_TOOLS = new Set(['Bash', 'Edit', 'Write', 'Read']);
@@ -211,6 +230,14 @@ function classifyUnknownTool(text, lastAssistant, toolUseId) {
   return raw && KNOWN_BLOCK_TOOLS.has(raw) ? raw : 'other';
 }
 
+function topHeads(byHead, limit = 5) {
+  const sorted = Object.entries(byHead).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  if (sorted.length <= limit) return Object.fromEntries(sorted);
+  const out = Object.fromEntries(sorted.slice(0, limit));
+  out.rest = sorted.slice(limit).reduce((sum, [, count]) => sum + count, 0);
+  return out;
+}
+
 function recordHookBlock(byHook, hook, event, unknownMeta = null) {
   const key = `${event}\0${hook}`;
   if (!byHook.has(key)) {
@@ -218,6 +245,7 @@ function recordHookBlock(byHook, hook, event, unknownMeta = null) {
     if (hook === 'unknown') {
       entry.by_tool = {};
       entry.by_shape = {};
+      entry.by_head = {};
     }
     byHook.set(key, entry);
   }
@@ -226,6 +254,7 @@ function recordHookBlock(byHook, hook, event, unknownMeta = null) {
   if (hook === 'unknown' && unknownMeta) {
     bucket.by_tool[unknownMeta.tool] = (bucket.by_tool[unknownMeta.tool] || 0) + 1;
     bucket.by_shape[unknownMeta.shape] = (bucket.by_shape[unknownMeta.shape] || 0) + 1;
+    if (unknownMeta.head) bucket.by_head[unknownMeta.head] = (bucket.by_head[unknownMeta.head] || 0) + 1;
   }
   return bucket;
 }
@@ -262,7 +291,7 @@ function failures(sessions) {
         if (!categories.has(category)) categories.set(category, { category, failures: 0, retry_turns: 0, weighted_cost: 0 });
         failed = categories.get(category);
         failed.failures++;
-        const unknownMeta = hook === 'unknown' ? { tool: 'other', shape: classifyUnknownShape('') } : null;
+        const unknownMeta = hook === 'unknown' ? { tool: 'other', shape: classifyUnknownShape(''), head: headHash('') } : null;
         failedHook = recordHookBlock(byHook, hook, event, unknownMeta);
         lastAssistant = null;
       } else if (entry.type === 'user' && lastAssistant) {
@@ -279,7 +308,7 @@ function failures(sessions) {
             const event = text.startsWith('PreToolUse:') ? 'PreToolUse' : 'other';
             const hook = sanitizeHookName(extractHookFromText(text));
             const unknownMeta = hook === 'unknown'
-              ? { tool: classifyUnknownTool(text, lastAssistant, blockedResult.tool_use_id), shape: classifyUnknownShape(text) }
+              ? { tool: classifyUnknownTool(text, lastAssistant, blockedResult.tool_use_id), shape: classifyUnknownShape(text), head: headHash(text) }
               : null;
             failedHook = recordHookBlock(byHook, hook, event, unknownMeta);
           } else {
@@ -296,6 +325,9 @@ function failures(sessions) {
   }
   const hookBlock = categories.get('hook_block');
   if (hookBlock) {
+    for (const entry of byHook.values()) {
+      if (entry.hook === 'unknown' && entry.by_head) entry.by_head = topHeads(entry.by_head);
+    }
     hookBlock.by_hook = [...byHook.values()].sort((a, b) =>
       b.weighted_cost - a.weighted_cost
       || b.failures - a.failures
@@ -305,7 +337,7 @@ function failures(sessions) {
   }
   return [...categories.values()];
 }
-module.exports = { autocompact, prescreen, batch, failures, incomingMessages };
+module.exports = { autocompact, prescreen, batch, failures, incomingMessages, MESSAGE_SIGNATURES, headHash };
 
 if (require.main === module) {
   const fs = require('node:fs');

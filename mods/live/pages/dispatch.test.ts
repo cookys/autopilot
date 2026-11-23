@@ -118,7 +118,7 @@ const GOLDEN_WIDE = [
   '派工',
   '── 執行中 1 ──────────────────────────────────────────────',
   '  run                         角色        引擎             經過     上次',
-  '▸ ● console-source            hand        sonnet           23 分    1 分前',
+  '▸ ◉ console-source            hand        sonnet           23 分    1 分前',
   '── foreman ──',
   '  ○ 無',
   '── 已完成 3（z 收合）───────────────────────────────',
@@ -131,7 +131,7 @@ const GOLDEN_WIDE = [
 const GOLDEN_80_EXPANDED = [
   '派工',
   '── 執行中 1 ──',
-  '▸● console-source hand sonnet 23分',
+  '▸◉ console-source hand sonnet 23分',
   '── 已完成 3（z 收合）──',
   ' ✓ astra g1 reviewer 18分 5時前',
   ' ✓ carbon g1 reviewer 21分 5時前',
@@ -142,7 +142,7 @@ const GOLDEN_80_EXPANDED = [
 const GOLDEN_80_FOLDED = [
   '派工',
   '── 執行中 1 ──',
-  '▸● console-source hand sonnet 23分',
+  '▸◉ console-source hand sonnet 23分',
   '── 已完成 3（z 展開）──',
   '[z] 展開已完成',
 ]
@@ -166,7 +166,7 @@ test('dispatch registry: page 3 in PAGES is framed dispatchPage', () => {
 test('dispatch negative control: golden comparator catches a single-character drift', () => {
   const got = drawn(80, 24, liveOf(NARROW_RUNS))
   const mutated = GOLDEN_80_EXPANDED.slice()
-  mutated[2] = '▸● console-source hand sonnet 24分'
+  mutated[2] = '▸◉ console-source hand sonnet 24分'
   expect(got).not.toEqual(mutated)
 })
 
@@ -198,7 +198,7 @@ test('dispatch §5: null live, null rows, and stale live draw red PALETTE.broken
   expect(joinedReason.includes('…'), 'stale reason is wrapped, never cut with ellipsis').toBe(false)
 
   // Cached run ages/durations under a stale snapshot carry ✗ in PALETTE.broken
-  const runRows70 = stale70.body.filter(r => /^[▸ ][●✓]/.test(text(r)))
+  const runRows70 = stale70.body.filter(r => /^[▸ ][◉✓]/.test(text(r)))
   expect(runRows70.length).toBe(4)
   for (const r of runRows70) {
     expect(r.some(s => s.color === PALETTE.broken && s.text.includes('✗')), `stale marker on ${text(r)}`).toBe(true)
@@ -232,7 +232,7 @@ test('dispatch G01: v7.4 top fleet-lines summary shows full 4-class counts, acti
   expect(pmLines[0]).toContain('2 分前')
   expect(pmLines[0]).toContain('>5 分過舊')
   expect(pmLines[1]).toContain('⊘1')
-  expect(pmLines[1]).toContain('●120')
+  expect(pmLines[1]).toContain('◉120')
   expect(pmLines[1]).toContain('✗1')
   expect(pmLines[1]).toContain('⋯1')
   expect(pmLines[1]).toContain('共 123 條')
@@ -258,7 +258,7 @@ test('dispatch G01: v7.4 top fleet-lines summary shows full 4-class counts, acti
   const conAll = conView.body.map(text).join('\n')
   expect(conAll).toContain('全艦隊產線 · fleet console --json')
   expect(conAll).toContain('⊘2')
-  expect(conAll).toContain('●14')
+  expect(conAll).toContain('◉14')
   expect(conAll).toContain('✗1')
   expect(conAll).toContain('⋯3')
   expect(conAll).toContain('pm offline')
@@ -280,7 +280,7 @@ test('dispatch G01: v7.4 top fleet-lines summary shows full 4-class counts, acti
   const fleetAll = fleetView.body.map(text).join('\n')
   expect(fleetAll).toContain('全艦隊產線 · fleet tasks --tree --json')
   expect(fleetAll).toContain('⊘5')
-  expect(fleetAll).toContain('●7')
+  expect(fleetAll).toContain('◉7')
   expect(fleetAll).toContain('✗3')
   expect(fleetAll).toContain('⋯2')
   expect(fleetAll).toContain('pm timeout')
@@ -294,7 +294,7 @@ test('dispatch G01: v7.4 top fleet-lines summary shows full 4-class counts, acti
   const missAll = missView.body.map(text).join('\n')
   expect(missAll).toContain('全艦隊產線 · 無來源（>5 分過舊）')
   expect(missAll).toContain('⊘—')
-  expect(missAll).toContain('●—')
+  expect(missAll).toContain('◉—')
   expect(missAll).toContain('✗—')
   expect(missAll).toContain('⋯—')
   expect(missAll).toContain('pm down')

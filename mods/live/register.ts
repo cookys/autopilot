@@ -25,7 +25,7 @@
 //   P7       <live_base>/runs/<project_key>.qc.json, .residue.json, .review.json; <live_base>/stage/<sid>.json; load-source.json; the marker's
 //            §2.9 fields (size, urgent, level, stage, stage_set_at, unit, review_families); the envelope's host_today_brain_usd / brain_cap_usd;
 //            the decisions sidecar's `ladder`. Each is optional: absent -> its slot is left out and its tab says "no data".
-//            The band is ONE line (band.tsx, layout in model.ts layoutBand); the ⓘ opens the pane on the Now tab (7 tabs: Now Decide Dispatch Review Spend Hygiene ?).
+//            The band is ONE line (band.tsx, layout in model.ts layoutBand); the i opens the pane on the Now tab (7 tabs: Now Decide Dispatch Review Spend Hygiene ?).
 //
 //   i18n     every word comes from mods/live/locales/{en,zh-TW}.json (compiled to locales.ts) through `t`; the locale is resolved on every tick:
 //            ~/.autopilot/config.json ui.locale > AUTOPILOT_LOCALE > Claude Code's language setting ($.config.list() row `language`, else the
@@ -200,7 +200,7 @@ export function v74TabStep(page: string, element: unknown, origin: unknown): { k
   const by = Math.abs(d) === 1 ? d : -Math.sign(d)
   return { kind: 'move', by: by > 0 ? 1 : -1 }
 }
-// the 現況 page's 產線 counts (✗ fail, ⊘ parked, ⋯ unknown, ● running) as the band's chips: failed, stuck(⊘), waiting(⋯), running
+// the 現況 page's 產線 counts (✗ fail, ⊘ parked, ⋯ unknown, ◉ running) as the band's chips: failed, stuck(⊘), waiting(⋯), running
 export function v74LineCounts(pm: PmStatus): { failed: number; stuck: number; running: number; waiting: number; normal: number } {
   const c = v74PmCounts(pm)
   return { failed: c.fail, stuck: c.idle, running: c.ok, waiting: c.unknown, normal: 0 }
@@ -455,7 +455,7 @@ const consolePaneOf = async ($: EngineInterface, e: Parameters<EngineInterface['
   })
 }
 let bandCollapsed = initialBandCollapsed() // the shell's one band row (pending count, needs-you count, the expand hint). A click on that row expands; d on the open 待決 menu collapses. Reset at session start.
-let bandSeenCount: number | null = null // pending cards already shown. Null until the first shell draw, which baselines them so cards already waiting are not marked. A later growth while collapsed marks ▲N until one expanded draw catches up.
+let bandSeenCount: number | null = null // pending cards already shown. Null until the first shell draw, which baselines them so cards already waiting are not marked. A later growth while collapsed marks ⏶N until one expanded draw catches up.
 let bandShellOff = false // console mode / framed pages: another page name was pressed, so the default 待決 shell stays closed until 待決 is pressed again; reset at session start
 let barTab: BarTabId | null = null // the tab of the band row that is open (its content is drawn under the rule); null = none; a memory state, reset at session start
 let shellMenu: ShellMenuId = 'd' // the O4 shell's menu (d 待決 by default). It is not barTab: d/r/u/p/h and 9 only change this.
@@ -479,7 +479,7 @@ let accountFile: { path: string; size: number; mtimeMs: number; parsedMs: number
 const MAX_ACCOUNT_BYTES = 4 * 1024 * 1024 // $.fs.read's cap
 const ACCOUNT_REPARSE_MS = 30_000 // a changed .claude.json is parsed again at most this often after a good parse (it can be megabytes)
 let tr: T = T_EN // the active translator, set at the start of every tick (and read by the band / pane draws)
-let pressSeq = 0 // one number per ⓘ press, taken before any await; only the latest press may assign paneTab or end the chain
+let pressSeq = 0 // one number per i press, taken before any await; only the latest press may assign paneTab or end the chain
 let decided: Promise<PaneTab> | null = null // the tab the latest unfinished press chose: a press landing meanwhile steps on from it (N rapid presses = N tabs)
 let previous: { scope: string; counts: Counts | null; acceptance: string | null } | null = null
 const advisories: AdvisoryTracker = newTracker() // P7a: advisory rows seen for the current session; advisories.count feeds a band chip
@@ -1216,7 +1216,7 @@ async function refresh($: EngineInterface): Promise<void> {
       previous = { scope, counts: built.counts, acceptance: built.acceptance }
     }
     // The side pane is never opened here (side-pane plan B, owner ruling 2026-11-06): it took 37-40% of the width and left the band 83 columns at 160 and 145 at 240. The person opens it:
-    // the ⓘ, a slot, or the /live-pane command.
+    // the i, a slot, or the /live-pane command.
   } catch (_e) {
     // a bad tick must never take the session down; the next tick tries again
   }
@@ -1698,7 +1698,7 @@ const framePageId = (): string => panePage
 // On CC 2.1.327 that remount drops the pane's keyboard focus to the prompt and collides on the previous placement's Button keys,
 // so digits 1-9 and 0 type into the prompt instead of firing strip hotkeys. Bump the Button key epoch on every placement move and,
 // when the pane held (or was opened with) focus, reclaim focus on the new placement's anchor after this render commits.
-// v7.4: the page is a full-width framed tree inside the AbovePrompt band, not a host Pane. `v74Open` is its open/closed state (the band's ▴/▾, /live-pane, the ⓘ, a slot, Esc);
+// v7.4: the page is a full-width framed tree inside the AbovePrompt band, not a host Pane. `v74Open` is its open/closed state (the band's ▴/▾, /live-pane, the i, a slot, Esc);
 // `bandLegacy` is the last AbovePrompt draw's legacyTabs (the host's old layout keeps the host Pane and its ui.open / ui.close).
 let v74Open = false
 // `bandLegacy` is null until the first AbovePrompt draw of this session: the mode is not known yet, so an open asked before it (`/live-pane` at startup) is only recorded
@@ -2011,7 +2011,7 @@ export async function startLive($: EngineInterface): Promise<void> {
 
 // every hook of the live mod except `session.start`
 export function registerLive(on: Parameters<Register>[0]): void {
-  // /live-pane: the pane is never opened on its own (plan B); this and the band's ⓘ and slots are the ways to open it
+  // /live-pane: the pane is never opened on its own (plan B); this and the band's i and slots are the ways to open it
   on('command.run', { command: 'live-pane' }, async ($) => {
     bandExpand = { ...bandExpand, expanded: true, manualExpanded: true }
     markPaneOpen()
@@ -2082,8 +2082,8 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const firstDraw = bandLegacy === null
     bandLegacy = !v74
     if (firstDraw && bandLegacy && v74Open) await openHostPane($) // an open asked before the mode was known
-    // the ⓘ opens the panel on the Now tab; pressed again while the panel is open it shows the next tab (7 tabs, the ? legend last, then Now again) (the pane never gets the keyboard
-    // while the person holds the ⓘ, so this is the keyboard way to change tab). "Open" is the engine's own record, $.ui.panes() (the pane
+    // the i opens the panel on the Now tab; pressed again while the panel is open it shows the next tab (7 tabs, the ? legend last, then Now again) (the pane never gets the keyboard
+    // while the person holds the i, so this is the keyboard way to change tab). "Open" is the engine's own record, $.ui.panes() (the pane
     // is listed until it closes, however it was opened). No hotkey: the band's autoFocus puts the keyboard path at Ctrl+x Tab, Enter.
     const info = async () => {
       if (!legacyTabs) return pageOpen('now')
@@ -2112,9 +2112,9 @@ export function registerLive(on: Parameters<Register>[0]): void {
         if (seq === pressSeq) decided = null
       }
     }
-    // a slot pressed opens the pane on the tab that explains it (model.ts slotTab). It is a press like the ⓘ's: it takes a sequence number, so an
-    // ⓘ press still in flight becomes stale and cannot drag the tab back, and it records its tab as `decided` while its open is in flight, so an
-    // ⓘ landing meanwhile steps on from the slot's tab instead of reading a pane $.ui.panes() does not list yet.
+    // a slot pressed opens the pane on the tab that explains it (model.ts slotTab). It is a press like the i's: it takes a sequence number, so an
+    // i press still in flight becomes stale and cannot drag the tab back, and it records its tab as `decided` while its open is in flight, so an
+    // i landing meanwhile steps on from the slot's tab instead of reading a pane $.ui.panes() does not list yet.
     const openOn = async (tab: PaneTab, unfold: string | null = null, pageId: PageId = pageOfTab(tab)) => {
       const seq = ++pressSeq
       decided = Promise.resolve(tab)
@@ -2193,7 +2193,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     // Otherwise the label keeps the cells the indicator's narrowest form leaves it (at most FORGE_LABEL_MAX); none while no request was timed.
     let forge: ForgeSegment[] | null = null
     const steps = validSteps(await read($, STEPS))
-    // the label sits on the left after the ⓘ (`│ ` + label) and a short forge tab joins the strip; the indicator keeps what it needs at its narrowest, the label gets the rest.
+    // the label sits on the left after the i (`│ ` + label) and a short forge tab joins the strip; the indicator keeps what it needs at its narrowest, the label gets the rest.
     // Console mode stays at FORGE_LABEL_MAX and never draws the pet (the console band's bytes stay what they were). Outside it, 48 holds a 5-step spark plus the pet: that label is 31 cells and 30 drops the pet.
     const indicatorMin = snapshot !== null && snapshot.band !== null ? Math.min(BAND_MIN_COLS, layoutBand(snapshot.band.slots, BAND_MIN_COLS).width) : BAND_MIN_COLS
     const con = !legacyTabs || consoleOn ? { ...consoleNav(), cols: columns } : null // X1/X4: the shared strip reads the same source health and counts as the pages in every mode.
@@ -2241,7 +2241,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       forge = fitted.speed
       bandPreset = { segs, width: fittedBandWidth(segs.reduce((n, s) => n + displayWidth(s.text), 0), null, false) }
     } else if (v74) {
-      // No project (or no band slots): the status row still keeps 狀態, 艦隊, 來源, 待決 N, ⓘ and tok/s. Only the own-seat segment says there is no project.
+      // No project (or no band slots): the status row still keeps 狀態, 艦隊, 來源, 待決 N, i and tok/s. Only the own-seat segment says there is no project.
       const withFleet = v74BareBandSlots(snap?.text ?? t('band.waiting'), fleetCounts, mergedDecide()?.length ?? 0, t)
       const parts = rows >= 1 ? v74SpeedParts(steps, consoleOn ? null : petText) : null
       const roomFor = (_speedTab: boolean) => Math.max(1, columns - 4)
@@ -2557,7 +2557,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
           progress = progressRow(el, [])
           quick = quickOf(0, [])
         }
-        // One row until a click. d on the open 待決 menu collapses; another menu key expands and selects. A new card while collapsed stays collapsed and marks ▲N.
+        // One row until a click. d on the open 待決 menu collapses; another menu key expands and selects. A new card while collapsed stays collapsed and marks ⏶N.
         // No focus-free key binding exists ($.command.register is a slash command; a Button hotkey needs this surface's keyboard), so the letter d still needs ctrl+x tab.
         const pendingCount = nonStep.length
         const seen = bandSeenCount === null ? pendingCount : bandSeenCount

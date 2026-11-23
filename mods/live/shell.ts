@@ -172,7 +172,7 @@ export function roomLines(rows: readonly RoomRow[], inner: number, count: number
 
 // ---- the fleet summary (autopilot's own lanes, FleetSummary.lanes) ----
 export type FleetLaneSum = { lane: string; needYou: number; failed: number; stuck: number; running: number; waiting: number }
-// one row per lane that has anything: the most pressing state's glyph (busy ●, waits for you ▲, idle ⋯ …) and its count
+// one row per lane that has anything: the most pressing state's glyph (busy ◉, waits for you ⏶, idle ⋯ …) and its count
 export function fleetLines(lanes: readonly FleetLaneSum[], inner: number, count: number): Seg[][] {
   const g = GLYPHS.state
   const rows: { rank: number; segs: Seg[] }[] = []
@@ -319,14 +319,14 @@ export function shellPlan(inp: ShellInput): ShellPlan | null {
   return { geo, bodyRows, compact, top: frameRow('top', widths, titles, separate), bottom: frameRow('bottom', widths, bottomTitles, separate), verts, columns, divider, separate, leftInner }
 }
 
-// the marks band.tsx draws (it sets no colour of its own): a picked option's ◆ and the `│` between the quick row's slots
+// the marks band.tsx draws (it sets no colour of its own): a picked option's ⬥ and the `│` between the quick row's slots
 export const PICK_MARK: Seg = { text: GLYPHS.structure.answer, color: PALETTE.action }
 export const QUICK_SEP: Seg = { text: ' ' + GLYPHS.structure.bandSep + ' ', color: PALETTE.structure }
 
 // ---- the card list (ux-v7): the left column of the 待決 tab, one row per question; and the progress row inside the main window ----
 // `grey`: an answered card (sent, or closed elsewhere) stays in its place with dim text, as the pane greys it; `gone`: the session or the CLI closed it, so it has no draft and its glyph is idle
 export type Card = { id: string; name: string; answer: string | null; sent: boolean; grey?: boolean; gone?: boolean }
-// ◐ the card in the main window (here), ◆ an answered one (action; done when it was sent), ○ an open one; the answer is right-aligned with one empty cell at the end.
+// ◐ the card in the main window (here), ⬥ an answered one (action; done when it was sent), ○ an open one; the answer is right-aligned with one empty cell at the end.
 // A name is never cut (§12: the 待決 tab's text is not truncated): it wraps inside the column, the mark stays on the first row and a continuation row hangs under the name. The answer sits on the first row.
 // The window is over rows: it keeps the whole current card in view (its first row when the card is taller than the window), centred as far as the list allows.
 export function cardRows(cards: readonly Card[], cursor: number, inner: number, rows: number = BODY_ROWS): { id: string; key: string; segs: Seg[] }[] {
@@ -356,7 +356,7 @@ export function cardRows(cards: readonly Card[], cursor: number, inner: number, 
   return all.slice(from, from + rows)
 }
 
-// `▰▰▱▱▱▱▱▱ 2/8  ◆ 上一張 name → answer` (ux-v7 G3): one cell per card, sent done, picked action, open idle. After a send with nothing waiting the tail says `✓ 已送出 N 張`. `wide` adds `· 待送 N 張`
+// `▰▰▱▱▱▱▱▱ 2/8  ⬥ 上一張 name → answer` (ux-v7 G3): one cell per card, sent done, picked action, open idle. After a send with nothing waiting the tail says `✓ 已送出 N 張`. `wide` adds `· 待送 N 張`
 // and, only when every name fits, the names; a name is never cut in half. The result is never wider than `width`.
 export function progressSegs(o: { cards: readonly Card[]; last: { name: string; answer: string } | null; wide: boolean; width: number; t: T }): Seg[] {
   const { cards, t } = o

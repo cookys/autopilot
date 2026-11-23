@@ -281,7 +281,7 @@ const drawn = (task: FleetTask): string => stateOf('fleetTask', { state: task.st
 const summaryOf = (rows: FleetRow[], extra: { fetchedMs?: number | null; error?: string | null; capped?: number } = {}) =>
   fleetSummary({ lanes: fleetLanes(rows, NOW), fetchedMs: extra.fetchedMs === undefined ? NOW : extra.fetchedMs, error: extra.error ?? null, nowMs: NOW, capped: extra.capped ?? 0 }, drawn)
 
-test('fleetSummary counts each row by the state the Fleet tab draws: ▲ blocked_human, ✗ failed/lost, ⊘ stuck (an hour-old open row too), ● running, ⋯ waiting; pending and findings in no count', () => {
+test('fleetSummary counts each row by the state the Fleet tab draws: ⏶ blocked_human, ✗ failed/lost, ⊘ stuck (an hour-old open row too), ◉ running, ⋯ waiting; pending and findings in no count', () => {
   const s = summaryOf([
     r({ id: ulid(NOW - 1000, 'A'.repeat(16)), lane: 'a--claude', state: 'running' }),
     r({ id: ulid(NOW - 2000, 'B'.repeat(16)), lane: 'a--claude', state: 'in_progress' }),
@@ -290,7 +290,7 @@ test('fleetSummary counts each row by the state the Fleet tab draws: ▲ blocked
     r({ id: ulid(NOW - 5000, 'E'.repeat(16)), lane: 'b--claude', state: 'failed' }),
     r({ id: ulid(NOW - 6000, 'F'.repeat(16)), lane: 'b--claude', state: 'lost' }),
     r({ id: ulid(NOW - 7000, 'G'.repeat(16)), lane: 'b--claude', state: 'suspect' }),
-    r({ id: ulid(NOW - 8000, 'H'.repeat(16)), lane: 'c--claude', state: 'running', observedMs: NOW - QUIET_MS - 1 }), // quiet seat: drawn ⊘, not ●
+    r({ id: ulid(NOW - 8000, 'H'.repeat(16)), lane: 'c--claude', state: 'running', observedMs: NOW - QUIET_MS - 1 }), // quiet seat: drawn ⊘, not ◉
     r({ id: ulid(NOW - OPEN_UNACCEPTED_MS - 1, 'I'.repeat(16)), lane: 'c--claude', state: 'open', createdMs: NOW - OPEN_UNACCEPTED_MS - 1 }), // upcoming, nobody accepted it: ⊘
     r({ id: ulid(NOW - 9000, 'J'.repeat(16)), lane: 'c--claude', state: 'open' }), // upcoming: pending, no count
     r({ id: ulid(NOW - 9500, 'K'.repeat(16)), lane: 'c--claude', state: 'task_accepted' }), // pending

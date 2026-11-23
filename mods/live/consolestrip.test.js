@@ -67,37 +67,37 @@ const bandAt = async (cols, tab = 'command', snap = FULL()) => (await G.load()).
 
 test('console strip 120: five tabs, each with its two most severe non-zero badges (the c0 console-full counts)', async () => {
   const s = await paneAt(120)
-  assert.deepEqual(labels(s), [' 指揮 ▲ 4  ✗ 3 ', ' 團隊 ✗ 2  ⊘ 4 ', ' 額度 ✗ 1  △ 2 ', ' 主機 ⊘ 1 ', ' 本席 '])
+  assert.deepEqual(labels(s), [' 指揮 ⏶ 4  ✗ 3 ', ' 團隊 ✗ 2  ⊘ 4 ', ' 額度 ✗ 1  △ 2 ', ' 主機 ⊘ 1 ', ' 本席 '])
   assert.deepEqual(s.tabs.map(x => x.id), ['command', 'team', 'quota', 'hosts', 'self'])
   assert.equal(s.exact, true)
 })
-test('console strip 80: the △ is given up, ▲N and ✗N stay', async () => {
+test('console strip 80: the △ is given up, ⏶N and ✗N stay', async () => {
   const s = await paneAt(80)
-  assert.deepEqual(labels(s), [' 指揮 ▲ 4  ✗ 3 ', ' 團隊 ✗ 2  ⊘ 4 ', ' 額度 ✗ 1 ', ' 主機 ⊘ 1 ', ' 本席 '])
+  assert.deepEqual(labels(s), [' 指揮 ⏶ 4  ✗ 3 ', ' 團隊 ✗ 2  ⊘ 4 ', ' 額度 ✗ 1 ', ' 主機 ⊘ 1 ', ' 本席 '])
   assert.ok(!labels(s).join('').includes('△'))
 })
-test('console strip 20: the active page name and the program-wide ▲N ✗N (the sum over every page), nothing else', async () => {
+test('console strip 20: the active page name and the program-wide ⏶N ✗N (the sum over every page), nothing else', async () => {
   const snap = FULL()
   const sum = { need_you: 0, failed: 0 }
   for (const pairs of Object.values(snap.counts.tabs)) for (const [k, n] of pairs) if (k in sum) sum[k] += n
   assert.deepEqual(sum, { need_you: 4, failed: 6 }, 'the fixture sums as the test expects')
   for (const tab of ['command', 'quota', 'self']) {
     const s = await paneAt(20, tab)
-    assert.deepEqual(labels(s), [' ' + T_ZH()('console.tab.' + tab) + ' ▲ 4  ✗ 6 '])
+    assert.deepEqual(labels(s), [' ' + T_ZH()('console.tab.' + tab) + ' ⏶ 4  ✗ 6 '])
     assert.equal(s.exact, true, 'one row at 20 columns')
   }
 })
-test('console strip: at every width ▲N and ✗N are never given up, the strip is one row, and a drawn △ means room was left', async () => {
+test('console strip: at every width ⏶N and ✗N are never given up, the strip is one row, and a drawn △ means room was left', async () => {
   const snap = FULL()
   for (let cols = 20; cols <= 140; cols++) {
     const s = await paneAt(cols, 'command', snap)
     assert.equal(s.exact, true, 'one row at ' + cols)
     const text = labels(s).join('')
     if (labels(s).length === 5) {
-      assert.ok(text.includes('▲ 4') && text.includes('✗ 3') && text.includes('✗ 2') && text.includes('✗ 1'), 'every ▲ / ✗ of the five tabs is drawn at ' + cols)
+      assert.ok(text.includes('⏶ 4') && text.includes('✗ 3') && text.includes('✗ 2') && text.includes('✗ 1'), 'every ⏶ / ✗ of the five tabs is drawn at ' + cols)
       assert.equal(text.includes('△'), cols >= CT.CONSOLE_FULL_MIN_COLS, '△ only from the full width, at ' + cols)
     } else {
-      assert.ok(text.includes('▲ 4') && text.includes('✗ 6'), 'the compact form keeps the totals at ' + cols)
+      assert.ok(text.includes('⏶ 4') && text.includes('✗ 6'), 'the compact form keeps the totals at ' + cols)
     }
   }
 })
@@ -110,9 +110,9 @@ test('console strip: a zero count is not drawn, only the first two non-zero entr
   assert.deepEqual(CT.badgesOf(snap, 'self'), [])
   assert.deepEqual(CT.badgesOf(null, 'command'), [])
 })
-test('console strip: the ⊘ number goes before the ▲ / ✗ numbers, in the middle widths', async () => {
+test('console strip: the ⊘ number goes before the ⏶ / ✗ numbers, in the middle widths', async () => {
   const s = await paneAt(60)
-  assert.deepEqual(labels(s), [' 指揮 ▲ 4  ✗ 3 ', ' 團隊 ✗ 2  ⊘ ', ' 額度 ✗ 1 ', ' 主機 ⊘ ', ' 本席 '])
+  assert.deepEqual(labels(s), [' 指揮 ⏶ 4  ✗ 3 ', ' 團隊 ✗ 2  ⊘ ', ' 額度 ✗ 1 ', ' 主機 ⊘ ', ' 本席 '])
 })
 test('console strip: no source (null snapshot) draws the five names with no badge', async () => {
   const s = await paneAt(120, 'command', null)
@@ -135,14 +135,14 @@ test('console tabs: the list has no 待決 / 用量 / 艦隊 (in either locale) 
 })
 test('console band: the same five tabs and badges as the pane; narrow it falls to the compact form; the forge tab stays after them', async () => {
   const wide = await bandAt(120)
-  assert.deepEqual(wide.tabs.map(x => x.label.text), [' 指揮 ▲ 4  ✗ 3 ', ' 團隊 ✗ 2  ⊘ 4 ', ' 額度 ✗ 1  △ 2 ', ' 主機 ⊘ 1 ', ' 本席 '])
+  assert.deepEqual(wide.tabs.map(x => x.label.text), [' 指揮 ⏶ 4  ✗ 3 ', ' 團隊 ✗ 2  ⊘ 4 ', ' 額度 ✗ 1  △ 2 ', ' 主機 ⊘ 1 ', ' 本席 '])
   const narrow = await bandAt(20)
-  assert.deepEqual(narrow.tabs.map(x => x.label.text), [' 指揮 ▲ 4  ✗ 6 '])
+  assert.deepEqual(narrow.tabs.map(x => x.label.text), [' 指揮 ⏶ 4  ✗ 6 '])
   const { tabs } = await G.load()
   const withForge = tabs.barStrip(null, T_ZH(), 'command', 'ϟ', true, { snap: FULL(), tab: 'command', cols: 120 })
   assert.deepEqual(withForge.tabs.map(x => x.id), ['command', 'team', 'quota', 'hosts', 'self', 'forge'])
 })
-test('console nav: the active tab is the shared one, ⓘ steps through the five, a slot lands on 指揮 or 本席', async () => {
+test('console nav: the active tab is the shared one, i steps through the five, a slot lands on 指揮 or 本席', async () => {
   const s = await paneAt(120, 'quota')
   assert.deepEqual(s.tabs.filter(x => x.on).map(x => x.id), ['quota'])
   const b = await bandAt(120, 'hosts')

@@ -1,5 +1,5 @@
 // TUI v2 (2026-10-10, owner-approved redesign + i18n): the band is groups joined by ` │ ` (dispatch + review share one), the wide band carries the stage walk,
-//   a 10-cell spend bar and the verdict reason, `⚑N` replaces `wt N`, `QC▲` / `QC✓` replace `QC owed` / `QC ✓`; the panel is six tabs (Now Dispatch Review Spend
+//   a 10-cell spend bar and the verdict reason, `⚑N` replaces `wt N`, `QC⏶` / `QC✓` replace `QC owed` / `QC ✓`; the panel is six tabs (Now Dispatch Review Spend
 //   Hygiene ?) with badges, the active one bold on a `subtle` background; every word comes from mods/live/locales/{en,zh-TW}.json. This suite pins the locale to
 //   zh-TW through AUTOPILOT_LOCALE (`world(...)` default; `worldEn` for the English table), so the verdict words the older cases assert are the zh-TW words.
 //   Run: `bash mods/live/run-tests.sh` (gen-locales.js --check first).
@@ -375,11 +375,11 @@ async function bandParts($: any, surface: (typeof SURFACES)[number], columns = 1
   return { line1: textOf(cells[0]).replace(/ │ $/, ''), line2: undefined, noTotal: false, progressRaw: '', last: cells[0], tree }
 }
 
-// the real band (AbovePrompt): its drawn tree, the full line (Texts + the ⓘ label) and the ⓘ Button node
+// the real band (AbovePrompt): its drawn tree, the full line (Texts + the i label) and the i Button node
 async function bandLine($: any, surface: (typeof SURFACES)[number], columns = 120) {
   const ui = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: columns }, viewport: { columns: Math.max(columns, 20), rows: 50, isFullscreen: true } })
   const tree = (await ui.drawn()) as Node
-  const info = ((await ui.findAll({ type: 'Button' })) as Node[]).find(b => b.props?.key === 'info') // the slots are Buttons too: the ⓘ is the one keyed info
+  const info = ((await ui.findAll({ type: 'Button' })) as Node[]).find(b => b.props?.key === 'info') // the slots are Buttons too: the i is the one keyed info
   await ui.unmount()
   // r2 §3.1: the band is two rows, the summary then the tab strip; `text` is the summary row (the strip row is the one holding the `tab:*` Buttons)
   const noStrip = (n: Node): Node => ({ ...n, children: ((n.children || []) as Node[]).filter(c => typeof c === 'string' || !((c.children || []) as Node[]).some(g => typeof g !== 'string' && String(g.props?.key ?? '').startsWith('tab:'))).map(c => (typeof c === 'string' ? c : noStrip(c))) })
@@ -973,7 +973,7 @@ for (const surface of SURFACES) {
     const band = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
     await w.clock.advance(5000)
     await w.clock.advance(5000)
-    expect(w.opens.length).toBe(0) // it took 37-40% of the width and left the band 83 columns at 160: the person opens it (the ⓘ, a slot, the quick row, /live-pane)
+    expect(w.opens.length).toBe(0) // it took 37-40% of the width and left the band 83 columns at 160: the person opens it (the i, a slot, the quick row, /live-pane)
     await band.unmount()
     const pane = await paneOn($, surface, 'dispatch')
     const rows = rowsOf((await pane.drawn()) as Node)
@@ -983,7 +983,7 @@ for (const surface of SURFACES) {
     const r3 = rows.find(t => t.includes(' r3 ')) as string
     expect(r1).toContain('implementer')
     expect(r1).toContain('codex / gpt')
-    expect(r1).toContain('● 執行')
+    expect(r1).toContain('◉ 執行')
     expect(r2).toContain('⊘ 疑似卡住')
     expect(r3).toContain('✓ 完成') // the exited run (rc 0) is in the finished table, drawn as a state word, never as `rc 0`
     expect(rows.some(t => t.includes('這是執行狀態，不是進度'))).toBe(true)
@@ -1286,7 +1286,7 @@ for (const surface of SURFACES) {
     world(on, files)
     await start($, surface)
     const p = await bandParts($, surface)
-    expect(p.line1).toBe('▲ 要你決定 repo · — · 10m · —')
+    expect(p.line1).toBe('⏶ 要你決定 repo · — · 10m · —')
     expect(p.line2).toMatch(/^待決議事項 1 件\s+待決 ›$/) // the Now tab keeps one row that points at 待決; the question itself is on that tab and in the wide band
     expect((await paneParts($, surface, 'decide')).texts.filter(t => t.trim() !== '')).toEqual(['待決在 band 上（d）'])
     const lead = walkTexts(p.tree).find(n => textOf(n) === '要你決定') as Node // the verdict word (the tab strip's badges also start with a state glyph)
@@ -1344,7 +1344,7 @@ for (const surface of SURFACES) {
     world(on, files)
     await start($, surface)
     const p = await bandParts($, surface)
-    expect(p.line1).toBe('● 進行中 repo · — · 10m · —')
+    expect(p.line1).toBe('◉ 進行中 repo · — · 10m · —')
     expect(p.line2).toBe('2 個派工在跑')
   })
 
@@ -1538,13 +1538,13 @@ for (const surface of SURFACES) {
     const w = world(on, files)
     await start($, surface)
     let pane = await paneParts($, surface, 'now')
-    expect(pane.head[0]).toContain('▲ 要你決定') // the global header's verdict line (verdict · project · since) is drawn above the tab body
+    expect(pane.head[0]).toContain('⏶ 要你決定') // the global header's verdict line (verdict · project · since) is drawn above the tab body
     expect(await paneHeader($, surface)).toBe('工作階段 $0.42 · 本機今日 $3.10 · 上下文 37%') // Z3: localized context metrics
     const rule = pane.texts.findIndex(t => t.startsWith('▾ 要你處理')) // the awaited decision is the first section (before "where you are")
     expect(rule).toBe(0)
     expect(rule).toBeLessThan(pane.texts.findIndex(t => t.startsWith('▾ 位置'))) // a foldable section, open by default
-    expect(pane.texts[rule + 1]).toMatch(/^▲ 待決議事項 1 件\s+待決 ›$/) // one row that points at the 待決 tab (the whole question is not repeated here)
-    expect(pane.texts[rule]).toMatch(/要你處理\s+1\s/) // the section title counts what awaits you as a plain number (no ▲, no colour)
+    expect(pane.texts[rule + 1]).toMatch(/^⏶ 待決議事項 1 件\s+待決 ›$/) // one row that points at the 待決 tab (the whole question is not repeated here)
+    expect(pane.texts[rule]).toMatch(/要你處理\s+1\s/) // the section title counts what awaits you as a plain number (no ⏶, no colour)
     expect(pane.texts.some(t => t.startsWith('▾ 待決議事項'))).toBe(false) // the old block that spread every question over this tab is gone
     expect(pane.texts.some(t => t.includes('要合併 plan 還是拆開？'))).toBe(false)
     const cards = (await paneParts($, surface, 'decide')).texts.filter(t => t.trim() !== '')
@@ -1558,7 +1558,7 @@ for (const surface of SURFACES) {
     put(w.files, null, { needs_decision: true, decisions: [{ question: '只有問題', options: [] }] })
     await w.clock.advance(5000)
     pane = await paneParts($, surface, 'now')
-    expect(pane.texts.some(t => /^▲ 待決議事項 1 件/.test(t))).toBe(true)
+    expect(pane.texts.some(t => /^⏶ 待決議事項 1 件/.test(t))).toBe(true)
     const cards2 = (await paneParts($, surface, 'decide')).texts.filter(t => t.trim() !== '')
     expect(cards2).toEqual(['待決在 band 上（d）'])
     put(w.files, null, { needs_decision: false, decisions: [] })
@@ -1649,7 +1649,7 @@ for (const surface of SURFACES) {
     const w = world(on, files)
     await start($, surface)
     let p = await bandParts($, surface)
-    expect(p.line1).toBe('▲ 要你決定 repo · — · 10m · —')
+    expect(p.line1).toBe('⏶ 要你決定 repo · — · 10m · —')
     expect(p.line2).toBe('等你批准：Bash: rm -rf build（等了 5 分）')
     files[P_ATT()] = j(attention('question', { tool_name: 'AskUserQuestion', summary: '要拆開嗎？' }))
     await w.clock.advance(5000)
@@ -1689,7 +1689,7 @@ for (const surface of SURFACES) {
     const w = world(on, files)
     await start($, surface)
     let p = await bandParts($, surface)
-    expect(p.line1.startsWith('● 進行中 repo')).toBe(true)
+    expect(p.line1.startsWith('◉ 進行中 repo')).toBe(true)
     expect(p.line2).toBe('任務進行中：接線')
     // the idle attention (turn ended) does not turn an in-progress task into 待命: the ruling is task in_progress OR a live run
     files[P_ATT()] = j(attention('idle'))
@@ -1732,7 +1732,7 @@ for (const surface of SURFACES) {
     files[P_TURN()] = j(turn('active')) // since 09:57:30, now 10:00:30 -> 3 min
     await w.clock.advance(5000)
     let p = await bandParts($, surface)
-    expect(p.line1.startsWith('● 進行中 repo')).toBe(true)
+    expect(p.line1.startsWith('◉ 進行中 repo')).toBe(true)
     expect(p.line2).toBe('回合進行中（3 分）')
     files[P_TURN()] = j(turn('ended'))
     await w.clock.advance(5000)
@@ -1793,7 +1793,7 @@ for (const surface of SURFACES) {
     // the user typed again: the hook's new active turn (new since) wins before the watcher cleans up
     files[P_TURN()] = j(turn('active', { since: '2026-10-04T10:00:00.000Z' }))
     await w.clock.advance(5000)
-    expect((await bandParts($, surface)).line1.startsWith('● 進行中 repo')).toBe(true)
+    expect((await bandParts($, surface)).line1.startsWith('◉ 進行中 repo')).toBe(true)
     files[P_TURN()] = j(T)
     files[P_TURN_EFF()] = eff({ session_id: SID_B })
     await w.clock.advance(5000)
@@ -1817,7 +1817,7 @@ for (const surface of SURFACES) {
     const pane = await paneParts($, surface, 'now')
     const at = pane.texts.findIndex(t => t.startsWith('▾ 要你處理'))
     expect(at).toBe(0)
-    expect(pane.texts[at + 1]).toBe('▲ 等你批准：Bash: rm -rf build（等了 5 分）')
+    expect(pane.texts[at + 1]).toBe('⏶ 等你批准：Bash: rm -rf build（等了 5 分）')
     expect((await paneParts($, surface, 'dispatch')).texts.some(t => t.includes('等你批准'))).toBe(false)
   })
 
@@ -1855,12 +1855,12 @@ for (const surface of SURFACES) {
     const w = world(on, files)
     await start($, surface)
     let p = await bandParts($, surface)
-    expect(p.line1).toBe('● 進行中 repo · — · 30m · 已完成 1 項') // GATEFIX: a task in progress is 進行中 (was 待命); root scope with tasks and no receipt: tasks first_created_at (09:30), progress unfrozen
+    expect(p.line1).toBe('◉ 進行中 repo · — · 30m · 已完成 1 項') // GATEFIX: a task in progress is 進行中 (was 待命); root scope with tasks and no receipt: tasks first_created_at (09:30), progress unfrozen
     const last = p.last as Node
     expect(last.props?.dimColor).toBe(true)
     const pane = await paneParts($, surface, 'now')
     expect(pane.texts.some(t => t.startsWith('▾ 任務  1/3'))).toBe(true) // the section chip counts completed / total
-    expect(pane.texts).toContain('● 執行中  接線') // unfinished only, the one in progress first
+    expect(pane.texts).toContain('◉ 執行中  接線') // unfinished only, the one in progress first
     expect(pane.texts).toContain('○ 未開始  收尾')
     expect(pane.texts.some(t => t.includes('寫測試'))).toBe(false) // the completed task leaves the list (P4: 任務 shows unfinished only)
     expect(pane.texts.some(t => t.includes('1 項已完成'))).toBe(true) // and sits behind one bare `more`
@@ -2077,11 +2077,11 @@ for (const surface of SURFACES) {
     const pane = await paneParts($, surface)
     const t = pane.texts
     expect(t).toContain('  工頭活動（依工作階段綁定：同一工作階段的多個工作會看到同一批）')
-    expect(t).toContain('● 執行中  修 parser · running · 30s 前')
+    expect(t).toContain('◉ 執行中  修 parser · running · 30s 前')
     expect(t).toContain('◌ 已停    a2 · last tool: Bash · 20m 前 · 久未動')
     expect(t).toContain('  階段 implement · 1m 前（run_ledger:tmp）')
     const nodes = walkTexts(pane.tree) // P4: a stale row is the `stopped` state, drawn in its own colour, not a hand-dimmed line
-    expect(nodes.find(n => textOf(n) === '◌')?.props?.color).not.toBe(nodes.find(n => textOf(n) === '●')?.props?.color)
+    expect(nodes.find(n => textOf(n) === '◌')?.props?.color).not.toBe(nodes.find(n => textOf(n) === '◉')?.props?.color)
   })
 
   test('W3a foreman: an absent sidecar is idle and draws nothing; never 工頭狀態：來源未接 (the watcher deletes the file when no agent and no stage are live) (' + surface + ')', async ($, on) => {
@@ -2105,7 +2105,7 @@ for (const surface of SURFACES) {
     put(agent()) // 30 s quiet
     await tick()
     let p = await bandParts($, surface)
-    expect(p.line1.startsWith('● 進行中 repo')).toBe(true)
+    expect(p.line1.startsWith('◉ 進行中 repo')).toBe(true)
     expect(p.line2).toBe('工頭在跑：修 parser（0 分前有動作）')
     put(agent({ description: null, label: 'last tool: Edit', last_activity_at: ago(120) })) // 120 s, no description: the label
     await tick()
@@ -2156,7 +2156,7 @@ for (const surface of SURFACES) {
     files[P_FOREMAN] = j(foremanSidecar({ agents: [agent()] }))
     await tick()
     let p = await bandParts($, surface)
-    expect(p.line1.startsWith('● 進行中 repo')).toBe(true)
+    expect(p.line1.startsWith('◉ 進行中 repo')).toBe(true)
     expect(p.line2).toBe('工頭在跑：修 parser（0 分前有動作）')
     // the foreman is ended: complete-and-waiting again
     files[P_FOREMAN] = j(foremanSidecar({ agents: [agent({ ended_at: ago(5) })] }))
@@ -2434,7 +2434,7 @@ for (const surface of SURFACES) {
     world(on, campaignWorld({ runs: liveRows(2, CAMP), counts: counts(2) }))
     await start($, surface)
     const p = await bandParts($, surface)
-    expect(p.line1.startsWith('● 進行中 repo')).toBe(true)
+    expect(p.line1.startsWith('◉ 進行中 repo')).toBe(true)
     expect(p.line2).toBe('2 個派工在跑')
   })
 
@@ -2550,7 +2550,7 @@ for (const surface of SURFACES) {
     world(on, files)
     await start($, surface)
     const p = await bandParts($, surface)
-    expect(p.line1.startsWith('▲ 要你決定 repo')).toBe(true)
+    expect(p.line1.startsWith('⏶ 要你決定 repo')).toBe(true)
     expect((await bandLine($, surface, 209)).text).toContain('要合併 campaign 分支嗎？')
     expect((await paneParts($, surface, 'decide')).texts.filter(t => t.trim() !== '')).toEqual(['待決在 band 上（d）'])
   })
@@ -2619,9 +2619,9 @@ const qcFact = (over: Record<string, unknown> = {}, scope: Record<string, unknow
   state: 'owed', range: 'abc..HEAD', protected_files_count: 2, evidence: null, mode: 'block', checked_at: '2026-10-04T10:00:00.000Z', ...over,
 })
 const QC_WANT = { project_key: KEY, root_run_id: ROOT }
-test('P7c: qc fact -> chip: ok = QC ✓, owed = QC ▲, not_needed / unknown / absent = no chip', async () => {
+test('P7c: qc fact -> chip: ok = QC ✓, owed = QC ⏶, not_needed / unknown / absent = no chip', async () => {
   expect(qcChip(readQc(JSON.stringify(qcFact({ state: 'ok', evidence: 'trailer' })), QC_WANT))).toBe('QC ✓')
-  expect(qcChip(readQc(JSON.stringify(qcFact({ state: 'owed' })), QC_WANT))).toBe('QC ▲')
+  expect(qcChip(readQc(JSON.stringify(qcFact({ state: 'owed' })), QC_WANT))).toBe('QC ⏶')
   expect(qcChip(readQc(JSON.stringify(qcFact({ state: 'not_needed', protected_files_count: 0 })), QC_WANT))).toBe(null)
   expect(qcChip(readQc(JSON.stringify(qcFact({ state: 'unknown', range: null })), QC_WANT))).toBe(null)
   expect(qcChip(readQc(null, QC_WANT))).toBe(null)
@@ -2671,8 +2671,8 @@ for (const surface of SURFACES) {
   })
 }
 
-// ==================== stage-graph P7: the one-line band (contract ②) and the eight-tab panel ====================
-// RED before the change (the two-line band): every "P7 band" / "P7 panel" case below fails (no slot, no ⓘ, no Legend / Graph / Spend / Hygiene tabs).
+// ==================== stage-graph P7: the one-line band (contract 2) and the eight-tab panel ====================
+// RED before the change (the two-line band): every "P7 band" / "P7 panel" case below fails (no slot, no i, no Legend / Graph / Spend / Hygiene tabs).
 const THEME = ['claude', 'warning', 'error', 'success', 'suggestion', 'inactive', 'subtle', 'merged', 'remember']
 
 // the rich world: a marker with the §2.9 fields, review + qc, decisions with a ladder rung, brain spend 120.4 / 150, load source + residue, a stage walk
@@ -2715,8 +2715,8 @@ function richWorld(): Tree {
 }
 
 // Collapsed row: verdict (+ reason at >= 160), stalled ⊘, QC, hygiene. Progress, spend and quota are not on it.
-const RICH_209 = '⊘ 疑似卡住 最久的派工 4m 沒有輸出 │ ⊘ 1  QC ✓ │ 開發 ↓ 3  ⚑ 2 │ ⓘ '
-const RICH_REST = '⊘ 疑似卡住 │ ⊘ 1  QC ✓ │ 開發 ↓ 3  ⚑ 2 │ ⓘ '
+const RICH_209 = '⊘ 疑似卡住 最久的派工 4m 沒有輸出 │ ⊘ 1  QC ✓ │ 開發 ↓ 3  ⚑ 2 │ i '
+const RICH_REST = '⊘ 疑似卡住 │ ⊘ 1  QC ✓ │ 開發 ↓ 3  ⚑ 2 │ i '
 const RICH_WIDTHS: [number, string][] = [
   [209, RICH_209],
   [160, RICH_209],
@@ -2782,10 +2782,10 @@ for (const surface of SURFACES) {
     const line = await bandLine($, surface, 209)
     expect(line.text).toBe(RICH_209)
     expect(displayWidth(line.text)).toBeLessThanOrEqual(209)
-    // one line: a Box row whose children are Texts and the ⓘ Button, no column and no second row
+    // one line: a Box row whose children are Texts and the i Button, no column and no second row
     const tree = line.tree as Drawn
     expect(tree.type).toBe('Box')
-    // r2 §3.1: the band is two rows (summary, tab strip). The summary row is still one row of Texts and the ⓘ Button; the strip is the second row.
+    // r2 §3.1: the band is two rows (summary, tab strip). The summary row is still one row of Texts and the i Button; the strip is the second row.
     const rows = (tree.children || []) as Drawn[]
     expect(rows.length).toBe(2)
     expect((rows[0].children || []).every(c => typeof c !== 'string' && ((c as Drawn).type === 'Text' || (c as Drawn).type === 'Button'))).toBe(true)
@@ -2798,7 +2798,7 @@ for (const surface of SURFACES) {
       const line = await bandLine($, surface, cols)
       expect(line.text).toBe(expected)
       expect(displayWidth(line.text)).toBeLessThanOrEqual(cols)
-      expect(line.info).toBeDefined() // the ⓘ is there at every width
+      expect(line.info).toBeDefined() // the i is there at every width
     })
   }
 
@@ -2813,7 +2813,7 @@ for (const surface of SURFACES) {
     expect(colorOf('⊘ 疑似卡住')).toBe('error') // verdict
     expect(dimOf(' 最久的派工 4m 沒有輸出')).toBe(true) // the reason phrase is a dim hint
     expect(colored.filter(([x]) => x === '✓').map(([, c]) => c)).toEqual(['success']) // QC mark; the walk left the collapsed row
-    expect(colorOf('⊘')).toBe('error'); expect(valueOf('⊘')).toEqual(['1', 'error', undefined]) // stalled; the live ● is not on this row
+    expect(colorOf('⊘')).toBe('error'); expect(valueOf('⊘')).toEqual(['1', 'error', undefined]) // stalled; the live ◉ is not on this row
     expect(colorOf('QC')).toBeUndefined() // the label stays default text, the mark carries the colour
     expect(colorOf('⚑')).toBe('warning') // the owner reminder: the mark is yellow, the number stays default text
     expect(colored.some(([x, c]) => x === '2' && c === undefined)).toBe(true)
@@ -2826,16 +2826,16 @@ for (const surface of SURFACES) {
     expectThemeOnly(line.tree as Drawn)
   })
 
-  test('P7 band: an empty slot is skipped with no doubled separator; a bare world is verdict + dispatch + ⓘ (' + surface + ')', async ($, on) => {
+  test('P7 band: an empty slot is skipped with no doubled separator; a bare world is verdict + dispatch + i (' + surface + ')', async ($, on) => {
     world(on, base())
     await start($, surface)
     const text = (await bandLine($, surface, 209)).text
-    expect(text).toBe('⊘ 疑似卡住 最久的派工 4m 沒有輸出 │ ⊘ 1 │ ⓘ ')
+    expect(text).toBe('⊘ 疑似卡住 最久的派工 4m 沒有輸出 │ ⊘ 1 │ i ')
     expect(text).not.toContain('│  │')
-    expect((await bandLine($, surface, 119)).text).toBe('⊘ 疑似卡住 │ ⊘ 1 │ ⓘ ') // the reason phrase is for wide bands only
+    expect((await bandLine($, surface, 119)).text).toBe('⊘ 疑似卡住 │ ⊘ 1 │ i ') // the reason phrase is for wide bands only
   })
 
-  test('P7 band: the ⓘ is a plain Button with autoFocus and no hotkey; pressing it opens the pane on the Now tab (' + surface + ')', async ($, on) => {
+  test('P7 band: the i is a plain Button with autoFocus and no hotkey; pressing it opens the pane on the Now tab (' + surface + ')', async ($, on) => {
     const w = world(on, richWorld())
     await start($, surface)
     for (const cols of [209, 119, 60]) {
@@ -2845,7 +2845,7 @@ for (const surface of SURFACES) {
       expect(info.props?.plain).toBe(true)
       expect(info.props?.autoFocus).toBe(true)
       expect(info.props?.hotkey).toBeUndefined()
-      expect(JSON.stringify(info)).toContain('ⓘ')
+      expect(JSON.stringify(info)).toContain('i')
       expect(buttons.filter(b => b.props?.autoFocus === true).map(b => b.props?.key)).toEqual(['info']) // the slots never take the keyboard's first stop
       expect(buttons[buttons.length - 1]).toBe(info) // and it is still the last control on the line
       await ui.unmount()
@@ -2869,13 +2869,13 @@ for (const surface of SURFACES) {
     expect(texts.some(t => t.startsWith('▾ 狀態 ') || t.startsWith('▾ 符號 '))).toBe(false) // not the legend
   })
 
-  test('P8 band: the ⓘ label is two cells, so the right half of a glyph the terminal draws wide is still the Button (' + surface + ')', async ($, on) => {
+  test('P8 band: the i label is two cells, so the right half of a glyph the terminal draws wide is still the Button (' + surface + ')', async ($, on) => {
     world(on, richWorld())
     await start($, surface)
-    // ⓘ (U+24D8) is East Asian Width Ambiguous: counted one cell here, drawn two by a CJK-locale terminal; a one-cell Button left its right half dead
+    // i (U+24D8) is East Asian Width Ambiguous: counted one cell here, drawn two by a CJK-locale terminal; a one-cell Button left its right half dead
     const line = await bandLine($, surface, 209)
     const label = labelOf(line.info as Node)
-    expect(label).toBe('ⓘ ')
+    expect(label).toBe('i ')
     expect(displayWidth(label)).toBe(2)
     expect(displayWidth(line.text)).toBeLessThanOrEqual(209)
   })
@@ -2948,7 +2948,7 @@ for (const surface of SURFACES) {
     expect((await rowsNow())[at].startsWith('▸ 位置')).toBe(true)
   })
 
-  test('P8 band: a slot pressed while an ⓘ press is still opening wins, and the next ⓘ steps on from the slot\'s tab (' + surface + ')', async ($, on) => {
+  test('P8 band: a slot pressed while an i press is still opening wins, and the next i steps on from the slot\'s tab (' + surface + ')', async ($, on) => {
     const w = world(on, richWorld())
     await start($, surface)
     let release: () => void = () => {}
@@ -2969,7 +2969,7 @@ for (const surface of SURFACES) {
       await pane.unmount()
       return tab
     }
-    expect(await activeTab()).toBe('dispatch') // the stale ⓘ press did not drag it back to Now
+    expect(await activeTab()).toBe('dispatch') // the stale i press did not drag it back to Now
     w.openGate = null
     const c = await band()
     await c.press({ key: 'info' })
@@ -3067,7 +3067,7 @@ for (const surface of SURFACES) {
     await pane.unmount()
   })
 
-  test('keyboard: the ⓘ continues from the tab a digit press chose (' + surface + ')', async ($, on) => {
+  test('keyboard: the i continues from the tab a digit press chose (' + surface + ')', async ($, on) => {
     const w = world(on, richWorld())
     await start($, surface)
     const band = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
@@ -3178,18 +3178,18 @@ for (const surface of SURFACES) {
     expect(await shownTabOf($, surface)).toBe('decide') // Now, then Decide
   })
 
-  test('P7 band: a non-ok snapshot is one dim line `<reason> │ ⓘ`, the reason cut to fit (' + surface + ')', async ($, on) => {
+  test('P7 band: a non-ok snapshot is one dim line `<reason> │ i`, the reason cut to fit (' + surface + ')', async ($, on) => {
     const files = base()
     delete files[LIVE + '/runs/' + KEY + '--' + ROOT + '.json']
     delete files[LIVE + '/runs/' + KEY + '.json']
     worldEn(on, files)
     await start($, surface)
     const wide = await bandLine($, surface, 209)
-    expect(wide.text).toBe("unavailable · this project's status cannot be read right now │ ⓘ ")
+    expect(wide.text).toBe("unavailable · this project's status cannot be read right now │ i ")
     expect(walkTexts(wide.tree)[0].props?.dimColor).toBe(true)
     const narrow = await bandLine($, surface, 40)
     expect(displayWidth(narrow.text)).toBeLessThanOrEqual(40)
-    expect(narrow.text.endsWith('… │ ⓘ ')).toBe(true)
+    expect(narrow.text.endsWith('… │ i ')).toBe(true)
     expect(narrow.info).toBeDefined()
   })
 
@@ -3199,11 +3199,11 @@ for (const surface of SURFACES) {
     world(on, files)
     await start($, surface)
     const band = await bandLine($, surface, 209)
-    expect(band.text.startsWith('▲ 要你決定 要合併 plan 還是拆開？ │ ')).toBe(true) // the reason phrase: wide bands only
+    expect(band.text.startsWith('⏶ 要你決定 要合併 plan 還是拆開？ │ ')).toBe(true) // the reason phrase: wide bands only
     expect(band.text.includes('\n')).toBe(false)
     expect((await bandLine($, surface, 159)).text).not.toContain('要合併 plan 還是拆開？')
     const now = (await paneParts($, surface, 'now')).texts
-    expect(now.some(t => /^▲ 待決議事項 1 件\s+待決 ›$/.test(t))).toBe(true) // the Now tab points at 待決
+    expect(now.some(t => /^⏶ 待決議事項 1 件\s+待決 ›$/.test(t))).toBe(true) // the Now tab points at 待決
     const cards = (await paneParts($, surface, 'decide')).texts.filter(t => t.trim() !== '')
     expect(cards).toEqual(['待決在 band 上（d）'])
   })
@@ -3215,7 +3215,7 @@ for (const surface of SURFACES) {
     const tree = (await pane.drawn()) as Drawn
     const buttons = walkAll(tree).filter(n => n.type === 'Button').map(n => n.props?.key as string).filter(k => !/^[bg]\d+$/.test(k) && k !== FOCUS_ANCHOR_KEY) // the inert focus anchor (A5) is not a tab; the body's toggle lines (and the summary rows' goto Buttons) (section headings, recent groups) are Buttons too
     expect(buttons).toEqual(['now', 'decide', 'dispatch', 'review', 'spend', 'hygiene', 'fleet', 'legend']) // the eight tabs in contract order (no › chip)
-    // the strip (child 0): zh labels, a badge per tab that holds something for the owner: ●N live runs, ⚑N residue (QC is ok here, so no ▲ on Review)
+    // the strip (child 0): zh labels, a badge per tab that holds something for the owner: ◉N live runs, ⚑N residue (QC is ok here, so no ⏶ on Review)
     const strip = stripOf(tree as Node)
     expect(strip).toContain('現況')
     expect(strip).toContain('待決')
@@ -3224,7 +3224,7 @@ for (const surface of SURFACES) {
     expect(strip).toContain('花費')
     expect(strip).toContain('殘留')
     expect(strip.trim().endsWith('?')).toBe(true)
-    expect(strip).not.toMatch(/[▲●⚑]/) // no symbol badge anywhere in the strip
+    expect(strip).not.toMatch(/[⏶◉⚑]/) // no symbol badge anywhere in the strip
     // names only: 殘留 needs the owner (2 worktrees) and is warning bold; 派工 has 2 live runs and is plain dim; 待決 has nothing pending here and is plain dim
     const nameNode = (id: string) => tabName(tree as Node, id)
     expect(nameNode('hygiene').props?.color).toBe('warning')
@@ -3253,17 +3253,17 @@ for (const surface of SURFACES) {
     expect(loud(owed, 'review'), 'QC owed marks Review').toBe(true)
     expect(loud(owed, 'hygiene'), 'residue marks Hygiene').toBe(true)
     expect(loud(owed, 'dispatch'), 'a live dispatch marks nothing').toBe(false)
-    expect(stripOf(owed)).not.toMatch(/[▲●⚑]/)
+    expect(stripOf(owed)).not.toMatch(/[⏶◉⚑]/)
     delete w.files[LIVE + '/runs/' + KEY + '.qc.json']
     delete w.files[LIVE + '/runs/' + KEY + '.residue.json']
     await w.clock.advance(5000)
-    // the rich world's plugin source is behind upstream: the 外掛來源 row shows ▲, so 殘留 stays marked with no residue at all
+    // the rich world's plugin source is behind upstream: the 外掛來源 row shows ⏶, so 殘留 stays marked with no residue at all
     expect(loud(await tree0(), 'hygiene'), 'a load source behind upstream marks Hygiene').toBe(true)
     w.files[LIVE + '/load-source.json'] = j({ schema: 'autopilot.load-source/1', checked_at: PUBLISHED, plugin_version: '2.37.0', source: 'dev', source_basis: 'dev_link', marketplace: 'directory', behind_upstream: 0, flags: [], stale_cache_dirs: [] })
     await w.clock.advance(5000)
     const quiet = await tree0()
     for (const id of ['review', 'hygiene', 'dispatch', 'decide']) expect(loud(quiet, id), id + ' with nothing to do is not marked').toBe(false)
-    expect(stripOf(quiet)).not.toMatch(/[▲●⚑]/)
+    expect(stripOf(quiet)).not.toMatch(/[⏶◉⚑]/)
   })
 
   test('P7 panel: every tab renders its fixture facts, theme colours only (' + surface + ')', async ($, on) => {
@@ -3292,7 +3292,7 @@ for (const surface of SURFACES) {
     expectThemeOnly(now.tree as Drawn, true)
 
     const dispatch = await tab('dispatch')
-    expect(has(dispatch.texts, ' r1 ', 'implementer', '● 執行')).toBe(true)
+    expect(has(dispatch.texts, ' r1 ', 'implementer', '◉ 執行')).toBe(true)
     expect(has(dispatch.texts, '▾ 執行中', '⊘ 2')).toBe(true) // the section chip: the worst state of the two live rows (one is stalled) and their count
     expect(has(dispatch.texts, '▾ 已完成', '✓ 1')).toBe(true)
 
@@ -3319,9 +3319,9 @@ for (const surface of SURFACES) {
     const hygiene = await tab('hygiene')
     // §12.7: two sections (what needs you, what can simply be cleared), each entry its name, its reason and its command; the cleanable one is not in the 2 that need you
     expect(has(hygiene.texts, '▾ 要你處理', ' 2 ', '3.0 MB')).toBe(true)
-    expect(has(hygiene.texts, '▲ hands-x', '4d04h', '2.0 MB')).toBe(true)
+    expect(has(hygiene.texts, '⏶ hands-x', '4d04h', '2.0 MB')).toBe(true)
     expect(has(hygiene.texts, '有沒提交的檔案，先看內容再決定要不要刪')).toBe(true)
-    expect(has(hygiene.texts, '▲ feature/old', '20d')).toBe(true)
+    expect(has(hygiene.texts, '⏶ feature/old', '20d')).toBe(true)
     expect(has(hygiene.texts, '分支還沒合併；確定不要了才刪')).toBe(true)
     expect(has(hygiene.texts, '▾ 可以直接清掉', ' 1 ', '1.0 MB')).toBe(true)
     expect(has(hygiene.texts, '◦ hands-old', '9d', '1.0 MB')).toBe(true)
@@ -3330,7 +3330,7 @@ for (const surface of SURFACES) {
     expect(has(hygiene.texts, '上次', '3h00m 前', '刪了 2 個 worktree、封存 1 條分支')).toBe(true)
     expect(has(hygiene.texts, '▾ 外掛來源')).toBe(true)
     expect(hygiene.texts.find(t => t.includes('▾ 外掛來源')), 'the source header carries no state chip').not.toContain('要你處理')
-    expect(has(hygiene.texts, '▲ 開發目錄', 'v2.37.0')).toBe(true)
+    expect(has(hygiene.texts, '⏶ 開發目錄', 'v2.37.0')).toBe(true)
     expect(has(hygiene.texts, '落後遠端 3 個提交')).toBe(true)
     expectThemeOnly(hygiene.tree as Drawn, true)
   })
@@ -3415,7 +3415,7 @@ test('G23 Fleet tab: data age, owner cards, lanes in flight before upcoming, stu
   expect([...order].sort((a, b) => a - b)).toEqual(order)
   expect(texts[at('DOA class')]).toMatch(/^⊘ stalled +\[REG a2\] DOA class · 2h00m ago/) // open two hours, nobody accepted it: stalled (the reason is in its opened detail)
   expect(texts[at('KR2 runs')]).toMatch(/^⊘ stalled /) // its seat quiet five hours
-  expect(texts[at('events contract')]).toMatch(/^● running /)
+  expect(texts[at('events contract')]).toMatch(/^◉ running /)
   expect(texts[at('rehearsal rerun')]).toMatch(/^⋯ waiting +\[REG u7\] rehearsal rerun · watch · 20m ago/) // accepted, its seat waits on a linked watch (PM ruling)
   expect(at('checking the NAS audit')).toBeGreaterThan(0) // a brief-header title falls back to the progress line
   expect(at('pid 4242')).toBe(-1)
@@ -3454,7 +3454,7 @@ test('fleetcards: the Fleet tab lists the other hosts\' cards with the session t
   const texts = (await paneParts($, 'terminal', 'fleet')).texts
   const at = (needle: string) => texts.findIndex(t => t.includes(needle))
   expect(at('other hosts')).toBeGreaterThan(0)
-  expect(texts[at('d-00000a01 Which DNS record?')]).toContain('▲')
+  expect(texts[at('d-00000a01 Which DNS record?')]).toContain('⏶')
   expect(texts[at('d-00000a01 Which DNS record?') + 1]).toContain('answer in ns-a/host-b/proj--claude@FAKE-sess-9')
   expect(texts[at('d-00000a02 change the DNS record')]).not.toContain('⊘') // answered: the mirror remembers it, reconciled
   expect(texts[at('d-00000a99 nobody has this card')]).toContain('⊘')
@@ -3547,7 +3547,7 @@ test('G33a: an alive forge-stats (summary_row) is asked for exactly one row on t
   await w.clock.advance(5_000) // inside the TTL: no second run
   expect(g33Tasks(ran)).toEqual(['fleet tasks --tree --json'])
   const texts = await g33Band($, BAND_PROPS.maxRows, 240)
-  expect(texts.join('')).toContain('⊘ 2  ● 1  ⋯ 1')
+  expect(texts.join('')).toContain('⊘ 2  ◉ 1  ⋯ 1')
   expect(texts.join('')).not.toContain(REPAIR)
   // the ask itself (pure): alive + summary_row, no tab open, a row to spare under the band's two
   expect(await g33AliveNow(g33Alive())).toBe(true)
@@ -3590,7 +3590,7 @@ test('G33a: a stale, foreign, absent, unreadable or oversized heartbeat is not a
   }
   expect(g33Tasks(ran).length).toBeGreaterThan(0) // the feed ran with no good heartbeat: the file is not the gate for it
   const texts = await g33Band($, BAND_PROPS.maxRows, 240)
-  expect(texts.join('')).toContain('⊘ 2  ● 1  ⋯ 1')
+  expect(texts.join('')).toContain('⊘ 2  ◉ 1  ⋯ 1')
   expect(g33One(w)).toEqual([])
 })
 test('G33a: a heartbeat that was alive and is not rewritten for more than 10 s takes the row back (terminal)', async ($, on) => {
@@ -3885,7 +3885,7 @@ test('G33a review g1: the heartbeat file is not the gate: a link, a non-file, an
   await w.clock.advance(5_000) // inside the TTL: the bad file does not cause another run, and does not cancel the one that happened
   expect(ran).toEqual(firstTick)
   const texts = await g33Band($, BAND_PROPS.maxRows, 240)
-  expect(texts.join('')).toContain('⊘ 2  ● 1  ⋯ 1')
+  expect(texts.join('')).toContain('⊘ 2  ◉ 1  ⋯ 1')
   expect(g33Asks(w).filter(a => a.startsWith('1/'))).toEqual([])
   w.statErrors[path] = 'EACCES: permission denied, stat'
   await w.clock.advance(5_000)
@@ -3915,7 +3915,7 @@ test('P7 model: displayWidth counts East Asian wide as 2, combining as 0 and the
   expect(displayWidth('族')).toBe(2)
   expect(displayWidth('Ａ')).toBe(2) // fullwidth latin
   expect(displayWidth('é')).toBe(1) // combining acute
-  expect(displayWidth('▲⊘✓●◌▸◷▰▱●◆↺ⓘ│')).toBe(14)
+  expect(displayWidth('⏶⊘✓◉◌▸◷▰▱◉⬥↺i│')).toBe(14)
   expect(displayWidth('')).toBe(0)
   expect(truncateToWidth('要你決定要你決定', 7)).toBe('要你決…')
   expect(displayWidth(truncateToWidth('要你決定要你決定', 7))).toBeLessThanOrEqual(7)
@@ -3945,24 +3945,24 @@ function bandOneLine(cols: number, steps: readonly (readonly ('pet' | 'trend' | 
 }
 const STUCK_ON_LAST = BAND_NARROW_STEPS.map((step, i) => (i === BAND_NARROW_STEPS.length - 1 ? [...step, 'fleetStuck' as const] : step))
 
-test('band one line: the fleet slot is `艦隊 ⊘ N  ● N  ⋯ N` after the verdict, glyph coloured and number plain, and null draws nothing', () => {
+test('band one line: the fleet slot is `艦隊 ⊘ N  ◉ N  ⋯ N` after the verdict, glyph coloured and number plain, and null draws nothing', () => {
   const t = makeT('zh-TW')
   const slot = slotFleet({ stuck: 2, running: 12, waiting: 16 }, t)
   expect(slot).not.toBeNull()
   const segs = slot?.segs ?? []
-  expect(segs.map(g => g.text).join('')).toBe('艦隊 ⊘ 2  ● 12  ⋯ 16')
+  expect(segs.map(g => g.text).join('')).toBe('艦隊 ⊘ 2  ◉ 12  ⋯ 16')
   expect(segs.find(g => g.text === '艦隊')?.dim).toBe(true)
   expect(segs.find(g => g.text === '⊘')?.color).toBe(ui.PALETTE.broken)
-  expect(segs.find(g => g.text === '●')?.color).toBe(ui.PALETTE.running)
+  expect(segs.find(g => g.text === '◉')?.color).toBe(ui.PALETTE.running)
   expect(segs.find(g => g.text === '⋯')?.color).toBe(ui.PALETTE.idle)
   expect(segs.find(g => g.text === '2')?.color).toBeUndefined()
   expect(segs.find(g => g.text === '2')?.tag).toBe('fleetStuck')
   expect(segs.find(g => g.text === '12')?.tag).toBe('fleetRun')
   expect(segs.find(g => g.text === '16')?.tag).toBe('fleetWait')
-  expect(slotFleet({ stuck: 0, running: 0, waiting: 0 }, t)?.segs.map(g => g.text).join('')).toBe('艦隊 ⊘ 0  ● 0  ⋯ 0')
+  expect(slotFleet({ stuck: 0, running: 0, waiting: 0 }, t)?.segs.map(g => g.text).join('')).toBe('艦隊 ⊘ 0  ◉ 0  ⋯ 0')
   expect(slotFleet(null, t)).toBeNull()
   expect(slotFleet(undefined, makeT('en'))).toBeNull()
-  expect(slotFleet({ stuck: 1, running: 0, waiting: 0 }, makeT('en'))?.segs.map(g => g.text).join('')).toBe('Fleet ⊘ 1  ● 0  ⋯ 0')
+  expect(slotFleet({ stuck: 1, running: 0, waiting: 0 }, makeT('en'))?.segs.map(g => g.text).join('')).toBe('Fleet ⊘ 1  ◉ 0  ⋯ 0')
   const facts = { verdict: verdictOf('decide', t), marker: null, live: 0, stalled: 0, review: null, qc: null, decisions: null, spend: null, loadSource: null, residue: null, nowMs: 0, fleet: { stuck: 2, running: 12, waiting: 16 } }
   expect(bandSlots(facts, t).map(s => s.id).slice(0, 2)).toEqual(['verdict', 'fleet'])
   expect(bandSlots({ ...facts, fleet: null }, t).some(s => s.id === 'fleet')).toBe(false)
@@ -3974,7 +3974,7 @@ test('band one line tier wide: verdict, fleet, speed and the pet, in that order'
   const wide = bandOneLine(200)
   expect(wide.applied).toBe(0)
   expect(wide.width).toBe(displayWidth(wide.text))
-  expect(wide.text).toContain('▲ 要你決定 │ 艦隊 ⊘ 2  ● 12  ⋯ 16 │ ⓘ │ ϟ 44 tok/s █▅▇▂▅ · Ferris Lv.1')
+  expect(wide.text).toContain('⏶ 要你決定 │ 艦隊 ⊘ 2  ◉ 12  ⋯ 16 │ i │ ϟ 44 tok/s █▅▇▂▅ · Ferris Lv.1')
   expect(wide.text).not.toContain('$')
   expect(wide.text).not.toContain('7d')
   const mid = bandOneLine(120)
@@ -3988,30 +3988,30 @@ test('band one line tier pet: the pet goes first and the waiting count stays', (
   expect(at.applied).toBe(1)
   expect(at.text).not.toContain('Ferris')
   expect(at.text).toContain('⋯ 16')
-  expect(at.text).toContain('● 12')
+  expect(at.text).toContain('◉ 12')
   expect(at.text).toContain('艦隊')
   expect(bandOneLine(70).text).toContain('Ferris Lv.1')
 })
 
-test('band one line tier waiting: `⋯ N` goes and `● N` with the word 艦隊 stay', () => {
+test('band one line tier waiting: `⋯ N` goes and `◉ N` with the word 艦隊 stay', () => {
   const at = bandOneLine(55)
   expect(at.applied).toBe(2)
   expect(at.text).not.toContain('⋯')
-  expect(at.text).toContain('● 12')
+  expect(at.text).toContain('◉ 12')
   expect(at.text).toContain('艦隊')
   expect(at.text).toContain('⊘ 2')
   expect(bandOneLine(56).text).toContain('⋯ 16')
 })
 
-test('band one line tier running: `● N` and the word 艦隊 go together and the stuck count stays', () => {
+test('band one line tier running: `◉ N` and the word 艦隊 go together and the stuck count stays', () => {
   const at = bandOneLine(49)
   expect(at.applied).toBe(3)
-  expect(at.text).not.toContain('●')
+  expect(at.text).not.toContain('◉')
   expect(at.text).not.toContain('艦隊')
   expect(at.text).toContain('⊘ 2')
   expect(at.text).toContain('█▅▇▂▅')
   expect(bandOneLine(50).text).toContain('艦隊')
-  expect(bandOneLine(50).text).toContain('● 12')
+  expect(bandOneLine(50).text).toContain('◉ 12')
 })
 
 test('band one line tier trend: the speed spark goes and the ϟ label stays', () => {
@@ -4082,15 +4082,15 @@ test('P7 model: slot texts and theme keys', () => {
   expect(text(u(7, 20))).toBe('▰▰▰▰▰▰▰▱▱▱ 7/20'.replace('▰▰▰▰▰▰▰▱▱▱', '▰▰▰▰▱▱▱▱▱▱')) // ceil(7*10/20) = 4th cell
   expect(slotUnit(mk({ unit: null }))).toBeNull()
   // dispatch: zero counts omitted
-  expect(text(slotDispatch(2, 1))).toBe('● 2  ⊘ 1')
+  expect(text(slotDispatch(2, 1))).toBe('◉ 2  ⊘ 1')
   expect(text(slotDispatch(0, 1))).toBe('⊘ 1')
-  expect(text(slotDispatch(3, 0))).toBe('● 3')
+  expect(text(slotDispatch(3, 0))).toBe('◉ 3')
   expect(slotDispatch(0, 0)).toBeNull()
-  // review: ↺ R<n> QC ▲ / QC ✓; the chip alone has no leading space
+  // review: ↺ R<n> QC ⏶ / QC ✓; the chip alone has no leading space
   const rv = readReview(JSON.stringify({ schema: 'autopilot.review/1', project_key: KEY, code: { generation: 4, seats: [] } }), KEY)
   const qc = (state: string) => readQc(JSON.stringify({ schema: 'autopilot.qc-status/1', scope: { project_key: KEY, root_run_id: null }, state }), { project_key: KEY, root_run_id: null })
-  expect(text(slotReview(rv, qc('owed')))).toBe('↺ R4  QC ▲')
-  expect(slotReview(rv, qc('owed'))?.segs.filter(g => g.tag === 'qc' && g.text !== ' ').map(g => [g.text, g.color, g.bold])).toEqual([['QC', undefined, undefined], ['▲', 'warning', undefined]]) // the label is default text; only the mark is yellow, and nothing is bold
+  expect(text(slotReview(rv, qc('owed')))).toBe('↺ R4  QC ⏶')
+  expect(slotReview(rv, qc('owed'))?.segs.filter(g => g.tag === 'qc' && g.text !== ' ').map(g => [g.text, g.color, g.bold])).toEqual([['QC', undefined, undefined], ['⏶', 'warning', undefined]]) // the label is default text; only the mark is yellow, and nothing is bold
   expect(text(slotReview(null, qc('ok')))).toBe('QC ✓')
   expect(text(slotReview(rv, qc('not_needed')))).toBe('↺ R4')
   expect(slotReview(null, qc('unknown'))).toBeNull()
@@ -4103,11 +4103,11 @@ test('P7 model: slot texts and theme keys', () => {
   // spend: `$<integer> <bar> <pct>`; warning from 80 %, error from 100 %
   const colorOf = (brain: number) => slotSpend({ brain, cap: 150 })?.segs[0].color
   const lay = (s: Slot | null, cols: number) => layoutBand(s === null ? [] : [s], cols).text
-  expect(lay(slotSpend({ brain: 119.6, cap: 150 }), 209)).toBe('$120 ▰▰▰▰▰▰▰▰▱▱ 79% │ ⓘ ')
-  expect(lay(slotSpend({ brain: 119.6, cap: 150 }), 150)).toBe('$120 ▰▰▰▰▱ │ ⓘ ')
-  expect(lay(slotSpend({ brain: 119.6, cap: 150 }), 100)).toBe('$▰▰▱ │ ⓘ ')
-  expect(lay(slotSpend({ brain: 12, cap: 100 }), 209)).toBe('$12 ▰▱▱▱▱▱▱▱▱▱ 12% │ ⓘ ')
-  expect(lay(slotSpend({ brain: 160, cap: 150 }), 209)).toBe('$160 ▰▰▰▰▰▰▰▰▰▰ 106% │ ⓘ ') // over the cap: the bar is full, the percent is floored
+  expect(lay(slotSpend({ brain: 119.6, cap: 150 }), 209)).toBe('$120 ▰▰▰▰▰▰▰▰▱▱ 79% │ i ')
+  expect(lay(slotSpend({ brain: 119.6, cap: 150 }), 150)).toBe('$120 ▰▰▰▰▱ │ i ')
+  expect(lay(slotSpend({ brain: 119.6, cap: 150 }), 100)).toBe('$▰▰▱ │ i ')
+  expect(lay(slotSpend({ brain: 12, cap: 100 }), 209)).toBe('$12 ▰▱▱▱▱▱▱▱▱▱ 12% │ i ')
+  expect(lay(slotSpend({ brain: 160, cap: 150 }), 209)).toBe('$160 ▰▰▰▰▰▰▰▰▰▰ 106% │ i ') // over the cap: the bar is full, the percent is floored
   expect(colorOf(119)).toBeUndefined()
   expect(colorOf(120)).toBe('warning')
   expect(colorOf(149)).toBe('warning')
@@ -4135,9 +4135,9 @@ test('P7 model: slot texts and theme keys', () => {
   expect(readStageWalk(JSON.stringify({ schema: 'autopilot.stage-walk/1', sid: 'other', walk: ['a'] }), SID_A)).toBeNull()
 })
 
-test('P7 model: the stage text is cut with … when the line still does not fit, never the verdict or the ⓘ', () => {
+test('P7 model: the stage text is cut with … when the line still does not fit, never the verdict or the i', () => {
   const facts = {
-    verdict: { mark: '●', word: '進行中', key: 'suggestion' as const }, marker: readMarker({ size: 'M', level: 'l5', stage: 'implement-' + 'x'.repeat(100), stage_set_at: '2026-10-04T09:57:30.000Z' }),
+    verdict: { mark: '◉', word: '進行中', key: 'suggestion' as const }, marker: readMarker({ size: 'M', level: 'l5', stage: 'implement-' + 'x'.repeat(100), stage_set_at: '2026-10-04T09:57:30.000Z' }),
     live: 1, stalled: 0, review: null, qc: null, decisions: null, spend: null, loadSource: null, residue: null, nowMs: Date.parse('2026-10-04T10:00:30.000Z'),
   }
   expect(bandSlots(facts).map(s => s.id)).toEqual(['verdict']) // position left the collapsed row
@@ -4145,26 +4145,26 @@ test('P7 model: the stage text is cut with … when the line still does not fit,
   const line = layoutBand(slots, 125) // 120-159: the position slot is `size·level·stage`
   expect(displayWidth(line.text)).toBeLessThanOrEqual(125)
   expect(displayWidth(line.text)).toBeGreaterThanOrEqual(123) // cut as little as needed
-  expect(line.text.startsWith('● 進行中 │ M·l5·implement')).toBe(true)
-  expect(line.text.endsWith('… │ ● 1 │ ⓘ ')).toBe(true)
-  expect(layoutBand(slots, 209).text).toBe('● 進行中 │ M·l5·implement-' + 'x'.repeat(100) + ' ◷ 3m │ ● 1 │ ⓘ ')
-  expect(layoutBand(slots, 100).text).toBe('● 進行中 │ ● 1 │ ⓘ ') // 80-119: no position slot at all
+  expect(line.text.startsWith('◉ 進行中 │ M·l5·implement')).toBe(true)
+  expect(line.text.endsWith('… │ ◉ 1 │ i ')).toBe(true)
+  expect(layoutBand(slots, 209).text).toBe('◉ 進行中 │ M·l5·implement-' + 'x'.repeat(100) + ' ◷ 3m │ ◉ 1 │ i ')
+  expect(layoutBand(slots, 100).text).toBe('◉ 進行中 │ ◉ 1 │ i ') // 80-119: no position slot at all
 })
 
 test('P7 width table: the load-source chip and `⚑N` stay on the collapsed row (a docked panel cannot hide the owner reminder)', () => {
   const ls = readLoadSource(JSON.stringify({ schema: 'autopilot.load-source/1', source: 'dev', marketplace: 'directory', behind_upstream: 3, flags: [], stale_cache_dirs: [] }))
   const rs = (n: number) => readResidue(JSON.stringify({ schema: 'autopilot.residue/1', project_key: KEY, reapable_worktrees: 0, by_class: {}, needs_human_count: n }), KEY)
   const slots = (n: number, withLs = true) => bandSlots({
-    verdict: { mark: '●', word: '進行中', key: 'suggestion' }, marker: null, live: 1, stalled: 0, review: null, qc: null, decisions: null, spend: null,
+    verdict: { mark: '◉', word: '進行中', key: 'suggestion' }, marker: null, live: 1, stalled: 0, review: null, qc: null, decisions: null, spend: null,
     loadSource: withLs ? ls : null, residue: rs(n), nowMs: 0,
   })
-  expect(layoutBand(slots(2), 209).text).toBe('● 進行中 │ dev ↓ 3  ⚑ 2 │ ⓘ ')
-  expect(layoutBand(slots(2), 159).text).toBe('● 進行中 │ dev ↓ 3  ⚑ 2 │ ⓘ ')
-  expect(layoutBand(slots(2), 114).text).toBe('● 進行中 │ dev ↓ 3  ⚑ 2 │ ⓘ ') // the docked panel case (bodyColumns 114 at 209 columns): the chip stays
-  expect(layoutBand(slots(2, false), 114).text).toBe('● 進行中 │ ⚑ 2 │ ⓘ ')
-  expect(layoutBand(slots(0), 114).text).toBe('● 進行中 │ dev ↓ 3 │ ⓘ ') // no residue to act on: the chip alone leaves no empty slot or doubled separator
-  expect(layoutBand(slots(2), 79).text).toBe('● 進行中 │ dev ↓ 3  ⚑ 2 │ ⓘ ')
-  expect(layoutBand(slots(2), 20).text).toBe('● │ dev ↓ 3  ⚑ 2 │ ⓘ ') // the verdict word shortens; the chip and ⚑ stay
+  expect(layoutBand(slots(2), 209).text).toBe('◉ 進行中 │ dev ↓ 3  ⚑ 2 │ i ')
+  expect(layoutBand(slots(2), 159).text).toBe('◉ 進行中 │ dev ↓ 3  ⚑ 2 │ i ')
+  expect(layoutBand(slots(2), 114).text).toBe('◉ 進行中 │ dev ↓ 3  ⚑ 2 │ i ') // the docked panel case (bodyColumns 114 at 209 columns): the chip stays
+  expect(layoutBand(slots(2, false), 114).text).toBe('◉ 進行中 │ ⚑ 2 │ i ')
+  expect(layoutBand(slots(0), 114).text).toBe('◉ 進行中 │ dev ↓ 3 │ i ') // no residue to act on: the chip alone leaves no empty slot or doubled separator
+  expect(layoutBand(slots(2), 79).text).toBe('◉ 進行中 │ dev ↓ 3  ⚑ 2 │ i ')
+  expect(layoutBand(slots(2), 20).text).toBe('◉ │ dev ↓ 3  ⚑ 2 │ i ') // the verdict word shortens; the chip and ⚑ stay
 })
 
 // ---- P7 review round 1 fixes ----
@@ -4193,11 +4193,11 @@ for (const surface of SURFACES) {
     expect(c[1]).toBe('error')
   })
 
-  test('P7 fix B: at 40 columns the ⓘ and the verdict glyph survive and the line fits (' + surface + ')', async ($, on) => {
+  test('P7 fix B: at 40 columns the i and the verdict glyph survive and the line fits (' + surface + ')', async ($, on) => {
     world(on, richWorld())
     await start($, surface)
     const line = await bandLine($, surface, 40)
-    expect(line.text).toBe('⊘ 疑似… │ ⊘ 1  QC ✓ │ 開發 ↓ 3  ⚑ 2 │ ⓘ ')
+    expect(line.text).toBe('⊘ 疑似… │ ⊘ 1  QC ✓ │ 開發 ↓ 3  ⚑ 2 │ i ')
     expect(displayWidth(line.text)).toBeLessThanOrEqual(40)
     expect(line.info).toBeDefined()
   })
@@ -4207,8 +4207,8 @@ for (const surface of SURFACES) {
       world(on, richWorld())
       await start($, surface)
       const line = await bandLine($, surface, cols)
-      expect(line.text).toBe('⊘ │ ⊘ 1  QC ✓ │ 開發 ↓ 3  ⚑ 2 │ ⓘ ')
-      expect(line.text.endsWith('ⓘ ')).toBe(true)
+      expect(line.text).toBe('⊘ │ ⊘ 1  QC ✓ │ 開發 ↓ 3  ⚑ 2 │ i ')
+      expect(line.text.endsWith('i ')).toBe(true)
       expect(line.text.startsWith('⊘')).toBe(true)
       expect(displayWidth(line.text)).toBe(34)
       expect(line.info).toBeDefined()
@@ -4219,7 +4219,7 @@ for (const surface of SURFACES) {
     world(on, richWorld())
     await start($, surface)
     const at = async (n: number) => (await bandLine($, surface, n)).text
-    const min = '⊘ │ ⊘ 1  QC ✓ │ 開發 ↓ 3  ⚑ 2 │ ⓘ '
+    const min = '⊘ │ ⊘ 1  QC ✓ │ 開發 ↓ 3  ⚑ 2 │ i '
     expect(await at(32)).toBe(min)
     expect(await at(31)).toBe(min)
     expect(await at(24)).toBe(min)
@@ -4327,25 +4327,25 @@ const gridLine = (locale: 'en' | 'zh-TW', state: 'idle' | 'running' | 'blocked',
 
 // the owner-approved mockup lines (docs/plans/evidence/2026-10-10-tui-v2): idle / running / blocked at 209 / 160 / 140 / 120 / 80, both locales
 const GRID: Record<string, string> = {
-  'en idle 209': '◌ Idle │ dev ↓ 3 │ ⓘ ',
-  'en idle 120': '◌ Idle │ dev ↓ 3 │ ⓘ ',
-  'en idle 80': '◌ Idle │ dev ↓ 3 │ ⓘ ',
-  'en running 209': '● Running │ QC ▲ │ dev ↓ 3 │ ⓘ ',
-  'en running 160': '● Running │ QC ▲ │ dev ↓ 3 │ ⓘ ',
-  'en running 140': '● Running │ QC ▲ │ dev ↓ 3 │ ⓘ ',
-  'en running 120': '● Running │ QC ▲ │ dev ↓ 3 │ ⓘ ',
-  'en running 80': '● Running │ QC ▲ │ dev ↓ 3 │ ⓘ ',
-  'en blocked 209': '▲ Needs you pick adapter A or B │ QC ▲ │ dev ↓ 3  ⚑ 3 │ ⓘ ',
-  'en blocked 140': '▲ Needs you │ QC ▲ │ dev ↓ 3  ⚑ 3 │ ⓘ ',
-  'en blocked 80': '▲ Needs you │ QC ▲ │ dev ↓ 3  ⚑ 3 │ ⓘ ',
-  'zh-TW idle 209': '◌ 待命 │ 開發 ↓ 3 │ ⓘ ',
-  'zh-TW idle 80': '◌ 待命 │ 開發 ↓ 3 │ ⓘ ',
-  'zh-TW running 209': '● 進行中 │ QC ▲ │ 開發 ↓ 3 │ ⓘ ',
-  'zh-TW running 120': '● 進行中 │ QC ▲ │ 開發 ↓ 3 │ ⓘ ',
-  'zh-TW running 80': '● 進行中 │ QC ▲ │ 開發 ↓ 3 │ ⓘ ',
-  'zh-TW blocked 209': '▲ 要你決定 選 adapter 方案 A 或 B │ QC ▲ │ 開發 ↓ 3  ⚑ 3 │ ⓘ ',
-  'zh-TW blocked 140': '▲ 要你決定 │ QC ▲ │ 開發 ↓ 3  ⚑ 3 │ ⓘ ',
-  'zh-TW blocked 80': '▲ 要你決定 │ QC ▲ │ 開發 ↓ 3  ⚑ 3 │ ⓘ ',
+  'en idle 209': '◌ Idle │ dev ↓ 3 │ i ',
+  'en idle 120': '◌ Idle │ dev ↓ 3 │ i ',
+  'en idle 80': '◌ Idle │ dev ↓ 3 │ i ',
+  'en running 209': '◉ Running │ QC ⏶ │ dev ↓ 3 │ i ',
+  'en running 160': '◉ Running │ QC ⏶ │ dev ↓ 3 │ i ',
+  'en running 140': '◉ Running │ QC ⏶ │ dev ↓ 3 │ i ',
+  'en running 120': '◉ Running │ QC ⏶ │ dev ↓ 3 │ i ',
+  'en running 80': '◉ Running │ QC ⏶ │ dev ↓ 3 │ i ',
+  'en blocked 209': '⏶ Needs you pick adapter A or B │ QC ⏶ │ dev ↓ 3  ⚑ 3 │ i ',
+  'en blocked 140': '⏶ Needs you │ QC ⏶ │ dev ↓ 3  ⚑ 3 │ i ',
+  'en blocked 80': '⏶ Needs you │ QC ⏶ │ dev ↓ 3  ⚑ 3 │ i ',
+  'zh-TW idle 209': '◌ 待命 │ 開發 ↓ 3 │ i ',
+  'zh-TW idle 80': '◌ 待命 │ 開發 ↓ 3 │ i ',
+  'zh-TW running 209': '◉ 進行中 │ QC ⏶ │ 開發 ↓ 3 │ i ',
+  'zh-TW running 120': '◉ 進行中 │ QC ⏶ │ 開發 ↓ 3 │ i ',
+  'zh-TW running 80': '◉ 進行中 │ QC ⏶ │ 開發 ↓ 3 │ i ',
+  'zh-TW blocked 209': '⏶ 要你決定 選 adapter 方案 A 或 B │ QC ⏶ │ 開發 ↓ 3  ⚑ 3 │ i ',
+  'zh-TW blocked 140': '⏶ 要你決定 │ QC ⏶ │ 開發 ↓ 3  ⚑ 3 │ i ',
+  'zh-TW blocked 80': '⏶ 要你決定 │ QC ⏶ │ 開發 ↓ 3  ⚑ 3 │ i ',
 }
 
 test('TUI v2 band grid: idle / running / blocked at 209 / 160 / 140 / 120 / 80 in en and zh-TW never exceed the column budget; the approved lines are drawn', () => {
@@ -4356,8 +4356,8 @@ test('TUI v2 band grid: idle / running / blocked at 209 / 160 / 140 / 120 / 80 i
         const where = locale + ' ' + state + ' ' + cols
         expect(displayWidth(line.text), where).toBeLessThanOrEqual(cols) // the budget is in display cells, CJK = 2
         expect(line.width, where).toBe(displayWidth(line.text))
-        expect(line.text.endsWith('ⓘ '), where).toBe(true)
-        expect(line.text.startsWith(state === 'idle' ? '◌' : state === 'running' ? '●' : '▲'), where).toBe(true)
+        expect(line.text.endsWith('i '), where).toBe(true)
+        expect(line.text.startsWith(state === 'idle' ? '◌' : state === 'running' ? '◉' : '⏶'), where).toBe(true)
         if (state === 'blocked') expect(line.text, where).toContain('⚑ 3') // the owner reminder survives every width
         // progress, spend and quota left the collapsed row; the reason phrase is still for >= 160 only
         expect(line.text.includes('◐'), where).toBe(false)
@@ -4392,7 +4392,7 @@ test('TUI v2 band: the budget is in display cells for CJK too (a wide-character 
   const line = layoutBand(bandSlots(facts as never, t), 160)
   expect(displayWidth(line.text)).toBeLessThanOrEqual(160)
   expect(line.text).toContain('…') // clipped
-  expect(line.text.startsWith('▲ 要你決定 要不要')).toBe(true)
+  expect(line.text.startsWith('⏶ 要你決定 要不要')).toBe(true)
 })
 
 // the same band through the mod, with the locale chosen the way a person would
@@ -4470,7 +4470,7 @@ for (const surface of SURFACES) {
           expect(stripOf(parts.tree).includes('…'), width + ' ' + id + ' strip').toBe(false)
           for (const text of parts.texts) {
             expect(displayWidth(text), width + ' ' + id + ': ' + text).toBeLessThanOrEqual(width)
-            if (id !== 'dispatch' || !/^[⊘●✓◌○✗?▲△∅] /.test(text)) expect(text.includes('…'), width + ' ' + id + ': ' + text).toBe(false) // only a 派工 table ROW may cut a cell (§4 table, §3.5); the strip, headers, the pointer row and the footer must not
+            if (id !== 'dispatch' || !/^[⊘◉✓◌○✗?⏶△∅] /.test(text)) expect(text.includes('…'), width + ' ' + id + ': ' + text).toBe(false) // only a 派工 table ROW may cut a cell (§4 table, §3.5); the strip, headers, the pointer row and the footer must not
           }
         }
       }
@@ -4502,7 +4502,7 @@ for (const surface of SURFACES) {
 }
 
 // ---- review round 1 fixes ----
-test('layoutBand: a long reason is clipped to the room left: a prefix of it is drawn, the line fits the budget exactly at the edge and the ⓘ keeps its cell (mutation room+1 turns this red)', () => {
+test('layoutBand: a long reason is clipped to the room left: a prefix of it is drawn, the line fits the budget exactly at the edge and the i keeps its cell (mutation room+1 turns this red)', () => {
   const REASONS = { en: 'x'.repeat(200), 'zh-TW': '要不要把這個很長很長很長很長很長很長很長很長很長很長很長很長的 plan 拆開來分段做？'.repeat(3) }
   for (const locale of ['en', 'zh-TW'] as const) {
     const t = makeT(locale)
@@ -4511,7 +4511,7 @@ test('layoutBand: a long reason is clipped to the room left: a prefix of it is d
     for (const cols of [160, 209]) {
       const line = at(cols)
       expect(displayWidth(line.text), locale + ' ' + cols).toBeLessThanOrEqual(cols)
-      expect(line.text.endsWith(' │ ⓘ '), locale + ' ' + cols).toBe(true)
+      expect(line.text.endsWith(' │ i '), locale + ' ' + cols).toBe(true)
       const v = verdictOf('decide', t)
       const body = line.text.slice(v.mark.length + 1 + v.word.length + 1, line.text.indexOf(' │ ')) // the text after the verdict word
       expect(body.length, locale + ' ' + cols + ': a reason is drawn').toBeGreaterThan(5)
@@ -4532,12 +4532,12 @@ test('layoutBand: a long reason is clipped to the room left: a prefix of it is d
     expect(edge, locale + ' the scan starts below the edge').toBeGreaterThan(160)
     expect(drawsReason(edge - 1), locale + ' one column narrower: no reason').toBe(false)
     expect(drawsReason(edge), locale + ' at the edge: the reason is drawn').toBe(true)
-    // the reason needs 8 cells (REASON_MIN) after its separating space: edge = bare width + 1 (the space) + 8 -> W + 9 (the ⓘ label is in W already)
+    // the reason needs 8 cells (REASON_MIN) after its separating space: edge = bare width + 1 (the space) + 8 -> W + 9 (the i label is in W already)
     expect(edge, locale + ' edge = W + 9').toBe(W + 9)
     for (let cols = edge - 1; cols <= edge + 12; cols += 1) {
       const line = atW(cols)
       expect(displayWidth(line.text), locale + ' edge ' + cols).toBeLessThanOrEqual(cols)
-      expect(line.text.endsWith('ⓘ '), locale + ' edge ' + cols).toBe(true)
+      expect(line.text.endsWith('i '), locale + ' edge ' + cols).toBe(true)
     }
     expect(atW(edge).width, locale + ' the reason takes the spare cells at the edge (a 2-cell character may leave one)').toBeGreaterThanOrEqual(locale === 'en' ? edge : edge - 1)
     expect(atW(edge).width, locale + ' never over the budget').toBeLessThanOrEqual(edge)
@@ -4667,7 +4667,7 @@ test('hygiene tab: a long cache dir and a long worktree command wrap in full at 
     const flat = lines.map(l => l.text.trim()).join('')
     // the name row is one line and may lose its tail; every other row (the reason, the command, the cache sentence) is whole
     for (const l of lines) { expect(displayWidth(l.text), l.text).toBeLessThanOrEqual(60); if (l.kind !== 'item' && l.kind !== 'bullet') expect(l.text.includes('…'), l.text).toBe(false) }
-    const name = lines.find(l => l.kind === 'item' && l.text.startsWith('▲ some-very-long'))
+    const name = lines.find(l => l.kind === 'item' && l.text.startsWith('⏶ some-very-long'))
     expect(name !== undefined && name.text.includes('…') && !name.text.includes('words'), 'the name keeps its head and loses its tail').toBe(true)
     expect(flat.replace(/\s/g, '').includes(dir.replace(/\s/g, ''))).toBe(true)
     expect(flat.replace(/\s/g, '').includes(target)).toBe(true)
@@ -4810,7 +4810,7 @@ test('dispatch tab: grouping and order (I22, M54): one row per group, severity t
     const from = lines.findIndex(l => l.toggle === id)
     const rows = bodyRows(lines.slice(from + 1, lines.findIndex((l, i) => i > from && l.kind === 'header')))
     expect(new Set(rows.map(r => r.group)).size, id + ' no two rows share a group').toBe(rows.length)
-    const sev = rows.map(r => ui.SEVERITY.indexOf((r.text.startsWith('⊘') ? 'stalled' : r.text.startsWith('●') ? 'running' : r.text.startsWith('◌') ? 'stopped' : 'done') as never))
+    const sev = rows.map(r => ui.SEVERITY.indexOf((r.text.startsWith('⊘') ? 'stalled' : r.text.startsWith('◉') ? 'running' : r.text.startsWith('◌') ? 'stopped' : 'done') as never))
     for (let i = 1; i < rows.length; i++) {
       expect(sev[i] >= sev[i - 1], id + ' severity order at ' + i).toBe(true)
       if (sev[i] === sev[i - 1]) expect(rows[i].ts as number, id + ' newest first at ' + i).toBeLessThanOrEqual(rows[i - 1].ts as number)
@@ -4876,7 +4876,7 @@ test('dispatch tab: who computes `fresh` (§2.5 gap): a row that ended with no r
     expect(row.fresh, name).toBe(fresh)
     expect(ui.stateOf('run', runSubject(row)).id, name).toBe(want)
     const text = dispatchLines(dispatchSnap([row], { detail: { counts: null, stalled: 0, now_ms: Date.parse('2026-10-13T08:00:00.000Z') } }), { t, cols: 120 }).map(l => l.text).join('\n')
-    const drawnRunning = text.split('\n').some(l => l.startsWith('● ') && l.includes(' x '))
+    const drawnRunning = text.split('\n').some(l => l.startsWith('◉ ') && l.includes(' x '))
     expect(drawnRunning, name + ' drawn as running').toBe(want === 'running')
   }
   // elapsed_s is frozen in a heartbeat rewrite: a stale copy of 5 s must not keep a never-probed run "not started" once the CLOCK is past the bound
@@ -5728,7 +5728,7 @@ const CLAUDE_JSON = JSON.stringify({
   },
 })
 const quotaSlots = (q: QuotaWindow[] | null) => bandSlots({
-  verdict: { mark: '●', word: '進行中', key: 'suggestion' }, marker: null, live: 1, stalled: 0, review: null, qc: null, decisions: null, spend: null,
+  verdict: { mark: '◉', word: '進行中', key: 'suggestion' }, marker: null, live: 1, stalled: 0, review: null, qc: null, decisions: null, spend: null,
   loadSource: null, residue: readResidue(JSON.stringify({ schema: 'autopilot.residue/1', project_key: KEY, reapable_worktrees: 0, by_class: {}, needs_human_count: 2 }), KEY), quota: q, nowMs: 0,
 })
 const win = (kind: string, pct: number): QuotaWindow => ({ kind, pct, resetsAtMs: null })
@@ -5767,39 +5767,39 @@ test('quota slot: absent without windows; the collapsed row never draws it; a di
   const q = [win('five_hour', 10), win('seven_day', 85)]
   const collapsed = layoutBand(quotaSlots(q), 209).text
   expect(collapsed).toBe(layoutBand(quotaSlots([]), 209).text)
-  expect(collapsed).toBe('● 進行中 │ ⚑ 2 │ ⓘ ')
+  expect(collapsed).toBe('◉ 進行中 │ ⚑ 2 │ i ')
   expect(collapsed).not.toContain('5h')
   expect(collapsed).not.toContain('7d')
   const direct = (cols: number) => layoutBand([
-    slotVerdict({ mark: '●', word: '進行中', key: 'suggestion' }), slotDispatch(1, 0), slotQuota(q),
+    slotVerdict({ mark: '◉', word: '進行中', key: 'suggestion' }), slotDispatch(1, 0), slotQuota(q),
     slotHygiene(null, readResidue(JSON.stringify({ schema: 'autopilot.residue/1', project_key: KEY, reapable_worktrees: 0, by_class: {}, needs_human_count: 2 }), KEY)),
   ].filter((s): s is Slot => s !== null), cols).text
-  expect(direct(209)).toBe('● 進行中 │ ● 1 │ 5h 10% 7d 85% │ ⚑ 2 │ ⓘ ')
-  expect(direct(159)).toBe('● 進行中 │ ● 1 │ 5h 10% 7d 85% │ ⚑ 2 │ ⓘ ')
-  expect(direct(119)).toBe('● 進行中 │ ● 1 │ 7d 85% │ ⚑ 2 │ ⓘ ')
-  expect(direct(79)).toBe('● 進行中 │ ● 1 │ ⚑ 2 │ ⓘ ')
+  expect(direct(209)).toBe('◉ 進行中 │ ◉ 1 │ 5h 10% 7d 85% │ ⚑ 2 │ i ')
+  expect(direct(159)).toBe('◉ 進行中 │ ◉ 1 │ 5h 10% 7d 85% │ ⚑ 2 │ i ')
+  expect(direct(119)).toBe('◉ 進行中 │ ◉ 1 │ 7d 85% │ ⚑ 2 │ i ')
+  expect(direct(79)).toBe('◉ 進行中 │ ◉ 1 │ ⚑ 2 │ i ')
   expect(slotTab('quota')).toBe('spend') // the quota slot opens 用量 (P3), no longer 現況
   expect(slotUnfolds('quota')).toBe(SECTION.limits)
 })
 
-test('quota slot: a band still too long drops the quota windows before the ⊘ / ● counts; the spend window is `cap`, never `$`', () => {
-  const slots = (word: string) => [slotVerdict({ mark: '●', word, key: 'suggestion' }), slotDispatch(12, 3), slotQuota([win('five_hour', 10), win('seven_day', 85)])].filter((s): s is Slot => s !== null)
+test('quota slot: a band still too long drops the quota windows before the ⊘ / ◉ counts; the spend window is `cap`, never `$`', () => {
+  const slots = (word: string) => [slotVerdict({ mark: '◉', word, key: 'suggestion' }), slotDispatch(12, 3), slotQuota([win('five_hour', 10), win('seven_day', 85)])].filter((s): s is Slot => s !== null)
   const fits = layoutBand(slots('w'.repeat(60)), 100).text
-  expect(fits).toContain('● 12  ⊘ 3 │ 7d 85% │ ⓘ ')
+  expect(fits).toContain('◉ 12  ⊘ 3 │ 7d 85% │ i ')
   const tight = layoutBand(slots('w'.repeat(76)), 100).text // one step over: the quota windows go before the counts
-  expect(tight).toContain('● 12  ⊘ 3 │ ⓘ ')
+  expect(tight).toContain('◉ 12  ⊘ 3 │ i ')
   expect(tight).not.toContain('85%')
   expect(displayWidth(tight)).toBeLessThanOrEqual(100)
   expect((slotQuota([win('spend_limit', 30)]) as Slot).segs.map(g => g.text).join('')).toBe('cap 30%')
   // the quota goes before the stage text is cut (a direct position slot; the collapsed row has neither)
   const staged = (q: QuotaWindow[] | null) => {
     const marker = readMarker({ size: 'M', level: 'l5', stage: 'implement-' + 'x'.repeat(100), stage_set_at: '2026-10-04T09:57:30.000Z' })
-    return [slotVerdict({ mark: '●', word: '進行中', key: 'suggestion' }), slotPosition(marker, Date.parse('2026-10-04T10:00:30.000Z')), slotDispatch(1, 0), slotQuota(q)].filter((s): s is Slot => s !== null)
+    return [slotVerdict({ mark: '◉', word: '進行中', key: 'suggestion' }), slotPosition(marker, Date.parse('2026-10-04T10:00:30.000Z')), slotDispatch(1, 0), slotQuota(q)].filter((s): s is Slot => s !== null)
   }
   expect(layoutBand(staged([win('five_hour', 10)]), 125).text).toBe(layoutBand(staged(null), 125).text)
   expect(layoutBand(staged([win('five_hour', 10)]), 209).text).toContain(' │ 5h 10% │ ')
   expect(bandSlots({
-    verdict: { mark: '●', word: '進行中', key: 'suggestion' }, marker: null, live: 12, stalled: 3, review: null, qc: null, decisions: null, spend: null,
+    verdict: { mark: '◉', word: '進行中', key: 'suggestion' }, marker: null, live: 12, stalled: 3, review: null, qc: null, decisions: null, spend: null,
     loadSource: null, residue: null, quota: [win('five_hour', 10), win('seven_day', 85)], nowMs: 0,
   }).some(s => s.id === 'quota')).toBe(false)
 })
@@ -6107,7 +6107,7 @@ for (const surface of SURFACES) {
       expect(at, prefix).toBeGreaterThanOrEqual(0)
       expect(await activeAfter('g' + at), prefix).toBe(tab)
     }
-    const residueItem = rows.findIndex(r => r.startsWith('▲ ') && r.includes('worktree') && r.trimEnd().endsWith('殘留 ›'))
+    const residueItem = rows.findIndex(r => r.startsWith('⏶ ') && r.includes('worktree') && r.trimEnd().endsWith('殘留 ›'))
     expect(residueItem, rows.join('\n')).toBeGreaterThanOrEqual(0)
     expect(await activeAfter('g' + residueItem)).toBe('hygiene')
     // folds: every header starts as SECTION_DEFAULTS says, and a press flips it and a second press restores it
@@ -6136,13 +6136,13 @@ for (const surface of SURFACES) {
     world(on, richWorld())
     await start($, surface)
     const out = await hyg($)
-    expect(out.some(t => t.startsWith('▲ hands-x') && t.trimEnd().endsWith('4d04h · 2.0 MB')), out.join('\n')).toBe(true)
+    expect(out.some(t => t.startsWith('⏶ hands-x') && t.trimEnd().endsWith('4d04h · 2.0 MB')), out.join('\n')).toBe(true)
     expect(out).toContain('  有沒提交的檔案，先看內容再決定要不要刪')
     expect(out.some(t => t.startsWith('  $ git -C /home/u/proj worktree remove --force')), 'the command sits under its own entry').toBe(true)
-    expect(out.some(t => t.startsWith('▲ feature/old')), 'a branch is named by the branch').toBe(true)
+    expect(out.some(t => t.startsWith('⏶ feature/old')), 'a branch is named by the branch').toBe(true)
     expect(out.some(t => t.startsWith('◦ hands-old') && t.trimEnd().endsWith('9d · 1.0 MB')), 'the cleanable entry is a neutral row in its own section').toBe(true)
     const sectionOf = (name: string) => out.findIndex(t => t.startsWith('▾ ' + name))
-    expect(sectionOf('要你處理')).toBeLessThan(out.findIndex(t => t.startsWith('▲ hands-x')))
+    expect(sectionOf('要你處理')).toBeLessThan(out.findIndex(t => t.startsWith('⏶ hands-x')))
     expect(out.findIndex(t => t.startsWith('◦ hands-old'))).toBeGreaterThan(sectionOf('可以直接清掉'))
     expect(out.some(t => /[▸▾]$/.test(t.trimEnd()) && !/^[▸▾] /.test(t)), 'no row carries a fold mark at its right edge').toBe(false)
   })
@@ -6414,11 +6414,11 @@ for (const surface of SURFACES) {
     const pane = await paneOn($, surface, 'now')
     const tree = (await pane.drawn()) as Node
     await pane.unmount()
-    expect(stripOf(tree)).not.toContain('▲')
+    expect(stripOf(tree)).not.toContain('⏶')
     expect(tabName(tree, 'decide').props?.color).toBe('warning')
     expect(stripOf(tree)).not.toMatch(/待決 \d/)
     const rows = rowsOf(tree)
-    const at = rows.findIndex(t => /^▲ 待決議事項 3 件\s+待決 ›$/.test(t))
+    const at = rows.findIndex(t => /^⏶ 待決議事項 3 件\s+待決 ›$/.test(t))
     expect(at).toBeGreaterThanOrEqual(0)
     expect(rows.some(t => t.includes('P5 殘留分頁'))).toBe(false) // none of the question text is on 現況
     const now = await paneOn($, surface, 'now')
@@ -6569,11 +6569,11 @@ for (const surface of SURFACES) {
 // the 殘留 tab of richWorld() at 76 columns (zh-TW): two to judge, one to clear, the cleanup kv, the source with its behind-upstream sentence
 const HYGIENE_GOLDEN_76: string[] = [
   "▾ 要你處理  2 · 3.0 MB ────────────────────────────────────────────────────",
-  "▲ hands-x                                                    4d04h · 2.0 MB",
+  "⏶ hands-x                                                    4d04h · 2.0 MB",
   "  有沒提交的檔案，先看內容再決定要不要刪",
   "  $ git -C /home/u/proj worktree remove --force /home/u/proj/.claude/",
   "    worktrees/hands-x",
-  "▲ feature/old                                                           20d",
+  "⏶ feature/old                                                           20d",
   "  分支還沒合併；確定不要了才刪",
   "  $ git branch -D feature/old",
   "▾ 可以直接清掉  1 · 1.0 MB ────────────────────────────────────────────────",
@@ -6583,7 +6583,7 @@ const HYGIENE_GOLDEN_76: string[] = [
   "▾ 自動清理 ────────────────────────────────────────────────────────────────",
   "上次        3h00m 前 · 刪了 2 個 worktree、封存 1 條分支",
   "▾ 外掛來源 ────────────────────────────────────────────────────────────────",
-  "▲ 開發目錄 · v2.37.0",
+  "⏶ 開發目錄 · v2.37.0",
   "  落後遠端 3 個提交",
 ]
 
@@ -6689,7 +6689,7 @@ for (const surface of SURFACES) {
     expect(bandRows(await drawE1($)).length).toBe(2)
   })
 
-  test('E1 現況: the Now preview has no project line; progress and spend left the band; no buttons row sits under the open tab; the ⓘ opens the pane (' + surface + ')', async ($, on) => {
+  test('E1 現況: the Now preview has no project line; progress and spend left the band; no buttons row sits under the open tab; the i opens the pane (' + surface + ')', async ($, on) => {
     const w = world(on, richWorld())
     await start($, surface)
     const rows = bandRows(await drawE1($, ['tab:now']))
@@ -6751,7 +6751,7 @@ for (const surface of SURFACES) {
   })
 }
 
-// BL-0359: the speed tab. The live mod times each model request from its own `turn.step` stream (speed.ts) and draws the result: the label on the band's left after the ⓘ
+// BL-0359: the speed tab. The live mod times each model request from its own `turn.step` stream (speed.ts) and draws the result: the label on the band's left after the i
 // (`│ ϟ 83 tok/s ▁▂▃▅▇`) and, when the strip's one short `ϟ` tab is open, the speed column and the recent-requests table. It no longer asks the mod below (codeforge's forge-stats) for a
 // one-row label, so two speeds can never stand on the band; the mod below is asked only for its full view (Ferris, pet, memory, brain), beside ours.
 // The hook below plays the mod below: it records every ask and answers a full view when it is asked for twelve rows or more, and, for the OLD contract, a keyed speed label when asked for one row.
@@ -6814,7 +6814,7 @@ for (const surface of SURFACES) {
     expect(asks.filter(a => a.maxRows === 1), 'no one-row ask').toEqual([])
   })
 
-  test('speed tab: a timed request draws the label on the left after the ⓘ (ours, ϟ N tok/s and a trend from two requests) and the strip gets one short last tab, a Button keyed forge (' + surface + ')', async ($, on) => {
+  test('speed tab: a timed request draws the label on the left after the i (ours, ϟ N tok/s and a trend from two requests) and the strip gets one short last tab, a Button keyed forge (' + surface + ')', async ($, on) => {
     const w = worldEn(on, richWorld())
     const asks: Ask[] = []
     forgeMod(w, asks)
@@ -6822,7 +6822,7 @@ for (const surface of SURFACES) {
     expect(d.forge, 'a Button keyed forge is drawn').toBeDefined()
     expect(d.speed, 'the label is a Button keyed speed').toBeDefined()
     expect(d.speedText).toMatch(/^│ ϟ \d+ tok\/s [▁▂▃▄▅▆▇█]{2}$/)
-    expect(((d.tree.children || []) as Node[]).map(c => c.props?.key).filter(k => k === 'info' || k === 'speed'), 'the label comes right after the ⓘ').toEqual(['info', 'speed'])
+    expect(((d.tree.children || []) as Node[]).map(c => c.props?.key).filter(k => k === 'info' || k === 'speed'), 'the label comes right after the i').toEqual(['info', 'speed'])
     expect(d.text).toContain(' ϟ ')
     expect(((d.tree.props as { flexDirection?: string } | undefined)?.flexDirection)).toBeUndefined() // one row: nothing is stacked
   })
@@ -6961,7 +6961,7 @@ for (const surface of SURFACES) {
     expect(row.text, 'the tabs are not on the summary row').not.toContain(' ' + t('tab.review') + ' ')
   })
 
-  // the shared fitted width includes the ⓘ and the ›, so the drawn row is exactly `columns` at every width in this range (never columns+1)
+  // the shared fitted width includes the i and the ›, so the drawn row is exactly `columns` at every width in this range (never columns+1)
   const rowAt = async ($: any, bodyColumns: number) => {
     const ui = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-band-1', props: { ...F_PROPS, bodyColumns, maxRows: 8 }, viewport: { columns: bodyColumns, rows: 50, isFullscreen: true } })
     const tree = (await ui.drawn()) as Node
@@ -7119,11 +7119,11 @@ for (const surface of SURFACES) {
     for (const bad of [Number.NaN, undefined]) {
       const d = await draw($, on, TWO, [], { maxRows: bad })
       expect(d.forge).toBeUndefined()
-      expect(d.text).toContain('ⓘ')
+      expect(d.text).toContain('i')
     }
     expect(asks).toEqual([])
     const s = await draw($, on, TWO, [], { hasSurvey: true })
-    expect(s.text).not.toContain('ⓘ')
+    expect(s.text).not.toContain('i')
     expect(asks.map(a => [a.maxRows, a.hasSurvey])).toEqual([[20, true]])
   })
 
@@ -7359,7 +7359,7 @@ for (const surface of SURFACES) {
     const all = d.rows.map(textD)
     expect(all[0]).toContain(' 待決 ')
     expect(all[2]).toContain('1. P5 殘留分頁要不要把已清掉的也列出來')
-    expect(all.some(r => r.includes('[ ] ★ OK'))).toBe(true)
+    expect(all.some(r => r.includes('[ ] ✧ OK'))).toBe(true)
     expect(all.some(r => r.includes('[ ] 完整顯示'))).toBe(true)
     expect(all[all.length - 1]).toContain('[ 送出（已答 0/3） ]')
     expect(all.join('\n')).not.toContain('U6')
@@ -7384,7 +7384,7 @@ for (const surface of SURFACES) {
     const d = await rowsD($, ['tab:decide', 'opt:d-4290499d:1'])
     expect(d.rows.map(textD).some(r => r.includes('[x] 完整顯示'))).toBe(true)
     expect(d.keys).toContain('submit')
-    expect(d.rows.map(textD).some(r => r.includes('[ ] ★ OK'))).toBe(true)
+    expect(d.rows.map(textD).some(r => r.includes('[ ] ✧ OK'))).toBe(true)
     expect((await paneParts($, surface, 'decide')).texts.filter(t => t.trim() !== '')).toEqual(['待決在 band 上（d）'])
     await rowsD($, ['submit'])
     expect(submits.length, 'inside the undo window nothing is sent').toBe(0)
@@ -7838,7 +7838,7 @@ for (const surface of SURFACES) {
     expect(d.rows[10]).toContain(' 1/1 ─')
   })
 
-  test('O4 shell v7: a pick marks the card ◆ with its answer, stays on the card, and the progress row names the last answer; 160 and wider add 待送 N 張 (' + surface + ')', async ($, on) => {
+  test('O4 shell v7: a pick marks the card ⬥ with its answer, stays on the card, and the progress row names the last answer; 160 and wider add 待送 N 張 (' + surface + ')', async ($, on) => {
     shellWorld(on)
     await start($, surface)
     await drawShell($, 160, [])
@@ -8149,7 +8149,7 @@ for (const surface of SURFACES) {
     expect(main).toContain('用量格式不認得')
     expect(main).not.toContain('tk60')
   })
-  test('usagetab: where the shell is not drawn (maxRows under 12) the open tab draws no open-pane button; the ⓘ still opens the pane (' + surface + ')', { plugins: [FORGE_STATS_WRITER] }, async ($, on) => {
+  test('usagetab: where the shell is not drawn (maxRows under 12) the open tab draws no open-pane button; the i still opens the pane (' + surface + ')', { plugins: [FORGE_STATS_WRITER] }, async ($, on) => {
     const w = shellWorld(on, { '/fake/forge-panel.json': usageRowsOf(3) })
     await start($, surface)
     await drawShell($, 160, ['menu:u'])
@@ -8317,7 +8317,7 @@ for (const surface of SURFACES) {
       expect(dimOf(d.tree, 'P5 殘留').some(x => x), 'the sent card is grey at ' + cols).toBe(true)
       expect(listDim(d.tree, 'P5 殘留', '列出來').length, 'the list row is found').toBeGreaterThan(0)
       expect(listDim(d.tree, 'P5 殘留', '列出來').some(x => x), 'its list row is grey at ' + cols).toBe(true)
-      expect(d.rows.some(r => r.includes('OK') && r.includes('★')), 'the options are still shown as text at ' + cols).toBe(true)
+      expect(d.rows.some(r => r.includes('OK') && r.includes('✧')), 'the options are still shown as text at ' + cols).toBe(true)
       if (cols === 100) console.log('RENDER-BEGIN sent-100 (' + surface + ')\n' + d.rows.join('\n') + '\nRENDER-END')
       for (const r of d.rows) expect(displayWidth(r), 'row width at ' + cols).toBeLessThanOrEqual(cols)
     }
@@ -8403,7 +8403,7 @@ for (const surface of SURFACES) {
     expect(back.rows[1], 'the batch was closed with the tab: the closed card is gone').toContain('共 2 張')
   })
 
-  test('side pane plan B: the pane is never opened on its own, at 160 or 240 columns, fullscreen with a project; the ⓘ, a slot and /live-pane open it (' + surface + ')', async ($, on) => {
+  test('side pane plan B: the pane is never opened on its own, at 160 or 240 columns, fullscreen with a project; the i, a slot and /live-pane open it (' + surface + ')', async ($, on) => {
     const w = shellWorld(on)
     await start($, surface)
     for (const cols of [160, 240]) {
@@ -8416,11 +8416,11 @@ for (const surface of SURFACES) {
     await $.command.run({ command: 'live-pane', args: '' })
     expect(w.opens.length).toBe(1)
     expect(w.opens[0]).toEqual({ id: 'autopilot-live', title: 'Autopilot', focus: true, closeOnEscape: true })
-    // the shell has no open-pane button any more: the ⓘ opens it
+    // the shell has no open-pane button any more: the i opens it
     const shell = await mountShell($, 160, 18)
     await shell.unmount()
-    expect(w.opens.length, 'the shell has no ⓘ and does not open the pane').toBe(1)
-    const again = await mountShell($, 160, 6, { legacyTabs: true }) // the legacy bar, under 12 rows, still has the ⓘ
+    expect(w.opens.length, 'the shell has no i and does not open the pane').toBe(1)
+    const again = await mountShell($, 160, 6, { legacyTabs: true }) // the legacy bar, under 12 rows, still has the i
     await again.press({ key: 'info' })
     await again.unmount()
     expect(w.opens.length).toBe(2)
@@ -8481,15 +8481,15 @@ for (const surface of SURFACES) {
       if (cols === 100) console.log('RENDER-BEGIN layout-long-100 (' + surface + ')\n' + d.raw.join('\n') + '\nRENDER-END')
     }
   })
-  test('bandlayout: one option per row, its description wrapped and indented under it, the recommended option marked ★ and named in the 建議 row with its reason (' + surface + ')', async ($, on) => {
+  test('bandlayout: one option per row, its description wrapped and indented under it, the recommended option marked ✧ and named in the 建議 row with its reason (' + surface + ')', async ($, on) => {
     layWorld(on)
     await start($, surface)
     await drawShell($, 100, [], 60)
     const main = mainCells((await drawShell($, 100, [], 60)).raw, 100)
-    const a = main.findIndex(r => r.includes('甲案') && r.includes('★'))
+    const a = main.findIndex(r => r.includes('甲案') && r.includes('✧'))
     const b = main.findIndex(r => r.includes('乙案'))
     expect(a, 'the recommended option row').toBeGreaterThan(0)
-    expect(main[b].includes('★'), 'only the recommended option is marked').toBe(false)
+    expect(main[b].includes('✧'), 'only the recommended option is marked').toBe(false)
     expect(b, 'the next option comes after the wrapped description').toBeGreaterThan(a + 2)
     const desc = main.slice(a + 1, b).filter(r => r.trim() !== '')
     expect(desc.length, 'the description wraps onto more than one row').toBeGreaterThan(1)
@@ -8503,11 +8503,11 @@ for (const surface of SURFACES) {
     const main = mainCells(raw, cols)
     expect(squash(main), 'every character of the long name at ' + cols).toContain(LONGLABEL)
     expect(squash(main).includes('…'), 'no ellipsis at ' + cols).toBe(false)
-    expect(main.some(r => r.includes('★')), 'the ★ at ' + cols).toBe(true)
+    expect(main.some(r => r.includes('✧')), 'the ✧ at ' + cols).toBe(true)
     for (const r of raw) expect(displayWidth(r), 'row width at ' + cols).toBeLessThanOrEqual(cols)
     return main
   }
-  test('bandlayout: a recommended option with a 23-character-plus name wraps whole onto the rows under it, ★ kept, on an open card and on a sent (locked) card; at 80 and 100 columns (' + surface + ')', async ($, on) => {
+  test('bandlayout: a recommended option with a 23-character-plus name wraps whole onto the rows under it, ✧ kept, on an open card and on a sent (locked) card; at 80 and 100 columns (' + surface + ')', async ($, on) => {
     const w = layWorld(on, [LONGCARD])
     on('prompt.submit', ($$: any, e: any) => ({ text: e.text }))
     claimHandle(on)
@@ -8545,7 +8545,7 @@ for (const surface of SURFACES) {
       for (const r of d.raw) expect(displayWidth(r), 'row width at ' + cols).toBeLessThanOrEqual(cols)
       const strip = stripOf(mainCells(d.raw, cols))
       expect(strip.length, 'a fixed strip under a rule at ' + cols).toBeGreaterThan(1)
-      expect(squash(strip), 'the option names are on the first screen at ' + cols).toContain('★')
+      expect(squash(strip), 'the option names are on the first screen at ' + cols).toContain('✧')
       expect(strip.some(r => r.includes('甲案')) && strip.some(r => r.includes('乙案')), 'both options at ' + cols).toBe(true)
       for (const k of ['opt:d-lay00001:0', 'opt:d-lay00001:1', 'fill', 'scroll:up']) expect(d.buttons, k + ' at ' + cols).toContain(k)
       expect(d.raw.join('\n').includes('█'), 'the scrollbar thumb at ' + cols).toBe(true)
@@ -9072,21 +9072,21 @@ for (const surface of SURFACES) {
     }
   })
 
-  test('r5 B2: a new card while collapsed stays one row and marks ▲N; expanding clears the mark (' + surface + ')', async ($, on) => {
+  test('r5 B2: a new card while collapsed stays one row and marks ⏶N; expanding clears the mark (' + surface + ')', async ($, on) => {
     const w = r5World(on, [PMCARD])
     await start($, surface)
-    const countOf = (tree: Node) => walkTexts(tree).filter(n => /^▲\d+$/.test(textOf(n)))
+    const countOf = (tree: Node) => walkTexts(tree).filter(n => /^⏶\d+$/.test(textOf(n)))
     const first = await drawShell($, 205, [], 19, { observe: true })
     expect(first.all.length, 'starts collapsed').toBe(1)
     const base = countOf(first.tree)
-    expect(base.length, '▲N is its own text').toBeGreaterThan(0)
+    expect(base.length, '⏶N is its own text').toBeGreaterThan(0)
     expect(base.every(n => n.props?.color === undefined), 'cards already waiting are not marked').toBe(true)
     w.files[W_MODEL] = j(model({ needs_decision: true, decisions: [PMCARD, DQ2] }))
     await w.clock.advance(5_000)
     const marked = await drawShell($, 205, [], 19, { observe: true })
     expect(marked.all.length, 'a new card does not expand').toBe(1)
     const flagged = countOf(marked.tree)
-    expect(flagged.some(n => textOf(n) === '▲2' && n.props?.color === 'warning'), 'the count is attention text').toBe(true)
+    expect(flagged.some(n => textOf(n) === '⏶2' && n.props?.color === 'warning'), 'the count is attention text').toBe(true)
     expect(flagged.every(n => n.props?.backgroundColor === undefined && n.props?.inverse === undefined), 'text colour only').toBe(true)
     const opened = await drawShell($, 205, ['band:row'], 19, { observe: true })
     expect(opened.all.length, 'still expandable').toBeGreaterThan(1)
@@ -9171,7 +9171,7 @@ for (const surface of SURFACES) {
     expect(typeof last.ts).toBe('number')
   })
 
-  test('O4 shell: a card with no title uses the first sentence, ★ does not need why, a long description wraps under its column, and a step copy is one list row (' + surface + ')', async ($, on) => {
+  test('O4 shell: a card with no title uses the first sentence, ✧ does not need why, a long description wraps under its column, and a step copy is one list row (' + surface + ')', async ($, on) => {
     const sentence = { id: 'd-sent0001', question: '第一句。第二句還在', options: [{ label: '好', description: '' }], recommendation: '好', why: null }
     const wrap = { id: 'd-wrap0001', title: '換行卡', question: '換行卡的全文', options: [{ label: '甲', description: '說明很長'.repeat(20) }], recommendation: '甲', why: null }
     const both = { id: 'd-once0001', question: '同一張', options: [{ label: '好', description: '' }], recommendation: null, why: null }
@@ -9184,10 +9184,10 @@ for (const surface of SURFACES) {
     expect(d.rows.join('\n')).toContain('第一句。')
     expect(d.rows.join('\n')).toContain('第二句還在')
     expect(names.filter(r => r.includes('第一句')).length).toBe(1)
-    expect(d.rows.join('\n')).toContain('★')
+    expect(d.rows.join('\n')).toContain('✧')
     const wide = await drawShell($, 80, ['card:d-wrap0001'], 40)
     const main = mainCells(wide.raw, 80)
-    const head = main.findIndex(r => r.includes('甲') && r.includes('★'))
+    const head = main.findIndex(r => r.includes('甲') && r.includes('✧'))
     expect(head).toBeGreaterThan(0)
     const cont = main.slice(head + 1).find(r => r.includes('說明很長'))
     expect(cont, 'the description continues').toBeDefined()

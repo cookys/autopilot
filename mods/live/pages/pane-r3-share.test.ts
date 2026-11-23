@@ -22,8 +22,8 @@ test('W2: 現況 lists five waste pools and percentages wide; overflow names 額
   }
   for (const rows of [4, 5, 7]) {
     const narrow = frameRows(nowPage, ctx(80, rows)).map(text).join('\n')
-    expect(narrow, 'height ' + rows).toContain('額度浪費 ▲5')
-    expect(narrow).not.toContain('現況 ▲5')
+    expect(narrow, 'height ' + rows).toContain('額度浪費 ⏶5')
+    expect(narrow).not.toContain('現況 ⏶5')
   }
 })
 
@@ -36,8 +36,8 @@ test('W4: overflow uses three real cards and counts only categories absent from 
   con.cards = cards; con.counts.decisions = 3
   const single = frameRows(nowPage, ctx(80, 4, con)).map(text).join('\n')
   expect(single).toContain('待決 3 張')
-  expect(single).toContain('額度浪費 ▲5')
-  expect((single.match(/▲5/g) ?? []).length).toBe(1) // W4: waste pools belong to one source summary.
+  expect(single).toContain('額度浪費 ⏶5')
+  expect((single.match(/⏶5/g) ?? []).length).toBe(1) // W4: waste pools belong to one source summary.
   expect(single).not.toContain('另有') // all three categories fit on the same row
   const two = frameRows(nowPage, ctx(80, 5, con)).map(text).join('\n')
   expect(two).toContain('待決 3 張')
@@ -138,7 +138,7 @@ test('U1: band keeps the 艦隊 section name at 160 and 120 columns when optiona
 test('W2 W4: wide overflow counts real hidden pools and calls them 額度浪費, excluding seat chrome', () => {
   const con = snapshot([...redPools, ...unknownPools, ...wastes])
   const out = frameRows(nowPage, ctx(160, 9, con)).map(text).join('\n')
-  expect(out).toContain('額度浪費 ▲5')
+  expect(out).toContain('額度浪費 ⏶5')
   expect(out).toContain('另有 9 項') // B58: the spend error row (no seats --quota source) takes one pool's place; one red pool is hidden with three unknown and five waste pools
   expect(out).not.toContain('本席 ✗')
 })

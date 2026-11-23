@@ -38,7 +38,7 @@ const num = (n: number): Frag => ui.fmtd('count', String(n))
 const gap = (): Frag => ui.val('  ', { role: 'prose' })
 const stateChip = (u: UiCtx, key: string, n: number): Frag => ui.cat(ui.stateLead(u, ui.stateOf('console', key), { word: false }), word(' '), num(n))
 
-// the summary line (§3.5): 產線 ● 9 ⋯ 3 ⊘ 1  主機 在線 12/13 · GPU 忙 5/7  額度 pool-b ✗ 2  改善 3 則. Parts from the right give way when the row is narrow. An expired or missing
+// the summary line (§3.5): 產線 ◉ 9 ⋯ 3 ⊘ 1  主機 在線 12/13 · GPU 忙 5/7  額度 pool-b ✗ 2  改善 3 則. Parts from the right give way when the row is narrow. An expired or missing
 // source says so where its figures would be.
 function summaryParts(u: UiCtx, con: ConsoleSnapshot): Frag[] {
   const t = u.t

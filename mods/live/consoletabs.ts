@@ -2,9 +2,9 @@
 // the badge after each name. Pure: no `$`, no engine, no file; erasable syntax (types plus plain functions), so a node test loads it through the one-line `.ts` resolve hook.
 // Every number comes from the snapshot's `counts.tabs` (the feed counts, this file never does); the glyphs come from GLYPHS and a chip is written by ui.chipSegs.
 //
-// The badge of a tab is the first two NON-ZERO entries of `counts.tabs[<page key>]` that have a mark (need_you ▲, failed ✗, stalled ⊘, findings △; `hint` and `hints` read as △).
-// Narrow rows give up from the tail (§3.2): first △, then the number of ⊘; ▲N and ✗N are never given up. A strip that still does not fit one row becomes the compact form:
-// the active tab's name and the whole program's ▲N and ✗N (the sum over every page).
+// The badge of a tab is the first two NON-ZERO entries of `counts.tabs[<page key>]` that have a mark (need_you ⏶, failed ✗, stalled ⊘, findings △; `hint` and `hints` read as △).
+// Narrow rows give up from the tail (§3.2): first △, then the number of ⊘; ⏶N and ✗N are never given up. A strip that still does not fit one row becomes the compact form:
+// the active tab's name and the whole program's ⏶N and ✗N (the sum over every page).
 
 import type { ConsoleSnapshot } from './console'
 import type { T } from './i18n'
@@ -45,7 +45,7 @@ export function badgesOf(snap: ConsoleSnapshot | null, tab: ConsoleTab): Badge[]
   return out
 }
 
-// the program-wide ▲N and ✗N: the sum of every page's counts, as the feed gave them
+// the program-wide ⏶N and ✗N: the sum of every page's counts, as the feed gave them
 export function consoleTotals(snap: ConsoleSnapshot | null): { need_you: number; failed: number } {
   const sum = { need_you: 0, failed: 0 }
   if (snap === null) return sum
@@ -68,7 +68,7 @@ function labelAt(snap: ConsoleSnapshot | null, tab: ConsoleTab, t: T, level: Lev
 
 const rowWidth = (tabs: readonly StripTab<ConsoleTab>[], hasNext: boolean): number => tabs.reduce((w, x) => w + displayWidth(' ' + x.label + ' ') + 1, hasNext ? displayWidth(GLYPHS.structure.goto) + 1 : 0)
 
-// the tabs one row of `room` cells can hold (`cols` is the surface's own width, which decides whether △ is drawn at all): the most badge that fits, else the compact form (active tab name + ▲N ✗N)
+// the tabs one row of `room` cells can hold (`cols` is the surface's own width, which decides whether △ is drawn at all): the most badge that fits, else the compact form (active tab name + ⏶N ✗N)
 export function consoleStripTabs(snap: ConsoleSnapshot | null, t: T, room: number, cols: number, active: ConsoleTab, hasNext: boolean): StripTab<ConsoleTab>[] {
   const levels: Level[] = cols >= CONSOLE_FULL_MIN_COLS ? [0, 1, 2] : [1, 2]
   for (const level of levels) {

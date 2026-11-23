@@ -28,9 +28,9 @@ test('v74-d: 待決 draws every card; only the selected card has a/b/c Buttons (
   for (const c of decide) expect(all).toContain(c.title)
   expect(all).toContain('▸  3. 預覽先拍幾欄')
   expect(all).not.toContain('▸  1.')
-  expect(all).toContain('· 合併 ★') // card 1: plain text with the recommended mark
+  expect(all).toContain('· 合併 ✧') // card 1: plain text with the recommended mark
   expect(all).toContain('a: 80 欄')
-  expect(all).toContain('b: 120 欄 ★')
+  expect(all).toContain('b: 120 欄 ✧')
   expect(all).not.toContain('a: 合併')
   expect(pressed(body).filter(p => /key:[abc]/.test(p))).toEqual(['key:a', 'key:b', 'key:c'])
   expect(pressed(body)).toContain('key:m')
@@ -40,8 +40,8 @@ test('v74-d: 待決 draws every card; only the selected card has a/b/c Buttons (
 test('v74-d: cursor on card 1 moves the Buttons to card 1 (negative: card 3 plain again)', () => {
   const { body } = decidePage.render(ctxOf({}))
   const all = body.map(text).join('\n')
-  expect(all).toContain('a: 合併 ★')
-  expect(all).toContain('· 120 欄 ★')
+  expect(all).toContain('a: 合併 ✧')
+  expect(all).toContain('· 120 欄 ✧')
   expect(all).not.toContain('a: 80 欄')
 })
 

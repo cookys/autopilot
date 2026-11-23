@@ -67,7 +67,7 @@ const V74_NARROW = BAND_NARROW_STEPS.map(step => step.filter(id => id !== 'speed
 function bandAt(cols: number): string {
   const fleet = slotFleet({ stuck: 1, running: 2, waiting: 0, failed: 1, normal: 3 }, t)
   const slots = [
-    { id: 'verdict' as const, segs: [{ text: '▲ 要你決定' }] },
+    { id: 'verdict' as const, segs: [{ text: '⏶ 要你決定' }] },
     fleet,
     { id: 'decide' as const, segs: [{ text: '待決', tag: 'chip' as const }, { text: ' ', tag: 'chip' as const }, { text: '4', tag: 'chip' as const }] },
     { id: 'hygiene' as const, segs: [{ text: '開發 ⚑ 1' }] },
@@ -91,7 +91,7 @@ test('r7 narrow: 100 and 80 columns keep fleet, 待決 and tok/s, and do not lea
   // The room that r6 actually fitted (tab strip subtracted from row 1) used to print "│  │".
   const fleet = slotFleet({ stuck: 1, running: 2, waiting: 0, failed: 1, normal: 3 }, t)
   const slots = [
-    { id: 'verdict' as const, segs: [{ text: '▲ 要你決定' }] },
+    { id: 'verdict' as const, segs: [{ text: '⏶ 要你決定' }] },
     fleet,
     { id: 'decide' as const, segs: [{ text: '待決' }, { text: ' ' }, { text: '4' }] },
     { id: 'hygiene' as const, segs: [{ text: '開發 ⚑ 1' }] },

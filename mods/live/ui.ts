@@ -441,8 +441,8 @@ export function meterValue(value: number, cap: number, o: { cells: number; fact?
   ], o.fact)
 }
 // ---- chip spacing (codeforge tui-guideline §3.5): THE one place a chip is written; no call site writes a spacing literal ----
-// a chip is a mark (a state or structure glyph, or a label such as `QC`), ONE space, then its value: `⊘ 2`, `↺ R3`, `QC ▲`. Chips are CHIP_GAP apart, a word and
-// the first chip after it CHIP_LEAD apart, a secondary part is introduced by CHIP_META. The exceptions are the three of §3.5 rule 1: `$329`, the fixed-width ⓘ, chart glyphs.
+// a chip is a mark (a state or structure glyph, or a label such as `QC`), ONE space, then its value: `⊘ 2`, `↺ R3`, `QC ⏶`. Chips are CHIP_GAP apart, a word and
+// the first chip after it CHIP_LEAD apart, a secondary part is introduced by CHIP_META. The exceptions are the three of §3.5 rule 1: `$329`, the fixed-width i, chart glyphs.
 export const CHIP_MARK = ' '
 export const CHIP_GAP = '  '
 export const CHIP_LEAD = ' '
@@ -468,7 +468,7 @@ const BADGE_STATES = ['need_you', 'running', 'stalled'] as const
 export type BadgeStated = Stated & { readonly id: (typeof BADGE_STATES)[number] }
 // narrows a Stated to the three states that have a badge form, so `stateBadge` rejects the other seven at the type level
 export const isBadgeState = (s: Stated): s is BadgeStated => (BADGE_STATES as readonly string[]).includes(s.id)
-// the only two badge constructors (§3.2 b, I14): ▲, ●N, ⊘N for a state; ⚑N for residue. Any other state is refused.
+// the only two badge constructors (§3.2 b, I14): ⏶, ◉N, ⊘N for a state; ⚑N for residue. Any other state is refused.
 export function stateBadge(s: BadgeStated, n: number | undefined, fact: FactId): Frag {
   if (!isBadgeState(s)) throw new Error('badge: state ' + (s as Stated).id + ' has no badge form')
   const st = STATES[s.id]
@@ -599,7 +599,7 @@ export type Choice = { label: string; picked: boolean; recommended: boolean; pre
 export const CARD_KEY_W = KEY_W - 2
 const cardLead = (key: string): Seg[] => [sg('  '), dim(padCells(cutProse(key, CARD_KEY_W - 1), CARD_KEY_W), { role: 'key' })]
 const cardHang = (): Seg => sg(' '.repeat(KEY_W))
-// the question line(s): `▲ n. question` with the glyph of its state; the whole text is bold default text (the 'question title' bold use) while the question is open, plain once it is
+// the question line(s): `⏶ n. question` with the glyph of its state; the whole text is bold default text (the 'question title' bold use) while the question is open, plain once it is
 // sent. It wraps (never cut, never repeated) and continuation lines start at column 2. `meta` (dim, after ` · `) closes the last line, or takes one of its own when it does not fit.
 export function cardTitle(u: Ctx, s: Stated, title: string, meta: string | undefined, o: { fact: FactId; sent: boolean; grey?: boolean }): PaneLine[] {
   const room = u.cols - 1 - 2
@@ -655,7 +655,7 @@ export function cardParaRows(u: Ctx, key: string, paras: readonly CardPara[], o:
   }
   return rows
 }
-// the options of one question: the key `選項` at column 2, then one row per option from column 12: `[x] ★ label` (picked: bold default text), `[ ] label`. A press-less choice is drawn plain (a question already sent), its picked mark kept. The star marks the recommendation here and nowhere else.
+// the options of one question: the key `選項` at column 2, then one row per option from column 12: `[x] ✧ label` (picked: bold default text), `[ ] label`. A press-less choice is drawn plain (a question already sent), its picked mark kept. The star marks the recommendation here and nowhere else.
 export function choiceRows(u: Ctx, key: string, choices: readonly Choice[], o: { fact: FactId; descriptions?: readonly string[] }): PaneLine[] {
   const room = Math.max(1, u.cols - 1 - KEY_W)
   const rows: PaneLine[] = []
@@ -1036,7 +1036,7 @@ export function verdictHeader(u: Ctx, v: { state: Stated; word: string; project:
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 // P1 additions (the review tab): small helpers other tabs may reuse
 
-// a header chip: the state glyph and word, then optional dim meta after ` · ` (`● 執行中 · 1 席已有發現`)
+// a header chip: the state glyph and word, then optional dim meta after ` · ` (`◉ 執行中 · 1 席已有發現`)
 export function chip(u: Ctx, s: Stated, meta?: string, fmt?: FmtKind): Frag {
   const segs: Seg[] = [...stateLead(u, s).segs]
   if (meta !== undefined && meta !== '') segs.push(dim(' · ' + meta, { role: 'value', ...(fmt === undefined ? {} : { fmt }) })) // a number in the meta is tagged with the formatter that made it (I8)
@@ -1108,8 +1108,8 @@ export function drawSeg(s: Seg): { color: ThemeKey | undefined; bold: boolean | 
   return { color, bold: s.bold, dimColor: s.dim }
 }
 
-// `need`: the tab holds something for the owner, so its name is drawn attention bold (the colour of `▲ 要你決定`)
-// ---- the forge label on the band's left, after the ⓘ: `│ ϟ 93 tok/s ▁▂▃▅▇ · Ferris Lv.1` (the live mod draws it itself, BL-0359; the strip keeps one short `ϟ` tab that opens its full view) ----
+// `need`: the tab holds something for the owner, so its name is drawn attention bold (the colour of `⏶ 要你決定`)
+// ---- the forge label on the band's left, after the i: `│ ϟ 93 tok/s ▁▂▃▅▇ · Ferris Lv.1` (the live mod draws it itself, BL-0359; the strip keeps one short `ϟ` tab that opens its full view) ----
 // Colours (owner ruling 2026-11-01, d-1081338d; plan section 12.11): the speed is `running` (how fast the running work goes: `ϟ` and the trend), its number default text, its unit dim,
 // the ` · ` `structure`, the pet dim; a speed of `—` (nothing measured) is `idle` as a whole. No new meaning for any role.
 // What the mod below (forge-stats) answers to a one-row ask, read into segments with a semantic role each. This is the ONLY place that reads the answer's shape.

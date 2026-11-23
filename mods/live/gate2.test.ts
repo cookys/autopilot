@@ -69,7 +69,7 @@ test('gate2 item 2: each 額度 pool row stays one row (no continuation rows in 
   const c = snap(pools)
   for (const [cols, rows] of [[160, 40], [120, 30], [80, 24]] as [number, number][]) {
     const out = frameRows(quotaPage, ctxOf(cols, rows, c) as never).map(text)
-    const at = out.findIndex(l => /^[▸ ] [✗?▲✓]/.test(l) && l.includes('team'))
+    const at = out.findIndex(l => /^[▸ ] [✗?⏶✓]/.test(l) && l.includes('team'))
     expect(at).toBeGreaterThan(0)
     const cont: string[] = []
     for (let i = at + 1; i < out.length - 1 && /^\s{20,}\S/.test(out[i]); i++) cont.push(out[i])
@@ -133,10 +133,10 @@ test('gate2 item 3: no drawn row has both hint forms ("x: label" and "[x] label"
 test('gate2 item 4: 80x24 額度 shows at least one pool row, and the frame is exactly the available height', () => {
   const out = frameRows(quotaPage, ctxOf(80, hOf(24), snap()) as never).map(text)
   expect(out.length).toBe(24)
-  expect(out.filter(l => /^[▸ ] [✗?▲✓] \S/.test(l)).length).toBeGreaterThanOrEqual(1)
+  expect(out.filter(l => /^[▸ ] [✗?⏶✓] \S/.test(l)).length).toBeGreaterThanOrEqual(1)
   const small = frameRows(quotaPage, ctxOf(80, 8, snap()) as never).map(text)
   expect(small.length).toBe(8)
-  expect(small.filter(l => /^[▸ ] [✗?▲✓] \S/.test(l)).length, 'even 8 rows show a pool').toBeGreaterThanOrEqual(1)
+  expect(small.filter(l => /^[▸ ] [✗?⏶✓] \S/.test(l)).length, 'even 8 rows show a pool').toBeGreaterThanOrEqual(1)
   const now = frameRows(nowPage, ctxOf(80, 24, snap()) as never).map(text)
   expect(now.slice(1, -1).filter(l => l.trim() !== '').length).toBeGreaterThanOrEqual(3)
 })

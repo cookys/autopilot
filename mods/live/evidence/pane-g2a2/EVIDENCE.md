@@ -57,8 +57,8 @@ The absolute real-Claude binary is the caller-provided 2.1.327 binary; `$HOME` a
 (fail) G33a: the tick publishes `autopilot.fleet` and the band draws those counts on its own line; the reader beneath is never asked for a second row (terminal)
 (fail) speed tab: a maxRows that is NaN or missing draws no label and asks nothing; the survey is passed down untouched (desktop)
 (fail) speed tab: a maxRows that is NaN or missing draws no label and asks nothing; the survey is passed down untouched (terminal)
-(fail) speed tab: a timed request draws the label on the left after the ⓘ (ours, ϟ N tok/s and a trend from two requests) and the strip gets one short last tab, a Button keyed forge (desktop)
-(fail) speed tab: a timed request draws the label on the left after the ⓘ (ours, ϟ N tok/s and a trend from two requests) and the strip gets one short last tab, a Button keyed forge (terminal)
+(fail) speed tab: a timed request draws the label on the left after the i (ours, ϟ N tok/s and a trend from two requests) and the strip gets one short last tab, a Button keyed forge (desktop)
+(fail) speed tab: a timed request draws the label on the left after the i (ours, ϟ N tok/s and a trend from two requests) and the strip gets one short last tab, a Button keyed forge (terminal)
 (fail) speed tab: opened, the ━ stands under the forge tab and the speed view is drawn under the rule: the speed column, the recent-requests table and the mod below beside them (desktop)
 (fail) speed tab: opened, the ━ stands under the forge tab and the speed view is drawn under the rule: the speed column, the recent-requests table and the mod below beside them (terminal)
 (fail) speed tab: pressing it again closes it, and the speed view is gone (desktop)
@@ -128,25 +128,25 @@ The absolute real-Claude binary is the caller-provided 2.1.327 binary; `$HOME` a
   AssertionError: expect(received).toContain()
 
   Expected: containing "✗"
-  Received: "資料過舊 · 上次發佈 18:00 · watcher 沒有在發佈 │ ⓘ "
+  Received: "資料過舊 · 上次發佈 18:00 · watcher 沒有在發佈 │ i "
 
 (fail) X4: 120x30 stale 12 minutes, pane open, keeps the full reason and repair in two band rows [392.37ms]
   AssertionError: expect(received).toContain()
 
   Expected: containing "✗"
-  Received: "資料過舊 · 上次發佈 18:00 · watcher 沒有在發佈 │ ⓘ "
+  Received: "資料過舊 · 上次發佈 18:00 · watcher 沒有在發佈 │ i "
 
 (fail) X4: 160x40 stale 12 minutes, pane closed, keeps the full reason and repair in two band rows [384.43ms]
   AssertionError: expect(received).toContain()
 
   Expected: containing "✗"
-  Received: "資料過舊 · 上次發佈 18:00 · watcher 沒有在發佈 │ ⓘ "
+  Received: "資料過舊 · 上次發佈 18:00 · watcher 沒有在發佈 │ i "
 
 (fail) X4: 160x40 stale 12 minutes, pane open, keeps the full reason and repair in two band rows [369.38ms]
   AssertionError: expect(received).toContain()
 
   Expected: containing "✗"
-  Received: "資料過舊 · 上次發佈 18:00 · watcher 沒有在發佈 │ ⓘ "
+  Received: "資料過舊 · 上次發佈 18:00 · watcher 沒有在發佈 │ i "
 
 ```
 
@@ -197,13 +197,13 @@ The absolute real-Claude binary is the caller-provided 2.1.327 binary; `$HOME` a
   AssertionError: expect(received).toContain()
 
   Expected: containing "✗"
-  Received: "◌ 待命 │ ⓘ "
+  Received: "◌ 待命 │ i "
 
 (fail) X4: 160 columns expired console source stays visible beside a fresh live snapshot, console mode false [504.08ms]
   AssertionError: expect(received).toContain()
 
   Expected: containing "✗"
-  Received: "◌ 待命 │ ⓘ "
+  Received: "◌ 待命 │ i "
 
 ```
 

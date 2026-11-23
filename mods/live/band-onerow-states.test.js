@@ -39,13 +39,13 @@ function emitRow(label, cols, lay) {
   return { line, w }
 }
 
-test('state 1: 80-col (75) simultaneous line ⊘/✗ alert + QC ▲ alert retains both alerts without wrap', () => {
+test('state 1: 80-col (75) simultaneous line ⊘/✗ alert + QC ⏶ alert retains both alerts without wrap', () => {
   const lay = B.layoutOneRowBand(baseInput({
     line: { stalled: 4, running: 3, failed: 2, waiting: 0, state: 'normal' },
     qc: { status: 'alert', state: 'normal' },
     pend: { count: 21, hasRec: true, state: 'normal' },
   }), 75, tZh)
-  const { line, w } = emitRow('80c line(⊘ 4 ✗ 2) + QC(▲)', 75, lay)
+  const { line, w } = emitRow('80c line(⊘ 4 ✗ 2) + QC(⏶)', 75, lay)
   assert.ok(w <= 75, 'width <= 75, got ' + w)
   assert.equal(line.includes('\n'), false, 'single row')
   const lineSeg = lay.segments.find(s => s.id === 'line')

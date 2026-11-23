@@ -29,7 +29,7 @@ const REAL_LOAD = {
   marketplace_path: '/home/ubuntu/projects/autopilot', marketplace_is_dev: true, dev_link_ok: true, behind_upstream: 0, flags: ['stale_cache_dirs'],
   stale_cache_dirs: [{ dir: '/home/ubuntu/.claude/plugins/cache/autopilot/autopilot/2.36.36', in_use_pids: ['1808913', '2097570'], alive: [] }],
 }
-const band = { kind: 'running', key: 'suggestion', why: 'ok', verdictReason: null, mark: '●', verdict: 'v', head: '', progress: '—', progressDim: false, reason: null, project: 'repo', elapsed: '10m', phase: '—', slots: [] }
+const band = { kind: 'running', key: 'suggestion', why: 'ok', verdictReason: null, mark: '◉', verdict: 'v', head: '', progress: '—', progressDim: false, reason: null, project: 'repo', elapsed: '10m', phase: '—', slots: [] }
 const snapOf = (residue: object | null, ls: object | null): LiveSnapshot => ({
   state: 'ok', text: '', header: 'h', metrics: { ctx: '37%' }, band, pending: [], project_key: null, root_run_id: null, link: null, rows: [], gates: null, sections: NO_SECTIONS,
   review: { plan: null, code: null }, published_at: null, session_as_of: null, host_as_of: null,
@@ -58,7 +58,7 @@ test('counts: only what needs your judgement is counted, on the tab chip, the ta
   const s = snapOf(REAL_RESIDUE, REAL_LOAD)
   const tl = residueTally(s.detail.residue!)
   expect([tl.judgeCount, tl.cleanCount, tl.judgeBytes, tl.cleanBytes]).toEqual([1, 2, 298819584, 328626176])
-  expect(surfaces(s)).toEqual({ tabName: true, nowRow: '▲ 1 個 worktree 要你處理', band: '⚑ 1' })
+  expect(surfaces(s)).toEqual({ tabName: true, nowRow: '⏶ 1 個 worktree 要你處理', band: '⚑ 1' })
 })
 test('counts: negative control, a cleanable class counted as yours to judge is a different number on every surface (the counts test above would be red)', () => {
   const s = snapOf(REAL_RESIDUE, REAL_LOAD)
@@ -104,18 +104,18 @@ test('name: the last path segment, whole; too long, it loses its tail (never its
   const long = 'agent-' + 'abcdef0123456789'.repeat(6)
   const s = snapOf(resWith([entry({ path: '/w/' + long, bytes: 1048576, command: null }), entry({ path: '/w/short', class: 'live' }), entry({ path: '/w/ok-name', age_days: 3, bytes: null, command: null })]), null)
   const out = hyg(s, ZH, 76)
-  const row = out.find(l => l.startsWith('▲ agent-'))!
+  const row = out.find(l => l.startsWith('⏶ agent-'))!
   expect(ui.displayWidth(row)).toBeLessThanOrEqual(75)
   expect(row).toContain('…')
-  expect(row.startsWith('▲ agent-abcdef')).toBe(true)
+  expect(row.startsWith('⏶ agent-abcdef')).toBe(true)
   expect(row.includes(long)).toBe(false)
   expect(row.endsWith('2d00h · 1.0 MB')).toBe(true)
-  expect(out.some(l => l.startsWith('▲ ok-name') && l.endsWith('3d00h'))).toBe(true)
+  expect(out.some(l => l.startsWith('⏶ ok-name') && l.endsWith('3d00h'))).toBe(true)
   // a branch is named by the branch, whole
   const b = hyg(snapOf(resWith([entry({ kind: 'branch', path: undefined, branch: 'feature/some-branch', class: 'unintegrated-branch', bytes: null })]), null))
-  expect(b.some(l => l.startsWith('▲ feature/some-branch'))).toBe(true)
+  expect(b.some(l => l.startsWith('⏶ feature/some-branch'))).toBe(true)
   // control: a head cut would lose the start of the name
-  expect(row.startsWith('▲ …')).toBe(false)
+  expect(row.startsWith('⏶ …')).toBe(false)
 })
 
 const REASONS: [string, string, string][] = [
@@ -175,7 +175,7 @@ test('more than 5: five entries per section, the rest behind the `more` row that
   expect(open.some(l => /^ +▾ 收起/.test(l))).toBe(true)
   // the judge section has its own cap
   const judge = Array.from({ length: 6 }, (_, i) => entry({ path: '/w/j-' + i, command: null }))
-  expect(hyg(snapOf(resWith(judge), null)).filter(l => l.startsWith('▲ j-')).length).toBe(5)
+  expect(hyg(snapOf(resWith(judge), null)).filter(l => l.startsWith('⏶ j-')).length).toBe(5)
 })
 
 test('empty sections: nothing to judge keeps the empty line, nothing to clear draws no section at all', () => {
@@ -198,7 +198,7 @@ test('auto cleanup: a kv row with the last run and what it did, or that it never
   for (const r of [REAL_RESIDUE, { ...REAL_RESIDUE, auto_ran_at: null }]) expect(hyg(snapOf(r, null)).join('\n')).not.toContain('∅')
 })
 
-// the state mark of the source row: ▲ only when the owner would really run the wrong copy
+// the state mark of the source row: ⏶ only when the owner would really run the wrong copy
 const sourceRows = (ls: object, t: typeof ZH = ZH): string[] => { const o = hyg(snapOf(REAL_RESIDUE, ls), t); return o.slice(o.findIndex(l => /^[▾▸] (外掛來源|Plugin source)/.test(l))) }
 test('plugin source: only stale cache dirs is fine (✓) with the sentence and the delete command; no chip on the header', () => {
   const out = sourceRows(REAL_LOAD)
@@ -207,20 +207,20 @@ test('plugin source: only stale cache dirs is fine (✓) with the sentence and t
   expect(out[2]).toBe('  舊版快取 2.36.36 沒有程式在用，可以刪')
   expect(out[3]).toBe('  $ rm -rf /home/ubuntu/.claude/plugins/cache/autopilot/autopilot/2.36.36/')
   expect(out.length).toBe(4)
-  expect(out.join('\n')).not.toContain('▲')
+  expect(out.join('\n')).not.toContain('⏶')
   // a copy a live program still uses: the sentence names the pid and offers no delete
   const busy = sourceRows({ ...REAL_LOAD, stale_cache_dirs: [{ dir: '/c/2.36.36', in_use_pids: ['1'], alive: ['4242'] }] })
   expect(busy[2]).toBe('  舊版快取 2.36.36 還有程式在用（pid 4242），先不要刪')
   expect(busy.some(l => l.includes('rm -rf'))).toBe(false)
   expect(sourceRows(REAL_LOAD, EN)[2]).toBe('  old cache 2.36.36 is not used by any program; safe to delete')
 })
-test('plugin source: negative control, every flag that really misleads is ▲ and says what to do; a stale-only flag set must not be', () => {
+test('plugin source: negative control, every flag that really misleads is ⏶ and says what to do; a stale-only flag set must not be', () => {
   const stateOf = (ls: object) => sourceRows(ls)[1].slice(0, 1)
   expect(stateOf(REAL_LOAD)).toBe('✓')
-  for (const f of ['marketplace_not_directory', 'marketplace_not_this_repo', 'dev_link_missing_or_stale']) expect(stateOf({ ...REAL_LOAD, flags: [f] }), f).toBe('▲')
-  expect(stateOf({ ...REAL_LOAD, behind_upstream: 2 })).toBe('▲')
-  expect(stateOf({ ...REAL_LOAD, source: 'cache:2.36.36' })).toBe('▲')
-  expect(stateOf({ ...REAL_LOAD, source: 'unknown' })).toBe('▲')
+  for (const f of ['marketplace_not_directory', 'marketplace_not_this_repo', 'dev_link_missing_or_stale']) expect(stateOf({ ...REAL_LOAD, flags: [f] }), f).toBe('⏶')
+  expect(stateOf({ ...REAL_LOAD, behind_upstream: 2 })).toBe('⏶')
+  expect(stateOf({ ...REAL_LOAD, source: 'cache:2.36.36' })).toBe('⏶')
+  expect(stateOf({ ...REAL_LOAD, source: 'unknown' })).toBe('⏶')
   expect(stateOf({ ...REAL_LOAD, flags: ['stale_cache_dirs', 'some_new_flag'] })).toBe('✓')
 })
 test('plugin source: a sentence per flag, the fix command from the marketplace path (never a fixed home), the rest in the producer words', () => {
@@ -229,10 +229,10 @@ test('plugin source: a sentence per flag, the fix command from the marketplace p
   const link = sourceRows({ ...REAL_LOAD, flags: ['dev_link_missing_or_stale'], stale_cache_dirs: [], marketplace_path: '/srv/other/repo' })
   expect(link.slice(2)).toEqual(['  開發連結不見了或過期', '  $ bash /srv/other/repo/scripts/dev-setup.sh'])
   expect(sourceRows({ ...REAL_LOAD, flags: ['dev_link_missing_or_stale'], stale_cache_dirs: [], marketplace_path: null }).slice(2)).toEqual(['  開發連結不見了或過期']) // no path, no command
-  expect(sourceRows({ ...REAL_LOAD, flags: [], stale_cache_dirs: [], behind_upstream: 3 }).slice(1)).toEqual(['▲ 開發目錄 · /home/ubuntu/projects/autopilot · v3.0.0-alpha.6', '  落後遠端 3 個提交'])
+  expect(sourceRows({ ...REAL_LOAD, flags: [], stale_cache_dirs: [], behind_upstream: 3 }).slice(1)).toEqual(['⏶ 開發目錄 · /home/ubuntu/projects/autopilot · v3.0.0-alpha.6', '  落後遠端 3 個提交'])
   expect(sourceRows({ ...REAL_LOAD, flags: ['mystery'], stale_cache_dirs: [] }).slice(2)).toEqual(['  其他旗標：mystery'])
-  expect(sourceRows({ ...REAL_LOAD, source: 'cache:2.36.36', flags: [], stale_cache_dirs: [] })[1]).toBe('▲ 快取版 2.36.36')
-  expect(sourceRows({ ...REAL_LOAD, source: 'unknown', flags: [], stale_cache_dirs: [], plugin_version: null })[1]).toBe('▲ 讀不到外掛來源')
+  expect(sourceRows({ ...REAL_LOAD, source: 'cache:2.36.36', flags: [], stale_cache_dirs: [] })[1]).toBe('⏶ 快取版 2.36.36')
+  expect(sourceRows({ ...REAL_LOAD, source: 'unknown', flags: [], stale_cache_dirs: [], plugin_version: null })[1]).toBe('⏶ 讀不到外掛來源')
 })
 
 test('invariants: I1-I8 and I10 hold on the new tab for the real data in both locales at 40-160 columns', () => {
@@ -249,7 +249,7 @@ test('invariants: I1-I8 and I10 hold on the new tab for the real data in both lo
 
 const GOLDEN_ZH_76: string[] = [
   "▾ 要你處理  1 · 285 MB ────────────────────────────────────────────────────",
-  "▲ agent-a16d390b66014e3cf                                    1d04h · 285 MB",
+  "⏶ agent-a16d390b66014e3cf                                    1d04h · 285 MB",
   "  有 1349 個檔案沒提交，先看內容再決定要不要刪",
   "  $ git -C '/home/ubuntu/projects/autopilot/.claude/worktrees/",
   "    agent-a16d390b66014e3cf' status --short",
@@ -270,7 +270,7 @@ const GOLDEN_ZH_76: string[] = [
   "  $ rm -rf /home/ubuntu/.claude/plugins/cache/autopilot/autopilot/2.36.36/",
 ]
 
-test('tab name: 殘留 turns yellow when the 外掛來源 row shows ▲ even with nothing to judge, and not for an old cache copy alone', () => {
+test('tab name: 殘留 turns yellow when the 外掛來源 row shows ⏶ even with nothing to judge, and not for an old cache copy alone', () => {
   const clean = resWith([entry({ class: 'clean-integrated', reason: 'HEAD is an ancestor of the integration ref' })])
   expect(tabNeeds(snapOf(clean, REAL_LOAD)).hygiene).toBeUndefined() // only stale_cache_dirs: information, not a request
   for (const bad of [
@@ -280,13 +280,13 @@ test('tab name: 殘留 turns yellow when the 外掛來源 row shows ▲ even wit
     { ...REAL_LOAD, source: 'unknown', flags: [] },
   ]) {
     expect(tabNeeds(snapOf(clean, bad)).hygiene, JSON.stringify(bad.flags) + ' ' + bad.source + ' ' + bad.behind_upstream).toEqual({})
-    expect(hyg(snapOf(clean, bad)).some(l => l.startsWith('▲ ')), 'the row shows ▲ too').toBe(true)
+    expect(hyg(snapOf(clean, bad)).some(l => l.startsWith('⏶ ')), 'the row shows ⏶ too').toBe(true)
   }
 })
 
 test('order: newest first within a section; entries with no age go last and keep their published order', () => {
   const es = [entry({ path: '/w/no-age-a', age_days: null }), entry({ path: '/w/no-age-b', age_days: null }), entry({ path: '/w/old', age_days: 3 }), entry({ path: '/w/new', age_days: 1 })]
-  const names = hyg(snapOf(resWith(es), REAL_LOAD)).filter(l => l.startsWith('▲ ')).map(l => l.slice(2).trim().split(/\s+/)[0])
+  const names = hyg(snapOf(resWith(es), REAL_LOAD)).filter(l => l.startsWith('⏶ ')).map(l => l.slice(2).trim().split(/\s+/)[0])
   expect(names).toEqual(['new', 'old', 'no-age-a', 'no-age-b'])
 })
 

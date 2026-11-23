@@ -1,6 +1,6 @@
-// mods/live/band.tsx — the band above the prompt: ONE line (stage-graph P7, contract ②; TUI v2 grammar). Pure view over the snapshot's slots:
+// mods/live/band.tsx — the band above the prompt: ONE line (stage-graph P7, contract 2; TUI v2 grammar). Pure view over the snapshot's slots:
 // `layoutBand` (model.ts) applies the width table, this file only draws the result: each slot a plain Button keyed by its slot id (a press opens
-// the pane on the tab that explains it), the separators plain Texts between them, then the ⓘ Button.
+// the pane on the tab that explains it), the separators plain Texts between them, then the i Button.
 // Colours are theme keys as text colour only: no backgroundColor, no inverse, no raw colour. No Image, no Raster.
 
 import { T_EN } from './i18n'
@@ -215,15 +215,15 @@ function staleLiveReason(snap: LiveSnapshot, t: T): string {
   return (age === '' ? '' : age + ' · ') + reason
 }
 
-// the band's own cells (the line and the ⓘ), and the width they take
+// the band's own cells (the line and the i), and the width they take
 function bandCells(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, onInfo: () => void, t: T, onSlot: (id: SlotId) => void, preset: { segs: Seg[]; width: number } | null = null, infoLabel = BAND_INFO_LABEL, legacyTabs = false, fleetUnknown = false): { nodes: unknown[]; width: number } {
   const { Text, Button } = el
   const extra = displayWidth(infoLabel) - displayWidth(BAND_INFO_LABEL)
-  // only the ⓘ autoFocuses: Ctrl+x Tab lands on it, as before the slots were controls
+  // only the i autoFocuses: Ctrl+x Tab lands on it, as before the slots were controls
   const icon = Button === undefined
     ? <Text>{infoLabel}</Text>
     : <Button key="info" plain autoFocus onPress={onInfo}>{infoLabel}</Button>
-  // a fitted line (the fleet segment is on it): draw those segs, do not run layoutBand again. The width is the shared fitted width (segs + ⓘ), never preset.width on its own.
+  // a fitted line (the fleet segment is on it): draw those segs, do not run layoutBand again. The width is the shared fitted width (segs + i), never preset.width on its own.
   const segW = (segs: { text: string }[]) => segs.reduce((n, s) => n + displayWidth(s.text), 0)
   const dimCells = !legacyTabs && snap?.state === 'stale' && snap.band !== null
   if (preset !== null) {
@@ -292,7 +292,7 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
       }
     }
   }
-  // the forge label is read by forgeSegments (ui.ts): speed (and pet) sit on the left after the ⓘ, and the strip keeps a short forge tab that opens the full view.
+  // the forge label is read by forgeSegments (ui.ts): speed (and pet) sit on the left after the i, and the strip keeps a short forge tab that opens the full view.
   // The rate is measured on this seat. A failed data source or a stale live snapshot does not clear it; the failure line is what narrows.
   const fb = forge === null ? null : forgeBar(forge)
   const forgeW = fb === null ? 0 : fb.width
@@ -308,7 +308,7 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
   // R4-1: the open pane owns navigation; its spare band row holds the repair whole. Row 1 never carries the command. `forgeRow`: that row under the band is forge-stats' summary (PM G33), so the repair is not drawn here.
   const repairBelow = noTabs && !legacyTabs && !forgeRow && (sourceBad || snap?.state === 'stale')
   const left = bandCells(el, snap, Math.max(1, leftRoom), hd.onInfo, t, hd.onSlot, preset, con !== null && !noTabs ? t('band.open_pane') + ' ' : BAND_INFO_LABEL, legacyTabs, fleetUnknown)
-  // the same fitted width as layoutBandLine: segs + ⓘ + speed + ›. The gap is whatever is left before the strip, at least one cell. tabsAt stops before the ›.
+  // the same fitted width as layoutBandLine: segs + i + speed + ›. The gap is whatever is left before the strip, at least one cell. tabsAt stops before the ›.
   const segW = preset !== null ? preset.segs.reduce((n, s) => n + displayWidth(s.text), 0) : left.width - displayWidth(BAND_INFO_LABEL)
   void segW
   const gap = Math.max(0, columns - strip.width - moreW)
@@ -325,7 +325,7 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
       </Box>
     )
   })
-  // r2 §3.1: the band is two rows, always. Row 1 is the summary (cells, ⓘ, speed); row 2 is the tab strip, right-aligned to the bottom edge.
+  // r2 §3.1: the band is two rows, always. Row 1 is the summary (cells, i, speed); row 2 is the tab strip, right-aligned to the bottom edge.
   const stripRow = <Box height={1} width={columns} overflow="hidden"><Text>{' '.repeat(gap)}</Text>{tabs}{moreNode}</Box>
   // `stripRow` alone is the menu row of the O4 shell: the shell is already 12 rows (SHELL_ROWS), so it takes the tab strip and leaves the summary row to the band's own draw
   // the quota segment sits at the right end of row 1 when two cells of room are left; it never takes a row and never pushes the speed label
@@ -357,7 +357,7 @@ export function BarButton(el: { Text: El; Button?: El }, id: string, label: stri
   return Button === undefined ? text : <Button key={id} plain onPress={onPress}>{text}</Button>
 }
 
-// the open tab's content: rows (each one drawn row). No buttons row sits under it: the band's height must not change with the open tab (the pane is reached from the ⓘ, a slot, the tab strip and /live-pane).
+// the open tab's content: rows (each one drawn row). No buttons row sits under it: the band's height must not change with the open tab (the pane is reached from the i, a slot, the tab strip and /live-pane).
 // Progress and spend left the collapsed slots, so the Now preview has no row. Dispatch shows the stalled chip. Review shows QC.
 export function barParts(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, tab: PaneTab | 'usage', columns: number, _t: T, o: { onSlot: (id: SlotId) => void }): { rows: unknown[] } {
   const { Box } = el
@@ -509,10 +509,10 @@ export function ShellBare(el: { Box: El; Text: El; Button?: El }, d: { main: unk
 }
 
 // The top menu row (ux-v7 §1). The host draws a letter hotkey as `k: ` in front of the label, so the label is the words
-// and the Box is as wide as that prefix plus the words. ▾ sits on the selected menu. ▲N stays on 待決. 待你動手 is the tail.
+// and the Box is as wide as that prefix plus the words. ▾ sits on the selected menu. ⏶N stays on 待決. 待你動手 is the tail.
 // r5: `note` is a dim summary at the tail (the collapsed band's `待決 N 張 · d 展開`, the bare card's position); `speed` is the forge label (`│ ϟ 83 tok/s ▁▂▃`, tok/s is back on the band), dropped when it does not fit
 // `onRow` is set only while the band is one row: a click on the gaps, the note, the awaiting tail or the trailing blank expands. It is absent when the band is open, so blank space stays a no-op.
-// `mark` colours only the ▲N count (text colour, no background) while a new card arrived under that one row.
+// `mark` colours only the ⏶N count (text colour, no background) while a new card arrived under that one row.
 export type MenuRowSpec = { selected: ShellMenuId; pending: number; room: number; awaiting: number; columns: number; onSelect: (id: ShellMenuId) => void; note?: string; speed?: readonly Seg[] | null; onSpeed?: () => void; onRow?: () => void; mark?: boolean; fold?: FoldCell }
 export function shellMenuRow(el: { Box: El; Text: El; Button?: El }, t: T, spec: MenuRowSpec): unknown {
   const { Box, Text, Button } = el
@@ -594,7 +594,7 @@ export function shellNote(el: { Box: El; Text: El }, text: string): unknown[] {
 
 // ---- the card view (ux-v7, bandlayout): the main window of the 待決 tab shows ONE card, every word of it. The rows below are all of the card, wrapped and never cut; the caller (register.ts) shows
 // the window of them that fits (shell scroll, `windowRows`) and grows the frame upward as far as the host's maxRows allows. One option per row (a hotkey Button 1..6), its description wrapped under it;
-// the recommendation (★ on the option and a 建議 row with its reason), the 不授權 line, then one Button (no hotkey: 0-9 are all taken) that fills the prompt box with the reply line so the owner types a
+// the recommendation (✧ on the option and a 建議 row with its reason), the 不授權 line, then one Button (no hotkey: 0-9 are all taken) that fills the prompt box with the reply line so the owner types a
 // note or a free answer there and presses Enter ----
 export type CardView = {
   key: string
@@ -689,7 +689,7 @@ export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t:
       if (o.description !== '') wrapPlain(o.description, w - 4, w - 4).forEach((r, i) => line('od' + k + '_' + i, r, true, i === 0 ? String(k + 1).padEnd(4) : '    '))
       return
     }
-    // one line `   N: label ★  description`; a description that does not fit wraps under the description column. No digit hotkey.
+    // one line `   N: label ✧  description`; a description that does not fit wraps under the description column. No digit hotkey.
     const num = String(k + 1)
     const star = o.recommended ? ' ' + GLYPHS.structure.recommend : ''
     const prefix = (o.picked ? PICK_MARK.text : ' ') + '  ' + num + ': '

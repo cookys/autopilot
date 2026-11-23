@@ -248,7 +248,7 @@ test('c-style: options and note sit at bottom of body', async ($, on) => {
   const h = await host($, on, { cols: 209, rows: 50 })
   const t = text(await h.key('v'))
   const bg = t.indexOf('背景')
-  const firstOpt = t.indexOf('★') - 20
+  const firstOpt = t.indexOf('✧') - 20
   const note = t.indexOf('m 附註：')
   const send = t.indexOf('預覽並送出')
   expect(bg).toBeGreaterThan(0)

@@ -67,7 +67,7 @@ const snapOf = (pending: LiveDecision[]): LiveSnapshot => ({
     key: 'warning',
     why: 'r',
     verdictReason: null,
-    mark: '▲',
+    mark: '⏶',
     verdict: 'v',
     head: '',
     progress: '—',
@@ -720,15 +720,15 @@ test('pane-attach 3 pure: step cards and look cards land in 要你做或看 whil
     const stepsText = textsOf(stepsSlice).join('\n')
 
     expect(decideSlice[0].text).toContain(decideTitle + '  2 ')
-    expect(decideText).toContain('▲ 1. 要採用哪個方案？')
-    expect(decideText).toContain('▲ 2. 要不要保留舊快取？')
+    expect(decideText).toContain('⏶ 1. 要採用哪個方案？')
+    expect(decideText).toContain('⏶ 2. 要不要保留舊快取？')
     expect(decideText).not.toContain('請到瀏覽器完成登入')
     expect(decideText).not.toContain('給你看：diff HEAD~1（repo）')
     expect(decideSlice.filter(l => l.kind !== 'blank').every(l => l.fact === 'decide.cards')).toBe(true)
 
     expect(stepsSlice[0].text).toContain(stepsTitle + '  2 ')
-    expect(stepsText).toContain('▲ 1. 請到瀏覽器完成登入')
-    expect(stepsText).toContain('▲ 給你看：diff HEAD~1（repo）')
+    expect(stepsText).toContain('⏶ 1. 請到瀏覽器完成登入')
+    expect(stepsText).toContain('⏶ 給你看：diff HEAD~1（repo）')
     expect(stepsText).not.toContain('要採用哪個方案？')
     expect(stepsText).not.toContain('要不要保留舊快取？')
     expect(stepsSlice.filter(l => l.kind !== 'blank').every(l => l.fact === 'decide.steps')).toBe(true)
@@ -765,7 +765,7 @@ test('pane-attach 3 pure: step cards and look cards land in 要你做或看 whil
   const brokenTexts = textsOf(broken)
   expect(brokenTexts.some(x => x.includes('要你做或看')), 'control: misrouted step card disappears from 要你做或看').toBe(false)
   expect(brokenTexts[0]).toContain('要你決定  2 ')
-  expect(brokenTexts.some(x => x.includes('▲ 2. 請到瀏覽器完成登入')), 'control: misrouted step card lands in 要你決定').toBe(true)
+  expect(brokenTexts.some(x => x.includes('⏶ 2. 請到瀏覽器完成登入')), 'control: misrouted step card lands in 要你決定').toBe(true)
   expect(brokenTexts[brokenTexts.length - 1]).toContain('送出（已答 0/2）')
 })
 

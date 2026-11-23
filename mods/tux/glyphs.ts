@@ -6,8 +6,8 @@ import { displayWidth } from './width.ts'
 
 export type PetIcon = { id: 'cat' | 'chick' | 'crab'; emoji: string; fallback: string; verified: string }
 export const GLYPHS = {
-  state: { need_you: '▲', failed: '✗', stalled: '⊘', findings: '△', running: '●', done: '✓', pending: '○', waiting: '⋯', stopped: '◌', skipped: '∅', unknown: '?', stale: '~' },
-  structure: { open: '▾', folded: '▸', foldUp: '▴', rule: '─', detail: '└', command: '$', goto: '›', bullet: '◦', empty: '—', tabMark: '━', residue: '⚑', behind: '↓', up: '↑', bandSep: '│', info: 'ⓘ', speed: 'ϟ', round: '↺', decisions: '◆', remoteDecision: '◇', age: '◷', recommend: '★', fresh: '✦', frameTL: '╭', frameTR: '╮', frameBL: '╰', frameBR: '╯', frameDown: '┬', frameUp: '┴', frameLeftT: '├', frameRightT: '┤', answer: '→' },
+  state: { need_you: '⏶', failed: '✗', stalled: '⊘', findings: '△', running: '◉', done: '✓', pending: '○', waiting: '⋯', stopped: '◌', skipped: '∅', unknown: '?', stale: '~' },
+  structure: { open: '▾', folded: '▸', foldUp: '▴', rule: '─', detail: '└', command: '$', goto: '›', bullet: '◦', empty: '—', tabMark: '━', residue: '⚑', behind: '↓', up: '↑', bandSep: '│', info: 'i', speed: 'ϟ', round: '↺', decisions: '⬥', remoteDecision: '◊', age: '◷', recommend: '✧', fresh: '✦', frameTL: '╭', frameTR: '╮', frameBL: '╰', frameBR: '╯', frameDown: '┬', frameUp: '┴', frameLeftT: '├', frameRightT: '┤', answer: '→' },
   chart: { meterOn: '▰', meterOff: '▱', here: '◐' },
   scrollbar: { track: '│', thumb: '█' }, // §12.10: the scrolling window's right-hand column; track and thumb borrow the drawing of bandSep and the top spark step, a second meaning each (SHARED_GLYPHS)
   spark: ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'],
@@ -20,11 +20,11 @@ export const GLYPHS = {
       crab: { id: 'crab', emoji: '🦀', fallback: '}{', verified: 'pending-owner' },
     } as Record<string, PetIcon>,
   },
-  verified: { '▴': 'pending-owner', '◇': 'pending-owner', '⊘': '2026-10-13 owner-ssh-tmux', '△': '2026-10-13 owner-ssh-tmux', '○': '2026-10-13 owner-ssh-tmux', '◌': '2026-10-13 owner-ssh-tmux', '∅': '2026-10-13 owner-ssh-tmux', '◦': '2026-10-13 owner-ssh-tmux', '›': '2026-10-13 owner-ssh-tmux', '━': '2026-10-13 owner-ssh-tmux', '◐': '2026-10-13 owner-ssh-tmux', '◍': '2026-10-13 owner-ssh-tmux', '↓': 'pending-owner', '★': 'pending-owner', '⋯': 'pending-owner', '✦': 'pending-owner', '╭': 'pending-owner', '╮': 'pending-owner', '╰': 'pending-owner', '╯': 'pending-owner', '┬': 'pending-owner', '┴': 'pending-owner', '├': 'pending-owner', '┤': 'pending-owner', '→': 'pending-owner' } as Record<string, string>,
+  verified: { '▴': 'pending-owner', '◊': '2026-11-23 PM-reviewed east_asian_width=N', '⊘': '2026-10-13 owner-ssh-tmux', '△': '2026-10-13 owner-ssh-tmux', '○': '2026-10-13 owner-ssh-tmux', '◌': '2026-10-13 owner-ssh-tmux', '∅': '2026-10-13 owner-ssh-tmux', '◦': '2026-10-13 owner-ssh-tmux', '›': '2026-10-13 owner-ssh-tmux', '━': '2026-10-13 owner-ssh-tmux', '◐': '2026-10-13 owner-ssh-tmux', '◍': '2026-10-13 owner-ssh-tmux', '↓': 'pending-owner', '✧': '2026-11-23 PM-reviewed east_asian_width=N', '⋯': 'pending-owner', '✦': 'pending-owner', '╭': 'pending-owner', '╮': 'pending-owner', '╰': 'pending-owner', '╯': 'pending-owner', '┬': 'pending-owner', '┴': 'pending-owner', '├': 'pending-owner', '┤': 'pending-owner', '→': 'pending-owner' } as Record<string, string>,
 }
-export const NEW_GLYPHS = ['▴', '◇', '⊘', '△', '○', '◌', '∅', '◦', '›', '━', '◐', '◍', '↓', '★', '⋯', '✦', '╭', '╮', '╰', '╯', '┬', '┴', '├', '┤', '→'] as const
+export const NEW_GLYPHS = ['▴', '◊', '⊘', '△', '○', '◌', '∅', '◦', '›', '━', '◐', '◍', '↓', '✧', '⋯', '✦', '╭', '╮', '╰', '╯', '┬', '┴', '├', '┤', '→'] as const
 // Extended_Pictographic glyphs a terminal may draw as an emoji box (§3.4); repeated so the rule survives a Unicode update
-export const EMOJI_BANNED = ['⏸', '⚙', '⚠', '✔', '✖', '▶', '⏹', '⏺', '▪', '▫'] as const
+export const EMOJI_BANNED = ['⏸', '⚙', '⚠', '✔', '✖', '▹', '⏹', '⏺', '▪', '▫'] as const
 
 
 const EXT_PICT = /\p{Extended_Pictographic}/u

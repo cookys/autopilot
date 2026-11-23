@@ -291,7 +291,7 @@ test('plan: the glyphs the frame draws are registered, one cell, and carry a ver
 
 test('fleet: one row per lane that has anything, the most pressing state first; a lane with nothing is not listed', () => {
   const rows = S.fleetLines(FLEET, 44, 7).map(segText)
-  assert.deepEqual(rows, ['▲ lane-b 1', '● lane-a 2'])
+  assert.deepEqual(rows, ['⏶ lane-b 1', '◉ lane-a 2'])
   assert.equal(S.fleetLines(FLEET, 44, 1).length, 1)
   assert.equal(S.fleetLines(FLEET, 44, 7)[0][0].color, ui.PALETTE.attention)
   assert.equal(S.fleetLines(FLEET, 44, 7)[1][0].color, ui.PALETTE.running)

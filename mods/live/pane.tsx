@@ -1,4 +1,4 @@
-// mods/live/pane.tsx — the panel the ⓘ opens (TUI v2): Now · Decide · Dispatch · Review · Spend · Hygiene · ?  (the stage walk lives in Now, the proxy decisions in Review, the owner's open questions in Decide,
+// mods/live/pane.tsx — the panel the i opens (TUI v2): Now · Decide · Dispatch · Review · Spend · Hygiene · ?  (the stage walk lives in Now, the proxy decisions in Review, the owner's open questions in Decide,
 // the glyph legend is the `?` tab). Pure view over the snapshot; `el` comes from $.ui.resolve(e). Every tab builds its lines in tabs.ts, out of ui.ts components
 // (a missing fact is an explicit "no data" line there, never an empty tab). Words come from the string tables through `t`. This file decides no colour: every Text
 // gets its props from `drawSeg` (ui.ts), theme keys as text colour only, no background, no inverse.

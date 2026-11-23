@@ -82,8 +82,8 @@ const segText = (s: { segs: { text: string }[] } | null): string => (s === null 
 test('r8 #12: the v7.4 fleet chips read stalled, running, failed (design S1), the older order stays for the legacy band', () => {
   const c = { stuck: 4, running: 3, waiting: 0, failed: 2 }
   const v = segText(slotFleet(c, t, true))
-  expect(v.indexOf('⊘')).toBeLessThan(v.indexOf('●'))
-  expect(v.indexOf('●')).toBeLessThan(v.indexOf('✗'))
+  expect(v.indexOf('⊘')).toBeLessThan(v.indexOf('◉'))
+  expect(v.indexOf('◉')).toBeLessThan(v.indexOf('✗'))
   const old = segText(slotFleet(c, t))
   expect(old.indexOf('✗')).toBeLessThan(old.indexOf('⊘'))
 })
@@ -117,14 +117,14 @@ test('r8 #9: a wrapped labelled help row hangs under its own text', () => {
   expect(l[i + 1].startsWith(' '.repeat(14))).toBe(true)
 })
 
-test('r8 #5: the legend names ⋯ and says what ◆ ▸ ▲ mean on the decide page and in the band', () => {
+test('r8 #5: the legend names ⋯ and says what ⬥ ▸ ⏶ mean on the decide page and in the band', () => {
   const all = helpLines().join('\n')
   expect(all).toContain('⋯ 等待中')
-  expect(all).toContain('◆ 等你決定')
+  expect(all).toContain('⬥ 等你決定')
   expect(all).toContain('→ 你選的答案')
   expect(all).toContain('✓ 我替你決定的紀錄')
   expect(all).toContain('▸ 已摺疊 · 目前這張')
-  expect(all).toContain('▲ 要你處理')
+  expect(all).toContain('⏶ 要你處理')
 })
 
 test('r8 #10: an empty 待辦 says how to recover, and its border hint offers no a/b/c', () => {

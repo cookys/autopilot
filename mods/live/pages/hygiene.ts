@@ -38,7 +38,7 @@ const ageUnit = (t: T, ms: number): string => {
 }
 const ageAgo = (t: T, ms: number): string => t('page.now.ago', { age: ageUnit(t, ms) })
 
-// `box`: the v7.4 band frame (design S7: ● and two spaces); the host Pane keeps ▲ and the locale separator
+// `box`: the v7.4 band frame (design S7: ◉ and two spaces); the host Pane keeps ⏶ and the locale separator
 function judgeRow(e: NeedsHumanEntry, wide: boolean, t: T, box: boolean): Row {
   const entry = { kind: e.kind, target: e.target, cls: e.class, ageMs: null, bytes: e.bytes, reason: e.reason, command: e.command }
   const rawName = e.branch?.trim() ? e.branch : e.kind === 'worktree' && !e.target.startsWith('/') ? e.target : residueNameOf(entry)

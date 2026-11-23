@@ -71,7 +71,7 @@ Shared Cursor/Kimi broker transport and clone rail use the cursor-named helpers;
 
 **Review family gate** — `lib/outbound-secret-scan.js` `lib/review-family-gate.js` `lib/cn-model-dispatch-gate.js` `lib/local-impl-slot.js` `lib/local-impl-slot.test.js` `lib/local-reviewer-exclusion.js` `local-reviewer-exclusion.test.js` `lib/cloud-operators.json` `lib/cn-model-gate-defaults.json` `cn-model-dispatch-gate.test.js` `lib/kimi-quota-observe.js` `lib/kimi-quota-observe.test.js` `lib/kimi-quota-observe.test.js` `cursor-quota-observe.test.js` `lib/qc-panel-codex-fallback.js` `lib/seat-fallback.js` (operator-based cloud gate, lease acquisition and context gating for implicit local implementers; cross-family rule, codex quota runtime substitute, pace-ordered seat retreat / family inference; contracts: `lib/cn-model-dispatch-gate.js`, `references/hetero-dispatch.md`)
 
-**Transcript data class** — `lib/data-class-policy.js` `lib/data-class-policy.json` `pm-offline-estimate.js` `pm-offline-estimate.test.js` `qualification-review-provider-cn-gate.test.js`
+**Transcript data class** — `lib/data-class-policy.js` `lib/data-class-policy.json` `pm-offline-estimate.js` `pm-offline-estimate.test.js` `pm-replay-slice.js` `pm-replay-slice.test.js` `qualification-review-provider-cn-gate.test.js`
 
 **Shared JSON & store primitives (cont.)** — `lib/quota-mirror-dirs.js` `lib/decision-answer.js`
 

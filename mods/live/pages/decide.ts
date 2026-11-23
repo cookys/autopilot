@@ -809,7 +809,7 @@ function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
   }
 
   if (single) {
-    const headRow: Row = truncateSegs([dimSeg(`卡 #01/1 · 僅 1 張待決 · 送出後清空 · ${statusText}${recText}`)], cols)
+    const headRow: Row = truncateSegs([dimSeg(`${ctx.t('v74.d.card_single')} · ${statusText}${recText}`)], cols)
     const sepRow: Row = [dimSeg(GLYPHS.structure.rule.repeat(cols))]
     const midRoom = Math.max(1, room - 2)
     const detailRows = buildDetail(cols)
@@ -822,8 +822,8 @@ function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
   const midRoom = Math.max(1, room - 2)
 
   // Left + Right header
-  const leftHead = padRowTo([dimSeg(leftW >= 34 ? `待決清單 (${cards.length} 張)` : `清單 (${cards.length})`)], leftW)
-  const rightHead = padRowTo([dimSeg(`卡 #${String(cursor + 1).padStart(2, '0')} / ${cards.length} · ${statusText}${recText}`)], rightW)
+  const leftHead = padRowTo([dimSeg(leftW >= 34 ? ctx.t('v74.d.list_long', { n: cards.length }) : ctx.t('v74.d.list_short', { n: cards.length }))], leftW)
+  const rightHead = padRowTo([dimSeg(`${ctx.t('v74.d.card_of', { k: String(cursor + 1).padStart(2, '0'), n: cards.length })} · ${statusText}${recText}`)], rightW)
   const headRow: Row = [...leftHead, dimSeg(' ' + GLYPHS.structure.bandSep + ' '), ...rightHead]
   const sepRow: Row = [dimSeg(GLYPHS.structure.rule.repeat(leftW + 3 + rightW))]
 

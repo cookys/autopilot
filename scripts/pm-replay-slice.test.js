@@ -236,3 +236,111 @@ test('parseArgs parses repeatable --sessions-dir and options', () => {
   assert.deepEqual(args.quota, { operator: 2, patrol: 1 });
   assert.equal(args.since, '2026-11-23T00:00:00Z');
 });
+
+test('buildPrefillPrefix and writeSliceOutput: shifts prefix start past Level-1 hit, sets shortPrefix, preserves tool pairs, and leaks no secret', () => {
+  const fakeToken = ['sk', 'ant', 'api03', 'midprefixsecret1234567890abcdefg'].join('-');
+  const session = [
+    makeUserEntry('earlier prefix prompt before secret', '2026-11-23T08:00:00Z'),
+    makeAssistantEntry('earlier prefix reply before secret', '2026-11-23T08:00:01Z'),
+    makeUserEntry('middle prefix event before secret turn', '2026-11-23T08:10:00Z'),
+    makeAssistantEntry(`leaked secret ${fakeToken}`, '2026-11-23T08:10:01Z'),
+    makeUserEntry('clean suffix prefix prompt', '2026-11-23T08:20:00Z'),
+    makeAssistantEntry('clean suffix prefix reply', '2026-11-23T08:20:01Z'),
+    makeUserEntry('[fleet patrol] check selected event', '2026-11-23T09:00:00Z'),
+    makeAssistantEntry('patrol ack', '2026-11-23T09:00:01Z'),
+  ];
+
+  // Shifted prefix shorter than level => excludes secret turn & earlier turns, shortPrefix: true
+  const shortRes = buildPrefillPrefix(session, 6, 1000, [0, 2, 4, 6]);
+  assert.equal(shortRes.startIndex, 4);
+  assert.equal(shortRes.endIndex, 6);
+  assert.equal(shortRes.turns.length, 2);
+  assert.equal(shortRes.shortPrefix, true);
+  assert.ok(!JSON.stringify(shortRes.turns).includes(fakeToken));
+  assert.ok(!JSON.stringify(shortRes.turns).includes('earlier prefix'));
+  assert.ok(!JSON.stringify(shortRes.turns).includes('middle prefix'));
+
+  // Remaining prefix reaches level => shortPrefix: false
+  const enoughRes = buildPrefillPrefix(session, 6, 15, [0, 2, 4, 6]);
+  assert.equal(enoughRes.startIndex, 4);
+  assert.equal(enoughRes.endIndex, 6);
+  assert.equal(enoughRes.turns.length, 2);
+  assert.equal(enoughRes.shortPrefix, false);
+
+  // No clean boundary remains after secret => empty prefix, no throw, shortPrefix: true
+  const emptyRes = buildPrefillPrefix(session, 4, 100, [0, 2, 4]);
+  assert.equal(emptyRes.turns.length, 0);
+  assert.equal(emptyRes.turnCount, 0);
+  assert.equal(emptyRes.estimatedTokens, 0);
+  assert.equal(emptyRes.shortPrefix, true);
+
+  // Secret inside tool_use: shifted start must not land on its paired tool_result boundary
+  const pairSession = [
+    makeUserEntry('before pair', '2026-11-23T08:00:00Z'),
+    {
+      type: 'assistant',
+      timestamp: '2026-11-23T08:00:01Z',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'tool_use', id: 'tu_secret', name: 'Read', input: { token: fakeToken } }],
+      },
+    },
+    {
+      type: 'user',
+      timestamp: '2026-11-23T08:00:02Z',
+      message: {
+        role: 'user',
+        content: [
+          { type: 'tool_result', tool_use_id: 'tu_secret', content: 'ok' },
+          { type: 'text', text: 'paired user text' },
+        ],
+      },
+    },
+    makeUserEntry('clean after pair', '2026-11-23T08:01:00Z'),
+    makeUserEntry('selected event', '2026-11-23T09:00:00Z'),
+  ];
+  const pairRes = buildPrefillPrefix(pairSession, 4, 100, [0, 2, 3, 4]);
+  assert.equal(pairRes.startIndex, 3);
+  assert.equal(pairRes.endIndex, 4);
+  assert.equal(pairRes.turns.length, 1);
+  assert.equal(pairRes.shortPrefix, true);
+  assert.ok(!JSON.stringify(pairRes.turns).includes('tu_secret'));
+
+  // End-to-end writeSliceOutput: shortPrefix in manifest & prefix-<level>.json, no secret leaked
+  const events = sliceEvents(session);
+  const sample = scanAndSampleEvents(events, { patrol: 1 }, 1);
+  const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-replay-prefix-shift-'));
+  const outDir = path.join(tmpBase, 'out');
+  try {
+    writeSliceOutput(outDir, session, sample, { seed: 1, levels: [1000] });
+
+    const manifestRaw = fs.readFileSync(path.join(outDir, 'manifest.json'), 'utf8');
+    const manifest = JSON.parse(manifestRaw);
+    assert.equal(manifest.prefixes.length, 1);
+    assert.equal(manifest.prefixes[0].startIndex, 4);
+    assert.equal(manifest.prefixes[0].endIndex, 6);
+    assert.equal(manifest.prefixes[0].turnCount, 2);
+    assert.equal(manifest.prefixes[0].shortPrefix, true);
+    assert.ok(!manifestRaw.includes(fakeToken));
+
+    const prefixRaw = fs.readFileSync(path.join(outDir, 'prefix-1000.json'), 'utf8');
+    const prefixJson = JSON.parse(prefixRaw);
+    assert.equal(prefixJson.startIndex, 4);
+    assert.equal(prefixJson.endIndex, 6);
+    assert.equal(prefixJson.turns.length, 2);
+    assert.equal(prefixJson.shortPrefix, true);
+    assert.ok(!prefixRaw.includes(fakeToken));
+    assert.ok(!prefixRaw.includes('earlier prefix prompt before secret'));
+    assert.ok(!prefixRaw.includes('earlier prefix reply before secret'));
+    assert.ok(!prefixRaw.includes('middle prefix event before secret turn'));
+    assert.ok(prefixRaw.includes('clean suffix prefix prompt'));
+    assert.ok(prefixRaw.includes('clean suffix prefix reply'));
+
+    for (const relPath of Object.keys(manifest.files)) {
+      const raw = fs.readFileSync(path.join(outDir, relPath), 'utf8');
+      assert.ok(!raw.includes(fakeToken));
+    }
+  } finally {
+    fs.rmSync(tmpBase, { recursive: true, force: true });
+  }
+});

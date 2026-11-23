@@ -316,22 +316,83 @@ function estimateTurnTokens(entry) {
   return Math.ceil(JSON.stringify(content).length / 4);
 }
 
+function findForbiddenStartIndices(session, limit) {
+  const toolUseIndexById = new Map();
+  const pairSpanDelta = new Int32Array(limit + 1);
+  const forbidden = new Set();
+
+  for (let i = 0; i < limit; i++) {
+    const content = session[i]?.message?.content;
+    if (!Array.isArray(content)) continue;
+    for (const block of content) {
+      if (block?.type === 'tool_use' && block.id) {
+        if (!toolUseIndexById.has(block.id)) {
+          toolUseIndexById.set(block.id, i);
+        }
+      } else if (block?.type === 'tool_result') {
+        forbidden.add(i);
+        const useIdx = block.tool_use_id ? toolUseIndexById.get(block.tool_use_id) : undefined;
+        if (useIdx !== undefined && useIdx < i) {
+          pairSpanDelta[useIdx + 1] += 1;
+          pairSpanDelta[i + 1] -= 1;
+        }
+      }
+    }
+  }
+
+  let active = 0;
+  for (let i = 0; i < limit; i++) {
+    active += pairSpanDelta[i];
+    if (active > 0) forbidden.add(i);
+  }
+
+  return forbidden;
+}
+
 /**
  * Extract a prefill prefix from turns before `firstSelectedIndex`,
- * starting from an event boundary, picking the safe boundary whose
- * estimated tokens are closest to `level` (ties broken by smaller),
- * and never splitting a tool_use / tool_result pair.
+ * starting from an event boundary after the last Level-1 secret hit,
+ * picking the safe boundary whose estimated tokens are closest to `level`
+ * (ties broken by smaller), and never splitting a tool_use / tool_result pair.
  */
 function buildPrefillPrefix(session, firstSelectedIndex, level, incomingIndices = [], options = {}) {
   const limit = Math.max(0, Math.min(firstSelectedIndex, session.length));
-  const boundaries = incomingIndices.filter((idx) => idx >= 0 && idx < limit);
-  const startIndex = boundaries.length > 0 ? boundaries[0] : 0;
+  const boundaries = [...new Set(incomingIndices.filter((idx) => idx >= 0 && idx < limit))].sort(
+    (a, b) => a - b
+  );
+  const baseStart = boundaries.length > 0 ? boundaries[0] : 0;
+
+  let lastHitIndex = -1;
+  for (let i = limit - 1; i >= baseStart; i--) {
+    const turnScan = scanCandidateItem(session[i], options);
+    if (!turnScan.passed) {
+      lastHitIndex = i;
+      break;
+    }
+  }
+
+  const forbiddenStartIndices = findForbiddenStartIndices(session, limit);
+  const minStart = lastHitIndex >= 0 ? lastHitIndex + 1 : baseStart;
+
+  let startIndex = limit;
+  if (boundaries.length > 0) {
+    const found = boundaries.find((idx) => idx >= minStart && !forbiddenStartIndices.has(idx));
+    if (found !== undefined) startIndex = found;
+  } else {
+    for (let i = minStart; i < limit; i++) {
+      if (!forbiddenStartIndices.has(i)) {
+        startIndex = i;
+        break;
+      }
+    }
+  }
 
   const pendingToolUseIds = new Set();
   let bestEndIndex = startIndex;
   let bestTokens = 0;
   let bestDiff = Infinity;
   let runningTokens = 0;
+  let reachedLevel = false;
 
   for (let i = startIndex; i < limit; i++) {
     const entry = session[i];
@@ -356,6 +417,7 @@ function buildPrefillPrefix(session, firstSelectedIndex, level, incomingIndices 
         bestTokens = runningTokens;
       }
       if (runningTokens >= level) {
+        reachedLevel = true;
         break;
       }
     }
@@ -363,17 +425,17 @@ function buildPrefillPrefix(session, firstSelectedIndex, level, incomingIndices 
 
   const rawTurns = session.slice(startIndex, bestEndIndex);
   const scanRes = scanCandidateItem({ level, turns: rawTurns }, options);
-  if (!scanRes.passed) {
-    throw new Error(`Prefix for level ${level} failed Level-1 secret scan`);
-  }
+  const turns = scanRes.passed ? scanRes.item.turns : [];
+  const shortPrefix = turns.length === 0 || !reachedLevel;
 
   return {
     level,
     startIndex,
-    endIndex: bestEndIndex,
-    estimatedTokens: bestTokens,
-    turnCount: scanRes.item.turns.length,
-    turns: scanRes.item.turns,
+    endIndex: turns.length === 0 ? startIndex : bestEndIndex,
+    estimatedTokens: turns.length === 0 ? 0 : bestTokens,
+    shortPrefix,
+    turnCount: turns.length,
+    turns,
     scanRes,
   };
 }
@@ -521,6 +583,7 @@ function writeSliceOutput(outDir, session, sampleResult, options = {}) {
       startIndex: prefix.startIndex,
       endIndex: prefix.endIndex,
       estimatedTokens: prefix.estimatedTokens,
+      shortPrefix: prefix.shortPrefix,
       turns: prefix.turns,
     });
     prefixes.push({
@@ -529,6 +592,7 @@ function writeSliceOutput(outDir, session, sampleResult, options = {}) {
       startIndex: prefix.startIndex,
       endIndex: prefix.endIndex,
       estimatedTokens: prefix.estimatedTokens,
+      shortPrefix: prefix.shortPrefix,
       turnCount: prefix.turnCount,
     });
   }

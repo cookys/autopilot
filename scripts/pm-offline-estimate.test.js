@@ -73,6 +73,30 @@ try {
   fs.writeFileSync(file, JSON.stringify({ items: [{ message_id: 'id-one', category: 'patrol', disposition: 'no_action' }, { message_id: 'id-two', category: 'patrol', disposition: 'done', fyi: true }] }));
   const output = execFileSync(process.execPath, [path.join(__dirname, 'pm-offline-estimate.js'), '--sessions-dir', privateDir, '--dispositions', file], { encoding: 'utf8' });
   const result = JSON.parse(output);
-  assert.deepEqual(result.s4.find(x => x.name === 'patrol'), { name: 'patrol', messages: 2, turns: 1, weighted_cost: 10, matched: 2, auto_processable: 2 });
+  assert.deepEqual(result.s4.find(x => x.name === 'patrol'), { name: 'patrol', messages: 2, turns: 1, weighted_cost: 10, matched: 2, auto_processable: 2, auto_weighted_cost: 10 });
   for (const secret of ['SECRET ALPHA', 'SECRET BETA', 'two']) assert(!output.includes(secret));
 } finally { fs.rmSync(privateDir, { recursive: true, force: true }); }
+
+const s4Dir = fs.mkdtempSync(path.join(os.tmpdir(), 'offline-s4-'));
+try {
+  const entries = [
+    { ...user('PRIVATE operator'), timestamp: '2026-01-02T00:00:00Z' }, turn(10),
+    wrap('PRIVATE old', '2025-12-31T00:00:00Z'), turn(20),
+    wrap('PRIVATE other', '2026-01-02T00:00:00Z'), turn(30),
+    { ...user('[inbox batch sample]\n#1 message_id="auto" PRIVATE auto\n#2 message_id="manual" PRIVATE manual'), timestamp: stamp }, turn(40),
+  ];
+  fs.writeFileSync(path.join(s4Dir, 'fixture.jsonl'), entries.map(JSON.stringify).join('\n'));
+  const file = path.join(s4Dir, 'dispositions.json');
+  fs.writeFileSync(file, JSON.stringify({ items: [
+    { message_id: 'auto', category: 'matched', disposition: 'no_action', delivered_at: stamp },
+    { message_id: 'manual', category: 'matched', disposition: 'action', delivered_at: stamp },
+  ] }));
+  const output = execFileSync(process.execPath, [path.join(__dirname, 'pm-offline-estimate.js'), '--sessions-dir', s4Dir, '--dispositions', file], { encoding: 'utf8' });
+  const result = JSON.parse(output);
+  assert.deepEqual(result.s4.find(x => x.name === 'unmatched_operator'), { name: 'unmatched_operator', messages: 1, turns: 1, weighted_cost: 10, matched: 0, auto_processable: 0, auto_weighted_cost: 0, excluded_from_s4: true });
+  assert.equal(result.s4.find(x => x.name === 'unmatched_pre_baseline').weighted_cost, 20);
+  assert.equal(result.s4.find(x => x.name === 'unmatched_other').weighted_cost, 30);
+  assert.equal(result.s4.find(x => x.name === 'matched').auto_weighted_cost, 20);
+  assert.deepEqual(result.s4_summary, { total_weighted_cost: 100, excluded_operator_weighted_cost: 10, s4_base_weighted_cost: 90, auto_weighted_cost: 20, auto_share_of_base: 20 / 90 });
+  assert(!output.includes('PRIVATE'));
+} finally { fs.rmSync(s4Dir, { recursive: true, force: true }); }

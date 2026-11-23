@@ -65,7 +65,7 @@ test('pending r2: 120x30 fallback shows the 21-card range and bounded card-count
   // 已改為雙欄：9 列 fallback 雙欄左欄顯示 2 張卡與雙端張數提示（↓ 下面還有 19 張 / ↑ 上面還有 19 張）
   const h = await host($, on)
   let screen = text(await h.draw())
-  expect(screen).toContain('清單 (21)')
+  expect(screen).toContain('待決清單 (21 張)') // 雙欄左欄 >= 40 欄，用 list_long 標題（PM 退化規則）
   expect(screen).toContain('卡 #01 / 21')
   expect(screen).toContain('▸ 01 scroll-0')
   expect(screen).toContain('  02 scroll-1')

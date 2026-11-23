@@ -866,7 +866,6 @@
   "v74.c.header_noage": "data {source} (schema {schema})",
   "v74.c.help_src": "local help (no data source) · icons and keys",
   "v74.c.header": "data {source} (schema {schema}) · {age}",
-  "v74.c.header_failed": "data {source} (schema {schema}) · read failed",
   "v74.c.src_missing": "now page source missing",
   "v74.e.section": "Dispatch {n}",
   "v74.e.col_line": "line",
@@ -1019,5 +1018,17 @@
   "v74.b.short.decide_compact": "Enter open · {ud} · w · Esc",
   "v74.b.min.decide_compact": "Enter open · w · Esc",
   "v74.b.min.decide": "a/b/c p/n v w Esc",
-  "v74.b.min.decide_c": "p/n a/b/c e m s v w Esc"
+  "v74.b.min.decide_c": "p/n a/b/c e m s v w Esc",
+  "v74.c.header_src_limit": "data {source} (schema {schema} · >{min}m stale)",
+  "v74.c.header_short_limit": "{source} (>{min}m stale)",
+  "v74.c.title_stale": "{age} (>{min}m stale)",
+  "v74.c.title_stale_noage": "stale (>{min}m)",
+  "v74.c.title_failed": "read failed",
+  "v74.c.title_failed_why": "read failed: {reason}",
+  "v74.c.title_nosrc": "no source",
+  "v74.c.title_nosrc_why": "no source: {reason}",
+  "v74.c.title_last_ok": "last {age}",
+  "v74.c.reason_no_live": "no live data",
+  "v74.c.reason_no_runs": "no run data",
+  "v74.c.reason_no_hygiene": "no hygiene data"
 }

@@ -308,7 +308,8 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
   // r11 #9: the border changes colour while the pane holds the keyboard, so focus is not only a hint word
   const held = ctx.v74?.keysHeld === true
   const bc = held ? heldBorder() : {}
-  const titleSegs = fitSegs(v74TitleSegs(page, ctx, (rows[0] ?? [])[0] ?? { text: t('tab.' + page.id) }), Math.max(0, fullCols - 6))
+  const titleMax = Math.max(0, fullCols - 6)
+  const titleSegs = fitSegs(v74TitleSegs(page, ctx, (rows[0] ?? [])[0] ?? { text: t('tab.' + page.id) }, titleMax), titleMax)
   const titleW = titleSegs.reduce((n, x) => n + displayWidth(x.text), 0)
   const top = <Box key="v74-top" height={1} width={fullCols} overflow="hidden"><Text {...bc}>{GLYPHS.structure.frameTL + rule + ' '}</Text>{titleSegs.map((x, j) => <Text key={'tt' + j} {...drawSeg(x)} wrap="truncate">{x.text}</Text>)}<Text {...bc}>{' ' + pad(fullCols - 5 - titleW) + GLYPHS.structure.frameTR}</Text></Box>
   const rawInner = rows.slice(1, rows.length - stripN - 1).map((r, k) => ({ r, idx: k + 1 }))

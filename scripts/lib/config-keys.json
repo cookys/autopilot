@@ -8932,30 +8932,6 @@
       "relates": []
     },
     {
-      "name": "AUTOPILOT_LIVE_V75",
-      "kind": "env",
-      "audience": "internal",
-      "class": "plumbing",
-      "default": null,
-      "readers": [
-        "mods/live/register.ts"
-      ],
-      "doc": null,
-      "relates": []
-    },
-    {
-      "name": "AUTOPILOT_POOL_ETA",
-      "kind": "env",
-      "audience": "internal",
-      "class": "path_seam",
-      "default": null,
-      "readers": [
-        "mods/live/register.ts"
-      ],
-      "doc": null,
-      "relates": []
-    },
-    {
       "name": "AUTOPILOT_BASH_GUARD_BUSY_LOOP_MODE",
       "kind": "env",
       "audience": "internal",

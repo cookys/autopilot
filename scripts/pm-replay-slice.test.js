@@ -2,6 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { spawnSync } = require('node:child_process');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -14,6 +15,7 @@ const {
   buildPrefillPrefix,
   writeSliceOutput,
   parseArgs,
+  loadSessionsFromDirs,
 } = require('./pm-replay-slice.js');
 
 function makeUserEntry(text, timestamp = '2026-11-23T10:00:00Z') {
@@ -340,6 +342,167 @@ test('buildPrefillPrefix and writeSliceOutput: shifts prefix start past Level-1 
       const raw = fs.readFileSync(path.join(outDir, relPath), 'utf8');
       assert.ok(!raw.includes(fakeToken));
     }
+  } finally {
+    fs.rmSync(tmpBase, { recursive: true, force: true });
+  }
+});
+
+test('loadSessionsFromDirs: streams across small chunks with same result as full-file read, skips bad JSON, preserves order, and filters --since at load time', () => {
+  const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-replay-stream-'));
+  try {
+    const file1Entries = [
+      makeUserEntry('old prompt before since', '2026-11-21T23:59:59Z'),
+      makeAssistantEntry('old reply before since', '2026-11-21T23:59:59Z'),
+      makeUserEntry('boundary prompt at since', '2026-11-22T00:00:00Z'),
+    ];
+    const file2Entries = [
+      makeAssistantEntry('boundary reply after since', '2026-11-22T00:00:05Z'),
+      makeUserEntry('later prompt without trailing newline', '2026-11-23T01:02:03Z'),
+    ];
+
+    const file1Content = [
+      JSON.stringify(file1Entries[0]),
+      '{"type":"user", broken json line',
+      '',
+      JSON.stringify(file1Entries[1]),
+      JSON.stringify(file1Entries[2]),
+    ].join('\n') + '\n';
+
+    const file2Content = [
+      JSON.stringify(file2Entries[0]),
+      'not-valid-json-at-all',
+      JSON.stringify(file2Entries[1]),
+    ].join('\n'); // intentionally no trailing newline
+
+    assert.ok(Buffer.byteLength(file1Content, 'utf8') > 64);
+    assert.ok(Buffer.byteLength(file2Content, 'utf8') > 64);
+
+    // Write in reverse filename order to verify sorted loading
+    fs.writeFileSync(path.join(tmpBase, '02-second.jsonl'), file2Content, 'utf8');
+    fs.writeFileSync(path.join(tmpBase, '01-first.jsonl'), file1Content, 'utf8');
+    fs.writeFileSync(path.join(tmpBase, 'ignore.txt'), '{"ignored":true}\n', 'utf8');
+
+    // Reference full-file read
+    const fullReadExpected = [];
+    for (const file of fs.readdirSync(tmpBase).filter((f) => f.endsWith('.jsonl')).sort()) {
+      for (const line of fs.readFileSync(path.join(tmpBase, file), 'utf8').split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          fullReadExpected.push(JSON.parse(trimmed));
+        } catch {
+          // skip malformed line
+        }
+      }
+    }
+
+    const stats = {};
+    const streamed = loadSessionsFromDirs([tmpBase], { chunkSize: 64, stats });
+    assert.ok(Array.isArray(streamed));
+    assert.deepEqual(streamed, fullReadExpected);
+    assert.equal(streamed.length, 5);
+    assert.equal(stats.skippedBadLines, 2);
+    assert.equal(stats.loadedCount, 5);
+
+    // --since drops earlier entries during load while preserving >= since items in order
+    const sinceStats = {};
+    const filtered = loadSessionsFromDirs([tmpBase], {
+      chunkSize: 64,
+      since: '2026-11-22T00:00:00Z',
+      stats: sinceStats,
+    });
+    assert.deepEqual(filtered, [file1Entries[2], file2Entries[0], file2Entries[1]]);
+    assert.equal(sinceStats.skippedBadLines, 2);
+    assert.equal(sinceStats.loadedCount, 3);
+  } finally {
+    fs.rmSync(tmpBase, { recursive: true, force: true });
+  }
+});
+
+test('loadSessionsFromDirs: correctly splices lines longer than chunkSize (64 bytes) including multibyte UTF-8 across chunk boundaries', () => {
+  const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-replay-splice-'));
+  try {
+    // Each JSON line intentionally exceeds 64 bytes (spanning multiple chunks) and puts
+    // multibyte UTF-8 characters across the 64-byte chunk boundary.
+    // Negative control: breaking cross-chunk carry-over (`rest + dec.write(...)`) splits
+    // these >64-byte lines mid-JSON so they fail JSON.parse and this test goes RED.
+    const entry1 = makeUserEntry(
+      `${'x'.repeat(28)}PM 收件匣批次包跨段測試${'y'.repeat(80)}`,
+      '2026-11-23T10:00:00Z'
+    );
+    const entry2 = makeAssistantEntry(
+      `long assistant response spanning multiple 64-byte chunks: ${'z'.repeat(110)}`,
+      '2026-11-23T10:00:05Z'
+    );
+    const entry3 = makeUserEntry(
+      `final long line without trailing newline ${'w'.repeat(90)}`,
+      '2026-11-23T10:01:00Z'
+    );
+    const badLongLine = `{"broken":"${'q'.repeat(80)}`;
+
+    const line1 = JSON.stringify(entry1);
+    const line2 = JSON.stringify(entry2);
+    const line3 = JSON.stringify(entry3);
+    assert.ok(Buffer.byteLength(line1, 'utf8') > 128);
+    assert.ok(Buffer.byteLength(line2, 'utf8') > 128);
+    assert.ok(Buffer.byteLength(line3, 'utf8') > 128);
+    assert.ok(Buffer.byteLength(badLongLine, 'utf8') > 64);
+
+    fs.writeFileSync(
+      path.join(tmpBase, 'long-lines.jsonl'),
+      [line1, badLongLine, line2, line3].join('\n'),
+      'utf8'
+    );
+
+    const stats = {};
+    const loaded = loadSessionsFromDirs([tmpBase], { chunkSize: 64, stats });
+    assert.deepEqual(loaded, [entry1, entry2, entry3]);
+    assert.equal(stats.skippedBadLines, 1);
+    assert.equal(stats.loadedCount, 3);
+  } finally {
+    fs.rmSync(tmpBase, { recursive: true, force: true });
+  }
+});
+
+test('CLI main prints skipped_bad_lines and loaded_items counts to stderr without leaking line content', () => {
+  const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-replay-cli-'));
+  try {
+    const sessionsDir = path.join(tmpBase, 'sessions');
+    const outDir = path.join(tmpBase, 'out');
+    fs.mkdirSync(sessionsDir, { recursive: true });
+
+    const badSentinel = 'SENTINEL_BAD_LINE_CONTENT_DO_NOT_PRINT';
+    const userSentinel = 'SENTINEL_USER_PROMPT_DO_NOT_PRINT';
+    const content = [
+      JSON.stringify(makeUserEntry('old prompt before since', '2026-11-20T00:00:00Z')),
+      `{invalid json ${badSentinel}`,
+      JSON.stringify(makeUserEntry(`operator hello ${userSentinel}`, '2026-11-23T10:00:00Z')),
+      JSON.stringify(makeAssistantEntry('ack reply', '2026-11-23T10:00:01Z')),
+    ].join('\n') + '\n';
+    fs.writeFileSync(path.join(sessionsDir, 'session.jsonl'), content, 'utf8');
+
+    const res = spawnSync(
+      process.execPath,
+      [
+        path.join(__dirname, 'pm-replay-slice.js'),
+        '--sessions-dir', sessionsDir,
+        '--out', outDir,
+        '--quota', 'operator=1',
+        '--levels', '100',
+        '--since', '2026-11-22T00:00:00Z',
+      ],
+      { encoding: 'utf8', timeout: 10000 }
+    );
+
+    assert.equal(res.status, 0, res.stderr);
+    const stderrLines = res.stderr.trim().split('\n');
+    assert.deepEqual(stderrLines, [
+      'skipped_bad_lines: 1',
+      'loaded_items: 2',
+    ]);
+    assert.ok(!res.stderr.includes(badSentinel));
+    assert.ok(!res.stderr.includes(userSentinel));
+    assert.ok(fs.existsSync(path.join(outDir, 'manifest.json')));
   } finally {
     fs.rmSync(tmpBase, { recursive: true, force: true });
   }

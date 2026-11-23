@@ -26,13 +26,15 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
+const digest = value => crypto.createHash('sha256').update(String(value)).digest('hex').slice(0, 16);
 
 const ROOT = process.env.DISTILL_SCAN_ROOT || path.join(os.homedir(), '.claude', 'projects');
 // --real-only keeps only encoded-cwd dirs under the user's real home (skip /tmp eval dirs).
 // Derived from os.homedir() so it works for any user (not a hardcoded username).
 const HOME_TOKEN = os.homedir().replace(/[^a-zA-Z0-9]/g, '-');
 const MAX_LINE_BYTES = 2 * 1024 * 1024;
-const STATE_SCHEMA = 2;
+const STATE_SCHEMA = 3;
 const DEFAULT_STATE = path.join(os.homedir(), '.autopilot', 'distill', 'scan-state.json');
 const args = process.argv.slice(2);
 if (args.includes('--help') || args.includes('-h')) {
@@ -135,7 +137,7 @@ function normCmd(cmd) {
     const sub = (toks[1] || '').replace(/[^a-zA-Z0-9_-].*$/, '');
     if (sub && /^[a-zA-Z]/.test(sub)) shape = head + ' ' + sub;
   }
-  return shape.length > 40 ? shape.slice(0, 40) : shape;
+  return shape.slice(0, 19);
 }
 
 // D5 A10 — split compound shell rituals for n-grams WITHOUT parsing heredoc bodies.
@@ -237,7 +239,7 @@ function scanFile(fp) {
   let raw;
   try { raw = fs.readFileSync(fp, 'utf8'); } catch { return null; }
   const cmd = new Map(), bi = new Map(), tri = new Map(), slash = new Map(), tool = new Map();
-  const samples = []; const seen = new Set();
+  const samples = new Map();
   let cwd = null, friction = 0, parseErr = 0, lines = 0;
   const seq = [];
   for (const line0 of raw.split(/\r?\n/)) {
@@ -253,16 +255,18 @@ function scanFile(fp) {
       if (isGenuineUserText(txt)) {
         const f = frictionHits(txt); friction += f;
         if (f > 0) {
-          const clean = txt.replace(/\s+/g, ' ').trim().slice(0, 160);
-          if (!seen.has(clean)) { seen.add(clean); samples.push(clean); }
+          const bucket = txt.length < 40 ? '<40' : txt.length <= 120 ? '40-120' : '>120';
+          FRICTION.forEach((p, i) => {
+            if (typeof p === 'string' ? txt.includes(p) : p.test(txt)) inc(samples, `${i}:${bucket}`);
+          });
         }
         const m = txt.trim().match(/^\/([a-z][a-z0-9-]{1,30})/i);
-        if (m) inc(slash, '/' + m[1].toLowerCase());
+        if (m) inc(slash, '/' + m[1].toLowerCase().slice(0, 18));
       }
     } else if (t === 'assistant' && rec.message && Array.isArray(rec.message.content)) {
       for (const c of rec.message.content) {
         if (!c || c.type !== 'tool_use') continue;
-        inc(tool, c.name);
+        inc(tool, String(c.name).slice(0, 19));
         if (c.name === 'Bash' && c.input) {
           // D5: emit one shape per compound step (&& / ; / |) so multi-step
           // rituals enter n-grams; heredoc bodies are stripped first.
@@ -283,7 +287,7 @@ function scanFile(fp) {
   for (let i = 0; i + 2 < s.length; i++) inc(tri, s[i] + ' → ' + s[i + 1] + ' → ' + s[i + 2]);
   return {
     cmd: [...cmd], bi: [...bi], tri: [...tri], slash: [...slash], tool: [...tool],
-    samples, cwd: cwd || '(unknown)', friction, cmds: seq.length, lines, parseErr,
+    samples: [...samples], cwd: cwd ? 'project-' + digest(cwd) : '(unknown)', friction, cmds: seq.length, lines, parseErr,
   };
 }
 
@@ -292,7 +296,7 @@ function mergeContribs(contribs) {
   const cmdFreq = new Map(), toolFreq = new Map(), slashFreq = new Map();
   const bigram = new Map(), trigram = new Map();
   const proj = new Map();
-  const frictionSamples = [], frictionSeen = new Set();
+  const frictionSamples = new Map();
   let files = 0, lines = 0, parseErr = 0, frictionTotal = 0, sessions = 0;
   for (const c of contribs) {
     if (!c) continue;
@@ -302,7 +306,7 @@ function mergeContribs(contribs) {
     for (const [k, v] of c.slash) inc(slashFreq, k, v);
     for (const [k, v] of c.bi) inc(bigram, k, v);
     for (const [k, v] of c.tri) inc(trigram, k, v);
-    for (const sm of c.samples) { if (!frictionSeen.has(sm)) { frictionSeen.add(sm); frictionSamples.push(sm); } }
+    for (const [key, count] of c.samples) inc(frictionSamples, key, count);
     const p = proj.get(c.cwd) || { sessions: 0, cmds: 0, friction: 0 };
     p.sessions += 1; p.cmds += c.cmds || 0; p.friction += c.friction || 0; proj.set(c.cwd, p);
   }
@@ -351,7 +355,7 @@ let rescanned = 0, reused = 0;
 for (const fp of paths) {
   let stat; try { stat = fs.statSync(fp); } catch { continue; }
   const sig = { size: stat.size, mtime: stat.mtimeMs };
-  const cached = INCREMENTAL ? prevState.files[fp] : null;
+  const cached = INCREMENTAL ? prevState.files[digest(fp)] : null;
   let contrib;
   if (cached && cached.size === sig.size && cached.mtime === sig.mtime && cached.atoms) {
     contrib = cached.atoms; reused++;
@@ -360,7 +364,7 @@ for (const fp of paths) {
   }
   if (!contrib) continue;
   contribs.push(contrib);
-  newState.files[fp] = { size: sig.size, mtime: sig.mtime, atoms: contrib };
+  newState.files[digest(fp)] = { size: sig.size, mtime: sig.mtime, atoms: contrib };
   if (NEW_ONLY && cached && cached.atoms) prevContribs.push(cached.atoms);
 }
 
@@ -376,7 +380,10 @@ let atoms = {
   scanned: merged.scanned,
   friction_total: merged.frictionTotal,
   top_commands: top([...merged.cmdFreq].reduce((m, [k, v]) => (isNoise(k) ? m : m.set(k, v)), new Map()), TOP),
-  friction_samples: merged.frictionSamples,
+  friction_samples: [...merged.frictionSamples].map(([key, count]) => {
+    const [matched_phrase_class, length_bucket] = key.split(':');
+    return { category: 'friction', matched_phrase_class: Number(matched_phrase_class), length_bucket, count };
+  }),
   top_bigrams: minCount(top(merged.bigram, TOP * 2), 3).slice(0, TOP),
   top_trigrams: minCount(top(merged.trigram, TOP * 2), 3).slice(0, TOP),
   top_slash: top(merged.slashFreq, 15),
@@ -389,20 +396,20 @@ let newSummary = null;
 if (NEW_ONLY) {
   const prev = mergeContribs(prevContribs);
   const rose = (curMap, prevMap) => (rows) => rows.filter(([k, c]) => c > (prevMap.get(k) || 0));
-  const prevSamples = new Set(prev.frictionSamples);
+  const prevSamples = prev.frictionSamples;
   atoms = {
     ...atoms,
     top_commands: rose(merged.cmdFreq, prev.cmdFreq)(atoms.top_commands),
     top_bigrams: rose(merged.bigram, prev.bigram)(atoms.top_bigrams),
     top_trigrams: rose(merged.trigram, prev.trigram)(atoms.top_trigrams),
     top_slash: rose(merged.slashFreq, prev.slashFreq)(atoms.top_slash),
-    friction_samples: atoms.friction_samples.filter((s) => !prevSamples.has(s)),
+    friction_samples: atoms.friction_samples.filter((s) => s.count > (prevSamples.get(`${s.matched_phrase_class}:${s.length_bucket}`) || 0)),
   };
   newSummary = { rescanned, reused, lastRun: prevState.lastRun || null };
 }
 
 if (AS_JSON) {
-  if (INCREMENTAL) atoms.cursor = { rescanned, reused, state: STATE_PATH, ...(newSummary || {}) };
+  if (INCREMENTAL) atoms.cursor = { rescanned, reused, ...(newSummary || {}) };
   process.stdout.write(JSON.stringify(atoms, null, 2) + '\n');
   process.exit(0);
 }
@@ -415,7 +422,7 @@ console.log('');
 console.log(`## Recurring command sequences (ritual candidates — trigrams, ≥3×)\n${fmt(atoms.top_trigrams) || '  (none ≥3×)'}\n`);
 console.log(`## Command-pair transitions (bigrams, ≥3×)\n${fmt(atoms.top_bigrams) || '  (none)'}\n`);
 console.log(`## Top PROCEDURAL command shapes (navigation/inspection noise removed)\n${fmt(atoms.top_commands) || '  (none)'}\n`);
-console.log(`## Friction-phrase contexts (recurring-correction candidates — sample)\n${atoms.friction_samples.slice(0, 30).map(s => '  • ' + s).join('\n') || '  (none)'}\n`);
+console.log(`## Friction-phrase contexts (recurring-correction candidates — sample)\n${atoms.friction_samples.slice(0, 30).map(s => `  ${s.count}  class ${s.matched_phrase_class} length ${s.length_bucket}`).join('\n') || '  (none)'}\n`);
 console.log(`## Slash-command usage\n${fmt(atoms.top_slash) || '  (none)'}\n`);
 if (!NEW_ONLY) {
   console.log(`## Tool usage\n${fmt(atoms.top_tools)}\n`);

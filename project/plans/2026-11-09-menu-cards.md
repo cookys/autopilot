@@ -1,6 +1,7 @@
 # Plan — lane interactive menus become PM-panel decision cards (menu cards)
 
 > Status: r2 ruled by PM (01M70B8A2J, 7A); P1-P4 shipped, P5 waits for the hub · Live date: P1-P4 shipped (a393b9a5f, 544c6f04f); P5 date is set when F4 hub /v1/decisions/upsert ships, then BL-0437..BL-0442 are scheduled by that date and judged by their own tests · Fleet task: 01M7091076 · Owner: autopilot lane · Branch: docs/menucard · Frame: PM dispatch 01M708ZGN4, fleet 01M7091076 / 01M7095F5H
+> 被取代：本計畫已歸檔，由pane v7.4 加上 C 雙欄取代（PM 裁定 01M832A87M，2026-11-23）；不再待裁，內文只留作歷史。
 > 稽核（2026-11-21，PM 01M7XQRV）：仍要做。路由已併（a393b9a5f、544c6f04f）；P5 等 F4 hub 與 /v1/decisions/upsert 上線，由 BL-0437..BL-0442 追；板頭「PM ruling pending」已過時（PM 裁 7A）。證據：a393b9a5f；544c6f04f。
 
 ## 0. Context / thesis

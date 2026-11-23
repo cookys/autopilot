@@ -28,7 +28,7 @@ try {
   assert.equal(JSON.parse(output).autocompact[0].actual_cost, 10);
 } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 
-assert.deepEqual(failures([[turn(10), { type: 'system', subtype: 'stop_hook', decision: 'block' }, turn(5)]]), [{ category: 'hook_block', failures: 1, retry_turns: 1, weighted_cost: 5 }]);
+assert.deepEqual(failures([[turn(10), { type: 'system', subtype: 'stop_hook', decision: 'block' }, turn(5)]]), [{ category: 'hook_block', failures: 1, retry_turns: 1, weighted_cost: 5, by_hook: [{ hook: 'unknown', event: 'Stop', failures: 1, retry_turns: 1, weighted_cost: 5 }] }]);
 
 assert.ok(Math.abs(autocompact([[turn(167001)]], 200000, 10000, 40000).simulated_cost - 216700.1) < 1e-6, 'summary read+output, 1h rewrite of prefix+summary, then the turn on the rebuilt 50k context');
 
@@ -145,3 +145,67 @@ try {
   assert.deepEqual(result.unmatched_other_breakdown, Object.fromEntries(['task_notification', 'system_reminder', 'hook_feedback', 'channel_other', 'rest'].map((name, i) => [name, { messages: 1, weighted_cost: i + 1 }])));
   assert(!output.includes('PRIVATE'));
 } finally { fs.rmSync(breakdownDir, { recursive: true, force: true }); }
+
+// v6: S2 hook_block breakdown by hook name and event type
+const s2Mixed = failures([[
+  turn(10),
+  { type: 'user', message: { content: [{ type: 'tool_result', content: 'PreToolUse:Bash hook error: bash-launch-guard: blocked command' }] } },
+  turn(30),
+  { type: 'system', subtype: 'stop_hook', decision: 'block', hookName: 'context-land-gate' },
+  turn(50),
+  { type: 'user', message: { content: [{ type: 'tool_result', content: 'blocked by hook without identifier' }] } },
+  turn(20),
+]]);
+assert.equal(s2Mixed.length, 1);
+const hb = s2Mixed[0];
+assert.equal(hb.category, 'hook_block');
+assert.equal(hb.failures, 3);
+assert.equal(hb.retry_turns, 3);
+assert.equal(hb.weighted_cost, 100);
+assert.deepEqual(hb.by_hook, [
+  { hook: 'context-land-gate', event: 'Stop', failures: 1, retry_turns: 1, weighted_cost: 50 },
+  { hook: 'bash-launch-guard', event: 'PreToolUse', failures: 1, retry_turns: 1, weighted_cost: 30 },
+  { hook: 'unknown', event: 'other', failures: 1, retry_turns: 1, weighted_cost: 20 },
+]);
+assert.equal(hb.by_hook.reduce((s, x) => s + x.failures, 0), hb.failures);
+assert.equal(hb.by_hook.reduce((s, x) => s + x.retry_turns, 0), hb.retry_turns);
+assert.equal(hb.by_hook.reduce((s, x) => s + x.weighted_cost, 0), hb.weighted_cost);
+
+const s2Extra = failures([[
+  turn(1),
+  { stopHookResult: { decision: 'block' } },
+  turn(4),
+  { type: 'user', message: { content: [{ type: 'tool_result', content: 'PreToolUse:Edit hook error: denied [orchestrator-edit-gate] use subagent' }] } },
+  turn(6),
+]]);
+assert.deepEqual(s2Extra[0].by_hook, [
+  { hook: 'orchestrator-edit-gate', event: 'PreToolUse', failures: 1, retry_turns: 1, weighted_cost: 6 },
+  { hook: 'unknown', event: 'Stop', failures: 1, retry_turns: 1, weighted_cost: 4 },
+]);
+
+const longToken = 'secret-long-payload-that-must-never-leak-into-json-output-over-sixty-four-chars';
+const secretPath = '/Users/operator/private-workspace/secret-dir/credentials.env';
+const secretBody = 'PRIVATE COMMAND PAYLOAD DO NOT EMIT';
+const s2Privacy = failures([[
+  turn(5),
+  { type: 'user', message: { content: [{ type: 'tool_result', content: `PreToolUse:Bash hook error: ${longToken} while reading ${secretPath} ${secretBody}` }] } },
+  turn(10),
+  { type: 'user', message: { content: [{ type: 'tool_result', content: `PreToolUse:Bash hook error: denied access to ${secretPath} ${secretBody}` }] } },
+  turn(12),
+  { type: 'system', subtype: 'stop_hook', decision: 'block', hookName: secretPath },
+  turn(8),
+]]);
+const s2PrivacyJson = JSON.stringify(s2Privacy);
+for (const leaked of [longToken, secretPath, 'private-workspace', 'secret-dir', 'credentials.env', secretBody]) {
+  assert(!s2PrivacyJson.includes(leaked), `must not leak ${leaked}`);
+}
+assert.deepEqual(s2Privacy, [{
+  category: 'hook_block',
+  failures: 3,
+  retry_turns: 3,
+  weighted_cost: 30,
+  by_hook: [
+    { hook: 'unknown', event: 'PreToolUse', failures: 2, retry_turns: 2, weighted_cost: 22 },
+    { hook: 'unknown', event: 'Stop', failures: 1, retry_turns: 1, weighted_cost: 8 },
+  ],
+}]);

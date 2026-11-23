@@ -161,40 +161,104 @@ function batch(sessions, seconds = 300) {
   }
   return { already_batched_items, saved_turns, weighted_cost };
 }
+const HOOK_BLOCK_RE = /(?:^PreToolUse:|hook (?:error|blocked|denied)|\bblocked by hook\b)/i;
+const HOOK_NAME_RE = /^[a-z][a-z0-9-]{0,63}$/;
+const KEBAB_HOOK_RE = /(?<![/\\\w.-])[a-z][a-z0-9]*(?:-[a-z0-9]+)+(?![/\\\w-]|\.\w)/;
+
+function sanitizeHookName(name) {
+  return typeof name === 'string' && HOOK_NAME_RE.test(name) ? name : 'unknown';
+}
+
+function extractHookFromText(text) {
+  if (typeof text !== 'string' || !text) return null;
+  const preHeader = text.match(/^PreToolUse:[^\s]+\s+hook\s+error:\s*/);
+  if (preHeader) {
+    const rest = text.slice(preHeader[0].length);
+    const leading = rest.match(/^(?:\[([a-z][a-z0-9]*(?:-[a-z0-9]+)+)\]|([a-z][a-z0-9]*(?:-[a-z0-9]+)+)(?![/\\\w-]|\.\w))/);
+    if (leading) return leading[1] || leading[2];
+    const bracketed = [...rest.matchAll(/\[([a-z][a-z0-9]*(?:-[a-z0-9]+)+)\]/g)];
+    if (bracketed.length) return bracketed[bracketed.length - 1][1];
+  }
+  const kebab = text.match(KEBAB_HOOK_RE);
+  return kebab ? kebab[0] : null;
+}
+
+function recordHookBlock(byHook, hook, event) {
+  const key = `${event}\0${hook}`;
+  if (!byHook.has(key)) byHook.set(key, { hook, event, failures: 0, retry_turns: 0, weighted_cost: 0 });
+  const bucket = byHook.get(key);
+  bucket.failures++;
+  return bucket;
+}
+
 function failures(sessions) {
   const categories = new Map();
+  const byHook = new Map();
   for (const session of sessions) {
-    let lastAssistant = null, failed = null;
+    let lastAssistant = null, failed = null, failedHook = null;
     for (const entry of session) {
       if (entry.type === 'assistant' && entry.message?.usage) {
         if (failed) {
+          const cost = computeWeightedCost(entry.message.usage);
           failed.retry_turns++;
-          failed.weighted_cost += computeWeightedCost(entry.message.usage);
+          failed.weighted_cost += cost;
+          if (failedHook) {
+            failedHook.retry_turns++;
+            failedHook.weighted_cost += cost;
+            failedHook = null;
+          }
           failed = null;
         }
         lastAssistant = entry;
       } else if (lastAssistant && ((entry.type === 'system' && entry.subtype === 'stop_hook' && entry.decision === 'block') || (entry.hookEvent && entry.decision === 'block') || entry.stopHookResult?.decision === 'block')) {
+        const isStopHook = entry.type === 'system' && entry.subtype === 'stop_hook' && entry.decision === 'block';
+        const isStopHookResult = entry.stopHookResult?.decision === 'block';
+        const event = (isStopHook || isStopHookResult || entry.hookEvent === 'Stop')
+          ? 'Stop'
+          : entry.hookEvent === 'PreToolUse'
+            ? 'PreToolUse'
+            : 'other';
+        const hook = sanitizeHookName(entry.hookName || entry.hook || entry.stopHookResult?.hookName || entry.stopHookResult?.hook);
         const category = 'hook_block';
         if (!categories.has(category)) categories.set(category, { category, failures: 0, retry_turns: 0, weighted_cost: 0 });
         failed = categories.get(category);
         failed.failures++;
+        failedHook = recordHookBlock(byHook, hook, event);
         lastAssistant = null;
       } else if (entry.type === 'user' && lastAssistant) {
         const blocks = Array.isArray(entry.message?.content) ? entry.message.content : [];
         const results = blocks.filter(b => b.type === 'tool_result');
-        const hookBlocked = results.some(b => /(?:^PreToolUse:|hook (?:error|blocked|denied)|\bblocked by hook\b)/i.test(typeof b.content === 'string' ? b.content : ''));
-        if (hookBlocked || results.some(b => b.is_error)) {
-          const category = hookBlocked ? 'hook_block' : 'tool_error';
+        const blockedResult = results.find(b => HOOK_BLOCK_RE.test(typeof b.content === 'string' ? b.content : ''));
+        if (blockedResult || results.some(b => b.is_error)) {
+          const category = blockedResult ? 'hook_block' : 'tool_error';
           if (!categories.has(category)) categories.set(category, { category, failures: 0, retry_turns: 0, weighted_cost: 0 });
           failed = categories.get(category);
           failed.failures++;
+          if (blockedResult) {
+            const text = typeof blockedResult.content === 'string' ? blockedResult.content : '';
+            const event = text.startsWith('PreToolUse:') ? 'PreToolUse' : 'other';
+            const hook = sanitizeHookName(extractHookFromText(text));
+            failedHook = recordHookBlock(byHook, hook, event);
+          } else {
+            failedHook = null;
+          }
           lastAssistant = null;
         } else if (incoming(entry)) {
           failed = null;
+          failedHook = null;
           lastAssistant = null;
         }
       }
     }
+  }
+  const hookBlock = categories.get('hook_block');
+  if (hookBlock) {
+    hookBlock.by_hook = [...byHook.values()].sort((a, b) =>
+      b.weighted_cost - a.weighted_cost
+      || b.failures - a.failures
+      || a.hook.localeCompare(b.hook)
+      || a.event.localeCompare(b.event)
+    );
   }
   return [...categories.values()];
 }

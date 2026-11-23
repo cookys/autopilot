@@ -277,28 +277,218 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
   return [head, ...gap, ...shown, ...actRows, ...foot].map(r => clip(r, ctx.size.cols))
 }
 
-// v7.4 top border title: the page name, then the dim data source, its schema and the feed age (design S1-S10)
-const V74_SOURCES: Record<string, [string, string]> = {
+// v7.4 top border title: clean design title (page name, source, schema, optional age) with NO warnings in the border (design S1-S10).
+// Stale (>5m), failure/no-source reasons, last-success age, and console source warnings live inside the page on the first body row (v74BodyStatusRow).
+export const V74_STALE_MS = 5 * 60_000
+const V74_STALE_MIN = 5
+const V74_IGNORED_CONSOLE_SOURCES = new Set(['slots', 'metrics', 'answer_log', 'changes'])
+
+export const V74_SOURCES: Record<string, [string, string]> = {
   now: ['fleet pm status --json', 'fleet.pm.status v1'],
   decide: ['fleet decisions list --json', 'fleet.decisions v1'],
   dispatch: ['autopilot status runs --json', 'autopilot.runs v1'],
   review: ['autopilot status review --json', 'autopilot.review v1'],
   spend: ['codeforge usage summary --json', 'usage.summary v1'],
-  quota: ['codeforge usage summary --json', 'usage.summary v1'],
+  quota: ['fleet console --json', 'fleet.console v1'],
   hygiene: ['autopilot hygiene --json', 'autopilot.hygiene v1'],
   fleet: ['fleet tasks --tree --json', 'fleet.tasks v1'],
   todo: ['fleet todo --json', 'fleet.todo v1'],
 }
-export function v74TitleSegs(page: Page, ctx: PageCtx, name: Seg): Seg[] {
-  const { t, nowMs } = ctx
-  const src = V74_SOURCES[page.id]
-  if (src === undefined) return [name, { text: ' · ' + t('v74.c.help_src'), dim: true }]
+
+type TitleFailure = { kind: 'failed' | 'nosrc'; reason: string | null }
+
+function v74ConsoleSevere(ctx: PageCtx): Seg | null {
+  if (ctx.console === null || ctx.console === undefined || ctx.console.sources === undefined || ctx.console.sources === null) return null
+  const liveKeys = Object.keys(ctx.console.sources).filter(k => !V74_IGNORED_CONSOLE_SOURCES.has(k))
+  return liveKeys.length === 0 ? null : mostSevere(ctx, liveKeys)
+}
+
+function v74PageFailure(page: Page, ctx: PageCtx): TitleFailure | null {
+  const errOf = (k: string): string | null => {
+    const v = ctx.v74?.errors?.[k]
+    return typeof v === 'string' && v.trim() !== '' ? v.trim() : null
+  }
+  const liveWhy = (): string | null => {
+    const h = ctx.live?.header?.trim() ?? ''
+    return h !== '' ? h : (ctx.live?.state ?? null)
+  }
+  switch (page.id) {
+    case 'now': {
+      const err = errOf('now') ?? (ctx.v74?.pmError?.trim() || null)
+      if (err !== null) return { kind: 'failed', reason: err }
+      if (ctx.v74 !== undefined && ctx.v74.pm === null) return { kind: 'failed', reason: null }
+      return null
+    }
+    case 'decide': {
+      const err = errOf('decide') ?? (ctx.v74?.decideError?.trim() || null)
+      if (err !== null) return { kind: 'failed', reason: err }
+      if (ctx.v74 !== undefined && ctx.v74.decide === null) return { kind: 'failed', reason: null }
+      return null
+    }
+    case 'todo': {
+      const err = errOf('todo')
+      if (err !== null) return { kind: 'failed', reason: err }
+      if (ctx.v74 !== undefined && ctx.v74.todo === null) return { kind: 'failed', reason: null }
+      return null
+    }
+    case 'spend':
+    case 'quota': {
+      const err = errOf(page.id)
+      if (err !== null) return { kind: 'failed', reason: err }
+      if (ctx.console === null) return { kind: 'failed', reason: null }
+      return null
+    }
+    case 'dispatch': {
+      const err = errOf('dispatch')
+      if (err !== null) return { kind: 'failed', reason: err }
+      if (ctx.live === null) return { kind: 'nosrc', reason: ctx.t('v74.c.reason_no_live') }
+      if (ctx.live.state !== 'ok' && ctx.live.state !== 'stale') return { kind: 'nosrc', reason: liveWhy() }
+      if (ctx.live.rows === null) return { kind: 'nosrc', reason: ctx.t('v74.c.reason_no_runs') }
+      return null
+    }
+    case 'review': {
+      const err = errOf('review')
+      if (err !== null) return { kind: 'failed', reason: err }
+      if (ctx.live === null) return { kind: 'nosrc', reason: ctx.t('v74.c.reason_no_live') }
+      if (ctx.live.state !== 'ok' && ctx.live.state !== 'stale') return { kind: 'nosrc', reason: liveWhy() }
+      return null
+    }
+    case 'hygiene': {
+      const err = errOf('hygiene')
+      if (err !== null) return { kind: 'failed', reason: err }
+      if (ctx.live === null) return { kind: 'nosrc', reason: ctx.t('v74.c.reason_no_live') }
+      if (ctx.live.state !== 'ok' && ctx.live.state !== 'stale') return { kind: 'nosrc', reason: liveWhy() }
+      if (ctx.live.detail?.residue === null && ctx.live.detail?.load_source === null) return { kind: 'nosrc', reason: ctx.t('v74.c.reason_no_hygiene') }
+      return null
+    }
+    case 'fleet': {
+      const err = errOf('fleet') ?? (ctx.v74?.fleetError?.trim() || null)
+      if (err !== null) return { kind: 'failed', reason: err }
+      if (ctx.live === null) return { kind: 'nosrc', reason: ctx.t('v74.c.reason_no_live') }
+      if (ctx.live.state !== 'ok' && ctx.live.state !== 'stale') return { kind: 'nosrc', reason: liveWhy() }
+      if (ctx.live.rows === null) return { kind: 'nosrc', reason: ctx.t('v74.c.reason_no_runs') }
+      if (ctx.v74 !== undefined && ctx.v74.decide === null) return { kind: 'failed', reason: errOf('decide') ?? (ctx.v74.decideError?.trim() || null) }
+      return null
+    }
+    default:
+      return null
+  }
+}
+
+const segsWidth = (segs: readonly Seg[]): number => segs.reduce((n, s) => n + displayWidth(s.text), 0)
+
+function v74PageAgeMs(page: Page, ctx: PageCtx): number | null {
   const published = ctx.live?.published_at
-  // r10b #5: every page's title ends in the data age; spend and quota read the console snapshot's own time, and a source that failed says so instead of staying silent
+  const publishedMs = typeof published === 'string' && Number.isFinite(Date.parse(published)) ? Date.parse(published) : null
   const consoleAt = ctx.console !== null && ctx.console !== undefined && ctx.console.generated_at_ms > 0 ? ctx.console.generated_at_ms : null
-  const fetched = ctx.v74?.ages?.[page.id] ?? (page.id === 'dispatch' || page.id === 'review' || page.id === 'hygiene' ? (typeof published === 'string' && Number.isFinite(Date.parse(published)) ? Date.parse(published) : null) : page.id === 'spend' || page.id === 'quota' ? consoleAt : null)
-  const failed = (page.id === 'todo' && ctx.v74 !== undefined && ctx.v74.todo === null) || (page.id === 'decide' && ctx.v74 !== undefined && ctx.v74.decide === null) || ((page.id === 'spend' || page.id === 'quota') && ctx.console === null)
-  if (failed) return [name, { text: ' · ' + t('v74.c.header_failed', { source: src[0], schema: src[1] }), dim: true }]
-  const info = fetched === null || fetched === undefined ? t('v74.c.header_noage', { source: src[0], schema: src[1] }) : t('v74.c.header', { source: src[0], schema: src[1], age: ageUnit(t, Math.max(0, nowMs - fetched)) })
-  return [name, { text: ' · ' + info, dim: true }]
+  const fetched = ctx.v74?.ages?.[page.id]
+    ?? (page.id === 'now' ? ctx.v74?.pmFetchedMs ?? null
+      : page.id === 'decide' ? ctx.v74?.decideFetchedMs ?? null
+      : page.id === 'dispatch' || page.id === 'review' || page.id === 'hygiene' ? publishedMs
+      : page.id === 'spend' || page.id === 'quota' ? consoleAt
+      : page.id === 'fleet' ? publishedMs
+      : null)
+  return fetched === null || fetched === undefined ? null : Math.max(0, ctx.nowMs - fetched)
+}
+
+export function v74TitleSegs(page: Page, ctx: PageCtx, name: Seg, maxCols?: number): Seg[] {
+  const { t } = ctx
+  const src = V74_SOURCES[page.id]
+  if (src === undefined) {
+    const out: Seg[] = [name, { text: ' · ' + t('v74.c.help_src'), dim: true }]
+    return maxCols === undefined ? out : maxCols <= 0 ? [] : clip(out, maxCols)
+  }
+  const ageMs = v74PageAgeMs(page, ctx)
+  const failure = v74PageFailure(page, ctx)
+  const failed = failure?.kind === 'failed'
+  const fullSrc: Seg = {
+    text: ' · ' + (failed
+      ? t('v74.c.header_failed', { source: src[0], schema: src[1] })
+      : ageMs !== null
+        ? t('v74.c.header', { source: src[0], schema: src[1], age: ageUnit(t, ageMs) })
+        : t('v74.c.header_noage', { source: src[0], schema: src[1] })),
+    dim: true,
+  }
+  if (maxCols === undefined) return [name, fullSrc]
+  if (maxCols <= 0) return []
+  if (segsWidth([name, fullSrc]) <= maxCols) return [name, fullSrc]
+
+  const tailSeg: Seg | null = failed
+    ? { text: ' · ' + t('v74.c.title_failed'), dim: true }
+    : ageMs === null
+      ? null
+      : { text: ' · ' + ageUnit(t, ageMs), dim: true }
+  const shortSrc: Seg = { text: ' · ' + src[0], dim: true }
+  const compact: Seg[] = tailSeg === null ? [name, shortSrc] : [name, shortSrc, tailSeg]
+  if (segsWidth(compact) <= maxCols) return compact
+
+  const tailW = tailSeg === null ? 0 : displayWidth(tailSeg.text)
+  const remForSrc = maxCols - displayWidth(name.text) - tailW
+  if (remForSrc >= 6) {
+    const mid: Seg = { text: ' · ' + truncateToWidth(src[0], remForSrc - 3), dim: true }
+    return tailSeg === null ? [name, mid] : [name, mid, tailSeg]
+  }
+  return clip(tailSeg === null ? [name] : [name, tailSeg], maxCols)
+}
+
+// First body row inside the v7.4 box when a source is stale (>5m or live.state=stale), failed/missing, or has a console source warning.
+// Returns null when the page's data is healthy and fresh so normal pages keep their exact layout and never put warnings in the border.
+export function v74BodyStatusRow(page: Page, ctx: PageCtx, maxCols?: number): Row | null {
+  const { t } = ctx
+  if (V74_SOURCES[page.id] === undefined) return null
+  const ageMs = v74PageAgeMs(page, ctx)
+  const failure = v74PageFailure(page, ctx)
+  const liveBacked = page.id === 'dispatch' || page.id === 'review' || page.id === 'hygiene' || page.id === 'fleet'
+  const liveStale = liveBacked && ctx.live?.state === 'stale'
+  const isStale = (ageMs !== null && ageMs > V74_STALE_MS) || liveStale
+  const severe = v74ConsoleSevere(ctx)
+  if (failure === null && !isStale && severe === null) return null
+
+  const tailSegs: Seg[] = []
+  if (failure !== null) {
+    const failBody = failure.kind === 'failed'
+      ? (failure.reason === null ? t('v74.c.title_failed') : t('v74.c.title_failed_why', { reason: failure.reason }))
+      : GLYPHS.state.failed + ' ' + (failure.reason === null ? t('v74.c.title_nosrc') : t('v74.c.title_nosrc_why', { reason: failure.reason }))
+    tailSegs.push({ text: failBody, color: PALETTE.broken })
+    if (isStale) {
+      const staleText = ageMs !== null
+        ? t('v74.c.title_stale', { age: ageUnit(t, ageMs), min: V74_STALE_MIN })
+        : t('v74.c.title_stale_noage', { min: V74_STALE_MIN })
+      tailSegs.push({ text: ' · ', dim: true })
+      tailSegs.push({ text: GLYPHS.state.stale + ' ' + staleText, color: PALETTE.attention })
+    } else if (ageMs !== null) {
+      tailSegs.push({ text: ' · ' + t('v74.c.title_last_ok', { age: ageUnit(t, ageMs) }), dim: true })
+    }
+  } else if (isStale) {
+    const staleText = ageMs !== null
+      ? t('v74.c.title_stale', { age: ageUnit(t, ageMs), min: V74_STALE_MIN })
+      : t('v74.c.title_stale_noage', { min: V74_STALE_MIN })
+    tailSegs.push({ text: GLYPHS.state.stale + ' ' + staleText, color: PALETTE.attention })
+  }
+
+  const all: Seg[] = severe === null
+    ? tailSegs
+    : tailSegs.length === 0
+      ? [severe]
+      : [...tailSegs, { text: ' · ', dim: true }, severe]
+
+  if (maxCols === undefined) return all
+  if (maxCols <= 0) return []
+  if (segsWidth(all) <= maxCols) return all
+
+  const tailW = segsWidth(tailSegs)
+  if (severe !== null && tailSegs.length > 0 && tailW <= maxCols) {
+    const remSev = maxCols - tailW - 3
+    if (remSev >= 4) return [...tailSegs, { text: ' · ', dim: true }, { ...severe, text: truncateToWidth(severe.text, remSev) }]
+    return tailSegs
+  }
+  if (tailSegs.length >= 2) {
+    const suffix = tailSegs.slice(1)
+    const suffixW = segsWidth(suffix)
+    const remFail = maxCols - suffixW
+    if (remFail >= 6) {
+      return [{ ...tailSegs[0], text: truncateToWidth(tailSegs[0].text, remFail) }, ...suffix]
+    }
+  }
+  return clip(all, maxCols)
 }

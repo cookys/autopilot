@@ -7,7 +7,7 @@ import { routeKey } from './keys'
 import { renderHelp } from './help'
 import { makeT } from '../i18n'
 import type { DecideCard, V74Ctx } from '../v74/contract'
-import { v74TitleSegs, frameHintText } from './frame'
+import { v74TitleSegs, v74BodyStatusRow, frameHintText } from './frame'
 import { PAGES } from './index'
 import type { Row } from './rows'
 import { renderReview } from './review'
@@ -121,6 +121,41 @@ test('r10b #5: a source that failed writes 「· 讀取失敗」 in the title (n
   expect(titleOf('spend', {}, null)).toMatch(/· 讀取失敗$/)
   expect(titleOf('decide', { v74: v74({ decide: null }) })).toMatch(/· 讀取失敗$/)
   expect(titleOf('spend')).not.toContain('讀取失敗')
+})
+const statusOf = (id: string, over: Record<string, unknown> = {}, console: unknown = { generated_at_ms: 1794200000000 - 42_000 }): string | null => {
+  const page = PAGES.find(p => p.id === id)!
+  const c = { ...(ctxOf({ ages: { todo: 1794200000000 - 9_000 } }) as object), console, ...over } as never
+  const row = v74BodyStatusRow(page, c)
+  return row === null ? null : text(row)
+}
+test('r10b #5: simultaneous read failure and staleness (>5m) writes 「· 讀取失敗」 in the title and keeps 「>5 分過舊」 in the body', () => {
+  const staleAt = 1794200000000 - 8 * 60_000
+  const spendTitle = titleOf('spend', { v74: v74({ errors: { spend: 'usage cli exit 1' } }) }, { generated_at_ms: staleAt })
+  expect(spendTitle).toMatch(/· 讀取失敗$/)
+  expect(spendTitle).not.toContain('過舊')
+  expect(spendTitle).not.toContain('>5')
+  const spendBody = statusOf('spend', { v74: v74({ errors: { spend: 'usage cli exit 1' } }) }, { generated_at_ms: staleAt })
+  expect(spendBody).not.toBeNull()
+  expect(spendBody!).toContain('讀取失敗：usage cli exit 1')
+  expect(spendBody!).toContain('>5 分過舊')
+
+  const nowTitle = titleOf('now', { v74: v74({ pm: null, pmFetchedMs: staleAt }) })
+  expect(nowTitle).toMatch(/· 讀取失敗$/)
+  expect(nowTitle).not.toContain('過舊')
+  const nowBody = statusOf('now', { v74: v74({ pm: null, pmFetchedMs: staleAt }) })
+  expect(nowBody).not.toBeNull()
+  expect(nowBody!).toContain('讀取失敗')
+  expect(nowBody!).toContain('>5 分過舊')
+
+  // Negative control: stale (>5m) without read failure keeps age in title and puts >5 分過舊 only in the body
+  const staleOnlyTitle = titleOf('spend', {}, { generated_at_ms: staleAt })
+  expect(staleOnlyTitle).toMatch(/· 8 分$/)
+  expect(staleOnlyTitle).not.toContain('讀取失敗')
+  expect(staleOnlyTitle).not.toContain('過舊')
+  const staleOnlyBody = statusOf('spend', {}, { generated_at_ms: staleAt })
+  expect(staleOnlyBody).not.toBeNull()
+  expect(staleOnlyBody!).toContain('>5 分過舊')
+  expect(staleOnlyBody!).not.toContain('讀取失敗')
 })
 
 // ---- #7 review rows: branch name first, sha only when there is no branch ----

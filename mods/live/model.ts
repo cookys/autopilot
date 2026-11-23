@@ -158,6 +158,8 @@ export type PaneDetail = {
   project: string | null
   marker: MarkerView | null
   qc: QcView | null
+  qc_at?: string | null
+  qc_reason?: string | null
   stage: StageWalkView | null
   decisions: DecisionsView | null
   load_source: LoadSourceView | null
@@ -219,7 +221,15 @@ export const SNAPSHOT_SCHEMA = 'autopilot.runs-live/1'
 export const MODEL_SCHEMA = 'review-job-model/1'
 export const POINTER_SCHEMA = 'autopilot.live-pointer/1'
 export const DEFAULT_VALID_FOR_S = 180
+export const TRACE_STALE_MIN = 5
+export const TRACE_STALE_MS = TRACE_STALE_MIN * 60_000
 export const CONTEXT_MAX_AGE_MS = 120000
+
+export function liveAgeMs(live: Pick<LiveSnapshot, 'published_at'> | null, nowMs: number): number | null {
+  if (live === null || typeof live.published_at !== 'string') return null
+  const ms = Date.parse(live.published_at)
+  return Number.isFinite(ms) ? Math.max(0, nowMs - ms) : null
+}
 export const DEFAULT_REVIEW_PORT = 8787
 export const RUNS_HINT = 'autopilot status runs --watch'
 
@@ -629,7 +639,30 @@ export function readForeman(text: string | null, want: ScopeWant): ForemanView |
 }
 
 export const QC_SCHEMA = 'autopilot.qc-status/1'
-export type QcView = { state: 'ok' | 'owed' | 'not_needed' | 'unknown'; range: string | null; protected_files_count: number; evidence: 'trailer' | 'artifact' | null }
+export type QcView = { state: 'ok' | 'owed' | 'not_needed' | 'unknown'; range: string | null; protected_files_count: number; evidence: 'trailer' | 'artifact' | null; at?: string | null }
+export type QcMissingReason = 'missing' | 'malformed' | 'wrong_schema' | 'wrong_scope' | 'invalid_state'
+
+// Diagnostic reason why readQc returned null (null = valid). Pure: callers may attach it to LiveSnapshot.detail.qc_reason.
+export function readQcReason(text: string | null, want: ScopeWant): QcMissingReason | null {
+  if (text === null) return 'missing'
+  const parsed = parseJson(text)
+  if (!parsed.ok || !isObject(parsed.value)) return 'malformed'
+  const v = parsed.value
+  if (v.schema !== QC_SCHEMA) return 'wrong_schema'
+  if (!scopeMatches(v, { project_key: want.project_key, root_run_id: null })) return 'wrong_scope'
+  if (v.state !== 'ok' && v.state !== 'owed' && v.state !== 'not_needed' && v.state !== 'unknown') return 'invalid_state'
+  return null
+}
+
+// Extract timestamp (at / checked_at / updated_at) from a valid qc fact without altering readQc's external shape.
+export function readQcAt(text: string | null, want: ScopeWant): string | null {
+  if (text === null) return null
+  const parsed = parseJson(text)
+  if (!parsed.ok || !isObject(parsed.value) || parsed.value.schema !== QC_SCHEMA || !scopeMatches(parsed.value, { project_key: want.project_key, root_run_id: null })) return null
+  const v = parsed.value
+  if (v.state !== 'ok' && v.state !== 'owed' && v.state !== 'not_needed' && v.state !== 'unknown') return null
+  return str(v.at) ?? str(v.checked_at) ?? str(v.updated_at)
+}
 
 // <live>/runs/<project_key>.qc.json (stage-graph P7c): the pre-push qc-gate decision for HEAD vs its upstream, re-derived by the watcher
 // (scripts/qc-evidence-status.js). Absent / foreign scope / unknown state = null (nothing to say).
@@ -639,9 +672,11 @@ export function readQc(text: string | null, want: ScopeWant): QcView | null {
   if (!parsed.ok || !isObject(parsed.value) || parsed.value.schema !== QC_SCHEMA || !scopeMatches(parsed.value, { project_key: want.project_key, root_run_id: null })) return null
   const v = parsed.value
   if (v.state !== 'ok' && v.state !== 'owed' && v.state !== 'not_needed' && v.state !== 'unknown') return null
+  const qcAt = str(v.at)
   return {
     state: v.state, range: str(v.range), protected_files_count: isCount(v.protected_files_count) ? v.protected_files_count : 0,
     evidence: v.evidence === 'trailer' || v.evidence === 'artifact' ? v.evidence : null,
+    ...(qcAt === null ? {} : { at: qcAt }),
   }
 }
 
@@ -701,6 +736,7 @@ export type LoadSourceView = {
   behind_upstream: number | null
   flags: string[]
   stale_cache_dirs: { dir: string; in_use_pids: string[]; alive: string[] }[]
+  at?: string | null
 }
 export function readLoadSource(text: string | null): LoadSourceView | null {
   if (text === null) return null
@@ -708,11 +744,13 @@ export function readLoadSource(text: string | null): LoadSourceView | null {
   if (!parsed.ok || !isObject(parsed.value) || parsed.value.schema !== LOAD_SOURCE_SCHEMA) return null
   const v = parsed.value
   const strs = (x: unknown): string[] => (Array.isArray(x) ? x.filter((y): y is string => typeof y === 'string') : [])
+  const lsAt = str(v.at) ?? str(v.updated_at) ?? str(v.written_at)
   return {
     plugin_version: str(v.plugin_version), source: str(v.source) || 'unknown', marketplace: str(v.marketplace) || 'missing', marketplace_path: str(v.marketplace_path),
     behind_upstream: finite(v.behind_upstream) && Number.isInteger(v.behind_upstream) && v.behind_upstream >= 0 ? v.behind_upstream : null,
     flags: strs(v.flags),
     stale_cache_dirs: (Array.isArray(v.stale_cache_dirs) ? v.stale_cache_dirs : []).filter(isObject).map(d => ({ dir: str(d.dir) || '?', in_use_pids: strs(d.in_use_pids), alive: strs(d.alive) })),
+    ...(lsAt === null ? {} : { at: lsAt }),
   }
 }
 

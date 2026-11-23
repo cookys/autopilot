@@ -146,12 +146,12 @@ test('codex-major-2: data 3-states keep exact fixed widths with no emoji; idle s
   assert.equal(idle.remind.clickable, false, 'idle reminder is not clickable')
 })
 
-// Codex Major (3): routing table & bottom hint row
+// Codex Major (3): routing table & bottom hint row (aligned per trace-inventory G01/G02/G15)
 test('codex-major-3: routing table maps every clickable segment to its digit page; decorations/sep non-clickable; bottom hint lists page digits', () => {
   assert.equal(B.bandSlotPage('remind', false), 'decide')
   assert.equal(B.bandSlotPage('remind', true), null)
   assert.equal(B.bandSlotPage('line'), 'dispatch')
-  assert.equal(B.bandSlotPage('source'), 'todo')
+  assert.equal(B.bandSlotPage('source'), 'hygiene')
   assert.equal(B.bandSlotPage('pend'), 'decide')
   assert.equal(B.bandSlotPage('qc'), 'review')
   assert.equal(B.bandSlotPage('tps'), 'spend')
@@ -167,9 +167,9 @@ test('codex-major-3: routing table maps every clickable segment to its digit pag
     assert.equal(seg.page, null, id + ' has no route page')
   }
   const hintWide = B.bandBottomHint(120, false, tZh)
-  for (const k of ['2', '3', '4', '5', '8', 'w']) assert.ok(hintWide.includes(k), 'wide hint includes ' + k)
+  for (const k of ['2', '3', '4', '5', '6', '0', 'w']) assert.ok(hintWide.includes(k), 'wide hint includes ' + k)
   const hintNarrow = B.bandBottomHint(20, false, tZh)
-  for (const k of ['2', '3', '4', '5', '8', 'w']) assert.ok(hintNarrow.includes(k), 'narrow hint still includes ' + k)
+  for (const k of ['2', '3', '4', '5', '6', '0', 'w']) assert.ok(hintNarrow.includes(k), 'narrow hint still includes ' + k)
   assert.ok(W.displayWidth(hintNarrow) <= 20, 'narrow hint fits width')
 })
 
@@ -427,4 +427,37 @@ test('r4-major2: missing and stale decision states never claim 無待決; only n
   }), 195, tEn)
   assert.equal(segText(normalZeroEn.remind).trimEnd(), 'No pending')
   assert.equal(normalZeroEn.remind.clickable, false)
+})
+
+// Traceability s1 (G01 / G02 / G15): line -> 3 (dispatch), source -> 6 (hygiene), prefixes & bottom hints align in zh-TW and en.
+test('trace-s1: G01 line routes to 3 (dispatch), G02 source routes to 6 (hygiene), and bandBottomHint aligns in zh-TW and en', () => {
+  for (const [loc, t] of [['zh-TW', tZh], ['en', tEn]]) {
+    const lineFull = B.formatLineFull({ stalled: 4, running: 120, failed: 2, waiting: 0, state: 'normal' }, t)
+    assert.equal(lineFull.page, 'dispatch', loc + ': full line routes to dispatch')
+    assert.ok(segText(lineFull).startsWith('3 '), loc + ': normal line starts with 3 ')
+    assert.equal(W.displayWidth(segText(lineFull)), B.BAND_COL_WIDTHS.line, loc + ': line width 26')
+
+    const lineStale = B.formatLineFull({ stalled: 4, running: 120, failed: 2, waiting: 0, state: 'stale' }, t)
+    assert.equal(lineStale.page, 'dispatch', loc + ': stale line routes to dispatch')
+    assert.ok(segText(lineStale).startsWith('~3'), loc + ': stale line starts with ~3')
+
+    const lineShort = B.formatLineShort({ stalled: 4, running: 3, failed: 2, waiting: 0, state: 'normal' }, t)
+    assert.equal(lineShort.page, 'dispatch', loc + ': short line routes to dispatch')
+    assert.ok(segText(lineShort).startsWith('3 '), loc + ': short line starts with 3 ')
+
+    const srcNorm = B.formatSource({ label: '開發', flags: 120, state: 'normal' }, t)
+    assert.equal(srcNorm.page, 'hygiene', loc + ': source routes to hygiene')
+    assert.ok(segText(srcNorm).startsWith('6 '), loc + ': normal source starts with 6 ')
+    assert.equal(W.displayWidth(segText(srcNorm)), B.BAND_COL_WIDTHS.source, loc + ': source width 16')
+
+    const srcStale = B.formatSource({ label: '開發', flags: 120, state: 'stale' }, t)
+    assert.equal(srcStale.page, 'hygiene', loc + ': stale source routes to hygiene')
+    assert.ok(segText(srcStale).startsWith('~6'), loc + ': stale source starts with ~6')
+  }
+  const zhWide = B.bandBottomHint(120, false, tZh)
+  assert.ok(zhWide.includes('3 派工') && zhWide.includes('6 殘留') && zhWide.includes('0 寵物'), 'zh-TW wide hint: ' + zhWide)
+  assert.equal(zhWide.includes('8 待辦'), false, 'zh-TW hint drops unwired 8 route: ' + zhWide)
+  const enWide = B.bandBottomHint(120, false, tEn)
+  assert.ok(enWide.includes('3 Dispatch') && enWide.includes('6 Hygiene') && enWide.includes('0 Pet'), 'en wide hint: ' + enWide)
+  assert.equal(enWide.includes('8 Todo'), false, 'en hint drops unwired 8 route: ' + enWide)
 })

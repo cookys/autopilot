@@ -2,14 +2,15 @@
 // Pure: PageCtx in, body and action rows out; frameRows draws the header, padding, empty-action fallback, overflow hint, and bottom tab strip.
 // Missing or stale live sources render in PALETTE.broken with the full wrapped reason (never cut with an ellipsis). Every key hint has a matching Button.
 import type { LivePaneRow, Seg } from '../model'
-import { runAgedOut, runEndedMs, runSubject, truncateToWidth } from '../model'
+import { TRACE_STALE_MIN, TRACE_STALE_MS, runAgedOut, runEndedMs, runSubject, truncateToWidth } from '../model'
 import { GLYPHS } from '../../tux/glyphs.ts'
 import { PALETTE } from '../../tux/palette.ts'
 import { displayWidth } from '../../tux/width.ts'
 import { STATES, stateOf, wrapPlain } from '../ui'
 import type { StateId } from '../ui'
+import { fleetLines } from '../v74/contract'
 import type { Page, PageCtx } from './frame'
-import { brokenRow, staleBadge } from './rows'
+import { brokenRow, consoleFleetCounts, isBriefStale, staleBadge } from './rows'
 import type { Row } from './rows'
 
 type T = PageCtx['t']
@@ -115,19 +116,123 @@ function drawRunRow(item: ClassifiedRun, wWork: number, stale: boolean, cols: nu
   ], cols)
 }
 
+function fleetLineSummaryRows(ctx: PageCtx): Row[] {
+  const { t, v74, console: con, size } = ctx
+  if (v74 === undefined) return []
+  const cols = size.cols
+  const nowMs = ctx.nowMs > 0 ? ctx.nowMs : (ctx.live?.detail.now_ms ?? 0)
+  const pm = v74.pm
+  const pmErr = (v74.pmError ?? v74.errors?.now ?? '').trim()
+  const fleetSum = v74.fleetSummary ?? null
+  const fleetErr = (v74.fleetError ?? v74.errors?.fleet ?? fleetSum?.error ?? '').trim()
+  const thr = t('trace.dispatch_lines_thr', { limit: TRACE_STALE_MIN })
+
+  const countRow = (stalled: number | null, running: number | null, failed: number | null, waiting: number | null, total: number | null): Row => {
+    const fmt = (n: number | null): string => (n === null ? GLYPHS.structure.empty : String(n))
+    const segs: Seg[] = [
+      { text: '  ' },
+      { text: GLYPHS.state.stalled + fmt(stalled), ...(stalled !== null && stalled > 0 ? { color: PALETTE.broken } : stalled === null ? { dim: true } : {}) },
+      { text: '  ' },
+      { text: GLYPHS.state.running + fmt(running), ...(running === null ? { dim: true } : {}) },
+      { text: '  ' },
+      { text: GLYPHS.state.failed + fmt(failed), ...(failed !== null && failed > 0 ? { color: PALETTE.broken } : failed === null ? { dim: true } : {}) },
+      { text: '  ' },
+      { text: GLYPHS.state.waiting + fmt(waiting), ...(waiting === null ? { dim: true } : {}) },
+      ...(total === null ? [] : [{ text: '  · ' + t('trace.dispatch_lines_total', { n: total }), dim: true }]),
+    ]
+    return truncateSegs(segs, cols)
+  }
+
+  const out: Row[] = []
+  if (pm !== null) {
+    const lines = fleetLines(pm)
+    let stalled = 0
+    let running = 0
+    let failed = 0
+    let waiting = 0
+    for (const l of lines) {
+      if (l.mark === 'parked') stalled++
+      else if (l.mark === 'fail') failed++
+      else if (l.mark === 'unknown') waiting++
+      else running++
+    }
+    const pmAt = pm.generated_at_ms > 0 ? pm.generated_at_ms : v74.pmFetchedMs
+    const pmAgeMs = pmAt !== null && nowMs > 0 ? Math.max(0, nowMs - pmAt) : null
+    const fetchAgeMs = v74.pmFetchedMs !== null && nowMs > 0 ? Math.max(0, nowMs - v74.pmFetchedMs) : null
+    const agePart = pmAgeMs === null ? '' : ' · ' + fmtAgo(pmAgeMs, true, t)
+    out.push(sectionRule(t('trace.dispatch_lines_head', { source: 'fleet pm status --json' }) + agePart + ' · ' + thr, cols))
+    out.push(countRow(stalled, running, failed, waiting, pm.projects.length))
+    if ((pmAgeMs !== null && pmAgeMs > TRACE_STALE_MS) || (fetchAgeMs !== null && fetchAgeMs > TRACE_STALE_MS)) {
+      const worstAge = Math.max(pmAgeMs ?? 0, fetchAgeMs ?? 0)
+      out.push(...brokenRows(GLYPHS.state.failed + ' ' + t('trace.now_pm_stale', { age: fmtDur(worstAge, true, t), limit: TRACE_STALE_MIN }), cols))
+    }
+    return out
+  }
+
+  const pmMiss = pmErr !== '' ? t('trace.fleet_pm_error', { error: pmErr }) : t('v74.c.pm_missing')
+  if (con !== null) {
+    const fc = consoleFleetCounts(con, t)
+    const tasksSrc = con.sources.tasks
+    const srcAgeMs = tasksSrc?.at_ms != null && nowMs > 0
+      ? Math.max(0, nowMs - tasksSrc.at_ms)
+      : (con.generated_at_ms > 0 && nowMs > 0 ? Math.max(0, nowMs - con.generated_at_ms) : null)
+    const agePart = srcAgeMs === null ? '' : ' · ' + fmtAgo(srcAgeMs, true, t)
+    out.push(sectionRule(t('trace.dispatch_lines_head', { source: 'fleet console --json' }) + agePart + ' · ' + thr, cols))
+    out.push(countRow(fc.stuck, fc.running, fc.failed, fc.waiting, fc.stuck + fc.running + fc.failed + fc.waiting + fc.normal))
+    out.push(...brokenRows(GLYPHS.state.failed + ' ' + pmMiss, cols))
+    if (tasksSrc?.state === 'no_source') {
+      out.push(...brokenRows(GLYPHS.state.failed + ' ' + t('frame.src_no_source', { name: t('console.command.src.tasks') }), cols))
+    } else {
+      const bs = isBriefStale(con, nowMs)
+      const isStale = tasksSrc?.state === 'stale' || tasksSrc?.state === 'expired' || (srcAgeMs !== null && srcAgeMs > TRACE_STALE_MS) || bs.stale
+      if (isStale) {
+        const stWord = tasksSrc !== undefined && tasksSrc.state !== 'ok' ? tasksSrc.state : bs.expired ? 'expired' : 'stale'
+        const msg = srcAgeMs !== null
+          ? t('trace.now_tasks_stale', { state: stWord, age: fmtDur(srcAgeMs, true, t), limit: TRACE_STALE_MIN })
+          : t('trace.now_tasks_stale_noage', { state: stWord, limit: TRACE_STALE_MIN })
+        out.push(...brokenRows(GLYPHS.state.failed + ' ' + msg, cols))
+      }
+    }
+    return out
+  }
+
+  if (fleetSum !== null && fleetSum.fetchedMs !== null) {
+    const fAgeMs = nowMs > 0 ? Math.max(0, nowMs - fleetSum.fetchedMs) : 0
+    const tot = fleetSum.totals
+    const srcName = t('fleet.source_cmd')
+    out.push(sectionRule(t('trace.dispatch_lines_head', { source: srcName }) + ' · ' + fmtAgo(fAgeMs, true, t) + ' · ' + thr, cols))
+    out.push(countRow(tot.stuck, tot.running, tot.failed, tot.waiting, tot.stuck + tot.running + tot.failed + tot.waiting))
+    out.push(...brokenRows(GLYPHS.state.failed + ' ' + [pmMiss, t('page.now.nosrc_console')].join(t('sep.list')), cols))
+    if (fAgeMs > TRACE_STALE_MS) {
+      out.push(...brokenRows(GLYPHS.state.failed + ' ' + t('trace.hygiene_src_stale', { source: srcName, age: fmtDur(fAgeMs, true, t), limit: TRACE_STALE_MIN }), cols))
+    }
+    return out
+  }
+
+  out.push(sectionRule(t('trace.dispatch_lines_missing', { limit: TRACE_STALE_MIN }), cols))
+  out.push(countRow(null, null, null, null, null))
+  const whyParts = [t('page.now.nosrc_console'), fleetErr !== '' ? t('fleet.error', { error: fleetErr }) : t('fleet.source_cmd') + ' ' + t('fleet.never')]
+  out.push(...brokenRows(GLYPHS.state.failed + ' ' + [pmMiss, t('trace.now_no_fallback', { why: whyParts.join(t('sep.list')) })].join(t('sep.list')), cols))
+  return out
+}
+
 export function dispatchView(ctx: PageCtx, _view: DispatchView = DEFAULT_VIEW): { body: Row[]; actions: Row[] } {
   const { t, size } = ctx
   const cols = size.cols
-  if (ctx.live === null) return { body: brokenRows(GLYPHS.state.failed + ' ' + t('page.dispatch.no_live'), cols), actions: [] }
+  const body: Row[] = fleetLineSummaryRows(ctx)
+  if (ctx.live === null) {
+    body.push(...brokenRows(GLYPHS.state.failed + ' ' + t('page.dispatch.no_live'), cols))
+    return { body, actions: [] }
+  }
 
   const live = ctx.live
   const stale = live.state !== 'ok'
-  const body: Row[] = []
   if (stale) {
     body.push(...brokenRows(GLYPHS.state.failed + ' ' + t('page.dispatch.stale_live', { why: live.header }), cols))
     if (live.rows === null) return { body, actions: [] }
   } else if (live.rows === null) {
-    return { body: brokenRows(GLYPHS.state.failed + ' ' + t('page.dispatch.no_runs'), cols), actions: [] }
+    body.push(...brokenRows(GLYPHS.state.failed + ' ' + t('page.dispatch.no_runs'), cols))
+    return { body, actions: [] }
   }
 
   const nowMs = ctx.nowMs > 0 ? ctx.nowMs : (live.detail.now_ms ?? 0)

@@ -5,7 +5,7 @@
 // A broken or missing source is a red row with the reason (§5): the number stays beside it, never replaced by a dash. Colours go through PALETTE only.
 import type { ConsoleItem, ConsoleSnapshot } from '../console'
 import type { LiveSnapshot, QcView, Seg } from '../model'
-import { displayWidth, isStepCard, truncateToWidth } from '../model'
+import { DEFAULT_VALID_FOR_S, TRACE_STALE_MIN, TRACE_STALE_MS, displayWidth, isStepCard, liveAgeMs, truncateToWidth } from '../model'
 import { GLYPHS } from '../../tux/glyphs.ts'
 import { PALETTE } from '../../tux/palette.ts'
 import { fleetLines, type PmStatus } from '../v74/contract'
@@ -13,7 +13,7 @@ import { ROLE_WARNING, isUnknownPool, normalizedPools, poolKey, poolLabel, rankP
 import type { Verdict } from './quota-pick'
 import { STRIP_SPLIT_COLS } from './layout'
 import type { Page, PageCtx } from './frame'
-import { WRAP_HANG, brokenRow, dataMissing, decisionCount, isBriefStale, lineCounts, lineState, lineStatusText, lineTotal, pendingMissingReason, pendingSourceMissing, staleBadge, stuckLinesOf, tokLabel, wrapRow } from './rows'
+import { WRAP_HANG, brokenRow, consoleFleetCounts, dataMissing, decisionCount, isBriefStale, lineCounts, lineState, lineStatusText, lineTotal, pendingMissingReason, pendingSourceMissing, staleBadge, stuckLinesOf, tokLabel, wrapRow } from './rows'
 import type { Row } from './rows'
 
 type T = PageCtx['t']
@@ -696,11 +696,92 @@ const v74QcWord = (ctx: PageCtx, q: QcView): string => {
   return ctx.t('page.review.qc_unknown')
 }
 
+// Minimal s2/feed trace extension: read optional error/fallback fields when wired without blocking on s2's V74Ctx edit.
+type V74NowTrace = {
+  pmError?: string | null
+  fleetError?: string | null
+  fleetSummary?: { fetchedMs: number | null; error: string | null; totals: { stuck: number; running: number; waiting: number; failed: number } } | null
+  errors?: { pm?: string | null; fleet?: string | null }
+}
+
+const brokenWrapped = (text: string, cols: number): Row[] => wrapRow(broken(text), Math.max(8, cols), WRAP_HANG)
+
+function v74TasksStaleRows(ctx: PageCtx, con: ConsoleSnapshot): Row[] {
+  const { t, size, nowMs } = ctx
+  const tasksSrc = con.sources.tasks
+  if (tasksSrc?.state === 'no_source') return brokenWrapped(t('frame.src_no_source', { name: t('console.command.src.tasks') }), size.cols)
+  const taskAgeMs = tasksSrc?.at_ms != null ? Math.max(0, nowMs - tasksSrc.at_ms) : (con.generated_at_ms > 0 ? Math.max(0, nowMs - con.generated_at_ms) : null)
+  const bs = isBriefStale(con, nowMs)
+  const isStale = tasksSrc?.state === 'stale' || tasksSrc?.state === 'expired' || (taskAgeMs !== null && taskAgeMs > TRACE_STALE_MS) || bs.stale
+  if (!isStale) return []
+  const stWord = tasksSrc !== undefined && tasksSrc.state !== 'ok' ? tasksSrc.state : bs.expired ? 'expired' : 'stale'
+  const msg = taskAgeMs !== null
+    ? t('trace.now_tasks_stale', { state: stWord, age: ageUnit(t, taskAgeMs), limit: TRACE_STALE_MIN })
+    : t('trace.now_tasks_stale_noage', { state: stWord, limit: TRACE_STALE_MIN })
+  return brokenWrapped(msg, size.cols)
+}
+
 function v74FleetSection(ctx: PageCtx, wide: boolean): Row[] {
-  const { t, v74, console: con, size } = ctx
+  const { t, v74, console: con, size, nowMs } = ctx
   const pm = v74!.pm
-  const head = v74OpenRule(t('v74.c.sec_fleet_src', { source: V74_PM_SOURCE }), wide)
-  if (pm === null) return [head, broken(t('v74.c.pm_missing'))]
+  const vExt = v74 as V74NowTrace
+  const pmErr = (vExt.pmError ?? vExt.errors?.pm ?? '').trim()
+  const fleetSum = vExt.fleetSummary ?? null
+  const fleetErr = (vExt.fleetError ?? vExt.errors?.fleet ?? fleetSum?.error ?? '').trim()
+  if (pm === null) {
+    const head = v74OpenRule(t('v74.c.sec_fleet_src', { source: V74_PM_SOURCE }), wide)
+    const rows: Row[] = [head, ...brokenWrapped(pmErr !== '' ? t('v74.c.pm_missing') + '：' + pmErr : t('v74.c.pm_missing'), size.cols)]
+    if (con !== null) {
+      const fc = consoleFleetCounts(con, t)
+      const tot = lineTotal(con)
+      const tasksSrc = con.sources.tasks
+      const srcAgeMs = tasksSrc?.at_ms != null ? Math.max(0, nowMs - tasksSrc.at_ms) : (con.generated_at_ms > 0 ? Math.max(0, nowMs - con.generated_at_ms) : null)
+      rows.push([dim(wide ? '  ' : ''), plain(t('trace.now_fallback_src', { source: 'console' }) + (srcAgeMs === null ? '' : ' · ' + ageOf(t, srcAgeMs)))])
+      rows.push(...v74TasksStaleRows(ctx, con))
+      const summary: Seg[] = [
+        ...(wide ? [dim('  ')] : []),
+        plain(t('v74.c.lines') + '       ' + String(tot) + '  '),
+        ...(fc.failed > 0 ? [{ text: GLYPHS.state.failed + String(fc.failed), color: PALETTE.broken }] : []),
+        ...(fc.stuck > 0 ? [plain(' ' + GLYPHS.state.stalled + String(fc.stuck))] : []),
+        ...(fc.running > 0 ? [plain(' ' + GLYPHS.state.running + String(fc.running))] : []),
+        ...(fc.waiting > 0 ? [plain(' ' + GLYPHS.state.waiting + String(fc.waiting))] : []),
+        ...(fc.normal > 0 ? [plain(' ' + GLYPHS.state.pending + String(fc.normal))] : []),
+      ]
+      const h = con.counts.summary.hosts
+      const hs = con.sources.hosts
+      if (hs !== undefined && hs.state === 'no_source') {
+        summary.push(plain('  · ' + t('page.now.hosts') + ' '), staleBadge(GLYPHS.state.failed + ' ' + t('page.now.hosts_no_source')))
+      } else if (hs !== undefined && typeof h.online === 'number' && typeof h.total === 'number') {
+        summary.push(plain('  · ' + t('page.now.hosts') + ' ' + h.online + '/' + h.total))
+      }
+      rows.push(summary)
+      for (const r of mergedPoolRows(ctx, con, wide)) rows.push(r)
+    } else if (fleetSum !== null && fleetSum.fetchedMs !== null) {
+      const fAgeMs = Math.max(0, nowMs - fleetSum.fetchedMs)
+      rows.push([dim(wide ? '  ' : ''), plain(t('trace.now_fallback_src', { source: t('fleet.source_cmd') }) + ' · ' + ageOf(t, fAgeMs))])
+      if (fAgeMs > TRACE_STALE_MS) {
+        rows.push(...brokenWrapped(t('trace.hygiene_src_stale', { source: t('fleet.source_cmd'), age: ageUnit(t, fAgeMs), limit: TRACE_STALE_MIN }), size.cols))
+      }
+      const tot = fleetSum.totals
+      rows.push([
+        ...(wide ? [dim('  ')] : []),
+        plain(t('v74.c.lines') + '  '),
+        { text: GLYPHS.state.failed + String(tot.failed), ...(tot.failed > 0 ? { color: PALETTE.broken } : {}) },
+        plain(' ' + GLYPHS.state.stalled + String(tot.stuck) + ' ' + GLYPHS.state.running + String(tot.running) + ' ' + GLYPHS.state.waiting + String(tot.waiting)),
+      ])
+      rows.push(...brokenWrapped(t('trace.now_no_console_hosts'), size.cols))
+    } else {
+      const whyParts = [t('page.now.nosrc_console'), fleetErr !== '' ? t('fleet.error', { error: fleetErr }) : t('fleet.source_cmd') + ' ' + t('fleet.never')]
+      rows.push(...brokenWrapped(t('trace.now_no_fallback', { why: whyParts.join(t('sep.list')) }), size.cols))
+      rows.push(...brokenWrapped(t('trace.now_no_console_hosts'), size.cols))
+    }
+    return rows
+  }
+  const pmAt = pm.generated_at_ms > 0 ? pm.generated_at_ms : v74!.pmFetchedMs
+  const pmAgeMs = pmAt !== null ? Math.max(0, nowMs - pmAt) : null
+  const fetchAgeMs = v74!.pmFetchedMs !== null ? Math.max(0, nowMs - v74!.pmFetchedMs) : null
+  const headTitle = t('v74.c.sec_fleet_src', { source: V74_PM_SOURCE }) + (pmAgeMs === null ? '' : ' · ' + ageOf(t, pmAgeMs))
+  const head = v74OpenRule(headTitle, wide)
   const { total, fail, idle, ok, unknown } = v74PmCounts(pm)
   const summary: Seg[] = [
     ...(wide ? [dim('  ')] : []),
@@ -713,11 +794,19 @@ function v74FleetSection(ctx: PageCtx, wide: boolean): Row[] {
   if (con !== null) {
     const h = con.counts.summary.hosts
     const hs = con.sources.hosts
-    if (hs !== undefined && hs.state !== 'no_source' && typeof h.online === 'number' && typeof h.total === 'number') {
+    if (hs !== undefined && hs.state === 'no_source') {
+      summary.push(plain('  · ' + t('page.now.hosts') + ' '), staleBadge(GLYPHS.state.failed + ' ' + t('page.now.hosts_no_source')))
+    } else if (hs !== undefined && typeof h.online === 'number' && typeof h.total === 'number') {
       summary.push(plain('  · ' + t('page.now.hosts') + ' ' + h.online + '/' + h.total))
     }
   }
-  const rows: Row[] = [head, summary]
+  const rows: Row[] = [head]
+  if ((pmAgeMs !== null && pmAgeMs > TRACE_STALE_MS) || (fetchAgeMs !== null && fetchAgeMs > TRACE_STALE_MS)) {
+    const worstAge = Math.max(pmAgeMs ?? 0, fetchAgeMs ?? 0)
+    rows.push(...brokenWrapped(t('trace.now_pm_stale', { age: ageUnit(t, worstAge), limit: TRACE_STALE_MIN }), size.cols))
+  }
+  if (con !== null) rows.push(...v74TasksStaleRows(ctx, con))
+  rows.push(summary)
   // r8 #13: failures first, then the quota exception (it is a ✗ too), then the parked and unknown lines
   const parked: Row[] = []
   let quotaDone = false
@@ -744,16 +833,27 @@ function v74FleetSection(ctx: PageCtx, wide: boolean): Row[] {
     rows.push(row)
   }
   quotaFirst()
+  if (con === null) rows.push(...brokenWrapped(t('trace.now_no_console_hosts'), size.cols))
   return rows
 }
 
 function v74SeatSection(ctx: PageCtx, wide: boolean): Row[] {
-  const { t, live } = ctx
-  if (live === null || live.state !== 'ok') {
+  const { t, live, size, nowMs } = ctx
+  if (live === null) {
     return [v74OpenRule(t('v74.c.sec_seat', { project: '?' }), wide), broken(t('page.now.no_live'))]
   }
   const proj = live.detail.project ?? live.project_key ?? t('v74.c.project_unknown')
-  const rows: Row[] = [v74OpenRule(t('v74.c.sec_seat', { project: String(proj) }), wide)]
+  const seatAge = liveAgeMs(live, nowMs)
+  if (live.state !== 'ok') {
+    const why = live.header.trim() !== '' ? live.header : live.state
+    const head = t('v74.c.sec_seat', { project: String(proj) }) + (seatAge === null ? '' : ' · ' + ageOf(t, seatAge))
+    return [v74OpenRule(head, wide), ...brokenWrapped(t('trace.now_seat_stale', { why, limit: TRACE_STALE_MIN, validS: DEFAULT_VALID_FOR_S }), size.cols)]
+  }
+  const head = t('v74.c.sec_seat', { project: String(proj) }) + (seatAge === null ? '' : ' · ' + ageOf(t, seatAge))
+  const rows: Row[] = [v74OpenRule(head, wide)]
+  if (seatAge !== null && seatAge > TRACE_STALE_MS) {
+    rows.push(...brokenWrapped(t('trace.seat_age_stale', { age: ageUnit(t, seatAge), limit: TRACE_STALE_MIN }), size.cols))
+  }
   const band = live.band
   const mark = band?.mark ?? GLYPHS.state.running
   const status = band !== null && band.verdict?.trim() ? band.verdict : t('v74.c.status_running')

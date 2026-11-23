@@ -19,7 +19,7 @@ import { commandView } from './commandtab'
 import { consolePage } from './consolepages'
 import type { ConsoleNav, ConsoleTab } from './consoletabs'
 import { keyed, scrollFrame } from './scroll'
-import { TAB_GAP, actionRows, frameBottomFit, frameHintMin, frameHintShort, frameHintText, frameRows, stripRows, STRIP_SPLIT_COLS, v74TitleSegs } from './pages/frame'
+import { TAB_GAP, actionRows, frameBottomFit, frameHintMin, frameHintShort, frameHintText, frameRows, stripRows, STRIP_SPLIT_COLS, v74BodyStatusRow, v74TitleSegs } from './pages/frame'
 import { displayWidth, truncateToWidth } from './model'
 import { fleetView as fleetPageView } from './pages/fleet'
 import { renderQuota } from './pages/quota'
@@ -32,7 +32,7 @@ import type { ConsoleSnapshot } from './console'
 import type { Page, PageCtx, PageId, Row } from './pages/frame'
 import type { ScrollModel } from './scroll'
 import type { Step } from './speed'
-import { V74_KEY } from './v74/contract'
+import { PET_KEY, V74_KEY } from './v74/contract'
 import type { V74Ctx } from './v74/contract'
 
 export type { PaneTab } from './model'
@@ -308,16 +308,25 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
   // r11 #9: the border changes colour while the pane holds the keyboard, so focus is not only a hint word
   const held = ctx.v74?.keysHeld === true
   const bc = held ? heldBorder() : {}
-  const titleSegs = fitSegs(v74TitleSegs(page, ctx, (rows[0] ?? [])[0] ?? { text: t('tab.' + page.id) }), Math.max(0, fullCols - 6))
+  const titleMax = Math.max(0, fullCols - 6)
+  const titleSegs = fitSegs(v74TitleSegs(page, ctx, (rows[0] ?? [])[0] ?? { text: t('tab.' + page.id) }, titleMax), titleMax)
   const titleW = titleSegs.reduce((n, x) => n + displayWidth(x.text), 0)
   const top = <Box key="v74-top" height={1} width={fullCols} overflow="hidden"><Text {...bc}>{GLYPHS.structure.frameTL + rule + ' '}</Text>{titleSegs.map((x, j) => <Text key={'tt' + j} {...drawSeg(x)} wrap="truncate">{x.text}</Text>)}<Text {...bc}>{' ' + pad(fullCols - 5 - titleW) + GLYPHS.structure.frameTR}</Text></Box>
+  const statusRow = v74BodyStatusRow(page, ctx, cols)
   const rawInner = rows.slice(1, rows.length - stripN - 1).map((r, k) => ({ r, idx: k + 1 }))
   let innerEntries = rawInner
-  // Codex R3 Critical: shrink boxed Decide pane to content height (drop trailing filler gap rows between content and actions).
-  if (page.id === 'decide' && ctx.v74 !== undefined) {
+  if (statusRow !== null) {
     const actStart = rows.length - stripCount - actionCount
     const bodyPart = rawInner.filter(e => e.idx < actStart)
     const actPart = rawInner.filter(e => e.idx >= actStart)
+    const keepBody = bodyPart.length > 0 ? bodyPart.slice(0, bodyPart.length - 1) : []
+    innerEntries = [{ r: statusRow, idx: -2 }, ...keepBody, ...actPart]
+  }
+  // Codex R3 Critical: shrink boxed Decide pane to content height (drop trailing filler gap rows between content and actions).
+  if (page.id === 'decide' && ctx.v74 !== undefined) {
+    const actStart = rows.length - stripCount - actionCount
+    const bodyPart = innerEntries.filter(e => e.idx < actStart)
+    const actPart = innerEntries.filter(e => e.idx >= actStart)
     while (bodyPart.length > 0 && bodyPart.length + actPart.length > 2 && bodyPart[bodyPart.length - 1].r.every(s => s.text.trim() === '')) {
       bodyPart.pop()
     }
@@ -348,10 +357,15 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
     const btn = Button === undefined ? label : <Button key={'tab:' + tb.id + ep} plain {...(V74_TAB_HOTKEYS ? { hotkey: tb.key } : {})} {...(land ? { autoFocus: true } : {})} onPress={choose}>{label}</Button>
     return <Box key={'tb' + j}>{j === 0 ? null : <Text>{' '.repeat(TAB_GAP)}</Text>}{btn}</Box>
   })
-  const hidden = Button === undefined || frame.decide?.textMode === true ? [] : tabItems.map((tb, j) => {
-    const choose = () => (frame.onPage !== undefined ? frame.onPage(tb.id as PageId) : onTab(PAGE_TAB[tb.id]))
-    return <Box key={'hk' + j} width={0} height={0} overflow="hidden"><Button key={'hotkey:' + tb.key + ep} plain hotkey={tb.key} onPress={choose}>{tb.key}</Button></Box>
-  })
+  const hidden = Button === undefined || frame.decide?.textMode === true ? [] : [
+    ...tabItems.map((tb, j) => {
+      const choose = () => (frame.onPage !== undefined ? frame.onPage(tb.id as PageId) : onTab(PAGE_TAB[tb.id]))
+      return <Box key={'hk' + j} width={0} height={0} overflow="hidden"><Button key={'hotkey:' + tb.key + ep} plain hotkey={tb.key} onPress={choose}>{tb.key}</Button></Box>
+    }),
+    ...(frame.pages.some(p => p.id === 'pet')
+      ? [<Box key="hk-pet" width={0} height={0} overflow="hidden"><Button key={'hotkey:' + PET_KEY + ep} plain hotkey={PET_KEY} onPress={() => (frame.onPage !== undefined ? frame.onPage('pet') : onTab('now'))}><Text>{''}</Text></Button></Box>]
+      : []),
+  ]
   // The boxed fallback replaces the strip row (and its navHot buttons).
   // Keep card navigation registered on this bottom border too. s stays on the action row.
   const letters = Button === undefined || typing || page.id !== 'decide' ? [] : (['a', 'b', 'c', 'e', 'm', 'n', 'p', 'j', 'k', 'v'] as const).map(letter => (

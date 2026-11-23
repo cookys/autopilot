@@ -122,12 +122,12 @@ export function fmtTps3(tps: number | null, state: DataState): string {
 
 const idleTone = (): { color: ThemeKey } => ({ color: PALETTE.idle })
 
-// Routing table (§2.3): click and digit key go to the exact same page; decorations/separators/idle never trigger.
+// Routing table (§2.3, aligned by trace-inventory G01/G02): click and digit key go to the exact same page; decorations/separators/idle never trigger.
 export function bandSlotPage(target: BandRoutingTarget, idleRemind = false): PageId | null {
   switch (target) {
     case 'remind': return idleRemind ? null : 'decide'
     case 'line': return 'dispatch'
-    case 'source': return 'todo'
+    case 'source': return 'hygiene'
     case 'pend': return 'decide'
     case 'qc': return 'review'
     case 'tps': return 'spend'
@@ -222,11 +222,11 @@ export function formatLineShort(line: OneRowInput['line'], t: T): OneRowSegment 
   return { id: 'line', segs, width: displayWidth(head + body), clickable: true, page: 'dispatch', short: true }
 }
 
-// 8 來源 開發 ⚑99+ (16 cols)
+// 6 來源 開發 ⚑99+ (16 cols)
 export function formatSource(source: OneRowInput['source'], t: T): OneRowSegment {
   const st = source.state
   const word = fixedLabel(t('band.onerow.source'), 4)
-  const prefix = (st === 'stale' ? '~8' : '8 ') + word + ' '
+  const prefix = (st === 'stale' ? '~6' : '6 ') + word + ' '
   const name = st === 'missing' || source.label === null || source.label === ''
     ? padRightToWidth(GLYPHS.structure.empty, 4)
     : padRightToWidth(source.label, 4)
@@ -234,7 +234,7 @@ export function formatSource(source: OneRowInput['source'], t: T): OneRowSegment
   const tail = (displayWidth(num) > 3 ? '' : ' ') + GLYPHS.structure.residue + num
   const full = prefix + name + tail
   const segs: Seg[] = st === 'stale' || st === 'missing' ? [{ text: full, ...idleTone() }] : [{ text: full }]
-  return { id: 'source', segs, width: BAND_COL_WIDTHS.source, clickable: true, page: 'todo' }
+  return { id: 'source', segs, width: BAND_COL_WIDTHS.source, clickable: true, page: 'hygiene' }
 }
 
 // 2 待決 99+ (10 cols)

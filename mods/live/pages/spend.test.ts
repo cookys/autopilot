@@ -2,11 +2,12 @@
 // fixed height H across every size and state, fold pair (collapsed / expanded) + overflow row, red stale/no-source wrapping, [5] & [z] Buttons, and empty states.
 import type { EngineInterface, On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
-import { FOCUS_ANCHOR_KEY } from '../pane'
+import { FOCUS_ANCHOR_KEY, Pane } from '../pane'
 import { makeT } from '../i18n'
 import * as M from '../model'
 import { displayWidth } from '../model'
-import { paneKey } from '../register'
+import { pageNeedsSteps, paneKey } from '../register'
+import type { Step } from '../speed'
 import { GLYPHS } from '../../tux/glyphs.ts'
 import { PALETTE } from '../../tux/palette.ts'
 import type { ConsoleSnapshot } from '../console'
@@ -15,7 +16,7 @@ import type { PageCtx, Row } from './frame'
 import { PAGES } from './index'
 import { seatQuota } from './now'
 import { brokenRow, staleBadge } from './rows'
-import { renderSpend, spendFocusRows, spendPage } from './spend'
+import { poolEtaRows, renderSpend, spendFocusRows, spendPage } from './spend'
 
 const t = makeT('zh-TW')
 const MIN = 60_000
@@ -396,4 +397,144 @@ test('r10b #6: an unknown 5h value draws no empty bar, it says 未接通 (negati
   expect(five).not.toContain(GLYPHS.chart.meterOff)
   const seven = rows.find(r => r.includes('7 天') || r.includes('7天'))!
   expect(seven).toContain(GLYPHS.chart.meterOn)
+})
+
+const stepOf = (over: Partial<Step> = {}): Step => ({
+  at: NOW - 30_000,
+  model: 'claude-opus-4',
+  isSubagent: false,
+  ttftMs: 200,
+  decodeMs: 1000,
+  outTokens: 1250,
+  tps: 1250,
+  ...over,
+})
+
+test('G03: register passes steps to spend page, and spend renders exact 1k+ tok/s, source turn.step, age, and sparkline', async () => {
+  expect(pageNeedsSteps('spend')).toBe(true)
+  expect(pageNeedsSteps('forge')).toBe(true)
+  expect(pageNeedsSteps('now')).toBe(false)
+
+  await feedFresh()
+  const steps: Step[] = [
+    stepOf({ at: NOW - 60_000, outTokens: 420, tps: 420 }),
+    stepOf({ at: NOW - 30_000, outTokens: 1250, tps: 1250 }),
+  ]
+  const rendered = renderSpend({ ...ctxOf(120, 40), steps })
+  const all = rendered.body.map(text).join('\n')
+  expect(all).toContain('本席速度（來源 turn.step）')
+  expect(all).toContain('1250 tok/s')
+  expect(all).not.toContain('1k+')
+  expect(all).toContain('30 秒前')
+  expect(all).toContain('2 次請求')
+  expect(all).toContain('最佳 1250')
+  expect(rendered.body.some(r => r.some(s => s.color === PALETTE.running && /[▁▂▃▄▅▆▇█]/.test(s.text)))).toBe(true)
+
+  // Pane wiring forwards frame.steps into spendPage
+  const mk = (kind: string) => (props: any) => ({ kind, props })
+  const el = { Box: mk('Box'), Text: mk('Text'), Button: mk('Button'), Link: mk('Link') }
+  const textOf = (n: any): string => n == null || typeof n === 'boolean' ? '' : typeof n === 'string' || typeof n === 'number' ? String(n) : Array.isArray(n) ? n.map(textOf).join('') : textOf(n.props?.children)
+  const paneText = textOf(Pane(el, liveOf(), 'spend', () => {}, t, 120, undefined, undefined, undefined, undefined, null, null, null, null, null, {
+    pages: PAGES, pageId: 'spend', console: calmConsole(), nowMs: NOW, rows: 30, steps,
+  } as any))
+  expect(paneText).toContain('1250 tok/s')
+  expect(paneText).toContain('turn.step')
+})
+
+test('G03: stale tok/s (>5 min) shows exact value, last request age, and red >5 min stale warning', async () => {
+  await feedFresh()
+  const steps: Step[] = [stepOf({ at: NOW - 6 * MIN, tps: 1250 })]
+  const rendered = renderSpend({ ...ctxOf(120, 40), steps })
+  const all = rendered.body.map(text).join('\n')
+  expect(all).toContain('1250 tok/s')
+  expect(all).toContain('6 分前')
+  expect(all).toContain('>5 分')
+  expect(rendered.body.some(r => r.some(s => s.color === PALETTE.broken) && text(r).includes('>5 分'))).toBe(true)
+})
+
+test('G03: missing tok/s explains no requests, <150ms decode window, no streamed output, and 0 output tokens', async () => {
+  await feedFresh()
+  const noReq = renderSpend({ ...ctxOf(120, 40), steps: [] }).body.map(text).join('\n')
+  expect(noReq).toContain('尚未有模型請求')
+  expect(noReq).toContain('turn.step')
+
+  const shortWin = renderSpend({ ...ctxOf(120, 40), steps: [stepOf({ at: NOW - 10_000, decodeMs: 80, outTokens: 12, tps: null })] }).body.map(text).join('\n')
+  expect(shortWin).toContain('80ms < 150ms')
+  expect(shortWin).toContain('10 秒前')
+
+  const noStream = renderSpend({ ...ctxOf(120, 40), steps: [stepOf({ at: NOW - 15_000, decodeMs: null, outTokens: 0, tps: null })] }).body.map(text).join('\n')
+  expect(noStream).toContain('未收到串流輸出')
+  expect(noStream).toContain('15 秒前')
+
+  const zeroTok = renderSpend({ ...ctxOf(120, 40), steps: [stepOf({ at: NOW - 20_000, decodeMs: 500, outTokens: 0, tps: null })] }).body.map(text).join('\n')
+  expect(zeroTok).toContain('輸出 0 token')
+  expect(zeroTok).toContain('20 秒前')
+})
+
+test('G14: 24h trend missing reason, today tok unknown reason, and live published_at >5 min stale warning', async () => {
+  await feedFresh()
+  const noHourly = renderSpend(ctxOf(120, 40, calmConsole(), liveOf(null))).body.map(text).join('\n')
+  expect(noHourly).toContain('spend-history.json')
+  expect(noHourly).toContain('不足 2 筆取樣')
+  expect(noHourly).toContain('token 數未知')
+  expect(noHourly).toContain('watcher 尚未發佈 token 總計')
+
+  const noLive = renderSpend(ctxOf(120, 40, calmConsole(), null)).body.map(text).join('\n')
+  expect(noLive).toContain('spend-history.json')
+  expect(noLive).toContain('沒有 live 資料')
+
+  const staleLive = renderSpend(ctxOf(120, 40, calmConsole(), liveOf(HOURLY_WIDE, { published_at: new Date(NOW - 8 * MIN).toISOString() }))).body
+  expect(staleLive.some(r => r.some(s => s.color === PALETTE.broken) && text(r).includes('8 分') && text(r).includes('>5 分'))).toBe(true)
+})
+
+test('G14: seatQuota failed <10m shows yellow warning, >10m shows red stale threshold and failure, pool stale shows >10m, and en locale works', async () => {
+  // Failed with cached result < 10 min -> yellow (PALETTE.attention) warning
+  seatQuota.reset()
+  await seatQuota.refresh(okRun(SEAT_JSON), NOW - 3 * MIN)
+  await seatQuota.refresh(failRun, NOW - 10_000)
+  const cachedFail = renderSpend(ctxOf(120, 40)).body
+  const warnRow = cachedFail.find(r => text(r).includes('fleet seats --quota 指令失敗'))
+  expect(warnRow).toBeDefined()
+  expect(text(warnRow!)).toContain('3 分前')
+  expect(text(warnRow!)).toContain('>10 分')
+  expect(warnRow!.some(s => s.color === PALETTE.attention)).toBe(true)
+
+  // Failed and stale > 10 min -> red stale row with >10 min threshold + red failure row
+  await feedStale25m()
+  const staleCon = calmConsole({
+    quota: {
+      pools: [{
+        ...calmConsole().quota.pools![0],
+        stale: true,
+        stale_age_min: 18,
+      }],
+      seats: [],
+    },
+  })
+  const staleBody = renderSpend(ctxOf(120, 40, staleCon)).body
+  const staleAll = staleBody.map(text).join('\n')
+  expect(staleAll).toContain('25 分未更新，以上是舊數字（門檻 >10 分）')
+  expect(staleAll).toContain('fleet seats --quota 指令失敗，沿用 25 分前舊結果')
+  expect(staleAll).toContain('18 分未更新 (>10 分)')
+
+  // poolEta stale includes numeric stale_after_s
+  const etaStale = poolEtaRows({ generated_at_ms: NOW - 10 * MIN, stale_after_s: 300, pools: [], alerts: [] }, NOW, t).map(text).join('\n')
+  expect(etaStale).toContain('300 秒')
+
+  // English locale smoke check with speed + missing 24h + cached failure
+  const en = makeT('en')
+  const enCtx: PageCtx = {
+    live: liveOf(null),
+    console: staleCon,
+    size: { cols: 120, rows: 30 },
+    t: en,
+    nowMs: NOW,
+    steps: [stepOf({ at: NOW - 6 * MIN, tps: 1250 })],
+  }
+  const enAll = renderSpend(enCtx).body.map(text).join('\n')
+  expect(enAll).toContain('1250 tok/s')
+  expect(enAll).toContain('>5 min')
+  expect(enAll).toContain('>10 min')
+  expect(enAll).toContain('spend-history.json')
+  expect(frameRows(spendPage, enCtx).length).toBe(30)
 })

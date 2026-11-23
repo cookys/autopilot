@@ -100,7 +100,7 @@ import { reopenLook, showPath } from '../viewer/show'
 import {
   acceptanceToast, autoResidueCount, bandCardNote, decideDialog, decideFillText, decideFixing, decideHeld, decideLine, decideOpen, decidePick, cleanTargets, normalizeAbs, decideReply, NO_DECIDE, makeRecentTracker, bandFactsDocument, bandLine1, bandView, buildSections, checkEnvelope, sourceMoved, sourcesOf, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
   isStepCard, BAND_NARROW_STEPS, displayWidth, fittedBandWidth, layoutBand, layoutBandLine, v74FitBand, slotFleet, headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeDurableDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions, readDurableDecisionFiles,
-  readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
+  readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readQcAt, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
   paneWidth, DEFAULT_PANE_COLS, slotTab, slotUnfolds, sparkText, truncateToWidth, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
 } from './model'
 import type { AccountView, ActivityItem, Counts, DecideState, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveDecision, LiveSnapshot, LookTarget, Manifest, PaneLine, PaneTab, Seg, Slot, SlotId, QuotaWindow, Sources, SourceGroup } from './model'
@@ -238,7 +238,26 @@ async function v74CtxOf($: EngineInterface, withStore = false): Promise<V74Ctx> 
   const nav = await read($, V74_NAV)
   // The host Pane's 待決 tab stays the retired pointer. Only the band box merges the card store.
   const decide = offerTodo(withStore ? mergedDecide() : decideFeed.cards(), V74_TODO)
-  return { pm: pmFeed.status(), pmFetchedMs: pmFeed.fetchedMs(), decide, todo: V74_TODO, nav, keysHeld: v74KeysHeld, sendResult: v74SendResult, ages: { now: pmFeed.fetchedMs(), decide: decideFeed.fetchedMs(), fleet: fleetFeed.fetchedMs() } }
+  const pmErr = pmFeed.error()
+  const decErr = decideFeed.error()
+  const fltErr = fleetFeed.error()
+  const fleetSum = await read($, FLEET)
+  return {
+    pm: pmFeed.status(),
+    pmFetchedMs: pmFeed.fetchedMs(),
+    pmError: pmErr,
+    decide,
+    decideFetchedMs: decideFeed.fetchedMs(),
+    decideError: decErr,
+    fleetError: fltErr,
+    fleetSummary: fleetSum,
+    todo: V74_TODO,
+    nav,
+    keysHeld: v74KeysHeld,
+    sendResult: v74SendResult,
+    ages: { now: pmFeed.fetchedMs(), decide: decideFeed.fetchedMs(), fleet: fleetFeed.fetchedMs() },
+    errors: { now: pmErr, decide: decErr, fleet: fltErr },
+  }
 }
 // The summary other plugins read (PM G33a; fleet.ts `FleetSummary`, `v: 1`): written by the feed after each run, success or failure, never while drawing. Each row is counted
 // by the state the Fleet tab draws for it, so the band reader and the tab never disagree.
@@ -930,7 +949,10 @@ async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{
   }
   // P7: the stage-graph facts. Each is optional; an absent / foreign file reads as null and its slot / tab says "no data".
   const marker = readMarker(scope.marker)
-  const qc = readQc(await readText($, liveBase + '/runs/' + scope.key + '.qc.json'), { project_key: scope.key, root_run_id: null })
+  const qcText = await readText($, liveBase + '/runs/' + scope.key + '.qc.json')
+  const qcScope = { project_key: scope.key, root_run_id: null }
+  const qc = readQc(qcText, qcScope)
+  const qcAt = readQcAt(qcText, qcScope)
   const residue = readResidue(await readText($, liveBase + '/runs/' + scope.key + '.residue.json'), scope.key)
   const stage = readStageWalk(await readText($, liveBase + '/stage/' + fileSid + '.json'), sid)
   const review = readReview(await readText($, liveBase + '/runs/' + scope.key + '.review.json'), scope.key)
@@ -958,7 +980,7 @@ async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{
       review,
       detail: {
         counts: countsOf(env), stalled: stalledCount(env, foreman, nowMs),
-        now_ms: nowMs, project: projectNameOf(identity, scope.key), marker, qc, stage, decisions, load_source: loadSource, residue,
+        now_ms: nowMs, project: projectNameOf(identity, scope.key), marker, qc, ...(qcAt === null ? {} : { qc_at: qcAt }), stage, decisions, load_source: loadSource, residue,
         spend: { session: sessionUsd(env, sid).text, host_all: usd(env.host_today_usd), host_all_n: typeof env.host_today_usd === 'number' && Number.isFinite(env.host_today_usd) ? env.host_today_usd : null, brain: spendOf(env)?.brain ?? null, cap: spendOf(env)?.cap ?? null, mode: await fuseModeOf($, autopilotHome), hourly: hourlySpend(readSpendHistory(await readText($, liveBase + '/runs/spend-history.json')), nowMs) },
       },
     }),
@@ -2683,6 +2705,9 @@ export function registerLive(on: Parameters<Register>[0]): void {
     return scrollHook(decideScroll, e, next, () => { void $.ui.invalidate('ui.render') })
   })
 }
+export function pageNeedsSteps(page: PageId): boolean {
+  return page === 'forge' || page === 'spend'
+}
 // The framed page's tree. `boxRows` null: the Pane surface (the legacy / dock path, as before). A number: v7.4, the page drawn as a full-width box of that many rows (borders included) plus the tab row under it,
 // inside the AbovePrompt band (pane.tsx framedView). Same state, same renderers, same press handlers.
 async function paneTree($: EngineInterface, e: { props: any; surface: string }, legacy: boolean, boxRows: number | null, boxMaxRows: number | null = null): Promise<unknown> {
@@ -2706,7 +2731,7 @@ async function paneTree($: EngineInterface, e: { props: any; surface: string }, 
     folded, boxRows !== null ? null : e.props.scroll ?? null,
     { state: decideState, batch: decideBatch, now: decideNow, inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } },
     decideScroll, fleet, null,
-    legacy ? null : { pages: [...PAGES, ...EXTRA_PAGES], pageId: panePage, ...(!legacy ? { pendingScroll } : {}), onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, others: fleet?.others ?? null, nowMs: frameNow, rows: boxRows ?? frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), ...(boxMaxRows === null ? {} : { maxRows: boxMaxRows }), bodyColumns: decideCols, ...(boxRows === null ? {} : { v74Box: true as const }), view: pageView, decide: { ...decideState, ...decideLocal, layoutMode: decideLayout }, v74, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { void v74Keylog($, { handler: 'input', component: 'Input', element: 'v74-note', len: [...v].length, page: panePage, cursor: decideLocal.cursor, focusOwner: 'v74-note', noteOpen: true }); decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(panePage === 'forge' ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}), ...(panePage === 'room' ? { room: parseRoom((await readRoomText($)) ?? '') } : {}) },
+    legacy ? null : { pages: [...PAGES, ...EXTRA_PAGES], pageId: panePage, ...(!legacy ? { pendingScroll } : {}), onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, others: fleet?.others ?? null, nowMs: frameNow, rows: boxRows ?? frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), ...(boxMaxRows === null ? {} : { maxRows: boxMaxRows }), bodyColumns: decideCols, ...(boxRows === null ? {} : { v74Box: true as const }), view: pageView, decide: { ...decideState, ...decideLocal, layoutMode: decideLayout }, v74, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { void v74Keylog($, { handler: 'input', component: 'Input', element: 'v74-note', len: [...v].length, page: panePage, cursor: decideLocal.cursor, focusOwner: 'v74-note', noteOpen: true }); decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(pageNeedsSteps(panePage) ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}), ...(panePage === 'room' ? { room: parseRoom((await readRoomText($)) ?? '') } : {}) },
   )
   if (boxRows === null) await probePane($, e as never, tree)
   return tree

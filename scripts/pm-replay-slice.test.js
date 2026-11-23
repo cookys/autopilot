@@ -128,14 +128,13 @@ test('scanAndSampleEvents: deterministic with fixed seed and aborts on insuffici
 
 test('buildPrefillPrefix never splits tool_use and tool_result pair', () => {
   const session = [
-    makeUserEntry('prefix start', '2026-11-23T09:00:00Z'),
+    makeUserEntry('a'.repeat(40), '2026-11-23T09:00:00Z'),
     {
       type: 'assistant',
       timestamp: '2026-11-23T09:00:01Z',
       message: {
         role: 'assistant',
-        content: [{ type: 'tool_use', id: 'tu_1', name: 'Read', input: { file_path: 'a.js' } }],
-        usage: { input_tokens: 150, output_tokens: 50 },
+        content: [{ type: 'tool_use', id: 'tu_1', name: 'Read', input: { file_path: 'x'.repeat(200) } }],
       },
     },
     {
@@ -143,16 +142,21 @@ test('buildPrefillPrefix never splits tool_use and tool_result pair', () => {
       timestamp: '2026-11-23T09:00:02Z',
       message: {
         role: 'user',
-        content: [{ type: 'tool_result', tool_use_id: 'tu_1', content: 'ok' }],
+        content: [{ type: 'tool_result', tool_use_id: 'tu_1', content: 'y'.repeat(40) }],
       },
     },
     makeUserEntry('selected event', '2026-11-23T10:00:00Z'),
   ];
 
-  // Level 150 is hit at assistant turn (200 tokens), but tool_use is open so it must include tool_result
-  const prefix = buildPrefillPrefix(session, 3, 150, [0, 3]);
-  assert.equal(prefix.endIndex, 3);
-  assert.equal(prefix.turns.length, 3);
+  // Earlier safe boundary (endIndex=1, ~11 tokens) is closer to level 30 than endIndex=3 (~101 tokens)
+  const prefixDown = buildPrefillPrefix(session, 3, 30, [0, 3]);
+  assert.equal(prefixDown.endIndex, 1);
+  assert.equal(prefixDown.turns.length, 1);
+
+  // Later safe boundary (endIndex=3, ~101 tokens) is closer to level 80 than endIndex=1 (~11 tokens)
+  const prefixUp = buildPrefillPrefix(session, 3, 80, [0, 3]);
+  assert.equal(prefixUp.endIndex, 3);
+  assert.equal(prefixUp.turns.length, 3);
 });
 
 test('writeSliceOutput: writes deterministic files, verifies sha256, rejects non-empty dir, and leaks no matched content', () => {

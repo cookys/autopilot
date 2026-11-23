@@ -312,19 +312,14 @@ function sha256Hex(content) {
 }
 
 function estimateTurnTokens(entry) {
-  const usage = entry?.message?.usage;
-  if (!usage || typeof usage !== 'object') return 0;
-  return (
-    (Number(usage.input_tokens) || 0) +
-    (Number(usage.cache_creation_input_tokens) || 0) +
-    (Number(usage.cache_read_input_tokens) || 0) +
-    (Number(usage.output_tokens) || 0)
-  );
+  const content = entry?.message?.content ?? '';
+  return Math.ceil(JSON.stringify(content).length / 4);
 }
 
 /**
  * Extract a prefill prefix from turns before `firstSelectedIndex`,
- * starting from an event boundary, accumulating usage tokens up to `level`,
+ * starting from an event boundary, picking the safe boundary whose
+ * estimated tokens are closest to `level` (ties broken by smaller),
  * and never splitting a tool_use / tool_result pair.
  */
 function buildPrefillPrefix(session, firstSelectedIndex, level, incomingIndices = [], options = {}) {
@@ -333,8 +328,9 @@ function buildPrefillPrefix(session, firstSelectedIndex, level, incomingIndices 
   const startIndex = boundaries.length > 0 ? boundaries[0] : 0;
 
   const pendingToolUseIds = new Set();
-  let lastSafeEndIndex = startIndex;
-  let lastSafeTokens = 0;
+  let bestEndIndex = startIndex;
+  let bestTokens = 0;
+  let bestDiff = Infinity;
   let runningTokens = 0;
 
   for (let i = startIndex; i < limit; i++) {
@@ -353,9 +349,11 @@ function buildPrefillPrefix(session, firstSelectedIndex, level, incomingIndices 
     runningTokens += estimateTurnTokens(entry);
 
     if (pendingToolUseIds.size === 0) {
-      if (runningTokens <= level || lastSafeEndIndex === startIndex) {
-        lastSafeEndIndex = i + 1;
-        lastSafeTokens = runningTokens;
+      const diff = Math.abs(runningTokens - level);
+      if (diff < bestDiff || (diff === bestDiff && runningTokens < bestTokens)) {
+        bestDiff = diff;
+        bestEndIndex = i + 1;
+        bestTokens = runningTokens;
       }
       if (runningTokens >= level) {
         break;
@@ -363,7 +361,7 @@ function buildPrefillPrefix(session, firstSelectedIndex, level, incomingIndices 
     }
   }
 
-  const rawTurns = session.slice(startIndex, lastSafeEndIndex);
+  const rawTurns = session.slice(startIndex, bestEndIndex);
   const scanRes = scanCandidateItem({ level, turns: rawTurns }, options);
   if (!scanRes.passed) {
     throw new Error(`Prefix for level ${level} failed Level-1 secret scan`);
@@ -372,8 +370,8 @@ function buildPrefillPrefix(session, firstSelectedIndex, level, incomingIndices 
   return {
     level,
     startIndex,
-    endIndex: lastSafeEndIndex,
-    estimatedTokens: lastSafeTokens,
+    endIndex: bestEndIndex,
+    estimatedTokens: bestTokens,
     turnCount: scanRes.item.turns.length,
     turns: scanRes.item.turns,
     scanRes,

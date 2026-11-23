@@ -220,7 +220,7 @@ export function formatSource(source: OneRowInput['source'], t: T): OneRowSegment
   const name = st === 'missing' || source.label === null || source.label === ''
     ? padRightToWidth(GLYPHS.structure.empty, 4)
     : padRightToWidth(source.label, 4)
-  const tail = ' ' + GLYPHS.thing.residue + fmtCount3(source.flags, st)
+  const tail = ' ' + GLYPHS.structure.residue + fmtCount3(source.flags, st)
   const full = prefix + name + tail
   const segs: Seg[] = st === 'stale' || st === 'missing' ? [{ text: full, ...idleTone() }] : [{ text: full }]
   return { id: 'source', segs, width: BAND_COL_WIDTHS.source, clickable: true, page: 'todo' }

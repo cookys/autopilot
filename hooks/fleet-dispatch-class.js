@@ -178,9 +178,8 @@ function applyShedRouting(toolInput) {
 
   const rules = sig.data.shed.rules;
   const undispatchable = new Set(Array.isArray(rules.undispatchable) ? rules.undispatchable : []);
-  const selfEngine = (process.env.AUTOPILOT_ENGINE || 'claude').toLowerCase();
   const chosen = rules.targets_in_order.find(
-    (t) => typeof t === 'string' && t && !undispatchable.has(t) && t.toLowerCase() !== selfEngine,
+    (t) => typeof t === 'string' && t && !undispatchable.has(t),
   );
   if (!chosen) {
     return insertShedLine(lines, 'Shed: skipped reason=no_target');

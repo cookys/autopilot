@@ -419,3 +419,30 @@ test('pet page: renders sprite + stat rows bottom-anchored at 80x24 and 120x30, 
   expect(tree.some(n => n.kind === 'Image')).toBe(false)
   expect(tree.some(n => n.kind === 'Text' && flat(n).includes('🐱 Mochi Lv.3'))).toBe(true)
 })
+
+test('pane boxed statusRow: last body row is visible when no statusRow is drawn; when statusRow is drawn, box keeps fixed height and renders statusRow', () => {
+  const fullBody = Array.from({ length: 6 }, (_, i) => line('row-' + i))
+  const customNow: Page = { ...PAGES[0], framed: true as const, render: () => ({ body: fullBody, actions: [] }) }
+  const pages = [customNow, ...PAGES.filter(p => p.id !== 'now')]
+  const okPm = { schema: 'fleet.pm.status' as const, schema_version: 1 as const, generated_at_ms: NOW - 10_000, selector: null, projects: [] }
+  const nav = { cursor: 0, picks: {}, notes: {}, noteMode: false }
+
+  const drawBox = (v74: Record<string, unknown>) => {
+    const tree = walk(Pane(EL as never, LIVE0, 'now', () => {}, t, 120, () => {}, new Set(), () => {}, new Set(), null, null, null, null, null, {
+      pages, pageId: 'now', console: null, nowMs: NOW, rows: 8, v74Box: true, v74,
+    } as never))
+    const inner = tree.filter(n => n.kind === 'Box' && typeof n.props.key === 'string' && /^v74-row\d+$/.test(n.props.key))
+    return inner.map(flat)
+  }
+
+  // Healthy fresh source -> no statusRow -> all 6 inner rows drawn, including the last row (row-5)
+  const noStatus = drawBox({ pm: okPm, pmFetchedMs: NOW - 10_000, decide: [], todo: null, nav, ages: { now: NOW - 10_000 } })
+  expect(noStatus.length).toBe(6)
+  expect(noStatus.join('\n')).toContain('row-0')
+  expect(noStatus.join('\n')).toContain('row-5')
+
+  // Failed source -> statusRow IS drawn on inner row 0 -> total inner rows stay 6 (8 total box rows)
+  const withStatus = drawBox({ pm: okPm, pmFetchedMs: NOW - 10_000, pmError: 'pm rpc fail', decide: [], todo: null, nav, ages: { now: NOW - 10_000 }, errors: { now: 'pm rpc fail' } })
+  expect(withStatus.length).toBe(6)
+  expect(withStatus[0]).toContain('讀取失敗：pm rpc fail')
+})

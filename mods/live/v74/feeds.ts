@@ -97,7 +97,7 @@ export function makePmFeed(ttlMs = V74_FEED_TTL_MS): PmFeed {
         fetchedMs = nowMs
         error = null
       } catch (e) {
-        status = null
+        // retain last successful status & fetchedMs so title/status row stay truthful
         error = firstLine(e instanceof Error ? e.message : String(e)) || 'failed'
       } finally {
         busy = false
@@ -131,7 +131,7 @@ export function makeDecideFeed(ttlMs = V74_FEED_TTL_MS): DecideFeed {
         fetchedMs = nowMs
         error = null
       } catch (e) {
-        cards = null
+        // retain last successful cards & fetchedMs so title/status row stay truthful
         error = firstLine(e instanceof Error ? e.message : String(e)) || 'failed'
       } finally {
         busy = false

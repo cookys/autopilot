@@ -1,6 +1,12 @@
 // mods/live/band-onerow.ts — single-row band layout (2026-11-23-band-layout v4, Fleet-Task 01M837HGTX).
 // Pure: no JSX, no engine calls, erasable TypeScript syntax with `.ts` imports so `node --test` can load it directly.
 // Colours use PALETTE roles only (no theme-key literals, no bold, no glyph literals outside GLYPHS).
+//
+// Glyph usage table (disambiguated from fold marker ▸):
+//   ▸ (U+25B8, GLYPHS.structure.folded) — folded section / disclosure toggle ONLY (ui.ts, band.tsx, pages/help.ts)
+//   ‣ (U+2023, EAW=N, width=1, not in EMOJI_BANNED) — band reminder lead & active list/card cursor (band-onerow.ts, pages/decide.ts, pages/quota.ts, pages/todo.ts)
+//   ▾ / ▴ (U+25BE / U+25B4) — pane expand/collapse toggle arrow on band right edge
+//   ⏶ (U+23F6, GLYPHS.state.need_you) — QC alert marker
 import { GLYPHS } from '../tux/glyphs.ts'
 import { PALETTE } from '../tux/palette.ts'
 import type { ThemeKey } from '../tux/palette.ts'
@@ -64,6 +70,7 @@ export type OneRowLayout = {
 
 const ELLIPSIS = '\u2026'
 const UP_TRI = '\u25B4' // GLYPHS.structure.open is ▾; ▴ is the collapsed/expanded opposite arrow per spec §2.5
+const REMIND_LEAD = '\u2023' // ‣ (U+2023, EAW=N, width=1): reminder lead, distinct from fold glyph ▸ and QC ⏶
 
 export const BAND_SEP_SEG: Seg = { text: ' ' + GLYPHS.structure.bandSep + ' ', color: PALETTE.structure }
 
@@ -243,10 +250,11 @@ export function formatPend(pend: OneRowInput['pend'], t: T): OneRowSegment {
   const word = fixedLabel(t('band.onerow.pend'), 4)
   const num = fmtCount3(pend.count, st)
   const prefix = (st === 'stale' ? '~2' : '2 ') + word + (displayWidth(num) > 3 ? '' : ' ')
+  // Keep at most one yellow (PALETTE.attention) focus per row (owned by remind); pending count uses non-yellow PALETTE.needs_human.
   const segs: Seg[] = st === 'stale' || st === 'missing'
     ? [{ text: prefix + num, ...idleTone() }]
     : pend.hasRec === true && (pend.count ?? 0) > 0
-      ? [{ text: prefix }, { text: num, color: PALETTE.attention }]
+      ? [{ text: prefix }, { text: num, color: PALETTE.needs_human }]
       : [{ text: prefix + num }]
   return { id: 'pend', segs, width: BAND_COL_WIDTHS.pend, clickable: true, page: 'decide' }
 }
@@ -344,8 +352,8 @@ function buildReminderRaw(inp: OneRowInput, t: T): { text: string; idle: boolean
   if (isStale) {
     return { text: '~' + body + '?', idle: false, stale: true, color: PALETTE.idle }
   }
-  // §2.6: use folded right-triangle (▸, GLYPHS.structure.folded) instead of banned emoji ▹, distinct from QC ⏶.
-  const withLead = GLYPHS.structure.folded + ' ' + body
+  // Use triangular bullet ‣ (U+2023, EAW=N, width=1) instead of fold glyph ▸ (GLYPHS.structure.folded) or banned ▹, distinct from QC ⏶.
+  const withLead = REMIND_LEAD + ' ' + body
   return { text: withLead, idle: false, stale: false, ...(inp.reminder.hasRec === true ? { color: PALETTE.attention } : {}) }
 }
 

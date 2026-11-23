@@ -5,6 +5,8 @@
 // exception items of rule T7 (a card another lane opened, seen through the mirror). A page-local view state may ride on the ctx as `decide` (DecideNav); without it the first card is focused, nothing picked.
 //
 // Import order: pages/frame.ts imports ./index, which imports this file; a test that imports this file first would hit the cycle, so import ./frame (or ./index) first.
+//
+// Glyph usage: ▸ (GLYPHS.structure.folded) is reserved for folded sections/disclosures; active card cursor uses ‣ (U+2023, EAW=N, width=1).
 import type { ConsoleCard } from '../console'
 import { DECIDE_UNDO_MS, NO_DECIDE, TRACE_STALE_MIN, TRACE_STALE_MS, decideDialog, decideFillText, decideLine, decidePick, displayWidth, isStepCard, liveAgeMs, recommendedIndex, truncateToWidth } from '../model'
 import type { DecideState, LiveDecision, Seg } from '../model'
@@ -34,6 +36,7 @@ export type DecideEffect = { kind: 'send'; id: string; line: string } | { kind: 
 
 const LETTERS = 'abcde'
 const MAX_OPTS = 5
+const CURSOR_MARK = '\u2023' // ‣ (U+2023, EAW=N, width=1): selected card cursor, distinct from fold glyph ▸
 const letterOf = (i: number): string => (i < MAX_OPTS ? LETTERS[i] : 'f' + (i + 1))
 
 type Item = { kind: 'own'; d: LiveDecision } | { kind: 'con'; c: ConsoleCard }
@@ -270,7 +273,7 @@ function ownCard(d: LiveDecision, pos: string, nav: DecideNav, ctx: PageCtx, wid
   const age = ageOf(ctx, openedMs(d, ctx))
   const old = d.options.length > MAX_OPTS ? t('page.decide.old', { n: d.options.length }) : ''
   const out: Row[] = []
-  const mark = seg(GLYPHS.structure.folded + ' ', { color: PALETTE.here })
+  const mark = seg(CURSOR_MARK + ' ', { color: PALETTE.here })
   const id0 = d.id === null ? '' : d.id + ' '
   // Z4: reserve the progress/age suffix before shortening the question.
   const progress = '(' + [pos, age].filter(Boolean).join(' · ') + ')'
@@ -393,7 +396,7 @@ function render(ctx0: PageCtx): { body: Row[]; actions: Row[] } {
     const title = cur.kind === 'own' ? cur.d.title ?? cur.d.question : cur.c.question
     const age = ageOf(ctx, cur.kind === 'own' ? openedMs(cur.d, ctx) : cur.c.opened_at_ms)
     const position = t('page.decide.position', { n: cursor + 1, total })
-    return { body: [], actions: [leftRight([seg(GLYPHS.structure.folded + ' ', { color: PALETTE.here }), seg(title)], position + (age === '' ? '' : ' · ' + age), ctx.size.cols)] }
+    return { body: [], actions: [leftRight([seg(CURSOR_MARK + ' ', { color: PALETTE.here }), seg(title)], position + (age === '' ? '' : ' · ' + age), ctx.size.cols)] }
   }
 
   if (cur === undefined) {
@@ -536,7 +539,7 @@ function v74Card(c: DecideCard, i: number, selected: boolean, nav: DecideNav, ct
   const { t } = ctx
   const cols = ctx.size.cols
   const out: Row[] = []
-  const mark = selected ? GLYPHS.structure.folded : ' '
+  const mark = selected ? CURSOR_MARK : ' '
   const title = seg(c.title, selected ? { color: PALETTE.here, here: true } : {})
   const box = ctx.box === true
   const cardAge = v74CardAgeText(c, ctx)
@@ -627,7 +630,7 @@ function boxOpen(c: DecideCard, i: number, nav: DecideNav, ctx: PageCtx, fit: Fi
   const picked = nav.picks[c.id]
   const held = nav.hold?.[c.id] !== undefined
   const sent = nav.sent[c.id] !== undefined && nav.fixing?.[c.id] === undefined
-  const heading = wrapRow([seg(GLYPHS.structure.folded + '  ' + String(i + 1) + '. '), seg(c.title, { color: PALETTE.here, here: true }), seg('：' + c.question)], ctx.pendingScroll === undefined ? ctx.size.cols : width, 5)
+  const heading = wrapRow([seg(CURSOR_MARK + '  ' + String(i + 1) + '. '), seg(c.title, { color: PALETTE.here, here: true }), seg('：' + c.question)], ctx.pendingScroll === undefined ? ctx.size.cols : width, 5)
   const out: Row[] = [...(ctx.pendingScroll === undefined ? heading.slice(0, 1) : heading), ...gap]
   out.push(...labelledBox(t('v74.d.bg'), c.background ?? t('v74.d.bg_none'), width), ...gap)
   c.options.forEach((o, k) => {
@@ -663,7 +666,7 @@ function pendingBody(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: 
     ...cards.slice(list.offset, list.offset + list.rows).map((c, k) => {
       const at = list.offset + k
       const row = truncateSegs(boxSummary(c, at, nav, { ...ctx, size: { ...ctx.size, cols: width } }).map(s => ({ ...s, text: s.text.replace(/\s/g, ' ') })), width)
-      return at === cursor ? row.map(s => ({ ...s, color: PALETTE.here, text: s === row[0] ? GLYPHS.structure.folded + s.text.slice(1) : s.text })) : row
+      return at === cursor ? row.map(s => ({ ...s, color: PALETTE.here, text: s === row[0] ? CURSOR_MARK + s.text.slice(1) : s.text })) : row
     }),
   ]
   if (list.hint) queue.push([dimSeg([
@@ -746,7 +749,7 @@ function renderBoxC(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
   const build = (between: boolean, desc: boolean, omitted: boolean, showBg = true): { rows: Row[]; headEnd: number } => {
     const countText = t('v74.d.c_count', { k: cursor + 1, n: cards.length }) + ageSuffix + (omitted ? ' ' + DOT + ' ' + t('v74.d.c_desc_omitted') : '')
     const out: Row[] = [[dimSeg(countText)]]
-    out.push(...wrapRow([seg(GLYPHS.structure.folded + '  '), seg(c.title, { color: PALETTE.here, here: true }), seg('：' + c.question)], cols, 3))
+    out.push(...wrapRow([seg(CURSOR_MARK + '  '), seg(c.title, { color: PALETTE.here, here: true }), seg('：' + c.question)], cols, 3))
     if (showBg) {
       const bgRaw = c.background ?? t('v74.d.bg_none')
       const bgLines = bgRaw.split('\n')
@@ -792,7 +795,7 @@ function renderBoxC(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
     const held = nav.hold?.[c.id] !== undefined
     const sent = nav.sent[c.id] !== undefined && nav.fixing?.[c.id] === undefined
     const qRow = truncateSegs([
-      seg(GLYPHS.structure.folded + ' '),
+      seg(CURSOR_MARK + ' '),
       dimSeg(`(${cursor + 1}/${cards.length}) `),
       seg(c.title, { color: PALETTE.here, here: true }),
       seg('：' + c.question),
@@ -837,7 +840,7 @@ function renderBoxCompactList(ctx: PageCtx, cards: DecideCard[], nav: DecideNav,
     const isCur = idx === cursor
     const p = nav.picks[item.id]
     const hasRec = item.options.some(o => o.recommended)
-    const mark = isCur ? GLYPHS.structure.folded + ' ' : '  '
+    const mark = isCur ? CURSOR_MARK + ' ' : '  '
     const num = String(idx + 1).padStart(2, '0') + ' '
     const suffix = (hasRec ? ' ' + GLYPHS.structure.recommend : '') + (p !== undefined ? ' ' + GLYPHS.structure.answer + letterOf(p) : ' ' + GLYPHS.state.pending)
     const titleRoom = Math.max(4, cols - displayWidth(mark + num + suffix))
@@ -954,7 +957,7 @@ function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
     const isCur = idx === cursor
     const p = nav.picks[item.id]
     const hasRec = item.options.some(o => o.recommended)
-    const mark = isCur ? GLYPHS.structure.folded + ' ' : '  '
+    const mark = isCur ? CURSOR_MARK + ' ' : '  '
     const num = String(idx + 1).padStart(2, '0') + ' '
     const suffix = (hasRec ? ' ' + GLYPHS.structure.recommend : '') + (p !== undefined ? ' ' + GLYPHS.structure.answer + letterOf(p) : ' ' + GLYPHS.state.pending)
     const titleRoom = Math.max(4, leftW - displayWidth(mark + num + suffix))

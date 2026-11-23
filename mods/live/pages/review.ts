@@ -121,7 +121,7 @@ function qcRows(ctx: PageCtx, q: QcView, qcAt?: string | null): Row[] {
   const cols = ctx.size.cols
   const st = STATES[stateOf('qc', q.state).id]
   const files = q.protected_files_count > 0 ? ctx.t('v74.e.qc_files_n', { n: q.protected_files_count }) : ctx.t('v74.e.qc_files_none')
-  const qcAge = ageText(ctx, q.at ?? qcAt, false)
+  const qcAge = ageText(ctx, qcAt, false)
   const qcHead = ctx.t('v74.e.rv_qc', { word: qcWord(ctx, q) }) + (qcAge === '' ? '' : ' · ' + qcAge)
   return [
     sectionRule(qcHead, cols),
@@ -225,14 +225,11 @@ export function renderReview(ctx: PageCtx, view: ReviewView = DEFAULT_REVIEW_VIE
   }
   if (reviewRows.length > 0) body.push(sectionRule(ctx.t('v74.e.rv_code', { n: reviewRows.length }), cols), ...reviewRows)
 
-  const qcReason = live.detail.qc_reason != null && live.detail.qc_reason.trim() !== '' ? live.detail.qc_reason.trim() : null
-  const showMissingQc = qc === null && (ctx.v74 !== undefined || ctx.box === true || qcReason !== null)
+  const showMissingQc = qc === null && (ctx.v74 !== undefined || ctx.box === true)
   if (qc !== null) body.push(...qcRows(ctx, qc, live.detail.qc_at))
   else if (showMissingQc) {
     const qcFile = (live.project_key ?? '<project_key>') + '.qc.json'
-    const qcWhy = qcReason !== null
-      ? ctx.t('trace.review_qc_reason', { file: qcFile, reason: qcReason })
-      : ctx.t('trace.review_qc_missing', { file: qcFile })
+    const qcWhy = ctx.t('trace.review_qc_missing', { file: qcFile })
     body.push(sectionRule(ctx.t('v74.c.sec_qc_missing'), cols), ...brokenRows(GLYPHS.state.failed + ' ' + qcWhy, cols))
   }
 

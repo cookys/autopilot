@@ -2,17 +2,18 @@
 // Verifies that band ~ / ? / 99+ / — indicators trace cleanly to full values, source names, ages, 5m/180s thresholds, and failure reasons
 // across 現況 (now), 待決 (decide), 審查 (review), 殘留 (hygiene), and 艦隊 (fleet), in both zh-TW and en.
 import { test, expect } from 'claude-code/testing'
-import { frameRows } from './frame'
+import { frameRows, v74BodyStatusRow } from './frame'
 import type { PageCtx, Row } from './frame'
 import { PAGES } from './index'
 import { nowPage } from './now'
 import { decidePage } from './decide'
+import { dispatchPage } from './dispatch'
 import { renderReview, reviewPage } from './review'
 import { hygienePage, hygieneView } from './hygiene'
 import { fleetPage, fleetView } from './fleet'
 import type { FleetCtx } from './fleet'
 import { makeT } from '../i18n'
-import { NO_DETAIL, NO_SECTIONS, displayWidth, readLoadSource, readQc, readQcAt, readQcReason } from '../model'
+import { NO_DETAIL, NO_SECTIONS, displayWidth, readLoadSource, readQc, readQcAt } from '../model'
 import type { LiveSnapshot, LoadSourceView, ResidueView } from '../model'
 import type { ConsoleSnapshot } from '../console'
 import type { OthersView } from '../fleet'
@@ -28,7 +29,7 @@ const text = (r: Row): string => r.map(s => s.text).join('')
 const join = (rows: Row[]): string => rows.map(text).join('\n')
 const NAV = { cursor: 0, picks: {}, notes: {}, noteMode: false }
 
-function makeLive(over: Partial<LiveSnapshot> & { qc?: LiveSnapshot['detail']['qc']; qc_reason?: string | null; residue?: ResidueView | null; load_source?: LoadSourceView | null } = {}): LiveSnapshot {
+function makeLive(over: Partial<LiveSnapshot> & { qc?: LiveSnapshot['detail']['qc']; residue?: ResidueView | null; load_source?: LoadSourceView | null } = {}): LiveSnapshot {
   return {
     state: over.state ?? 'ok',
     text: over.text ?? '',
@@ -51,7 +52,6 @@ function makeLive(over: Partial<LiveSnapshot> & { qc?: LiveSnapshot['detail']['q
       now_ms: NOW,
       project: 'proj-alpha',
       qc: over.qc === undefined ? null : over.qc,
-      ...(over.qc_reason === undefined ? {} : { qc_reason: over.qc_reason }),
       residue: over.residue === undefined ? null : over.residue,
       load_source: over.load_source === undefined ? null : over.load_source,
       ...(over.detail ?? {}),
@@ -216,12 +216,16 @@ test('G06 review: live.state === ok with published_at > 5m shows stale warning +
   withDetailQcAt.detail = { ...withDetailQcAt.detail, qc_at: readQcAt(checkedJson, { project_key: 'proj-alpha', root_run_id: null }) }
   expect(join(renderReview({ live: withDetailQcAt, console: null, size: { cols: 120, rows: 30 }, t: tZh, nowMs: NOW }).body)).toContain('14')
 
-  const qc = readQc(JSON.stringify({ schema: 'autopilot.qc-status/1', scope: { project_key: 'proj-alpha' }, state: 'ok', range: 'aaaa111..bbbb222', protected_files_count: 1, evidence: 'artifact', at: iso(12 * MIN) }), { project_key: 'proj-alpha', root_run_id: null })
-  expect(qc?.at).toBe(iso(12 * MIN))
+  const qcAtJson = JSON.stringify({ schema: 'autopilot.qc-status/1', scope: { project_key: 'proj-alpha' }, state: 'ok', range: 'aaaa111..bbbb222', protected_files_count: 1, evidence: 'artifact', at: iso(12 * MIN) })
+  const qc = readQc(qcAtJson, { project_key: 'proj-alpha', root_run_id: null })
+  const qcAt = readQcAt(qcAtJson, { project_key: 'proj-alpha', root_run_id: null })
+  expect(qc).toEqual({ state: 'ok', range: 'aaaa111..bbbb222', protected_files_count: 1, evidence: 'artifact' })
+  expect(qcAt).toBe(iso(12 * MIN))
   const staleOkLive = makeLive({
     state: 'ok',
     published_at: iso(9 * MIN),
     qc,
+    detail: { ...NO_DETAIL, now_ms: NOW, project: 'proj-alpha', qc, qc_at: qcAt },
     review: {
       code: { phase: null, generation: 2, base: 'aaaa111', head: 'bbbb222', converged: true, at: iso(15 * MIN), seats: [{ id: 'g', family: 'google', status: 'reviewed', verdict: 'SHIP-AS-IS' }] },
       plan: { logical_plan_id: 'plan-x@1112223', generation: 1, max_generations: 2, terminal: true, verdict: 'READY', updated_at: iso(30 * MIN), seats: [{ id: 'a', family: null, status: 'READY' }] },
@@ -245,18 +249,10 @@ test('G06 review: live.state === ok with published_at > 5m shows stale warning +
   }
 })
 
-test('G12 review: qc === null in v7.4 mode renders explicit missing QC block with filename and diagnostic reason; readQcReason classifies failures', () => {
-  expect(readQcReason(null, { project_key: 'p1', root_run_id: null })).toBe('missing')
-  expect(readQcReason('{bad', { project_key: 'p1', root_run_id: null })).toBe('malformed')
-  expect(readQcReason(JSON.stringify({ schema: 'other/1' }), { project_key: 'p1', root_run_id: null })).toBe('wrong_schema')
-  expect(readQcReason(JSON.stringify({ schema: 'autopilot.qc-status/1', scope: { project_key: 'other' }, state: 'ok' }), { project_key: 'p1', root_run_id: null })).toBe('wrong_scope')
-  expect(readQcReason(JSON.stringify({ schema: 'autopilot.qc-status/1', scope: { project_key: 'p1' }, state: 'bogus' }), { project_key: 'p1', root_run_id: null })).toBe('invalid_state')
-  expect(readQcReason(JSON.stringify({ schema: 'autopilot.qc-status/1', scope: { project_key: 'p1' }, state: 'ok' }), { project_key: 'p1', root_run_id: null })).toBeNull()
-
+test('G12 review: qc === null in v7.4 mode renders explicit missing QC block with filename', () => {
   const v74: V74Ctx = { pm: null, pmFetchedMs: null, decide: [], todo: null, nav: NAV }
   const liveNoQc = makeLive({
     qc: null,
-    qc_reason: 'wrong_schema',
     review: {
       code: { phase: null, generation: 1, base: 'aaaa111', head: 'bbbb222', converged: true, at: iso(MIN), seats: [{ id: 'g', family: 'google', status: 'reviewed', verdict: 'SHIP-AS-IS' }] },
       plan: null,
@@ -266,7 +262,6 @@ test('G12 review: qc === null in v7.4 mode renders explicit missing QC block wit
     const out = renderReview({ live: liveNoQc, console: null, size: { cols: 120, rows: 30 }, t, nowMs: NOW, v74 })
     const all = join(out.body)
     expect(all, loc).toContain('proj-alpha.qc.json')
-    expect(all, loc).toContain('wrong_schema')
     expect(out.body.some(r => r.some(s => s.color === PALETTE.broken)), loc).toBe(true)
   }
 })
@@ -462,7 +457,6 @@ test('trace-s3 frame invariant: all 5 pages stay within fixed height and width a
     state: 'ok',
     published_at: iso(9 * MIN),
     qc: null,
-    qc_reason: 'missing',
     residue: { reapable: 1, by_class: {}, at: iso(9 * MIN), needs_human_count: 105, needs_human_bytes: null, needs_human: [{ kind: 'worktree', target: 'wt-1', class: 'clean-integrated', age_days: 1, bytes: null, reason: null, command: null }], auto_ran_at: null, auto_removed_count: null, auto_archived_count: null },
     load_source: { plugin_version: null, source: 'dev', marketplace: 'directory', marketplace_path: null, behind_upstream: 0, flags: ['stale_cache_dirs'], stale_cache_dirs: [], at: iso(9 * MIN) },
   })
@@ -475,4 +469,30 @@ test('trace-s3 frame invariant: all 5 pages stay within fixed height and width a
       for (const r of framed) expect(displayWidth(text(r)), `${page.id}@${cols}x${rows}`).toBeLessThanOrEqual(cols)
     }
   }
+})
+
+test('errors.now unification: PM feed error under v74.errors.now flows to fleet, now, dispatch, and v74BodyStatusRow', () => {
+  const errMsg = 'pm rpc timeout 9s'
+  const v74: V74Ctx = {
+    pm: null,
+    pmFetchedMs: null,
+    decide: CARDS,
+    todo: null,
+    nav: NAV,
+    errors: { now: errMsg },
+  }
+  const ctx: FleetCtx = {
+    live: makeLive({ published_at: iso(30_000), rows: [] }),
+    console: makeCon(),
+    size: { cols: 120, rows: 30 },
+    t: tZh,
+    nowMs: NOW,
+    v74,
+  }
+  expect(join(fleetView(ctx).body), 'fleet reads v74.errors.now').toContain(errMsg)
+  expect(join(nowPage.render(ctx).body), 'now reads v74.errors.now').toContain(errMsg)
+  expect(join(dispatchPage.render(ctx).body), 'dispatch reads v74.errors.now').toContain(errMsg)
+  const statusRow = v74BodyStatusRow(nowPage, ctx, 120)
+  expect(statusRow).not.toBeNull()
+  expect(text(statusRow!), 'v74BodyStatusRow reads v74.errors.now').toContain(errMsg)
 })

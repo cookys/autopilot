@@ -461,3 +461,11 @@ test('trace-s1: G01 line routes to 3 (dispatch), G02 source routes to 6 (hygiene
   assert.ok(enWide.includes('3 Dispatch') && enWide.includes('6 Hygiene') && enWide.includes('0 Pet'), 'en wide hint: ' + enWide)
   assert.equal(enWide.includes('8 Todo'), false, 'en hint drops unwired 8 route: ' + enWide)
 })
+
+test('glyph disambiguation: band reminder uses ‣ (U+2023), not fold marker ▸ (GLYPHS.structure.folded)', () => {
+  const lay = B.layoutOneRowBand(sampleInput(), 195, tZh)
+  const rem = segText(lay.remind)
+  assert.ok(rem.startsWith('\u2023 '), 'reminder starts with ‣ : ' + rem)
+  assert.equal(rem.includes(G.structure.folded), false, 'reminder does not reuse fold glyph ▸: ' + rem)
+  assert.equal(W.displayWidth('\u2023'), 1, '‣ is width 1')
+})

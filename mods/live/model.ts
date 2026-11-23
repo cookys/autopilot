@@ -159,7 +159,6 @@ export type PaneDetail = {
   marker: MarkerView | null
   qc: QcView | null
   qc_at?: string | null
-  qc_reason?: string | null
   stage: StageWalkView | null
   decisions: DecisionsView | null
   load_source: LoadSourceView | null
@@ -639,22 +638,9 @@ export function readForeman(text: string | null, want: ScopeWant): ForemanView |
 }
 
 export const QC_SCHEMA = 'autopilot.qc-status/1'
-export type QcView = { state: 'ok' | 'owed' | 'not_needed' | 'unknown'; range: string | null; protected_files_count: number; evidence: 'trailer' | 'artifact' | null; at?: string | null }
-export type QcMissingReason = 'missing' | 'malformed' | 'wrong_schema' | 'wrong_scope' | 'invalid_state'
+export type QcView = { state: 'ok' | 'owed' | 'not_needed' | 'unknown'; range: string | null; protected_files_count: number; evidence: 'trailer' | 'artifact' | null }
 
-// Diagnostic reason why readQc returned null (null = valid). Pure: callers may attach it to LiveSnapshot.detail.qc_reason.
-export function readQcReason(text: string | null, want: ScopeWant): QcMissingReason | null {
-  if (text === null) return 'missing'
-  const parsed = parseJson(text)
-  if (!parsed.ok || !isObject(parsed.value)) return 'malformed'
-  const v = parsed.value
-  if (v.schema !== QC_SCHEMA) return 'wrong_schema'
-  if (!scopeMatches(v, { project_key: want.project_key, root_run_id: null })) return 'wrong_scope'
-  if (v.state !== 'ok' && v.state !== 'owed' && v.state !== 'not_needed' && v.state !== 'unknown') return 'invalid_state'
-  return null
-}
-
-// Extract timestamp (at / checked_at / updated_at) from a valid qc fact without altering readQc's external shape.
+// Extract timestamp (at / checked_at / updated_at) from a valid qc fact into detail.qc_at without altering readQc's 4-key P7c shape.
 export function readQcAt(text: string | null, want: ScopeWant): string | null {
   if (text === null) return null
   const parsed = parseJson(text)
@@ -672,11 +658,9 @@ export function readQc(text: string | null, want: ScopeWant): QcView | null {
   if (!parsed.ok || !isObject(parsed.value) || parsed.value.schema !== QC_SCHEMA || !scopeMatches(parsed.value, { project_key: want.project_key, root_run_id: null })) return null
   const v = parsed.value
   if (v.state !== 'ok' && v.state !== 'owed' && v.state !== 'not_needed' && v.state !== 'unknown') return null
-  const qcAt = str(v.at)
   return {
     state: v.state, range: str(v.range), protected_files_count: isCount(v.protected_files_count) ? v.protected_files_count : 0,
     evidence: v.evidence === 'trailer' || v.evidence === 'artifact' ? v.evidence : null,
-    ...(qcAt === null ? {} : { at: qcAt }),
   }
 }
 

@@ -24,7 +24,13 @@ const THEME_CORRESPONDENCE = {
     role: 'PALETTE.attention',
     dark: 'theme.warning (high-contrast amber/yellow on dark bg; ANSI 33)',
     light: 'theme.warning (dark amber/ochre readable on light bg; ANSI 33)',
-    meaning: 'operator action needed (pending decision reminder / count with recommendation)',
+    meaning: 'operator action needed (single yellow focus per row: reminder alert with recommendation)',
+  },
+  merged: {
+    role: 'PALETTE.needs_human',
+    dark: 'theme.merged (distinct non-yellow semantic accent on dark bg)',
+    light: 'theme.merged (distinct non-yellow semantic accent on light bg)',
+    meaning: 'pending decision count awaiting human (non-yellow so row keeps at most one yellow focus)',
   },
   error: {
     role: 'PALETTE.broken',
@@ -144,7 +150,7 @@ test('palette 2: every band segment across normal/alert/stale/missing/idle maps 
     ['source', 'missing', segBy(layMissing, 'source').segs, [P.idle]],
 
     ['pend', 'normal', segBy(layNormal, 'pend').segs, ['default']],
-    ['pend', 'alert(rec)', segBy(layAlert, 'pend').segs, ['default', P.attention]],
+    ['pend', 'alert(rec)', segBy(layAlert, 'pend').segs, ['default', P.needs_human]],
     ['pend', 'stale', segBy(layStale, 'pend').segs, [P.idle]],
     ['pend', 'missing', segBy(layMissing, 'pend').segs, [P.idle]],
 
@@ -190,5 +196,38 @@ test('palette 2: every band segment across normal/alert/stale/missing/idle maps 
     const info = THEME_CORRESPONDENCE[primaryKey]
     assert.ok(info, 'theme correspondence documented for ' + primaryKey)
     process.stdout.write(`| ${segId} | ${state} | ${roleNameOf(primaryKey === 'default' ? undefined : primaryKey)} | ${primaryKey} | ${info.dark} | ${info.light} |\n`)
+  }
+})
+
+test('palette 3: at most one yellow (PALETTE.attention) segment per rendered band row', () => {
+  const yellowCount = lay => {
+    const items = [lay.remind, ...lay.segments, lay.toggle]
+    return items.filter(it => it.segs.some(s => s.color === P.attention))
+  }
+  const cases = [
+    ['normal', makeInput()],
+    ['alert(rec + pend rec)', makeInput({
+      reminder: { hasRec: true },
+      line: { stalled: 4, running: 3, failed: 2, waiting: 0, state: 'normal' },
+      pend: { count: 21, hasRec: true, state: 'normal' },
+      qc: { status: 'alert', state: 'normal' },
+    })],
+    ['stale', makeInput({ reminder: { state: 'stale', hasRec: true }, pend: { count: 21, hasRec: true, state: 'stale' } })],
+    ['missing', makeInput({ reminder: { text: null, state: 'missing', hasRec: false }, pend: { count: null, hasRec: false, state: 'missing' } })],
+    ['idle', makeInput({ reminder: { text: null, state: 'normal', hasRec: false }, pend: { count: 0, hasRec: false, state: 'normal' } })],
+  ]
+  for (const cols of [195, 75]) {
+    for (const [label, inp] of cases) {
+      const lay = B.layoutOneRowBand(inp, cols, tZh)
+      const yellows = yellowCount(lay)
+      assert.ok(yellows.length <= 1, `${label}@${cols}: at most 1 yellow segment per row, got ${yellows.map(x => x.id).join(',')}`)
+      if (label.startsWith('alert')) {
+        assert.deepEqual(yellows.map(x => x.id), ['remind'], `${label}@${cols}: only remind is yellow`)
+        const pendSeg = lay.segments.find(s => s.id === 'pend')
+        assert.ok(pendSeg, `${label}@${cols}: pend present`)
+        assert.equal(pendSeg.segs.some(s => s.color === P.attention), false, `${label}@${cols}: pend is not yellow`)
+        assert.equal(pendSeg.segs.some(s => s.color === P.needs_human), true, `${label}@${cols}: pend uses PALETTE.needs_human`)
+      }
+    }
   }
 })

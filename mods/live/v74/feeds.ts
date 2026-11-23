@@ -6,8 +6,8 @@ export const DECIDE_LIST_ARGV = ['fleet', 'decision', 'list', '--json'] as const
 export const V74_FEED_TTL_MS = 30_000
 
 export type CliRunner = (argv: readonly string[]) => Promise<{ exitCode: number; stdout: string; stderr: string }>
-export type PmFeed = { status: () => PmStatus | null; fetchedMs: () => number | null; refresh: (run: CliRunner, nowMs: number, force?: boolean) => Promise<boolean> }
-export type DecideFeed = { cards: () => DecideCard[] | null; fetchedMs: () => number | null; refresh: (run: CliRunner, nowMs: number, force?: boolean) => Promise<boolean> }
+export type PmFeed = { status: () => PmStatus | null; fetchedMs: () => number | null; error: () => string | null; refresh: (run: CliRunner, nowMs: number, force?: boolean) => Promise<boolean> }
+export type DecideFeed = { cards: () => DecideCard[] | null; fetchedMs: () => number | null; error: () => string | null; refresh: (run: CliRunner, nowMs: number, force?: boolean) => Promise<boolean> }
 
 const firstLine = (s: string): string => s.split('\n').map(l => l.trim()).find(l => l !== '') ?? ''
 
@@ -70,17 +70,19 @@ export function parseDecideList(json: string): DecideCard[] | null {
     if (options.length === 0) continue
     out.push({ id, title, question, background, options })
   }
-  return out.length === 0 ? null : out
+  return out
 }
 
 export function makePmFeed(ttlMs = V74_FEED_TTL_MS): PmFeed {
   let status: PmStatus | null = null
   let fetchedMs: number | null = null
   let triedMs: number | null = null
+  let error: string | null = null
   let busy = false
   return {
     status: () => status,
     fetchedMs: () => fetchedMs,
+    error: () => error,
     refresh: async (run, nowMs, force = false) => {
       if (busy) return false
       if (!force && triedMs !== null && nowMs - triedMs < ttlMs) return false
@@ -93,8 +95,10 @@ export function makePmFeed(ttlMs = V74_FEED_TTL_MS): PmFeed {
         if (parsed === null) throw new Error('invalid pm status json')
         status = parsed
         fetchedMs = nowMs
-      } catch {
+        error = null
+      } catch (e) {
         status = null
+        error = firstLine(e instanceof Error ? e.message : String(e)) || 'failed'
       } finally {
         busy = false
       }
@@ -107,10 +111,12 @@ export function makeDecideFeed(ttlMs = V74_FEED_TTL_MS): DecideFeed {
   let cards: DecideCard[] | null = null
   let fetchedMs: number | null = null
   let triedMs: number | null = null
+  let error: string | null = null
   let busy = false
   return {
     cards: () => cards,
     fetchedMs: () => fetchedMs,
+    error: () => error,
     refresh: async (run, nowMs, force = false) => {
       if (busy) return false
       if (!force && triedMs !== null && nowMs - triedMs < ttlMs) return false
@@ -120,10 +126,13 @@ export function makeDecideFeed(ttlMs = V74_FEED_TTL_MS): DecideFeed {
         const r = await run(DECIDE_LIST_ARGV)
         if (r.exitCode !== 0) throw new Error(firstLine(r.stderr) || 'exit ' + r.exitCode)
         const parsed = parseDecideList(r.stdout)
+        if (parsed === null) throw new Error('invalid decision list json')
         cards = parsed
         fetchedMs = nowMs
-      } catch {
+        error = null
+      } catch (e) {
         cards = null
+        error = firstLine(e instanceof Error ? e.message : String(e)) || 'failed'
       } finally {
         busy = false
       }

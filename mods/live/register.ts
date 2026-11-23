@@ -238,7 +238,24 @@ async function v74CtxOf($: EngineInterface, withStore = false): Promise<V74Ctx> 
   const nav = await read($, V74_NAV)
   // The host Pane's 待決 tab stays the retired pointer. Only the band box merges the card store.
   const decide = offerTodo(withStore ? mergedDecide() : decideFeed.cards(), V74_TODO)
-  return { pm: pmFeed.status(), pmFetchedMs: pmFeed.fetchedMs(), decide, todo: V74_TODO, nav, keysHeld: v74KeysHeld, sendResult: v74SendResult, ages: { now: pmFeed.fetchedMs(), decide: decideFeed.fetchedMs(), fleet: fleetFeed.fetchedMs() } }
+  const pmErr = pmFeed.error()
+  const decErr = decideFeed.error()
+  const fltErr = fleetFeed.error()
+  return {
+    pm: pmFeed.status(),
+    pmFetchedMs: pmFeed.fetchedMs(),
+    pmError: pmErr,
+    decide,
+    decideFetchedMs: decideFeed.fetchedMs(),
+    decideError: decErr,
+    fleetError: fltErr,
+    todo: V74_TODO,
+    nav,
+    keysHeld: v74KeysHeld,
+    sendResult: v74SendResult,
+    ages: { now: pmFeed.fetchedMs(), decide: decideFeed.fetchedMs(), fleet: fleetFeed.fetchedMs() },
+    errors: { now: pmErr, decide: decErr, fleet: fltErr },
+  }
 }
 // The summary other plugins read (PM G33a; fleet.ts `FleetSummary`, `v: 1`): written by the feed after each run, success or failure, never while drawing. Each row is counted
 // by the state the Fleet tab draws for it, so the band reader and the tab never disagree.

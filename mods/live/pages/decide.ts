@@ -112,7 +112,8 @@ export function decideReduce(nav: DecideNav, key: KeyAction, ctx: PageCtx, nowMs
   }
   if (nav.armed === true && key.kind !== 'submit' && key.kind !== 'confirm') return decideReduce({ ...nav, armed: false, snap: undefined, stale: false }, key, ctx, nowMs) // any other key cancels the send preview, then does its own work
   if (key.kind === 'style') return same({ style: (nav.style ?? 'D') === 'D' ? 'C' : 'D', bgOpen: false, detailOffset: 0 })
-  const compactMode = (ctx.maxRows ?? ctx.size.rows) < DECIDE_COMPACT_MAX_ROWS
+  const reduceMode = decideLayoutMode(ctx.bodyColumns ?? ctx.size.cols, nav.layoutMode ?? null)
+  const compactMode = (ctx.maxRows ?? ctx.size.rows) < DECIDE_COMPACT_MAX_ROWS && (reduceMode === 'single' || (nav.style ?? 'D') === 'C')
   if (key.kind === 'expand') {
     if (nav.bgOpen) return same({ bgOpen: false, detailOffset: 0 })
     if (compactMode && nav.compactExpanded === true) return same({ compactExpanded: false, detailOffset: 0 })
@@ -935,11 +936,12 @@ function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
 function renderBoxV74(ctx: DecideCtx, cards: DecideCard[], nav: DecideNav, cursor: number, actions: Row[]): { body: Row[]; actions: Row[] } {
   const bodyCols = ctx.bodyColumns ?? ctx.size.cols
   const effMaxRows = ctx.maxRows ?? ctx.size.rows
-  if (effMaxRows < DECIDE_COMPACT_MAX_ROWS && nav.compactExpanded !== true) {
+  const mode = decideLayoutMode(bodyCols, nav.layoutMode ?? null)
+  const singleCol = mode === 'single' || (nav.style ?? 'D') === 'C'
+  if (singleCol && effMaxRows < DECIDE_COMPACT_MAX_ROWS && nav.compactExpanded !== true) {
     return renderBoxCompactList(ctx, cards, nav, cursor, actions)
   }
-  const mode = decideLayoutMode(bodyCols, nav.layoutMode ?? null)
-  if (effMaxRows < DECIDE_COMPACT_MAX_ROWS || mode === 'single' || (nav.style ?? 'D') === 'C') {
+  if (singleCol) {
     return renderBoxC(ctx, cards, nav, cursor, actions)
   }
   return renderBoxD(ctx, cards, nav, cursor, actions)

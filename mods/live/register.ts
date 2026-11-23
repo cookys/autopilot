@@ -1842,7 +1842,7 @@ async function frameKeyBody($: EngineInterface, k: KeyAction): Promise<void> {
       const v74 = await v74CtxOf($, true)
       // The focus path's cursor event names the card that already has the ▸. Applying it
       // after a move puts the cursor back. A later cursor event in the queue still runs.
-      const compactCollapsed = decideMaxRows < DECIDE_COMPACT_MAX_ROWS && decideLocal.compactExpanded !== true
+      const compactCollapsed = decideMaxRows < DECIDE_COMPACT_MAX_ROWS && (decideLayoutMode(decideCols, decideLayout) === 'single' || (decideLocal.style ?? 'D') === 'C') && decideLocal.compactExpanded !== true
       if (k.kind === 'cursor' && k.at === decideLocal.cursor && !compactCollapsed) {
         void v74Keylog($, {
           handler: 'frameKey', component: 'AbovePrompt', key: 'cursor', event: 'cursor',

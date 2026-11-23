@@ -122,12 +122,12 @@ export function fmtTps3(tps: number | null, state: DataState): string {
 
 const idleTone = (): { color: ThemeKey } => ({ color: PALETTE.idle })
 
-// Routing table (§2.3): click and digit key go to the exact same page; decorations/separators/idle never trigger.
+// Routing table (§2.3, aligned by trace-inventory G01/G02): click and digit key go to the exact same page; decorations/separators/idle never trigger.
 export function bandSlotPage(target: BandRoutingTarget, idleRemind = false): PageId | null {
   switch (target) {
     case 'remind': return idleRemind ? null : 'decide'
-    case 'line': return 'dispatch'
-    case 'source': return 'todo'
+    case 'line': return 'now'
+    case 'source': return 'hygiene'
     case 'pend': return 'decide'
     case 'qc': return 'review'
     case 'tps': return 'spend'
@@ -152,11 +152,11 @@ function fixedLabel(word: string, width: number): string {
   return padRightToWidth(word, width)
 }
 
-// 3 產線 ⊘99+ ●99+ ✗99+ ⋯99+ (26 cols)
+// 1 產線 ⊘99+ ●99+ ✗99+ ⋯99+ (26 cols)
 export function formatLineFull(line: OneRowInput['line'], t: T): OneRowSegment {
   const st = line.state
   const word = fixedLabel(t('band.onerow.line'), 4)
-  const prefixBase = (st === 'stale' ? '~3' : '3 ') + word
+  const prefixBase = (st === 'stale' ? '~1' : '1 ') + word
   const prefix = prefixBase + ' '
   const items: { glyph: string; val: number | null; alert: boolean }[] = [
     { glyph: GLYPHS.state.stalled, val: line.stalled, alert: (line.stalled ?? 0) > 0 },
@@ -179,10 +179,10 @@ export function formatLineFull(line: OneRowInput['line'], t: T): OneRowSegment {
       segs.push(it.alert ? { text: txt, color: PALETTE.broken } : { text: txt })
     })
   }
-  return { id: 'line', segs, width: BAND_COL_WIDTHS.line, clickable: true, page: 'dispatch' }
+  return { id: 'line', segs, width: BAND_COL_WIDTHS.line, clickable: true, page: 'now' }
 }
 
-// Shortened alert-only line form (§2.6): `3 產線 ⊘ 4 ✗ 2` (matches wide ⊘ ● ✗ ⋯ order, space between glyph and count, max 3, width <= 14).
+// Shortened alert-only line form (§2.6): `1 產線 ⊘ 4 ✗ 2` (matches wide ⊘ ● ✗ ⋯ order, space between glyph and count, max 3, width <= 14).
 // Drops the redundant label word (and then inner space before `+`/`?`) when counts would exceed 14 cols so `+` and `?` are preserved.
 export function formatLineShort(line: OneRowInput['line'], t: T): OneRowSegment {
   const st = line.state
@@ -196,9 +196,9 @@ export function formatLineShort(line: OneRowInput['line'], t: T): OneRowSegment 
   if ((line.stalled ?? 0) > 0) alerts.push({ glyph: GLYPHS.state.stalled, count: compactCount(line.stalled as number) })
   if ((line.failed ?? 0) > 0) alerts.push({ glyph: GLYPHS.state.failed, count: compactCount(line.failed as number) })
   const picked = alerts.slice(0, 3)
-  const pfxFull = (st === 'stale' ? '~3' : '3 ') + word + ' '
-  const pfxDigit = st === 'stale' ? '~3 ' : '3 '
-  const pfxTight = st === 'stale' ? '~3' : '3'
+  const pfxFull = (st === 'stale' ? '~1' : '1 ') + word + ' '
+  const pfxDigit = st === 'stale' ? '~1 ' : '1 '
+  const pfxTight = st === 'stale' ? '~1' : '1'
   const joinedSpaced = picked.map(a => a.glyph + ' ' + a.count).join(' ')
   const joinedTight = picked.map(a => a.glyph + a.count).join(' ')
   let head = pfxFull
@@ -219,14 +219,14 @@ export function formatLineShort(line: OneRowInput['line'], t: T): OneRowSegment 
   const segs: Seg[] = st === 'stale'
     ? [{ text: head + body, ...idleTone() }]
     : [{ text: head }, { text: body, color: PALETTE.broken }]
-  return { id: 'line', segs, width: displayWidth(head + body), clickable: true, page: 'dispatch', short: true }
+  return { id: 'line', segs, width: displayWidth(head + body), clickable: true, page: 'now', short: true }
 }
 
-// 8 來源 開發 ⚑99+ (16 cols)
+// 6 來源 開發 ⚑99+ (16 cols)
 export function formatSource(source: OneRowInput['source'], t: T): OneRowSegment {
   const st = source.state
   const word = fixedLabel(t('band.onerow.source'), 4)
-  const prefix = (st === 'stale' ? '~8' : '8 ') + word + ' '
+  const prefix = (st === 'stale' ? '~6' : '6 ') + word + ' '
   const name = st === 'missing' || source.label === null || source.label === ''
     ? padRightToWidth(GLYPHS.structure.empty, 4)
     : padRightToWidth(source.label, 4)
@@ -234,7 +234,7 @@ export function formatSource(source: OneRowInput['source'], t: T): OneRowSegment
   const tail = (displayWidth(num) > 3 ? '' : ' ') + GLYPHS.structure.residue + num
   const full = prefix + name + tail
   const segs: Seg[] = st === 'stale' || st === 'missing' ? [{ text: full, ...idleTone() }] : [{ text: full }]
-  return { id: 'source', segs, width: BAND_COL_WIDTHS.source, clickable: true, page: 'todo' }
+  return { id: 'source', segs, width: BAND_COL_WIDTHS.source, clickable: true, page: 'hygiene' }
 }
 
 // 2 待決 99+ (10 cols)

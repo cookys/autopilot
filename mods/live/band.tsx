@@ -28,7 +28,7 @@ import type { BandSegmentId, OneRowLayout } from './band-onerow'
 import { isBriefStale, staleBadge } from './pages/rows'
 import { mostSevere } from './pages/frame'
 import type { PageId } from './pages/frame'
-import { V74_KEY, V74_PAGES } from './v74/contract'
+import { PET_KEY, V74_KEY, V74_PAGES } from './v74/contract'
 
 type El = (props: any) => any
 
@@ -145,7 +145,7 @@ export function OneRowBand(
       ? <Box key="pane-toggle-plain">{togTexts}</Box>
       : <Button key="pane-toggle" plain {...(layout.toggle.expanded ? {} : { autoFocus: true })} onPress={onToggleExpand}>{togTexts}</Button>,
   )
-  // §2.3: when the page frame is closed/not drawn, keep page digits (1-9) and w reachable on the band row.
+  // §2.3: when the page frame is closed/not drawn, keep page digits (1-9, 0 pet) and w reachable on the band row.
   // Use empty <Text>{''}</Text> labels (matching focusAnchor in pane.tsx) so tree-text readers do not append hidden hotkey letters to the band row.
   if (hotkeys !== undefined && Button !== undefined) {
     for (const id of V74_PAGES) {
@@ -156,6 +156,11 @@ export function OneRowBand(
         </Box>,
       )
     }
+    parts.push(
+      <Box key="band-hk-pet" width={0} height={0} overflow="hidden">
+        <Button key={'band-hotkey:' + PET_KEY} plain hotkey={PET_KEY} onPress={() => hotkeys.onPage('pet')}><Text>{''}</Text></Button>
+      </Box>,
+    )
     parts.push(
       <Box key="band-hk-w" width={0} height={0} overflow="hidden">
         <Button key="band-hotkey:w" plain hotkey="w" onPress={onToggleExpand}><Text>{''}</Text></Button>

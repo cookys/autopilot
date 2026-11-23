@@ -38,12 +38,12 @@ test('r8 #3: after s the page says how many cards went out', () => {
 })
 
 test('r8 #8: other cards are one summary row each; the card at the cursor is open in full', () => {
-  // 已改為雙欄：左欄每卡一列（游標列 ▸），右欄展開游標卡詳情
+  // 已改為雙欄：左欄每卡一列（游標列 ‣），右欄展開游標卡詳情
   const { body } = decidePage.render(ctxOf({ nav: { cursor: 1, picks: {}, notes: {}, noteMode: false } }))
   const content = body.slice(2).map(text)
   const left = content.map(l => l.slice(0, l.indexOf(' │ ')))
   const right = content.map(l => l.slice(l.indexOf(' │ ') + 3))
-  expect(left.some(l => l.startsWith('▸ 02 ' + decide[1].title))).toBe(true)
+  expect(left.some(l => l.startsWith('‣ 02 ' + decide[1].title))).toBe(true)
   expect(left.some(l => l.startsWith('  01 ' + decide[0].title))).toBe(true)
   expect(left.some(l => l.startsWith('  03 ' + decide[2].title))).toBe(true)
   expect(right.join('\n')).toContain(decide[1].question)
@@ -123,7 +123,7 @@ test('r8 #5: the legend names ⋯ and says what ⬥ ▸ ⏶ mean on the decide p
   expect(all).toContain('⬥ 等你決定')
   expect(all).toContain('→ 你選的答案')
   expect(all).toContain('✓ 我替你決定的紀錄')
-  expect(all).toContain('▸ 已摺疊 · 目前這張')
+  expect(all).toContain('▸ 已摺疊')
   expect(all).toContain('⏶ 要你處理')
 })
 
@@ -143,16 +143,16 @@ test('r8 #10: an empty 待辦 says how to recover, and its border hint offers no
 const four: DecideCard[] = [0, 1, 2, 3].map(n => ({ ...decide[n % decide.length], id: 'd-r8-' + n, title: 'T' + (n + 1), question: 'Q' + (n + 1) + '？' }))
 const nav4 = (cursor: number) => ({ cursor, picks: {}, notes: {}, noteMode: false })
 
-test('r8-1: the open card follows the cursor, ▸ and the head count with it, the others stay one row in order', () => {
-  // 已改為雙欄：表頭顯示 卡 #0N / 4，左欄維持 1234 順序與單一 ▸ 游標列，右欄只展開該卡詳情
+test('r8-1: the open card follows the cursor, ‣ and the head count with it, the others stay one row in order', () => {
+  // 已改為雙欄：表頭顯示 卡 #0N / 4，左欄維持 1234 順序與單一 ‣ 游標列，右欄只展開該卡詳情
   for (const at of [0, 1, 2, 3]) {
     const lines = decidePage.render(ctxOf({ decide: four, nav: nav4(at) }, 40)).body.map(text)
     expect(lines[0]).toContain('卡 #0' + (at + 1) + ' / 4')
     const content = lines.slice(2)
     const left = content.map(l => l.slice(0, l.indexOf(' │ ')))
     const right = content.map(l => l.slice(l.indexOf(' │ ') + 3))
-    expect(left.filter(l => l.startsWith('▸'))).toEqual([expect.stringContaining('▸ 0' + (at + 1) + ' T' + (at + 1))])
-    const order = left.map(l => /^(?:▸ |  )0(\d) T/.exec(l)?.[1]).filter(x => x !== undefined)
+    expect(left.filter(l => l.startsWith('‣'))).toEqual([expect.stringContaining('‣ 0' + (at + 1) + ' T' + (at + 1))])
+    const order = left.map(l => /^(?:‣ |  )0(\d) T/.exec(l)?.[1]).filter(x => x !== undefined)
     expect(order.join('')).toBe('1234')
     expect(right.join('\n')).toContain('T' + (at + 1) + '：Q' + (at + 1) + '？')
     expect(right.filter(l => l.startsWith('    背景')).length).toBe(1)
@@ -160,11 +160,11 @@ test('r8-1: the open card follows the cursor, ▸ and the head count with it, th
 })
 
 test('r8-1: through the frame ctx (ctx.decide carries the cursor) the open card is that card', () => {
-  // 已改為雙欄：ctx.decide.cursor=3 時左欄游標在 ▸ 04 T4 且右欄顯示卡 #04 與 T4 詳情
+  // 已改為雙欄：ctx.decide.cursor=3 時左欄游標在 ‣ 04 T4 且右欄顯示卡 #04 與 T4 詳情
   const ctx = { ...(ctxOf({ decide: four }, 40) as object), decide: { ...NO_NAV, cursor: 3 } } as never
   const lines = decidePage.render(ctx).body.map(text)
   expect(lines[0]).toContain('卡 #04 / 4')
-  expect(lines.some(l => l.startsWith('▸ 04 T4'))).toBe(true)
+  expect(lines.some(l => l.startsWith('‣ 04 T4'))).toBe(true)
   expect(lines.join('\n')).toContain('T4：Q4？')
 })
 
@@ -181,7 +181,7 @@ test('r8-1: in a short frame the other cards collapse before the blank row betwe
   expect(b).toBeGreaterThan(a + 1)
   expect(right.slice(a + 1, b).some(l => l.trim() === '')).toBe(true) // the blank row between [a] and [b]
   expect(right.slice(a, b).some(l => l.includes('說明'))).toBe(true) // the description is still there
-  expect(left.some(l => l.startsWith('▸ 01 T1'))).toBe(true)
+  expect(left.some(l => l.startsWith('‣ 01 T1'))).toBe(true)
   expect(left.some(l => l.startsWith('  04 T4'))).toBe(true)
   expect(lines.length).toBeLessThanOrEqual(17 - 1 - 2 - 1)
 })

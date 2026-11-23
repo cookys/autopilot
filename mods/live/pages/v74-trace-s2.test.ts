@@ -110,21 +110,21 @@ test('G11 feed: makeDecideFeed exposes error() and preserves last successful fet
   expect(feed.error()).toBeNull()
   expect(feed.fetchedMs()).toBe(NOW - 8 * MIN)
 
-  // 2. CLI failure -> cards null, error exposes stderr first line, fetchedMs preserves last success
+  // 2. CLI failure -> retains last good cards ([]), error exposes stderr first line, fetchedMs preserves last success
   await feed.refresh(async () => ({ exitCode: 1, stdout: '', stderr: '\n  hub unreachable\nstack trace' }), NOW - 4 * MIN)
-  expect(feed.cards()).toBeNull()
+  expect(feed.cards()).toEqual([])
   expect(feed.error()).toBe('hub unreachable')
   expect(feed.fetchedMs()).toBe(NOW - 8 * MIN)
 
-  // 3. Invalid JSON on exit 0 -> cards null, error set, fetchedMs NOT overwritten
+  // 3. Invalid JSON on exit 0 -> retains last good cards ([]), error set, fetchedMs NOT overwritten
   await feed.refresh(async () => ({ exitCode: 0, stdout: 'not-json', stderr: '' }), NOW - 2 * MIN)
-  expect(feed.cards()).toBeNull()
+  expect(feed.cards()).toEqual([])
   expect(feed.error()).toBe('invalid decision list json')
   expect(feed.fetchedMs()).toBe(NOW - 8 * MIN)
 
-  // 4. Runner rejection (timeout) -> error captured, fetchedMs preserved
+  // 4. Runner rejection (timeout) -> retains last good cards ([]), error captured, fetchedMs preserved
   await feed.refresh(async () => { throw new Error('command timed out') }, NOW - MIN)
-  expect(feed.cards()).toBeNull()
+  expect(feed.cards()).toEqual([])
   expect(feed.error()).toBe('command timed out')
   expect(feed.fetchedMs()).toBe(NOW - 8 * MIN)
 
@@ -148,17 +148,17 @@ test('G13 feed: makePmFeed exposes error() and preserves last successful fetched
   expect(feed.fetchedMs()).toBe(NOW - 10 * MIN)
 
   await feed.refresh(async () => ({ exitCode: 2, stdout: '', stderr: 'pm daemon offline\ndetail' }), NOW - 5 * MIN)
-  expect(feed.status()).toBeNull()
+  expect(feed.status()).toEqual(PM_OBJ)
   expect(feed.error()).toBe('pm daemon offline')
   expect(feed.fetchedMs()).toBe(NOW - 10 * MIN)
 
   await feed.refresh(async () => ({ exitCode: 0, stdout: '{"schema":"wrong"}', stderr: '' }), NOW - 2 * MIN)
-  expect(feed.status()).toBeNull()
+  expect(feed.status()).toEqual(PM_OBJ)
   expect(feed.error()).toBe('invalid pm status json')
   expect(feed.fetchedMs()).toBe(NOW - 10 * MIN)
 
   await feed.refresh(async () => { throw new Error('ETIMEDOUT') }, NOW - MIN)
-  expect(feed.status()).toBeNull()
+  expect(feed.status()).toEqual(PM_OBJ)
   expect(feed.error()).toBe('ETIMEDOUT')
   expect(feed.fetchedMs()).toBe(NOW - 10 * MIN)
 

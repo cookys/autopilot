@@ -195,4 +195,31 @@ describe('pm-seat-cost-metrics', () => {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
+
+  it('streams a session file larger than one read chunk without splitting multibyte text', () => {
+    const tmp = makeTempDir();
+    try {
+      const sessDir = path.join(tmp, 'sessions');
+      fs.mkdirSync(sessDir);
+      const rows = [];
+      for (let i = 0; i < 400; i++) {
+        rows.push({
+          type: 'assistant',
+          timestamp: '2026-11-22T01:00:00.000Z',
+          message: {
+            id: 'm' + i,
+            role: 'assistant',
+            content: [{ type: 'text', text: '中'.repeat(3000) }],
+            usage: { input_tokens: 1, output_tokens: 1 },
+          },
+        });
+      }
+      writeJsonl(path.join(sessDir, 'big.jsonl'), rows);
+      assert.ok(fs.statSync(path.join(sessDir, 'big.jsonl')).size > 2 * (1 << 20));
+      const out = computeMetrics({ sessionsDirs: [sessDir], day: '2026-11-22' });
+      assert.equal(out[0].calls, 400);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
 });

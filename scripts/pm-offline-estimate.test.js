@@ -28,7 +28,7 @@ try {
   assert.equal(JSON.parse(output).autocompact[0].actual_cost, 10);
 } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 
-assert.deepEqual(failures([[turn(10), { type: 'system', subtype: 'stop_hook', decision: 'block' }, turn(5)]]), [{ category: 'hook_block', failures: 1, retry_turns: 1, weighted_cost: 5, by_hook: [{ hook: 'unknown', event: 'Stop', failures: 1, retry_turns: 1, weighted_cost: 5 }] }]);
+assert.deepEqual(failures([[turn(10), { type: 'system', subtype: 'stop_hook', decision: 'block' }, turn(5)]]), [{ category: 'hook_block', failures: 1, retry_turns: 1, weighted_cost: 5, by_hook: [{ hook: 'unknown', event: 'Stop', failures: 1, retry_turns: 1, weighted_cost: 5, by_tool: { other: 1 }, by_shape: { empty: 1 } }] }]);
 
 assert.ok(Math.abs(autocompact([[turn(167001)]], 200000, 10000, 40000).simulated_cost - 216700.1) < 1e-6, 'summary read+output, 1h rewrite of prefix+summary, then the turn on the rebuilt 50k context');
 
@@ -165,7 +165,7 @@ assert.equal(hb.weighted_cost, 100);
 assert.deepEqual(hb.by_hook, [
   { hook: 'context-land-gate', event: 'Stop', failures: 1, retry_turns: 1, weighted_cost: 50 },
   { hook: 'bash-launch-guard', event: 'PreToolUse', failures: 1, retry_turns: 1, weighted_cost: 30 },
-  { hook: 'unknown', event: 'other', failures: 1, retry_turns: 1, weighted_cost: 20 },
+  { hook: 'unknown', event: 'other', failures: 1, retry_turns: 1, weighted_cost: 20, by_tool: { other: 1 }, by_shape: { starts_blocked: 1 } },
 ]);
 assert.equal(hb.by_hook.reduce((s, x) => s + x.failures, 0), hb.failures);
 assert.equal(hb.by_hook.reduce((s, x) => s + x.retry_turns, 0), hb.retry_turns);
@@ -180,7 +180,7 @@ const s2Extra = failures([[
 ]]);
 assert.deepEqual(s2Extra[0].by_hook, [
   { hook: 'orchestrator-edit-gate', event: 'PreToolUse', failures: 1, retry_turns: 1, weighted_cost: 6 },
-  { hook: 'unknown', event: 'Stop', failures: 1, retry_turns: 1, weighted_cost: 4 },
+  { hook: 'unknown', event: 'Stop', failures: 1, retry_turns: 1, weighted_cost: 4, by_tool: { other: 1 }, by_shape: { empty: 1 } },
 ]);
 
 const longToken = 'secret-long-payload-that-must-never-leak-into-json-output-over-sixty-four-chars';
@@ -205,7 +205,58 @@ assert.deepEqual(s2Privacy, [{
   retry_turns: 3,
   weighted_cost: 30,
   by_hook: [
-    { hook: 'unknown', event: 'PreToolUse', failures: 2, retry_turns: 2, weighted_cost: 22 },
-    { hook: 'unknown', event: 'Stop', failures: 1, retry_turns: 1, weighted_cost: 8 },
+    { hook: 'unknown', event: 'PreToolUse', failures: 2, retry_turns: 2, weighted_cost: 22, by_tool: { Bash: 2 }, by_shape: { has_hook: 2 } },
+    { hook: 'unknown', event: 'Stop', failures: 1, retry_turns: 1, weighted_cost: 8, by_tool: { other: 1 }, by_shape: { empty: 1 } },
   ],
 }]);
+
+// v7: S2 unknown hook_block breakdown by_tool and by_shape
+const toolTurn = (id, name, cost = 1) => ({
+  type: 'assistant',
+  message: {
+    usage: { input_tokens: cost },
+    content: [{ type: 'tool_use', id, name, input: { cmd: 'SECRET_CMD_MARKER' } }],
+  },
+});
+const s2UnknownBreakdown = failures([[
+  toolTurn('t1', 'Bash', 1),
+  { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't1', content: 'PreToolUse:Bash hook error: MARKER_SHAPE_HOOK' }] } },
+  toolTurn('t2', 'Edit', 2),
+  { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't2', content: 'BLOCKED by hook: MARKER_SHAPE_BLOCKED' }] } },
+  toolTurn('t3', 'Write', 3),
+  { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't3', content: 'denied by hook: MARKER_SHAPE_DENIED' }] } },
+  toolTurn('t4', 'Read', 4),
+  { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't4', content: 'not allowed by hook: MARKER_SHAPE_NOT_ALLOWED' }] } },
+  toolTurn('t5', 'CustomTool', 5),
+  { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't5', content: 'hook error: missing permission MARKER_SHAPE_PERMISSION' }] } },
+  turn(6),
+  { type: 'system', subtype: 'stop_hook', decision: 'block' },
+  turn(7),
+]]);
+const s2UnknownJson = JSON.stringify(s2UnknownBreakdown);
+for (const marker of [
+  'SECRET_CMD_MARKER',
+  'MARKER_SHAPE_HOOK',
+  'MARKER_SHAPE_BLOCKED',
+  'MARKER_SHAPE_DENIED',
+  'MARKER_SHAPE_NOT_ALLOWED',
+  'MARKER_SHAPE_PERMISSION',
+  'CustomTool',
+]) {
+  assert(!s2UnknownJson.includes(marker), `must not leak ${marker}`);
+}
+const preUnknown = s2UnknownBreakdown[0].by_hook.find(b => b.hook === 'unknown' && b.event === 'PreToolUse');
+const otherUnknown = s2UnknownBreakdown[0].by_hook.find(b => b.hook === 'unknown' && b.event === 'other');
+const stopUnknown = s2UnknownBreakdown[0].by_hook.find(b => b.hook === 'unknown' && b.event === 'Stop');
+assert.deepEqual(preUnknown.by_tool, { Bash: 1 });
+assert.deepEqual(preUnknown.by_shape, { has_hook: 1 });
+assert.deepEqual(otherUnknown.by_tool, { Edit: 1, Write: 1, Read: 1, other: 1 });
+assert.deepEqual(otherUnknown.by_shape, {
+  starts_blocked: 1,
+  starts_denied: 1,
+  starts_not_allowed: 1,
+  has_permission: 1,
+});
+assert.deepEqual(stopUnknown.by_tool, { other: 1 });
+assert.deepEqual(stopUnknown.by_shape, { empty: 1 });
+console.log('unknown breakdown tests passed');

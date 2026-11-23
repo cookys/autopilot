@@ -1016,5 +1016,9 @@
   "v74.b.border.decide_c": "p/n card · a/b/c pick · e expand context · m note · s preview · v dual view · {keys} · Esc",
   "v74.b.short.decide_c": "p/n · a/b/c · e · m · s · v · Esc",
   "v74.b.border.decide_bg": "e or Esc back to card · {ud} scroll",
-  "v74.b.short.decide_bg": "Esc · {ud}"
+  "v74.b.short.decide_bg": "Esc · {ud}",
+  "v74.d.card_single": "Card #01/1 · only 1 pending · clears on send",
+  "v74.d.list_long": "Pending list ({n})",
+  "v74.d.list_short": "List ({n})",
+  "v74.d.card_of": "Card #{k} / {n}"
 }

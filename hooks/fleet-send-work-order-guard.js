@@ -50,8 +50,8 @@ const WORK_ORDER_PHRASES = Object.freeze([
 ]);
 
 const HEADER_EXAMPLE = '訊息內文最上面逐行寫：\ntask_id: <26 碼任務 id>\ntag: progress|result|question|ruling|fyi\nwaiting_on: <對方地址>';
-const DENY_REASON = '這則 send 是在派工（要對方現在做事或回交件）。新工作請用 dispatch；既有任務的訊息請用 reply，並用標頭行綁定任務。' + HEADER_EXAMPLE + '\n純資訊才用 send 並設 fyi=true（fyi 不能夾帶要對方做事的指令）。' + gateHint('新工作用 dispatch；既有任務用 reply（帶 task 標頭）；純資訊 send 才設 fyi=true', 'hooks/README.md');
-const REPLY_DENY_REASON = '這則 reply 是在派工（要對方現在做事或回交件）。新工作請用 dispatch；若是回答既有任務，請帶任務脈絡。' + HEADER_EXAMPLE + '\n純資訊才設 fyi=true。' + gateHint('新工作用 dispatch；回答既有任務要帶 task 標頭；純資訊才設 fyi=true', 'hooks/README.md');
+const DENY_REASON = '這則 send 是在派工（要對方現在做事或回交件）。新工作請用 dispatch；既有任務的訊息請用 reply，並用標頭行綁定任務。' + HEADER_EXAMPLE + '\n純資訊才用 send 並設 fyi=true（fyi 不能夾帶要對方做事的指令）。' + gateHint('新工作用 dispatch；既有任務留言用 task_comment(task_id, text)、回派工用 task_result(message_id, result, content)；純資訊 send 才設 fyi=true', 'hooks/README.md');
+const REPLY_DENY_REASON = '這則 reply 是在派工（要對方現在做事或回交件）。新工作請用 dispatch；若是回答既有任務，請帶任務脈絡。' + HEADER_EXAMPLE + '\n純資訊才設 fyi=true。' + gateHint('新工作用 dispatch；既有任務留言用 task_comment(task_id, text)、回派工用 task_result(message_id, result, content)；純資訊才設 fyi=true', 'hooks/README.md');
 // 'fyi' means "needs no answer, no action": an ask hiding under it is still a work order. Only the bare
 // noun 回報 (a mention, e.g. "晚點補完整回報") stays allowed under fyi.
 const FYI_BENIGN_PHRASES = Object.freeze(['回報']);

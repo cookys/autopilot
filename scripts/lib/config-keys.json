@@ -6044,6 +6044,22 @@
       "summary": "Environment override of reply_language (beats ~/.autopilot/config.json). Set to \"zh-Hant\" to require Traditional Chinese replies in owner-question-guard; any other value disables the check even when reply_language is set in config.json."
     },
     {
+      "name": "AUTOPILOT_STOP_ONCE",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": "on",
+      "readers": [
+        "hooks/owner-question-guard.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "reply_language",
+        "AUTOPILOT_OWNER_QUESTION_GUARD"
+      ],
+      "summary": "The reply-language check of owner-question-guard blocks at most once per turn: a retry Stop (stop_hook_active) passes it. Set to 0 to restore the old repeat-block behaviour."
+    },
+    {
       "name": "AUTOPILOT_SEND_WORK_ORDER_GUARD",
       "kind": "env",
       "audience": "user",

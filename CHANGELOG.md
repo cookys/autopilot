@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- **owner-question-guard 語言檢查每回合最多擋一次**（PM 省額度計畫 S5b，`AUTOPILOT_STOP_ONCE`，預設開，`0` 還原）：重試的 Stop（`stop_hook_active`）略過回覆語言檢查，不再讓同一回合被重複重提示；卡片規則的重擋不變。其餘 Stop hook 盤點後本來就是一次（inbox-drain-gate、per-turn-gate 已處理重入，askpm-remind 第二次不擋，context-land-gate 兩次為設計）。
 - pm-seat-cost-daily (mechanism, Fleet task 01M8350QM7GTW20VH5YP2EAK0H, no version bump): `scripts/pm-seat-cost-daily.sh` appends the previous UTC day's PM-seat cost row (re-run safe), with a systemd user service and timer at 00:30 Taipei under `scripts/systemd/`; the PM installs them.
 - pm-cost-s2 (mechanism, Fleet task 01M8350QM7GTW20VH5YP2EAK0H, no version bump): the fleet send/reply work-order refusal now names `task_comment(task_id, text)` and `task_result(message_id, result, content)`, so a refused call is fixed in one retry.
 - pm-seat-cost-metrics (mechanism, Fleet task 01M8350QM7GTW20VH5YP2EAK0H, no version bump): added `scripts/pm-seat-cost-metrics.js` and `scripts/pm-seat-cost-metrics.test.js` to emit daily UTC weighted-cost, context, mechanical/failure share, rotation/resume-check, bypass-auto-handled, operator correction/latency, mutually exclusive slice, detector, and gate rows from PM session JSONL transcripts and optional ledger/courier/rotation logs.

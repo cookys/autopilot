@@ -1226,12 +1226,16 @@ const BARE_LS_DENY = [
   'ls -la | head',
 ];
 for (const cmd of BARE_LS_DENY) {
-  test(`rule4 denies bare ls: ${JSON.stringify(cmd)}`, () => {
+  test(`rule4 auto-rewrites bare ls: ${JSON.stringify(cmd)}`, () => {
     const r = run(cmd, { lsDefault: true });
-    assert.strictEqual(r.deny, true);
-    assert.match(r.reason, /bare-ls/);
-    assert.match(r.reason, /command ls/);
-    assert.match(r.reason, /AUTOPILOT_BASH_GUARD_LS_MODE/);
+    assert.strictEqual(r.deny, false);
+    assert.strictEqual(r.decision, 'allow');
+    assert.ok(r.updatedInput && r.updatedInput.command, `expected updatedInput.command for ${cmd}`);
+    assert.notStrictEqual(r.updatedInput.command, cmd);
+    assert.match(r.ctx, /已自動改寫/);
+    const recheck = run(r.updatedInput.command, { lsDefault: true });
+    assert.strictEqual(recheck.deny, false);
+    assert.doesNotMatch(recheck.ctx, /bare-ls|已自動改寫/);
   });
 }
 const BARE_LS_ALLOW = [
@@ -1311,7 +1315,7 @@ test('rule4 knob: env warn advises without denying, off is silent, garbage denie
   const o = run('ls', { lsDefault: true, env: { AUTOPILOT_BASH_GUARD_LS_MODE: 'off' } });
   assert.strictEqual(o.deny, false);
   assert.doesNotMatch(o.ctx, /bare-ls/);
-  assert.strictEqual(run('ls', { lsDefault: true, env: { AUTOPILOT_BASH_GUARD_LS_MODE: 'bogus' } }).deny, true);
+  assert.strictEqual(run('ls $(ls)', { lsDefault: true, env: { AUTOPILOT_BASH_GUARD_LS_MODE: 'bogus' } }).deny, true);
 });
 
 // Cost bound: the hook runs on every Bash call, so crafted unclosed `[a` / `a=(` runs must stay linear.
@@ -2398,14 +2402,16 @@ test('P2 paste-ready rewrites: every changed rule emits a copyable rewrite that 
     assert.ok(rw, `missing rewrite in: ${r.reason}`);
     assert.strictEqual(run(rw).deny, false, `rewrite still denied: ${rw}`);
   }
-  // 3. zsh-expansion (warn-only)
+  // 3. zsh-expansion (auto-rewrite)
   {
     const r = run('echo *.zzq_nonexistent_p2', { shell: 'zsh' });
     assert.strictEqual(r.deny, false);
-    assert.match(r.ctx, /zsh-expansion/);
-    const rw = extractRewrite(r.ctx);
-    assert.ok(rw, `missing rewrite in: ${r.ctx}`);
-    assert.doesNotMatch(run(rw, { shell: 'zsh' }).ctx, /zsh-expansion/);
+    assert.strictEqual(r.decision, 'allow');
+    assert.ok(r.updatedInput && r.updatedInput.command, `missing updatedInput.command in: ${JSON.stringify(r)}`);
+    assert.match(r.ctx, /已自動改寫/);
+    const recheck = run(r.updatedInput.command, { shell: 'zsh' });
+    assert.strictEqual(recheck.deny, false);
+    assert.doesNotMatch(recheck.ctx, /zsh-expansion|已自動改寫/);
   }
   // 4. zsh-only-syntax
   {

@@ -4,9 +4,12 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const { StringDecoder } = require('node:string_decoder');
 const { incomingMessages } = require('./pm-offline-estimate.js');
 const { scanText } = require('./lib/outbound-secret-scan.js');
 const { redactText } = require('./lib/personal-data-redact.js');
+
+const DEFAULT_CHUNK_SIZE = 1 << 20;
 
 const DEFAULT_QUOTA = {
   operator: 3,
@@ -684,16 +687,60 @@ function parseArgs(argv) {
   return args;
 }
 
-function loadSessionsFromDirs(dirs) {
+function loadSessionsFromDirs(dirs, options = {}) {
+  const opts = options || {};
+  const sinceMs = opts.since ? Date.parse(opts.since) : -Infinity;
+  const chunkSize = opts.chunkSize ?? DEFAULT_CHUNK_SIZE;
+  if (!Number.isInteger(chunkSize) || chunkSize <= 0) {
+    throw new Error(`Invalid chunkSize: ${chunkSize}`);
+  }
   const combined = [];
+  let skippedBadLines = 0;
+  const buf = Buffer.alloc(chunkSize);
+
+  function handleLine(line) {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    let entry;
+    try {
+      entry = JSON.parse(trimmed);
+    } catch {
+      skippedBadLines += 1;
+      return;
+    }
+    if (Number.isFinite(sinceMs) && entry && entry.timestamp) {
+      const ts = Date.parse(entry.timestamp);
+      if (Number.isFinite(ts) && ts < sinceMs) return;
+    }
+    combined.push(entry);
+  }
+
   for (const dir of dirs) {
     const files = fs.readdirSync(dir).filter((f) => f.endsWith('.jsonl')).sort();
     for (const file of files) {
-      const lines = fs.readFileSync(path.join(dir, file), 'utf8').split('\n').filter(Boolean);
-      for (const line of lines) {
-        combined.push(JSON.parse(line));
+      const fd = fs.openSync(path.join(dir, file), 'r');
+      try {
+        const dec = new StringDecoder('utf8');
+        let rest = '';
+        let n;
+        while ((n = fs.readSync(fd, buf, 0, buf.length, null)) > 0) {
+          const parts = (rest + dec.write(buf.subarray(0, n))).split('\n');
+          rest = parts.pop();
+          for (const line of parts) {
+            handleLine(line);
+          }
+        }
+        const tail = rest + dec.end();
+        if (tail) handleLine(tail);
+      } finally {
+        fs.closeSync(fd);
       }
     }
+  }
+
+  if (opts.stats && typeof opts.stats === 'object') {
+    opts.stats.skippedBadLines = skippedBadLines;
+    opts.stats.loadedCount = combined.length;
   }
   return combined;
 }
@@ -703,10 +750,19 @@ function main(argv = process.argv.slice(2)) {
   if (!args.out || args.sessionsDirs.length === 0) {
     throw new Error('Usage: pm-replay-slice.js --sessions-dir <dir> --out <dir> [--seed N] [--levels 200000,300000] [--quota ...] [--since ISO]');
   }
-  const session = loadSessionsFromDirs(args.sessionsDirs);
-  const events = sliceEvents(session, { since: args.since });
-  const sampleResult = scanAndSampleEvents(events, args.quota, args.seed);
-  writeSliceOutput(args.out, session, sampleResult, { seed: args.seed, levels: args.levels });
+  const loadStats = { skippedBadLines: 0, loadedCount: 0 };
+  const session = loadSessionsFromDirs(args.sessionsDirs, {
+    since: args.since,
+    stats: loadStats,
+  });
+  try {
+    const events = sliceEvents(session, { since: args.since });
+    const sampleResult = scanAndSampleEvents(events, args.quota, args.seed);
+    writeSliceOutput(args.out, session, sampleResult, { seed: args.seed, levels: args.levels });
+  } finally {
+    process.stderr.write(`skipped_bad_lines: ${loadStats.skippedBadLines}\n`);
+    process.stderr.write(`loaded_items: ${loadStats.loadedCount}\n`);
+  }
 }
 
 if (require.main === module) {
@@ -715,6 +771,7 @@ if (require.main === module) {
 
 module.exports = {
   DEFAULT_QUOTA,
+  DEFAULT_CHUNK_SIZE,
   CLASSIFICATION_RULES,
   SUPPLEMENTARY_REDACT_RULES,
   classifyEvent,
@@ -728,4 +785,6 @@ module.exports = {
   serializeEvent,
   writeSliceOutput,
   parseArgs,
+  loadSessionsFromDirs,
+  main,
 };

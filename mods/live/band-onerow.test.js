@@ -46,6 +46,7 @@ test('carbon-critical-a: 80-col bodyColumns=75 with failed & stalled keeps short
   assert.ok(lineSeg.width <= 14, 'shortened line width <= 14, got ' + lineSeg.width)
   assert.ok(segText(lineSeg).includes(G.state.failed + ' 2'), 'shortened line contains spaced failed alert: ' + segText(lineSeg))
   assert.ok(segText(lineSeg).includes(G.state.stalled + ' 4'), 'shortened line contains spaced stalled alert: ' + segText(lineSeg))
+  assert.ok(segText(lineSeg).indexOf(G.state.stalled) < segText(lineSeg).indexOf(G.state.failed), 'shortened line keeps wide ⊘-before-✗ order: ' + segText(lineSeg))
   assert.ok(qcSeg, 'alerting QC segment MUST NOT be dropped at 75 cols')
   assert.ok(segText(qcSeg).includes(G.state.need_you), 'QC alert mark retained')
   assert.ok(lay.remind.width >= 20, 'reminder keeps readable width >= 20, got ' + lay.remind.width)
@@ -290,20 +291,140 @@ test('r3-minor1: missing sparkline and pet omit unlabelled shells and free width
   assert.equal(W.displayWidth(B.oneRowText(noDecor)), 195, 'total row still fills exact 195 cols')
 })
 
-// Codex R3 Minor: 80-col shortened alert form has space between glyph and count, stays <= 14 cols even at 99+ and stale
-test('r3-minor-spacing: 80-col shortened line uses `3 產線 ✗ 2 ⊘ 4` with spaces and preserves spaces + `?` at 99+ / stale', () => {
+// Codex R3 Minor + R4 Minor: 80-col shortened alert form unifies wide ⊘-before-✗ order (`3 產線 ⊘ 4 ✗ 2`) and preserves `+` + `?` within 14 cols
+test('r3-minor-spacing: 80-col shortened line uses `3 產線 ⊘ 4 ✗ 2` with spaces and preserves `+` + `?` at 99+ / stale', () => {
   const normal = B.formatLineShort({ stalled: 4, running: 3, failed: 2, waiting: 0, state: 'normal' }, tZh)
-  assert.equal(segText(normal), '3 產線 ✗ 2 ⊘ 4')
+  assert.equal(segText(normal), '3 產線 ⊘ 4 ✗ 2')
   assert.equal(normal.width, 14)
 
   const maxNormal = B.formatLineShort({ stalled: 250, running: 3, failed: 120, waiting: 0, state: 'normal' }, tZh)
   assert.ok(maxNormal.width <= 14, 'max normal short <= 14, got ' + maxNormal.width)
-  assert.ok(segText(maxNormal).includes('✗ 99+'), 'max normal keeps space: ' + segText(maxNormal))
   assert.ok(segText(maxNormal).includes('⊘ 99+'), 'max normal keeps space: ' + segText(maxNormal))
+  assert.ok(segText(maxNormal).includes('✗ 99+'), 'max normal keeps space: ' + segText(maxNormal))
+  assert.ok(segText(maxNormal).indexOf('⊘') < segText(maxNormal).indexOf('✗'), 'normal short keeps ⊘ before ✗')
 
   const maxStale = B.formatLineShort({ stalled: 250, running: 3, failed: 120, waiting: 0, state: 'stale' }, tZh)
   assert.ok(maxStale.width <= 14, 'max stale short <= 14, got ' + maxStale.width)
   assert.ok(segText(maxStale).startsWith('~'), 'stale starts with ~: ' + segText(maxStale))
-  assert.ok(segText(maxStale).includes('✗ 99?'), 'stale keeps space and ?: ' + segText(maxStale))
-  assert.ok(segText(maxStale).includes('⊘ 99?'), 'stale keeps space and ?: ' + segText(maxStale))
+  assert.ok(segText(maxStale).includes('⊘99+?'), 'stale preserves + and ?: ' + segText(maxStale))
+  assert.ok(segText(maxStale).includes('✗99+?'), 'stale preserves + and ?: ' + segText(maxStale))
+  assert.ok(segText(maxStale).indexOf('⊘') < segText(maxStale).indexOf('✗'), 'stale short keeps ⊘ before ✗')
+})
+
+// Codex R4 Major 1: stale overflow counts preserve `+` (`99+?`), remain distinct from exact 99 (`99?`), and stay within §2.2 column widths
+test('r4-major1: normal and stale distinguish exact 99 from 99+ across all count segments without exceeding §2.2 widths', () => {
+  const exact99 = {
+    line: { stalled: 99, running: 99, failed: 99, waiting: 99 },
+    source: { label: '開發', flags: 99 },
+    pend: { count: 99, hasRec: true },
+    tps: { value: 999 },
+  }
+  const over99 = {
+    line: { stalled: 120, running: 250, failed: 999, waiting: 100 },
+    source: { label: '開發', flags: 300 },
+    pend: { count: 210, hasRec: true },
+    tps: { value: 1250 },
+  }
+  const withState = (cfg, st) => sampleInput({
+    reminder: { state: st },
+    line: { ...cfg.line, state: st },
+    source: { ...cfg.source, state: st },
+    pend: { ...cfg.pend, state: st },
+    qc: { status: 'alert', state: st },
+    tps: { ...cfg.tps, state: st },
+    spark: { bars: '▇█▆▅▆', state: st },
+    pet: { text: 'Ferris Lv.1', state: st },
+  })
+  const expectedWidths = { line: 26, source: 16, pend: 10, qc: 8, tps: 14, spark: 6, pet: 12 }
+
+  for (const t of [tZh, tEn]) {
+    const norm99 = B.layoutOneRowBand(withState(exact99, 'normal'), 195, t)
+    const normOver = B.layoutOneRowBand(withState(over99, 'normal'), 195, t)
+    assert.equal((B.oneRowText(norm99).match(/99\+/g) || []).length, 0, 'normal 99 has no 99+')
+    assert.equal((B.oneRowText(normOver).match(/99\+/g) || []).length, 6, 'normal over-99 has 6x 99+')
+    assert.deepEqual(normOver.sepPositions, norm99.sepPositions, 'normal 99 vs 99+ keeps separators fixed')
+
+    const stale99 = B.layoutOneRowBand(withState(exact99, 'stale'), 195, t)
+    const staleOver = B.layoutOneRowBand(withState(over99, 'stale'), 195, t)
+    const s99Text = B.oneRowText(stale99)
+    const sOverText = B.oneRowText(staleOver)
+    assert.equal((s99Text.match(/99\+\?/g) || []).length, 0, 'stale 99 has no 99+?')
+    assert.equal((s99Text.match(/99\?/g) || []).length, 6, 'stale 99 has 6x 99?: ' + s99Text)
+    assert.equal((sOverText.match(/99\+\?/g) || []).length, 6, 'stale over-99 has 6x 99+?: ' + sOverText)
+    assert.equal((sOverText.match(/(?<!\+)99\?/g) || []).length, 0, 'stale over-99 never loses +: ' + sOverText)
+    assert.notEqual(sOverText, s99Text, 'stale 99 and stale 99+ are visually distinct')
+    assert.deepEqual(staleOver.sepPositions, norm99.sepPositions, 'stale 99+? keeps identical separator positions')
+    for (const lay of [norm99, normOver, stale99, staleOver]) {
+      const widths = Object.fromEntries(lay.segments.map(s => [s.id, W.displayWidth(segText(s))]))
+      assert.deepEqual(widths, expectedWidths, 'every segment matches §2.2 width table')
+      assert.equal(W.displayWidth(B.oneRowText(lay)), 195, 'exact total 195 cols')
+    }
+  }
+
+  // 80-col (75) narrow stale distinguishes 99 from 99+ on both line short form and pend without exceeding limits
+  const stale99_75 = B.layoutOneRowBand(withState(exact99, 'stale'), 75, tZh)
+  const staleOver_75 = B.layoutOneRowBand(withState(over99, 'stale'), 75, tZh)
+  assert.ok(W.displayWidth(B.oneRowText(stale99_75)) <= 75)
+  assert.ok(W.displayWidth(B.oneRowText(staleOver_75)) <= 75)
+  const line99 = stale99_75.segments.find(s => s.id === 'line')
+  const lineOver = staleOver_75.segments.find(s => s.id === 'line')
+  const pend99 = stale99_75.segments.find(s => s.id === 'pend')
+  const pendOver = staleOver_75.segments.find(s => s.id === 'pend')
+  assert.equal(segText(line99), '~3 ⊘ 99? ✗ 99?')
+  assert.equal(segText(lineOver), '~3 ⊘99+? ✗99+?')
+  assert.ok(W.displayWidth(segText(lineOver)) <= B.BAND_COL_WIDTHS.lineShortMax)
+  assert.equal(segText(pend99), '~2待決 99?')
+  assert.equal(segText(pendOver), '~2待決99+?')
+  assert.equal(W.displayWidth(segText(pendOver)), B.BAND_COL_WIDTHS.pend)
+})
+
+// Codex R4 Major 2: missing decision source shows 待決資料缺失 (never 無待決); stale 0-pending shows ~無待決?; only normal + count=0 shows 無待決
+test('r4-major2: missing and stale decision states never claim 無待決; only normal count=0 is idle', () => {
+  const missingBoth = sampleInput({
+    reminder: { text: null, state: 'missing', hasRec: false },
+    pend: { count: null, hasRec: false, state: 'missing' },
+  })
+  const missZh = B.layoutOneRowBand(missingBoth, 195, tZh)
+  assert.ok(segText(missZh.remind).includes('待決資料缺失'), 'missing zh-TW shows 待決資料缺失: ' + segText(missZh.remind))
+  assert.equal(segText(missZh.remind).includes('無待決'), false, 'missing zh-TW must NOT claim 無待決')
+  assert.equal(missZh.remind.segs[0].color, P.idle)
+  assert.notEqual(missZh.remind.segs[0].dim, true)
+  assert.equal(missZh.remind.clickable, true, 'missing reminder remains clickable to inspect source')
+
+  const missEn = B.layoutOneRowBand(missingBoth, 195, tEn)
+  assert.ok(segText(missEn.remind).includes('Pending data missing'), 'missing en shows Pending data missing: ' + segText(missEn.remind))
+  assert.equal(segText(missEn.remind).includes('No pending'), false, 'missing en must NOT claim No pending')
+
+  const missPendOnly = B.layoutOneRowBand(sampleInput({
+    reminder: { text: null, state: 'normal', hasRec: false },
+    pend: { count: null, hasRec: false, state: 'missing' },
+  }), 195, tZh)
+  assert.ok(segText(missPendOnly.remind).includes('待決資料缺失'), 'null/missing pend count never falls back to 無待決')
+  assert.equal(segText(missPendOnly.remind).includes('無待決'), false)
+
+  for (const staleInp of [
+    sampleInput({ reminder: { text: null, state: 'stale', hasRec: false }, pend: { count: 0, hasRec: false, state: 'stale' } }),
+    sampleInput({ reminder: { text: null, state: 'normal', hasRec: false }, pend: { count: 0, hasRec: false, state: 'stale' } }),
+  ]) {
+    const staleZero = B.layoutOneRowBand(staleInp, 195, tZh)
+    const remTxt = segText(staleZero.remind).trimEnd()
+    assert.equal(remTxt, '~無待決?', 'stale 0-pending must mark ~ and ? instead of confirmed 無待決: ' + remTxt)
+    assert.equal(staleZero.remind.segs[0].color, P.idle)
+    assert.notEqual(staleZero.remind.segs[0].dim, true)
+    assert.equal(staleZero.remind.clickable, true, 'stale reminder stays clickable')
+  }
+
+  const normalZeroZh = B.layoutOneRowBand(sampleInput({
+    reminder: { text: null, state: 'normal', hasRec: false },
+    pend: { count: 0, hasRec: false, state: 'normal' },
+  }), 195, tZh)
+  assert.equal(segText(normalZeroZh.remind).trimEnd(), '無待決')
+  assert.equal(normalZeroZh.remind.clickable, false)
+
+  const normalZeroEn = B.layoutOneRowBand(sampleInput({
+    reminder: { text: null, state: 'normal', hasRec: false },
+    pend: { count: 0, hasRec: false, state: 'normal' },
+  }), 195, tEn)
+  assert.equal(segText(normalZeroEn.remind).trimEnd(), 'No pending')
+  assert.equal(normalZeroEn.remind.clickable, false)
 })

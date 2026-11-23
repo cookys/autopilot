@@ -60,6 +60,7 @@ node --test "$here/pages/quota-pick.test.js" < /dev/null
 # pages/fleet.test.ts (S2: the 艦隊 page golden rows, fixed height, no-source and stale rows, key presses) is picked up the same way
 # decide.test.ts (S1: the 待決 page, golden against the codeforge mockups, and its key reducer) is picked up the same way
 # pane-poll.test.ts (the real tick runs `fleet console --json` and `fleet seats --quota --json` on every page and with the pane closed, console.json or not) is picked up the same way
+# band-onerow-interact.test.ts (Codex R4 Major 3: mounted AbovePrompt w round-trip, manual collapse/expand persistence across refresh/page-switch/resize, §2.3 click routing & hidden-segment digit hotkeys) is picked up the same way
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 

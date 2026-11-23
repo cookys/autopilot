@@ -1009,6 +1009,7 @@
   "band.onerow.expand": "展開",
   "band.onerow.collapse": "收合",
   "band.onerow.idle": "無待決",
+  "band.onerow.missing": "待決資料缺失",
   "band.onerow.remind_prefix": "要你決定：",
   "band.onerow.hint_full": "2 待決 3 派工 4 審查 5 花費 8 待辦 w {toggle}",
   "band.onerow.hint_short": "2待 3派 4審 5花 8辦 w{toggle}",

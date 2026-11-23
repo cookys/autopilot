@@ -39,26 +39,34 @@ function emitRow(label, cols, lay) {
   return { line, w }
 }
 
-test('state 1: 80-col (75) simultaneous line ✗/⊘ alert + QC ▲ alert retains both alerts without wrap', () => {
+test('state 1: 80-col (75) simultaneous line ⊘/✗ alert + QC ▲ alert retains both alerts without wrap', () => {
   const lay = B.layoutOneRowBand(baseInput({
     line: { stalled: 4, running: 3, failed: 2, waiting: 0, state: 'normal' },
     qc: { status: 'alert', state: 'normal' },
     pend: { count: 21, hasRec: true, state: 'normal' },
   }), 75, tZh)
-  const { line, w } = emitRow('80c line(✗ 2 ⊘ 4) + QC(▲)', 75, lay)
+  const { line, w } = emitRow('80c line(⊘ 4 ✗ 2) + QC(▲)', 75, lay)
   assert.ok(w <= 75, 'width <= 75, got ' + w)
   assert.equal(line.includes('\n'), false, 'single row')
   const lineSeg = lay.segments.find(s => s.id === 'line')
   const qcSeg = lay.segments.find(s => s.id === 'qc')
   const pendSeg = lay.segments.find(s => s.id === 'pend')
   assert.ok(lineSeg && lineSeg.short === true, 'line kept in short alert form')
-  assert.equal(segText(lineSeg), '3 產線 ✗ 2 ⊘ 4')
+  assert.equal(segText(lineSeg), '3 產線 ⊘ 4 ✗ 2')
+  assert.ok(segText(lineSeg).indexOf('⊘') < segText(lineSeg).indexOf('✗'), 'narrow alert keeps wide ⊘-before-✗ order')
   assert.ok(qcSeg && segText(qcSeg).includes(G.state.need_you), 'QC alert retained')
   assert.ok(pendSeg && segText(pendSeg).includes('21'), 'pend count retained')
   assert.ok(lay.remind.width >= 20, 'reminder keeps readable width >= 20, got ' + lay.remind.width)
 })
 
-test('state 2: all 4 counts at 99+ plus stale (~ prefix and ?) keep exact widths and never clip `?` at 195 and 75 cols', () => {
+test('state 2: all 4 counts at 99+ plus stale (~ prefix and 99+?) distinguish 99 vs 99+ within §2.2 widths at 195 and 75 cols', () => {
+  const exact99Counts = {
+    line: { stalled: 99, running: 99, failed: 99, waiting: 99, state: 'normal' },
+    source: { label: '開發', flags: 99, state: 'normal' },
+    pend: { count: 99, hasRec: true, state: 'normal' },
+    qc: { status: 'alert', state: 'normal' },
+    tps: { value: 999, state: 'normal' },
+  }
   const maxCounts = {
     line: { stalled: 120, running: 250, failed: 999, waiting: 100, state: 'normal' },
     source: { label: '開發', flags: 300, state: 'normal' },
@@ -66,11 +74,32 @@ test('state 2: all 4 counts at 99+ plus stale (~ prefix and ?) keep exact widths
     qc: { status: 'alert', state: 'normal' },
     tps: { value: 1250, state: 'normal' },
   }
+  const exact99Normal195 = B.layoutOneRowBand(baseInput(exact99Counts), 195, tZh)
+  const r99Norm195 = emitRow('200c exact-99 normal', 195, exact99Normal195)
+  assert.equal(r99Norm195.w, 195)
+  assert.equal((r99Norm195.line.match(/99\+/g) || []).length, 0, 'exact 99 normal has no 99+')
+
   const normal195 = B.layoutOneRowBand(baseInput(maxCounts), 195, tZh)
   const rNorm195 = emitRow('200c 99+ normal', 195, normal195)
   assert.equal(rNorm195.w, 195)
   assert.equal((rNorm195.line.match(/99\+/g) || []).length, 6, 'line(4)+source(1)+pend(1) all cap at 99+')
   assert.ok(rNorm195.line.includes('1k+'), 'tps caps at 1k+')
+
+  const stale99 = {
+    reminder: { state: 'stale' },
+    line: { stalled: 99, running: 99, failed: 99, waiting: 99, state: 'stale' },
+    source: { label: '開發', flags: 99, state: 'stale' },
+    pend: { count: 99, hasRec: true, state: 'stale' },
+    qc: { status: 'alert', state: 'stale' },
+    tps: { value: 999, state: 'stale' },
+    spark: { bars: '▇█▆▅▆', state: 'stale' },
+    pet: { text: 'Ferris Lv.1', state: 'stale' },
+  }
+  const stale99_195 = B.layoutOneRowBand(baseInput(stale99), 195, tZh)
+  const r99Stale195 = emitRow('200c exact-99 stale (~ + ?)', 195, stale99_195)
+  assert.equal(r99Stale195.w, 195)
+  assert.equal((r99Stale195.line.match(/99\+\?/g) || []).length, 0, 'exact 99 stale has no 99+?')
+  assert.equal((r99Stale195.line.match(/99\?/g) || []).length, 6, 'exact 99 stale shows 6x 99?')
 
   const staleMax = {
     reminder: { state: 'stale' },
@@ -84,7 +113,7 @@ test('state 2: all 4 counts at 99+ plus stale (~ prefix and ?) keep exact widths
   }
   for (const cols of [195, 75]) {
     const lay = B.layoutOneRowBand(baseInput(staleMax), cols, tZh)
-    const { line, w } = emitRow(`${cols === 195 ? '200c' : '80c'} 99+ stale (~ + ?)`, cols, lay)
+    const { line, w } = emitRow(`${cols === 195 ? '200c' : '80c'} 99+ stale (~ + 99+?)`, cols, lay)
     assert.ok(w <= cols, `${cols}: width <= ${cols}, got ${w}`)
     assert.equal(line.includes('\n'), false, `${cols}: no wrap`)
     // Reminder keeps both ~ prefix and ? suffix even when truncated at 75 cols
@@ -94,9 +123,11 @@ test('state 2: all 4 counts at 99+ plus stale (~ prefix and ?) keep exact widths
     // Alert segments retained at both 195 and 75 cols
     assert.ok(lay.segments.some(s => s.id === 'line'), `${cols}: line alert retained`)
     assert.ok(lay.segments.some(s => s.id === 'qc'), `${cols}: qc alert retained`)
-    // Every visible segment starts with ~, preserves ?, and uses PALETTE.idle without dim
+    // Every visible segment starts with ~, preserves ?, stays within §2.2 width, and uses PALETTE.idle without dim
     for (const seg of lay.segments) {
       const txt = segText(seg)
+      const capW = seg.id === 'line' && seg.short ? B.BAND_COL_WIDTHS.lineShortMax : B.BAND_COL_WIDTHS[seg.id]
+      assert.ok(W.displayWidth(txt) <= capW, `${cols} ${seg.id} width ${W.displayWidth(txt)} <= ${capW}: ${txt}`)
       assert.ok(txt.startsWith('~'), `${cols} ${seg.id} starts with ~: ${txt}`)
       assert.ok(txt.includes('?'), `${cols} ${seg.id} preserves ?: ${txt}`)
       for (const s of seg.segs) {
@@ -104,14 +135,21 @@ test('state 2: all 4 counts at 99+ plus stale (~ prefix and ?) keep exact widths
         assert.notEqual(s.dim, true, `${cols} ${seg.id} stale does not stack dim`)
       }
     }
+    if (cols === 195) {
+      assert.equal((line.match(/99\+\?/g) || []).length, 6, '195c stale preserves all 6x 99+?: ' + line)
+      assert.ok(line.includes('1k+?'), '195c stale preserves 1k+?: ' + line)
+    }
     if (cols === 75) {
       const lineTxt = segText(lay.segments.find(s => s.id === 'line'))
-      assert.ok(lineTxt.includes('✗ 99?') && lineTxt.includes('⊘ 99?'), `75c stale short line keeps both ? and spaces: ${lineTxt}`)
+      const pendTxt = segText(lay.segments.find(s => s.id === 'pend'))
+      assert.ok(lineTxt.includes('⊘99+?') && lineTxt.includes('✗99+?'), `75c stale short line preserves + and ?: ${lineTxt}`)
+      assert.ok(lineTxt.indexOf('⊘') < lineTxt.indexOf('✗'), `75c stale short line keeps ⊘ before ✗: ${lineTxt}`)
+      assert.ok(pendTxt.includes('99+?'), `75c stale pend preserves 99+?: ${pendTxt}`)
     }
   }
 })
 
-test('state 3: missing brief / missing quota renders `—` on data slots, omits empty spark/pet shells, and S4 idle renders 無待決', () => {
+test('state 3: missing brief/quota renders 待決資料缺失 (never 無待決), stale 0-pending marks ~…?, and only normal S4 idle renders 無待決', () => {
   const missingInp = baseInput({
     reminder: { text: null, state: 'missing' },
     line: { stalled: null, running: null, failed: null, waiting: null, state: 'missing' },
@@ -127,6 +165,10 @@ test('state 3: missing brief / missing quota renders `—` on data slots, omits 
     const { line, w } = emitRow(`${cols === 195 ? '200c' : '80c'} missing brief/quota (—)`, cols, lay)
     assert.ok(w <= cols, `${cols}: width <= ${cols}, got ${w}`)
     assert.equal(line.includes('\n'), false)
+    assert.ok(segText(lay.remind).includes('待決資料缺失'), `${cols}: missing reminder says 待決資料缺失: ${segText(lay.remind)}`)
+    assert.equal(segText(lay.remind).includes('無待決'), false, `${cols}: missing reminder must NOT say 無待決`)
+    assert.equal(lay.remind.segs[0].color, P.idle, `${cols}: missing reminder uses PALETTE.idle`)
+    assert.notEqual(lay.remind.segs[0].dim, true, `${cols}: missing reminder does not stack dim`)
     assert.equal(lay.segments.some(s => s.id === 'spark' || s.id === 'pet'), false, `${cols}: no empty spark/pet shells`)
     for (const seg of lay.segments) {
       assert.ok(segText(seg).includes(G.structure.empty), `${cols} ${seg.id} displays —`)
@@ -136,6 +178,20 @@ test('state 3: missing brief / missing quota renders `—` on data slots, omits 
       }
     }
   }
+  const staleZeroLay = B.layoutOneRowBand(baseInput({
+    reminder: { text: null, state: 'stale', hasRec: false },
+    pend: { count: 0, hasRec: false, state: 'stale' },
+    qc: { status: 'ok', state: 'stale' },
+    line: { stalled: 0, running: 2, failed: 0, waiting: 0, state: 'stale' },
+    spark: { bars: null, state: 'missing' },
+    pet: { text: null, state: 'missing' },
+  }), 155, tZh)
+  const rStaleZero = emitRow('160c stale 0-pending (~無待決?)', 155, staleZeroLay)
+  assert.ok(rStaleZero.w <= 155)
+  assert.equal(segText(staleZeroLay.remind).trimEnd(), '~無待決?', 'stale 0-pending must show ~無待決?, not confirmed 無待決')
+  assert.equal(staleZeroLay.remind.segs[0].color, P.idle)
+  assert.notEqual(staleZeroLay.remind.segs[0].dim, true)
+
   const idleLay = B.layoutOneRowBand(baseInput({
     reminder: { text: null, state: 'normal', hasRec: false },
     pend: { count: 0, hasRec: false, state: 'normal' },
@@ -146,7 +202,7 @@ test('state 3: missing brief / missing quota renders `—` on data slots, omits 
   }), 155, tZh)
   const rIdle = emitRow('160c S4 idle (0 pending)', 155, idleLay)
   assert.ok(rIdle.w <= 155)
-  assert.ok(segText(idleLay.remind).includes('無待決'), 'S4 idle shows 無待決')
+  assert.equal(segText(idleLay.remind).trimEnd(), '無待決', 'S4 normal idle shows 無待決')
   assert.equal(idleLay.remind.clickable, false)
 })
 

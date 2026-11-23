@@ -100,12 +100,12 @@ export function padLeftToWidth(text: string, width: number): string {
   return w >= width ? text : ' '.repeat(width - w) + text
 }
 
-// Right-aligned 3-column count: normal caps at 99+, stale adds ? suffix within 3 cols, missing uses em-dash.
+// Right-aligned 3-column count: normal caps at 99+, stale adds ? suffix (99+? when >99, absorbing its leading space), missing uses em-dash.
 export function fmtCount3(n: number | null, state: DataState): string {
   if (state === 'missing' || n === null || !Number.isFinite(n)) return '  ' + GLYPHS.structure.empty
   const v = Math.max(0, Math.floor(n))
   if (state === 'stale') {
-    const s = v > 99 ? '99?' : String(v) + '?'
+    const s = v > 99 ? '99+?' : String(v) + '?'
     return padLeftToWidth(s, 3)
   }
   const s = v > 99 ? '99+' : String(v)
@@ -156,7 +156,8 @@ function fixedLabel(word: string, width: number): string {
 export function formatLineFull(line: OneRowInput['line'], t: T): OneRowSegment {
   const st = line.state
   const word = fixedLabel(t('band.onerow.line'), 4)
-  const prefix = (st === 'stale' ? '~3' : '3 ') + word + ' '
+  const prefixBase = (st === 'stale' ? '~3' : '3 ') + word
+  const prefix = prefixBase + ' '
   const items: { glyph: string; val: number | null; alert: boolean }[] = [
     { glyph: GLYPHS.state.stalled, val: line.stalled, alert: (line.stalled ?? 0) > 0 },
     { glyph: GLYPHS.state.running, val: line.running, alert: false },
@@ -165,8 +166,11 @@ export function formatLineFull(line: OneRowInput['line'], t: T): OneRowSegment {
   ]
   const segs: Seg[] = []
   if (st === 'stale' || st === 'missing') {
-    const body = items.map(it => it.glyph + fmtCount3(it.val, st)).join(' ')
-    segs.push({ text: prefix + body, ...idleTone() })
+    const body = items.map(it => {
+      const c = fmtCount3(it.val, st)
+      return (displayWidth(c) > 3 ? '' : ' ') + it.glyph + c
+    }).join('')
+    segs.push({ text: prefixBase + body, ...idleTone() })
   } else {
     segs.push({ text: prefix })
     items.forEach((it, idx) => {
@@ -178,19 +182,19 @@ export function formatLineFull(line: OneRowInput['line'], t: T): OneRowSegment {
   return { id: 'line', segs, width: BAND_COL_WIDTHS.line, clickable: true, page: 'dispatch' }
 }
 
-// Shortened alert-only line form (§2.6): `3 產線 ✗ 2 ⊘ 4` (only alerting items, space between glyph and count, max 3, width <= 14).
-// Drops the redundant label word when multi-digit or stale `?` counts would exceed 14 cols so glyph spacing and `?` are preserved.
+// Shortened alert-only line form (§2.6): `3 產線 ⊘ 4 ✗ 2` (matches wide ⊘ ● ✗ ⋯ order, space between glyph and count, max 3, width <= 14).
+// Drops the redundant label word (and then inner space before `+`/`?`) when counts would exceed 14 cols so `+` and `?` are preserved.
 export function formatLineShort(line: OneRowInput['line'], t: T): OneRowSegment {
   const st = line.state
   const word = fixedLabel(t('band.onerow.line'), 4)
   const compactCount = (n: number): string => {
     const v = Math.max(0, Math.floor(n))
-    if (st === 'stale') return v > 99 ? '99?' : String(v) + '?'
+    if (st === 'stale') return v > 99 ? '99+?' : String(v) + '?'
     return v > 99 ? '99+' : String(v)
   }
   const alerts: { glyph: string; count: string }[] = []
-  if ((line.failed ?? 0) > 0) alerts.push({ glyph: GLYPHS.state.failed, count: compactCount(line.failed as number) })
   if ((line.stalled ?? 0) > 0) alerts.push({ glyph: GLYPHS.state.stalled, count: compactCount(line.stalled as number) })
+  if ((line.failed ?? 0) > 0) alerts.push({ glyph: GLYPHS.state.failed, count: compactCount(line.failed as number) })
   const picked = alerts.slice(0, 3)
   const pfxFull = (st === 'stale' ? '~3' : '3 ') + word + ' '
   const pfxDigit = st === 'stale' ? '~3 ' : '3 '
@@ -226,7 +230,8 @@ export function formatSource(source: OneRowInput['source'], t: T): OneRowSegment
   const name = st === 'missing' || source.label === null || source.label === ''
     ? padRightToWidth(GLYPHS.structure.empty, 4)
     : padRightToWidth(source.label, 4)
-  const tail = ' ' + GLYPHS.structure.residue + fmtCount3(source.flags, st)
+  const num = fmtCount3(source.flags, st)
+  const tail = (displayWidth(num) > 3 ? '' : ' ') + GLYPHS.structure.residue + num
   const full = prefix + name + tail
   const segs: Seg[] = st === 'stale' || st === 'missing' ? [{ text: full, ...idleTone() }] : [{ text: full }]
   return { id: 'source', segs, width: BAND_COL_WIDTHS.source, clickable: true, page: 'todo' }
@@ -236,8 +241,8 @@ export function formatSource(source: OneRowInput['source'], t: T): OneRowSegment
 export function formatPend(pend: OneRowInput['pend'], t: T): OneRowSegment {
   const st = pend.state
   const word = fixedLabel(t('band.onerow.pend'), 4)
-  const prefix = (st === 'stale' ? '~2' : '2 ') + word + ' '
   const num = fmtCount3(pend.count, st)
+  const prefix = (st === 'stale' ? '~2' : '2 ') + word + (displayWidth(num) > 3 ? '' : ' ')
   const segs: Seg[] = st === 'stale' || st === 'missing'
     ? [{ text: prefix + num, ...idleTone() }]
     : pend.hasRec === true && (pend.count ?? 0) > 0
@@ -325,21 +330,23 @@ function buildToggle(expanded: boolean, maxCols: number, t: T): { segs: Seg[]; w
   return { segs: [{ text: arrow }], width: displayWidth(arrow), expanded }
 }
 
-function buildReminderRaw(inp: OneRowInput, t: T): { text: string; idle: boolean; color?: ThemeKey } {
-  const pendingN = inp.pend.count ?? 0
+function buildReminderRaw(inp: OneRowInput, t: T): { text: string; idle: boolean; stale: boolean; color?: ThemeKey } {
   const raw = inp.reminder.text?.trim() ?? ''
-  const idle = pendingN === 0 && raw === '' && inp.reminder.state !== 'stale'
-  if (idle) return { text: t('band.onerow.idle'), idle: true, color: PALETTE.idle }
-  if (inp.reminder.state === 'missing') {
-    return { text: GLYPHS.structure.folded + ' ' + t('band.onerow.remind_prefix') + GLYPHS.structure.empty, idle: false, color: PALETTE.idle }
+  const dataNormal = inp.reminder.state === 'normal' && inp.pend.state === 'normal'
+  if (dataNormal && inp.pend.count === 0 && raw === '') {
+    return { text: t('band.onerow.idle'), idle: true, stale: false, color: PALETTE.idle }
   }
-  const body = raw !== '' ? raw : t('band.onerow.remind_prefix') + GLYPHS.structure.empty
-  if (inp.reminder.state === 'stale') {
-    return { text: '~' + body + '?', idle: false, color: PALETTE.idle }
+  if (inp.reminder.state === 'missing' || (raw === '' && (inp.pend.state === 'missing' || inp.pend.count === null))) {
+    return { text: t('band.onerow.missing'), idle: false, stale: false, color: PALETTE.idle }
+  }
+  const isStale = inp.reminder.state === 'stale' || (raw === '' && inp.pend.state === 'stale')
+  const body = raw !== '' ? raw : inp.pend.count === 0 ? t('band.onerow.idle') : t('band.onerow.remind_prefix') + GLYPHS.structure.empty
+  if (isStale) {
+    return { text: '~' + body + '?', idle: false, stale: true, color: PALETTE.idle }
   }
   // §2.6: use folded right-triangle (▸, GLYPHS.structure.folded) instead of banned emoji ▶, distinct from QC ▲.
   const withLead = GLYPHS.structure.folded + ' ' + body
-  return { text: withLead, idle: false, ...(inp.reminder.hasRec === true ? { color: PALETTE.attention } : {}) }
+  return { text: withLead, idle: false, stale: false, ...(inp.reminder.hasRec === true ? { color: PALETTE.attention } : {}) }
 }
 
 // Lay out the single-row band inside `bodyColumns` (never wider, never wraps).
@@ -436,7 +443,7 @@ export function layoutOneRowBand(inp: OneRowInput, bodyColumns: number, t: T): O
     }
     return padRightToWidth(raw, width)
   }
-  const remText = formatRemText(remRaw.text, finalRemW, inp.reminder.state === 'stale')
+  const remText = formatRemText(remRaw.text, finalRemW, remRaw.stale)
   const remind: OneRowSegment = {
     id: 'remind',
     segs: remText === '' ? [] : [{ text: remText, ...(remRaw.color !== undefined ? { color: remRaw.color } : {}) }],

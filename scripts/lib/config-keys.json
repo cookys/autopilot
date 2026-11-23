@@ -49,81 +49,91 @@
     }
   },
   "entries": [
-      {
-        "name": "accounts.quota_probe_demand",
-        "kind": "config_key",
-        "audience": "user",
-        "type": "enum",
-        "allowed": ["audit", "registry"],
-        "default": "audit",
-        "readers": [
-          "scripts/claude-account.js",
-          "scripts/lib/account-probe.js"
-        ],
-        "doc": "docs/guide/settings-reference.md",
-        "relates": ["AUTOPILOT_QUOTA_PROBE_DEMAND", "accounts.quota_probe"],
-        "summary": "Controls whether periodic quota probes cover only aliases used in the last 24 h (audit) or also idle aliases in the host registry (registry)."
-      },
-      {
-        "name": "AUTOPILOT_QUOTA_PROBE_DEMAND",
-        "kind": "env",
-        "audience": "user",
-        "default": "audit",
-        "readers": [
-          "scripts/claude-account.js"
-        ],
-        "doc": "docs/guide/settings-reference.md",
-        "relates": ["accounts.quota_probe_demand"],
-        "summary": "Overrides accounts.quota_probe_demand (audit or registry)."
-      },
-      {
-        "name": "AUTOPILOT_DEP_CACHE",
-        "kind": "env",
-        "audience": "user",
-        "default": "1",
-        "readers": [
-          "scripts/affected-suites.js"
-        ],
-        "doc": "docs/guide/settings-reference.md",
-        "relates": [],
-        "summary": "Set to 0 to disable runtime dependency cache pruning in affected-suites.js."
-      },
-      {
-        "name": "AUTOPILOT_DEP_TRACE_FILE",
-        "kind": "env",
-        "audience": "internal",
-        "class": "test_seam",
-        "default": null,
-        "readers": [
-          "scripts/lib/dep-trace-hook.js",
-          "scripts/lib/dep-trace-bash.sh",
-          "scripts/build-dep-cache.js"
-        ],
-        "doc": null,
-        "relates": [],
-        "note": "Trace destination for runtime dependency collection."
-      },
-      {
-        "name": "AUTOPILOT_DEP_TRACE_ROOT",
-        "kind": "env",
-        "audience": "internal",
-        "class": "test_seam",
-        "default": null,
-        "readers": [
-          "scripts/lib/dep-trace-hook.js",
-          "scripts/build-dep-cache.js"
-        ],
-        "doc": null,
-        "relates": [],
-        "note": "Repository root for runtime dependency collection."
-      },
+    {
+      "name": "accounts.quota_probe_demand",
+      "kind": "config_key",
+      "audience": "user",
+      "type": "enum",
+      "allowed": [
+        "audit",
+        "registry"
+      ],
+      "default": "audit",
+      "readers": [
+        "scripts/claude-account.js",
+        "scripts/lib/account-probe.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_QUOTA_PROBE_DEMAND",
+        "accounts.quota_probe"
+      ],
+      "summary": "Controls whether periodic quota probes cover only aliases used in the last 24 h (audit) or also idle aliases in the host registry (registry)."
+    },
+    {
+      "name": "AUTOPILOT_QUOTA_PROBE_DEMAND",
+      "kind": "env",
+      "audience": "user",
+      "default": "audit",
+      "readers": [
+        "scripts/claude-account.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "accounts.quota_probe_demand"
+      ],
+      "summary": "Overrides accounts.quota_probe_demand (audit or registry)."
+    },
+    {
+      "name": "AUTOPILOT_DEP_CACHE",
+      "kind": "env",
+      "audience": "user",
+      "default": "1",
+      "readers": [
+        "scripts/affected-suites.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Set to 0 to disable runtime dependency cache pruning in affected-suites.js."
+    },
+    {
+      "name": "AUTOPILOT_DEP_TRACE_FILE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/lib/dep-trace-hook.js",
+        "scripts/lib/dep-trace-bash.sh",
+        "scripts/build-dep-cache.js"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "Trace destination for runtime dependency collection."
+    },
+    {
+      "name": "AUTOPILOT_DEP_TRACE_ROOT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/lib/dep-trace-hook.js",
+        "scripts/build-dep-cache.js"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "Repository root for runtime dependency collection."
+    },
     {
       "name": "AUTOPILOT_M6_CUTLINE",
       "kind": "env",
       "audience": "internal",
       "class": "test_seam",
       "default": null,
-      "readers": ["scripts/lib/m6-cutline.js"],
+      "readers": [
+        "scripts/lib/m6-cutline.js"
+      ],
       "doc": null,
       "relates": [],
       "note": "Test-only override for the M6 cutline day."
@@ -2662,7 +2672,9 @@
       "audience": "user",
       "class": "test_seam",
       "default": "on",
-      "readers": ["scripts/lib/agy-stream-json.js"],
+      "readers": [
+        "scripts/lib/agy-stream-json.js"
+      ],
       "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Enables the agy prompt file fallback unless set to 0, false, no, or off.",
@@ -2674,7 +2686,9 @@
       "audience": "user",
       "class": "test_seam",
       "default": "2097152",
-      "readers": ["scripts/lib/agy-stream-json.js"],
+      "readers": [
+        "scripts/lib/agy-stream-json.js"
+      ],
       "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Caps the agy prompt fallback file at 2 MiB by default.",
@@ -4593,7 +4607,9 @@
       "audience": "internal",
       "class": "plumbing",
       "default": null,
-      "readers": ["scripts/lane-ops.sh"],
+      "readers": [
+        "scripts/lane-ops.sh"
+      ],
       "doc": null,
       "relates": []
     },
@@ -9040,6 +9056,19 @@
         "AUTOPILOT_INBOX_DRAIN_GATE_LEAD"
       ],
       "summary": "When true, hooks/inbox-drain-gate.js also blocks lead seats with stale (>10m) unread inbox items (default false)."
+    },
+    {
+      "name": "AUTOPILOT_GATEWAY_FILL",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/lib/gateway-fill.js"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "Override the gateway-fill spool file path; set by gateway-fill-dry-run.js to point the dry run at its own spool."
     }
   ]
 }

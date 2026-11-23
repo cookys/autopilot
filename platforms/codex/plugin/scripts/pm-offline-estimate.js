@@ -2,10 +2,11 @@
 
 const { computeWeightedCost } = require('./pm-seat-cost-metrics.js');
 
-function autocompact(sessions, window = 200000, summaryTokens = 10000) {
+function autocompact(sessions, window = 200000, summaryTokens = 10000, prefixTokens = 40000) {
   let actual = 0, simulated = 0, compressions = 0, totalContext = 0, turns = 0;
   for (const session of sessions) {
-    let offset = 0;
+    let offset = 0, previous = 0;
+    const base = prefixTokens + summaryTokens;
     for (const entry of session) {
       if (entry.type !== 'assistant' || !entry.message?.usage) continue;
       const u = entry.message.usage;
@@ -13,11 +14,15 @@ function autocompact(sessions, window = 200000, summaryTokens = 10000) {
       actual += computeWeightedCost(u);
       totalContext += context;
       turns++;
-      let adjusted = Math.max(0, context - offset);
+      // A real compaction or /clear shows as a context drop: restart the simulation from the real value.
+      if (previous && context < previous * 0.6) offset = 0;
+      previous = context;
+      let adjusted = context - offset;
       if (adjusted > window - 33000) {
-        simulated += computeWeightedCost({ cache_read_input_tokens: adjusted, output_tokens: summaryTokens, cache_creation_input_tokens: summaryTokens });
-        offset = context - summaryTokens;
-        adjusted = summaryTokens;
+        // Summary call: reads the whole context, writes the summary; then the fixed prefix plus summary is rewritten (1h cache).
+        simulated += computeWeightedCost({ cache_read_input_tokens: adjusted, output_tokens: summaryTokens, cache_creation: { ephemeral_1h_input_tokens: base } });
+        offset = context - base;
+        adjusted = base;
         compressions++;
       }
       if (offset === 0) simulated += computeWeightedCost(u);
@@ -63,6 +68,14 @@ function prescreen(sessions, rules) {
   }
   return classes.map(c => c.result);
 }
+// Inbox messages reach the PM wrapped as <channel ... kind="wake">; a patrol line names its class after the tag.
+function batchKey(entry) {
+  const text = messageText(entry);
+  const kind = fields(entry).kind || text.match(/\bkind="([a-z_]+)"/)?.[1] || text.match(/^\s*\[([a-zA-Z0-9_-]+)\]/)?.[1];
+  if (kind == null) return null;
+  const cls = text.match(/\[fleet patrol\]\s+([a-z0-9_]+)/)?.[1] || text.match(/\[fleet patrol\]\s+(\d+ tasks held)/) && 'tasks_held';
+  return cls ? `${kind}:${cls}` : kind;
+}
 function batch(sessions, seconds = 300) {
   let saved_turns = 0, weighted_cost = 0;
   for (const session of sessions) {
@@ -70,7 +83,7 @@ function batch(sessions, seconds = 300) {
     let pending = false;
     for (const entry of session) {
       if (incoming(entry)) {
-        const kind = fields(entry).kind || messageText(entry).match(/^\s*\[([a-zA-Z0-9_-]+)\]/)?.[1];
+        const kind = batchKey(entry);
         const time = Date.parse(entry.timestamp);
         const previous = first.get(kind);
         pending = kind != null && Number.isFinite(time) && previous !== undefined && time >= previous && time - previous <= seconds * 1000;
@@ -127,7 +140,7 @@ if (require.main === module) {
   const fs = require('node:fs');
   const path = require('node:path');
   const args = process.argv.slice(2), dirs = [], windows = [];
-  let since = -Infinity, out, rules = null, summary = 10000, batchWindow = 300;
+  let since = -Infinity, out, rules = null, summary = 10000, prefix = 40000, batchWindow = 300;
   for (let i = 0; i < args.length; i++) {
     const value = args[++i];
     switch (args[i - 1]) {
@@ -137,6 +150,7 @@ if (require.main === module) {
       case '--out': out = value; break;
       case '--rules': rules = JSON.parse(value.trimStart().startsWith('{') ? value : fs.readFileSync(value, 'utf8')); break;
       case '--summary-tokens': summary = Number(value); break;
+      case '--prefix-tokens': prefix = Number(value); break;
       case '--batch-window-sec': batchWindow = Number(value); break;
       default: throw new Error('Unknown argument');
     }
@@ -162,7 +176,7 @@ if (require.main === module) {
     }
   }
   dirs.forEach(visit);
-  const result = { autocompact: windows.map(window => ({ window, ...autocompact(sessions, window, summary) })), s4: prescreen(sessions, rules), s5a: batch(sessions, batchWindow), s2: failures(sessions) };
+  const result = { autocompact: windows.map(window => ({ window, ...autocompact(sessions, window, summary, prefix) })), s4: prescreen(sessions, rules), s5a: batch(sessions, batchWindow), s2: failures(sessions) };
   const json = JSON.stringify(result, null, 2) + '\n';
   if (out) fs.writeFileSync(out, json); else process.stdout.write(json);
 }

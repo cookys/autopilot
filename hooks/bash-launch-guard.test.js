@@ -1225,7 +1225,23 @@ const BARE_LS_DENY = [
   'if ls; then echo y; fi',
   'ls -la | head',
 ];
+// Bare ls is auto-rewritten to `command ls` when that is mechanically safe; nested contexts
+// ($(ls), `ls`, <(ls), a=( ... ), (( ... ))) offer no safe rewrite and stay denied.
+// The denied count is pinned so a case silently flipping either way turns this red.
+const BARE_LS_NO_REWRITE_COUNT = 32;
+let bareLsDenied = 0;
 for (const cmd of BARE_LS_DENY) {
+  const r0 = run(cmd, { lsDefault: true });
+  if (r0.deny) {
+    bareLsDenied += 1;
+    test(`rule4 denies bare ls (no safe rewrite): ${JSON.stringify(cmd)}`, () => {
+      assert.strictEqual(r0.deny, true);
+      assert.match(r0.reason, /bare-ls/);
+      assert.match(r0.reason, /command ls/);
+      assert.match(r0.reason, /AUTOPILOT_BASH_GUARD_LS_MODE/);
+    });
+    continue;
+  }
   test(`rule4 auto-rewrites bare ls: ${JSON.stringify(cmd)}`, () => {
     const r = run(cmd, { lsDefault: true });
     assert.strictEqual(r.deny, false);
@@ -1238,6 +1254,9 @@ for (const cmd of BARE_LS_DENY) {
     assert.doesNotMatch(recheck.ctx, /bare-ls|已自動改寫/);
   });
 }
+test('rule4 bare-ls no-safe-rewrite set is pinned', () => {
+  assert.strictEqual(bareLsDenied, BARE_LS_NO_REWRITE_COUNT);
+});
 const BARE_LS_ALLOW = [
   'command ls',
   'command ls -la',

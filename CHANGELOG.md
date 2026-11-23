@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- pm-cost-s2 (mechanism, Fleet task 01M8350QM7GTW20VH5YP2EAK0H, no version bump): the fleet send/reply work-order refusal now names `task_comment(task_id, text)` and `task_result(message_id, result, content)`, so a refused call is fixed in one retry.
 - pm-seat-cost-metrics (mechanism, Fleet task 01M8350QM7GTW20VH5YP2EAK0H, no version bump): added `scripts/pm-seat-cost-metrics.js` and `scripts/pm-seat-cost-metrics.test.js` to emit daily UTC weighted-cost, context, mechanical/failure share, rotation/resume-check, bypass-auto-handled, operator correction/latency, mutually exclusive slice, detector, and gate rows from PM session JSONL transcripts and optional ledger/courier/rotation logs.
 - live-retire-v75 (Fleet task 01M82HXJHZA2MV3ABFHCG4TQPP, no version bump): retired the v7.5 dock shell (`mods/live/v75.ts`, `mods/live/band75.tsx`, `mods/live/v75.test.ts`), the `AUTOPILOT_LIVE_V75` switch, and v7.5-only locale strings so `mods/live/` runs a single v7.4 in-band frame path.
 - shed-fleet-dispatch (mechanism, Fleet task 01M82ZAK5Y63KSMTXG6F1ST830, no version bump): `hooks/fleet-dispatch-class.js` now reads `burn_more.v1.json` via `scripts/lib/shed-route.js` (`readBurnMoreSignal`) for `inventory`/`summary`/`chores` briefs of size `XS`/`S`, rewriting `Engine:` to the first dispatchable target and stamping `Shed: hit|skipped` (honouring `Engine-Pin:`, existing `Shed:`, and `AUTOPILOT_SHED_ROUTE=0`). Test: `hooks/tests/fleet-dispatch-class.test.sh`.

@@ -285,3 +285,13 @@ test('cli denies the work order and the off switch allows it', () => {
   assert.equal(off.status, 0, off.stderr);
   assert.equal(off.stdout, '');
 });
+
+test('pm-cost-s2: send and reply refusals name task_comment(task_id, text) and task_result(message_id, result, content)', () => {
+  for (const tool of ['mcp__fleet__send', 'mcp__fleet__reply']) {
+    const out = call(tool, '請跑 nsys 這一輪，跑完交件。', { message_id: 'm1' });
+    assert.equal(out.hookSpecificOutput.permissionDecision, 'deny');
+    const reason = out.hookSpecificOutput.permissionDecisionReason;
+    assert.match(reason, /task_comment\(task_id, text\)/);
+    assert.match(reason, /task_result\(message_id, result, content\)/);
+  }
+});

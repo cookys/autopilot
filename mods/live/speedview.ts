@@ -5,7 +5,7 @@
 
 import type { T } from './i18n'
 import type { Seg } from './model'
-import { fmtCount, fmtMs, fmtTps, mainSteps, recentTimed, shortModel, summarize } from './speed'
+import { agentRows, fmtCount, fmtMs, fmtTps, mainSteps, recentTimed, shortModel, summarize } from './speed'
 import type { Step } from './speed'
 import { GLYPHS } from '../tux/glyphs.ts'
 import { PALETTE } from '../tux/palette.ts'
@@ -108,4 +108,28 @@ export function speedView(steps: readonly Step[], rows: number, columns: number,
   if (left < RECENT_COL_W) return { columns: [speed], used: speed.width }
   const recent = recentColumn(steps, rows, RECENT_COL_W, t)
   return { columns: [speed, recent], used: speed.width + COL_GAP + recent.width }
+}
+
+/**
+ * One line per agent: the main conversation, then each subagent still making requests (an idle one folds away). Every agent is timed from its own requests.
+ * Columns: tok/s, first-token delay (the prompt processing, apart from the writing rate), tokens out so far, model, name. A rate whose window held prompt
+ * processing is a lower bound: the foot line says so, dim, when any row is one.
+ */
+export function agentsColumn(steps: readonly Step[], now: number, t: T, width: number): SpeedColumn {
+  const title = [seg(t('agents.title'))]
+  const rows = agentRows(steps, now)
+  if (rows.length === 0) return { lines: [title, [seg(DASH + ' ' + t('speed.none'), { dim: true })]], width }
+  const W = RECENT_W
+  const header = [seg('  ' + padLeft(t('reqs.tps'), W.tps) + ' ' + padLeft(t('reqs.ttft'), W.ttft) + ' ' + padLeft(t('agents.total'), W.out) + '  ' + t('reqs.model'), { dim: true })]
+  const body = rows.map((r): Seg[] => {
+    const bullet = seg(GLYPHS.structure.bullet + ' ', { color: PALETTE.structure, role: 'rule' })
+    const numbers = padLeft(fmtTps(r.latestTps, DASH), W.tps) + ' ' + padLeft(fmtMs(r.ttftMs, DASH), W.ttft) + ' ' + padLeft(fmtCount(r.outTokens), W.out) + '  '
+    const name = r.id === null ? t('agents.main') : r.label ?? t('reqs.sub')
+    const room = Math.max(0, width - displayWidth(GLYPHS.structure.bullet + ' ') - displayWidth(numbers))
+    const cells = cutCells(shortModel(r.model) + ' ' + name, room)
+    return r.id === null ? [bullet, seg(numbers + cells)] : [bullet, seg(numbers, { dim: true }), seg(cells, { dim: true })]
+  })
+  const lines = [title, header, ...body]
+  if (rows.some(r => r.floor)) lines.push([seg(cutCells(t('agents.floor'), width), { dim: true })])
+  return { lines, width }
 }

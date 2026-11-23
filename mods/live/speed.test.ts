@@ -5,7 +5,8 @@ import { test, expect } from 'claude-code/testing'
 import { makeT } from './i18n'
 import { isStep, fmtCount, fmtMs, fmtTps, KEEP_STEPS, MIN_DECODE_MS, petTag, recentTimed, serverToolMs, STEPS_SHAPE, stepRate, summarize, validSteps } from './speed'
 import type { Step } from './speed'
-import { COL_GAP, RECENT_W, recentColumn, SPEED_COL_W, SPEED_ROWS, speedColumn, speedLabelParts, speedView, sparkline } from './speedview'
+import { agentRows, AGENT_ACTIVE_MS } from './speed'
+import { agentsColumn, COL_GAP, RECENT_W, recentColumn, SPEED_COL_W, SPEED_ROWS, speedColumn, speedLabelParts, speedView, sparkline } from './speedview'
 import * as ui from './ui'
 
 const step = (over: Partial<Step> = {}): Step => ({ at: 1, model: 'claude-opus-5-5', isSubagent: false, ttftMs: 1000, decodeMs: 2000, outTokens: 200, tps: 100, ...over })
@@ -283,3 +284,43 @@ for (const locale of ['zh-TW', 'en'] as const) {
     }
   })
 }
+
+const mk = (o: Partial<Step>): Step => ({ at: 1_000_000, model: 'claude-opus-5-5', isSubagent: false, ttftMs: 500, decodeMs: 2000, outTokens: 200, tps: 100, ...o })
+
+test('agentRows: each agent is timed from its own requests; main first, an idle subagent folds away', () => {
+  const now = 1_000_000 + 10_000
+  const steps = [
+    mk({ outTokens: 400, decodeMs: 2000, tps: 200 }),
+    mk({ isSubagent: true, agentId: 'a1', agent: '審查 diff', model: 'claude-haiku-5-5', outTokens: 30, decodeMs: 5000, tps: 6, floor: true, at: now - 5_000 }),
+    mk({ isSubagent: true, agentId: 'a2', agent: 'old', at: now - AGENT_ACTIVE_MS - 1 }),
+  ]
+  const rows = agentRows(steps, now)
+  expect(rows.map(r => r.id)).toEqual([null, 'a1'])
+  expect(rows[0].latestTps).toBe(200)
+  expect(rows[1].latestTps).toBe(6)
+  expect(rows[1].outTokens).toBe(30)
+  expect(rows[1].floor).toBe(true)
+  expect(rows[0].floor).toBe(false)
+})
+
+test('agentRows: a subagent sample without agentId (stored before per-agent rates) still groups by model, and isStep accepts both shapes', () => {
+  expect(isStep(mk({}))).toBe(true)
+  expect(isStep(mk({ agentId: 'a1', agent: 'x', floor: true }))).toBe(true)
+  expect(isStep({ ...mk({}), agentId: 5 })).toBe(false)
+  expect(agentRows([mk({ isSubagent: true, at: 5_000 })], 6_000).length).toBe(1)
+})
+
+test('agentsColumn: one line per agent, CJK name cut by display cells, floor note only when a rate is a lower bound', () => {
+  const t = makeT('zh-TW')
+  const now = 1_000_000
+  const steps = [mk({ at: now }), mk({ isSubagent: true, agentId: 'a1', agent: '審查很長的差異內容審查很長的差異內容', floor: true, at: now })]
+  const col = agentsColumn(steps, now, t, 60)
+  const text = col.lines.map(l => l.map(x => x.text).join(''))
+  expect(text.length).toBe(5)
+  expect(text[2]).toContain('主席')
+  expect(text[3]).toContain('審查')
+  for (const line of text) expect(ui.displayWidth(line)).toBeLessThanOrEqual(60)
+  expect(text[4]).toContain('下限')
+  const calm = agentsColumn([mk({ at: now })], now, t, 60).lines.map(l => l.map(x => x.text).join(''))
+  expect(calm.join('\n')).not.toContain('下限')
+})

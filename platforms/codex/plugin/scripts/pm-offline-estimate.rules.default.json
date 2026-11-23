@@ -1,0 +1,8 @@
+{ "auto_classes": [
+  { "name": "patrol_overdue", "match": { "pattern": "\\[fleet patrol\\] overdue" } },
+  { "name": "patrol_stalled", "match": { "pattern": "\\[fleet patrol\\] (p1_stalled|wait_stall|wait_stale)" } },
+  { "name": "patrol_no_report", "match": { "pattern": "\\[fleet patrol\\] \\d+ tasks? held" } },
+  { "name": "auto_merge_notice", "match": { "pattern": "\\[auto\\] merged" } },
+  { "name": "delivery_failed", "match": { "pattern": "delivery failed" } },
+  { "name": "runaway_notice", "match": { "pattern": "\\[fleet runaway\\]" } }
+] }

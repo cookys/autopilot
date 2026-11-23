@@ -36,6 +36,10 @@ node --test "$here/band-no-error-text.test.js"
 node --test "$here/shell.test.js"
 # the band fold (default one row, one click, the new-card mark): pure, imports the real bandfold.ts
 node --test "$here/bandfold.test.js"
+# single-row fixed-column band layout + decide C dual-column/hysteresis rules: pure, imports band-onerow.ts & pages/layout.ts
+node --test "$here/band-onerow.test.js"
+node --test "$here/band-onerow-states.test.js"
+node --test "$here/band-onerow-palette.test.js"
 # the P2 pet tab & panel/1 tuple reader (sprite, 79 vs 80 fallback, negative controls, usage/side poison isolation): pure, imports real panel.ts & pettab.ts
 node --test "$here/pettab.test.js"
 # the operator-console snapshot (the fleet.console/1 trust-boundary parser, the console.json mode reader, fictional fixtures): pure, imports the real console.ts
@@ -56,6 +60,7 @@ node --test "$here/pages/quota-pick.test.js" < /dev/null
 # pages/fleet.test.ts (S2: the 艦隊 page golden rows, fixed height, no-source and stale rows, key presses) is picked up the same way
 # decide.test.ts (S1: the 待決 page, golden against the codeforge mockups, and its key reducer) is picked up the same way
 # pane-poll.test.ts (the real tick runs `fleet console --json` and `fleet seats --quota --json` on every page and with the pane closed, console.json or not) is picked up the same way
+# band-onerow-interact.test.ts (Codex R4 Major 3: mounted AbovePrompt w round-trip, manual collapse/expand persistence across refresh/page-switch/resize, §2.3 click routing & hidden-segment digit hotkeys) is picked up the same way
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 

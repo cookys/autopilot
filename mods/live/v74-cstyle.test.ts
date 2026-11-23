@@ -255,8 +255,8 @@ test('c-style: options and note sit at bottom of body', async ($, on) => {
   expect(firstOpt).toBeGreaterThan(bg)
   expect(note).toBeGreaterThan(firstOpt)
   expect(send).toBeGreaterThan(note)
-  // the spare rows sit between the one-line background and the options, none after the note row
-  expect(t.slice(bg, firstOpt)).toMatch(/│ +││/)
+  // Round 5 (Codex R3 Critical): single-card mode shrinks to content height with zero blank filler rows between background and options, none after the note row
+  expect(t.slice(bg, firstOpt)).not.toMatch(/│ +││/)
   expect(t.slice(note, send).replace(/[│ ]/g, '').length).toBeLessThanOrEqual('m 附註：（空）'.length)
   await h.close()
 })

@@ -48,7 +48,7 @@ test('r8 #8: other cards are one summary row each; the card at the cursor is ope
   expect(left.some(l => l.startsWith('  03 ' + decide[2].title))).toBe(true)
   expect(right.join('\n')).toContain(decide[1].question)
   expect(right.filter(l => l.startsWith('    背景')).length).toBe(1)
-  expect(right.filter(l => /^ {2}\[[abc]\] /.test(l)).length).toBeGreaterThan(0)
+  expect(right.filter(l => /^ {2}[abc]: /.test(l)).length).toBeGreaterThan(0)
 })
 
 test('r8 #8: a picked answer shows in the card summary', () => {
@@ -175,8 +175,8 @@ test('r8-1: in a short frame the other cards collapse before the blank row betwe
   const content = lines.slice(2)
   const left = content.map(l => l.slice(0, l.indexOf(' │ ')))
   const right = content.map(l => l.slice(l.indexOf(' │ ') + 3))
-  const a = right.findIndex(l => /^ {2}\[a\] /.test(l))
-  const b = right.findIndex(l => /^ {2}\[b\] /.test(l))
+  const a = right.findIndex(l => /^ {2}a: /.test(l))
+  const b = right.findIndex(l => /^ {2}b: /.test(l))
   expect(a).toBeGreaterThan(0)
   expect(b).toBeGreaterThan(a + 1)
   expect(right.slice(a + 1, b).some(l => l.trim() === '')).toBe(true) // the blank row between [a] and [b]

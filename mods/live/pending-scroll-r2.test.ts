@@ -1,10 +1,12 @@
-// Regression: 120x30 gives AbovePrompt only nine or ten rows, so the real host uses
+// Regression: 120x30 gives AbovePrompt a short row budget, so the real host uses
 // the boxed fallback, not the docked Pane mounted by pending-scroll.test.ts.
+// Per PM 01M837ZECP, maxRows < 10 collapses to a 1-row-per-card compact list, so
+// dual-column fallback tests use the minimum dual-column budget (maxRows = 10).
 import { test, expect, mock } from 'claude-code/testing'
 const cards = Array.from({ length: 21 }, (_, i) => ({ id: 'scroll-' + i, title: 'Card ' + (i + 1) }))
 const walk = n => !n || typeof n !== 'object' ? [] : Array.isArray(n) ? n.flatMap(walk) : [n, ...walk(n.children)]
 const text = n => typeof n === 'string' ? n : Array.isArray(n) ? n.map(text).join('') : n?.props?.width === 0 || n?.props?.height === 0 ? '' : text(n?.children ?? [])
-async function host($, on, maxRows = 9) {
+async function host($, on, maxRows = 10) {
   const root = '/fixture/pending-scroll'
   const now = Date.parse('2026-11-01T00:00:00Z')
   const clock = mock.clock(on, { now })
@@ -62,37 +64,37 @@ test('pending r2: fullscreen fallback registers n/p in the mounted hotkey path',
 })
 
 test('pending r2: 120x30 fallback shows the 21-card range and bounded card-count hints at both ends', async ($, on) => {
-  // 已改為雙欄：9 列 fallback 雙欄左欄顯示 2 張卡與雙端張數提示（↓ 下面還有 19 張 / ↑ 上面還有 19 張）
+  // 已改為雙欄（PM 01M837ZECP：maxRows < 10 收合為單欄清單，雙欄最低 10 列）：左欄顯示 3 張卡與雙端張數提示（↓ 下面還有 18 張 / ↑ 上面還有 18 張）
   const h = await host($, on)
   let screen = text(await h.draw())
-  expect(screen).toContain('清單 (21)')
+  expect(screen).toContain('待決清單 (21 張)') // 雙欄左欄 >= 40 欄，用 list_long 標題（PM 退化規則）
   expect(screen).toContain('卡 #01 / 21')
   expect(screen).toContain('▸ 01 scroll-0')
   expect(screen).toContain('  02 scroll-1')
-  expect(screen).toContain('↓ 下面還有 19 張')
+  expect(screen).toContain('↓ 下面還有 18 張')
   expect(screen).not.toContain('另有')
   for (let i = 0; i < 20; i++) screen = text(await h.key('n'))
   expect(screen).toContain('卡 #21 / 21')
   expect(screen).toContain('  20 scroll')
   expect(screen).toContain('▸ 21 scroll')
-  expect(screen).toContain('↑ 上面還有 19 張')
+  expect(screen).toContain('↑ 上面還有 18 張')
   expect(screen).not.toContain('另有')
   expect(screen).not.toContain('1 2 3 4 5 6 7 8 9 10')
   await h.close()
 })
 
 test('pending r2: fallback PgDn/PgUp change detail offset, reach the end and keep actions at the bottom', async ($, on) => {
-  // 已改為雙欄：9 列 fallback 右欄每頁 2 行（↑ 上面還有 2 行），卡號表頭為 卡 #01 / 21
+  // 已改為雙欄（PM 01M837ZECP：雙欄最低 10 列）：右欄每頁 3 行（↑ 上面還有 3 行），卡號表頭為 卡 #01 / 21
   const h = await host($, on)
   const footer = tree => (tree.children[0].children.slice(-2)).map(text)
   const initial = await h.draw()
   const fixed = footer(initial)
   const first = text(initial)
-  const page = by => $.ui.scroll({ component: 'AbovePrompt', requestId: 'above-prompt', by, offset: 0, bodyRows: 9, contentRows: 9, origin: { kind: 'person' } })
+  const page = by => $.ui.scroll({ component: 'AbovePrompt', requestId: 'above-prompt', by, offset: 0, bodyRows: 10, contentRows: 10, origin: { kind: 'person' } })
   await page(9)
   let tree = await h.draw()
   expect(text(tree)).not.toBe(first)
-  expect(text(tree)).toContain('↑ 上面還有 2 行')
+  expect(text(tree)).toContain('↑ 上面還有 3 行')
   const seen = [text(tree)]
   for (let i = 0; i < 100; i++) {
     await page(9)
@@ -112,16 +114,16 @@ test('pending r2: fallback PgDn/PgUp change detail offset, reach the end and kee
 })
 
 test('pending r2: a fallback wheel scrolls current detail without moving the card queue', async ($, on) => {
-  // 已改為雙欄：滾輪捲右欄詳情，左欄佇列與游標停在卡 #01 / 21
+  // 已改為雙欄（PM 01M837ZECP：雙欄最低 10 列）：滾輪捲右欄詳情 3 行，左欄佇列與游標停在卡 #01 / 21
   const h = await host($, on)
   const first = text(await h.draw())
-  await $.ui.scroll({ component: 'AbovePrompt', requestId: 'above-prompt', by: 3, offset: 0, bodyRows: 9, contentRows: 9, pointer: { x: 70, y: 18 }, origin: { kind: 'person' } })
+  await $.ui.scroll({ component: 'AbovePrompt', requestId: 'above-prompt', by: 3, offset: 0, bodyRows: 10, contentRows: 10, pointer: { x: 70, y: 18 }, origin: { kind: 'person' } })
   const after = text(await h.draw())
   expect(after).not.toBe(first)
   expect(after).toContain('▸ 01 scroll-0')
-  expect(after).toContain('↓ 下面還有 19 張')
+  expect(after).toContain('↓ 下面還有 18 張')
   expect(after).toContain('卡 #01 / 21')
-  expect(after).toContain('↑ 上面還有 2 行')
+  expect(after).toContain('↑ 上面還有 3 行')
   await h.close()
 })
 

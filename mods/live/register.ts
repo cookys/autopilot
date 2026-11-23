@@ -58,8 +58,10 @@ import type { ConsoleSnapshot } from './console'
 import { consoleSlotTab, nextConsoleTab } from './consoletabs'
 import type { ConsoleNav, ConsoleTab } from './consoletabs'
 
-import { BandBar, bandQuotaSeg, BarRule, Shell, barContent, barParts, cardMain, cardQuick, ShellBare, decideContent, progressRow, cardSplit, shellMenuRow, shellNote, speedContent, stackBand, stackRows, usageDraw } from './band'
+import { BandBar, bandQuotaSeg, BarRule, OneRowBand, Shell, barContent, barParts, cardMain, cardQuick, ShellBare, decideContent, progressRow, cardSplit, shellMenuRow, shellNote, speedContent, stackBand, stackRows, usageDraw } from './band'
 import type { SpeedPlacement } from './band'
+import { bandExpandOnPageChange, bandExpandOnRefresh, bandExpandOnResize, bandSlotPage, dataStateOf, initialBandExpand, layoutOneRowBand, toggleBandExpand } from './band-onerow'
+import type { BandExpandState, BandSegmentId, OneRowInput } from './band-onerow'
 import { normalizedPools } from './pages/quota-pick'
 import { consoleFleetCounts } from './pages/rows'
 import { KEEP_STEPS, petTag, serverToolMs, STEPS_SHAPE, stepRate, validSteps } from './speed'
@@ -78,6 +80,8 @@ import { routeKey } from './pages/keys'
 import type { KeyAction } from './pages/keys'
 import { decideReduce, NO_NAV, v74Pool } from './pages/decide'
 import type { DecideNav } from './pages/decide'
+import { DECIDE_COMPACT_MAX_ROWS, decideLayoutMode } from './pages/layout'
+import type { DecideLayoutMode } from './pages/layout'
 import { SEATS_TIMEOUT_MS, seatQuota, v74PmCounts } from './pages/now'
 import { PAGES, EXTRA_PAGES } from './pages/index'
 import { makeDecideFeed, makePmFeed, mergeDecideCards } from './v74/feeds'
@@ -97,7 +101,7 @@ import {
   acceptanceToast, autoResidueCount, bandCardNote, decideDialog, decideFillText, decideFixing, decideHeld, decideLine, decideOpen, decidePick, cleanTargets, normalizeAbs, decideReply, NO_DECIDE, makeRecentTracker, bandFactsDocument, bandLine1, bandView, buildSections, checkEnvelope, sourceMoved, sourcesOf, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
   isStepCard, BAND_NARROW_STEPS, displayWidth, fittedBandWidth, layoutBand, layoutBandLine, v74FitBand, slotFleet, headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeDurableDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions, readDurableDecisionFiles,
   readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
-  paneWidth, DEFAULT_PANE_COLS, slotTab, slotUnfolds, truncateToWidth, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
+  paneWidth, DEFAULT_PANE_COLS, slotTab, slotUnfolds, sparkText, truncateToWidth, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
 } from './model'
 import type { AccountView, ActivityItem, Counts, DecideState, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveDecision, LiveSnapshot, LookTarget, Manifest, PaneLine, PaneTab, Seg, Slot, SlotId, QuotaWindow, Sources, SourceGroup } from './model'
 
@@ -105,8 +109,8 @@ const TICK_MS = 5000
 const FACTS_PRUNE_MS = 60_000
 const FACTS_TMP_STALE_MS = 5 * 60 * 1000
 const PANE_ID = 'autopilot-live'
-const V74_FRAME_MIN = 6
-const V74_FRAME_MAX = 28 // design S2..S10 measure 28 rows from ╭ to ╰ (26 body rows + both borders; r8 #6 had 27). V74_FRAME_MIN: the smallest v7.4 page frame (two borders and four rows); under it only the band row draws
+const V74_FRAME_MIN = 4
+const V74_FRAME_MAX = 28 // design S2..S10 measure 28 rows from ╭ to ╰ (26 body rows + both borders; r8 #6 had 27). V74_FRAME_MIN: the smallest v7.4 page frame (two borders and two inner rows, so 80x24 can open); under it only the band row draws
 const MAX_PATH_FILES = 256
 const MAX_RECEIPT_FILES = 64
 const MAX_CAMPAIGN_ROOTS = 8 // session-mode.js CAMPAIGN_ROOTS_MAX
@@ -1168,6 +1172,7 @@ async function refresh($: EngineInterface): Promise<void> {
     }
     petText = petTag(liveBaseSeen === null ? null : await readText($, liveBaseSeen + '/codeforge/pet.json'))
     snapshot = { ...built.snap, recent, activity, account: { account, quota } }
+    bandExpand = bandExpandOnRefresh(bandExpand)
     if (built.snap.state === 'ok' && liveBaseSeen !== null && sidOk && sid) await publishBandFacts($, liveBaseSeen, built.snap, sid, nowMs).catch(() => undefined)
     await pruneDecide($, new Set(built.snap.pending.flatMap(d => (d.id === null ? [] : [d.id]))), built.snap.state === 'ok', nowMs).catch(() => undefined)
     $.ui.invalidate('ui.render')
@@ -1615,6 +1620,7 @@ async function panePagePress($: EngineInterface, id: PageId): Promise<void> {
   if (id === panePage) return
   panePage = id
   paneTab = PAGE_TAB_OF[id] ?? paneTab
+  bandExpand = bandExpandOnPageChange(bandExpand, id)
   keyed(decideScroll, 'page:' + id) // K1: a different page starts at its first row.
   void $.ui.scroll({ in: PANE_ID, to: 'start' }).catch(() => undefined)
   decideLocal = { ...decideLocal, textMode: false, textBuf: '', armed: false } // a tab press ends a note being typed: the mode must not outlive the page
@@ -1661,7 +1667,10 @@ const focusRows = (id: string, expanded: boolean): number => {
   if (id === 'spend') return spendFocusRows(snapshot)
   return 1
 }
-let decideLocal: Pick<DecideNav, 'cursor' | 'folded' | 'textMode' | 'textBuf' | 'opt' | 'detailOffset' | 'armed' | 'snap' | 'stale' | 'style' | 'bgOpen'> = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt, style: 'D', bgOpen: false }
+let decideLocal: Pick<DecideNav, 'cursor' | 'folded' | 'textMode' | 'textBuf' | 'opt' | 'detailOffset' | 'armed' | 'snap' | 'stale' | 'style' | 'bgOpen' | 'compactExpanded'> = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt, style: 'D', bgOpen: false, compactExpanded: false }
+let bandExpand: BandExpandState = initialBandExpand('now')
+let decideLayout: DecideLayoutMode | null = null
+let decideMaxRows = 24
 const framePageId = (): string => panePage
 // B56: crossing the side-dock width threshold unmounts `<Pane placement="dock">` and mounts `<Pane placement="inline">` (or back).
 // On CC 2.1.327 that remount drops the pane's keyboard focus to the prompt and collides on the previous placement's Button keys,
@@ -1720,7 +1729,7 @@ export const v74EscClosesBg = (bgOpen: boolean | undefined, textMode: boolean, o
 export type V74KeysEvent = { kind: 'open' } | { kind: 'closed' } | { kind: 'sent' } | { kind: 'key'; key: KeyAction['kind'] } | { kind: 'focus'; named: string | undefined; origin: unknown }
 export function v74KeysHeldNext(was: boolean, ev: V74KeysEvent): boolean {
   if (ev.kind === 'open' || ev.kind === 'closed' || ev.kind === 'sent') return false
-  if (ev.kind === 'key') return ev.key !== 'close' && ev.key !== 'page' ? true : was
+  if (ev.kind === 'key') return ev.key === 'close' ? false : ev.key !== 'page' ? true : was
   return v74KeysHeldAfter(was, ev.named, ev.origin)
 }
 const bandElement = (named: string | undefined): boolean => named !== undefined && /^(tab:|card:|letter:|hotkey:|opt:|v74-note$)/.test(named)
@@ -1728,6 +1737,7 @@ function markPaneOpen(): void {
   v74KeysHeld = false
   v74SendResult = null
   v74Open = true
+  bandExpand = { ...bandExpand, expanded: true }
   paneOpened = true
   paneOpenAsked = true
   panePlacement = null
@@ -1735,6 +1745,7 @@ function markPaneOpen(): void {
 function markPaneClosed(): void {
   v74KeysHeld = false
   v74Open = false
+  bandExpand = { ...bandExpand, expanded: false }
   paneOpened = false
   paneOpenAsked = false
   paneFocused = false
@@ -1802,6 +1813,21 @@ async function frameKeyBody($: EngineInterface, k: KeyAction): Promise<void> {
   v74KeysHeld = v74KeysHeldNext(v74KeysHeld, { kind: 'key', key: k.kind })
   try {
     if (k.kind === 'page') { await panePagePress($, k.to as PageId); return }
+    if (k.kind === 'toggle_expand') {
+      const synced = bandExpand.expanded === v74Open ? bandExpand : { ...bandExpand, expanded: v74Open }
+      bandExpand = toggleBandExpand(synced)
+      if (bandExpand.expanded) {
+        await panePagePress($, 'now')
+        markPaneOpen()
+        await openPane($)
+      } else {
+        panePage = bandExpand.activePage
+        paneTab = PAGE_TAB_OF[panePage] ?? paneTab
+        markPaneClosed()
+        await closePane($)
+      }
+      return
+    }
     if (k.kind === 'close') {
       markPaneClosed()
       await closePane($)
@@ -1818,7 +1844,8 @@ async function frameKeyBody($: EngineInterface, k: KeyAction): Promise<void> {
       const v74 = await v74CtxOf($, true)
       // The focus path's cursor event names the card that already has the ▸. Applying it
       // after a move puts the cursor back. A later cursor event in the queue still runs.
-      if (k.kind === 'cursor' && k.at === decideLocal.cursor) {
+      const compactCollapsed = decideMaxRows < DECIDE_COMPACT_MAX_ROWS && decideLocal.compactExpanded !== true
+      if (k.kind === 'cursor' && k.at === decideLocal.cursor && !compactCollapsed) {
         void v74Keylog($, {
           handler: 'frameKey', component: 'AbovePrompt', key: 'cursor', event: 'cursor',
           page: framePageId(), cursor: decideLocal.cursor, cursorBefore, cursorAfter: decideLocal.cursor,
@@ -1826,10 +1853,10 @@ async function frameKeyBody($: EngineInterface, k: KeyAction): Promise<void> {
         })
         return
       }
-      const ctx = { live: snapshot, console: consoleSnap, size: { cols: decideCols, rows: 24 }, t: tr, nowMs, v74 }
+      const ctx = { live: snapshot, console: consoleSnap, size: { cols: decideCols, rows: 24 }, bodyColumns: decideCols, maxRows: decideMaxRows, t: tr, nowMs, v74 }
       const prevStyle = decideLocal.style ?? 'D'
       const r = decideReduce({ ...st, ...decideLocal }, k, ctx, nowMs)
-      decideLocal = { cursor: r.nav.cursor, folded: r.nav.folded, textMode: r.nav.textMode, textBuf: r.nav.textBuf, opt: r.nav.opt, detailOffset: r.nav.detailOffset, armed: r.nav.armed, snap: r.nav.snap, stale: r.nav.stale, style: r.nav.style, bgOpen: r.nav.bgOpen }
+      decideLocal = { cursor: r.nav.cursor, folded: r.nav.folded, textMode: r.nav.textMode, textBuf: r.nav.textBuf, opt: r.nav.opt, detailOffset: r.nav.detailOffset, armed: r.nav.armed, snap: r.nav.snap, stale: r.nav.stale, style: r.nav.style, bgOpen: r.nav.bgOpen, compactExpanded: r.nav.compactExpanded }
       if ((r.nav.style ?? 'D') !== prevStyle) void $.store.set('decide.style', r.nav.style ?? 'D').catch(() => undefined)
       if (k.kind === 'style' || k.kind === 'expand' || k.kind === 'move' || k.kind === 'cursor' || k.kind === 'prev' || k.kind === 'next') pendingScroll.detail.offset = 0
       if (k.kind === 'cursor') {
@@ -1877,6 +1904,7 @@ export async function paneKey($: EngineInterface, key: string, over: { paneFocus
     textMode: page === 'decide' && decideLocal.textMode,
     armed: page === 'decide' && decideLocal.armed === true,
     bgOpen: page === 'decide' && decideLocal.bgOpen === true,
+    compactExpanded: page === 'decide' && decideLocal.compactExpanded === true,
   })
   if (act.kind !== 'none' && act.kind !== 'pass' && act.kind !== 'button') await frameKey($, act)
   return act
@@ -1928,11 +1956,14 @@ export async function startLive($: EngineInterface): Promise<void> {
   paneTab = 'now'
   panePage = 'now'
   bandLegacy = null
+  bandExpand = initialBandExpand('now')
+  decideLayout = null
+  decideMaxRows = 24
   markPaneClosed()
   panePlacementEpoch = 0
   pageView = {}
   const savedStyle = await $.store.get('decide.style').catch(() => undefined)
-  decideLocal = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt, style: savedStyle === 'C' ? 'C' : 'D', bgOpen: false }
+  decideLocal = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt, style: savedStyle === 'C' ? 'C' : 'D', bgOpen: false, compactExpanded: false }
   Object.assign(pendingScroll, { list: newScroll(), detail: newScroll(), cursor: '' })
   resetNoteInputs()
   consoleReadMs = -Infinity
@@ -1960,6 +1991,7 @@ export async function startLive($: EngineInterface): Promise<void> {
 export function registerLive(on: Parameters<Register>[0]): void {
   // /live-pane: the pane is never opened on its own (plan B); this and the band's ⓘ and slots are the ways to open it
   on('command.run', { command: 'live-pane' }, async ($) => {
+    bandExpand = { ...bandExpand, expanded: true, manualExpanded: true }
     markPaneOpen()
     await openPane($)
     return {}
@@ -2090,10 +2122,21 @@ export function registerLive(on: Parameters<Register>[0]): void {
       const nextPage: BandPageId = isOpen && at >= 0 ? BAND_PAGE_TABS[(at + 1) % BAND_PAGE_TABS.length] : 'now'
       await pageOpen(nextPage, null, nextCon)
     }
-    // v7.4 S1: the band's ▴ / ▾ toggle. Closed -> the same open path as the ⓘ (pageOpen('now')); open -> the same close path as a tab press on the showing tab (markPaneClosed + closePane).
+    // v7.4 S1 / §2.5: the band's ▾展開 / ▴收合 toggle. Expand switches to page 1 ('now') and remembers previous page; collapse restores previous page and closes the band frame.
     const togglePaneRun = async () => {
       const listed = await $.ui.panes().catch(() => [] as { id: string; isShown: boolean; isFocused: boolean; isPlaced: boolean }[])
-      const action = !v74 ? (listed.some(p => p.id === PANE_ID) ? 'close' : 'open') : v74Open ? 'close' : 'open'
+      if (v74) {
+        const synced = bandExpand.expanded === v74Open ? bandExpand : { ...bandExpand, expanded: v74Open }
+        bandExpand = toggleBandExpand(synced)
+        void appendLog($, 'band-reload.log', { step: 'toggle-press', panes: listed, v74Open, action: bandExpand.expanded ? 'open' : 'close' })
+        if (bandExpand.expanded) { await pageOpen('now'); return }
+        panePage = bandExpand.activePage
+        paneTab = PAGE_TAB_OF[panePage] ?? paneTab
+        markPaneClosed()
+        await closePane($)
+        return
+      }
+      const action = listed.some(p => p.id === PANE_ID) ? 'close' : 'open'
       void appendLog($, 'band-reload.log', { step: 'toggle-press', panes: listed, v74Open, action })
       if (action === 'open') { await pageOpen('now'); return }
       markPaneClosed()
@@ -2222,13 +2265,79 @@ export function registerLive(on: Parameters<Register>[0]): void {
       if (answer !== undefined && answer !== null && (answer as { type?: string }).type !== 'engine') forgeRow = answer
     }
     const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge, usageOn, moreTo, con, bandPreset, consoleOn && consoleSnap !== null ? bandQuotaSeg(normalizedPools(consoleSnap), bandNow, t, qSrc) : null, paneOpen || v74, legacyTabs, forgeRow !== null, legacyTabs ? undefined : () => { void togglePane() }, paneOpen)
-    // v7.4: the O4 shell and the two-row band never draw. Closed: the one-line BandBar. Open: the page as a full-width framed tree (title in the top border, hint in the bottom border), the tab row, then the BandBar row.
+    // v7.4: single-row fixed-column band (2026-11-23-band-layout v4) + framed page within maxRows.
     if (v74) {
-      const height = Math.min(rows - 1, V74_FRAME_MAX) // the band row stays; the tab row is the frame's bottom border. Never more than the design's 28 rows.
-      if (!v74Open || height < V74_FRAME_MIN) return stackRows(el, [bar.row1])
-      const page = await paneTree($, e as never, false, height)
-      await logBandGeometry($, rows, columns, height + 2)
-      return stackRows(el, [page, bar.row1])
+      decideMaxRows = rows
+      decideCols = paneWidth(columns)
+      const prevLayout = decideLayout
+      decideLayout = decideLayoutMode(columns, decideLayout)
+      if (rows >= DECIDE_COMPACT_MAX_ROWS && decideLocal.compactExpanded === true) {
+        decideLocal = { ...decideLocal, compactExpanded: false }
+      }
+      if (prevLayout === 'single' && decideLayout === 'dual') {
+        decideLocal = { ...decideLocal, style: 'D', compactExpanded: false }
+      }
+      bandExpand = bandExpandOnResize(bandExpand, columns)
+      const decideCards = mergedDecide()
+      const curCard = decideCards !== null && decideCards.length > 0 ? decideCards[Math.max(0, Math.min(decideCards.length - 1, decideLocal.cursor))] : null
+      const publishedMs = snap?.published_at != null && Number.isFinite(Date.parse(snap.published_at)) ? Date.parse(snap.published_at) : null
+      const liveAgeMs = publishedMs !== null ? Math.max(0, bandNow - publishedMs) : null
+      const liveStale = snap?.state === 'stale'
+      const pmFetched = pmFeed.fetchedMs()
+      const tasksSrc = consoleSnap?.sources.tasks
+      const lineAgeMs = pmFetched !== null ? Math.max(0, bandNow - pmFetched) : tasksSrc?.at_ms != null ? Math.max(0, bandNow - tasksSrc.at_ms) : fleetNow.fetchedMs !== null ? Math.max(0, bandNow - fleetNow.fetchedMs) : null
+      const lineStaleFlag = tasksSrc?.state === 'stale' || tasksSrc?.state === 'expired'
+      const decideFetched = decideFeed.fetchedMs()
+      const decideAgeMs = decideFetched !== null ? Math.max(0, bandNow - decideFetched) : liveAgeMs
+      const pendCount = decideCards !== null ? decideCards.length : (snap !== null ? snap.pending.filter(d => !isStepCard(d)).length : null)
+      const ls = snap?.detail.load_source ?? null
+      const srcLabel = ls === null ? null : ls.source === 'dev' ? t('band.src_dev') : ls.source === 'cache' ? t('band.src_cache') : t('band.src_unknown')
+      const srcFlags = snap?.detail.residue?.needs_human_count ?? ls?.flags.length ?? null
+      const qcState = snap?.detail.qc ?? null
+      const qcStatus: 'alert' | 'ok' | 'none' = qcState === null ? 'none' : qcState.state === 'owed' ? 'alert' : 'ok'
+      const lastStep = steps.length > 0 ? steps[steps.length - 1] : null
+      const tpsAgeMs = lastStep !== null ? Math.max(0, bandNow - lastStep.at) : null
+      const tpsDataState = dataStateOf(tpsAgeMs, lastStep === null)
+      const sparkBars = steps.length > 0 ? sparkText(steps.slice(-5).map(s => s.tps)) : null
+      const remText = curCard !== null
+        ? t('band.onerow.remind_prefix') + curCard.question
+        : snap?.band?.reason ?? (liveStale && snap?.text ? snap.text : null)
+      const remState = liveStale ? 'stale' : dataStateOf(decideAgeMs, false, false)
+      const height = Math.min(Math.max(0, rows - 1), V74_FRAME_MAX) // total band height = height + 1 <= maxRows
+      const showBox = v74Open && height >= V74_FRAME_MIN
+      const oneRowInput: OneRowInput = {
+        reminder: { text: remText, cardId: curCard?.id ?? null, state: remState, hasRec: curCard?.options.some(o => o.recommended) ?? false },
+        line: {
+          stalled: fleetCounts?.stuck ?? null,
+          running: fleetCounts?.running ?? null,
+          failed: (fleetCounts as { failed?: number } | null)?.failed ?? (fleetCounts !== null ? 0 : null),
+          waiting: fleetCounts?.waiting ?? null,
+          state: dataStateOf(lineAgeMs, fleetCounts === null, lineStaleFlag),
+        },
+        source: { label: srcLabel, flags: srcFlags, state: dataStateOf(liveAgeMs, ls === null && snap?.band === null, liveStale) },
+        pend: { count: pendCount, hasRec: curCard?.options.some(o => o.recommended) ?? false, state: dataStateOf(decideAgeMs, pendCount === null, liveStale) },
+        qc: { status: qcStatus, state: dataStateOf(liveAgeMs, qcState === null, liveStale) },
+        tps: { value: lastStep?.tps ?? null, state: tpsDataState },
+        spark: { bars: sparkBars, state: tpsDataState },
+        pet: { text: petText, state: petText === null ? 'missing' : 'normal' },
+        // Codex R3 Major3 / Carbon R3 M1: band toggle MUST match actual visible pane state (never ▴收合 when no pane is shown).
+        expanded: showBox,
+      }
+      const onOneRowSegment = (id: BandSegmentId) => {
+        const target = bandSlotPage(id, false)
+        if (target === null) return
+        bandExpand = { ...bandExpand, expanded: true, manualExpanded: true, activePage: target }
+        void pageOpen(target as BandPageId)
+      }
+      const onOneRowPage = (id: PageId) => {
+        bandExpand = { ...bandExpand, expanded: true, manualExpanded: true, activePage: id }
+        void pageOpen(id as BandPageId)
+      }
+      const oneRow = OneRowBand(el, layoutOneRowBand(oneRowInput, columns, t), onOneRowSegment, () => { void togglePane() }, showBox ? undefined : { onPage: onOneRowPage })
+      if (!showBox) return stackRows(el, [oneRow])
+      const page = await paneTree($, e as never, false, height, rows)
+      await logBandGeometry($, rows, columns, height + 1)
+      return stackRows(el, [page, oneRow])
     }
     if (shellMode && rows < SHELL_MIN_ROWS) {
       const n = snapshot === null ? 0 : new Set(snapshot.pending.filter(d => !isStepCard(d)).map(cardKey)).size
@@ -2576,7 +2685,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
 }
 // The framed page's tree. `boxRows` null: the Pane surface (the legacy / dock path, as before). A number: v7.4, the page drawn as a full-width box of that many rows (borders included) plus the tab row under it,
 // inside the AbovePrompt band (pane.tsx framedView). Same state, same renderers, same press handlers.
-async function paneTree($: EngineInterface, e: { props: any; surface: string }, legacy: boolean, boxRows: number | null): Promise<unknown> {
+async function paneTree($: EngineInterface, e: { props: any; surface: string }, legacy: boolean, boxRows: number | null, boxMaxRows: number | null = null): Promise<unknown> {
   if (boxRows === null) hostScrollHome($, e.props.scroll, paneTab)
   decideCols = paneWidth(e.props.bodyColumns)
   decideInputs = inputsFor(e.surface)
@@ -2597,7 +2706,7 @@ async function paneTree($: EngineInterface, e: { props: any; surface: string }, 
     folded, boxRows !== null ? null : e.props.scroll ?? null,
     { state: decideState, batch: decideBatch, now: decideNow, inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } },
     decideScroll, fleet, null,
-    legacy ? null : { pages: [...PAGES, ...EXTRA_PAGES], pageId: panePage, ...(!legacy ? { pendingScroll } : {}), onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, others: fleet?.others ?? null, nowMs: frameNow, rows: boxRows ?? frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), ...(boxRows === null ? {} : { v74Box: true as const }), view: pageView, decide: { ...decideState, ...decideLocal }, v74, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { void v74Keylog($, { handler: 'input', component: 'Input', element: 'v74-note', len: [...v].length, page: panePage, cursor: decideLocal.cursor, focusOwner: 'v74-note', noteOpen: true }); decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(panePage === 'forge' ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}), ...(panePage === 'room' ? { room: parseRoom((await readRoomText($)) ?? '') } : {}) },
+    legacy ? null : { pages: [...PAGES, ...EXTRA_PAGES], pageId: panePage, ...(!legacy ? { pendingScroll } : {}), onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, others: fleet?.others ?? null, nowMs: frameNow, rows: boxRows ?? frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), ...(boxMaxRows === null ? {} : { maxRows: boxMaxRows }), bodyColumns: decideCols, ...(boxRows === null ? {} : { v74Box: true as const }), view: pageView, decide: { ...decideState, ...decideLocal, layoutMode: decideLayout }, v74, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { void v74Keylog($, { handler: 'input', component: 'Input', element: 'v74-note', len: [...v].length, page: panePage, cursor: decideLocal.cursor, focusOwner: 'v74-note', noteOpen: true }); decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(panePage === 'forge' ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}), ...(panePage === 'room' ? { room: parseRoom((await readRoomText($)) ?? '') } : {}) },
   )
   if (boxRows === null) await probePane($, e as never, tree)
   return tree

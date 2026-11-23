@@ -15,7 +15,8 @@ import { GLYPHS } from '../../tux/glyphs.ts'
 import { PALETTE } from '../../tux/palette.ts'
 import { PAGES } from './index'
 import { ageUnit } from './now'
-import { PAGE_KEYS, STRIP_SPLIT_COLS, V74_STRIP_ORDER, actionRows } from './layout'
+import { DECIDE_COMPACT_MAX_ROWS, PAGE_KEYS, STRIP_SPLIT_COLS, V74_STRIP_ORDER, actionRows, decideLayoutMode } from './layout'
+import type { DecideLayoutMode } from './layout'
 import { V74_KEY } from '../v74/contract'
 import { WRAP_HANG, brokenRow, decisionCount, poolsNeedLook, sourceMissing, staleBadge, unknownPoolCount, wrapRow } from './rows'
 import type { Row } from './rows'
@@ -27,7 +28,7 @@ import type { ScrollModel } from '../scrollmath'
 export type PendingScroll = { list: ScrollModel; detail: ScrollModel; cursor: string }
 
 export type { Row } from './rows'
-export interface PageCtx { pendingScroll?: PendingScroll; poolEta?: PoolEta | null; room?: readonly { seq: number; from: string; kind: string; text: string }[]; live: LiveSnapshot | null; console: ConsoleSnapshot | null; size: { cols: number; rows: number }; t: T; nowMs: number; shortBody?: boolean; steps?: readonly Step[]; pet?: unknown; v74?: V74Ctx; box?: true } // box: drawn inside the v7.4 band frame (not the host Pane)
+export interface PageCtx { pendingScroll?: PendingScroll; poolEta?: PoolEta | null; room?: readonly { seq: number; from: string; kind: string; text: string }[]; live: LiveSnapshot | null; console: ConsoleSnapshot | null; size: { cols: number; rows: number }; bodyColumns?: number; maxRows?: number; t: T; nowMs: number; shortBody?: boolean; steps?: readonly Step[]; pet?: unknown; v74?: V74Ctx; box?: true; decide?: { cursor?: number; picks?: Record<string, number>; notes?: Record<string, string>; textMode?: boolean; snap?: string; stale?: boolean; armed?: boolean; bgOpen?: boolean; style?: 'D' | 'C'; layoutMode?: DecideLayoutMode | null; compactExpanded?: boolean } } // box: drawn inside the v7.4 band frame (not the host Pane)
 export type PageId = 'now' | 'decide' | 'fleet' | 'quota' | 'dispatch' | 'review' | 'spend' | 'hygiene' | 'pet' | 'room' | 'forge' | 'help' | 'todo'
 // `framed` (optional, additive): true once the page is filled in; pane.tsx draws a framed page through frameRows and an unframed shell the old way, so S0 changes nothing on screen
 export interface Page { id: PageId; key: string; title: string; framed?: true; render(ctx: PageCtx): { body: Row[]; actions: Row[]; overflow?: true } }
@@ -116,11 +117,26 @@ const cardless = (page: Page, ctx: PageCtx): boolean => (page.id === 'decide' ||
 // r11 #4: while the send preview is up, Esc means one thing (cancel the preview), so the border says so and nothing else
 const armed = (page: Page, ctx: PageCtx): boolean => page.id === 'decide' && ctx.decide?.armed === true && !cardless(page, ctx)
 const bgOpen = (page: Page, ctx: PageCtx): boolean => page.id === 'decide' && ctx.decide?.bgOpen === true && !cardless(page, ctx)
+const compactDecide = (page: Page, ctx: PageCtx): boolean =>
+  page.id === 'decide' && ctx.v74 !== undefined && ctx.box === true && (ctx.maxRows ?? ctx.size.rows) < DECIDE_COMPACT_MAX_ROWS && ctx.decide?.compactExpanded !== true && !cardless(page, ctx)
 const styleC = (page: Page, ctx: PageCtx): boolean => page.id === 'decide' && ctx.decide?.style === 'C' && !cardless(page, ctx)
-export const frameHintText = (page: Page, ctx: PageCtx): string => armed(page, ctx) ? ctx.t('v74.b.border.armed') : bgOpen(page, ctx) ? ctx.t('v74.b.border.decide_bg', { ud: GLYPHS.structure.up + GLYPHS.structure.behind }) : styleC(page, ctx) ? ctx.t('v74.b.border.decide_c', { keys: keysWord(ctx) }) : ctx.t(cardless(page, ctx) ? 'v74.b.border.cardless' : V74_BORDER_KEY[page.id] ?? 'v74.b.border.default', { ud: GLYPHS.structure.up + GLYPHS.structure.behind, keys: keysWord(ctx) })
-export const frameHintShort = (page: Page, ctx: PageCtx): string => armed(page, ctx) ? ctx.t('v74.b.short.armed') : bgOpen(page, ctx) ? ctx.t('v74.b.short.decide_bg', { ud: GLYPHS.structure.up + GLYPHS.structure.behind }) : styleC(page, ctx) ? ctx.t('v74.b.short.decide_c') : ctx.t(cardless(page, ctx) ? 'v74.b.short.scroll' : V74_SHORT_KEY[page.id] ?? 'v74.b.short.scroll', { ud: GLYPHS.structure.up + GLYPHS.structure.behind })
+export const frameHintText = (page: Page, ctx: PageCtx): string => armed(page, ctx) ? ctx.t('v74.b.border.armed') : bgOpen(page, ctx) ? ctx.t('v74.b.border.decide_bg', { ud: GLYPHS.structure.up + GLYPHS.structure.behind }) : compactDecide(page, ctx) ? ctx.t('v74.b.border.decide_compact', { ud: GLYPHS.structure.up + GLYPHS.structure.behind, keys: keysWord(ctx) }) : styleC(page, ctx) ? ctx.t('v74.b.border.decide_c', { keys: keysWord(ctx) }) : ctx.t(cardless(page, ctx) ? 'v74.b.border.cardless' : V74_BORDER_KEY[page.id] ?? 'v74.b.border.default', { ud: GLYPHS.structure.up + GLYPHS.structure.behind, keys: keysWord(ctx) })
+export const frameHintShort = (page: Page, ctx: PageCtx): string => armed(page, ctx) ? ctx.t('v74.b.short.armed') : bgOpen(page, ctx) ? ctx.t('v74.b.short.decide_bg', { ud: GLYPHS.structure.up + GLYPHS.structure.behind }) : compactDecide(page, ctx) ? ctx.t('v74.b.short.decide_compact', { ud: GLYPHS.structure.up + GLYPHS.structure.behind }) : styleC(page, ctx) ? ctx.t('v74.b.short.decide_c') : ctx.t(cardless(page, ctx) ? 'v74.b.short.scroll' : V74_SHORT_KEY[page.id] ?? 'v74.b.short.scroll', { ud: GLYPHS.structure.up + GLYPHS.structure.behind })
+export const frameHintMin = (page: Page, ctx: PageCtx): string => armed(page, ctx) || bgOpen(page, ctx) || cardless(page, ctx) ? '' : compactDecide(page, ctx) ? ctx.t('v74.b.min.decide_compact') : styleC(page, ctx) ? ctx.t('v74.b.min.decide_c') : page.id === 'decide' ? ctx.t('v74.b.min.decide') : ''
 export function frameBorderRow(page: Page, ctx: PageCtx): Row {
-  return [{ text: GLYPHS.structure.frameBL + GLYPHS.structure.rule + ' ' + frameHintText(page, ctx), dim: true }]
+  const lead = GLYPHS.structure.frameBL + GLYPHS.structure.rule + ' '
+  const avail = Math.max(0, ctx.size.cols - displayWidth(lead))
+  const full = frameHintText(page, ctx)
+  if (displayWidth(full) <= avail) return [{ text: lead + full, dim: true }]
+  // Narrow frames drop secondary clauses first rather than letting clip() emit `…`.
+  const keys = keysWord(ctx)
+  const withoutKeys = full.replace(' · ' + keys, '').replace(keys + ' · ', '')
+  if (withoutKeys !== full && displayWidth(withoutKeys) <= avail) return [{ text: lead + withoutKeys, dim: true }]
+  const short = frameHintShort(page, ctx)
+  if (displayWidth(short) <= avail) return [{ text: lead + short, dim: true }]
+  const min = frameHintMin(page, ctx)
+  if (min !== '' && displayWidth(min) <= avail) return [{ text: lead + min, dim: true }]
+  return [{ text: GLYPHS.structure.frameBL + GLYPHS.structure.rule, dim: true }]
 }
 
 // PM 01M7XB0B: one bottom border. Hints on the left, page tabs on the right, the current page marked.
@@ -128,7 +144,7 @@ export function frameBorderRow(page: Page, ctx: PageCtx): Row {
 export type BorderTab = { key: string; id: string; text: string }
 const RULE_MIN = 8 // dashes the bottom border keeps between the hint and the tabs before the names are given up
 export const TAB_GAP = 2 // blanks between two tabs of the bottom border (design)
-export function frameBottomFit(cols: number, hintFull: string, hintShort: string, tabs: readonly BorderTab[], active: string): { hint: string; tabs: BorderTab[] } {
+export function frameBottomFit(cols: number, hintFull: string, hintShort: string, tabs: readonly BorderTab[], active: string, hintMin = ''): { hint: string; tabs: BorderTab[] } {
   const digits = tabs.map(x => ({ ...x, text: x.id === active ? x.key + ' ' + x.text.replace(/^\d+\s+/, '') : x.key }))
   const fullTabs = tabs.map(x => ({ ...x, text: x.text }))
   // design (narrow sheet): `╰─  <hint>  ────  1 現況  2 待決 … 9 說明  ─╯`: two blanks around the hint, at least two dashes, two blanks between tabs and at both ends of them
@@ -139,7 +155,7 @@ export function frameBottomFit(cols: number, hintFull: string, hintShort: string
   if (fits(hintFull, fullTabs)) return { hint: hintFull, tabs: fullTabs }
   // the shortest hint keeps every name only while the border still shows a readable rule (RULE_MIN dashes); on a tighter border the names give way, not the hint
   if (chrome + displayWidth(hintShort) + tabW(fullTabs) + RULE_MIN <= cols) return { hint: hintShort, tabs: fullTabs }
-  for (const hint of [hintShort, '']) {
+  for (const hint of [hintShort, ...(hintMin !== '' ? [hintMin] : []), '']) {
     if (fits(hint, digits)) return { hint, tabs: digits }
   }
   return { hint: '', tabs: digits }
@@ -200,8 +216,13 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
   const droppedDecideAct = first.actions.some(x => x.some(s => s.press === 'tab:2:decide'))
   const layout = (r: { body: Row[]; actions: Row[] }, short = false) => {
     const read = page.id === 'decide' || page.id === 'todo' || page.id === 'help'
-    // Dual-column decide (renderBoxD) already lays out left + divider + right to exact ctx.size.cols; wrapping at 80 splits every row in half and hides the bottom scroll hint.
-    const dualDecide = page.id === 'decide' && ctx.v74 !== undefined && ctx.box === true && ctx.size.cols >= 100 && !styleC(page, ctx)
+    // Dual-column decide (renderBoxD) and compact list (renderBoxCompactList) already lay out to exact ctx.size.cols; wrapping at 80 splits rows in half and hides bottom scroll hints.
+    const bodyCols = ctx.bodyColumns ?? ctx.size.cols
+    const effMaxRows = ctx.maxRows ?? ctx.size.rows
+    const fullWidthDecide = page.id === 'decide' && ctx.v74 !== undefined && ctx.box === true && (
+      (effMaxRows < DECIDE_COMPACT_MAX_ROWS && ctx.decide?.compactExpanded !== true) ||
+      (effMaxRows >= DECIDE_COMPACT_MAX_ROWS && decideLayoutMode(bodyCols, ctx.decide?.layoutMode ?? null) === 'dual' && !styleC(page, ctx))
+    )
     const body = r.body.filter(x => read || x.some(s => s.text.trim() !== '')).flatMap(x => {
       if (opts.topAnchor === true && x.map(s => s.text).join('').trimStart().startsWith(GLYPHS.structure.open + ' ') && x.map(s => s.text).join('').trimEnd().endsWith(GLYPHS.structure.rule)) { // only section rules (they end in ─); a ▾ legend row is text
         const row = x.map(s => ({ ...s }))
@@ -213,7 +234,7 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
       }
       const joined = x.map(s => s.text).join('')
       const lead = /^ */.exec(joined)?.[0].length ?? 0
-      const width = read && !dualDecide ? Math.min(80, ctx.size.cols) : ctx.size.cols
+      const width = read && !fullWidthDecide ? Math.min(80, ctx.size.cols) : ctx.size.cols
       const hang = read ? Math.max(WRAP_HANG, Math.min(lead, Math.max(0, width - 4))) : WRAP_HANG
       return wrapRow(x, width, hang)
     })

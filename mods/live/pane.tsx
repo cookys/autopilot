@@ -19,7 +19,7 @@ import { commandView } from './commandtab'
 import { consolePage } from './consolepages'
 import type { ConsoleNav, ConsoleTab } from './consoletabs'
 import { keyed, scrollFrame } from './scroll'
-import { TAB_GAP, actionRows, frameBottomFit, frameHintShort, frameHintText, frameRows, stripRows, STRIP_SPLIT_COLS, v74TitleSegs } from './pages/frame'
+import { TAB_GAP, actionRows, frameBottomFit, frameHintMin, frameHintShort, frameHintText, frameRows, stripRows, STRIP_SPLIT_COLS, v74TitleSegs } from './pages/frame'
 import { displayWidth, truncateToWidth } from './model'
 import { fleetView as fleetPageView } from './pages/fleet'
 import { renderQuota } from './pages/quota'
@@ -311,8 +311,20 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
   const titleSegs = fitSegs(v74TitleSegs(page, ctx, (rows[0] ?? [])[0] ?? { text: t('tab.' + page.id) }), Math.max(0, fullCols - 6))
   const titleW = titleSegs.reduce((n, x) => n + displayWidth(x.text), 0)
   const top = <Box key="v74-top" height={1} width={fullCols} overflow="hidden"><Text {...bc}>{GLYPHS.structure.frameTL + rule + ' '}</Text>{titleSegs.map((x, j) => <Text key={'tt' + j} {...drawSeg(x)} wrap="truncate">{x.text}</Text>)}<Text {...bc}>{' ' + pad(fullCols - 5 - titleW) + GLYPHS.structure.frameTR}</Text></Box>
-  const inner = rows.slice(1, rows.length - stripN - 1).map((r, k) => (
-    <Box key={'v74-row' + k} height={1} width={fullCols} overflow="hidden"><Text>{side + ' '}</Text><Box flexGrow={1} flexDirection="row" overflow="hidden">{drawRow(r, k + 1)}</Box><Text>{' ' + side}</Text></Box>
+  const rawInner = rows.slice(1, rows.length - stripN - 1).map((r, k) => ({ r, idx: k + 1 }))
+  let innerEntries = rawInner
+  // Codex R3 Critical: shrink boxed Decide pane to content height (drop trailing filler gap rows between content and actions).
+  if (page.id === 'decide' && ctx.v74 !== undefined) {
+    const actStart = rows.length - stripCount - actionCount
+    const bodyPart = rawInner.filter(e => e.idx < actStart)
+    const actPart = rawInner.filter(e => e.idx >= actStart)
+    while (bodyPart.length > 0 && bodyPart.length + actPart.length > 2 && bodyPart[bodyPart.length - 1].r.every(s => s.text.trim() === '')) {
+      bodyPart.pop()
+    }
+    innerEntries = [...bodyPart, ...actPart]
+  }
+  const inner = innerEntries.map(({ r, idx }, k) => (
+    <Box key={'v74-row' + k} height={1} width={fullCols} overflow="hidden"><Text>{side + ' '}</Text><Box flexGrow={1} flexDirection="row" overflow="hidden">{drawRow(r, idx)}</Box><Text>{' ' + side}</Text></Box>
   ))
   // PM 01M7XB0B: the page tabs sit on the bottom border, right side; the key hint stays on the left. One row, never a second line.
   const entriesOf = (c: PageCtx) => stripRows(page, c).flat().filter(sg => sg.press !== undefined && !sg.press.endsWith(':pet'))
@@ -321,7 +333,7 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
     const m = /^tab:(\d):(\w+)$/.exec(sg.press as string)
     return m === null ? [] : [{ key: m[1], id: m[2], text: sg.text }]
   })
-  const fit = frameBottomFit(fullCols, frameHintText(page, ctx), frameHintShort(page, ctx), tabItems, page.id)
+  const fit = frameBottomFit(fullCols, frameHintText(page, ctx), frameHintShort(page, ctx), tabItems, page.id, frameHintMin(page, ctx))
   const tabW = fit.tabs.reduce((n, x, i) => n + (i === 0 ? 0 : TAB_GAP) + displayWidth(x.text), 0)
   const padN = Math.max(1, fullCols - (2 + 2 + displayWidth(fit.hint) + 2 + 2 + tabW + 2 + 2))
   const tabs = fit.tabs.map((tb, j) => {

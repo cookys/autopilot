@@ -117,9 +117,12 @@ const cardless = (page: Page, ctx: PageCtx): boolean => (page.id === 'decide' ||
 // r11 #4: while the send preview is up, Esc means one thing (cancel the preview), so the border says so and nothing else
 const armed = (page: Page, ctx: PageCtx): boolean => page.id === 'decide' && ctx.decide?.armed === true && !cardless(page, ctx)
 const bgOpen = (page: Page, ctx: PageCtx): boolean => page.id === 'decide' && ctx.decide?.bgOpen === true && !cardless(page, ctx)
+const compactDecide = (page: Page, ctx: PageCtx): boolean =>
+  page.id === 'decide' && ctx.v74 !== undefined && ctx.box === true && (ctx.maxRows ?? ctx.size.rows) < DECIDE_COMPACT_MAX_ROWS && ctx.decide?.compactExpanded !== true && !cardless(page, ctx)
 const styleC = (page: Page, ctx: PageCtx): boolean => page.id === 'decide' && ctx.decide?.style === 'C' && !cardless(page, ctx)
-export const frameHintText = (page: Page, ctx: PageCtx): string => armed(page, ctx) ? ctx.t('v74.b.border.armed') : bgOpen(page, ctx) ? ctx.t('v74.b.border.decide_bg', { ud: GLYPHS.structure.up + GLYPHS.structure.behind }) : styleC(page, ctx) ? ctx.t('v74.b.border.decide_c', { keys: keysWord(ctx) }) : ctx.t(cardless(page, ctx) ? 'v74.b.border.cardless' : V74_BORDER_KEY[page.id] ?? 'v74.b.border.default', { ud: GLYPHS.structure.up + GLYPHS.structure.behind, keys: keysWord(ctx) })
-export const frameHintShort = (page: Page, ctx: PageCtx): string => armed(page, ctx) ? ctx.t('v74.b.short.armed') : bgOpen(page, ctx) ? ctx.t('v74.b.short.decide_bg', { ud: GLYPHS.structure.up + GLYPHS.structure.behind }) : styleC(page, ctx) ? ctx.t('v74.b.short.decide_c') : ctx.t(cardless(page, ctx) ? 'v74.b.short.scroll' : V74_SHORT_KEY[page.id] ?? 'v74.b.short.scroll', { ud: GLYPHS.structure.up + GLYPHS.structure.behind })
+export const frameHintText = (page: Page, ctx: PageCtx): string => armed(page, ctx) ? ctx.t('v74.b.border.armed') : bgOpen(page, ctx) ? ctx.t('v74.b.border.decide_bg', { ud: GLYPHS.structure.up + GLYPHS.structure.behind }) : compactDecide(page, ctx) ? ctx.t('v74.b.border.decide_compact', { ud: GLYPHS.structure.up + GLYPHS.structure.behind, keys: keysWord(ctx) }) : styleC(page, ctx) ? ctx.t('v74.b.border.decide_c', { keys: keysWord(ctx) }) : ctx.t(cardless(page, ctx) ? 'v74.b.border.cardless' : V74_BORDER_KEY[page.id] ?? 'v74.b.border.default', { ud: GLYPHS.structure.up + GLYPHS.structure.behind, keys: keysWord(ctx) })
+export const frameHintShort = (page: Page, ctx: PageCtx): string => armed(page, ctx) ? ctx.t('v74.b.short.armed') : bgOpen(page, ctx) ? ctx.t('v74.b.short.decide_bg', { ud: GLYPHS.structure.up + GLYPHS.structure.behind }) : compactDecide(page, ctx) ? ctx.t('v74.b.short.decide_compact', { ud: GLYPHS.structure.up + GLYPHS.structure.behind }) : styleC(page, ctx) ? ctx.t('v74.b.short.decide_c') : ctx.t(cardless(page, ctx) ? 'v74.b.short.scroll' : V74_SHORT_KEY[page.id] ?? 'v74.b.short.scroll', { ud: GLYPHS.structure.up + GLYPHS.structure.behind })
+export const frameHintMin = (page: Page, ctx: PageCtx): string => armed(page, ctx) || bgOpen(page, ctx) || cardless(page, ctx) ? '' : compactDecide(page, ctx) ? ctx.t('v74.b.min.decide_compact') : styleC(page, ctx) ? ctx.t('v74.b.min.decide_c') : page.id === 'decide' ? ctx.t('v74.b.min.decide') : ''
 export function frameBorderRow(page: Page, ctx: PageCtx): Row {
   return [{ text: GLYPHS.structure.frameBL + GLYPHS.structure.rule + ' ' + frameHintText(page, ctx), dim: true }]
 }
@@ -129,7 +132,7 @@ export function frameBorderRow(page: Page, ctx: PageCtx): Row {
 export type BorderTab = { key: string; id: string; text: string }
 const RULE_MIN = 8 // dashes the bottom border keeps between the hint and the tabs before the names are given up
 export const TAB_GAP = 2 // blanks between two tabs of the bottom border (design)
-export function frameBottomFit(cols: number, hintFull: string, hintShort: string, tabs: readonly BorderTab[], active: string): { hint: string; tabs: BorderTab[] } {
+export function frameBottomFit(cols: number, hintFull: string, hintShort: string, tabs: readonly BorderTab[], active: string, hintMin = ''): { hint: string; tabs: BorderTab[] } {
   const digits = tabs.map(x => ({ ...x, text: x.id === active ? x.key + ' ' + x.text.replace(/^\d+\s+/, '') : x.key }))
   const fullTabs = tabs.map(x => ({ ...x, text: x.text }))
   // design (narrow sheet): `╰─  <hint>  ────  1 現況  2 待決 … 9 說明  ─╯`: two blanks around the hint, at least two dashes, two blanks between tabs and at both ends of them
@@ -140,7 +143,7 @@ export function frameBottomFit(cols: number, hintFull: string, hintShort: string
   if (fits(hintFull, fullTabs)) return { hint: hintFull, tabs: fullTabs }
   // the shortest hint keeps every name only while the border still shows a readable rule (RULE_MIN dashes); on a tighter border the names give way, not the hint
   if (chrome + displayWidth(hintShort) + tabW(fullTabs) + RULE_MIN <= cols) return { hint: hintShort, tabs: fullTabs }
-  for (const hint of [hintShort, '']) {
+  for (const hint of [hintShort, ...(hintMin !== '' ? [hintMin] : []), '']) {
     if (fits(hint, digits)) return { hint, tabs: digits }
   }
   return { hint: '', tabs: digits }

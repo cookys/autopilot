@@ -1729,7 +1729,7 @@ export const v74EscClosesBg = (bgOpen: boolean | undefined, textMode: boolean, o
 export type V74KeysEvent = { kind: 'open' } | { kind: 'closed' } | { kind: 'sent' } | { kind: 'key'; key: KeyAction['kind'] } | { kind: 'focus'; named: string | undefined; origin: unknown }
 export function v74KeysHeldNext(was: boolean, ev: V74KeysEvent): boolean {
   if (ev.kind === 'open' || ev.kind === 'closed' || ev.kind === 'sent') return false
-  if (ev.kind === 'key') return ev.key !== 'close' && ev.key !== 'page' ? true : was
+  if (ev.kind === 'key') return ev.key === 'close' ? false : ev.key !== 'page' ? true : was
   return v74KeysHeldAfter(was, ev.named, ev.origin)
 }
 const bandElement = (named: string | undefined): boolean => named !== undefined && /^(tab:|card:|letter:|hotkey:|opt:|v74-note$)/.test(named)
@@ -1737,6 +1737,7 @@ function markPaneOpen(): void {
   v74KeysHeld = false
   v74SendResult = null
   v74Open = true
+  bandExpand = { ...bandExpand, expanded: true }
   paneOpened = true
   paneOpenAsked = true
   panePlacement = null
@@ -1813,7 +1814,8 @@ async function frameKeyBody($: EngineInterface, k: KeyAction): Promise<void> {
   try {
     if (k.kind === 'page') { await panePagePress($, k.to as PageId); return }
     if (k.kind === 'toggle_expand') {
-      bandExpand = toggleBandExpand(bandExpand)
+      const synced = bandExpand.expanded === v74Open ? bandExpand : { ...bandExpand, expanded: v74Open }
+      bandExpand = toggleBandExpand(synced)
       if (bandExpand.expanded) {
         await panePagePress($, 'now')
         markPaneOpen()
@@ -2124,7 +2126,8 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const togglePaneRun = async () => {
       const listed = await $.ui.panes().catch(() => [] as { id: string; isShown: boolean; isFocused: boolean; isPlaced: boolean }[])
       if (v74) {
-        bandExpand = toggleBandExpand(bandExpand)
+        const synced = bandExpand.expanded === v74Open ? bandExpand : { ...bandExpand, expanded: v74Open }
+        bandExpand = toggleBandExpand(synced)
         void appendLog($, 'band-reload.log', { step: 'toggle-press', panes: listed, v74Open, action: bandExpand.expanded ? 'open' : 'close' })
         if (bandExpand.expanded) { await pageOpen('now'); return }
         panePage = bandExpand.activePage
@@ -2300,6 +2303,8 @@ export function registerLive(on: Parameters<Register>[0]): void {
         ? t('band.onerow.remind_prefix') + curCard.question
         : snap?.band?.reason ?? (liveStale && snap?.text ? snap.text : null)
       const remState = liveStale ? 'stale' : dataStateOf(decideAgeMs, false, false)
+      const height = Math.min(Math.max(0, rows - 1), V74_FRAME_MAX) // total band height = height + 1 <= maxRows
+      const showBox = v74Open && height >= V74_FRAME_MIN
       const oneRowInput: OneRowInput = {
         reminder: { text: remText, cardId: curCard?.id ?? null, state: remState, hasRec: curCard?.options.some(o => o.recommended) ?? false },
         line: {
@@ -2315,7 +2320,8 @@ export function registerLive(on: Parameters<Register>[0]): void {
         tps: { value: lastStep?.tps ?? null, state: tpsDataState },
         spark: { bars: sparkBars, state: tpsDataState },
         pet: { text: petText, state: petText === null ? 'missing' : 'normal' },
-        expanded: v74Open,
+        // Codex R3 Major3 / Carbon R3 M1: band toggle MUST match actual visible pane state (never ▴收合 when no pane is shown).
+        expanded: showBox,
       }
       const onOneRowSegment = (id: BandSegmentId) => {
         const target = bandSlotPage(id, false)
@@ -2327,8 +2333,6 @@ export function registerLive(on: Parameters<Register>[0]): void {
         bandExpand = { ...bandExpand, expanded: true, manualExpanded: true, activePage: id }
         void pageOpen(id as BandPageId)
       }
-      const height = Math.min(Math.max(0, rows - 1), V74_FRAME_MAX) // total band height = height + 1 <= maxRows
-      const showBox = v74Open && height >= V74_FRAME_MIN
       const oneRow = OneRowBand(el, layoutOneRowBand(oneRowInput, columns, t), onOneRowSegment, () => { void togglePane() }, showBox ? undefined : { onPage: onOneRowPage })
       if (!showBox) return stackRows(el, [oneRow])
       const page = await paneTree($, e as never, false, height, rows)

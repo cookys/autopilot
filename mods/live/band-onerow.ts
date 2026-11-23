@@ -178,7 +178,8 @@ export function formatLineFull(line: OneRowInput['line'], t: T): OneRowSegment {
   return { id: 'line', segs, width: BAND_COL_WIDTHS.line, clickable: true, page: 'dispatch' }
 }
 
-// Shortened alert-only line form (§2.6): `3 產線 ✗2 ⊘4` (only alerting items, max 3, width <= 14).
+// Shortened alert-only line form (§2.6): `3 產線 ✗ 2 ⊘ 4` (only alerting items, space between glyph and count, max 3, width <= 14).
+// Drops the redundant label word when multi-digit or stale `?` counts would exceed 14 cols so glyph spacing and `?` are preserved.
 export function formatLineShort(line: OneRowInput['line'], t: T): OneRowSegment {
   const st = line.state
   const word = fixedLabel(t('band.onerow.line'), 4)
@@ -191,19 +192,24 @@ export function formatLineShort(line: OneRowInput['line'], t: T): OneRowSegment 
   if ((line.failed ?? 0) > 0) alerts.push({ glyph: GLYPHS.state.failed, count: compactCount(line.failed as number) })
   if ((line.stalled ?? 0) > 0) alerts.push({ glyph: GLYPHS.state.stalled, count: compactCount(line.stalled as number) })
   const picked = alerts.slice(0, 3)
-  const pfxSpaced = (st === 'stale' ? '~3' : '3 ') + word
-  const pfxTight = (st === 'stale' ? '~3' : '3') + word
-  const joinedSpaced = picked.map(a => a.glyph + a.count).join(' ')
-  const joinedTight = picked.map(a => a.glyph + a.count).join('')
-  let head = pfxSpaced + ' '
+  const pfxFull = (st === 'stale' ? '~3' : '3 ') + word + ' '
+  const pfxDigit = st === 'stale' ? '~3 ' : '3 '
+  const pfxTight = st === 'stale' ? '~3' : '3'
+  const joinedSpaced = picked.map(a => a.glyph + ' ' + a.count).join(' ')
+  const joinedTight = picked.map(a => a.glyph + a.count).join(' ')
+  let head = pfxFull
   let body = joinedSpaced
   if (displayWidth(head + body) > BAND_COL_WIDTHS.lineShortMax) {
-    body = joinedTight
+    head = pfxDigit
+    if (displayWidth(head + body) > BAND_COL_WIDTHS.lineShortMax) {
+      body = joinedTight
+    }
     if (displayWidth(head + body) > BAND_COL_WIDTHS.lineShortMax) {
       head = pfxTight + ' '
     }
     if (displayWidth(head + body) > BAND_COL_WIDTHS.lineShortMax) {
-      body = clipToWidth(body, Math.max(1, BAND_COL_WIDTHS.lineShortMax - displayWidth(head)))
+      const avail = Math.max(1, BAND_COL_WIDTHS.lineShortMax - displayWidth(head))
+      body = st === 'stale' && avail >= 2 ? clipToWidth(body, avail - 1) + '?' : clipToWidth(body, avail)
     }
   }
   const segs: Seg[] = st === 'stale'
@@ -346,6 +352,9 @@ export function layoutOneRowBand(inp: OneRowInput, bodyColumns: number, t: T): O
 
   const lineAlert = hasLineAlert(inp.line)
   const qcAlert = hasQcAlert(inp.qc)
+  const hasSpark = inp.spark.state !== 'missing' && (inp.spark.bars ?? '').length > 0
+  const hasPet = inp.pet.state !== 'missing' && (inp.pet.text ?? '') !== ''
+  const tpsEmpty = inp.tps.state === 'missing' || inp.tps.value === null
 
   const map = new Map<BandSegmentId, OneRowSegment>([
     ['line', formatLineFull(inp.line, t)],
@@ -357,7 +366,8 @@ export function layoutOneRowBand(inp: OneRowInput, bodyColumns: number, t: T): O
     ['pet', formatPet(inp.pet)],
   ])
   const order: BandSegmentId[] = ['line', 'source', 'pend', 'qc', 'tps', 'spark', 'pet']
-  const active = new Set<BandSegmentId>(order)
+  // Carbon R3 m1: omit unlabelled decoration shells (spark, pet) when they have no data so width returns to reminder.
+  const active = new Set<BandSegmentId>(order.filter(id => (id === 'spark' ? hasSpark : id === 'pet' ? hasPet : true)))
   const dropped: BandSegmentId[] = []
 
   const drop = (id: BandSegmentId): void => {
@@ -375,9 +385,14 @@ export function layoutOneRowBand(inp: OneRowInput, bodyColumns: number, t: T): O
 
   const remAvail = (): number => cols - rightWidth()
 
-  // §2.6 (160-col rule): drop decorations (pet, spark) first if reminder cannot show in full (up to 60 cols).
+  // §2.6: when reminder cannot show in full (up to 60 cols), reclaim decorations first,
+  // then other non-alert segments (non-alert QC, valueless tok/s, source, valued tok/s) before truncating reminder.
   if (remAvail() < remTargetDecor) drop('pet')
   if (remAvail() < remTargetDecor) drop('spark')
+  if (remAvail() < remTargetDecor && !qcAlert) drop('qc')
+  if (remAvail() < remTargetDecor && tpsEmpty) drop('tps')
+  if (remAvail() < remTargetDecor) drop('source')
+  if (remAvail() < remTargetDecor) drop('tps')
 
   // Priority drop order until reminder has at least REMIND_MIN_COLS (28):
   // pet -> spark -> qc (non-alert) -> source -> tps -> line (non-alert; alert switches to short form <=14) -> pend last.
@@ -411,7 +426,17 @@ export function layoutOneRowBand(inp: OneRowInput, bodyColumns: number, t: T): O
   }
 
   const finalRemW = Math.max(0, remAvail())
-  const remText = finalRemW > 0 ? padRightToWidth(remRaw.text, finalRemW) : ''
+  const formatRemText = (raw: string, width: number, stale: boolean): string => {
+    if (width <= 0) return ''
+    if (displayWidth(raw) <= width) return padRightToWidth(raw, width)
+    if (stale && raw.endsWith('?')) {
+      if (width === 1) return '?'
+      if (width === 2) return '~?'
+      return padRightToWidth(clipToWidth(raw.slice(0, -1), width - 1) + '?', width)
+    }
+    return padRightToWidth(raw, width)
+  }
+  const remText = formatRemText(remRaw.text, finalRemW, inp.reminder.state === 'stale')
   const remind: OneRowSegment = {
     id: 'remind',
     segs: remText === '' ? [] : [{ text: remText, ...(remRaw.color !== undefined ? { color: remRaw.color } : {}) }],

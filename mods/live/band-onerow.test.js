@@ -44,8 +44,8 @@ test('carbon-critical-a: 80-col bodyColumns=75 with failed & stalled keeps short
   assert.ok(lineSeg, 'alerting line segment MUST NOT be dropped at 75 cols')
   assert.equal(lineSeg.short, true, 'alerting line uses shortened form at 75 cols')
   assert.ok(lineSeg.width <= 14, 'shortened line width <= 14, got ' + lineSeg.width)
-  assert.ok(segText(lineSeg).includes(G.state.failed + '2'), 'shortened line contains failed alert')
-  assert.ok(segText(lineSeg).includes(G.state.stalled + '4'), 'shortened line contains stalled alert')
+  assert.ok(segText(lineSeg).includes(G.state.failed + ' 2'), 'shortened line contains spaced failed alert: ' + segText(lineSeg))
+  assert.ok(segText(lineSeg).includes(G.state.stalled + ' 4'), 'shortened line contains spaced stalled alert: ' + segText(lineSeg))
   assert.ok(qcSeg, 'alerting QC segment MUST NOT be dropped at 75 cols')
   assert.ok(segText(qcSeg).includes(G.state.need_you), 'QC alert mark retained')
   assert.ok(lay.remind.width >= 20, 'reminder keeps readable width >= 20, got ' + lay.remind.width)
@@ -117,7 +117,11 @@ test('codex-major-2: data 3-states keep exact fixed widths with no emoji; idle s
       pet: { state: st, text: st === 'missing' ? null : 'Ferris Lv.1' },
     }), 195, tZh)
     const widths = Object.fromEntries(lay.segments.map(s => [s.id, W.displayWidth(segText(s))]))
-    assert.deepEqual(widths, { line: 26, source: 16, pend: 10, qc: 8, tps: 14, spark: 6, pet: 12 }, 'widths unchanged in state ' + st)
+    // Carbon R3 m1: empty/missing spark & pet omit unlabelled `│ —` shells; all 5 labelled data segments keep exact fixed widths.
+    const expectedWidths = st === 'missing'
+      ? { line: 26, source: 16, pend: 10, qc: 8, tps: 14 }
+      : { line: 26, source: 16, pend: 10, qc: 8, tps: 14, spark: 6, pet: 12 }
+    assert.deepEqual(widths, expectedWidths, 'widths unchanged in state ' + st)
     const full = B.oneRowText(lay)
     assert.equal(EMOJI_RE.test(full), false, 'no emoji in state ' + st)
     if (st === 'stale') {
@@ -250,4 +254,56 @@ test('decide-c-layout: 82/83/84 threshold, +/-2 hysteresis, and equal column wid
   const w120 = L.decideColumnWidths(120)
   assert.equal(Math.abs(w120.leftW - w120.rightW) <= 1, true, 'equal columns at 120')
   assert.equal(w120.leftW + w120.sepW + w120.rightW, 120)
+})
+
+// Codex R3 Major2 / Carbon R3 M2: 120-col reclaims non-alert segments before truncating reminder; 120-col title is never shorter than 80-col
+test('r3-major2: 120-col (115) reclaims non-alert segments before truncating reminder and is never shorter than 80-col (75)', () => {
+  const longRem = { text: '要你決定：要不要把 shared-tui plan 合進 develop？', cardId: 'd-001', state: 'normal', hasRec: true }
+  const scenarios = [
+    { name: 'qc-ok + tps-missing', over: { reminder: longRem, qc: { status: 'ok' }, tps: { value: null, state: 'missing' }, spark: { bars: null, state: 'missing' }, pet: { text: null, state: 'missing' } } },
+    { name: 'qc-ok + tps-179', over: { reminder: longRem, qc: { status: 'ok' }, tps: { value: 179, state: 'normal' }, spark: { bars: null, state: 'missing' }, pet: { text: null, state: 'missing' } } },
+    { name: 'qc-alert + tps-179', over: { reminder: longRem, qc: { status: 'alert' }, tps: { value: 179, state: 'normal' }, spark: { bars: '▇█▆▅▆', state: 'normal' }, pet: { text: 'Ferris Lv.1', state: 'normal' } } },
+  ]
+  for (const { name, over } of scenarios) {
+    const lay115 = B.layoutOneRowBand(sampleInput(over), 115, tZh)
+    const lay75 = B.layoutOneRowBand(sampleInput(over), 75, tZh)
+    const rem115 = segText(lay115.remind).trimEnd()
+    const rem75 = segText(lay75.remind).trimEnd()
+    assert.ok(W.displayWidth(B.oneRowText(lay115)) <= 115, name + ': 115 fits')
+    assert.ok(W.displayWidth(B.oneRowText(lay75)) <= 75, name + ': 75 fits')
+    assert.ok(W.displayWidth(rem115) >= W.displayWidth(rem75), `${name}: 120-col title (${W.displayWidth(rem115)}) >= 80-col (${W.displayWidth(rem75)}): ${rem115} vs ${rem75}`)
+    assert.equal(rem115.includes('\u2026'), false, `${name}: 120-col shows full 51-col title once non-alert segments reclaimed: ${rem115}`)
+    assert.ok(lay115.dropped.includes('source'), `${name}: non-alert source reclaimed at 115 cols`)
+  }
+})
+
+// Carbon R3 m1: sparkline and pet omit empty shells when missing and return width budget to reminder
+test('r3-minor1: missing sparkline and pet omit unlabelled shells and free width to reminder', () => {
+  const withDecor = B.layoutOneRowBand(sampleInput(), 195, tZh)
+  const noDecor = B.layoutOneRowBand(sampleInput({
+    spark: { bars: null, state: 'missing' },
+    pet: { text: null, state: 'missing' },
+  }), 195, tZh)
+  assert.equal(noDecor.segments.some(s => s.id === 'spark' || s.id === 'pet'), false, 'spark & pet omitted when missing')
+  assert.equal(B.oneRowText(noDecor).includes(G.structure.bandSep + ' ' + G.structure.empty), false, 'no unlabelled │ — empty shell')
+  assert.equal(noDecor.remind.width, withDecor.remind.width + 24, 'freed 24 cols (9 spark + 15 pet) return to reminder')
+  assert.equal(W.displayWidth(B.oneRowText(noDecor)), 195, 'total row still fills exact 195 cols')
+})
+
+// Codex R3 Minor: 80-col shortened alert form has space between glyph and count, stays <= 14 cols even at 99+ and stale
+test('r3-minor-spacing: 80-col shortened line uses `3 產線 ✗ 2 ⊘ 4` with spaces and preserves spaces + `?` at 99+ / stale', () => {
+  const normal = B.formatLineShort({ stalled: 4, running: 3, failed: 2, waiting: 0, state: 'normal' }, tZh)
+  assert.equal(segText(normal), '3 產線 ✗ 2 ⊘ 4')
+  assert.equal(normal.width, 14)
+
+  const maxNormal = B.formatLineShort({ stalled: 250, running: 3, failed: 120, waiting: 0, state: 'normal' }, tZh)
+  assert.ok(maxNormal.width <= 14, 'max normal short <= 14, got ' + maxNormal.width)
+  assert.ok(segText(maxNormal).includes('✗ 99+'), 'max normal keeps space: ' + segText(maxNormal))
+  assert.ok(segText(maxNormal).includes('⊘ 99+'), 'max normal keeps space: ' + segText(maxNormal))
+
+  const maxStale = B.formatLineShort({ stalled: 250, running: 3, failed: 120, waiting: 0, state: 'stale' }, tZh)
+  assert.ok(maxStale.width <= 14, 'max stale short <= 14, got ' + maxStale.width)
+  assert.ok(segText(maxStale).startsWith('~'), 'stale starts with ~: ' + segText(maxStale))
+  assert.ok(segText(maxStale).includes('✗ 99?'), 'stale keeps space and ?: ' + segText(maxStale))
+  assert.ok(segText(maxStale).includes('⊘ 99?'), 'stale keeps space and ?: ' + segText(maxStale))
 })

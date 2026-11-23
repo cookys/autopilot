@@ -21,8 +21,10 @@ import { GLYPHS } from '../tux/glyphs.ts'
 import { routeKey } from './pages/keys'
 import { decideColumnWidths, decideLayoutMode, decidePage, decideReduce, NO_NAV } from './pages/decide'
 import type { DecideNav } from './pages/decide'
-import { frameRows } from './pages/frame'
+import { frameBottomFit, frameHintMin, frameHintShort, frameHintText, frameRows } from './pages/frame'
 import { PAGES } from './pages/index'
+import { Pane } from './pane'
+import { paneKey, v74KeysHeldNext } from './register'
 import { newScroll } from './scrollmath'
 import type { DecideCard } from './v74/contract'
 
@@ -109,11 +111,11 @@ test('band-onerow routing: segment click and digit key reach identical pages; hi
 })
 
 test('band-onerow max values & alerts: Carbon Critical (a)+(b) and Codex Major (5)', () => {
-  // (a) 75 cols retains shortened line alert + QC alert
+  // (a) 75 cols retains shortened line alert (spaced glyph + count) + QC alert
   const a = layoutOneRowBand(sampleInput(), 75, t)
   expect(displayWidth(oneRowText(a))).toBeLessThanOrEqual(75)
-  expect(oneRowText(a)).toContain(GLYPHS.state.failed + '2')
-  expect(oneRowText(a)).toContain(GLYPHS.state.stalled + '4')
+  expect(oneRowText(a)).toContain(GLYPHS.state.failed + ' 2')
+  expect(oneRowText(a)).toContain(GLYPHS.state.stalled + ' 4')
   expect(oneRowText(a)).toContain(GLYPHS.state.need_you)
 
   // (b) Max values obey §2.2 widths exactly
@@ -493,6 +495,278 @@ test('80x24 mounted AbovePrompt opens Decide page via digit hotkey 2 at maxRows=
   expect(text12).toContain('立刻合併')
   expect(text12).toContain('暫緩一天')
   await b12.unmount()
+
+  await $.session.end({ reason: 'exit' })
+})
+
+test('R3 codex Critical: single-card mode (v) shrinks pane height to content with zero blank filler rows below background', () => {
+  const mk = (type: string) => (props: any) => ({ type, props, children: props.children })
+  const el = { Box: mk('Box'), Text: mk('Text'), Link: mk('Link'), Button: mk('Button'), Input: mk('Input') }
+  const tree = Pane(
+    el,
+    null,
+    'decide',
+    () => {},
+    t,
+    195,
+    () => {},
+    new Set(),
+    () => {},
+    new Set(),
+    null,
+    null,
+    null,
+    null,
+    null,
+    {
+      pages: PAGES,
+      pageId: 'decide',
+      console: null,
+      nowMs: NOW,
+      rows: 18,
+      maxRows: 19,
+      bodyColumns: 195,
+      v74Box: true,
+      decide: { ...NO_NAV, style: 'C' },
+      v74: { pm: null, pmFetchedMs: null, decide: CARDS, todo: null, nav: { cursor: 0, picks: {}, notes: {}, noteMode: false } },
+    },
+  )
+  const rowBoxes = walk(tree).filter(n => n.type === 'Box' && typeof n.props?.key === 'string' && /^v74-row\d+$/.test(n.props.key))
+  const innerLines = rowBoxes.map(b => text(b).replace(/^│ /, '').replace(/ │$/, '').trim())
+  // Shrunk well below fixed 16 inner rows (rows: 18 - 2 borders)
+  expect(rowBoxes.length).toBeLessThan(16)
+  // At most 1 single blank separator line between options — never a multi-row blank filler block
+  let consecutiveBlanks = 0
+  let maxBlankRun = 0
+  for (const line of innerLines) {
+    if (line === '') {
+      consecutiveBlanks += 1
+      if (consecutiveBlanks > maxBlankRun) maxBlankRun = consecutiveBlanks
+    } else {
+      consecutiveBlanks = 0
+    }
+  }
+  expect(maxBlankRun).toBeLessThanOrEqual(1)
+  // Options sit directly after the background line (zero filler rows between them)
+  const bgIdx = innerLines.findIndex(l => l.includes('背景'))
+  const optAIdx = innerLines.findIndex(l => l.includes('立刻合併'))
+  expect(bgIdx).toBeGreaterThan(-1)
+  expect(optAIdx).toBe(bgIdx + 1)
+  expect(innerLines.join('\n')).toContain('暫緩一天')
+})
+
+test('R3 Major3 & Carbon M1/M3: bottom border hints list w and v across widths, and 80x24 compact list shows visible key hints', () => {
+  const tabItems = PAGES.filter(p => p.id !== 'pet').map(p => ({ key: p.key, id: p.id, text: p.key + ' ' + t('tab.' + p.id) }))
+  const baseV74 = { pm: null, pmFetchedMs: null, decide: CARDS, todo: null, nav: { cursor: 0, picks: {}, notes: {}, noteMode: false } }
+
+  // Dual / normal Decide across 200 (195), 160 (155), 120 (115), 80 (75)
+  for (const cols of [195, 155, 115, 75] as const) {
+    const ctx = { live: null, console: null, size: { cols: cols - 4, rows: 14 }, bodyColumns: cols, maxRows: 14, t, nowMs: NOW, box: true as const, decide: { ...NO_NAV, style: 'D' as const }, v74: baseV74 }
+    const fit = frameBottomFit(cols, frameHintText(decidePage, ctx as never), frameHintShort(decidePage, ctx as never), tabItems, 'decide', frameHintMin(decidePage, ctx as never))
+    expect(fit.hint.length, `decide hint non-empty at ${cols}`).toBeGreaterThan(0)
+    expect(fit.hint, `decide hint includes w at ${cols}`).toContain('w')
+    expect(fit.hint, `decide hint includes v at ${cols}`).toContain('v')
+    expect(fit.hint, `decide hint includes Esc at ${cols}`).toContain('Esc')
+  }
+
+  // Single-card Decide (v) across 200, 120, 80
+  for (const cols of [195, 115, 75] as const) {
+    const ctx = { live: null, console: null, size: { cols: cols - 4, rows: 14 }, bodyColumns: cols, maxRows: 14, t, nowMs: NOW, box: true as const, decide: { ...NO_NAV, style: 'C' as const }, v74: baseV74 }
+    const fit = frameBottomFit(cols, frameHintText(decidePage, ctx as never), frameHintShort(decidePage, ctx as never), tabItems, 'decide', frameHintMin(decidePage, ctx as never))
+    expect(fit.hint, `decide_c hint includes w at ${cols}`).toContain('w')
+    expect(fit.hint, `decide_c hint includes v at ${cols}`).toContain('v')
+  }
+
+  // 80x24 compact list (maxRows=6, bodyColumns=75): non-empty key hint (never blank ╰─    ───)
+  const compactCtx = { live: null, console: null, size: { cols: 71, rows: 6 }, bodyColumns: 75, maxRows: 6, t, nowMs: NOW, box: true as const, decide: { ...NO_NAV, style: 'D' as const, compactExpanded: false }, v74: baseV74 }
+  const compactFit = frameBottomFit(75, frameHintText(decidePage, compactCtx as never), frameHintShort(decidePage, compactCtx as never), tabItems, 'decide', frameHintMin(decidePage, compactCtx as never))
+  expect(compactFit.hint.length).toBeGreaterThan(0)
+  expect(compactFit.hint).toContain('Enter')
+  expect(compactFit.hint).toContain('w')
+  expect(compactFit.hint).toContain('Esc')
+
+  // Non-decide pages (e.g. now) also list w across widths
+  const nowPage = PAGES[0]
+  for (const cols of [195, 115, 75] as const) {
+    const ctx = { live: null, console: null, size: { cols: cols - 4, rows: 14 }, bodyColumns: cols, maxRows: 14, t, nowMs: NOW, box: true as const, v74: baseV74 }
+    const fit = frameBottomFit(cols, frameHintText(nowPage, ctx as never), frameHintShort(nowPage, ctx as never), tabItems, 'now', frameHintMin(nowPage, ctx as never))
+    expect(fit.hint, `now hint includes w at ${cols}`).toContain('w')
+  }
+})
+
+test('R3 Carbon M3: 120-col dual-column right detail orders 背景 before 選項 (matching C) and aligns scrollbar █ with zero 1-cell shift on option rows', () => {
+  const longCards: DecideCard[] = [
+    {
+      id: 'd-scroll-1',
+      title: '合併 shared-tui',
+      question: '是否立即合併進 develop？',
+      background: '已完成三輪審查，等待最後核准。',
+      options: [
+        { label: '立刻合併', detail: '採用 --no-ff 合併並保留完整提交歷史紀錄', recommended: true },
+        { label: '暫緩一天', detail: '先觀察夜間自動測試結果再做決定', recommended: false },
+        { label: '退回重修', detail: '補齊更多實機截圖證據後再送審', recommended: false },
+      ],
+    },
+    CARDS[1],
+  ]
+  const dualCtx = {
+    live: null,
+    console: null,
+    size: { cols: 111, rows: 14 },
+    bodyColumns: 115,
+    maxRows: 14,
+    t,
+    nowMs: NOW,
+    box: true as const,
+    pendingScroll: { list: newScroll(), detail: newScroll(), cursor: '' },
+    decide: { ...NO_NAV, style: 'D' as const },
+    v74: { pm: null, pmFetchedMs: null, decide: longCards, todo: null, nav: { cursor: 0, picks: {}, notes: {}, noteMode: false } },
+  }
+  const dualOut = decidePage.render(dualCtx as never)
+  const rightLines = dualOut.body.map(r => rowText(r).split(' │ ').slice(1).join(' │ '))
+  const bgIdxDual = rightLines.findIndex(l => l.includes('背景'))
+  const optAIdxDual = rightLines.findIndex(l => l.includes('立刻合併'))
+  expect(bgIdxDual).toBeGreaterThan(-1)
+  expect(optAIdxDual).toBeGreaterThan(bgIdxDual)
+
+  // Matches single-card C order (背景 before 選項)
+  const singleOut = decidePage.render({ ...dualCtx, decide: { ...NO_NAV, style: 'C' as const }, size: { cols: 111, rows: 22 }, maxRows: 22 } as never)
+  const singleLines = singleOut.body.map(rowText)
+  expect(singleLines.findIndex(l => l.includes('背景'))).toBeLessThan(singleLines.findIndex(l => l.includes('立刻合併')))
+
+  // Verify scrollbar alignment under host hotkey rendering (pane.tsx stripLead + host `x: ` prefix):
+  // Previously `[a] ` (4 cells) was stripped and drawn as `a: ` (3 cells), shifting █ left by 1 cell.
+  const hostRenderedWidth = (row: { text: string; press?: string }[]): number => {
+    let total = 0
+    const used = new Set<string>()
+    for (let j = 0; j < row.length; j++) {
+      const sg = row[j]
+      if (sg.press !== undefined && sg.press.startsWith('key:')) {
+        let e = j
+        while (e + 1 < row.length && row[e + 1].press === sg.press) e++
+        const run = row.slice(j, e + 1)
+        const keyLetter = sg.press.slice(4)
+        const letter = /^[a-z]$/.test(keyLetter) && !used.has(keyLetter) ? keyLetter : null
+        if (letter !== null) used.add(letter)
+        const stripLead = (x: string) => letter === null ? x : x.replace(new RegExp('^\\[' + letter + '\\] |^' + letter + ': |^' + letter + ' '), '')
+        const drawn = run.map((x, n) => (n === 0 && letter !== null ? letter + ': ' + stripLead(x.text) : x.text)).join('')
+        total += displayWidth(drawn)
+        j = e
+        continue
+      }
+      total += displayWidth(sg.text)
+    }
+    return total
+  }
+  const scrollRows = dualOut.body.filter(r => {
+    const last = r[r.length - 1]?.text ?? ''
+    return last === GLYPHS.scrollbar.thumb || last === GLYPHS.scrollbar.track
+  })
+  expect(scrollRows.some(r => r[r.length - 1]?.text === GLYPHS.scrollbar.thumb)).toBe(true)
+  expect(scrollRows.some(r => r.some(s => s.press === 'key:a'))).toBe(true)
+  for (const r of scrollRows) {
+    expect(hostRenderedWidth(r), 'scrollbar row width aligned: ' + rowText(r)).toBe(111)
+  }
+})
+
+test('R3 Major3 & Carbon M1/M3: 80x24 no-pane never shows ▴收合, toggle expands/collapses, and Esc releases focus to input', async ($, on: On) => {
+  // Unit assertions for Esc returning focus to input box
+  expect(v74KeysHeldNext(true, { kind: 'key', key: 'close' })).toBe(false)
+  expect(v74KeysHeldNext(true, { kind: 'focus', named: undefined, origin: { kind: 'person' } })).toBe(false)
+  expect(routeKey('Escape', { page: 'decide', paneFocus: true, focusedButton: false, textMode: false })).toEqual({ kind: 'close' })
+  expect(routeKey('Escape', { page: 'decide', paneFocus: false, focusedButton: false, textMode: false })).toEqual({ kind: 'pass' })
+  const fakeEngine = { ui: { invalidate: () => {}, close: async () => {} } } as any
+  expect(await paneKey(fakeEngine, 'Escape')).toEqual({ kind: 'close' })
+
+  const HOME = '/fake/onerow-r3-home'
+  const LIVE = '/fake/onerow-r3-live'
+  const REPO = '/work/onerow-r3-repo'
+  const SID = 'onerow-r3-sid'
+  const KEY = '0000000000000097'
+  const PUBLISHED = '2026-10-04T10:00:00.000Z'
+  const files: Record<string, string> = {
+    [HOME + '/.autopilot/live-pointer.json']: JSON.stringify({ schema: 'autopilot.live-pointer/1', live_base: LIVE, autopilot_home: HOME + '/.autopilot' }),
+    [HOME + '/.autopilot/session-mode/' + SID + '.json']: JSON.stringify({ session_id: SID, project_key: KEY, expires_at: '2026-10-05T10:00:00.000Z' }),
+    [LIVE + '/runs/' + KEY + '.json']: JSON.stringify({ schema: 'autopilot.runs-live/1', scope: { project_key: KEY, root_run_id: null }, published_at: PUBLISHED, valid_for_s: 180, runs: [], counts: { confirmed_live: 0, exited: 0, unknown: 0 } }),
+    [REPO + '/.git/HEAD']: 'ref: refs/heads/main\n',
+  }
+  const clock = mock.clock(on, { now: Date.parse(PUBLISHED) + 30_000 })
+  on('env.get', (_, e) => ({ value: e.name === 'HOME' ? HOME : e.name === 'AUTOPILOT_LOCALE' ? 'zh-TW' : undefined }))
+  on('fs.read', (_, e) => { if (!(e.path in files)) throw new Error('ENOENT'); return { value: files[e.path] } })
+  on('fs.exists', (_, e) => ({ value: e.path in files }))
+  on('fs.write', () => ({ value: undefined }))
+  on('fs.list', () => ({ value: [] }))
+  on('fs.stat', (_, e) => { if (!(e.path in files) && e.path !== REPO) throw new Error('ENOENT'); return { value: { kind: e.path === REPO ? 'dir' : 'file', size: 1, mtimeMs: 0, isLink: false, realPath: e.path } } })
+  on('config.list', () => ({ value: [] }))
+  on('session.id', () => ({ value: SID }))
+  on('session.cwd', () => ({ value: REPO }))
+  on('session.root', () => ({ value: REPO }))
+  on('session.start', () => ({ cwd: REPO }))
+  on('session.end', () => ({ sessionId: SID }))
+  on('command.register', (_, e) => ({ value: { command: e.name } }))
+  on('ui.render', { component: 'AbovePrompt' }, () => ({ type: 'engine' as const, ref: 0 }))
+  on('ui.invalidate', () => ({ value: undefined }))
+  on('ui.toast', () => ({ value: undefined }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.close', () => ({ value: undefined }))
+  on('ui.panes', () => ({ value: [] }))
+  on('process.run', () => ({ value: { exitCode: 1, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
+
+  await $.session.start({ surface: 'terminal', cwd: REPO })
+  await clock.advance(5000)
+
+  const countRows = (tree: Node): number => {
+    const kids = (tree.children || []) as Node[]
+    let total = 0
+    for (const c of kids) {
+      if (c?.props?.key?.startsWith('v74:') || (c?.type === 'Box' && c?.props?.flexDirection === 'column')) {
+        total += (c.children || []).length
+      } else {
+        total += 1
+      }
+    }
+    return total
+  }
+
+  // 1. Collapsed initially: 1 row, shows ▾展開, never ▴收合
+  const bCollapsed = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', props: { bodyColumns: 75, maxRows: 12, view: { agentId: undefined } }, viewport: { columns: 80, rows: 24, isFullscreen: true } })
+  const tCollapsed = await bCollapsed.drawn() as Node
+  expect(countRows(tCollapsed)).toBe(1)
+  expect(text(tCollapsed)).toContain('▾展開')
+  expect(text(tCollapsed)).not.toContain('▴收合')
+  await bCollapsed.press({ key: 'pane-toggle' })
+  await clock.advance(0)
+  await bCollapsed.unmount()
+
+  // 2. Expanded with room (maxRows=12): pane visible, band shows ▴收合
+  const bExpanded = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', props: { bodyColumns: 75, maxRows: 12, view: { agentId: undefined } }, viewport: { columns: 80, rows: 24, isFullscreen: true } })
+  const tExpanded = await bExpanded.drawn() as Node
+  expect(countRows(tExpanded)).toBeGreaterThan(1)
+  expect(text(tExpanded)).toContain('▴收合')
+  expect(text(tExpanded)).not.toContain('▾展開')
+  await bExpanded.unmount()
+
+  // 3. Open state but viewport too short for pane (maxRows=4 -> height=3 < V74_FRAME_MIN=4):
+  //    no pane drawn -> band MUST show ▾展開 and NEVER ▴收合 (Codex R3 Major3 / Carbon R3 M1)
+  const bNoPane = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', props: { bodyColumns: 75, maxRows: 4, view: { agentId: undefined } }, viewport: { columns: 80, rows: 24, isFullscreen: true } })
+  const tNoPane = await bNoPane.drawn() as Node
+  expect(countRows(tNoPane)).toBe(1)
+  expect(text(tNoPane)).toContain('▾展開')
+  expect(text(tNoPane)).not.toContain('▴收合')
+  await bNoPane.unmount()
+
+  // 4. Press w hotkey on expanded pane to collapse back to 1 row
+  const bCollapseKey = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', props: { bodyColumns: 75, maxRows: 12, view: { agentId: undefined } }, viewport: { columns: 80, rows: 24, isFullscreen: true } })
+  await bCollapseKey.press({ key: 'letter:w' })
+  await clock.advance(0)
+  await bCollapseKey.unmount()
+
+  const bAfterCollapse = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', props: { bodyColumns: 75, maxRows: 12, view: { agentId: undefined } }, viewport: { columns: 80, rows: 24, isFullscreen: true } })
+  const tAfterCollapse = await bAfterCollapse.drawn() as Node
+  expect(countRows(tAfterCollapse)).toBe(1)
+  expect(text(tAfterCollapse)).toContain('▾展開')
+  expect(text(tAfterCollapse)).not.toContain('▴收合')
+  await bAfterCollapse.unmount()
 
   await $.session.end({ reason: 'exit' })
 })

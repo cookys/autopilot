@@ -759,9 +759,7 @@ function renderBoxC(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
       body = { rows: [qRow, inlineOptRow], headEnd: 1 }
     }
   }
-  const pad = Math.max(0, room - body.rows.length)
-  const padded = pad > 0 ? [...body.rows.slice(0, body.headEnd), ...Array.from({ length: pad }, (): Row => [seg('')]), ...body.rows.slice(body.headEnd)] : body.rows
-  return { body: padded, actions: effActions }
+  return { body: body.rows, actions: effActions }
 }
 
 // Compact 1-row-per-card list for maxRows < 10 (PM 01M837ZECP): pressing a card expands it.
@@ -815,11 +813,13 @@ function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
   const recText = recIx >= 0 ? ` · ${GLYPHS.structure.recommend} ${letterOf(recIx)}` : ''
   const single = cards.length === 1
 
-  // Build right-pane detail lines for `c`
+  // Build right-pane detail lines for `c` in operator order (UX gate §14, matching single-card C): title -> background -> options -> note.
+  // Option buttons use `a: label` (3-cell prefix) to match the host hotkey draw width so the right-edge scrollbar aligns on every row.
   const buildDetail = (detailW: number): Row[] => {
     const innerW = Math.max(10, detailW - 2)
     const out: Row[] = []
     out.push(...wrapRow([seg(c.title, { color: PALETTE.here, here: true }), seg('：' + c.question)], innerW, 2))
+    out.push(...labelledBox(t('v74.d.bg'), c.background ?? t('v74.d.bg_none'), innerW))
     out.push([seg('')])
     c.options.forEach((o, k) => {
       if (k > 0) out.push([seg('')])
@@ -827,12 +827,9 @@ function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
       const tone = picked === k ? pickedTone() : o.recommended ? { color: PALETTE.attention } : {}
       const keyLabel = (k < PICK_KEYS.length ? PICK_KEYS[k] : letterOf(k))
       const rec = o.recommended ? [seg('  ' + GLYPHS.structure.recommend + ' ' + t('v74.d.rec'), { color: PALETTE.attention })] : []
-      out.push(...wrapRow([seg('  '), seg(`[${keyLabel}] ${o.label}${mark}`, { ...tone, ...(ctx.pendingScroll !== undefined && !held && !sent && k < PICK_KEYS.length ? { press: 'key:' + PICK_KEYS[k] } : {}) }), ...rec], innerW, 6))
+      out.push(...wrapRow([seg('  '), seg(`${keyLabel}: ${o.label}${mark}`, { ...tone, ...(ctx.pendingScroll !== undefined && !held && !sent && k < PICK_KEYS.length ? { press: 'key:' + PICK_KEYS[k] } : {}) }), ...rec], innerW, 6))
       if (o.detail !== '') out.push(...wrapRow([seg('      '), dimSeg(o.detail)], innerW, 6))
     })
-    out.push([seg('')])
-    out.push(...labelledBox(t('v74.d.bg'), c.background ?? t('v74.d.bg_none'), innerW))
-    out.push([seg('')])
     if (held) out.push([seg('  '), dimSeg(t('v74.d.held', { k: picked === undefined ? '-' : String(PICK_KEYS[picked] ?? picked + 1) }))])
     else if (sent) out.push([seg('  '), dimSeg(t('v74.d.sent'))])
     const note = nav.notes[c.id] ?? ''
@@ -841,10 +838,11 @@ function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
     return out
   }
 
-  const scrollDetail = (detailRows: Row[], detailW: number, visRows: number): Row[] => {
-    const innerW = Math.max(10, detailW - 2)
+  const scrollDetail = (detailRows: Row[], detailW: number, visRows: number, padToVis = true): Row[] => {
+    const textW = Math.max(1, detailW - 1)
     if (ctx.pendingScroll === undefined) {
-      return Array.from({ length: visRows }, (_, i) => padRowTo(detailRows[i] ?? [seg('')], detailW))
+      const count = padToVis ? visRows : Math.min(visRows, detailRows.length)
+      return Array.from({ length: count }, (_, i) => padRowTo(detailRows[i] ?? [seg('')], detailW))
     }
     const model = ctx.pendingScroll.detail
     keyed(model, c.id)
@@ -858,7 +856,7 @@ function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
         shown.push(padRowTo(row, detailW))
       } else {
         const on = i >= thumb.top && i < thumb.top + thumb.len
-        shown.push([...padRowTo(row, innerW + 1), seg(on ? GLYPHS.scrollbar.thumb : GLYPHS.scrollbar.track, { color: on ? PALETTE.here : PALETTE.structure })])
+        shown.push([...padRowTo(row, textW), seg(on ? GLYPHS.scrollbar.thumb : GLYPHS.scrollbar.track, { color: on ? PALETTE.here : PALETTE.structure })])
       }
     }
     if (win.hint) {
@@ -868,7 +866,9 @@ function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
       ].filter(Boolean).join('  ')
       shown.push(padRowTo([dimSeg(hintText)], detailW))
     }
-    while (shown.length < visRows) shown.push(padRowTo([seg('')], detailW))
+    if (padToVis) {
+      while (shown.length < visRows) shown.push(padRowTo([seg('')], detailW))
+    }
     return shown
   }
 
@@ -877,7 +877,7 @@ function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
     const sepRow: Row = [dimSeg(GLYPHS.structure.rule.repeat(cols))]
     const midRoom = Math.max(1, room - 2)
     const detailRows = buildDetail(cols)
-    const rightShown = scrollDetail(detailRows, cols, midRoom)
+    const rightShown = scrollDetail(detailRows, cols, midRoom, false)
     return { body: [headRow, sepRow, ...rightShown], actions }
   }
 

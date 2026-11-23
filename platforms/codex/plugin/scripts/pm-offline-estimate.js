@@ -49,24 +49,62 @@ function fields(entry) {
 function incoming(entry) {
   return entry.type === 'user' && !entry.isMeta && !!messageText(entry);
 }
-function prescreen(sessions, rules) {
-  if (!rules) return null;
-  const classes = rules.auto_classes.map(c => ({ rule: c.match, result: { name: c.name, messages: 0, turns: 0, weighted_cost: 0 } }));
+function incomingMessages(session) {
+  const crypto = require('node:crypto');
+  const seen = new Map(), result = [];
+  session.forEach((entry, index) => {
+    let text;
+    if (incoming(entry)) text = messageText(entry);
+    else if (entry.type === 'attachment' && entry.attachment?.type === 'queued_command') text = entry.attachment.prompt;
+    else if (entry.type === 'queue-operation') text = entry.content;
+    if (typeof text !== 'string' || !text) return;
+    const hash = crypto.createHash('sha256').update(text).digest('hex');
+    const time = Date.parse(entry.timestamp);
+    const prior = seen.get(hash) || [];
+    if (prior.some(p => p.type !== entry.type && Number.isFinite(time) && Number.isFinite(p.time) && Math.abs(time - p.time) <= 5000)) return;
+    prior.push({ type: entry.type, time });
+    seen.set(hash, prior);
+    result.push({ text, timestamp: entry.timestamp, index });
+  });
+  return result;
+}
+function unpack(text) {
+  if (!/\[inbox batch\b|PM 收件匣[^\n]*批次包/i.test(text)) return [text];
+  const parts = text.split(/(?:^|\n)(?=\s*(?:#\d+\b|###\s*項目\s*\d+\b))/).slice(1);
+  return parts.length ? parts : [text];
+}
+function prescreen(sessions, rules, dispositions = null) {
+  if (!rules && !dispositions) return null;
+  const rows = dispositions && (Array.isArray(dispositions) ? dispositions : dispositions.items);
+  const lookup = rows && new Map(rows.map(row => [String(row.message_id), row]));
+  const classes = rules && !lookup ? rules.auto_classes.map(c => ({ rule: c.match, result: { name: c.name, messages: 0, turns: 0, weighted_cost: 0 } })) : [];
+  const totals = new Map();
   for (const session of sessions) {
-    let active = null;
-    for (const entry of session) {
-      if (incoming(entry)) {
-        const text = messageText(entry);
-        const metadata = fields(entry);
-        active = classes.find(({ rule }) => (!rule.kind || rule.kind === metadata.kind) && (!rule.from || rule.from === metadata.from) && (!rule.pattern || new RegExp(rule.pattern).test(text))) || null;
-        if (active) active.result.messages++;
-      } else if (entry.type === 'assistant' && entry.message?.usage && active) {
-        active.result.turns++;
-        active.result.weighted_cost += computeWeightedCost(entry.message.usage);
+    const messages = incomingMessages(session);
+    messages.forEach((message, i) => {
+      const items = unpack(message.text);
+      const end = messages[i + 1]?.index ?? session.length;
+      const turns = session.slice(message.index + 1, end).filter(e => e.type === 'assistant' && e.message?.usage);
+      const cost = turns.reduce((sum, e) => sum + computeWeightedCost(e.message.usage), 0);
+      for (const text of items) {
+        if (lookup) {
+          const id = text.match(/\bmessage_id="([^"]+)"/)?.[1];
+          const row = id && lookup.get(id);
+          const name = row?.category || 'unmatched';
+          if (!totals.has(name)) totals.set(name, { name, messages: 0, turns: 0, weighted_cost: 0, matched: 0, auto_processable: 0 });
+          const result = totals.get(name);
+          result.messages++; result.turns += turns.length / items.length; result.weighted_cost += cost / items.length;
+          if (row) { result.matched++; if (row.disposition === 'no_action' || (row.disposition === 'done' && (row.fyi === true || !!row.no_action_reason))) result.auto_processable++; }
+        } else {
+          const entry = session[message.index];
+          const metadata = fields(entry);
+          const active = classes.find(({ rule }) => (!rule.kind || rule.kind === metadata.kind) && (!rule.from || rule.from === metadata.from) && (!rule.pattern || new RegExp(rule.pattern).test(text)));
+          if (active) { active.result.messages++; active.result.turns += turns.length / items.length; active.result.weighted_cost += cost / items.length; }
+        }
       }
-    }
+    });
   }
-  return classes.map(c => c.result);
+  return lookup ? [...totals.values()] : classes.map(c => c.result);
 }
 // Inbox messages reach the PM wrapped as <channel ... kind="wake">; a patrol line names its class after the tag.
 function batchKey(entry) {
@@ -77,25 +115,28 @@ function batchKey(entry) {
   return cls ? `${kind}:${cls}` : kind;
 }
 function batch(sessions, seconds = 300) {
-  let saved_turns = 0, weighted_cost = 0;
+  let saved_turns = 0, weighted_cost = 0, already_batched_items = 0;
   for (const session of sessions) {
-    const first = new Map();
-    let pending = false;
-    for (const entry of session) {
-      if (incoming(entry)) {
-        const kind = batchKey(entry);
-        const time = Date.parse(entry.timestamp);
+    const first = new Map(), messages = incomingMessages(session);
+    messages.forEach((message, i) => {
+      const items = unpack(message.text), time = Date.parse(message.timestamp);
+      if (items.length > 1) already_batched_items += items.length;
+      const keys = new Set();
+      for (const text of items) {
+        const entry = { ...session[message.index], message: { content: text } };
+        const kind = batchKey(entry) || batchKey({ ...session[message.index], message: { content: message.text } });
+        if (kind == null || keys.has(kind) || !Number.isFinite(time)) continue;
+        keys.add(kind);
         const previous = first.get(kind);
-        pending = kind != null && Number.isFinite(time) && previous !== undefined && time >= previous && time - previous <= seconds * 1000;
-        if (kind != null && !pending && Number.isFinite(time)) first.set(kind, time);
-      } else if (pending && entry.type === 'assistant' && entry.message?.usage) {
-        saved_turns++;
-        weighted_cost += computeWeightedCost(entry.message.usage);
-        pending = false;
+        if (previous !== undefined && time >= previous && time - previous <= seconds * 1000) {
+          const end = messages[i + 1]?.index ?? session.length;
+          const turn = session.slice(message.index + 1, end).find(e => e.type === 'assistant' && e.message?.usage);
+          if (turn) { saved_turns += 1 / items.length; weighted_cost += computeWeightedCost(turn.message.usage) / items.length; }
+        } else first.set(kind, time);
       }
-    }
+    });
   }
-  return { saved_turns, weighted_cost };
+  return { already_batched_items, saved_turns, weighted_cost };
 }
 function failures(sessions) {
   const categories = new Map();
@@ -134,13 +175,13 @@ function failures(sessions) {
   }
   return [...categories.values()];
 }
-module.exports = { autocompact, prescreen, batch, failures };
+module.exports = { autocompact, prescreen, batch, failures, incomingMessages };
 
 if (require.main === module) {
   const fs = require('node:fs');
   const path = require('node:path');
   const args = process.argv.slice(2), dirs = [], windows = [];
-  let since = -Infinity, out, rules = null, summary = 10000, prefix = 40000, batchWindow = 300;
+  let since = -Infinity, out, rules = null, dispositions = null, summary = 10000, prefix = 40000, batchWindow = 300;
   for (let i = 0; i < args.length; i++) {
     const value = args[++i];
     switch (args[i - 1]) {
@@ -148,6 +189,7 @@ if (require.main === module) {
       case '--window': windows.push(Number(value)); break;
       case '--since': since = Date.parse(value); break;
       case '--out': out = value; break;
+      case '--dispositions': dispositions = JSON.parse(fs.readFileSync(value, 'utf8')); break;
       case '--rules': rules = JSON.parse(value.trimStart().startsWith('{') ? value : fs.readFileSync(value, 'utf8')); break;
       case '--summary-tokens': summary = Number(value); break;
       case '--prefix-tokens': prefix = Number(value); break;
@@ -176,7 +218,7 @@ if (require.main === module) {
     }
   }
   dirs.forEach(visit);
-  const result = { autocompact: windows.map(window => ({ window, ...autocompact(sessions, window, summary, prefix) })), s4: prescreen(sessions, rules), s5a: batch(sessions, batchWindow), s2: failures(sessions) };
+  const result = { autocompact: windows.map(window => ({ window, ...autocompact(sessions, window, summary, prefix) })), s4: prescreen(sessions, rules, dispositions), s5a: batch(sessions, batchWindow), s2: failures(sessions) };
   const json = JSON.stringify(result, null, 2) + '\n';
   if (out) fs.writeFileSync(out, json); else process.stdout.write(json);
 }

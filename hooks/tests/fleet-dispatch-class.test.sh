@@ -187,4 +187,90 @@ for pair in "Role: plan-reviewer|plan-review" "Role: reviewer|code-review" "Role
   assert_contains "$__RUN_STDOUT" "\"class\":\"${want_cls}\"" "negative-control GREEN on real hook (${want_cls})"
 done
 
+# 9. Capacity shed routing for mechanical fleet dispatches (inventory/summary/chores, XS/S)
+SHED_TMP="$TEST_TMP/shed"
+mkdir -p "$SHED_TMP/home/projects/capacity/out"
+write_burn_more() {
+  local target_file="$1"
+  local gen_at="$2"
+  local undispatchable="${3:-[]}"
+  cat > "$target_file" <<EOF
+{
+  "schema": "capacity.burn_more/1",
+  "run_id": "bm-test-001",
+  "generated_at": "${gen_at}",
+  "shed": {
+    "pools": [],
+    "rules": {
+      "mechanical_classes": ["inventory", "summary", "chores"],
+      "targets_in_order": ["minimax", "codex"],
+      "undispatchable": ${undispatchable}
+    }
+  }
+}
+EOF
+}
+
+FRESH_AT="$(node -e 'process.stdout.write(new Date(Date.now() - 60000).toISOString())')"
+STALE_AT="$(node -e 'process.stdout.write(new Date(Date.now() - 7 * 3600 * 1000).toISOString())')"
+BM_FILE="$SHED_TMP/home/projects/capacity/out/burn_more.v1.json"
+
+# (1) fresh signal + Role inventory + Size S -> Engine rewritten, Shed hit line has run_id and engine
+write_burn_more "$BM_FILE" "$FRESH_AT" "[]"
+SHED_TASK_1=$'Engine: sonnet\nRole: inventory\nSize: S\nLane: alpha\nInventory files.'
+__RUN_STDOUT="$(HOME="$SHED_TMP/home" AUTOPILOT_BURN_MORE="$BM_FILE" node "$HOOK_PATH" <<< "$(build_dispatch_payload "$SHED_TASK_1")")"
+assert_contains "$__RUN_STDOUT" 'Engine: minimax' "shed-1: Engine rewritten to minimax"
+assert_contains "$__RUN_STDOUT" "Shed: hit engine=minimax run_id=bm-test-001 signal_at=${FRESH_AT}" "shed-1: Shed hit line"
+
+# (2) stale signal (7 hours old) -> Engine unchanged, Shed skipped stale
+write_burn_more "$BM_FILE" "$STALE_AT" "[]"
+__RUN_STDOUT="$(HOME="$SHED_TMP/home" AUTOPILOT_BURN_MORE="$BM_FILE" node "$HOOK_PATH" <<< "$(build_dispatch_payload "$SHED_TASK_1")")"
+assert_contains "$__RUN_STDOUT" 'Engine: sonnet' "shed-2: Engine unchanged on stale"
+assert_contains "$__RUN_STDOUT" 'Shed: skipped reason=stale' "shed-2: Shed skipped stale"
+
+# (3) first target in undispatchable -> next target chosen
+write_burn_more "$BM_FILE" "$FRESH_AT" '["minimax"]'
+__RUN_STDOUT="$(HOME="$SHED_TMP/home" AUTOPILOT_BURN_MORE="$BM_FILE" node "$HOOK_PATH" <<< "$(build_dispatch_payload "$SHED_TASK_1")")"
+assert_contains "$__RUN_STDOUT" 'Engine: codex' "shed-3: next target codex chosen"
+assert_contains "$__RUN_STDOUT" 'Shed: hit engine=codex run_id=bm-test-001' "shed-3: Shed hit codex"
+
+# (4) Role implementer -> untouched
+write_burn_more "$BM_FILE" "$FRESH_AT" "[]"
+SHED_TASK_4=$'Engine: sonnet\nRole: implementer\nSize: S\nLane: alpha\nImplement feature.'
+__RUN_STDOUT="$(HOME="$SHED_TMP/home" AUTOPILOT_BURN_MORE="$BM_FILE" node "$HOOK_PATH" <<< "$(build_dispatch_payload "$SHED_TASK_4")")"
+assert_contains "$__RUN_STDOUT" 'Engine: sonnet' "shed-4: implementer Engine untouched"
+assert_not_contains "$__RUN_STDOUT" 'Shed:' "shed-4: implementer has no Shed line"
+
+# (5) Engine-Pin present -> untouched plus skipped pinned
+SHED_TASK_5=$'Engine: sonnet\nEngine-Pin: sonnet\nRole: inventory\nSize: S\nLane: alpha\nInventory files.'
+__RUN_STDOUT="$(HOME="$SHED_TMP/home" AUTOPILOT_BURN_MORE="$BM_FILE" node "$HOOK_PATH" <<< "$(build_dispatch_payload "$SHED_TASK_5")")"
+assert_contains "$__RUN_STDOUT" 'Engine: sonnet' "shed-5: Engine-Pin keeps sonnet"
+assert_contains "$__RUN_STDOUT" 'Shed: skipped reason=pinned' "shed-5: Shed skipped pinned"
+
+# (6) already has a Shed line -> untouched
+SHED_TASK_6=$'Engine: sonnet\nRole: inventory\nSize: S\nShed: hit engine=other run_id=old signal_at=2026-01-01T00:00:00Z\nInventory files.'
+__RUN_STDOUT="$(HOME="$SHED_TMP/home" AUTOPILOT_BURN_MORE="$BM_FILE" node "$HOOK_PATH" <<< "$(build_dispatch_payload "$SHED_TASK_6")")"
+assert_contains "$__RUN_STDOUT" 'Engine: sonnet' "shed-6: existing Shed line keeps Engine"
+assert_contains "$__RUN_STDOUT" 'run_id=old' "shed-6: existing Shed line untouched"
+
+# (7) AUTOPILOT_SHED_ROUTE=0 switches it off
+__RUN_STDOUT="$(HOME="$SHED_TMP/home" AUTOPILOT_BURN_MORE="$BM_FILE" AUTOPILOT_SHED_ROUTE=0 node "$HOOK_PATH" <<< "$(build_dispatch_payload "$SHED_TASK_1")")"
+assert_contains "$__RUN_STDOUT" 'Engine: sonnet' "shed-7: AUTOPILOT_SHED_ROUTE=0 keeps Engine"
+assert_not_contains "$__RUN_STDOUT" 'Shed:' "shed-7: AUTOPILOT_SHED_ROUTE=0 adds no Shed line"
+
+# (8) negative control: mutant hook without applyShedRouting -> case 1 RED, real hook GREEN
+MUTANT_SHED="$TEST_TMP/hooks/fleet-dispatch-class.no-shed.js"
+mkdir -p "$TEST_TMP/scripts/lib"
+cp "$REPO_ROOT/scripts/lib/shed-route.js" "$TEST_TMP/scripts/lib/shed-route.js"
+node -e '
+  const fs = require("fs");
+  const src = fs.readFileSync(process.argv[1], "utf8");
+  const mutated = src.replace("const nextTask = applyShedRouting(toolInput);", "const nextTask = toolInput.task;");
+  if (mutated === src) process.exit(2);
+  fs.writeFileSync(process.argv[2], mutated, "utf8");
+' "$HOOK_PATH" "$MUTANT_SHED"
+assert_eq 0 "$?" "shed-8: built no-shed mutant"
+NEG_SHED_OUT="$(HOME="$SHED_TMP/home" AUTOPILOT_BURN_MORE="$BM_FILE" node "$MUTANT_SHED" <<< "$(build_dispatch_payload "$SHED_TASK_1")")"
+assert_not_contains "$NEG_SHED_OUT" 'Shed: hit' "shed-8: negative-control RED without applyShedRouting"
+
 finalize_test

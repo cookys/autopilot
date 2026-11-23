@@ -183,11 +183,50 @@ function extractHookFromText(text) {
   return kebab ? kebab[0] : null;
 }
 
-function recordHookBlock(byHook, hook, event) {
+const KNOWN_BLOCK_TOOLS = new Set(['Bash', 'Edit', 'Write', 'Read']);
+const UNKNOWN_SHAPES = [
+  ['empty', text => typeof text !== 'string' || !text.trim()],
+  ['starts_blocked', text => /^blocked\b/i.test(text.trimStart())],
+  ['starts_denied', text => /^denied\b/i.test(text.trimStart())],
+  ['starts_not_allowed', text => /^not allowed\b/i.test(text.trimStart())],
+  ['has_permission', text => /\bpermission\b/i.test(text)],
+  ['has_hook', text => /\bhook\b/i.test(text)],
+  ['other', () => true],
+];
+
+function classifyUnknownShape(text) {
+  return UNKNOWN_SHAPES.find(([, matches]) => matches(text))[0];
+}
+
+function classifyUnknownTool(text, lastAssistant, toolUseId) {
+  let raw = null;
+  if (typeof text === 'string') {
+    const m = text.match(/^PreToolUse:([^\s]+)/);
+    if (m) raw = m[1];
+  }
+  if (!raw && toolUseId && Array.isArray(lastAssistant?.message?.content)) {
+    const tu = lastAssistant.message.content.find(b => b.type === 'tool_use' && b.id === toolUseId);
+    if (tu?.name) raw = tu.name;
+  }
+  return raw && KNOWN_BLOCK_TOOLS.has(raw) ? raw : 'other';
+}
+
+function recordHookBlock(byHook, hook, event, unknownMeta = null) {
   const key = `${event}\0${hook}`;
-  if (!byHook.has(key)) byHook.set(key, { hook, event, failures: 0, retry_turns: 0, weighted_cost: 0 });
+  if (!byHook.has(key)) {
+    const entry = { hook, event, failures: 0, retry_turns: 0, weighted_cost: 0 };
+    if (hook === 'unknown') {
+      entry.by_tool = {};
+      entry.by_shape = {};
+    }
+    byHook.set(key, entry);
+  }
   const bucket = byHook.get(key);
   bucket.failures++;
+  if (hook === 'unknown' && unknownMeta) {
+    bucket.by_tool[unknownMeta.tool] = (bucket.by_tool[unknownMeta.tool] || 0) + 1;
+    bucket.by_shape[unknownMeta.shape] = (bucket.by_shape[unknownMeta.shape] || 0) + 1;
+  }
   return bucket;
 }
 
@@ -223,7 +262,8 @@ function failures(sessions) {
         if (!categories.has(category)) categories.set(category, { category, failures: 0, retry_turns: 0, weighted_cost: 0 });
         failed = categories.get(category);
         failed.failures++;
-        failedHook = recordHookBlock(byHook, hook, event);
+        const unknownMeta = hook === 'unknown' ? { tool: 'other', shape: classifyUnknownShape('') } : null;
+        failedHook = recordHookBlock(byHook, hook, event, unknownMeta);
         lastAssistant = null;
       } else if (entry.type === 'user' && lastAssistant) {
         const blocks = Array.isArray(entry.message?.content) ? entry.message.content : [];
@@ -238,7 +278,10 @@ function failures(sessions) {
             const text = typeof blockedResult.content === 'string' ? blockedResult.content : '';
             const event = text.startsWith('PreToolUse:') ? 'PreToolUse' : 'other';
             const hook = sanitizeHookName(extractHookFromText(text));
-            failedHook = recordHookBlock(byHook, hook, event);
+            const unknownMeta = hook === 'unknown'
+              ? { tool: classifyUnknownTool(text, lastAssistant, blockedResult.tool_use_id), shape: classifyUnknownShape(text) }
+              : null;
+            failedHook = recordHookBlock(byHook, hook, event, unknownMeta);
           } else {
             failedHook = null;
           }

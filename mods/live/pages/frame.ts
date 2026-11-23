@@ -124,7 +124,19 @@ export const frameHintText = (page: Page, ctx: PageCtx): string => armed(page, c
 export const frameHintShort = (page: Page, ctx: PageCtx): string => armed(page, ctx) ? ctx.t('v74.b.short.armed') : bgOpen(page, ctx) ? ctx.t('v74.b.short.decide_bg', { ud: GLYPHS.structure.up + GLYPHS.structure.behind }) : compactDecide(page, ctx) ? ctx.t('v74.b.short.decide_compact', { ud: GLYPHS.structure.up + GLYPHS.structure.behind }) : styleC(page, ctx) ? ctx.t('v74.b.short.decide_c') : ctx.t(cardless(page, ctx) ? 'v74.b.short.scroll' : V74_SHORT_KEY[page.id] ?? 'v74.b.short.scroll', { ud: GLYPHS.structure.up + GLYPHS.structure.behind })
 export const frameHintMin = (page: Page, ctx: PageCtx): string => armed(page, ctx) || bgOpen(page, ctx) || cardless(page, ctx) ? '' : compactDecide(page, ctx) ? ctx.t('v74.b.min.decide_compact') : styleC(page, ctx) ? ctx.t('v74.b.min.decide_c') : page.id === 'decide' ? ctx.t('v74.b.min.decide') : ''
 export function frameBorderRow(page: Page, ctx: PageCtx): Row {
-  return [{ text: GLYPHS.structure.frameBL + GLYPHS.structure.rule + ' ' + frameHintText(page, ctx), dim: true }]
+  const lead = GLYPHS.structure.frameBL + GLYPHS.structure.rule + ' '
+  const avail = Math.max(0, ctx.size.cols - displayWidth(lead))
+  const full = frameHintText(page, ctx)
+  if (displayWidth(full) <= avail) return [{ text: lead + full, dim: true }]
+  // Narrow frames drop secondary clauses first rather than letting clip() emit `…`.
+  const keys = keysWord(ctx)
+  const withoutKeys = full.replace(' · ' + keys, '').replace(keys + ' · ', '')
+  if (withoutKeys !== full && displayWidth(withoutKeys) <= avail) return [{ text: lead + withoutKeys, dim: true }]
+  const short = frameHintShort(page, ctx)
+  if (displayWidth(short) <= avail) return [{ text: lead + short, dim: true }]
+  const min = frameHintMin(page, ctx)
+  if (min !== '' && displayWidth(min) <= avail) return [{ text: lead + min, dim: true }]
+  return [{ text: GLYPHS.structure.frameBL + GLYPHS.structure.rule, dim: true }]
 }
 
 // PM 01M7XB0B: one bottom border. Hints on the left, page tabs on the right, the current page marked.

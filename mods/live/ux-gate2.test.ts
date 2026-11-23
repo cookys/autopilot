@@ -89,7 +89,7 @@ for (const [cols, rows] of [[120, 30], [160, 40]]) for (const open of [false, tr
     expect(summary).not.toContain('視窗高度不足')
     expect(summary).toContain('資料過舊') // v7.4: the stale reason stays on the one band row
     expect(summary).not.toContain('1 現況') // maxRows 2: no frame and no tab row, whatever the pane state
-    expect(summary.endsWith(open ? '▴收合' : '▾展開')).toBe(true)
+    expect(summary.endsWith('▾展開')).toBe(true) // maxRows 2 < V74_FRAME_MIN + 1: no pane is drawn, so toggle reflects visible state (▾展開, Codex R3 Major3 / Carbon R3 M1)
     expect(displayWidth(summary)).toBeLessThanOrEqual(cols)
     await band.unmount()
     await $.session.end({ reason: 'exit' })

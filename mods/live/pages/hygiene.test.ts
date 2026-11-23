@@ -140,7 +140,7 @@ const GOLDEN = {
   wide: [
     '殘留',
     '── 要你處理 ─────────────────────────────────────────────',
-    '  ▲ worktree hetero-feat-fs-pane-v2-c1mhR9：分支已併入，可移除',
+    '  ⏶ worktree hetero-feat-fs-pane-v2-c1mhR9：分支已併入，可移除',
     '── 可清除 2 ──',
     '▸ ○ /dev/shm/petshot-1001 寵物截圖沙盒（重拍後）',
     '  ○ target/flaky-tests.log 7 天前',
@@ -155,7 +155,7 @@ const GOLDEN = {
   open80: [
     '殘留',
     '── 要你處理 ──',
-    ' ▲ worktree c1mhR9 已併入，可移除',
+    ' ⏶ worktree c1mhR9 已併入，可移除',
     '── 可清除 2 ──',
     '▸○ petshot-1001 沙盒',
     ' ○ flaky-tests.log',
@@ -169,7 +169,7 @@ const GOLDEN = {
   folded80: [
     '殘留',
     '── 要你處理 ──',
-    ' ▲ worktree c1mhR9 已併入，可移除',
+    ' ⏶ worktree c1mhR9 已併入，可移除',
     '── 可清除 2 ──',
     '▸○ petshot-1001 沙盒',
     ' ○ flaky-tests.log',

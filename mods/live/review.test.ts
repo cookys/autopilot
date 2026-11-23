@@ -243,8 +243,8 @@ test('the raw verdict never shows in the default render; it sits in the opened s
 
 test('a round with a seat still running reads running, with the seats that already have findings counted; a running seat beats findings', () => {
   const lines = textsOf(render(rich(), 76))
-  expect(lines[0]).toContain('● 執行中 · 1 席已有發現')
-  expect(lines.some(l => l.startsWith('            ● 執行中  s0 · minimax'))).toBe(true)
+  expect(lines[0]).toContain('◉ 執行中 · 1 席已有發現')
+  expect(lines.some(l => l.startsWith('            ◉ 執行中  s0 · minimax'))).toBe(true)
   expect(lines.some(l => l.startsWith('            △ 待修    s1 · zhipu'))).toBe(true)
 })
 

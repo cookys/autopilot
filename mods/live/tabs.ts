@@ -67,7 +67,7 @@ export function headerLines(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
 // "more" without a number. A header line too narrow for the hint drops it: the spend segments are never squeezed or cut.
 export type ScrollView = { offset: number; bodyRows: number }
 // ---- tab attention: which tab holds something for the owner, visible without opening it. The tab NAME is drawn warning bold (no symbol): 待決 while a question is open, 殘留 while
-// residue needs a person or the plugin load source is wrong (the 外掛來源 row shows ▲), 審查 while QC is owed. Dispatch is not marked: a running dispatch needs nobody. No number in this variant. ----
+// residue needs a person or the plugin load source is wrong (the 外掛來源 row shows ⏶), 審查 while QC is owed. Dispatch is not marked: a running dispatch needs nobody. No number in this variant. ----
 export type TabNeed = Record<string, never>
 // what the owner has to judge (residueTally): the one number behind the tab name, the 現況 row, its summary and the band's ⚑N; the cleanable entries are not counted
 const judgeCountOf = (snap: LiveSnapshot): number => (snap.detail.residue === null ? 0 : residueTally(snap.detail.residue).judgeCount)
@@ -117,7 +117,7 @@ export function pageBarStrip(snap: LiveSnapshot | null, t: T, columns: number, a
   const pending = decisionCount({ live: snap, console: con })
   // M6: the fleet count marks only failed / stuck lines with ✗; idle lines are counted apart with ⊘ (an idle line is not an error)
   const fleetCounts = con === null ? { failed: 0, stuck: 0, running: 0, waiting: 0, normal: 0 } : consoleFleetCounts(con, t)
-  // M6: 額度 carries the same pool counts the quota page draws: red ✗, unknown ?, yellow ▲ (a closed band must not read as all-clear)
+  // M6: 額度 carries the same pool counts the quota page draws: red ✗, unknown ?, yellow ⏶ (a closed band must not read as all-clear)
   const pools = normalizedPools(con)
   const verdicts = pools === null ? [] : rankPools(pools, con?.generated_at_ms ?? 0, t)
   const qRed = verdicts.filter(v => v.role === 'broken' && !isUnknownPool(v)).length
@@ -979,7 +979,7 @@ function residueAuto(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
 }
 // the load-source facts that really put the owner on the wrong copy; a flag outside this list (stale_cache_dirs: old copies nobody runs) is information, not a request
 const BAD_SOURCE_FLAGS = ['marketplace_not_directory', 'marketplace_not_this_repo', 'dev_link_missing_or_stale']
-// the one state of the plugin load source: the 外掛來源 row and the 殘留 tab name both read it, so the tab turns yellow exactly when the row shows ▲
+// the one state of the plugin load source: the 外掛來源 row and the 殘留 tab name both read it, so the tab turns yellow exactly when the row shows ⏶
 function sourceStateOf(ls: NonNullable<LiveSnapshot['detail']['load_source']>): Stated {
   return ui.stateOf('loadSource', { source: ls.source, behind: ls.behind_upstream ?? 0, flags: ls.flags.filter(f => BAD_SOURCE_FLAGS.includes(f)).length + (ls.marketplace === 'missing' ? 1 : 0) })
 }

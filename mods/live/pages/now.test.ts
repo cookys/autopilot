@@ -68,17 +68,17 @@ const feed = async (): Promise<void> => { seatQuota.reset(); await seatQuota.ref
 const GOLD_160 = [
   '→ 待決 3 張卡等你（最舊 40 分）：q',
   '── 全艦隊 ────────────────────────────────────────────',
-  '  產線 51 ｜ ⊘ 卡住 5  ● 執行 6  ⋯ 等待 40 ｜ 主機 17/18 在線',
+  '  產線 51 ｜ ⊘ 卡住 5  ◉ 執行 6  ⋯ 等待 40 ｜ 主機 17/18 在線',
   // N2 (codeforge B49-B54): 現況 has no row action, so no row carries the ▸ focus mark
   '  ✗ capacity--claude 卡住 2 小時：等待沒寫等誰（wait_untyped）',
   '  ⊘ hangar--claude 01M7N2ZC 證據逾期 40 分',
-  '  ▲ 主機 h6 離線 12 分',
+  '  ⏶ 主機 h6 離線 12 分',
   '  ? 額度 personal 判定未知：缺換池資料（capacity）',
   '── 本席 codeforge--claude ────────────────────────────',
   '  位置   plan/shared-tui · 階段 plan · 上下文 41%', // Z3: Chinese context label
   '  任務   ⋯ 01M7N307 r2 草稿 03:00 · 1/3',
-  '  背景   ● 盤點子代理 4 分',
-  '  派工   ● 1 執行中（sonnet hand 23 分）',
+  '  背景   ◉ 盤點子代理 4 分',
+  '  派工   ◉ 1 執行中（sonnet hand 23 分）',
   '  審查   plan 第 1 代 2/2 席回來',
   '  花費   本席（池 team）5 時 17% · 7 天 68% · 今天 $3.10（seats --quota 40 秒前）',
   '  殘留   2 項可清',
@@ -89,16 +89,16 @@ const GOLD_120 = GOLD_160
 const GOLD_80 = [
   '→ 待決 3 張卡等你（最舊 40 分）：q',
   '── 全艦隊 ──',
-  '產線 51 ⊘5 ●6 ⋯40 · 主機 17/18',
+  '產線 51 ⊘5 ◉6 ⋯40 · 主機 17/18',
   ' ✗ capacity 卡住 2 時：等待沒寫等誰',
   ' ⊘ hangar 01M7N2ZC 證據逾 40 分',
-  ' ▲ 主機 h6 離線 12 分',
+  ' ⏶ 主機 h6 離線 12 分',
   '? 額度 personal 判定未知：缺換池資料（capacity）',
   '── 本席 codeforge ──',
   'plan/shared-tui · plan · 上下文 41%', // Z3: Chinese context label
   '⋯ 01M7N307 r2 草稿 03:00',
-  '背景 ● 盤點子代理 4 分',
-  '派工 ● 1 · 審查 2/2 · 花費 7 天 68%',
+  '背景 ◉ 盤點子代理 4 分',
+  '派工 ◉ 1 · 審查 2/2 · 花費 7 天 68%',
   '── 最近對話 ──',
   'PM 01M7N33J 三條硬規定：分頁列在最下一列、高度固定、過期標紅',
 ]
@@ -301,7 +301,7 @@ test('now R2: shortBody (<= 4 rows) combines Button + pending summary first, dro
   expect(framed6[0]).toContain('→ 待決 3 張（最舊 1 天）：')
   expect(framed6[1]).toBe('✗ 艦隊 離線 1 線（復原線）· 主機 17/18（離線 1）')
   expect(framed6[2]).toBe('✗ 額度 紅 1（trinity） · 資料過期 180 分· ? 未知 1（personal）')
-  expect(framed6[3]).toBe('額度浪費 ▲1') // X2: include hidden category/severity.
+  expect(framed6[3]).toBe('額度浪費 ⏶1') // X2: include hidden category/severity.
 })
 
 test('now C1: short 現況 summarises each class once (pending -> fleet -> quota -> 另有 N 項), omits empty classes, truncates names with … to fit width, bottom-anchors, deduplicates pool_key, and keeps 另有 6 項 at 80x3', () => {
@@ -413,7 +413,7 @@ test('now C1: short 現況 summarises each class once (pending -> fleet -> quota
   expect(fullShort[0]).toContain('→ 待決 3 張')
   expect(fullShort[1]).toBe('✗ 艦隊 離線 1 線（復原線）· 卡住 1 線（遊戲線）· 主機 17/18（離線 1）')
   expect(fullShort[2]).toBe('✗ 額度 紅 2（F 池、trinity） · 資料過期 180 分· ? 未知 1（personal）')
-  expect(fullShort[3]).toBe('額度浪費 ▲1')
+  expect(fullShort[3]).toBe('額度浪費 ⏶1')
   expect(fullShort[4]).toBe('另有 1 項（艦隊 △1）') // X2: classify the hidden extras.
 
   // 4. R14 bottom-anchoring and omitting empty class rows

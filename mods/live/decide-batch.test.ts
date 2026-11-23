@@ -16,7 +16,7 @@ const dec = (id: string, question: string, over: Partial<LiveDecision> = {}): Li
 const fakes = (n: number): LiveDecision[] => Array.from({ length: n }, (_, i) => dec('d-fake' + i, 'Fake question ' + (i + 1)))
 const snapOf = (pending: LiveDecision[]): LiveSnapshot => ({
   state: 'ok', text: '', header: 'h', metrics: { ctx: '37%' },
-  band: { kind: 'decide', key: 'warning', why: 'r', verdictReason: null, mark: '▲', verdict: 'v', head: '', progress: '—', progressDim: false, reason: null, project: 'repo', elapsed: '10m', phase: '—', slots: [] },
+  band: { kind: 'decide', key: 'warning', why: 'r', verdictReason: null, mark: '⏶', verdict: 'v', head: '', progress: '—', progressDim: false, reason: null, project: 'repo', elapsed: '10m', phase: '—', slots: [] },
   pending, project_key: null, root_run_id: null, link: null, rows: [], gates: null, sections: NO_SECTIONS, review: null, published_at: null, session_as_of: null, host_as_of: null,
   detail: { ...NO_DETAIL, now_ms: 1, counts: { confirmed_live: 0, exited: 0, unknown: 0 } }, activity: [], recent: [],
 }) as never
@@ -60,7 +60,7 @@ class Session {
     this.offset = plan.offset
     return plan
   }
-  titles(): string[] { return this.texts().filter(x => /^[▲✓●◌○·◆→] \d+\. /u.test(x) || /^\S+ \d+\. /u.test(x)) }
+  titles(): string[] { return this.texts().filter(x => /^[⏶✓◉◌○·⬥→] \d+\. /u.test(x) || /^\S+ \d+\. /u.test(x)) }
   greyed(): number { return this.lines().filter(l => l.kind === 'item' && l.segs !== undefined && l.segs.some(s => s.role === 'title') && l.segs.filter(s => s.role === 'title').every(s => s.dim === true)).length }
 }
 

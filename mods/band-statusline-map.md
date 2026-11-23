@@ -15,7 +15,7 @@ One line. Speed (tok/s) and trend stay in the same segment as the pet. They drop
 | Fleet | Band |
 | Dispatch stalled ⊘ | Band. Not dropped by the narrow fallbacks. |
 | Speed, trend, pet | Band, forge segment |
-| Dispatch ●live, position, unit, review round, decisions | Statusline, via `band-facts/<sid>.json` |
+| Dispatch ◉live, position, unit, review round, decisions | Statusline, via `band-facts/<sid>.json` |
 | Spend | Statusline, via `band-facts/<sid>.json` |
 | 5h / 7d quota | Statusline only. The expanded usage tab still draws the windows. |
 
@@ -28,7 +28,7 @@ One line. Speed (tok/s) and trend stay in the same segment as the pet. They drop
 3. Bar glyphs: ▰ and ▱.
 4. Band labels (QC, dev / cache / src, quota short labels) come from the locale tables, including zh-TW. Statusline bars stay short `5h` / `7d`. Another account's `週` becomes `7d` on the statusline side.
 5. The band colours through `PALETTE` theme keys. The statusline applies its own RGB to the same thresholds.
-6. Warning glyph is ▲. ⚠ is not used on the band.
+6. Warning glyph is ⏶. ⚠ is not used on the band.
 7. ◷ means elapsed only, never time remaining.
 8. Three arrows stay distinct: band hygiene `↓` is commits behind upstream, statusline `⇣` is git behind, statusline `⬆` is a new Claude Code version.
 9. Each surface keeps one yellow. The pair is two surfaces.
@@ -37,7 +37,7 @@ One line. Speed (tok/s) and trend stay in the same segment as the pet. They drop
 
 `mods/live/band-statusline-contract.json` is the only editable copy of the thresholds, the floor rule, and the glyphs. A hooks module imports only code files and cannot import node builtins, so `node mods/live/gen-band-contract.js` compiles that JSON into `mods/live/band-contract-data.ts`. Glyphs in the compiled file are `\u` escapes; the values equal the JSON. `band-contract.ts` imports the compiled file and checks the shape. `run-tests.sh` runs `gen-band-contract.js --check` and fails when the compiled file drifts. The published file copies the same object so codeforge reads it from there.
 
-The published `contract` object has exactly these keys, in this order: `quota_warn_pct`, `quota_error_pct`, `round`, `bar_on`, `bar_off`, `alert`, `age`. `round` is `"floor"`. `alert` is the warning glyph ▲. `age` is ◷. ◷ means elapsed, never time remaining; that sentence is not a key in the published object.
+The published `contract` object has exactly these keys, in this order: `quota_warn_pct`, `quota_error_pct`, `round`, `bar_on`, `bar_off`, `alert`, `age`. `round` is `"floor"`. `alert` is the warning glyph ⏶. `age` is ◷. ◷ means elapsed, never time remaining; that sentence is not a key in the published object.
 
 ## Published file
 
@@ -46,7 +46,7 @@ The published `contract` object has exactly these keys, in this order: `quota_wa
 The refresh tick is `TICK_MS` 5000. There is no separate throttle on this write, so a steady run of ok ticks rewrites `written_at_ms` every 5 s, which is inside the 10 s bound. A failed or non-ok tick does not publish, so the previous file stays and `written_at_ms` is not refreshed. The statusline treats a file whose age is outside `0..30000` ms as absent (30 s and a future timestamp both count). That stale reading after a non-ok stretch is intended.
 
 ```json
-{"v":1,"written_at_ms":0,"session_id":"","contract":{"quota_warn_pct":80,"quota_error_pct":100,"round":"floor","bar_on":"▰","bar_off":"▱","alert":"▲","age":"◷"},"progress":{"live_dispatches":0,"position":null,"unit":null,"review_round":null,"decisions_open":0},"spend":{"usd":null,"cap_usd":null}}
+{"v":1,"written_at_ms":0,"session_id":"","contract":{"quota_warn_pct":80,"quota_error_pct":100,"round":"floor","bar_on":"▰","bar_off":"▱","alert":"⏶","age":"◷"},"progress":{"live_dispatches":0,"position":null,"unit":null,"review_round":null,"decisions_open":0},"spend":{"usd":null,"cap_usd":null}}
 ```
 
 `progress` keys are exactly `live_dispatches`, `position`, `unit`, `review_round`, `decisions_open`. `live_dispatches` and `decisions_open` are numbers (0 when none). `position`, `unit` and `review_round` are null when there is no value. `position` is `size[!]·level·stage` (no unit label, no age). `unit` is `index/total`. `review_round` is the code-review generation, else the plan generation. `spend` keys are exactly `usd` and `cap_usd` (brain dollars and the cap, null when absent). Numbers and those tokens only. No prompt or transcript text. Quota windows are not in this file.

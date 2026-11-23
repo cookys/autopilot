@@ -118,7 +118,7 @@ test('r6 dirty digit: the hotkey Button the host presses still switches to page 
 })
 
 test('r6 narrow: 產線, 待決 and tok/s stay when the row is about 100 columns', () => {
-  const slots = v74BareBandSlots('▲ 要你決定', { stuck: 1, running: 2, waiting: 3 }, 4, t)
+  const slots = v74BareBandSlots('⏶ 要你決定', { stuck: 1, running: 2, waiting: 3 }, 4, t)
   const speed = [{ role: 'bolt' as const, text: 'ϟ ' }, { role: 'value' as const, text: '—' }, { role: 'unit' as const, text: ' tok/s' }]
   const fitted = layoutBandLine(slots, 100, speed, [['pet'], ['fleetWait'], ['fleetRun', 'fleetWord'], ['trend']], false)
   const keptSpeed = fitted.speed ?? speed

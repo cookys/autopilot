@@ -14,7 +14,7 @@ const iso = (agoMs: number): string => new Date(NOW - agoMs).toISOString()
 const LOCALES = [['zh-TW', makeT('zh-TW')], ['en', makeT('en')]] as const
 const BG_OUT = '/tmp/x.output'
 
-const band = (kind: string, why = 'reason') => ({ kind, key: 'suggestion', why, verdictReason: null, mark: '●', verdict: 'v', head: '', progress: '—', progressDim: false, reason: null, project: 'repo', elapsed: '10m', phase: '—', slots: [] })
+const band = (kind: string, why = 'reason') => ({ kind, key: 'suggestion', why, verdictReason: null, mark: '◉', verdict: 'v', head: '', progress: '—', progressDim: false, reason: null, project: 'repo', elapsed: '10m', phase: '—', slots: [] })
 const run = (id: string, over: object = {}) => ({ run_id: id, role: 'implementer', runner: 'codex', model: 'gpt-5', stall: false, rc: null, final_status: null, elapsed_s: 90, probe_age_s: 5, phase: 'running', started_at: iso(90_000), ended_at: null, ended: false, fresh: true, ...over })
 const task = (subject: string, status: string) => ({ subject, status })
 const item = (label: string, quietMs: number | null, tail: string | null = null, kind = 'shell') => ({ kind, label, detail: null, tail, quietMs })
@@ -70,7 +70,7 @@ test('I11 F1: a background item quiet for FRESH_MS.quiet - 1 ms and for exactly 
   for (const q of [Tq - 1, Tq]) {
     const rows = rowTexts(bgLines([item('job', q)]))
     expect(rows.length, 'quiet ' + q).toBe(1)
-    expect(rows[0].startsWith('● 執行中'), rows[0]).toBe(true)
+    expect(rows[0].startsWith('◉ 執行中'), rows[0]).toBe(true)
   }
   const stale = bgLines([item('job', Tq + 1)], makeT('zh-TW'), false)
   expect(rowTexts(stale), 'closed: no item row, the stopped one is behind the toggle').toEqual([])
@@ -82,7 +82,7 @@ test('I11 F1: a background item quiet for FRESH_MS.quiet - 1 ms and for exactly 
   // negative control: a threshold that is off by one (> becomes >=) would call the item at exactly T stopped; the T row above is what fails then
 })
 
-test('I11 X0 / X1: an exit marker of 0 is ✓ 完成, any other code is ✗ 失敗, never ● whatever the quiet time; 背景工作 is one empty line and one more', () => {
+test('I11 X0 / X1: an exit marker of 0 is ✓ 完成, any other code is ✗ 失敗, never ◉ whatever the quiet time; 背景工作 is one empty line and one more', () => {
   for (const quiet of [1_000, ui.FRESH_MS.quiet + 1, 6 * 3_600_000]) {
     const ok = rowTexts(bgLines([item('job', quiet, '[exited with code 0]')]))
     expect(ok.length).toBe(1)
@@ -91,14 +91,14 @@ test('I11 X0 / X1: an exit marker of 0 is ✓ 完成, any other code is ✗ 失�
       const bad = rowTexts(bgLines([item('job', quiet, '[exited with code ' + code + ']')]))
       expect(bad[0].startsWith('✗ 失敗'), bad[0]).toBe(true)
     }
-    for (const r of [...ok, ...rowTexts(bgLines([item('job', quiet, '[exited with code 3]')]))]) expect(r.includes('●'), r).toBe(false)
+    for (const r of [...ok, ...rowTexts(bgLines([item('job', quiet, '[exited with code 3]')]))]) expect(r.includes('◉'), r).toBe(false)
   }
   const closed = bgLines([item('a', 1_000, '[exited with code 0]'), item('b', 1_000, '[exited with code 1]')], makeT('zh-TW'), false)
   expect(closed.map(l => l.kind)).toEqual(['empty', 'more'])
   expect(closed[1].text).toContain('2 項已結束')
   // negative control: a marker that is not the whole last line is output, not an exit
   const prose = rowTexts(bgLines([item('job', 1_000, 'the build exited with code 0 once')]))
-  expect(prose[0].startsWith('● 執行中'), prose[0]).toBe(true)
+  expect(prose[0].startsWith('◉ 執行中'), prose[0]).toBe(true)
 })
 
 // ---- I16: 現況 at 76 columns has no 今日花費 or 帳號 section, and each summary row carries goto ----
@@ -176,7 +176,7 @@ test('I17: every data line of 現況 has a fact; a foreign fact is a kv / item p
     expect(i17([...ls, ls.find(l => l.fact === 'review.round') as PaneLine]).length).toBeGreaterThan(0)
     const rv = ls.find(l => l.fact === 'review.round') as PaneLine
     expect(i17(ls.map(l => (l === rv ? { ...l, segs: [...(l.segs ?? []), { text: 'x', role: 'state' as const }] } : l))).length, 'a second state seg on the review row').toBeGreaterThan(0)
-    // the section title count is plain: no ▲ and no colour; a planted yellow ▲ chip is flagged (negative control)
+    // the section title count is plain: no ⏶ and no colour; a planted yellow ⏶ chip is flagged (negative control)
     expect(chipViolations(ls), loc).toEqual([])
     const reason = ls.find(l => l.kind === 'item' && l.fact === 'now.attention') as PaneLine
     expect(reason.segs?.some(s => s.role === 'state'), 'the stalled reason keeps its state word').toBe(true)
@@ -651,7 +651,7 @@ test('tab colour: a running dispatch never marks 派工; no symbol badge is draw
   expect(loud(sr, 'dispatch')).toBe(false)
   expect(tabNeeds(needSnap({ live: 3 })).dispatch).toBeUndefined()
   const text = [...sr.tabs.map(x => x.label), ...sr.rule].map(g => g.text).join('')
-  expect(text).not.toMatch(/[▲●⚑⊘]/)
+  expect(text).not.toMatch(/[⏶◉⚑⊘]/)
 })
 test('tab colour: the active tab that needs the owner is warning bold, with its claude ━ run under it (owner 2026-10-16)', () => {
   const sr = stripOf(needSnap({ pending: true }), ctxOf(makeT('zh-TW'), 120), 'decide', true)

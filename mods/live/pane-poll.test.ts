@@ -153,7 +153,7 @@ for (const page of PAGES_OPEN) {
   test('pane-poll: pane open on ' + page + ', no console.json: `fleet console --json` and `fleet seats --quota --json` each run within ' + TICKS + ' ticks', async ($, on) => {
     const w = world(on, baseFiles())
     await begin($)
-    w.panes.push(PANE_ID) // the pane is open: $.ui.panes() lists it, as after the ⓘ or /live-pane
+    w.panes.push(PANE_ID) // the pane is open: $.ui.panes() lists it, as after the i or /live-pane
     await frameKey(keyEngine, { kind: 'page', to: page })
     const errors: string[] = []
     await drawPane($, errors, page + ' before the first tick')

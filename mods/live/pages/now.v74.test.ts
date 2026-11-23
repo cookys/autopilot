@@ -21,7 +21,7 @@ const liveOk = {
   text: '',
   header: '',
   band: {
-    mark: '●', verdict: '進行中', elapsed: '3h26m', progress: '', progressDim: false, reason: null,
+    mark: '◉', verdict: '進行中', elapsed: '3h26m', progress: '', progressDim: false, reason: null,
     verdictReason: null, head: '', project: 'demo', phase: '', slots: [],
     key: 'running' as const, why: '', text: '',
   },
@@ -122,7 +122,7 @@ test('v74 now: a project with no counts draws as unknown, never as healthy (nega
   expect(fleetLines(bare!)[0].mark).toBe('unknown')
   const joined = nowPage.render(v74Ctx(bare)).body.map(text).join('\n')
   expect(joined).toContain('line-a 計數未知')
-  expect(joined).not.toMatch(/產線\s+1\s+.*●1/) // the summary does not count it as a running (ok) line
+  expect(joined).not.toMatch(/產線\s+1\s+.*◉1/) // the summary does not count it as a running (ok) line
   const ok = parsePmStatus('{"schema":"fleet.pm.status","schema_version":1,"generated_at_ms":1795149000000,"selector":null,"projects":[{"project":"line-a","counts":{"stuck":0,"overdue":0,"running":1,"waiting":0,"total":1},"tasks":[]}]}')
   expect(fleetLines(ok!)[0].mark).toBe('ok')
 })
@@ -144,13 +144,13 @@ test('r10 #3: the band fleet chips and the 現況 產線 summary carry the same 
   const bandSlot = slotFleet(v74LineCounts(pm!), t, true)!
   const band = bandSlot.segs.map(x => x.text).join('')
   expect(band.startsWith(t('v74.c.lines')), 'the band names its subject with the same word').toBe(true)
-  const digits = (s: string): string[] => (s.match(/[✗⊘●⋯][ ]?\d+/g) ?? []).map(x => x.replace(/\s/g, ''))
+  const digits = (s: string): string[] => (s.match(/[✗⊘◉⋯][ ]?\d+/g) ?? []).map(x => x.replace(/\s/g, ''))
   const num = (g: string, from: string): number | null => { const m = new RegExp(g + '\\s?(\\d+)').exec(from); return m === null ? null : Number(m[1]) }
   expect(num('✗', band) ?? 0).toBe(c.fail)
   expect(num('⊘', band) ?? 0).toBe(c.idle)
-  expect(num('●', band) ?? 0).toBe(c.ok)
+  expect(num('◉', band) ?? 0).toBe(c.ok)
   expect(num('✗', page!) ?? 0).toBe(c.fail)
   expect(num('⊘', page!) ?? 0).toBe(c.idle)
-  expect(num('●', page!) ?? 0).toBe(c.ok)
+  expect(num('◉', page!) ?? 0).toBe(c.ok)
   expect(digits(band).length).toBeGreaterThan(0)
 })

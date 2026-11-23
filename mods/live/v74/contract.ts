@@ -41,7 +41,7 @@ export function parsePmStatus(json: string): PmStatus | null {
 }
 
 // The 全艦隊 block of 現況 (S2). fleet.pm.status has no host count, no offline/idle line state and no quota pools:
-// lines = projects; ✗ = a project with stuck > 0 or overdue > 0; ⊘ = only waiting; ● = the rest. Hosts and quota alerts keep their existing sources (console / quota) and are omitted when those are missing.
+// lines = projects; ✗ = a project with stuck > 0 or overdue > 0; ⊘ = only waiting; ◉ = the rest. Hosts and quota alerts keep their existing sources (console / quota) and are omitted when those are missing.
 export type FleetLineMark = 'fail' | 'parked' | 'ok' | 'unknown'
 export type FleetLine = { project: string; mark: FleetLineMark; counts: PmCounts }
 export function fleetLines(s: PmStatus): FleetLine[] {

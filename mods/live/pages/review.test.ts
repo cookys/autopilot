@@ -215,7 +215,7 @@ function drawReviewPane(
 // `[z] 收合替你決定` is rendered in the action area at 160x40 and 120x30 whenever foldable decisions exist, and `沒有要你處理的事` when none exist.
 const GOLD_120_BODY = [
   '── 程式碼審查 ─────────────────────────────────────────',
-  '▸ 第 1 代 f55289ca · google SHIP-AS-IS · xai SHIP-AS-IS                                          ▲ 135 時前，HEAD 已不同',
+  '▸ 第 1 代 f55289ca · google SHIP-AS-IS · xai SHIP-AS-IS                                          ⏶ 135 時前，HEAD 已不同',
   '── 推送前檢查 ──',
   '  ✓ check-all 綠 · 627114b',
   '── 替你決定的事 2（z 收合）─────────────────────────',
@@ -227,7 +227,7 @@ const GOLD_120_BODY = [
 
 const GOLD_160_BODY = [
   '── 程式碼審查 ─────────────────────────────────────────',
-  '▸ 第 1 代 f55289ca · google SHIP-AS-IS · xai SHIP-AS-IS' + ' '.repeat(82) + '▲ 135 時前，HEAD 已不同',
+  '▸ 第 1 代 f55289ca · google SHIP-AS-IS · xai SHIP-AS-IS' + ' '.repeat(82) + '⏶ 135 時前，HEAD 已不同',
   '── 推送前檢查 ──',
   '  ✓ check-all 綠 · 627114b',
   '── 替你決定的事 2（z 收合）─────────────────────────',
@@ -239,7 +239,7 @@ const GOLD_160_BODY = [
 
 const GOLD_80_OPEN_BODY = [
   '── 程式碼 ──',
-  '▸g1 f55289ca google✓ xai✓ ▲HEAD 不同',
+  '▸g1 f55289ca google✓ xai✓ ⏶HEAD 不同',
   '── 推送前 ── ✓ 627114b',
   '── 替你決定 2（z 收合）──',
   '01M7N33J 分頁列放最下列 15分',
@@ -249,7 +249,7 @@ const GOLD_80_OPEN_BODY = [
 
 const GOLD_80_FOLDED_BODY = [
   '── 程式碼 ──',
-  '▸g1 f55289ca google✓ xai✓ ▲HEAD 不同',
+  '▸g1 f55289ca google✓ xai✓ ⏶HEAD 不同',
   '── 推送前 ── ✓ 627114b',
   '── 替你決定 2（z 展開）──',
   '── plan ── 1fba336 凍結 8/8',
@@ -274,7 +274,7 @@ test('review: registry replaces the shell at key 4 and marks the page framed', (
 test('review: negative control — altering one word or glyph breaks golden equality', () => {
   const got = reviewPage.render(ctxOf(80, 24, LIVE_NARROW)).body.map(text)
   const mutated = GOLD_80_OPEN_BODY.slice()
-  mutated[1] = '▸g1 f55289ca google✓ xai✗ ▲HEAD 不同'
+  mutated[1] = '▸g1 f55289ca google✓ xai✗ ⏶HEAD 不同'
   expect(got).not.toEqual(mutated)
 })
 

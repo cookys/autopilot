@@ -40,7 +40,7 @@ test('S4 派工: one section with 線/引擎/工作/狀態, branch in 工作, ti
   const lines = v.body.map(text)
   expect(lines[0]).toMatch(/^▾ 派工 3 筆 ─+/)
   expect(lines[1]).toMatch(/線\s+引擎\s+工作\s+狀態/)
-  expect(lines[2]).toMatch(/● 甲線\s+codex\s+feat\/tux-sync 測試\s+執行中 12 分$/)
+  expect(lines[2]).toMatch(/◉ 甲線\s+codex\s+feat\/tux-sync 測試\s+執行中 12 分$/)
   expect(lines[3]).toMatch(/✓ 乙線\s+kimi\s+scripts README 盤點\s+完成 40 分前$/)
   expect(lines[4]).toMatch(/✗ 丙線\s+kimi\s+learn\/search 整合測試\s+逾時（1200 秒）$/)
   expect(lines.join('\n')).not.toMatch(/foreman|背景代理|執行中 \d+$|已完成/)

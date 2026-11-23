@@ -10,7 +10,7 @@ const dir = __dirname
 const contractPath = path.join(dir, 'band-statusline-contract.json')
 
 const facts = {
-  verdict: { mark: '●', word: 'Running', key: 'suggestion' },
+  verdict: { mark: '◉', word: 'Running', key: 'suggestion' },
   marker: {
     size: 'M', urgent: false, bug: false, high_risk: false, level: 'l5', stage: 'implement', stage_set_at_ms: 1,
     unit: { kind: 'task', index: 3, total: 5, label: 'do not publish this label' }, review_families: ['a'],
@@ -37,7 +37,7 @@ test('(a) the collapsed row has no quota, spend, position, unit, decisions, live
   assert.equal(text.includes('7d'), false)
   assert.equal(text.includes('$'), false)
   assert.equal(text.includes('R9'), false)
-  assert.equal(text.includes('● 4'), false)
+  assert.equal(text.includes('◉ 4'), false)
   assert.equal(text.includes('do not publish'), false)
   assert.equal(text.includes('⊘ 2'), true)
   assert.equal(text.includes('QC'), true)

@@ -42,7 +42,7 @@ export type LivePaneRow = {
   ended_at: string | null
   // the producer's own end test (runs-watch computeCounts: phase exited, ended_at or final_status; an rc is an end too) and its own freshness test
   // (confirmed_live: alive === true and a probe no older than counts.fresh_bound_s). A row the producer never probed is not `fresh`, and a row that
-  // ended without an rc and without a final_status is `ended` and not `fresh`, so it reads ◌ 已停 and never ● 執行中 (design plan §2.5, §3.3 run row 6)
+  // ended without an rc and without a final_status is `ended` and not `fresh`, so it reads ◌ 已停 and never ◉ 執行中 (design plan §2.5, §3.3 run row 6)
   ended: boolean
   fresh: boolean
   starting: boolean
@@ -680,7 +680,7 @@ export function readQc(text: string | null, want: ScopeWant): QcView | null {
   }
 }
 
-// the review-slot chip: `QC✓` (evidence present), `QC▲` (protected diff, no evidence: it awaits a person); nothing owed or unknown = no chip
+// the review-slot chip: `QC✓` (evidence present), `QC⏶` (protected diff, no evidence: it awaits a person); nothing owed or unknown = no chip
 export function qcChip(q: QcView | null, t: T = T_EN): string | null {
   if (q === null) return null
   const label = t('band.qc')
@@ -768,8 +768,8 @@ export function loadSourceFor(v: LoadSourceView, sessionPid: number | string | n
   return v.flags.includes('dev_link_missing_or_stale') ? 'unknown' : 'dev'
 }
 
-// The hygiene slot's load-source chip: `dev` / `dev ↓3` (behind upstream by 3), `dev ▲` (the marketplace is not this repo's directory),
-// `cache 2.36.36 ▲` (a stale cache copy is what loads), `src ? ▲` (unknown). warn = the chip carries ▲ (the renderer picks the warning colour).
+// The hygiene slot's load-source chip: `dev` / `dev ↓3` (behind upstream by 3), `dev ⏶` (the marketplace is not this repo's directory),
+// `cache 2.36.36 ⏶` (a stale cache copy is what loads), `src ? ⏶` (unknown). warn = the chip carries ⏶ (the renderer picks the warning colour).
 export function hygieneChip(v: LoadSourceView | null, sessionPid: number | string | null = null, t: T = T_EN): { text: string; warn: boolean } | null {
   if (v === null) return null
   const src = loadSourceFor(v, sessionPid)
@@ -1324,7 +1324,7 @@ export function reviewSlot(r: ReviewView | null): string | null {
 
 const short = (sha: string | null): string => (sha === null ? '—' : sha.slice(0, 8))
 
-// ================= stage-graph P7: the one-line band (contract ②) and the panel's facts =================
+// ================= stage-graph P7: the one-line band (contract 2) and the panel's facts =================
 // Colours are theme keys used as TEXT colour only (owner decision 5): no backgroundColor, no inverse, no raw colour.
 export type ThemeKey = 'claude' | 'warning' | 'error' | 'success' | 'suggestion' | 'inactive' | 'subtle' | 'merged' | 'remember'
 export type SlotId = 'verdict' | 'fleet' | 'position' | 'unit' | 'dispatch' | 'review' | 'decisions' | 'decide' | 'spend' | 'quota' | 'hygiene'
@@ -1530,7 +1530,7 @@ export function slotVerdict(v: { mark: string; word: string; key: ThemeKey | und
   return { id: 'verdict', segs }
 }
 
-// The fleet summary on the band's own line, right after the verdict: `艦隊 ⊘ N  ● N  ⋯ N`. The word is dim; each count is a chip whose glyph carries the
+// The fleet summary on the band's own line, right after the verdict: `艦隊 ⊘ N  ◉ N  ⋯ N`. The word is dim; each count is a chip whose glyph carries the
 // theme key (stuck broken, running running, waiting idle) and whose number is plain. Both the glyph and the number carry the drop tag, so a width step
 // that removes a count removes the number with it. Zeros stay (a fetched summary always names all three). Null hides the slot: nothing has been fetched.
 export function slotFleet(c: { stuck: number; running: number; waiting: number; failed?: number; normal?: number } | null | undefined, t: T = T_EN, v74Order = false): Slot | null {
@@ -1541,7 +1541,7 @@ export function slotFleet(c: { stuck: number; running: number; waiting: number; 
   const stuck = chip(GS.stalled, c.stuck, PALETTE.broken, 'fleetStuck')
   const run = chip(GS.running, c.running, PALETTE.running, 'fleetRun')
   const wait = chip(GS.waiting, c.waiting, PALETTE.idle, 'fleetWait')
-  // r8 #12: design S1/S2 read `⊘ stalled  ● running  ✗ failed`, then the idle counts; the older order (✗ first) stays for the pane and the legacy band
+  // r8 #12: design S1/S2 read `⊘ stalled  ◉ running  ✗ failed`, then the idle counts; the older order (✗ first) stays for the pane and the legacy band
   const chips = ui.chipsJoin(v74Order ? [stuck, run, ...failed, ...normal, wait] : [...failed, stuck, ...normal, run, wait], 'next')
   return { id: 'fleet', segs: [sp(t(v74Order ? 'shell.fleet_lines' : 'shell.fleet'), { dim: true, tag: 'fleetWord' }), ui.gapSeg(ui.CHIP_LEAD, 'fleetWord'), ...chips] }
 }
@@ -1605,7 +1605,7 @@ export function slotDispatch(live: number, stalled: number): Slot | null {
   return { id: 'dispatch', segs: ui.chipsJoin(chips, 'next') }
 }
 
-// `↺ R<n>` (↺ dim) + `  QC ▲` / `  QC ✓`: the round goes at < 120, the QC chip stays down to 80
+// `↺ R<n>` (↺ dim) + `  QC ⏶` / `  QC ✓`: the round goes at < 120, the QC chip stays down to 80
 export function slotReview(r: ReviewView | null, q: QcView | null, t: T = T_EN): Slot | null {
   const round = reviewRound(r)
   const chip = qcChip(q, t)
@@ -1618,7 +1618,7 @@ export function slotReview(r: ReviewView | null, q: QcView | null, t: T = T_EN):
   return { id: 'review', segs: ui.chipsJoin(chips) }
 }
 
-// `◆ <proxy>` + `  ? <undocumented>` + `  <rung>`: ◆ is a plain value now (claude is reserved for "you are here"), `?` inactive
+// `⬥ <proxy>` + `  ? <undocumented>` + `  <rung>`: ⬥ is a plain value now (claude is reserved for "you are here"), `?` inactive
 export function slotDecisions(d: DecisionsView | null): Slot | null {
   if (d === null) return null
   const parts: Seg[][] = []
@@ -1680,7 +1680,7 @@ export function slotHygiene(ls: LoadSourceView | null, residue: ResidueView | nu
   }
   // the mark is yellow, the number default text
   if (wt > 0) chips.push(ui.chipSegs([sp(GT.residue, { color: PALETTE.attention, tag: 'wt' })], [sp(String(wt), { tag: 'wt' })]))
-  // the gap goes with the chip before it: a lone `⚑ N` has no leading gap. A text label (`dev`, `cache 2.36.36 ▲`) belongs to the chip after it (CHIP_LEAD, one blank);
+  // the gap goes with the chip before it: a lone `⚑ N` has no leading gap. A text label (`dev`, `cache 2.36.36 ⏶`) belongs to the chip after it (CHIP_LEAD, one blank);
   // CHIP_GAP is only for chip to chip (`dev ↓ 3  ⚑ 2`: the label is inside the first chip)
   const labelOnly = chip !== null && chips.length === 2 && chips[0].length === 1
   const segs = labelOnly ? [...chips[0], ui.gapSeg(ui.CHIP_LEAD, 'chip'), ...chips[1]] : ui.chipsJoin(chips)
@@ -1747,7 +1747,7 @@ export function bandFactsDocument(input: {
 
 export const BAND_SEP = ui.CHIP_MARK + GT.bandSep + ui.CHIP_MARK
 export const BAND_ICON = GT.info
-// the ⓘ Button's label: the glyph plus a space. ⓘ (U+24D8) is East Asian Width Ambiguous: displayWidth counts it one cell, a CJK-locale terminal
+// the i Button's label: the glyph plus a space. i (U+24D8) is East Asian Width Ambiguous: displayWidth counts it one cell, a CJK-locale terminal
 // (the owner's) draws it two, so a one-cell Button left the glyph's right half outside the control. The space makes the Button two cells either way.
 export const BAND_INFO_LABEL = BAND_ICON + ' '
 export type BandLayout = { segs: Seg[]; text: string; width: number }
@@ -1762,7 +1762,7 @@ const REASON_MIN = 8
 // The collapsed row (PM 2026-11-16): verdict, fleet, stalled ⊘, QC, hygiene (source chip and ⚑N). The reason phrase is for >= 160.
 // The source chip is not dropped. QC is not dropped. A caller that still passes position, unit, spend, quota or decisions gets the old width tags.
 // Then, if the line still does not fit: the position's stage text is cut with `…`, then a directly passed unit slot goes, then the
-// verdict WORD is shortened (the glyph stays). Never the verdict glyph, the ⓘ, the stalled count, QC or `⚑N`.
+// verdict WORD is shortened (the glyph stays). Never the verdict glyph, the i, the stalled count, QC or `⚑N`.
 export function layoutBand(slots: Slot[], columns: number): BandLayout {
   const drop = new Set<string>()
   if (columns >= 160) { drop.add('dot'); drop.add('bar5'); drop.add('bar3') }
@@ -1805,7 +1805,7 @@ export function layoutBand(slots: Slot[], columns: number): BandLayout {
     kept = kept.map(f).filter((s): s is Slot => s !== null && s.segs.length > 0)
     segs = join(kept)
   }
-  // last: shorten the verdict WORD, the glyph stays; the ⓘ is never touched
+  // last: shorten the verdict WORD, the glyph stays; the i is never touched
   over = widthOf(segs) - columns
   if (over > 0) {
     const v = segs[0]
@@ -1815,7 +1815,7 @@ export function layoutBand(slots: Slot[], columns: number): BandLayout {
   }
   // the verdict's reason phrase (wide bands only): whatever room is left, clipped, right after the verdict word
   const room = columns - widthOf(segs) - 1
-  if (rs.text !== null && segs[0] !== undefined && kept[0] !== undefined && kept[0].id === 'verdict' && room >= REASON_MIN) { // widthOf() already counts the ⓘ, so room = free cells - 1 and the inserted ' ' + reason (1 + room) fills the line exactly
+  if (rs.text !== null && segs[0] !== undefined && kept[0] !== undefined && kept[0].id === 'verdict' && room >= REASON_MIN) { // widthOf() already counts the i, so room = free cells - 1 and the inserted ' ' + reason (1 + room) fills the line exactly
     segs = [segs[0], { ...sp(' ' + truncateToWidth(rs.text, Math.min(room, REASON_MAX)), { dim: true }), slot: 'verdict' }, ...segs.slice(1)]
   }
   return { segs, text: segs.map(g => g.text).join('') + BAND_INFO_LABEL, width: widthOf(segs) }
@@ -1856,8 +1856,8 @@ function segTextWidth(segs: readonly { text: string }[]): number {
   return segs.reduce((n, s) => n + displayWidth(s.text), 0)
 }
 
-// The one width the one-line band shares. `segWidth` is the slot texts only (no ⓘ: layoutBand.width already added it, so callers pass the segs).
-// The ⓘ label is 2 cells, the speed label is forgeBar's own width, and `more` is the dim `›` plus the space after it.
+// The one width the one-line band shares. `segWidth` is the slot texts only (no i: layoutBand.width already added it, so callers pass the segs).
+// The i label is 2 cells, the speed label is forgeBar's own width, and `more` is the dim `›` plus the space after it.
 export function fittedBandWidth(segWidth: number, speed: readonly ForgeSegment[] | null, more: boolean): number {
   const speedW = speed === null || speed.length === 0 ? 0 : ui.forgeBar(speed).width
   const moreW = more ? displayWidth(GLYPHS.structure.goto) + 1 : 0
@@ -1913,7 +1913,7 @@ export function v74FitBand(segs: readonly Seg[], speed: readonly ForgeSegment[] 
   return collapseBandSeps(out)
 }
 
-// `columns` is the room for the indicator, the ⓘ, the speed label and, when `more` is set, the `›` cell (the caller already removed the tab strip and the one-cell gap).
+// `columns` is the room for the indicator, the i, the speed label and, when `more` is set, the `›` cell (the caller already removed the tab strip and the one-cell gap).
 // The width table is shown at least 120 columns. A candidate whose verdict word was shortened is refused and the next step is tried.
 // The stuck count is not a step, so it is still on the line when every step has been applied.
 // Verdict, fleet, stalled dispatch, QC and hygiene stay on the collapsed row. Nothing else is optional. The last candidate is returned even when it still overflows.
@@ -1948,7 +1948,7 @@ export function layoutBandLine(slots: readonly Slot[], columns: number, speed: r
   return last
 }
 
-// a non-ok snapshot: one dim line `<reason> │ ⓘ `, the reason cut to fit
+// a non-ok snapshot: one dim line `<reason> │ i `, the reason cut to fit
 export function plainBandText(reason: string, columns: number): string {
   return truncateToWidth(reason.replace(/\s*\n\s*/g, ' '), Math.max(1, columns - displayWidth(BAND_SEP) - displayWidth(BAND_INFO_LABEL)))
 }

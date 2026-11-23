@@ -49,8 +49,8 @@ test('control: waiting is the one-cell midline ellipsis (EAW N, same class as st
 })
 
 test('M8 control: a line containing the gear glyph is reported', () => {
-  assert.ok(ui.emojiViolations('● 2 ⚙ jobs').length > 0)
-  assert.deepEqual(ui.emojiViolations('● 2 jobs'), [])
+  assert.ok(ui.emojiViolations('◉ 2 ⚙ jobs').length > 0)
+  assert.deepEqual(ui.emojiViolations('◉ 2 jobs'), [])
 })
 
 test('M9 control: a keycap sequence is reported; plain digits, # and * stay legal', () => {
@@ -61,9 +61,9 @@ test('M9 control: a keycap sequence is reported; plain digits, # and * stay lega
 
 test('M10 control: a state glyph also in the structure table is reported', () => {
   const g = clone()
-  g.structure.bullet = '●'
+  g.structure.bullet = '◉'
   const v = ui.vocabularyViolations(g)
-  assert.ok(v.some(x => x.includes('●')), JSON.stringify(v))
+  assert.ok(v.some(x => x.includes('◉')), JSON.stringify(v))
 })
 
 test('control: a new glyph without a verified entry is reported', () => {
@@ -218,7 +218,7 @@ test('scan-level control: one violation planted in a copy of viewer/pane.tsx is 
       ['L9 bold on its own line', boldHits, BOLD_FILES, HINT, '<Text\n  key="hint"\n  bold\n>'],
       ['L1b inverse', src => hits(src, BG_RE).filter(x => !(x.includes('inverse') && x.includes("tl"))), [], HINT, '<Text key="hint" inverse>'],
       ['L1b backgroundColor', src => hits(src, BG_RE).filter(x => !(x.includes('inverse') && x.includes("tl"))), [], HINT, '<Text key="hint" backgroundColor={x}>'],
-      ['L2 glyph', L2, ['tux/glyphs.ts'], HINT, '<Text key="hint" dimColor>{\'▲\'}</Text>' + HINT],
+      ['L2 glyph', L2, ['tux/glyphs.ts'], HINT, '<Text key="hint" dimColor>{\'⏶\'}</Text>' + HINT],
       ['L5 hand-made line', L5_HAND, ['live/ui.ts'], HINT, 'void ({ text: x } as PaneLine)\n' + HINT],
       ['L6 core hand formatting', L6_CORE, modSources().filter(f => !L6_FILES().includes(f)), HINT, 'void x.toFixed(1)\n' + HINT],
     ]
@@ -339,7 +339,7 @@ test('L2 control: a glyph planted in the real viewer pane and viewer strings is 
   for (const f of ['viewer/pane.tsx', 'viewer/strings.ts']) {
     const src = readMod(f)
     assert.deepEqual(L2(src), [], f)
-    assert.ok(L2(src + "\nconst g = '▲'").length > 0, f)
+    assert.ok(L2(src + "\nconst g = '⏶'").length > 0, f)
   }
 })
 test('L2: no string-table value carries a state or structure glyph', () => {
@@ -350,10 +350,10 @@ test('L2: no string-table value carries a state or structure glyph', () => {
   }
 })
 test('L2 control: a planted glyph is reported, a comment is not', () => {
-  assert.ok(L2("const g = '▲'").length > 0)
+  assert.ok(L2("const g = '⏶'").length > 0)
   assert.ok(L2("const g = '→'").length > 0)
   assert.ok(L2("const g = 'ⓘ'").length > 0)
-  assert.deepEqual(L2('// ▲ in a comment\nconst g = 1'), [])
+  assert.deepEqual(L2('// ⏶ in a comment\nconst g = 1'), [])
   assert.ok(L2_RE.test('⚑') && !L2_RE.test('abc 現況'))
 })
 
@@ -657,7 +657,7 @@ test('turn.step measurement control: the unguarded form, and a catch-less try, a
 })
 
 // L10 (codeforge tui-guideline §3.5, rule 2): a chip is written in ONE place, ui.chipSegs / chipsJoin; no call site glues a glyph from the GS / GT tables to what
-// follows it by `+`. The only legal continuation is `ui.CHIP_MARK` (the one space), so `GS.running + live` (the old `●3`) is reported. The runtime half is chip-spacing.test.ts.
+// follows it by `+`. The only legal continuation is `ui.CHIP_MARK` (the one space), so `GS.running + live` (the old `◉3`) is reported. The runtime half is chip-spacing.test.ts.
 const L10 = src => hits(src, /\b(?:GS|GT)\.\w+\s*\+(?!\s*ui\.CHIP_MARK)/)
 test('L10: no source under mods/ glues a GS / GT glyph to the next piece by `+` (a chip goes through ui.chipSegs)', () => {
   assert.ok(modSources().includes('live/model.ts'))
@@ -723,11 +723,11 @@ test('petIconViolations controls: ⚠️, emoji with U+FE0F, width-1 char, bad f
     ['⚠️', e => { e.emoji = '⚠️' }],
     ['emoji with U+FE0F', e => { e.emoji = '🐱\uFE0F' }],
     ['width-1 char', e => { e.emoji = 'x' }],
-    ['width-1 symbol', e => { e.emoji = '★' }],
+    ['width-1 symbol', e => { e.emoji = '✧' }],
     ['single-char fallback', e => { e.fallback = ':' }],
     ['three-char fallback', e => { e.fallback = ':3)' }],
     ['CJK fallback', e => { e.fallback = '寵' }],
-    ['East Asian Ambiguous fallback', e => { e.fallback = '★!' }],
+    ['East Asian Ambiguous fallback', e => { e.fallback = '✧!' }],
     ['bad verified', e => { e.verified = 'owner-11-18' }],
   ]) {
     const g = clone()

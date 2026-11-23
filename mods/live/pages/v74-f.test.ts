@@ -135,7 +135,7 @@ test('v74 F S7: three blocks with full descriptions and no buttons', () => {
   expect(frameRows(hygienePage, ctxOf(liveOf({ residue: RESIDUE, load_source: LOAD_DEV }), null)).length).toBe(30)
 })
 
-test('v74 F S7: ● and two spaces only inside the band frame (box); the host Pane keeps ▲ and the locale separator', () => {
+test('v74 F S7: ◉ and two spaces only inside the band frame (box); the host Pane keeps ⏶ and the locale separator', () => {
   const live = liveOf({ residue: RESIDUE, load_source: LOAD_DEV })
   const boxed = texts(hygieneView({ ...ctxOf(live, null), box: true }).body)[1]
   expect(boxed).toContain(GLYPHS.state.running + ' ')
@@ -211,7 +211,7 @@ test('v74 F S8 negative control: missing cards, other-host mirror and live runs 
   expect(out.filter(r => r.includes('無來源')).length).toBe(3)
   expect(none.every(r => r.every(s => s.color === PALETTE.broken))).toBe(true)
   const empty = texts(fleetView(ctxOf(liveOf({ rows: [] }), null, { v74: { pm: null, pmFetchedMs: null, decide: [], todo: null, nav }, others: { ...others, cards: [] } })).body)
-  expect(empty.join('\n')).toContain('執行中 ● 0')
+  expect(empty.join('\n')).toContain('執行中 ◉ 0')
   expect(empty.filter(r => r.trim() === '沒有').length).toBe(3)
   expect(empty.join('\n')).not.toContain('line-')
 })
@@ -234,17 +234,17 @@ const pmOf = (): PmStatus => {
   const proj = (project: string, counts: ReturnType<typeof c>) => ({ project, root_id: null, counts, tasks: [ptask({})] })
   return { schema: 'fleet.pm.status', schema_version: 1, generated_at_ms: NOW, selector: null, projects: [proj('甲線', c(1, 0, 0, 0)), proj('乙線', c(0, 1, 0, 0)), proj('丙線', c(0, 0, 0, 2)), proj('丁線', c(0, 0, 1, 0)), proj('戊線', c(0, 0, 2, 0))] }
 }
-const headCount = (out: string[], word: string): number => Number((out.find(r => r.includes(word) && /\d/.test(r)) ?? '').match(/(\d+)\s*$|[●✗✓]\s*(\d+)/)?.slice(1).find(Boolean) ?? NaN)
+const headCount = (out: string[], word: string): number => Number((out.find(r => r.includes(word) && /\d/.test(r)) ?? '').match(/(\d+)\s*$|[◉✗✓]\s*(\d+)/)?.slice(1).find(Boolean) ?? NaN)
 
 test('v74 F gate G3: 艦隊 shows every run once: 執行中 + 失敗 + 已完成 = the runs in the feed, and each card header equals its listed rows', () => {
   const many = Array.from({ length: 9 }, (_, i) => run({ run_id: 'run-' + i, runner: 'codex', elapsed_s: 60 * (i + 1), ...(i < 2 ? { ended: true, fresh: false, rc: 1, final_status: 'x' } : i < 5 ? { ended: true, fresh: false, rc: 0, ended_at: new Date(NOW - 5 * MIN).toISOString() } : {}) }))
   const ctx = ctxOf(liveOf({ rows: many }), null, { v74: { pm: null, pmFetchedMs: null, decide, todo: null, nav }, others })
   const out = texts(fleetView(ctx).body)
-  const n = (w: string): number => Number((out.find(r => r.includes(w) && /[●✗✓]/.test(r)) ?? '').match(/(\d+)/)?.[1])
+  const n = (w: string): number => Number((out.find(r => r.includes(w) && /[◉✗✓]/.test(r)) ?? '').match(/(\d+)/)?.[1])
   expect(n('執行中') + n('失敗') + n('已完成')).toBe(9)
   expect(out.filter(r => /run-\d/.test(r)).length).toBe(9) // none folded, none dropped
   expect(Number(out[0].match(/(\d+) 張/)?.[1])).toBe(decide.length)
-  expect(out.filter(r => r.includes('◆')).length).toBe(decide.length)
+  expect(out.filter(r => r.includes('⬥')).length).toBe(decide.length)
   // negative control: dropping a run from the feed changes the sum, so the check is not vacuous
   const fewer = texts(fleetView(ctxOf(liveOf({ rows: many.slice(1) }), null, { v74: { pm: null, pmFetchedMs: null, decide, todo: null, nav }, others })).body)
   expect(fewer.filter(r => /run-\d/.test(r)).length).toBe(8)
@@ -266,10 +266,10 @@ test('v74 F gate G10: one set of names: pool "F 池" on 花費 and 現況, never
   expect(texts(renderSpend(ctxOf(live, consoleOf([pool('F 池')]))).body).join('\n')).toContain('F 池')
 })
 
-test('v74 F gate X3: 現況 counts the 產線 the same way as the shared fleetLines projection (✗ failed, ⊘ idle, ● ok)', () => {
+test('v74 F gate X3: 現況 counts the 產線 the same way as the shared fleetLines projection (✗ failed, ⊘ idle, ◉ ok)', () => {
   const pm = pmOf()
   const marks = fleetLines(pm).map(l => l.mark)
-  const want = ['✗' + marks.filter(m => m === 'fail').length, '⊘' + marks.filter(m => m === 'parked').length, '●' + marks.filter(m => m === 'ok').length]
+  const want = ['✗' + marks.filter(m => m === 'fail').length, '⊘' + marks.filter(m => m === 'parked').length, '◉' + marks.filter(m => m === 'ok').length]
   const body = texts(nowPage.render({ ...ctxOf(liveOf(), null), v74: { pm, pmFetchedMs: NOW, decide: [], todo: null, nav } }).body)
   const row = body.find(r => r.includes('產線')) ?? ''
   expect(row).toContain('產線       5')

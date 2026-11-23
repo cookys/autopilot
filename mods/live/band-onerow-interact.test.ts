@@ -544,7 +544,7 @@ test('trace-G01: clicking line (3 產線 with 99+ overflow) opens 派工 showing
   let tree = await band.drawn()
   const lineText = text(byKey(tree, 'band:line'))
   expect(lineText).toContain('3 產線')
-  expect(lineText).toContain('●99+')
+  expect(lineText).toContain('◉99+')
 
   await band.press({ key: 'band:line' })
   await settle(h)
@@ -557,7 +557,7 @@ test('trace-G01: clicking line (3 產線 with 99+ overflow) opens 派工 showing
   expect(full).toContain('全艦隊產線 · fleet pm status --json')
   expect(full).toContain('>5 分過舊')
   expect(full).toContain('⊘0')
-  expect(full).toContain('●100')
+  expect(full).toContain('◉100')
   expect(full).toContain('✗1')
   expect(full).toContain('⋯0')
   expect(full).toContain('共 101 條')

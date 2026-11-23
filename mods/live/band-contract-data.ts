@@ -8,6 +8,6 @@ export const BAND_CONTRACT_RAW = {
   round: "floor",
   bar_on: "\u25b0",
   bar_off: "\u25b1",
-  alert: "\u25b2",
+  alert: "\u23f6",
   age: "\u25f7",
 }

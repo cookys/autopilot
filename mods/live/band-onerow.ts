@@ -152,7 +152,7 @@ function fixedLabel(word: string, width: number): string {
   return padRightToWidth(word, width)
 }
 
-// 3 產線 ⊘99+ ●99+ ✗99+ ⋯99+ (26 cols)
+// 3 產線 ⊘99+ ◉99+ ✗99+ ⋯99+ (26 cols)
 export function formatLineFull(line: OneRowInput['line'], t: T): OneRowSegment {
   const st = line.state
   const word = fixedLabel(t('band.onerow.line'), 4)
@@ -182,7 +182,7 @@ export function formatLineFull(line: OneRowInput['line'], t: T): OneRowSegment {
   return { id: 'line', segs, width: BAND_COL_WIDTHS.line, clickable: true, page: 'dispatch' }
 }
 
-// Shortened alert-only line form (§2.6): `3 產線 ⊘ 4 ✗ 2` (matches wide ⊘ ● ✗ ⋯ order, space between glyph and count, max 3, width <= 14).
+// Shortened alert-only line form (§2.6): `3 產線 ⊘ 4 ✗ 2` (matches wide ⊘ ◉ ✗ ⋯ order, space between glyph and count, max 3, width <= 14).
 // Drops the redundant label word (and then inner space before `+`/`?`) when counts would exceed 14 cols so `+` and `?` are preserved.
 export function formatLineShort(line: OneRowInput['line'], t: T): OneRowSegment {
   const st = line.state
@@ -251,7 +251,7 @@ export function formatPend(pend: OneRowInput['pend'], t: T): OneRowSegment {
   return { id: 'pend', segs, width: BAND_COL_WIDTHS.pend, clickable: true, page: 'decide' }
 }
 
-// 4 QC ▲   (8 cols)
+// 4 QC ⏶   (8 cols)
 export function formatQc(qc: OneRowInput['qc'], t: T): OneRowSegment {
   const st = qc.state
   const label = fixedLabel(t('band.onerow.qc'), 2)
@@ -344,7 +344,7 @@ function buildReminderRaw(inp: OneRowInput, t: T): { text: string; idle: boolean
   if (isStale) {
     return { text: '~' + body + '?', idle: false, stale: true, color: PALETTE.idle }
   }
-  // §2.6: use folded right-triangle (▸, GLYPHS.structure.folded) instead of banned emoji ▶, distinct from QC ▲.
+  // §2.6: use folded right-triangle (▸, GLYPHS.structure.folded) instead of banned emoji ▹, distinct from QC ⏶.
   const withLead = GLYPHS.structure.folded + ' ' + body
   return { text: withLead, idle: false, stale: false, ...(inp.reminder.hasRec === true ? { color: PALETTE.attention } : {}) }
 }

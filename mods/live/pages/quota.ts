@@ -269,7 +269,7 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
   })
   const verdictBlock: Row[] = [...blockedRows, verdictRow]
 
-  // M2: the hint row under a cut table. At 80 columns it says how many pools are hidden and of which kind (`↓ 還有 10 池（?3 ▲5 ✓2）`); wider pages keep the frame's `↓ 還有 N 列`
+  // M2: the hint row under a cut table. At 80 columns it says how many pools are hidden and of which kind (`↓ 還有 10 池（?3 ⏶5 ✓2）`); wider pages keep the frame's `↓ 還有 N 列`
   const moreRow = (hidden: number[]): Row => {
     const arrow = GLYPHS.structure.behind
     if (tier !== 'narrow') return [{ text: t('frame.more', { n: hidden.length, arrow }), dim: true }]

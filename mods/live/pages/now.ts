@@ -152,7 +152,7 @@ function overviewRows(ctx: PageCtx, con: ConsoleSnapshot, wide: boolean): Row[] 
   const s = con.counts.summary
   const counts = lineCounts(con, t)
   const total = lineTotal(con)
-  // N4: an old snapshot keeps its old values, each with the ✗ mark, and says its age once (`產線 9✗ ●2 ⋯1 ⊘6 · 主機 4/6✗ · ✗ 資料已過期 12 分前`)
+  // N4: an old snapshot keeps its old values, each with the ✗ mark, and says its age once (`產線 9✗ ◉2 ⋯1 ⊘6 · 主機 4/6✗ · ✗ 資料已過期 12 分前`)
   const bs = isBriefStale(con, ctx.nowMs)
   const totalText = String(total)
   const totalSeg: Seg = bs.stale ? staleBadge(totalText + GLYPHS.state.failed) : plain(totalText)

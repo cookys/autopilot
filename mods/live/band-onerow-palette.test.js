@@ -30,7 +30,7 @@ const THEME_CORRESPONDENCE = {
     role: 'PALETTE.broken',
     dark: 'theme.error (bright red on dark bg; ANSI 31)',
     light: 'theme.error (deep red readable on light bg; ANSI 31)',
-    meaning: 'fault or blocked alert (line ✗ failed / ⊘ stalled, QC ▲ alert)',
+    meaning: 'fault or blocked alert (line ✗ failed / ⊘ stalled, QC ⏶ alert)',
   },
   inactive: {
     role: 'PALETTE.idle',
@@ -149,7 +149,7 @@ test('palette 2: every band segment across normal/alert/stale/missing/idle maps 
     ['pend', 'missing', segBy(layMissing, 'pend').segs, [P.idle]],
 
     ['qc', 'normal(✓)', segBy(layNormal, 'qc').segs, ['default']],
-    ['qc', 'alert(▲)', segBy(layAlert, 'qc').segs, ['default', P.broken]],
+    ['qc', 'alert(⏶)', segBy(layAlert, 'qc').segs, ['default', P.broken]],
     ['qc', 'stale', segBy(layStale, 'qc').segs, [P.idle]],
     ['qc', 'missing', segBy(layMissing, 'qc').segs, [P.idle]],
 

@@ -29,6 +29,7 @@ node --test "$here/gen-locales.test.js"
 node --test "$here/ui-lint.test.js"
 # shared tux: strict PALETTE = tokens.roles, manifest shas, golden locks (negative controls included)
 node --test "$here/../tux/tokens.test.js" "$here/../tux/golden.test.js"
+node --test "$here/width-lint.test.js"
 node --test "$here/band-split.test.js"
 node --test "$here/band-keep-speed.test.js"
 node --test "$here/band-no-error-text.test.js"

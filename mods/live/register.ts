@@ -2058,7 +2058,15 @@ export function registerLive(on: Parameters<Register>[0]): void {
       if (usage) {
         const outTokens = usage.output_tokens ?? 0
         const { decodeMs, tps } = stepRate({ sent, first, last, outTokens, thinkingStreamed, serverToolMs: serverToolMs(result.serverToolUses) })
-        const step: Step = { at: Date.now(), model: usage.model ?? e.model, isSubagent: e.agentId !== undefined, ttftMs: first !== null ? first - sent : null, decodeMs, outTokens, tps }
+        let agent: string | undefined
+        if (e.agentId !== undefined) {
+          try {
+            const found = (await $.agent.list()).find(a => a.id === e.agentId)
+            const named = found?.description || found?.name || found?.type
+            if (named) agent = named.slice(0, 40)
+          } catch (_e) { /* no agent list: the sample is kept without a name */ }
+        }
+        const step: Step = { at: Date.now(), model: usage.model ?? e.model, isSubagent: e.agentId !== undefined, ttftMs: first !== null ? first - sent : null, decodeMs, outTokens, tps, ...(e.agentId !== undefined ? { agentId: e.agentId } : {}), ...(agent !== undefined ? { agent } : {}), ...(first !== null && !thinkingStreamed ? { floor: true } : {}) }
         await update($, STEPS, list => [...validSteps(list), step].slice(-KEEP_STEPS))
         await $.ui.invalidate('ui.render')
       }

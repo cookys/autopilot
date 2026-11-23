@@ -349,7 +349,7 @@ test('r4-major1: normal and stale distinguish exact 99 from 99+ across all count
     const s99Text = B.oneRowText(stale99)
     const sOverText = B.oneRowText(staleOver)
     assert.equal((s99Text.match(/99\+\?/g) || []).length, 0, 'stale 99 has no 99+?')
-    assert.equal((s99Text.match(/99\?/g) || []).length, 6, 'stale 99 has 6x 99?: ' + s99Text)
+    assert.equal((s99Text.match(/(?<!\d)99\?/g) || []).length, 6, 'stale 99 has 6x 99?: ' + s99Text)
     assert.equal((sOverText.match(/99\+\?/g) || []).length, 6, 'stale over-99 has 6x 99+?: ' + sOverText)
     assert.equal((sOverText.match(/(?<!\+)99\?/g) || []).length, 0, 'stale over-99 never loses +: ' + sOverText)
     assert.notEqual(sOverText, s99Text, 'stale 99 and stale 99+ are visually distinct')

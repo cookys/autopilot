@@ -99,7 +99,7 @@ test('state 2: all 4 counts at 99+ plus stale (~ prefix and 99+?) distinguish 99
   const r99Stale195 = emitRow('200c exact-99 stale (~ + ?)', 195, stale99_195)
   assert.equal(r99Stale195.w, 195)
   assert.equal((r99Stale195.line.match(/99\+\?/g) || []).length, 0, 'exact 99 stale has no 99+?')
-  assert.equal((r99Stale195.line.match(/99\?/g) || []).length, 6, 'exact 99 stale shows 6x 99?')
+  assert.equal((r99Stale195.line.match(/(?<!\d)99\?/g) || []).length, 6, 'exact 99 stale shows 6x 99?')
 
   const staleMax = {
     reminder: { state: 'stale' },

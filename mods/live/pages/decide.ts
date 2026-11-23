@@ -6,7 +6,7 @@
 //
 // Import order: pages/frame.ts imports ./index, which imports this file; a test that imports this file first would hit the cycle, so import ./frame (or ./index) first.
 import type { ConsoleCard } from '../console'
-import { DECIDE_UNDO_MS, NO_DECIDE, decideDialog, decideFillText, decideLine, decidePick, displayWidth, isStepCard, recommendedIndex, truncateToWidth } from '../model'
+import { DECIDE_UNDO_MS, NO_DECIDE, TRACE_STALE_MIN, TRACE_STALE_MS, decideDialog, decideFillText, decideLine, decidePick, displayWidth, isStepCard, liveAgeMs, recommendedIndex, truncateToWidth } from '../model'
 import type { DecideState, LiveDecision, Seg } from '../model'
 import { GLYPHS } from '../../tux/glyphs.ts'
 import { PALETTE } from '../../tux/palette.ts'
@@ -480,6 +480,58 @@ const CARET = '_'
 const ruleTo = (text: string, cols: number): Row => [dimSeg(text + ' ' + GLYPHS.structure.rule.repeat(Math.max(0, cols - displayWidth(text) - 1)))]
 const THREE = PICK_KEYS.length
 
+// Minimal s2/feed trace extension: read optional error and card open-time metadata without blocking on s2's V74Ctx/DecideCard edit.
+type V74DecideTrace = { decideError?: string | null; errors?: { decide?: string | null } }
+type DecideCardMeta = DecideCard & { openedAtMs?: number | null; opened_at?: string | null; source?: string | null }
+
+function decideAgeDuration(t: PageCtx['t'], ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000))
+  if (s < 60) return t('page.now.age_s', { n: s })
+  const m = Math.floor(s / 60)
+  if (m < 60) return t('page.now.age_m', { n: m })
+  const h = Math.floor(m / 60)
+  return h < 24 ? t('page.now.age_h', { n: h }) : t('page.now.age_d', { n: Math.floor(h / 24) })
+}
+
+function v74CardAgeText(c: DecideCard, ctx: PageCtx): string {
+  const mc = c as DecideCardMeta
+  let atMs: number | null = typeof mc.openedAtMs === 'number' && Number.isFinite(mc.openedAtMs) ? mc.openedAtMs : null
+  if (atMs === null && typeof mc.opened_at === 'string') {
+    const parsed = Date.parse(mc.opened_at)
+    if (Number.isFinite(parsed)) atMs = parsed
+  }
+  if (atMs === null && ctx.live !== null) {
+    const match = ctx.live.pending.find(d => d.id === c.id)
+    if (match !== undefined) atMs = openedMs(match, ctx)
+  }
+  if (atMs === null) return ''
+  const age = ageOf(ctx, atMs)
+  return age === '' ? '' : ctx.t('trace.card_age', { age })
+}
+
+function v74StaleBanners(ctx: PageCtx): Row[] {
+  const { t, nowMs, size, live } = ctx
+  const cols = Math.max(8, size.cols)
+  const out: Row[] = []
+  const decideFetched = ctx.v74?.ages?.decide ?? null
+  if (decideFetched !== null) {
+    const ageMs = Math.max(0, nowMs - decideFetched)
+    if (ageMs > TRACE_STALE_MS) {
+      out.push(...brokenRows(GLYPHS.state.failed + ' ' + t('trace.decide_feed_stale', { age: decideAgeDuration(t, ageMs), limit: TRACE_STALE_MIN }), cols))
+    }
+  }
+  if (live !== null && live.state === 'stale') {
+    const why = live.header.trim() !== '' ? live.header : live.state
+    out.push(...brokenRows(GLYPHS.state.failed + ' ' + t('trace.decide_live_stale', { why, limit: TRACE_STALE_MIN }), cols))
+  } else if (decideFetched === null && live !== null && live.state === 'ok') {
+    const liveAge = liveAgeMs(live, nowMs)
+    if (liveAge !== null && liveAge > TRACE_STALE_MS) {
+      out.push(...brokenRows(GLYPHS.state.failed + ' ' + t('trace.decide_live_age', { age: decideAgeDuration(t, liveAge), limit: TRACE_STALE_MIN }), cols))
+    }
+  }
+  return out
+}
+
 function v74Card(c: DecideCard, i: number, selected: boolean, nav: DecideNav, ctx: PageCtx, picks: Record<string, number>, notes: Record<string, string>): Row[] {
   const { t } = ctx
   const cols = ctx.size.cols
@@ -487,14 +539,16 @@ function v74Card(c: DecideCard, i: number, selected: boolean, nav: DecideNav, ct
   const mark = selected ? GLYPHS.structure.folded : ' '
   const title = seg(c.title, selected ? { color: PALETTE.here, here: true } : {})
   const box = ctx.box === true
+  const cardAge = v74CardAgeText(c, ctx)
+  const ageTail: Seg[] = cardAge === '' ? [] : [dimSeg(' ' + DOT + ' ' + cardAge)]
   // The band frame has no host Pane. Each card head is a Button keyed card:N so the host's spatial up/down
   // (a focused Button consumes arrows; they never become ui.scroll while the frame is shorter than the viewport)
   // lands on the next card and ui.focus reports that key. Only the selected ▸ takes autoFocus.
   // The selected head is not a Button. A focused Button consumes Down/Up and re-fires onPress
   // with its own card:N, so the cursor event writes the index the ▸ already has.
   const head = box
-    ? [seg(mark + '  ' + String(i + 1) + '. ', selected ? {} : { press: 'card:' + i }), title, seg('：' + c.question)]
-    : [seg(mark + '  ' + String(i + 1) + '. '), title, seg('：' + c.question)]
+    ? [seg(mark + '  ' + String(i + 1) + '. ', selected ? {} : { press: 'card:' + i }), title, seg('：' + c.question), ...ageTail]
+    : [seg(mark + '  ' + String(i + 1) + '. '), title, seg('：' + c.question), ...ageTail]
   out.push(box ? head : truncateSegs(head, cols))
   const bg = c.background ?? t('v74.d.bg_none')
   // J1: the real Pane draws cards through this path (not boxOpen): the open card's background is shown in full (one row per line, wrapped on the label's hanging indent, never cut), the frame scrolls it; the other cards keep one cut row
@@ -657,18 +711,20 @@ function boxBody(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: numb
   if (fit.collapse) return [head, ...more(cards.slice(0, cursor), 0), ...boxOpen(cards[cursor], cursor, nav, ctx, fit), ...more(cards.slice(cursor + 1), cursor + 1)]
   return [head, ...cards.flatMap((c, i) => (i === cursor ? boxOpen(c, i, nav, ctx, fit) : [boxSummary(c, i, nav, ctx)]))]
 }
-function renderBoxC(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: number, actions: Row[]): { body: Row[]; actions: Row[] } {
+function renderBoxC(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: number, actions: Row[], topBanners: Row[] = []): { body: Row[]; actions: Row[] } {
   const { t } = ctx
   const cols = ctx.size.cols
   const c = cards[cursor]
+  const cardAge = v74CardAgeText(c, ctx)
+  const ageSuffix = cardAge === '' ? '' : ' ' + DOT + ' ' + cardAge
   const innerRows = Math.max(1, ctx.size.rows - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - 1)
   const effActions = innerRows <= 2 ? [] : actions
-  const room = Math.max(1, innerRows - effActions.length)
+  const room = Math.max(1, innerRows - effActions.length - topBanners.length)
   if (nav.bgOpen === true) {
     const width = Math.max(20, Math.min(80, cols) - 1)
-    const countRow: Row = [dimSeg(t('v74.d.c_count', { k: cursor + 1, n: cards.length }))]
+    const countRow: Row = [dimSeg(t('v74.d.c_count', { k: cursor + 1, n: cards.length }) + ageSuffix)]
     const full = labelledBox(t('v74.d.bg'), c.background ?? t('v74.d.bg_none'), width).flatMap(r => wrapRow(r, width, BOX_LABEL_HANG))
-    const bgRoom = Math.max(1, ctx.size.rows - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - 1 - 1)
+    const bgRoom = Math.max(1, ctx.size.rows - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - 1 - 1 - topBanners.length)
     if (ctx.pendingScroll !== undefined) {
       const model = ctx.pendingScroll.detail
       keyed(model, c.id + ':bg')
@@ -683,12 +739,12 @@ function renderBoxC(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
         win.above > 0 ? GLYPHS.structure.up + ' ' + t('shell.more_up', { n: win.above }) : '',
         win.below > 0 ? GLYPHS.structure.behind + ' ' + t('shell.more_down', { n: win.below }) : '',
       ].filter(Boolean).join('  '))])
-      return { body: [countRow, ...shown], actions: [] }
+      return { body: [...topBanners, countRow, ...shown], actions: [] }
     }
-    return { body: [countRow, ...full.slice(0, bgRoom)], actions: [] }
+    return { body: [...topBanners, countRow, ...full.slice(0, bgRoom)], actions: [] }
   }
   const build = (between: boolean, desc: boolean, omitted: boolean, showBg = true): { rows: Row[]; headEnd: number } => {
-    const countText = t('v74.d.c_count', { k: cursor + 1, n: cards.length }) + (omitted ? ' ' + DOT + ' ' + t('v74.d.c_desc_omitted') : '')
+    const countText = t('v74.d.c_count', { k: cursor + 1, n: cards.length }) + ageSuffix + (omitted ? ' ' + DOT + ' ' + t('v74.d.c_desc_omitted') : '')
     const out: Row[] = [[dimSeg(countText)]]
     out.push(...wrapRow([seg(GLYPHS.structure.folded + '  '), seg(c.title, { color: PALETTE.here, here: true }), seg('：' + c.question)], cols, 3))
     if (showBg) {
@@ -759,20 +815,20 @@ function renderBoxC(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
       body = { rows: [qRow, inlineOptRow], headEnd: 1 }
     }
   }
-  return { body: body.rows, actions: effActions }
+  return { body: [...topBanners, ...body.rows], actions: effActions }
 }
 
 // Compact 1-row-per-card list for maxRows < 10 (PM 01M837ZECP): pressing a card expands it.
-function renderBoxCompactList(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: number, actions: Row[]): { body: Row[]; actions: Row[] } {
+function renderBoxCompactList(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: number, actions: Row[], topBanners: Row[] = []): { body: Row[]; actions: Row[] } {
   const { t } = ctx
   const cols = ctx.size.cols
-  const room = Math.max(1, ctx.size.rows - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - 1 - actions.length)
+  const room = Math.max(1, ctx.size.rows - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - 1 - actions.length - topBanners.length)
   const hasHead = room >= 2
   const listCap = hasHead ? room - 1 : room
   const maxOff = Math.max(0, cards.length - listCap)
   const offset = Math.max(0, Math.min(maxOff, cursor < listCap ? 0 : cursor - listCap + 1))
   const shown = cards.slice(offset, offset + listCap)
-  const body: Row[] = []
+  const body: Row[] = [...topBanners]
   if (hasHead) {
     body.push(truncateSegs([dimSeg(t('v74.d.compact_hint', { k: cursor + 1, n: cards.length }))], cols))
   }
@@ -800,11 +856,13 @@ function padRowTo(row: Row, width: number): Row {
   return w >= width ? cut : [...cut, seg(' '.repeat(width - w))]
 }
 
-function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: number, actions: Row[]): { body: Row[]; actions: Row[] } {
+function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: number, actions: Row[], topBanners: Row[] = []): { body: Row[]; actions: Row[] } {
   const { t } = ctx
   const cols = ctx.size.cols
   const c = cards[cursor]
-  const room = Math.max(1, ctx.size.rows - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - 1 - actions.length)
+  const cardAge = v74CardAgeText(c, ctx)
+  const ageSuffix = cardAge === '' ? '' : ' ' + DOT + ' ' + cardAge
+  const room = Math.max(1, ctx.size.rows - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - 1 - actions.length - topBanners.length)
   const picked = nav.picks[c.id]
   const held = nav.hold?.[c.id] !== undefined
   const sent = nav.sent[c.id] !== undefined && nav.fixing?.[c.id] === undefined
@@ -873,12 +931,12 @@ function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
   }
 
   if (single) {
-    const headRow: Row = truncateSegs([dimSeg(`${ctx.t('v74.d.card_single')} · ${statusText}${recText}`)], cols)
+    const headRow: Row = truncateSegs([dimSeg(`${ctx.t('v74.d.card_single')} · ${statusText}${recText}${ageSuffix}`)], cols)
     const sepRow: Row = [dimSeg(GLYPHS.structure.rule.repeat(cols))]
     const midRoom = Math.max(1, room - 2)
     const detailRows = buildDetail(cols)
     const rightShown = scrollDetail(detailRows, cols, midRoom, false)
-    return { body: [headRow, sepRow, ...rightShown], actions }
+    return { body: [...topBanners, headRow, sepRow, ...rightShown], actions }
   }
 
   const { leftW, rightW } = decideColumnWidths(cols)
@@ -886,7 +944,7 @@ function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
 
   // Left + Right header
   const leftHead = padRowTo([dimSeg(leftW >= 34 ? ctx.t('v74.d.list_long', { n: cards.length }) : ctx.t('v74.d.list_short', { n: cards.length }))], leftW)
-  const rightHead = padRowTo([dimSeg(`${ctx.t('v74.d.card_of', { k: String(cursor + 1).padStart(2, '0'), n: cards.length })} · ${statusText}${recText}`)], rightW)
+  const rightHead = padRowTo([dimSeg(`${ctx.t('v74.d.card_of', { k: String(cursor + 1).padStart(2, '0'), n: cards.length })} · ${statusText}${recText}${ageSuffix}`)], rightW)
   const headRow: Row = [...leftHead, dimSeg(' ' + GLYPHS.structure.bandSep + ' '), ...rightHead]
   const sepRow: Row = [dimSeg(GLYPHS.structure.rule.repeat(leftW + 3 + rightW))]
 
@@ -955,27 +1013,27 @@ function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
   const detailRows = buildDetail(rightW)
   const rightShown = scrollDetail(detailRows, rightW, midRoom)
 
-  const body: Row[] = [headRow, sepRow]
+  const body: Row[] = [...topBanners, headRow, sepRow]
   for (let i = 0; i < midRoom; i++) {
     body.push([...leftShown[i], dimSeg(' ' + GLYPHS.structure.bandSep + ' '), ...rightShown[i]])
   }
   return { body, actions }
 }
 
-function renderBoxV74(ctx: DecideCtx, cards: DecideCard[], nav: DecideNav, cursor: number, actions: Row[]): { body: Row[]; actions: Row[] } {
+function renderBoxV74(ctx: DecideCtx, cards: DecideCard[], nav: DecideNav, cursor: number, actions: Row[], topBanners: Row[] = []): { body: Row[]; actions: Row[] } {
   const bodyCols = ctx.bodyColumns ?? ctx.size.cols
   const effMaxRows = ctx.maxRows ?? ctx.size.rows
   const mode = decideLayoutMode(bodyCols, nav.layoutMode ?? null)
   if (effMaxRows < DECIDE_COMPACT_MAX_ROWS) {
     return nav.compactExpanded === true
-      ? renderBoxC(ctx, cards, nav, cursor, actions)
-      : renderBoxCompactList(ctx, cards, nav, cursor, actions)
+      ? renderBoxC(ctx, cards, nav, cursor, actions, topBanners)
+      : renderBoxCompactList(ctx, cards, nav, cursor, actions, topBanners)
   }
   const singleCol = mode === 'single' || (nav.style ?? 'D') === 'C'
   if (singleCol) {
-    return renderBoxC(ctx, cards, nav, cursor, actions)
+    return renderBoxC(ctx, cards, nav, cursor, actions, topBanners)
   }
-  return renderBoxD(ctx, cards, nav, cursor, actions)
+  return renderBoxD(ctx, cards, nav, cursor, actions, topBanners)
 }
 
 function renderV74(ctx: DecideCtx): { body: Row[]; actions: Row[] } {
@@ -983,8 +1041,17 @@ function renderV74(ctx: DecideCtx): { body: Row[]; actions: Row[] } {
   const cols = ctx.size.cols
   const v = ctx.v74 as NonNullable<PageCtx['v74']>
   const cards = v.decide
-  if (cards === null) return { body: [brokenRow(GLYPHS.state.failed + ' ' + t('v74.d.no_source'))], actions: [[seg(t('shell.on_band'))]] } // no source: the red row, and the old pointer to the band's own card view
-  if (cards.length === 0) return { body: [[seg(GLYPHS.state.pending + ' '), dimSeg(t('page.decide.none_cards'))]], actions: [] }
+  const staleBanners = v74StaleBanners(ctx)
+  if (cards === null) {
+    const decideErr = ((v as V74DecideTrace).decideError ?? (v as V74DecideTrace).errors?.decide ?? '').trim()
+    const noSrcBody = decideErr !== ''
+      ? brokenRows(GLYPHS.state.failed + ' ' + t('v74.d.no_source') + '：' + decideErr, Math.max(8, cols))
+      : [brokenRow(GLYPHS.state.failed + ' ' + t('v74.d.no_source'))]
+    // In v7.4 band box mode the obsolete `shell.on_band` pointer is dropped; non-box callers keep it for backward compatibility.
+    const noSrcActions: Row[] = ctx.box === true ? [] : [[seg(t('shell.on_band'))]]
+    return { body: [...staleBanners, ...noSrcBody], actions: noSrcActions }
+  }
+  if (cards.length === 0) return { body: [...staleBanners, [seg(GLYPHS.state.pending + ' '), dimSeg(t('page.decide.none_cards'))]], actions: [] }
   const dn = ctx.decide
   const nav: DecideNav = { ...NO_NAV, ...(dn ?? {}), cursor: dn?.cursor ?? v.nav.cursor, picks: dn?.picks ?? v.nav.picks, notes: dn?.notes ?? v.nav.notes, textMode: dn?.textMode ?? v.nav.noteMode }
   const cursor = Math.max(0, Math.min(cards.length - 1, nav.cursor))
@@ -1017,20 +1084,20 @@ function renderV74(ctx: DecideCtx): { body: Row[]; actions: Row[] } {
     return renderBoxV74(ctx, cards, nav, cursor, [
       ...sendRows,
       ...resultRow,
-    ])
+    ], staleBanners)
   }
   const head = ruleTo(GLYPHS.structure.open + ' ' + t('v74.d.head', { n: cards.length, k: cursor + 1 }), cols)
   if (ctx.pendingScroll !== undefined) {
-    const room = Math.max(1, ctx.size.rows - 1 - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - actions.length)
-    return { body: pendingBody(ctx, cards, nav, cursor, room), actions }
+    const room = Math.max(1, ctx.size.rows - 1 - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - actions.length - staleBanners.length)
+    return { body: [...staleBanners, ...pendingBody(ctx, cards, nav, cursor, room)], actions }
   }
   const blocks = cards.map((c, i) => [...v74Card(c, i, i === cursor, nav, ctx, nav.picks, nav.notes), [seg('')]])
   // a short allocation: leading cards go first so the selected one stays on screen (the frame cuts the tail)
   const room = Math.max(1, ctx.size.rows - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - actions.length)
   let first = 0
-  const total = (): number => 1 + blocks.slice(first).reduce((n, b) => n + b.length, 0)
+  const total = (): number => 1 + staleBanners.length + blocks.slice(first).reduce((n, b) => n + b.length, 0)
   while (total() > room && first < cursor) first++
-  return { body: [head, ...blocks.slice(first).flat()], actions }
+  return { body: [head, ...staleBanners, ...blocks.slice(first).flat()], actions }
 }
 
 export const decidePage: Page = { id: 'decide', key: '2', title: '待決', framed: true, render }

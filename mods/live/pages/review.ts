@@ -3,7 +3,7 @@
 // colours and glyphs strictly via PALETTE / GLYPHS, stale or missing sources in red wrapped without truncation (A10),
 // Enter (view.expanded) folds the decided rows; there is no action-area Button (S5 has none).
 import type { CodeReviewView, DecisionRow, DecisionsView, LiveSnapshot, PlanReviewView, QcView, ReviewSeat, Seg } from '../model'
-import { displayWidth, truncateToWidth } from '../model'
+import { DEFAULT_VALID_FOR_S, TRACE_STALE_MIN, TRACE_STALE_MS, displayWidth, liveAgeMs, truncateToWidth } from '../model'
 import { GLYPHS } from '../../tux/glyphs.ts'
 import { PALETTE } from '../../tux/palette.ts'
 import { STATES, stateOf, wrapPlain } from '../ui'
@@ -108,12 +108,23 @@ function sectionRule(label: string, cols: number): Row {
   return [seg(head + RULE.repeat(Math.max(2, cols - displayWidth(head) - 2)), { color: PALETTE.structure })]
 }
 
+function ageDuration(t: PageCtx['t'], ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000))
+  if (s < 60) return t('page.now.age_s', { n: s })
+  const m = Math.floor(s / 60)
+  if (m < 60) return t('page.now.age_m', { n: m })
+  const h = Math.floor(m / 60)
+  return h < 24 ? t('page.now.age_h', { n: h }) : t('page.now.age_d', { n: Math.floor(h / 24) })
+}
+
 function qcRows(ctx: PageCtx, q: QcView): Row[] {
   const cols = ctx.size.cols
   const st = STATES[stateOf('qc', q.state).id]
   const files = q.protected_files_count > 0 ? ctx.t('v74.e.qc_files_n', { n: q.protected_files_count }) : ctx.t('v74.e.qc_files_none')
+  const qcAge = ageText(ctx, q.at, false)
+  const qcHead = ctx.t('v74.e.rv_qc', { word: qcWord(ctx, q) }) + (qcAge === '' ? '' : ' · ' + qcAge)
   return [
-    sectionRule(ctx.t('v74.e.rv_qc', { word: qcWord(ctx, q) }), cols),
+    sectionRule(qcHead, cols),
     truncateSegs([seg('   ' + ctx.t('v74.e.qc_range') + ' '), seg(q.range ?? GLYPHS.structure.empty)], cols),
     truncateSegs([seg('   ' + ctx.t('v74.e.qc_files') + ' '), seg(files, st.key === undefined || q.state === 'ok' || q.state === 'not_needed' ? {} : { color: st.key })], cols),
   ]
@@ -176,10 +187,17 @@ export function renderReview(ctx: PageCtx, view: ReviewView = DEFAULT_REVIEW_VIE
     return { body: brokenRows(GLYPHS.state.failed + ' ' + ctx.t('page.review.no_live'), cols), actions: unknownActions() }
   }
   const body: Row[] = []
+  const ageMs = liveAgeMs(live, ctx.nowMs)
   const liveBroken = live.state !== 'ok'
+  const liveAgeOver = !liveBroken && ageMs !== null && ageMs > TRACE_STALE_MS
   if (liveBroken) {
     const why = live.header.trim() !== '' ? live.header : live.state
-    body.push(...brokenRows(GLYPHS.state.failed + ' ' + ctx.t('page.review.stale_live', { why }), cols))
+    const thresh = ageMs !== null
+      ? ctx.t('trace.age_threshold', { age: ageDuration(ctx.t, ageMs), limit: TRACE_STALE_MIN, validS: DEFAULT_VALID_FOR_S })
+      : ctx.t('trace.threshold_only', { limit: TRACE_STALE_MIN, validS: DEFAULT_VALID_FOR_S })
+    body.push(...brokenRows(GLYPHS.state.failed + ' ' + ctx.t('page.review.stale_live', { why }) + ' · ' + thresh, cols))
+  } else if (liveAgeOver) {
+    body.push(...brokenRows(GLYPHS.state.failed + ' ' + ctx.t('trace.review_age_stale', { age: ageDuration(ctx.t, ageMs), limit: TRACE_STALE_MIN, validS: DEFAULT_VALID_FOR_S }), cols))
   }
   const code = live.review?.code ?? null
   const qc = live.detail.qc ?? null
@@ -189,17 +207,34 @@ export function renderReview(ctx: PageCtx, view: ReviewView = DEFAULT_REVIEW_VIE
   const reviewRows: Row[] = []
   if (code !== null) {
     const diff = isHeadDifferent(code, qc)
-    const tail: Seg[] = diff ? [seg('  '), seg(GLYPHS.state.need_you, { color: PALETTE.attention }), seg(' ' + ctx.t('page.review.head_diff'))] : []
+    const codeAge = ageText(ctx, code.at, false)
+    const tail: Seg[] = [
+      ...(codeAge === '' ? [] : [dimSeg(' · ' + codeAge)]),
+      ...(diff ? [seg('  '), seg(GLYPHS.state.need_you, { color: PALETTE.attention }), seg(' ' + ctx.t('page.review.head_diff'))] : []),
+    ]
     reviewRows.push(reviewRow(ctx, codeLabel(code), code.seats, 'code', code.generation ?? GLYPHS.structure.empty, tail))
   }
   if (plan !== null) {
     const { name, verdictWord } = parsePlanIdentity(plan, live)
-    const tail: Seg[] = plan.terminal ? [seg('  '), dimSeg(ctx.t('page.review.plan_frozen'))] : verdictWord !== null ? [seg('  '), dimSeg(verdictWord)] : []
+    const planAge = ageText(ctx, plan.updated_at, false)
+    const tail: Seg[] = [
+      ...(planAge === '' ? [] : [dimSeg(' · ' + planAge)]),
+      ...(plan.terminal ? [seg('  '), dimSeg(ctx.t('page.review.plan_frozen'))] : verdictWord !== null ? [seg('  '), dimSeg(verdictWord)] : []),
+    ]
     reviewRows.push(reviewRow(ctx, name, plan.seats, 'plan', plan.generation, tail))
   }
   if (reviewRows.length > 0) body.push(sectionRule(ctx.t('v74.e.rv_code', { n: reviewRows.length }), cols), ...reviewRows)
 
+  const qcReason = live.detail.qc_reason != null && live.detail.qc_reason.trim() !== '' ? live.detail.qc_reason.trim() : null
+  const showMissingQc = qc === null && (ctx.v74 !== undefined || ctx.box === true || qcReason !== null)
   if (qc !== null) body.push(...qcRows(ctx, qc))
+  else if (showMissingQc) {
+    const qcFile = (live.project_key ?? '<project_key>') + '.qc.json'
+    const qcWhy = qcReason !== null
+      ? ctx.t('trace.review_qc_reason', { file: qcFile, reason: qcReason })
+      : ctx.t('trace.review_qc_missing', { file: qcFile })
+    body.push(sectionRule(ctx.t('v74.c.sec_qc_missing'), cols), ...brokenRows(GLYPHS.state.failed + ' ' + qcWhy, cols))
+  }
 
   const decisionsMissing = decisions === null && live.sections?.decisionsNotWired === true
   if (decisions !== null) body.push(...decidedRows(ctx, decisions, !view.expanded))
@@ -207,7 +242,7 @@ export function renderReview(ctx: PageCtx, view: ReviewView = DEFAULT_REVIEW_VIE
 
   if (body.length === 0) body.push([seg(GLYPHS.state.pending + ' ', { color: PALETTE.idle }), dimSeg(ctx.t('page.review.empty'))])
 
-  return { body, actions: liveBroken || decisionsMissing ? unknownActions() : [] }
+  return { body, actions: liveBroken || liveAgeOver || decisionsMissing || showMissingQc ? unknownActions() : [] }
 }
 
 export const reviewPage: Page = {

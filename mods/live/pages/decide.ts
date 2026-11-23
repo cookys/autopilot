@@ -112,8 +112,7 @@ export function decideReduce(nav: DecideNav, key: KeyAction, ctx: PageCtx, nowMs
   }
   if (nav.armed === true && key.kind !== 'submit' && key.kind !== 'confirm') return decideReduce({ ...nav, armed: false, snap: undefined, stale: false }, key, ctx, nowMs) // any other key cancels the send preview, then does its own work
   if (key.kind === 'style') return same({ style: (nav.style ?? 'D') === 'D' ? 'C' : 'D', bgOpen: false, detailOffset: 0 })
-  const reduceMode = decideLayoutMode(ctx.bodyColumns ?? ctx.size.cols, nav.layoutMode ?? null)
-  const compactMode = (ctx.maxRows ?? ctx.size.rows) < DECIDE_COMPACT_MAX_ROWS && (reduceMode === 'single' || (nav.style ?? 'D') === 'C')
+  const compactMode = (ctx.maxRows ?? ctx.size.rows) < DECIDE_COMPACT_MAX_ROWS
   if (key.kind === 'expand') {
     if (nav.bgOpen) return same({ bgOpen: false, detailOffset: 0 })
     if (compactMode && nav.compactExpanded === true) return same({ compactExpanded: false, detailOffset: 0 })
@@ -662,7 +661,9 @@ function renderBoxC(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
   const { t } = ctx
   const cols = ctx.size.cols
   const c = cards[cursor]
-  const room = Math.max(1, ctx.size.rows - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - 1 - actions.length)
+  const innerRows = Math.max(1, ctx.size.rows - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - 1)
+  const effActions = innerRows <= 2 ? [] : actions
+  const room = Math.max(1, innerRows - effActions.length)
   if (nav.bgOpen === true) {
     const width = Math.max(20, Math.min(80, cols) - 1)
     const countRow: Row = [dimSeg(t('v74.d.c_count', { k: cursor + 1, n: cards.length }))]
@@ -730,9 +731,37 @@ function renderBoxC(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
   if (body.rows.length > room) body = build(false, true, false, true)
   if (body.rows.length > room) body = build(false, false, true, true)
   if (body.rows.length > room) body = build(false, false, true, false)
+  if (body.rows.length > room) {
+    const picked = nav.picks[c.id]
+    const held = nav.hold?.[c.id] !== undefined
+    const sent = nav.sent[c.id] !== undefined && nav.fixing?.[c.id] === undefined
+    const qRow = truncateSegs([
+      seg(GLYPHS.structure.folded + ' '),
+      dimSeg(`(${cursor + 1}/${cards.length}) `),
+      seg(c.title, { color: PALETTE.here, here: true }),
+      seg('：' + c.question),
+    ], cols)
+    const optSegsOf = (o: DecideCard['options'][number], k: number): Seg[] => {
+      const mark = picked === k ? ' ' + GLYPHS.structure.answer : ''
+      const tone = picked === k ? pickedTone() : o.recommended ? { color: PALETTE.attention } : {}
+      const label = (k < THREE ? PICK_KEYS[k] + ': ' : DOT + ' ') + o.label
+      const rec = o.recommended ? [seg(' ' + GLYPHS.structure.recommend, { color: PALETTE.attention })] : []
+      return [seg(label + mark, { ...tone, ...(ctx.pendingScroll !== undefined && !held && !sent && k < THREE ? { press: 'key:' + PICK_KEYS[k] } : {}) }), ...rec]
+    }
+    const stacked: Row[] = [qRow, ...c.options.map((o, k) => truncateSegs([seg('  '), ...optSegsOf(o, k)], cols))]
+    if (stacked.length <= room) {
+      body = { rows: stacked, headEnd: 1 }
+    } else {
+      const inlineOptRow = truncateSegs([
+        seg('  '),
+        ...c.options.flatMap((o, k) => (k === 0 ? optSegsOf(o, k) : [seg('   '), ...optSegsOf(o, k)])),
+      ], cols)
+      body = { rows: [qRow, inlineOptRow], headEnd: 1 }
+    }
+  }
   const pad = Math.max(0, room - body.rows.length)
   const padded = pad > 0 ? [...body.rows.slice(0, body.headEnd), ...Array.from({ length: pad }, (): Row => [seg('')]), ...body.rows.slice(body.headEnd)] : body.rows
-  return { body: padded, actions }
+  return { body: padded, actions: effActions }
 }
 
 // Compact 1-row-per-card list for maxRows < 10 (PM 01M837ZECP): pressing a card expands it.
@@ -937,10 +966,12 @@ function renderBoxV74(ctx: DecideCtx, cards: DecideCard[], nav: DecideNav, curso
   const bodyCols = ctx.bodyColumns ?? ctx.size.cols
   const effMaxRows = ctx.maxRows ?? ctx.size.rows
   const mode = decideLayoutMode(bodyCols, nav.layoutMode ?? null)
-  const singleCol = mode === 'single' || (nav.style ?? 'D') === 'C'
-  if (singleCol && effMaxRows < DECIDE_COMPACT_MAX_ROWS && nav.compactExpanded !== true) {
-    return renderBoxCompactList(ctx, cards, nav, cursor, actions)
+  if (effMaxRows < DECIDE_COMPACT_MAX_ROWS) {
+    return nav.compactExpanded === true
+      ? renderBoxC(ctx, cards, nav, cursor, actions)
+      : renderBoxCompactList(ctx, cards, nav, cursor, actions)
   }
+  const singleCol = mode === 'single' || (nav.style ?? 'D') === 'C'
   if (singleCol) {
     return renderBoxC(ctx, cards, nav, cursor, actions)
   }

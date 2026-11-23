@@ -109,8 +109,8 @@ const TICK_MS = 5000
 const FACTS_PRUNE_MS = 60_000
 const FACTS_TMP_STALE_MS = 5 * 60 * 1000
 const PANE_ID = 'autopilot-live'
-const V74_FRAME_MIN = 6
-const V74_FRAME_MAX = 28 // design S2..S10 measure 28 rows from ╭ to ╰ (26 body rows + both borders; r8 #6 had 27). V74_FRAME_MIN: the smallest v7.4 page frame (two borders and four rows); under it only the band row draws
+const V74_FRAME_MIN = 4
+const V74_FRAME_MAX = 28 // design S2..S10 measure 28 rows from ╭ to ╰ (26 body rows + both borders; r8 #6 had 27). V74_FRAME_MIN: the smallest v7.4 page frame (two borders and two inner rows, so 80x24 can open); under it only the band row draws
 const MAX_PATH_FILES = 256
 const MAX_RECEIPT_FILES = 64
 const MAX_CAMPAIGN_ROOTS = 8 // session-mode.js CAMPAIGN_ROOTS_MAX
@@ -1842,7 +1842,7 @@ async function frameKeyBody($: EngineInterface, k: KeyAction): Promise<void> {
       const v74 = await v74CtxOf($, true)
       // The focus path's cursor event names the card that already has the ▸. Applying it
       // after a move puts the cursor back. A later cursor event in the queue still runs.
-      const compactCollapsed = decideMaxRows < DECIDE_COMPACT_MAX_ROWS && (decideLayoutMode(decideCols, decideLayout) === 'single' || (decideLocal.style ?? 'D') === 'C') && decideLocal.compactExpanded !== true
+      const compactCollapsed = decideMaxRows < DECIDE_COMPACT_MAX_ROWS && decideLocal.compactExpanded !== true
       if (k.kind === 'cursor' && k.at === decideLocal.cursor && !compactCollapsed) {
         void v74Keylog($, {
           handler: 'frameKey', component: 'AbovePrompt', key: 'cursor', event: 'cursor',
@@ -2265,7 +2265,15 @@ export function registerLive(on: Parameters<Register>[0]): void {
     // v7.4: single-row fixed-column band (2026-11-23-band-layout v4) + framed page within maxRows.
     if (v74) {
       decideMaxRows = rows
+      decideCols = paneWidth(columns)
+      const prevLayout = decideLayout
       decideLayout = decideLayoutMode(columns, decideLayout)
+      if (rows >= DECIDE_COMPACT_MAX_ROWS && decideLocal.compactExpanded === true) {
+        decideLocal = { ...decideLocal, compactExpanded: false }
+      }
+      if (prevLayout === 'single' && decideLayout === 'dual') {
+        decideLocal = { ...decideLocal, style: 'D', compactExpanded: false }
+      }
       bandExpand = bandExpandOnResize(bandExpand, columns)
       const decideCards = mergedDecide()
       const curCard = decideCards !== null && decideCards.length > 0 ? decideCards[Math.max(0, Math.min(decideCards.length - 1, decideLocal.cursor))] : null
@@ -2315,9 +2323,14 @@ export function registerLive(on: Parameters<Register>[0]): void {
         bandExpand = { ...bandExpand, expanded: true, manualExpanded: true, activePage: target }
         void pageOpen(target as BandPageId)
       }
-      const oneRow = OneRowBand(el, layoutOneRowBand(oneRowInput, columns, t), onOneRowSegment, () => { void togglePane() })
+      const onOneRowPage = (id: PageId) => {
+        bandExpand = { ...bandExpand, expanded: true, manualExpanded: true, activePage: id }
+        void pageOpen(id as BandPageId)
+      }
       const height = Math.min(Math.max(0, rows - 1), V74_FRAME_MAX) // total band height = height + 1 <= maxRows
-      if (!v74Open || height < V74_FRAME_MIN) return stackRows(el, [oneRow])
+      const showBox = v74Open && height >= V74_FRAME_MIN
+      const oneRow = OneRowBand(el, layoutOneRowBand(oneRowInput, columns, t), onOneRowSegment, () => { void togglePane() }, showBox ? undefined : { onPage: onOneRowPage })
+      if (!showBox) return stackRows(el, [oneRow])
       const page = await paneTree($, e as never, false, height, rows)
       await logBandGeometry($, rows, columns, height + 1)
       return stackRows(el, [page, oneRow])

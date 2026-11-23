@@ -27,6 +27,8 @@ import { BAND_SEP_SEG } from './band-onerow'
 import type { BandSegmentId, OneRowLayout } from './band-onerow'
 import { isBriefStale, staleBadge } from './pages/rows'
 import { mostSevere } from './pages/frame'
+import type { PageId } from './pages/frame'
+import { V74_KEY, V74_PAGES } from './v74/contract'
 
 type El = (props: any) => any
 
@@ -114,6 +116,7 @@ export function OneRowBand(
   layout: OneRowLayout,
   onSegment: (id: BandSegmentId) => void,
   onToggleExpand: () => void,
+  hotkeys?: { onPage: (id: PageId) => void },
 ): unknown {
   const { Box, Text, Button } = el
   const drawSegList = (segs: readonly Seg[], prefix: string) =>
@@ -142,6 +145,22 @@ export function OneRowBand(
       ? <Box key="pane-toggle-plain">{togTexts}</Box>
       : <Button key="pane-toggle" plain autoFocus onPress={onToggleExpand}>{togTexts}</Button>,
   )
+  // §2.3: when the page frame is closed/not drawn, keep page digits (1-9) and w reachable on the band row.
+  if (hotkeys !== undefined && Button !== undefined) {
+    for (const id of V74_PAGES) {
+      const digit = V74_KEY[id]
+      parts.push(
+        <Box key={'band-hk-' + id} width={0} height={0} overflow="hidden">
+          <Button key={'band-hotkey:' + digit} plain hotkey={digit} onPress={() => hotkeys.onPage(id)}>{digit}</Button>
+        </Box>,
+      )
+    }
+    parts.push(
+      <Box key="band-hk-w" width={0} height={0} overflow="hidden">
+        <Button key="band-hotkey:w" plain hotkey="w" onPress={onToggleExpand}>w</Button>
+      </Box>,
+    )
+  }
   return <Box key="onerow-band" height={1} width={layout.columns} overflow="hidden">{parts}</Box>
 }
 

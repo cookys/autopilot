@@ -292,3 +292,207 @@ test('mounted AbovePrompt band height never exceeds maxRows at 12, 9, and 5 rows
   }
   await $.session.end({ reason: 'exit' })
 })
+
+const FIVE_CARDS: DecideCard[] = [
+  ...CARDS,
+  {
+    id: 'd-c3',
+    title: '預覽先拍幾欄',
+    question: '截圖要包含哪幾個寬度？',
+    background: '目前規則涵蓋 160、120、80 三種寬度。',
+    options: [
+      { label: '全拍四尺寸', detail: '', recommended: true },
+      { label: '只拍窄版', detail: '', recommended: false },
+    ],
+  },
+  {
+    id: 'd-c4',
+    title: '外掛更新時機',
+    question: '何時把新版推進快取？',
+    background: '測試全綠後再推。',
+    options: [
+      { label: '立即更新', detail: '', recommended: true },
+      { label: '等明天', detail: '', recommended: false },
+    ],
+  },
+  {
+    id: 'd-c5',
+    title: '驗收測試卡',
+    question: '這張卡是否要一起驗證雙欄清單？',
+    background: null,
+    options: [
+      { label: '是', detail: '', recommended: true },
+      { label: '否', detail: '', recommended: false },
+    ],
+  },
+]
+
+test('decide C layout at 155/22, 115/20, and 75/12: dual-column >=3 left cards at 155 & 115, single-column card at 75', () => {
+  const drawBox5 = (bodyColumns: number, maxRows: number, nav: Partial<DecideNav> = {}) => {
+    const innerCols = Math.max(20, bodyColumns - 4)
+    const boxRows = Math.max(4, Math.min(maxRows - 1, 28))
+    const stripN = innerCols < 66 ? 2 : 1
+    const ctx = {
+      live: null,
+      console: null,
+      size: { cols: innerCols, rows: boxRows + stripN },
+      bodyColumns,
+      maxRows,
+      t,
+      nowMs: NOW,
+      box: true as const,
+      pendingScroll: { list: newScroll(), detail: newScroll(), cursor: '' },
+      decide: { ...NO_NAV, style: 'D' as const, ...nav },
+      v74: { pm: null, pmFetchedMs: null, decide: FIVE_CARDS, todo: null, nav: { cursor: nav.cursor ?? 0, picks: {}, notes: {}, noteMode: false } },
+    }
+    const rows = frameRows(decidePage, ctx as never, { topAnchor: true, pages: PAGES })
+    return { rows: rows.map(rowText), boxRows }
+  }
+
+  // 160x45 (bodyColumns=155, maxRows=22) and 120x40 (bodyColumns=115, maxRows=20), plus real tmux heights (16, 14):
+  // dual-column with >=3 cards in the left list and card detail on the right.
+  for (const [bodyCols, maxRows] of [[155, 22], [115, 20], [155, 16], [115, 14]] as const) {
+    const res = drawBox5(bodyCols, maxRows)
+    const joined = res.rows.join('\n')
+    expect(res.boxRows + 1, `${bodyCols}x${maxRows} fits maxRows`).toBeLessThanOrEqual(maxRows)
+    expect(joined, `${bodyCols}x${maxRows} dual header`).toContain('卡 #01 / 5')
+    expect(joined, `${bodyCols}x${maxRows} not single-card`).not.toContain('第 1 張，共 5 張')
+    const splitRows = res.rows.filter(r => r.includes(' │ '))
+    const leftCardRows = splitRows.map(r => r.split(' │ ')[0]).filter(l => /\b0[1-5]\s/.test(l))
+    expect(leftCardRows.length, `${bodyCols}x${maxRows} left column has >=3 cards`).toBeGreaterThanOrEqual(3)
+    const rightJoined = splitRows.map(r => r.split(' │ ').slice(1).join(' │ ')).join('\n')
+    expect(rightJoined.replace(/\s+/g, ''), `${bodyCols}x${maxRows} right column shows question`).toContain('是否要將shared-tui分支合併進develop？')
+    expect(rightJoined, `${bodyCols}x${maxRows} right column shows option`).toContain('立刻合併')
+  }
+
+  // Wide but short (maxRows < 10): collapses to single-column 1-row-per-card list, not single-card detail.
+  for (const bodyCols of [155, 115] as const) {
+    const compact = drawBox5(bodyCols, 9, { compactExpanded: false })
+    const joined = compact.rows.join('\n')
+    expect(joined, `${bodyCols}x9 compact list shows cards`).toContain('01 合併 shared-tui')
+    expect(joined, `${bodyCols}x9 compact list shows 3+ cards`).toContain('03 預覽先拍幾欄')
+    expect(joined, `${bodyCols}x9 not dual column`).not.toContain(' │ ')
+    expect(joined, `${bodyCols}x9 not single-card detail`).not.toContain('第 1 張，共 5 張')
+  }
+
+  // 80x24 (bodyColumns=75, maxRows=12): single column showing one card's question and option rows.
+  const at75 = drawBox5(75, 12)
+  const joined75 = at75.rows.join('\n')
+  expect(at75.boxRows + 1).toBeLessThanOrEqual(12)
+  expect(joined75).not.toContain('卡 #01 / 5')
+  expect(joined75).not.toContain(' │ ')
+  expect(joined75).toContain('是否要將 shared-tui 分支合併進 develop？')
+  expect(joined75).toContain('立刻合併')
+  expect(joined75).toContain('暫緩一天')
+
+  // Tight 80x24 expanded card (maxRows=6 and maxRows=5): still fits question + options inside maxRows.
+  for (const maxRows of [6, 5] as const) {
+    const tight = drawBox5(75, maxRows, { compactExpanded: true })
+    const joined = tight.rows.join('\n')
+    expect(tight.boxRows + 1, `75x${maxRows} fits maxRows`).toBeLessThanOrEqual(maxRows)
+    expect(joined, `75x${maxRows} shows question`).toContain('合併 shared-tui')
+    expect(joined, `75x${maxRows} shows option a`).toContain('立刻合併')
+    expect(joined, `75x${maxRows} shows option b`).toContain('暫緩一天')
+  }
+})
+
+test('80x24 mounted AbovePrompt opens Decide page via digit hotkey 2 at maxRows=6 and maxRows=12', async ($, on: On) => {
+  const HOME = '/fake/onerow-80-home'
+  const LIVE = '/fake/onerow-80-live'
+  const REPO = '/work/onerow-80-repo'
+  const SID = 'onerow-80-sid'
+  const KEY = '0000000000000098'
+  const PUBLISHED = '2026-10-04T10:00:00.000Z'
+  const files: Record<string, string> = {
+    [HOME + '/.autopilot/live-pointer.json']: JSON.stringify({ schema: 'autopilot.live-pointer/1', live_base: LIVE, autopilot_home: HOME + '/.autopilot' }),
+    [HOME + '/.autopilot/session-mode/' + SID + '.json']: JSON.stringify({ session_id: SID, project_key: KEY, expires_at: '2026-10-05T10:00:00.000Z' }),
+    [LIVE + '/runs/' + KEY + '.json']: JSON.stringify({ schema: 'autopilot.runs-live/1', scope: { project_key: KEY, root_run_id: null }, published_at: PUBLISHED, valid_for_s: 180, runs: [], counts: { confirmed_live: 0, exited: 0, unknown: 0 } }),
+    [REPO + '/.git/HEAD']: 'ref: refs/heads/main\n',
+  }
+  const decideJson = JSON.stringify({
+    cards: CARDS.map(c => ({
+      card: {
+        card_id: c.id,
+        kind: c.title,
+        question: c.question,
+        background: c.background,
+        options: c.options.map(o => ({ label: o.label, description: o.detail })),
+        recommendation: c.options.find(o => o.recommended)?.label ?? null,
+      },
+    })),
+  })
+  const clock = mock.clock(on, { now: Date.parse(PUBLISHED) + 120_000 })
+  on('env.get', (_, e) => ({ value: e.name === 'HOME' ? HOME : e.name === 'AUTOPILOT_LOCALE' ? 'zh-TW' : undefined }))
+  on('fs.read', (_, e) => { if (!(e.path in files)) throw new Error('ENOENT'); return { value: files[e.path] } })
+  on('fs.exists', (_, e) => ({ value: e.path in files }))
+  on('fs.write', () => ({ value: undefined }))
+  on('fs.list', () => ({ value: [] }))
+  on('fs.stat', (_, e) => { if (!(e.path in files) && e.path !== REPO) throw new Error('ENOENT'); return { value: { kind: e.path === REPO ? 'dir' : 'file', size: 1, mtimeMs: 0, isLink: false, realPath: e.path } } })
+  on('config.list', () => ({ value: [] }))
+  on('session.id', () => ({ value: SID }))
+  on('session.cwd', () => ({ value: REPO }))
+  on('session.root', () => ({ value: REPO }))
+  on('session.start', () => ({ cwd: REPO }))
+  on('session.end', () => ({ sessionId: SID }))
+  on('command.register', (_, e) => ({ value: { command: e.name } }))
+  on('ui.render', { component: 'AbovePrompt' }, () => ({ type: 'engine' as const, ref: 0 }))
+  on('ui.invalidate', () => ({ value: undefined }))
+  on('ui.toast', () => ({ value: undefined }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.close', () => ({ value: undefined }))
+  on('ui.panes', () => ({ value: [] }))
+  on('process.run', (_, e) => {
+    const argv = (e as { argv?: readonly string[] }).argv ?? []
+    if (argv[0] === 'fleet' && argv[1] === 'decision') {
+      return { value: { exitCode: 0, stdout: decideJson, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    }
+    return { value: { exitCode: 1, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
+
+  await $.session.start({ surface: 'terminal', cwd: REPO })
+  await clock.advance(5000)
+
+  const countRows = (tree: Node): number => {
+    const kids = (tree.children || []) as Node[]
+    let total = 0
+    for (const c of kids) {
+      if (c?.props?.key?.startsWith('v74:') || (c?.type === 'Box' && c?.props?.flexDirection === 'column')) {
+        total += (c.children || []).length
+      } else {
+        total += 1
+      }
+    }
+    return total
+  }
+
+  // Starts collapsed at 80x24 (maxRows=6): digit hotkey 2 is bound on OneRowBand and opens Decide page inside 6 rows.
+  const b6 = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', props: { bodyColumns: 75, maxRows: 6, view: { agentId: undefined } }, viewport: { columns: 80, rows: 24, isFullscreen: true } })
+  const closedTree = await b6.drawn() as Node
+  expect(countRows(closedTree)).toBe(1)
+  const hk2 = walk(closedTree).find(n => n.type === 'Button' && n.props?.hotkey === '2')
+  expect(hk2?.props?.key).toBe('band-hotkey:2')
+  await b6.press({ key: 'band-hotkey:2' })
+  await clock.advance(0)
+  await b6.unmount()
+
+  const b6Open = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', props: { bodyColumns: 75, maxRows: 6, view: { agentId: undefined } }, viewport: { columns: 80, rows: 24, isFullscreen: true } })
+  const open6 = await b6Open.drawn() as Node
+  expect(countRows(open6)).toBeLessThanOrEqual(6)
+  expect(countRows(open6)).toBeGreaterThanOrEqual(5)
+  const text6 = text(open6)
+  expect(text6).toContain('╭')
+  expect(text6).toContain('待決')
+  await b6Open.unmount()
+
+  // At 80x24 with maxRows=12: Decide page stays open and shows card question and options.
+  const b12 = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', props: { bodyColumns: 75, maxRows: 12, view: { agentId: undefined } }, viewport: { columns: 80, rows: 24, isFullscreen: true } })
+  const open12 = await b12.drawn() as Node
+  expect(countRows(open12)).toBeLessThanOrEqual(12)
+  const text12 = text(open12)
+  expect(text12).toContain('是否要將 shared-tui 分支合併進 develop？')
+  expect(text12).toContain('立刻合併')
+  expect(text12).toContain('暫緩一天')
+  await b12.unmount()
+
+  await $.session.end({ reason: 'exit' })
+})

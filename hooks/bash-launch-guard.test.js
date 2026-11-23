@@ -58,6 +58,8 @@ function run(cmd, { shell = 'bash', extra = {}, env = {}, lsDefault = false } = 
   const h = out && out.hookSpecificOutput;
   return {
     deny: !!(h && h.permissionDecision === 'deny'),
+    decision: (h && h.permissionDecision) || '',
+    updatedInput: (h && h.updatedInput) || null,
     ctx: (h && h.additionalContext) || '',
     reason: (h && h.permissionDecisionReason) || '',
     status: r.status,
@@ -2443,4 +2445,22 @@ test('P2 paste-ready rewrites: every changed rule emits a copyable rewrite that 
     assert.ok(rw, `missing rewrite in: ${r.reason}`);
     assert.strictEqual(run(rw, { env: { AUTOPILOT_BASH_GUARD_SHARED_RM_MODE: 'deny' } }).deny, false, `rewrite still denied: ${rw}`);
   }
+});
+
+test('auto-rewrite: bare-ls returns allow with updatedInput.command and additionalContext', () => {
+  const r = run('ls -la', { lsDefault: true });
+  assert.strictEqual(r.deny, false);
+  assert.strictEqual(r.decision, 'allow');
+  assert.ok(r.updatedInput, 'expected updatedInput');
+  assert.strictEqual(r.updatedInput.command, 'command ls -la');
+  assert.match(r.ctx, /已自動改寫：ls -la → command ls -la/);
+});
+
+test('auto-rewrite: unquoted no-match glob under zsh returns allow with updatedInput.command', () => {
+  const r = run('echo *.nonexistent_ext_xyz', { shell: 'zsh' });
+  assert.strictEqual(r.deny, false);
+  assert.strictEqual(r.decision, 'allow');
+  assert.ok(r.updatedInput, 'expected updatedInput');
+  assert.strictEqual(r.updatedInput.command, "echo '*.nonexistent_ext_xyz'");
+  assert.match(r.ctx, /已自動改寫：echo \*\.nonexistent_ext_xyz → echo '\*\.nonexistent_ext_xyz'/);
 });

@@ -318,7 +318,8 @@ function classify(tool, input) {
     // rest of this hook emits (the read counter and the wait advisory still run).
     const launchWarns = [];
     if (payload.tool_name === 'Bash' && payload.tool_input && typeof payload.tool_input.command === 'string') {
-      const cmd = payload.tool_input.command;
+      const origCmd = payload.tool_input.command;
+      let cmd = origCmd;
       const secret = cfg.secretMode === 'off' ? null : detectSecretPrint(cmd);
       const secretReason = secret && `${secret.why} (${secret.rule})`;
       if (secret && cfg.secretMode === 'block') {
@@ -353,13 +354,20 @@ function classify(tool, input) {
         ? `\n改寫後的指令（直接照抄）：${ls.rewrite}`
         : '';
       if (ls && cfg.lsMode === 'deny') {
-        emitDeny(`bash-launch-guard (${ls.rule}): ${ls.why}. Set AUTOPILOT_BASH_GUARD_LS_MODE=warn|off `
-          + '(or depth0_delegate_gate.bare_ls in ~/.autopilot/config.json) to relax.'
-          + lsRewrite
-          + gateHint('ls 要帶顯式路徑（ls <path>）；要探索目錄改用 Glob/Read 工具', 'hooks/README.md'));
-        process.exit(0);
+        if (ls.rewrite && ls.rewrite !== cmd && !detectBareLs(ls.rewrite)) {
+          const prev = cmd;
+          cmd = ls.rewrite;
+          launchWarns.push(`已自動改寫：${prev} → ${cmd}`);
+        } else {
+          emitDeny(`bash-launch-guard (${ls.rule}): ${ls.why}. Set AUTOPILOT_BASH_GUARD_LS_MODE=warn|off `
+            + '(or depth0_delegate_gate.bare_ls in ~/.autopilot/config.json) to relax.'
+            + lsRewrite
+            + gateHint('ls 要帶顯式路徑（ls <path>）；要探索目錄改用 Glob/Read 工具', 'hooks/README.md'));
+          process.exit(0);
+        }
+      } else if (ls) {
+        launchWarns.push(`bash-launch-guard (${ls.rule}): ${ls.why}${lsRewrite}`);
       }
-      if (ls) launchWarns.push(`bash-launch-guard (${ls.rule}): ${ls.why}${lsRewrite}`);
       const rv = cfg.rmVarMode === 'off' ? null : detectRecursiveRmVar(cmd);
       const rvRewrite = rv && rv.rewrite ? `\n改寫後的指令（直接照抄）：${rv.rewrite}` : '';
       if (rv && cfg.rmVarMode === 'deny') {
@@ -401,11 +409,31 @@ function classify(tool, input) {
       if (zs) launchWarns.push(`bash-launch-guard (${zs.rule}): ${zs.why}${zsRewrite}`);
       const shellName = path.basename(process.env.AUTOPILOT_BASH_GUARD_SHELL || process.env.SHELL || '');
       if (shellName === 'zsh') {
-        const z = detectZshExpansion(cmd, typeof payload.cwd === 'string' ? payload.cwd : process.cwd());
+        const zshCwd = typeof payload.cwd === 'string' ? payload.cwd : process.cwd();
+        const z = detectZshExpansion(cmd, zshCwd);
         if (z) {
-          const zRewrite = z.rewrite ? `\n改寫後的指令（直接照抄）：${z.rewrite}` : '';
-          launchWarns.push(`bash-launch-guard (${z.rule}, warn only): ${z.why}${zRewrite}`);
+          if (z.rewrite && z.rewrite !== cmd && !detectZshExpansion(z.rewrite, zshCwd)) {
+            const prev = cmd;
+            cmd = z.rewrite;
+            launchWarns.push(`已自動改寫：${prev} → ${cmd}`);
+          } else {
+            const zRewrite = z.rewrite ? `\n改寫後的指令（直接照抄）：${z.rewrite}` : '';
+            launchWarns.push(`bash-launch-guard (${z.rule}, warn only): ${z.why}${zRewrite}`);
+          }
         }
+      }
+      if (cmd !== origCmd) {
+        const advisory = launchWarns.join('\n');
+        if (advisory) process.stderr.write(`${advisory}\n`);
+        process.stdout.write(`${JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: 'PreToolUse',
+            permissionDecision: 'allow',
+            updatedInput: { ...payload.tool_input, command: cmd },
+            additionalContext: advisory,
+          },
+        })}\n`);
+        process.exit(0);
       }
     }
     const emitAdvisory = (lines) => {

@@ -137,7 +137,7 @@ function normCmd(cmd) {
     const sub = (toks[1] || '').replace(/[^a-zA-Z0-9_-].*$/, '');
     if (sub && /^[a-zA-Z]/.test(sub)) shape = head + ' ' + sub;
   }
-  return /^(git (add|commit|log))$/.test(shape) ? shape : 'cmd-' + digest(shape);
+  return shape.slice(0, 19);
 }
 
 // D5 A10 — split compound shell rituals for n-grams WITHOUT parsing heredoc bodies.
@@ -261,12 +261,12 @@ function scanFile(fp) {
           });
         }
         const m = txt.trim().match(/^\/([a-z][a-z0-9-]{1,30})/i);
-        if (m) inc(slash, 'slash-' + digest(m[1].toLowerCase()));
+        if (m) inc(slash, '/' + m[1].toLowerCase().slice(0, 18));
       }
     } else if (t === 'assistant' && rec.message && Array.isArray(rec.message.content)) {
       for (const c of rec.message.content) {
         if (!c || c.type !== 'tool_use') continue;
-        inc(tool, c.name === 'Bash' ? 'Bash' : 'tool-' + digest(c.name));
+        inc(tool, String(c.name).slice(0, 19));
         if (c.name === 'Bash' && c.input) {
           // D5: emit one shape per compound step (&& / ; / |) so multi-step
           // rituals enter n-grams; heredoc bodies are stripped first.

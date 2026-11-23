@@ -161,7 +161,7 @@ function batch(sessions, seconds = 300) {
   }
   return { already_batched_items, saved_turns, weighted_cost };
 }
-const HOOK_BLOCK_RE = /(?:^PreToolUse:|hook (?:error|blocked|denied)|\bblocked by hook\b)/i;
+const HOOK_BLOCK_RE = /(?:^PreToolUse:|hook (?:error|blocked|denied)|\b(?:blocked|denied|not allowed) by hook\b)/i;
 const HOOK_NAME_RE = /^[a-z][a-z0-9-]{0,63}$/;
 const KEBAB_HOOK_RE = /(?<![/\\\w.-])[a-z][a-z0-9]*(?:-[a-z0-9]+)+(?![/\\\w-]|\.\w)/;
 

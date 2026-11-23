@@ -48,7 +48,7 @@ Shared Cursor/Kimi broker transport and clone rail use the cursor-named helpers;
 `build-dep-cache.js` `lib/dep-trace-hook.js` `lib/dep-trace-bash.sh` `plan-rubric-scaffold.js` `hetero-review-loop.js` `check-phase-review-receipt.js` `measure-streamjson-equivalence.js` `lib/review-chain-derive.js` `lib/review-packets.js`
 `lib/finding-class.js` `lib/exclude-allowlist.js` `lib/seat-id-guard.js` `lib/raw-log-path.js` `review-ledger-archive.js` `lib/review-ledger-copy.js` `lib/review-ledger-tar.js` `evidence-pack.js` `evidence-pack.test.js` `lib/high-risk-paths.json`
 
-**Verification & review synthesis (cont.)** — `review-jury.js` `render-fleet-inventory.js` `rule-effect-check.js` `post-merge-suite.sh` `nightly-suites.sh`
+**Verification & review synthesis (cont.)** — `fleet-tools-regress.js` `fleet-tools-regress.test.js` `review-jury.js` `render-fleet-inventory.js` `rule-effect-check.js` `post-merge-suite.sh` `nightly-suites.sh`
 `replay-stop-guard.js` `reply-precheck.js` `check-unmerged-ship.js` `lesson-lint.js` `lesson-lint.test.js` `check-tip-verify-default.sh` `lib/tip-verify-repo-default.js` `lib/tip-verify-grace.json`
 
 **Task tree & risk** — `tree.js` `risk-counter.js` `brain-tier-report.js` `check-batch-overlap.js` `hook-harness-matrix.js` `lib/chain-command.js`
@@ -109,3 +109,5 @@ Rule of thumb: **if it parses JSON or could run under agy, write it in Node; oth
 ## Hooks testing (moved from AGENTS.md)
 
 - **Hooks runtime smoke test**: `CLAUDE_PLUGIN_ROOT=$(pwd) node hooks/intent-capture.js < /dev/null` should write to `~/.autopilot/intent/` without throwing.
+
+`node scripts/fleet-tools-regress.js` checks fleet upload, fetch, and watch registration/cancellation; intended for hangar’s updater to call after each harness update.

@@ -1,6 +1,6 @@
 'use strict';
 const assert = require('node:assert/strict');
-const { autocompact, prescreen, batch, failures } = require('./pm-offline-estimate.js');
+const { autocompact, prescreen, batch, failures, MESSAGE_SIGNATURES, headHash } = require('./pm-offline-estimate.js');
 const turn = n => ({ type: 'assistant', message: { usage: { input_tokens: n } } });
 assert.equal(autocompact([[turn(167000)]]).compressions, 0);
 assert.equal(autocompact([[turn(167001)]]).compressions, 1);
@@ -28,7 +28,7 @@ try {
   assert.equal(JSON.parse(output).autocompact[0].actual_cost, 10);
 } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 
-assert.deepEqual(failures([[turn(10), { type: 'system', subtype: 'stop_hook', decision: 'block' }, turn(5)]]), [{ category: 'hook_block', failures: 1, retry_turns: 1, weighted_cost: 5, by_hook: [{ hook: 'unknown', event: 'Stop', failures: 1, retry_turns: 1, weighted_cost: 5, by_tool: { other: 1 }, by_shape: { empty: 1 } }] }]);
+assert.deepEqual(failures([[turn(10), { type: 'system', subtype: 'stop_hook', decision: 'block' }, turn(5)]]), [{ category: 'hook_block', failures: 1, retry_turns: 1, weighted_cost: 5, by_hook: [{ hook: 'unknown', event: 'Stop', failures: 1, retry_turns: 1, weighted_cost: 5, by_tool: { other: 1 }, by_shape: { empty: 1 }, by_head: { [headHash('')]: 1 } }] }]);
 
 assert.ok(Math.abs(autocompact([[turn(167001)]], 200000, 10000, 40000).simulated_cost - 216700.1) < 1e-6, 'summary read+output, 1h rewrite of prefix+summary, then the turn on the rebuilt 50k context');
 
@@ -165,7 +165,7 @@ assert.equal(hb.weighted_cost, 100);
 assert.deepEqual(hb.by_hook, [
   { hook: 'context-land-gate', event: 'Stop', failures: 1, retry_turns: 1, weighted_cost: 50 },
   { hook: 'bash-launch-guard', event: 'PreToolUse', failures: 1, retry_turns: 1, weighted_cost: 30 },
-  { hook: 'unknown', event: 'other', failures: 1, retry_turns: 1, weighted_cost: 20, by_tool: { other: 1 }, by_shape: { starts_blocked: 1 } },
+  { hook: 'unknown', event: 'other', failures: 1, retry_turns: 1, weighted_cost: 20, by_tool: { other: 1 }, by_shape: { starts_blocked: 1 }, by_head: { [headHash('blocked by hook without identifier')]: 1 } },
 ]);
 assert.equal(hb.by_hook.reduce((s, x) => s + x.failures, 0), hb.failures);
 assert.equal(hb.by_hook.reduce((s, x) => s + x.retry_turns, 0), hb.retry_turns);
@@ -180,7 +180,7 @@ const s2Extra = failures([[
 ]]);
 assert.deepEqual(s2Extra[0].by_hook, [
   { hook: 'orchestrator-edit-gate', event: 'PreToolUse', failures: 1, retry_turns: 1, weighted_cost: 6 },
-  { hook: 'unknown', event: 'Stop', failures: 1, retry_turns: 1, weighted_cost: 4, by_tool: { other: 1 }, by_shape: { empty: 1 } },
+  { hook: 'unknown', event: 'Stop', failures: 1, retry_turns: 1, weighted_cost: 4, by_tool: { other: 1 }, by_shape: { empty: 1 }, by_head: { [headHash('')]: 1 } },
 ]);
 
 const longToken = 'secret-long-payload-that-must-never-leak-into-json-output-over-sixty-four-chars';
@@ -205,8 +205,8 @@ assert.deepEqual(s2Privacy, [{
   retry_turns: 3,
   weighted_cost: 30,
   by_hook: [
-    { hook: 'unknown', event: 'PreToolUse', failures: 2, retry_turns: 2, weighted_cost: 22, by_tool: { Bash: 2 }, by_shape: { has_hook: 2 } },
-    { hook: 'unknown', event: 'Stop', failures: 1, retry_turns: 1, weighted_cost: 8, by_tool: { other: 1 }, by_shape: { empty: 1 } },
+    { hook: 'unknown', event: 'PreToolUse', failures: 2, retry_turns: 2, weighted_cost: 22, by_tool: { Bash: 2 }, by_shape: { has_hook: 2 }, by_head: { [headHash(`PreToolUse:Bash hook error: ${longToken} while reading ${secretPath} ${secretBody}`)]: 1, [headHash(`PreToolUse:Bash hook error: denied access to ${secretPath} ${secretBody}`)]: 1 } },
+    { hook: 'unknown', event: 'Stop', failures: 1, retry_turns: 1, weighted_cost: 8, by_tool: { other: 1 }, by_shape: { empty: 1 }, by_head: { [headHash('')]: 1 } },
   ],
 }]);
 
@@ -260,3 +260,35 @@ assert.deepEqual(otherUnknown.by_shape, {
 assert.deepEqual(stopUnknown.by_tool, { other: 1 });
 assert.deepEqual(stopUnknown.by_shape, { empty: 1 });
 console.log('unknown breakdown tests passed');
+
+// v8: MESSAGE_SIGNATURES + by_head
+const sigMsg1 = 'PreToolUse:Bash hook error: 這個操作會讀到真正的 Claude 預設設定目錄';
+const sigMsg2 = 'PreToolUse:Bash hook error: 這個指令會印出秘密。要檢查設定';
+const sigMsg3 = 'PreToolUse:mcp__fleet__send hook error: 這則 send 是在派工（要對方現在做事或回交件）。';
+const kebabMsg = 'PreToolUse:Bash hook error: some-kebab-hook: blocked';
+const unknownHeadMsg = 'PreToolUse:Bash hook error: 完全未知的中文拒絕訊息 SECRET_HEAD_MARKER';
+const s2Sig = failures([[
+  turn(1), { type: 'user', message: { content: [{ type: 'tool_result', content: sigMsg1 }] } },
+  turn(1), { type: 'user', message: { content: [{ type: 'tool_result', content: sigMsg2 }] } },
+  turn(1), { type: 'user', message: { content: [{ type: 'tool_result', content: sigMsg3 }] } },
+  turn(1), { type: 'user', message: { content: [{ type: 'tool_result', content: kebabMsg }] } },
+  turn(1), { type: 'user', message: { content: [{ type: 'tool_result', content: unknownHeadMsg }] } },
+  turn(1),
+]]);
+const s2SigJson = JSON.stringify(s2Sig);
+assert(!s2SigJson.includes('完全未知的中文拒絕訊息'), 'by_head must not leak original text');
+assert(!s2SigJson.includes('SECRET_HEAD_MARKER'), 'by_head must not leak marker');
+const sigHooks = s2Sig[0].by_hook.map(b => b.hook);
+assert(sigHooks.includes('claude-home-read-guard'));
+assert(sigHooks.includes('secret-print'));
+assert(sigHooks.includes('fleet-send-work-order-guard'));
+assert(sigHooks.includes('some-kebab-hook'));
+const sigUnknown = s2Sig[0].by_hook.find(b => b.hook === 'unknown');
+assert.deepEqual(sigUnknown.by_head, { [headHash(unknownHeadMsg)]: 1 });
+
+for (const sig of MESSAGE_SIGNATURES) {
+  const srcPath = path.join(__dirname, '..', sig.source);
+  const src = fs.readFileSync(srcPath, 'utf8');
+  assert(src.includes(sig.prefix), `prefix "${sig.prefix}" must exist in ${sig.source}`);
+}
+console.log('signature & provenance tests passed');

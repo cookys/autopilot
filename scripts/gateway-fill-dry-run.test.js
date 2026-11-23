@@ -27,10 +27,10 @@ function makeEntry({
     '- **Effort**: S',
     '- **Source**: test',
     '- **Pointer**: docs/plans/ok.md',
-    '- **Done-Check**: test passes',
+    '- **Done-Check**: `node scripts/gateway-fill-dry-run.test.js`',
     '- **Artifact**: code',
     '- **Needs**: none',
-    '- **ms**: ',
+    '- **ms**: dry-run-test',
     '- **Used-by**: e2e',
     '- **Queued-By**: ns/c/m self',
     '- **Problem**: synthetic test problem',
@@ -43,6 +43,14 @@ function makeEntry({
     lines.push(`- **Engine-Class**: ${engineClass}`);
   }
   return lines.join('\n');
+}
+
+// A backlog's Pointer resolves from the git root, so each synthetic repo is a real one.
+function initRepo(root) {
+  fs.mkdirSync(path.join(root, 'docs', 'plans'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'docs', 'plans', 'ok.md'), 'ok\n');
+  const r = spawnSync('git', ['init', '-q', root], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
 }
 
 function writeBacklog(filePath, entries) {
@@ -84,9 +92,11 @@ function runTests() {
     const alphaBacklog = path.join(tmpRoot, 'alpha', 'BACKLOG.md');
     const betaBacklog = path.join(tmpRoot, 'beta', 'docs', 'BACKLOG.md');
 
+    initRepo(path.join(tmpRoot, 'alpha'));
+    initRepo(path.join(tmpRoot, 'beta'));
     writeBacklog(alphaBacklog, [
       makeEntry({ id: 'BL-0001', title: 'Alpha P2 cheap', priority: 'P2', engineClass: 'cheap' }),
-      makeEntry({ id: 'BL-0002', title: 'Alpha non-cheap', priority: 'P1', engineClass: 'heavy' }),
+      makeEntry({ id: 'BL-0002', title: 'Alpha non-cheap', priority: 'P1' }),
       makeEntry({ id: 'BL-0003', title: 'Alpha default P3 cheap', engineClass: 'cheap' }),
     ]);
 

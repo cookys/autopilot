@@ -25,4 +25,22 @@ if ! SW_OUT="$(node scripts/check-backlog-single-writer.js --staged 2>&1)"; then
   echo "$SW_OUT" >&2
   exit 1
 fi
+
+# --- architecture map gate (warn on unupdated_row, block on missing fields/deleted paths) ---
+if [ -f "$REPO_ROOT/ARCHITECTURE.md" ] && [ -f "$REPO_ROOT/scripts/check-architecture-map.js" ]; then
+  # git removes MERGE_HEAD before this hook runs, so diff HEAD against the tree about to be committed
+  __MAP_TREE="$(git write-tree)"
+  if MAP_OUT="$(node "$REPO_ROOT/scripts/check-architecture-map.js" --repo "$REPO_ROOT" --base HEAD --head "$__MAP_TREE" --mode warn 2>&1)"; then
+    if [ -n "$MAP_OUT" ]; then
+      echo "$MAP_OUT" >&2
+    fi
+  else
+    echo "─────────────────────────────────────────────────────────────" >&2
+    echo "pre-merge-commit: architecture map gate failed" >&2
+    echo "─────────────────────────────────────────────────────────────" >&2
+    echo "$MAP_OUT" >&2
+    exit 1
+  fi
+fi
+
 exit 0

@@ -275,14 +275,15 @@ test('list --answers formats status, Taipei time, grouped latest reply, and --op
     const lines = allRes.stdout.trim().split('\n');
     assert.equal(lines.length, 4, `expected 4 grouped lines, got:\n${allRes.stdout}`);
 
-    // (a)
-    assert.equal(lines[0], '已答 11-16 18:00 check deployment status for api server ｜ deployed v2 cleanly');
+    // newest first: 11-17 00:30, 11-16 19:00, 11-16 18:00, 11-16 17:00
     // (b) + (d) UTC 16:30 -> Taipei 11-17 00:30
-    assert.equal(lines[1], '未答 11-17 00:30 why did nightly build fail ｜ （尚無答案）');
-    // (c) merged into 1 line with latest reply
-    assert.equal(lines[2], '已答 ×2 11-16 17:00 status of migration job ｜ latest migration reply');
+    assert.equal(lines[0], '未答 11-17 00:30 why did nightly build fail ｜ （尚無答案）');
     // (e) disposed without reply
-    assert.equal(lines[3], '已處置 11-16 19:00 closed without reply ｜ （尚無答案）');
+    assert.equal(lines[1], '已處置 11-16 19:00 closed without reply ｜ （尚無答案）');
+    // (a)
+    assert.equal(lines[2], '已答 11-16 18:00 check deployment status for api server ｜ deployed v2 cleanly');
+    // (c) merged into 1 line with latest reply
+    assert.equal(lines[3], '已答 ×2 11-16 17:00 status of migration job ｜ latest migration reply');
 
     // (e) --open excludes disposed
     const openRes = s.run(['list', '--answers', '--open']);
@@ -315,9 +316,10 @@ test('list --answers marks pre-cutoff and no-reply-log asks as 舊紀錄, post-c
     assert.equal(res.status, 0, res.stderr);
     const lines = res.stdout.trim().split('\n');
     assert.equal(lines.length, 3);
-    assert.match(lines[0], /^舊紀錄 /);
+    // newest first
+    assert.match(lines[0], /^未答 /);
     assert.match(lines[1], /^已答 /);
-    assert.match(lines[2], /^未答 /);
+    assert.match(lines[2], /^舊紀錄 /);
 
     // --open still lists 舊紀錄
     const openRes = s.run(['list', '--open']);
@@ -420,6 +422,27 @@ test('list --answers --open drops 舊紀錄 groups, shows ×N for merged asks, a
     assert.ok(where.stdout.includes(path.join(s.state, 'askpm.jsonl')), where.stdout);
     assert.ok(where.stdout.includes('hook_enabled no'), where.stdout);
     assert.ok(where.stdout.includes('asks 4'), where.stdout);
+  } finally {
+    s.cleanup();
+  }
+});
+
+test('list --answers shows the newest asks first so the 30-line cap drops the oldest', () => {
+  const rows = [];
+  for (let i = 0; i < 40; i += 1) {
+    const hh = String(Math.floor(i / 2)).padStart(2, '0');
+    const mm = i % 2 === 0 ? '00' : '30';
+    rows.push(askRow('a-nf' + String(i).padStart(6, '0'), 'distinct question number ' + i + ' ' + 'x'.repeat(i + 1), '2026-11-23T' + hh + ':' + mm + ':00.000Z', 's-' + i));
+  }
+  const s = makeStore(rows);
+  try {
+    const res = s.run(['list', '--answers']);
+    assert.equal(res.status, 0, res.stderr);
+    const lines = res.stdout.trim().split('\n');
+    assert.equal(lines.length, 31);
+    assert.ok(lines[0].includes('question number 39'), lines[0]);
+    assert.ok(lines[29].includes('question number 10'), lines[29]);
+    assert.equal(lines[30], '… 10 more');
   } finally {
     s.cleanup();
   }

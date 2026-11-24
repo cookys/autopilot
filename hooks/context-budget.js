@@ -81,6 +81,7 @@ const {
   lockStateFile, sessionIdOf, stateDirOf, sessionHandoffPath, readContextTokens, readContextUsage, budgetDecision, inferWindowTokens, scaleTiers, tiersForKnownWindow, unreachableT2Warning, BASE_WINDOW,
 } = require('./context-budget-lib.js');
 const { resolveLiveDir, sanitizeSessionId, readLive } = require('../scripts/lib/live-state-dir.js');
+const { resolveFleetSeat } = require('./_shared/fleet-seat.js');
 const { writeLiveRecord } = require('../scripts/statusline-live-tee.js');
 const autocompact = require('../scripts/lib/autocompact-window.js');
 
@@ -332,6 +333,7 @@ function advisePostCompact(st, sid, liveTokens, cfg) {
     // PARENT transcript anyway — a T2 exit-2 there would inject the handoff
     // directive into the wrong actor's stderr (pre-merge review finding).
     if (payload && payload.agent_id) process.exit(0);
+    const fleetSeat = resolveFleetSeat(payload);
     const tpath = payload && payload.transcript_path;
     if (!tpath || typeof tpath !== 'string') process.exit(0);
 
@@ -395,7 +397,7 @@ function advisePostCompact(st, sid, liveTokens, cfg) {
       // is at least as fresh, so it is trusted directly).
       if (liveMain.model && typeof liveMain.model.id === 'string') st.knownModel = liveMain.model.id;
       cfg = applyModelTiers(st, cfg);
-      const liveCfg = tiersForKnownWindow(cfg, liveWindow);
+      const liveCfg = tiersForKnownWindow(cfg, liveWindow, fleetSeat);
       warnOnce(st, unreachableT2Warning(cfg, liveWindow));
       // v2.36.22: a session's context window never changes, so remember it. The live
       // file is written by the statusline, which stops ticking while the session waits
@@ -464,7 +466,7 @@ function advisePostCompact(st, sid, liveTokens, cfg) {
         ? st.knownWindow : null;
       if (rememberedWindow !== null) warnOnce(st, unreachableT2Warning(cfg, rememberedWindow));
       const effCfg = rememberedWindow !== null
-        ? tiersForKnownWindow(cfg, rememberedWindow)
+        ? tiersForKnownWindow(cfg, rememberedWindow, fleetSeat)
         : scaleTiers(cfg, inferWindowTokens(st.observedMax));
 
       // Cheap path below T1: parse only every Nth call. Once T1 territory has
@@ -478,7 +480,7 @@ function advisePostCompact(st, sid, liveTokens, cfg) {
           // auto-compaction (which lowers current context) cannot walk it back.
           st.observedMax = Math.max(Number.isFinite(st.observedMax) ? st.observedMax : 0, tokens);
           const liveCfg = rememberedWindow !== null
-            ? tiersForKnownWindow(cfg, rememberedWindow)
+            ? tiersForKnownWindow(cfg, rememberedWindow, fleetSeat)
             : scaleTiers(cfg, inferWindowTokens(st.observedMax));
           resetBelowTiers(st, tokens, liveCfg);
           const d = onceFilter(st, cfg, budgetDecision(

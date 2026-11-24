@@ -112,7 +112,7 @@ function applyPerModel(cfg, modelId) {
 function readContextBudget(opts) {
   const o = opts || {};
   const env = o.env || process.env;
-  const cfg = { t1: 100_000, t2: 150_000, t3: 0, explicitT3: false, gap: 50_000, mode: 'warn', explicitT1: false, explicitT2: false, envT1: false, envT2: false, perModel: [], liveWrite: true, step: 50_000, warnings: [] };
+  const cfg = { t1: 100_000, t2: 150_000, t3: 0, explicitT3: false, gap: 50_000, mode: 'warn', explicitT1: false, explicitT2: false, envT1: false, envT2: false, perModel: [], t2PctBySeat: { pm: 35 }, t2HardBlock: true, liveWrite: true, step: 50_000, warnings: [] };
   try {
     const user = JSON.parse(fs.readFileSync(configPath({ env, home: o.home }), 'utf8'));
     const cb = user && user.context_budget;
@@ -127,6 +127,19 @@ function readContextBudget(opts) {
       const cm = normMode(cb.mode, 'config', cfg.warnings);
       if (cm) cfg.mode = cm;
       cfg.perModel = normPerModel(cb.per_model, cfg.warnings);
+      if (cb.t2_pct_by_seat && typeof cb.t2_pct_by_seat === 'object' && !Array.isArray(cb.t2_pct_by_seat)) {
+        for (const [k, v] of Object.entries(cb.t2_pct_by_seat)) {
+          if (Number.isFinite(v) && v > 0 && v <= 100) {
+            cfg.t2PctBySeat[String(k).trim().toLowerCase()] = v;
+          } else {
+            cfg.warnings.push(`context_budget t2_pct_by_seat "${k}" ${JSON.stringify(v)} is not a number in (0, 100], so it is ignored`);
+          }
+        }
+      }
+      if (cb.t2_hard_block === false) cfg.t2HardBlock = false;
+      else if (cb.t2_hard_block !== undefined && typeof cb.t2_hard_block !== 'boolean') {
+        cfg.warnings.push(`context_budget t2_hard_block ${JSON.stringify(cb.t2_hard_block)} is not boolean, so it is ignored`);
+      }
       if (cb.live_write === false) cfg.liveWrite = false;
     }
   } catch { /* absent/corrupt config -> defaults */ }

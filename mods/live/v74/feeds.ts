@@ -3,11 +3,14 @@ import { parsePmStatus, type DecideCard, type CardOption, type PmStatus } from '
 
 export const PM_STATUS_ARGV = ['fleet', 'pm', 'status', '--json'] as const
 export const DECIDE_LIST_ARGV = ['fleet', 'decision', 'list', '--json'] as const
+export const ASKS_LIST_TAIL = ['list', '--answers', '--open', '--json'] as const
 export const V74_FEED_TTL_MS = 30_000
 
 export type CliRunner = (argv: readonly string[]) => Promise<{ exitCode: number; stdout: string; stderr: string }>
 export type PmFeed = { status: () => PmStatus | null; fetchedMs: () => number | null; error: () => string | null; refresh: (run: CliRunner, nowMs: number, force?: boolean) => Promise<boolean> }
 export type DecideFeed = { cards: () => DecideCard[] | null; fetchedMs: () => number | null; error: () => string | null; refresh: (run: CliRunner, nowMs: number, force?: boolean) => Promise<boolean> }
+export type AskRow = { status: string; count: number; at: string; ask: string; answer: string | null }
+export type AsksFeed = { rows: () => AskRow[] | null; fetchedMs: () => number | null; error: () => string | null; refresh: (run: CliRunner, argv: readonly string[], nowMs: number, force?: boolean) => Promise<boolean> }
 
 const firstLine = (s: string): string => s.split('\n').map(l => l.trim()).find(l => l !== '') ?? ''
 const exitError = (stderr: string, exitCode: number): string => {
@@ -114,6 +117,56 @@ export function makePmFeed(ttlMs = V74_FEED_TTL_MS): PmFeed {
   }
 }
 
+export function parseAsksJson(json: string): AskRow[] | null {
+  let o: unknown
+  try { o = JSON.parse(json) } catch { return null }
+  if (!Array.isArray(o)) return null
+  const out: AskRow[] = []
+  for (const item of o) {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) return null
+    const r = item as Record<string, unknown>
+    if (typeof r.status !== 'string' || typeof r.at !== 'string' || typeof r.ask !== 'string') return null
+    if (typeof r.count !== 'number' || !Number.isFinite(r.count)) return null
+    if (r.answer !== null && typeof r.answer !== 'string') return null
+    out.push({ status: r.status, count: r.count, at: r.at, ask: r.ask, answer: r.answer })
+  }
+  return out
+}
+
+export function makeAsksFeed(ttlMs = V74_FEED_TTL_MS): AsksFeed {
+  let rows: AskRow[] | null = null
+  let fetchedMs: number | null = null
+  let triedMs: number | null = null
+  let error: string | null = null
+  let busy = false
+  return {
+    rows: () => rows,
+    fetchedMs: () => fetchedMs,
+    error: () => error,
+    refresh: async (run, argv, nowMs, force = false) => {
+      if (busy) return false
+      if (!force && triedMs !== null && nowMs - triedMs < ttlMs) return false
+      busy = true
+      triedMs = nowMs
+      try {
+        const r = await run(argv)
+        if (r.exitCode !== 0) throw new Error(exitError(r.stderr, r.exitCode))
+        const parsed = parseAsksJson(r.stdout)
+        if (parsed === null) throw new Error('invalid asks json')
+        rows = parsed
+        fetchedMs = nowMs
+        error = null
+      } catch (e) {
+        // retain last successful rows & fetchedMs so title/status row stay truthful
+        error = firstLine(e instanceof Error ? e.message : String(e)) || 'failed'
+      } finally {
+        busy = false
+      }
+      return true
+    },
+  }
+}
+
 export function makeDecideFeed(ttlMs = V74_FEED_TTL_MS): DecideFeed {
   let cards: DecideCard[] | null = null
   let fetchedMs: number | null = null
@@ -139,6 +192,56 @@ export function makeDecideFeed(ttlMs = V74_FEED_TTL_MS): DecideFeed {
         error = null
       } catch (e) {
         // retain last successful cards & fetchedMs so title/status row stay truthful
+        error = firstLine(e instanceof Error ? e.message : String(e)) || 'failed'
+      } finally {
+        busy = false
+      }
+      return true
+    },
+  }
+}
+
+export function parseAsksJson(json: string): AskRow[] | null {
+  let o: unknown
+  try { o = JSON.parse(json) } catch { return null }
+  if (!Array.isArray(o)) return null
+  const out: AskRow[] = []
+  for (const item of o) {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) return null
+    const r = item as Record<string, unknown>
+    if (typeof r.status !== 'string' || typeof r.at !== 'string' || typeof r.ask !== 'string') return null
+    if (typeof r.count !== 'number' || !Number.isFinite(r.count)) return null
+    if (r.answer !== null && typeof r.answer !== 'string') return null
+    out.push({ status: r.status, count: r.count, at: r.at, ask: r.ask, answer: r.answer })
+  }
+  return out
+}
+
+export function makeAsksFeed(ttlMs = V74_FEED_TTL_MS): AsksFeed {
+  let rows: AskRow[] | null = null
+  let fetchedMs: number | null = null
+  let triedMs: number | null = null
+  let error: string | null = null
+  let busy = false
+  return {
+    rows: () => rows,
+    fetchedMs: () => fetchedMs,
+    error: () => error,
+    refresh: async (run, argv, nowMs, force = false) => {
+      if (busy) return false
+      if (!force && triedMs !== null && nowMs - triedMs < ttlMs) return false
+      busy = true
+      triedMs = nowMs
+      try {
+        const r = await run(argv)
+        if (r.exitCode !== 0) throw new Error(exitError(r.stderr, r.exitCode))
+        const parsed = parseAsksJson(r.stdout)
+        if (parsed === null) throw new Error('invalid asks json')
+        rows = parsed
+        fetchedMs = nowMs
+        error = null
+      } catch (e) {
+        // retain last successful rows & fetchedMs so title/status row stay truthful
         error = firstLine(e instanceof Error ? e.message : String(e)) || 'failed'
       } finally {
         busy = false

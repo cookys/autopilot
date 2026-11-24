@@ -41,7 +41,7 @@ test('等回報 becomes 已回覆 when a later reply contains 已回報 and that
   const open = A.askpmView(waiting, { cols: 120 });
   assert.equal(open.entries[0].at, '2026-11-10 09:00:00');
   assert.equal(open.entries[0].status, 'waiting');
-  assert.deepEqual(open.entries[0].replyLines, ['等回報：遊戲線', '先看測試']);
+  assert.deepEqual(open.entries[0].replyLines, ['等回報：遊戲線']);
   const same = A.askpmView([
     ask(at, '記憶線合併了嗎'),
     reply('2026-11-10T01:00:05.000Z', '等回報：遊戲線\n已回報：2026-11-10 09:00:00'),
@@ -81,7 +81,7 @@ test('a turn row is ignored and does not take the reply', () => {
   const view = A.askpmView(rows, { cols: 120 });
   assert.equal(view.entries.length, 1);
   assert.equal(view.entries[0].status, 'replied');
-  assert.deepEqual(view.entries[0].replyLines, ['好', '第二行']);
+  assert.deepEqual(view.entries[0].replyLines, ['好']);
 });
 
 test('summary is the first 40 code points and the section renders beside a wide queue', () => {
@@ -96,4 +96,53 @@ test('summary is the first 40 code points and the section renders beside a wide 
   assert.equal(joined.includes('已回覆'), true);
   assert.equal(joined.includes('2026-11-10 09:00:00'), true);
   assert.equal(joined.includes('Z'), false);
+});
+
+test('replies with ask_id match by ask_id even when out of order, and keep latest single non-empty line', () => {
+  const rows = [
+    { ...ask('2026-11-10T01:00:00.000Z', '第一題'), ask_id: 'a1' },
+    { ...ask('2026-11-10T02:00:00.000Z', '第二題'), ask_id: 'a2' },
+    { ...reply('2026-11-10T02:00:05.000Z', '\n  \n第二題舊答\n第二行'), ask_id: 'a2' },
+    { ...reply('2026-11-10T02:00:10.000Z', '第一題答案\n補充'), ask_id: 'a1' },
+    { ...reply('2026-11-10T02:00:15.000Z', '第二題新答\n補充'), ask_id: 'a2' },
+  ];
+  const view = A.askpmView(rows, { cols: 120 });
+  assert.equal(view.entries[0].status, 'replied');
+  assert.deepEqual(view.entries[0].replyLines, ['第一題答案']);
+  assert.equal(view.entries[1].status, 'replied');
+  assert.deepEqual(view.entries[1].replyLines, ['第二題新答']);
+});
+
+test('legacy replies without ask_id still match positionally', () => {
+  const rows = [
+    ask('2026-11-10T01:00:00.000Z', '舊題一'),
+    reply('2026-11-10T01:00:05.000Z', '舊答一\n第二行'),
+    ask('2026-11-10T02:00:00.000Z', '舊題二'),
+    reply('2026-11-10T02:00:05.000Z', '舊答二'),
+  ];
+  const view = A.askpmView(rows, { cols: 120 });
+  assert.deepEqual(view.entries[0].replyLines, ['舊答一']);
+  assert.deepEqual(view.entries[1].replyLines, ['舊答二']);
+});
+
+test('disposition action=close marks the ask as replied without DONE_MARK', () => {
+  const rows = [
+    { ...ask('2026-11-10T01:00:00.000Z', '需要關閉的問題'), ask_id: 'a-close' },
+    { ...reply('2026-11-10T01:00:05.000Z', '等回報：遊戲線'), ask_id: 'a-close' },
+    { schema: 'autopilot.askpm/1', kind: 'disposition', at: '2026-11-10T01:05:00.000Z', ask_id: 'a-close', action: 'close' },
+  ];
+  const view = A.askpmView(rows, { cols: 120 });
+  assert.equal(view.entries[0].status, 'replied');
+  assert.deepEqual(view.entries[0].replyLines, ['等回報：遊戲線']);
+});
+
+test('ask without reply stays open and renders 尚未回覆', () => {
+  const rows = [ask('2026-11-10T01:00:00.000Z', '還沒回的問題')];
+  const view = A.askpmView(rows, { cols: 120 });
+  assert.equal(view.entries[0].status, 'open');
+  assert.deepEqual(view.entries[0].replyLines, []);
+  const u = { t: I.makeT('zh-TW'), cols: 40 };
+  const lines = A.askpmLines(view, u);
+  const joined = lines.map((l) => (l.segs ? l.segs.map((s) => s.text).join('') : l.text)).join('\n');
+  assert.equal(joined.includes('尚未回覆'), true);
 });

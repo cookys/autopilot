@@ -1419,6 +1419,7 @@ function openDecision({ cwd, root, session, question, background, options, recom
           }
         }
         const acknowledged = new Set(Array.isArray(not_duplicate_of) ? not_duplicate_of : []);
+        if (answeredHit) acknowledged.add(answeredHit.id);
         const duplicate = findDuplicateCards(allCards.filter((e) => !isClosedEntry(e)), entry).find((match) => !acknowledged.has(match.id));
         if (duplicate) return { status: 'duplicate', duplicate };
       }

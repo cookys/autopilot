@@ -150,7 +150,20 @@ function openCard(sb, extraArgs = []) {
     const rWrongId = openCard(sb, ['--supersede', 'd-00000000', '--supersede-reason', 'wrong id']);
     assert.strictEqual(rWrongId.status, 15, '--supersede with wrong id must still be refused');
 
-    // 5. --supersede with matching id and non-empty reason -> allowed, stores supersedes & supersede_reason
+  } finally {
+    fs.rmSync(sb.root, { recursive: true, force: true });
+  }
+}
+
+// 5. --supersede with matching id and non-empty reason -> allowed (own sandbox: no other live same-title cards)
+{
+  const sb = makeSandbox();
+  try {
+    const r1 = openCard(sb);
+    assert.strictEqual(r1.status, 0, `initial open: ${r1.stderr}`);
+    const opened = JSON.parse(r1.stdout);
+    const rc = runCli(['close', '--id', opened.id, '--answer', 'yes', '--cwd', sb.repo], sb);
+    assert.strictEqual(rc.status, 0, `close failed: ${rc.stderr}`);
     const rSupersede = openCard(sb, ['--supersede', opened.id, '--supersede-reason', 'scope changed']);
     assert.strictEqual(rSupersede.status, 0, `--supersede with valid id and reason should succeed: ${rSupersede.stderr}`);
     const jSup = JSON.parse(rSupersede.stdout);

@@ -54,7 +54,7 @@
       "kind": "config_key",
       "audience": "user",
       "type": "object",
-      "default": { "pm": 20 },
+      "default": { "pm": 25 },
       "readers": [
         "scripts/lib/config-path.js"
       ],

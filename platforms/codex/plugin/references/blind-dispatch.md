@@ -508,7 +508,7 @@ live-fire receipts: `docs/plans/_archive/2026/10/evidence/2026-10-02-final-panel
 
 **The blinding boundary is who holds verdict context, not the round number.**
 Whoever knows prior findings must never be the one who dispatches the next
-verdict. (Depth numbering follows `agents/README.md` § Orchestration: main
+verdict. (Depth numbering follows `docs/dev/agents-contract.md` § Orchestration: main
 session = depth 0, dispatched agent = depth 1, its child = depth 2.)
 
 | Nested pattern | Allowed? | Why |
@@ -562,7 +562,7 @@ session-driven re-dispatch under quality-pipeline and audit.
 ## See Also
 
 - `agents/reviewer.md` — first-pass review methodology (full context, by design)
-- `agents/README.md` — methodology agents and the ENUM Handoff contract
+- `docs/dev/agents-contract.md` — methodology agents and the ENUM Handoff contract
 - `skills/quality-pipeline/references/code-review.md` — consumer site (re-review loop)
 - `skills/audit/SKILL.md` — consumer site (re-audit)
 

@@ -1,15 +1,9 @@
 ---
 name: doc-sync
 description: >
-  Audit docs against actual code and find drift (wrong / stale / missing claims), report-only.
-  Use when: "do the docs match the code", "check for doc drift", "audit docs vs code", "did
-  this change make docs stale", "doc-sync", "文件跟 code 同步嗎", "查文件有沒有過時",
-  "對照文件與實作", post-merge doc verification, periodic doc accuracy sweep. Two layers:
-  a deterministic gate (reliable — links/fences/version/CLI-surface/roadmap; the real stopping
-  condition, gate-able in CI) + an LLM sweep for discovery (scoped per-diff / full whole-repo;
-  non-deterministic, never loop to zero). Not for: WRITING docs from scratch, fixing a single
-  known typo, or build/test correctness (→ quality-pipeline). Report-only — surfaces findings;
-  you triage + fix; mechanizable findings get demoted into the deterministic gate.
+  Report-only doc-vs-code drift audit via deterministic gate plus bounded LLM sweep.
+  Use when: "doc-sync", "check for doc drift", "文件跟 code 同步嗎".
+  Not for: writing docs from scratch, single typos, build/test checks (→ quality-pipeline).
 ---
 
 # Doc-Sync (Doc↔Code Drift Audit)

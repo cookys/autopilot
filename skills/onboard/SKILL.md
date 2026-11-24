@@ -1,15 +1,9 @@
 ---
 name: onboard
 description: >
-  Scaffold a consuming project's autopilot config (`.claude/*-config.md` DI) from its detected reality —
-  the bridge from "fresh repo" to "autopilot-calibrated repo". Use when: "onboard this repo to autopilot",
-  "set up the .claude config", "scaffold autopilot for this project", "calibrate autopilot to this codebase",
-  "把這個專案接上 autopilot", "建立 .claude 設定", "幫這個 repo 接 autopilot". Detects package manager /
-  commands / coverage thresholds / doc convention / workspace layout, scaffolds the config set with
-  autopilot-only (ecosystem-standalone) chains, then enriches the judgment-heavy configs (skill-routing,
-  doc-drift domains, security surfaces) by reading the repo. Not for: bootstrapping project-tracking docs
-  from a plan (→ project-lifecycle), authoring a plan (→ references/plan-template.md), or running quality
-  gates (→ quality-pipeline).
+  Detect repo reality and scaffold `.claude/*-config.md` DI configs with standalone autopilot chains.
+  Use when: "onboard this repo to autopilot", "建立 .claude 設定", "set up the .claude config".
+  Not for: project tracking (→ project-lifecycle), plans (→ plan-template), quality gates (→ quality-pipeline).
 ---
 
 # Onboard — calibrate autopilot to a consuming project

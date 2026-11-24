@@ -1,6 +1,9 @@
 ---
 name: debug
-description: Evidence-first debugging for correctness issues. Invoke when diagnosing bugs, crashes, logic errors, data corruption, connectivity problems, intermittent failures (incl. flaky tests with environment divergence), or 'works on my machine' issues. For performance issues (slow / high latency / CPU / memory), use the profiling skill instead. For perf regressions with known change attribution, profiling is still primary — measure first, don't guess from the deploy diff.
+description: >
+  Evidence-first debugging for correctness bugs, crashes, and flaky tests.
+  Use when: diagnosing bugs, crashes, or intermittent failures.
+  Not for: performance/latency/memory issues (→ profiling).
 ---
 
 # Evidence-First Debugging

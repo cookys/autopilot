@@ -1,10 +1,8 @@
 ---
 name: harness-maintenance
 description: >
-  Audit or refresh Autopilot harness capability state. Use when checking whether Codex,
-  Claude Code, agy, Grok, MiniMax, Copilot CLI, or another harness currently supports
-  skills, hooks, agents, status lines, headless dispatch, DI, gating, or runner roles;
-  when platform facts may be stale; or before expanding cross-harness integrations.
+  Audit or refresh Autopilot harness capability state across Codex, Claude Code, agy, Grok, and peers.
+  Use when: checking stale harness support or expanding cross-harness integration.
 ---
 
 # Harness Maintenance

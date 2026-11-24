@@ -19,7 +19,9 @@ mkdir -p "$HOOK_HOME/.autopilot/intent"
 run_hook session-start.js
 assert_exit_code "$__RUN_EXIT" 0 "exit code 0 for normal run"
 assert_contains "$__RUN_STDOUT" '"hookSpecificOutput"' "plugin output structure when CLAUDE_PLUGIN_ROOT is set"
-assert_contains "$__RUN_STDOUT" "autopilot:dev-flow" "contains dev-flow skill trigger"
+assert_contains "$__RUN_STDOUT" "You have **Autopilot** lifecycle skills." "contains base autopilot context"
+assert_not_contains "$__RUN_STDOUT" "| Trigger | Skill |" "duplicate 12-row skill table removed"
+assert_contains "$__RUN_STDOUT" "Agent brief first lines:" "brief header format line retained"
 
 # Test environment without CLAUDE_PLUGIN_ROOT. Keep the parent stdin deliberately
 # open through a FIFO while the direct hook invocation receives explicit EOF. The
@@ -152,6 +154,6 @@ rm -f "$HOOK_HOME/.autopilot/intent-capture.disabled"
 echo "invalid json content" > "$HOOK_HOME/.autopilot/config.json"
 run_hook session-start.js
 assert_exit_code "$__RUN_EXIT" 0 "fail-open on malformed config.json"
-assert_contains "$__RUN_STDOUT" "autopilot:dev-flow" "base context still outputted"
+assert_contains "$__RUN_STDOUT" "You have **Autopilot** lifecycle skills." "base context still outputted"
 
 finalize_test

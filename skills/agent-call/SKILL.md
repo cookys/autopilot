@@ -1,6 +1,9 @@
 ---
 name: agent-call
-description: Contact an already-running persistent coding-agent session by exact name. Triggers on owner instructions like "通知 <host>", "跟 <host/project> 說", "叫 <host> 看一下", or naming a fleet member (`namespace/courier/member`) or pane by name. Always use fleet messaging v2 first (`send`/`reply`/`dispatch` MCP tools, or `fleet send` in scripts/human shells); use Claude native `SendMessage` to another session only when fleet refuses or is unreachable, and record the fallback in the local outbox. Not for: asking a model for an opinion (redirect to the consult seat via `scripts/dispatch-consult.sh`), reviewing a plan or diff with heterogeneous engines (redirect to hetero-review), or creating new implementers (redirect to `/l4`, `/l5`, or `/l6`). Never use this route to create temporary workers. Every session, Claude or not, is addressed by the full member address shown by `fleet peers` (the `directory` MCP tool returns the same list).
+description: >
+  Contact an already-running persistent coding-agent session via fleet v2 (fallback: Claude SendMessage + outbox).
+  Use when: "通知 <host>", "跟 <host> 說", naming a fleet member/pane.
+  Not for: opinions (→ consult), hetero review (→ hetero-review), new workers (→ /l4–/l6).
 ---
 
 # Agent Call — persistent peer routing

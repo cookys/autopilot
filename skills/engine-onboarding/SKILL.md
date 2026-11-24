@@ -1,12 +1,9 @@
 ---
 name: engine-onboarding
 description: >
-  Onboard a new heterogeneous engine into the autopilot lifecycle. Use when: "onboard a new engine",
-  "qualify gpt-X / a new model as a reviewer", "is model Y good enough", "add an implementer engine",
-  "add a planner engine", "add a verifier engine", "evaluate a model as orchestrator",
-  "route a model by role", "new model for review/dispatch", "新增一個引擎",
-  "驗證某模型夠不夠格", "這個 model 能不能用", "加一個 reviewer/implementer/verifier/orchestrator 模型".
-  Not for: writing new scorecard scripts, inventing new routing policies, or deciding model-family domain fit.
+  Onboard and qualify a new heterogeneous model/engine by role in autopilot.
+  Use when: "onboard a new engine", "新增一個引擎", "qualify model as reviewer".
+  Not for: writing scorecard scripts, new routing policies, model-family fit.
 ---
 
 # Engine Onboarding (heterogeneous lifecycle)

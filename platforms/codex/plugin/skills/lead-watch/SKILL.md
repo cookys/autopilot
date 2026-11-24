@@ -1,9 +1,8 @@
 ---
 name: lead-watch
 description: >
-  Opt-in for LEADS only (the PM, a game or GPU lead, or any lane's depth-0 toward the hands it dispatched); workers never
-  load it. Named invocations only: "/lead-watch" and "autopilot:lead-watch". Makes the lead go and check on its team when a
-  report is overdue or a member sits idle with open work, instead of waiting for a message.
+  Opt-in for leads only (never workers): proactively check overdue reports or idle members with open work.
+  Use when: "/lead-watch", "autopilot:lead-watch".
 ---
 
 # Lead-watch - a lead keeps watching its team

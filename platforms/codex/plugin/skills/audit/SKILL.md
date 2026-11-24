@@ -1,12 +1,9 @@
 ---
 name: audit
 description: >
-  Compare two existing implementations and find every difference. Use when: "compare X with Y",
-  "check X against Y", "verify X matches Y", "flag anything missing", "比對 X 和 Y",
-  "檢查有沒有漏掉", "驗證是否一致", feature parity review between old and new systems,
-  an existing spec against an implemented target, or cross-system completeness checks. Not for
-  future/unimplemented plan readiness, architecture-plan critique, debugging a single discrepancy,
-  or writing comparison tests.
+  Compare two existing implementations for feature parity and missing items.
+  Use when: "compare X with Y", "verify X matches Y", "比對 X 和 Y".
+  Not for: future plan review, single-bug debug, writing tests.
 ---
 
 # Systematic Comparison Audit

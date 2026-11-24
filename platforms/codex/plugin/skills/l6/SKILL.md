@@ -1,12 +1,9 @@
 ---
 name: l6
 description: >
-  Terse CEO front-door — Level 6: like /l5 (worktree-isolated hetero implementer + authoritative
-  qc) but the VERIFICATION AUTHORING is also leaf-dispatched to a heterogeneous engine; depth-0 remains
-  pure orchestration. Use when: "/l6 <goal>", "L6 <goal>", "全委", "全部派遣", "省 token 全外包",
-  "delegate everything incl verification". Presets involvement=just-results, scope=Hold, project red
-  lines plus -x additions (override --mode / --expand / --solo). Not for: /l5 when you still want to do verification yourself; /l4
-  all-Claude; /l3 inline.
+  Terse CEO front-door (Level 6): hetero implementer plus hetero verification authoring; depth-0 orchestrates only.
+  Use when: "/l6 <goal>", "L6 <goal>", "全委".
+  Not for: self-verification (→ /l5), all-Claude (→ /l4), inline (→ /l3).
 ---
 
 <!-- AUTOPILOT_CODEX_LIFECYCLE_ADAPTER_V1 -->

@@ -1,13 +1,9 @@
 ---
 name: learn
 description: >
-  Save a hard-won lesson or surprising fix so future sessions benefit. Boundary: learn records
-  facts/gotchas; distill produces reusable multi-step procedures from conversation history. Use
-  when: "save this to knowledge", "record this", "remember for next time", "/learn", "記下來",
-  "存到 knowledge", "記住這個", user shares a gotcha or non-obvious fix, solution took 2+ attempts,
-  environment-specific workaround discovered. Also handles: "knowledge health audit",
-  "check MEMORY.md size", stale knowledge cleanup. Not for: active debugging, writing tests,
-  project status updates, or extracting recurring procedures from history (→ distill).
+  Record a hard-won fact/gotcha to knowledge or audit MEMORY.md health.
+  Use when: "/learn", "記下來", "knowledge health audit".
+  Not for: debugging, writing tests, status updates, recurring procedures (→ distill).
 ---
 
 # learn

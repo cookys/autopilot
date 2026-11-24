@@ -1,15 +1,9 @@
 ---
 name: hetero-review
 description: >
-  Thin router for dual heterogeneous review loops across independent model families on a plan or code diff.
-  Use when: "叫 autopilot plan loop review hetero" or "coding 完成後過 hetero loop review", or when
-  instructed to engage hetero engine review.
-  ADR-0001 governs both loops: a reviewer's verdict is a claim until depth-0 re-derives it from the
-  reviewer's JSON artifact and the exact base..head range it reviewed; an implementer's green is a claim,
-  never a gate. The plan loop reviews frozen rubrics via dispatch-plan-review, while the code loop runs
-  hetero review via hetero-review-loop.
-  Not for: implementation work (→ /l4 through /l6 slash commands), asking a model for an opinion
-  (→ consult seat), or messaging a running session (→ agent-call skill).
+  Router for ADR-0001 dual heterogeneous review loops on frozen plan rubrics or code diffs.
+  Use when: "plan loop review hetero", "過 hetero loop review", hetero engine review.
+  Not for: implementation (→ /l4–/l6), opinions (→ consult), messaging peers (→ agent-call).
 ---
 
 # Hetero Review — Multi-Family Verification Loops

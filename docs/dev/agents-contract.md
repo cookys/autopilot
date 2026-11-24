@@ -1,6 +1,6 @@
 # Autopilot Methodology Agents
 
-This directory ships **three methodology agents** bundled with autopilot. They carry autopilot's discipline axis into agent-level execution so dispatched reviews, debugs, and plans follow the same Three Red Lines as the skill layer.
+`agents/` ships **three methodology agents** bundled with autopilot. They carry autopilot's discipline axis into agent-level execution so dispatched reviews, debugs, and plans follow the same Three Red Lines as the skill layer.
 
 | Agent | Purpose | Model | Read-only |
 |-------|---------|-------|-----------|
@@ -81,11 +81,11 @@ The `Next consumer` field uses a **fixed enum** so calling skills can pattern-ma
 
 The round-trip happens **in the skill**, never inside the agent's own session. This keeps each agent session bounded, its output contract deterministic, and the orchestration topology legible in the skill trace.
 
-**Nested self-dispatch (Claude Code v2.1.172+) — scoped exception, never required.** The Handoff ENUMs (`PARALLEL_DISPATCH` / `SEQUENTIAL_DISPATCH`) remain the canonical cross-platform path: the agent reports, the calling skill dispatches. On Claude Code v2.1.172+, a subagent whose own `tools:` frontmatter includes `Agent` can spawn nested subagents (harness max depth 5). No shipped agent is authorized to self-consume a `PARALLEL_DISPATCH` / `SEQUENTIAL_DISPATCH` handoff today: the planner's contract permanently forbids dispatching executors (research children only), and reviewer/debugger are terminal. An executor-capable agent that self-consumes its handoff is a possible future pattern, but it is a **topology change** (removes skill-layer oversight), not a mere optimization — adopting it requires an explicit design decision and an update to this section, not just a `tools:` addition. Because this is never required, non-CC platforms need zero changes — they degrade to the skill-layer round-trip above. Today only the **planner** carries `Agent` in its allowlist, and only for read-only research children (see `planner.md` § Research Children); the reviewer and debugger remain terminal, so the invariant above holds for every verdict-producing agent. Review-integrity rules for any nested dispatch live in [`references/blind-dispatch.md`](../references/blind-dispatch.md) § Nested dispatch.
+**Nested self-dispatch (Claude Code v2.1.172+) — scoped exception, never required.** The Handoff ENUMs (`PARALLEL_DISPATCH` / `SEQUENTIAL_DISPATCH`) remain the canonical cross-platform path: the agent reports, the calling skill dispatches. On Claude Code v2.1.172+, a subagent whose own `tools:` frontmatter includes `Agent` can spawn nested subagents (harness max depth 5). No shipped agent is authorized to self-consume a `PARALLEL_DISPATCH` / `SEQUENTIAL_DISPATCH` handoff today: the planner's contract permanently forbids dispatching executors (research children only), and reviewer/debugger are terminal. An executor-capable agent that self-consumes its handoff is a possible future pattern, but it is a **topology change** (removes skill-layer oversight), not a mere optimization — adopting it requires an explicit design decision and an update to this section, not just a `tools:` addition. Because this is never required, non-CC platforms need zero changes — they degrade to the skill-layer round-trip above. Today only the **planner** carries `Agent` in its allowlist, and only for read-only research children (see `agents/planner.md` § Research Children); the reviewer and debugger remain terminal, so the invariant above holds for every verdict-producing agent. Review-integrity rules for any nested dispatch live in [`references/blind-dispatch.md`](../../references/blind-dispatch.md) § Nested dispatch.
 
 **autopilot nesting policy: depth ≤ 2** (main session → orchestrating agent → leaf). Same coordination-cost philosophy as the team skill's cap-3 — the harness's depth-5 ceiling is a limit, not a target. The context-offload motivation for nesting is fully served at depth 2; a leaf that needs to orchestrate further is a sign the skill-layer decomposition should be redone at depth 0, not deepened. Like cap-3, this is documentation policy, not a runtime gate.
 
-> When the re-dispatch is reviewer- or auditor-role on the same target after a fix, the prompt MUST follow [`references/blind-dispatch.md`](../references/blind-dispatch.md) (outcome-blinding to prevent quality-gate self-bypass). First-pass / fixer / domain-expert handoff are explicitly out of scope.
+> When the re-dispatch is reviewer- or auditor-role on the same target after a fix, the prompt MUST follow [`references/blind-dispatch.md`](../../references/blind-dispatch.md) (outcome-blinding to prevent quality-gate self-bypass). First-pass / fixer / domain-expert handoff are explicitly out of scope.
 
 ## Tool permissions — no direct file patching
 
@@ -100,10 +100,10 @@ Claude Code enforces this allowlist. The agents **cannot patch source files via 
 
 **Scope of the guarantee**: The allowlist prevents `Edit` / `Write` use. It does **not** sandbox `Bash`, which the agents retain for read-only diagnostics (`git log`, `docker logs`, `grep`, running test commands). Each agent's system prompt explicitly forbids Bash-side mutations (`rm`, `git commit`, `curl -X POST`, destructive DB commands, etc.). The prompt-level discipline plus `Edit` / `Write` mechanical denial together give you: methodology agents **read and reason**, caller skills **decide and apply**.
 
-**Child-hop caveat (planner)**: a nested child's toolset comes from the *child's* agent type, not the parent's allowlist — a planner child dispatched as `general-purpose` would have Edit/Write. The planner contract therefore mandates `subagent_type: Explore` (read-only by construction) or an explicit read-only prompt preamble (`planner.md` § Research Children). For the child hop the guarantee is **convention-enforced, not mechanical**.
+**Child-hop caveat (planner)**: a nested child's toolset comes from the *child's* agent type, not the parent's allowlist — a planner child dispatched as `general-purpose` would have Edit/Write. The planner contract therefore mandates `subagent_type: Explore` (read-only by construction) or an explicit read-only prompt preamble (`agents/planner.md` § Research Children). For the child hop the guarantee is **convention-enforced, not mechanical**.
 
 ## Further reading
 
 - Plan doc: `project/plans/_archive/2026/04/2026-04-12-methodology-agents-and-hooks.md` — full design, review loop history, rationale
-- Individual agent spec: `reviewer.md` / `debugger.md` / `planner.md`
-- Companion plugins: see `../README.md` § Recommended Companions
+- Individual agent spec: `agents/reviewer.md` / `agents/debugger.md` / `agents/planner.md`
+- Companion plugins: see `docs/dev/architecture.md` § Recommended Companions

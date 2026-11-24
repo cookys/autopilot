@@ -1,13 +1,9 @@
 ---
 name: research-to-ship
 description: >
-  Pinned participatory pipeline — research industry best-practice → write a plan → bounded,
-  rubric-frozen plan review (maximum two generations) → expand into a tracked project → execute per
-  dev-flow. Each phase ends at a human approval gate. Use when: "research best practice on X then
-  build it properly", "查業界 best practice 寫成 plan、有限 review 後展開成 project 照 dev-flow 跑",
-  "把這個主題做成正式專案", "spec it out then ship it the rigorous way". Not for: full hands-off
-  autonomy (→ ceo-agent), a quick fix / already-known implementation (→ dev-flow), research with no
-  build (→ survey / deep-research), or a single irreversible decision (→ think-tank-dialectic).
+  Human-gated pipeline: industry research → plan → bounded rubric review → project → dev-flow.
+  Use when: "research best practice on X then build it", "把這個主題做成正式專案", "spec it out then ship it".
+  Not for: hands-off (→ ceo-agent), quick fix (→ dev-flow), research only (→ survey), stalemate (→ think-tank-dialectic).
 ---
 
 # research-to-ship — a topic → researched, reviewed, shipped

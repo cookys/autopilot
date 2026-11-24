@@ -39,6 +39,7 @@ const path = require('path');
 const { isEnabled } = require('./_shared/opt-in');
 const { isPmConsole } = require('./_shared/pm-console');
 const { withWriteLock, appendRow } = require('../scripts/lib/jsonl-store');
+const { groupKey } = require('../scripts/lib/ask-group-key');
 
 const SCHEMA = 'autopilot.askpm/1';
 // mods/live/console.ts inlines this schema inside consoleModeOf and does not export it.
@@ -234,6 +235,59 @@ function computeAskId(sessionId, at, text) {
   return `a-${hash.slice(0, 8)}`;
 }
 
+const REEHO_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+
+function formatTaipeiTime(iso) {
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return null;
+  const d = new Date(ms + 8 * 60 * 60 * 1000);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+}
+
+function firstReplyLine(reply) {
+  const candidates = Array.isArray(reply.lines) && reply.lines.length > 0
+    ? reply.lines
+    : (typeof reply.text === 'string' ? reply.text.split('\n') : []);
+  for (const line of candidates) {
+    if (typeof line !== 'string') continue;
+    const trimmed = line.trim();
+    if (trimmed) return trimmed.slice(0, 120);
+  }
+  return null;
+}
+
+function findReecho(env, text, currentAskId, nowIso) {
+  const key = groupKey(text);
+  if (!key) return undefined;
+  const rows = readRows(env);
+  if (!rows || rows.length === 0) return undefined;
+  const nowMs = Date.parse(nowIso);
+  const replyByAskId = new Map();
+  for (const r of rows) {
+    if (r.kind === 'reply' && typeof r.ask_id === 'string' && r.ask_id !== '' && !replyByAskId.has(r.ask_id)) {
+      replyByAskId.set(r.ask_id, r);
+    }
+  }
+  for (let i = rows.length - 1; i >= 0; i -= 1) {
+    const r = rows[i];
+    if (r.kind !== 'ask') continue;
+    if (r.ask_id === currentAskId) continue;
+    if (typeof r.ask_id !== 'string' || r.ask_id === '') continue;
+    if (typeof r.text !== 'string' || groupKey(r.text) !== key) continue;
+    const askMs = Date.parse(r.at || r.ts);
+    if (!Number.isFinite(askMs) || nowMs - askMs > REEHO_WINDOW_MS) continue;
+    const reply = replyByAskId.get(r.ask_id);
+    if (!reply) continue;
+    const line = firstReplyLine(reply);
+    if (!line) continue;
+    const taipei = formatTaipeiTime(r.at || r.ts);
+    if (!taipei) continue;
+    return `你問過同一件事（台北時間 ${taipei}），上次的答案：${line}`;
+  }
+  return undefined;
+}
+
 function onPrompt(input, env) {
   if (input.agent_id) return null;
   const at = new Date().toISOString();
@@ -249,7 +303,8 @@ function onPrompt(input, env) {
   const sessionId = typeof input.session_id === 'string' ? input.session_id : '';
   const askId = computeAskId(sessionId, at, text);
   append(env, { schema: SCHEMA, kind: 'ask', at, ask_id: askId, session_id: sessionId, text });
-  return { kind: 'ask', ask_id: askId };
+  const reecho = findReecho(env, text, askId, at);
+  return { kind: 'ask', ask_id: askId, reecho };
 }
 
 // The Stop payload's last_assistant_message is the reply of the turn that is
@@ -377,7 +432,10 @@ function main() {
   try {
     if (!isEnabled('askpm-log')) return;
     const input = JSON.parse(fs.readFileSync(0, 'utf8'));
-    handle(input, { AUTOPILOT_STATE_DIR: process.env.AUTOPILOT_STATE_DIR, XDG_STATE_HOME: process.env.XDG_STATE_HOME, HOME: process.env.HOME });
+    const res = handle(input, { AUTOPILOT_STATE_DIR: process.env.AUTOPILOT_STATE_DIR, XDG_STATE_HOME: process.env.XDG_STATE_HOME, HOME: process.env.HOME });
+    if (res && typeof res.reecho === 'string') {
+      process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: res.reecho } })}\n`);
+    }
   } catch (err) {
     process.stderr.write(`askpm-log: fail-open: ${err && err.message}\n`);
   }

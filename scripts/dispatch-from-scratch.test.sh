@@ -53,7 +53,8 @@ if [[ "$count" != "1" ]]; then
   echo "sandbox_not_clean: count=$count" >&2
   exit 9
 fi
-echo '{"status":"ok","manifest_path":"/tmp/m.json","raw_log":"/tmp/r.log"}'
+echo 'dispatch-author: run_id=r1 manifest=/tmp/m.json (watch: x)' >&2
+echo '{"status":"authored","raw_log":"/tmp/r.log"}'
 EOF
 chmod +x "$FAKE_AUTHOR"
 
@@ -66,6 +67,14 @@ if ! printf '%s' "$out" | grep -q '產出未審，進 repo 前須 Claude 席或 
 else
   echo "PASS: review notice printed"
   PASS=$((PASS + 1))
+fi
+
+if printf '%s' "$out" | grep -q '^manifest: /tmp/m.json$' && printf '%s' "$out" | grep -q '^raw_log: /tmp/r.log$'; then
+  echo "PASS: manifest and raw_log parsed from real dispatch-author output"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: manifest or raw_log not parsed" >&2
+  FAIL=$((FAIL + 1))
 fi
 
 # 3. First engine fails -> falls back to second engine

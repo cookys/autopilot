@@ -68,7 +68,7 @@ export PATH="$PATH:$HOME/.local/bin:$HOME/.kimi-code/bin"
 # Candidate engines: (label, runner, endpoint, model)
 CANDIDATES=(
   "minimax|cc-shim|minimax|MiniMax-M3"
-  "kimi|cc-shim|kimi|kimi-code/kimi-for-coding"
+  "kimi|kimi||kimi-code/k3"
 )
 
 REASONS=()
@@ -76,22 +76,12 @@ for entry in "${CANDIDATES[@]}"; do
   IFS='|' read -r label runner endpoint model <<< "$entry"
   out=""
   rc=0
-  out="$(cd "$SB" && "$AUTHOR_BIN" --runner "$runner" --endpoint "$endpoint" --model "$model" --prompt-file "$SB/$BRIEF_NAME" 2>&1)" || rc=$?
+  ep_args=()
+  [[ -z "$endpoint" ]] || ep_args=(--endpoint "$endpoint")
+  out="$(cd "$SB" && "$AUTHOR_BIN" --runner "$runner" ${ep_args[@]+"${ep_args[@]}"} --model "$model" --prompt-file "$SB/$BRIEF_NAME" 2>&1)" || rc=$?
 
   if [[ $rc -eq 0 ]]; then
-    manifest="$(printf '%s\n' "$out" | node -e '
-      const fs = require("fs");
-      const raw = fs.readFileSync(0, "utf8");
-      for (const line of raw.split(/\r?\n/).reverse()) {
-        const t = line.trim();
-        if (!t.startsWith("{")) continue;
-        try {
-          const j = JSON.parse(t);
-          console.log(j.manifest_path || j.manifest || "");
-          process.exit(0);
-        } catch {}
-      }
-    ' 2>/dev/null || true)"
+    manifest="$(printf '%s\n' "$out" | grep -o 'manifest=[^ ]*' | head -n 1 | cut -d= -f2- || true)"
     raw_log="$(printf '%s\n' "$out" | node -e '
       const fs = require("fs");
       const raw = fs.readFileSync(0, "utf8");

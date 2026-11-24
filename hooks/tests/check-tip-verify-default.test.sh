@@ -103,7 +103,7 @@ EOF
 node "$READER" "$REAL_CFG" > "$TEST_TMP/lib.out"
 node "$OLD" "$REAL_CFG" > "$TEST_TMP/old.out"
 cmp -s "$TEST_TMP/lib.out" "$TEST_TMP/old.out" || fail "lib stdout differs from the old heredoc on the real config"
-printf '%s' '["node scripts/affected-suites.js --base develop --run"]' > "$TEST_TMP/golden.out"
+printf '%s' '["node scripts/affected-suites.js --base develop --fast --run"]' > "$TEST_TMP/golden.out"
 cmp -s "$TEST_TMP/lib.out" "$TEST_TMP/golden.out" || fail "real config command is not the affected-suites fence"
 node -e 'const m=require(process.argv[1]); const fs=require("fs"); const t=fs.readFileSync(process.argv[2],"utf8"); const c=m.commandsFromText(t); if (c.length) process.stdout.write(JSON.stringify(c));' \
   "$READER" "$REAL_CFG" > "$TEST_TMP/mod.out"

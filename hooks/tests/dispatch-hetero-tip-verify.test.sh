@@ -384,7 +384,7 @@ ln -s "$REPO_ROOT/.claude/quality-gate-config.md" "$SBX/.claude/quality-gate-con
 CASE_PROMPT="$PROMPT_PLAIN"
 run_case tv-real-repo-config
 assert_eq "$(jget "$J" tip_verify.source)" "repo_config" "real quality-gate-config source repo_config"
-assert_eq "$(jget "$J" tip_verify.commands.0.cmd)" "node scripts/affected-suites.js --base develop --run" "real quality-gate-config command"
+assert_eq "$(jget "$J" tip_verify.commands.0.cmd)" "node scripts/affected-suites.js --base develop --fast --run" "real quality-gate-config command"
 assert_eq "$(jget "$J" tip_verify.commands.1.cmd)" "" "real quality-gate-config is one command"
 
 # --- negative control: ignore a failing rc → the false case goes wrongly green ---

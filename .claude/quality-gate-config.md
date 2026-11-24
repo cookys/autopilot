@@ -6,7 +6,7 @@
 ## Test Command
 
 ```bash
-node scripts/affected-suites.js --base develop --run
+node scripts/affected-suites.js --base develop --fast --run
 ```
 
 Test step: select first, then run (from the repository root).

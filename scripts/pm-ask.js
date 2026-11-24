@@ -6,7 +6,7 @@
  *   close <ask_id> --evidence <ref>   Dispose ask as closed (sha 7-40 hex, 26-char ULID, d-8hex, https URL, or existing absolute path)
  *   progress <ask_id> --task <ulid>   Dispose ask as tracked under a 26-char fleet task ULID
  *   supersede <old_id> <new_id>       Dispose <old_id> as superseded by newer <new_id>
- *   list [--open] [--answers]         List asks (<= 30 lines, `id age first-60-chars`, `… N more`)
+ *   list [--open] [--answers [--json]]         List asks (<= 30 lines, `id age first-60-chars`, `… N more`)
  *   overdue [--hours 24]              List open asks older than N hours (default 24, <= 30 lines)
  *
  * Exit codes: 0 ok, 2 usage/validation error.
@@ -295,6 +295,18 @@ function formatAnswersList(entries, disposed, repliesByAskId, replyCutoffMs, now
   return shown.join('\n');
 }
 
+function answerRecord(entry, disposed, repliesByAskId, replyCutoffMs, nowMs) {
+  const row = entry.row;
+  const { status, latestReply } = statusOf(entry, disposed, repliesByAskId, replyCutoffMs, nowMs);
+  return {
+    status,
+    count: entry.count || 1,
+    at: entry.last_at || row.at,
+    ask: (typeof row.text === 'string' ? row.text : '').replace(/\s+/g, ' ').trim(),
+    answer: latestReply ? String(latestReply.text || '') : null,
+  };
+}
+
 function listOutput(env, opts = {}) {
   const nowMs = opts.nowMs ?? Date.now();
   const { asks, disposed, repliesByAskId, replyCutoffMs } = loadState(env);
@@ -306,6 +318,7 @@ function listOutput(env, opts = {}) {
       : grouped;
     // Newest first: the 30-line cap must cut the oldest rows, not the ones the operator asked today.
     const newestFirst = [...shown].sort((a, b) => (Date.parse(b.last_at || b.row.at) || 0) - (Date.parse(a.last_at || a.row.at) || 0));
+    if (opts.json) return JSON.stringify(newestFirst.map((e) => answerRecord(e, disposed, repliesByAskId, replyCutoffMs, nowMs)));
     return formatAnswersList(newestFirst, disposed, repliesByAskId, replyCutoffMs, nowMs);
   }
   return formatList(grouped, nowMs);
@@ -447,12 +460,15 @@ function runCommand(argv, env = envFromProcess(), nowMs = Date.now()) {
   if (cmd === 'list') {
     let openOnly = false;
     let answers = false;
+    let json = false;
     for (const arg of rest) {
       if (arg === '--open') openOnly = true;
       else if (arg === '--answers') answers = true;
+      else if (arg === '--json') json = true;
       else throw usageError(`pm-ask list: unknown argument ${arg}`);
     }
-    return listOutput(env, { open: openOnly, answers, nowMs });
+    if (json && !answers) throw usageError('pm-ask list: --json needs --answers');
+    return listOutput(env, { open: openOnly, answers, json, nowMs });
   }
 
   if (cmd === 'where') {

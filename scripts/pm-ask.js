@@ -300,7 +300,9 @@ function listOutput(env, opts = {}) {
     const shown = opts.open
       ? grouped.filter((e) => statusOf(e, disposed, repliesByAskId, replyCutoffMs).status !== '舊紀錄')
       : grouped;
-    return formatAnswersList(shown, disposed, repliesByAskId, replyCutoffMs);
+    // Newest first: the 30-line cap must cut the oldest rows, not the ones the operator asked today.
+    const newestFirst = [...shown].sort((a, b) => (Date.parse(b.last_at || b.row.at) || 0) - (Date.parse(a.last_at || a.row.at) || 0));
+    return formatAnswersList(newestFirst, disposed, repliesByAskId, replyCutoffMs);
   }
   return formatList(grouped, nowMs);
 }

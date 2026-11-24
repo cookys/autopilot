@@ -78,12 +78,14 @@ function loadState(env) {
   const repliesByAskId = new Map();
   let replyCutoffMs = null;
   for (let i = 0; i < rows.length; i += 1) {
-    const r = typeof rows[i].text === 'string' ? { ...rows[i], text: maskSecrets(rows[i].text) } : rows[i];
+    let r = typeof rows[i].text === 'string' ? { ...rows[i], text: maskSecrets(rows[i].text) } : rows[i];
     if (r.kind === 'ask' && typeof r.ask_id === 'string' && r.ask_id !== '' && !isHandoffResume(r.text)) {
       const entry = { row: r, index: i };
       asks.push(entry);
       askById.set(r.ask_id, entry);
-    } else if (r.kind === 'disposition' && typeof r.ask_id === 'string' && r.ask_id !== '') {
+    } else if ((r.kind === 'reply' || r.kind === 'disposition') && typeof r.ask_id === 'string' && r.ask_id !== '') {
+      // hooks/askpm-log.js writes the PM's answer as kind 'reply'; the older writer and hand-made rows use disposition + action 'reply'
+      if (r.kind === 'reply') r = { ...r, action: 'reply' };
       if (r.action === 'close' || r.action === 'progress' || r.action === 'supersede') {
         disposed.add(r.ask_id);
       } else if (r.action === 'reply') {

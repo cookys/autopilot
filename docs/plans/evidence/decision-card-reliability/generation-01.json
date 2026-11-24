@@ -1,0 +1,345 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "01M85R7AXE9FSA18144YSCS57G",
+  "logical_plan_id": "decision-card-reliability",
+  "session_id": "loop-decision-card-reliability",
+  "session_key": "a0e03d07f08e0095cce3e7830834fb83ac36a2bf6a909a4195e4279143411ab8",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": null,
+  "terminal": true,
+  "policy_reason": "required_seat_transport_exhausted",
+  "rubric_sha256": "4e5282bbb9201420031c366c8db15a19bb8597080b5f44d1a9542772ff3b19dc",
+  "manifest_sha256": "3a2362abc2330fcb1cf1475b5b41b22c8686aef107d032430679458fb112fa85",
+  "context_sha256": null,
+  "plan_sha256": "e3ffcdbf03072b1f66ffe68ad33888d8a6d07622044fcb465932f0d0e82a35b8",
+  "plan_path": "docs/plans/2026-11-24-decision-card-reliability.md",
+  "plan_git_blob_sha": "0eaff886cc06b311483172c896acd6fce6127f4c",
+  "repo_head_sha": "0a393ae4ba07cbfb46b54ab4183e452cbaa2f543",
+  "plan_dirty_vs_head": false,
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "transport_exhausted",
+  "attempts": [
+    {
+      "seat_id": "astra_construct_validity",
+      "target_id": "astra_construct_validity",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-6-astra",
+          "operation": "plan-review",
+          "request_digest": "e21cb4be4a91084dee6c27bba77f53b6c9379de42944d668e25668dc4e9b7d89"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 3,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "c6ee47a1fed349f94d85424a2507dabc8f9951abec3ef34717aa2f7635ca606b",
+          "stderr_sha256": "9020b1f74edf461d5577c1c0911db30366524045402cc9494095893947e79c1a"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "<tmp>/dispatch-author-codex-mvcjV9/stdout",
+          "digest": "c6ee47a1fed349f94d85424a2507dabc8f9951abec3ef34717aa2f7635ca606b"
+        },
+        "receipt_digest": "80191904cbabbca0629d4382767863f50076909f43a3d25dc0f847cc96f9836f"
+      },
+      "transport_status": "exit_failure",
+      "usage": null,
+      "duration_ms": 49990,
+      "error": "codex transport chrome frame missing",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "available",
+      "unratified": {
+        "payload": {
+          "verdict": "STOP",
+          "findings": [
+            {
+              "rubric_id": "R1",
+              "class": "decision-now",
+              "severity": "blocking",
+              "affected_surface": "第二節第 1 項、第七節已答卡去重風險",
+              "claim": "已答卡比對範圍未定義，且「同題或同指紋」與「新題目描述可通過」存在未解決的規則衝突。",
+              "evidence": "計畫要求同題或同指紋命中即拒絕，但未限定請求、專案或作用域；風險緩解又承諾明確新題目描述可通過，未說明同指紋但不同題目時何者優先。",
+              "evidence_reference": "第二節第 1 項；第五節 T1；第七節第一列",
+              "repair": "凍結比較的作用域、指紋構成與題目比對的優先規則；明定同指紋的新題目是否仍屬重開，並加入同作用域重問被擋、不同作用域合法同題及同指紋改題的驗收。",
+              "blocks_next_slice_or_immediate_integrity": true,
+              "cannot_defer_to_spike": true,
+              "failure_scenario": "兩個獨立請求使用相同標準化題目，第一個已答；若按目前未限定作用域的同題規則掃描，第二個合法請求會被拒絕並回顯第一個請求的答案。"
+            },
+            {
+              "rubric_id": "R2",
+              "class": "decision-now",
+              "severity": "blocking",
+              "affected_surface": "from_request 解析、原請求方定位與轉送完成判定",
+              "claim": "計畫定義了請求 id 的儲存位置，尚未定義 id 如何可信地解析為原請求方，也未定義原請求方與 executor 不同時的交付語意。",
+              "evidence": "第二節只指定 scripts/request-decision.js 對應端點；驗收要求記錄單一 sent_message_id，但現有路徑送至 executor，新增路徑送至原請求方，未說明取代、追加或兩者相同時的處理。",
+              "evidence_reference": "第二節第 2 項；第五節 T2",
+              "repair": "指定請求紀錄的權威來源、查找鍵與可信原請求方欄位；決定 executor 與原請求方的收件規則，並定義各必要交付的成功紀錄、部分成功狀態與重試規則。加入兩者不同且僅一方送達的驗收。",
+              "blocks_next_slice_or_immediate_integrity": true,
+              "cannot_defer_to_spike": true,
+              "failure_scenario": "卡片 executor 是 A，from_request 所屬請求方是 B；送 A 成功而送 B 失敗。若單一 sent_message_id 被視為完成證據，卡片可被結案，但原請求方仍未收到答案。"
+            },
+            {
+              "rubric_id": "R5",
+              "class": "implementation-spike",
+              "severity": "non-blocking",
+              "affected_surface": "T5 真實案例 fixture 與回歸證據",
+              "claim": "目前設計可驗證一般狀態機行為，但尚不能證明覆蓋指定的四張重問卡與五張 verify_failed；真實欄位結構本身不足以重現事件。",
+              "evidence": "第六節明示未找到原始 card ID，測試先描述為四組 closed fixture 與五組 CLI 失敗模擬；第七節僅要求抽取真實欄位結構，未要求保留各案例的觸發操作與狀態序列。",
+              "evidence_reference": "第六節來源、原始卡號與日誌、轉測試方式；第七節第三列",
+              "repair": "將案例取得列為有明確產出的前置 spike：建立九個事件至脫敏 fixture、觸發序列及斷言的對照。資料不足時明確標記未驗證的歷史案例，不以合成測試全綠宣告四加五案例已覆蓋。",
+              "blocks_next_slice_or_immediate_integrity": false,
+              "cannot_defer_to_spike": false,
+              "failure_scenario": ""
+            },
+            {
+              "rubric_id": "R6",
+              "class": "decision-now",
+              "severity": "blocking",
+              "affected_surface": "T1–T5 執行依賴、共用檔案與 M1/M2 驗收順序",
+              "claim": "執行表允許三項工作並行修改同一檔案，沒有整合所有權；里程碑亦未反映 T5 對 T2、T3 的依賴。",
+              "evidence": "T1、T2、T3 都屬可平行群組 A 且修改 scripts/open-decision.js；T5 依賴 T1–T3，但 M1 要求四加五案例測試完成，T2、T3 的成果則列於較晚的 M2。",
+              "evidence_reference": "第一節里程碑表；第四節子工作表",
+              "repair": "指定共用檔案的單一整合責任或明確串行順序；將 fixture 蒐集與整合回歸分開標示，並讓 M1/M2 的驗收順序符合 T5 的實際依賴。若 T2、T3 必須提前供 M1 使用，明列其前置完成點。",
+              "blocks_next_slice_or_immediate_integrity": true,
+              "cannot_defer_to_spike": true,
+              "failure_scenario": "依表先在 M1 宣告九個回歸案例完成，但 T2、T3 隨 M2 才整合；M1 的全綠結果沒有覆蓋最終派送與分診路徑，無法作為計畫所要求的整合回歸證據。"
+            }
+          ]
+        },
+        "parser_status": "strict",
+        "attempt": 1,
+        "target_id": "astra_construct_validity",
+        "family": "openai",
+        "request_digest": "e21cb4be4a91084dee6c27bba77f53b6c9379de42944d668e25668dc4e9b7d89",
+        "raw_digest": "c6ee47a1fed349f94d85424a2507dabc8f9951abec3ef34717aa2f7635ca606b"
+      }
+    },
+    {
+      "seat_id": "astra_construct_validity",
+      "target_id": "astra_construct_validity",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-6-astra",
+          "operation": "plan-review",
+          "request_digest": "4612983149aed00e6583b5787572850eb7d5499669e2e7fe981476532fbecb5c"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 3,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "a48e221332a1b919189ae98ee81ff049b619579ab6fc7f45189081b2faa4ed3f",
+          "stderr_sha256": "379c4882a7e958c646c5a9d083b50083ae80895cac7f574106a7cd6d4a6c0654"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "<tmp>/dispatch-author-codex-eZHM9P/stdout",
+          "digest": "a48e221332a1b919189ae98ee81ff049b619579ab6fc7f45189081b2faa4ed3f"
+        },
+        "receipt_digest": "427fc32c9c90056af972ab156cdb5020e19d9cb8eb936759473f6e20ea7b3763"
+      },
+      "transport_status": "exit_failure",
+      "usage": null,
+      "duration_ms": 89021,
+      "error": "codex transport chrome frame missing",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "available",
+      "unratified": {
+        "payload": {
+          "verdict": "CONDITIONAL",
+          "findings": [
+            {
+              "rubric_id": "R1",
+              "class": "decision-now",
+              "severity": "blocking",
+              "affected_surface": "T1 已答卡比對範圍與測試",
+              "claim": "計畫列出狀態，但未明定跨 root scope 的搜尋範圍、同題正規化規則及請求指紋欄位，無法建立唯一的拒絕判準。",
+              "evidence": "第二節要求同題或同指紋即拒絕，第七節僅補充標準化後同題或同請求指紋；第五、六節只測 closed 卡同題重開。現有卡片按 root scope 分檔，現行 live-card 去重則搜尋整個 project。",
+              "evidence_reference": "計畫第二節第 1 項、第五節 T1、第六節第 1 項、第七節；scripts/open-decision.js:37–46、1361–1365",
+              "repair": "在 T1 開工前明定搜尋的 project／root 範圍、正規化與指紋組成、已答的資料判準，並加入跨 root 重問、同指紋不同措辭及合理新題可通過的對照案例。",
+              "blocks_next_slice_or_immediate_integrity": true,
+              "cannot_defer_to_spike": true,
+              "failure_scenario": "卡片在 root A 已答並 closed，session 切換至 root B 後重送相同問題；若實作者只讀目前 scope，既有單 scope 測試全部通過，仍會產生重問卡。"
+            },
+            {
+              "rubric_id": "R2",
+              "class": "decision-now",
+              "severity": "blocking",
+              "affected_surface": "T2 from_request 回覆路由與完成狀態",
+              "claim": "from_request 目前只提供關聯 id，計畫未建立原請求方地址的可用來源，也未區分 executor 與原請求方的送達紀錄。",
+              "evidence": "request-decision.js 的 send body 沒有 requester 地址，儲存紀錄的 to 是 PM；forward 是重送原請求至 PM。計畫只引用此對應端點並要求記錄 sent_message_id，而 open-decision.js 現有此欄位表示該答案已送至 executor。",
+              "evidence_reference": "計畫第二節第 2 項、第五節 T2；scripts/request-decision.js 的 send、writeRecord、forward；scripts/open-decision.js:104–110、1635–1636",
+              "repair": "明定 requester 地址從何處取得、如何與 request id 綁定並在答覆端取得；定義 executor 與 requester 相同或不同時的收件規則、各自成功紀錄、部分成功的結案條件及重送行為，加入兩個不同收件人的驗收。",
+              "blocks_next_slice_or_immediate_integrity": true,
+              "cannot_defer_to_spike": true,
+              "failure_scenario": "worker A 發出請求，PM 開卡並指定 executor B；B 收到答案而 A 的轉送失敗。若沿用單一 sent_message_id 判定完成，卡片會結案，A 仍收不到答案且重送被視為已完成。"
+            },
+            {
+              "rubric_id": "R5",
+              "class": "decision-now",
+              "severity": "blocking",
+              "affected_surface": "T5 verify_failed 的驗收判準與負控制",
+              "claim": "計畫對相同故障輸入同時要求套件通過與轉紅，混淆正常故障處理測試和故意破壞實作的負控制。",
+              "evidence": "第六節要求 stub verify 非零退出或 send 非 ok 回應，斷言 pending_dispatch、dispatch_error、dispatch_attempts 並禁止 closed；第五節 T5 卻要求模擬 verify exit 7／非 ok 回應時測試轉紅。正確處理這些輸入時，前述斷言應通過。",
+              "evidence_reference": "計畫第五節 T5 負控制、第六節第 2 項",
+              "repair": "明定正常實作遇到 verify 或 send 失敗時，故障處理測試應通過；負控制改成故意移除驗證、錯誤結案或漏記失敗狀態，並要求原測試因偵測錯誤行為而失敗。",
+              "blocks_next_slice_or_immediate_integrity": true,
+              "cannot_defer_to_spike": true,
+              "failure_scenario": "verify 回傳 exit 7，實作正確保留 pending_dispatch 並記錄錯誤，測試斷言全部通過；按第五節這反而不符合負控制，執行者可能把外部命令失敗直接當作測試有效的證據。"
+            },
+            {
+              "rubric_id": "R5",
+              "class": "implementation-spike",
+              "severity": "non-blocking",
+              "affected_surface": "T5 真實案例 fixture 與恢復驗證",
+              "claim": "目前設計可以驗證失敗時不誤結案，但尚不足以證明四加五個歷史案例已被重現，或 verify_failed 後能恢復送達。",
+              "evidence": "第六節明示缺少原始 card ID，並以四組 closed fixture 與通用 verify/send stub 代替案例細節；沒有逐案來源到斷言的對照，也沒有失敗後重新核實並成功送達的驗收。現有 parkUndelivered 註解指出未保存 answer_id 的失敗卡會被 redeliver 略過。",
+              "evidence_reference": "計畫第六節、第七節 fixture 風險；scripts/open-decision.js:1770–1777",
+              "repair": "執行計畫已提出的 fixture 擷取 spike，產出逐案來源、脫敏 fixture、觸發路徑及斷言對照；驗證適用案例從失敗到重新核實及送達的完整路徑。無法取得的案例明列未驗證，不以合成資料計入真實案例完成數。",
+              "blocks_next_slice_or_immediate_integrity": false,
+              "cannot_defer_to_spike": false,
+              "failure_scenario": ""
+            },
+            {
+              "rubric_id": "R6",
+              "class": "decision-now",
+              "severity": "blocking",
+              "affected_surface": "T1–T5 執行依賴與 M1／M2",
+              "claim": "工作表與里程碑的先後條件不一致，共用檔案也缺少整合順序，不能直接照目前平行分組執行。",
+              "evidence": "T1、T2、T3 全列 A 群可平行且均修改 open-decision.js；T5 依賴 T1–T3，但 M1 在 11 月 25 日要求四加五回歸測試完成，T2／T3 所屬 M2 的目標日則是 11 月 26 日。計畫沒有區分 M1 的先行測試子集與 M2 整合測試。",
+              "evidence_reference": "計畫第一節里程碑表、第四節子工作表",
+              "repair": "指定 open-decision.js 的整合責任與提交先後，或先固定介面再平行開發；將 M1 回歸子集與依賴 T2／T3 的整合驗收分開，或調整依賴與完成日，使每個里程碑都有可實際執行的完成條件。",
+              "blocks_next_slice_or_immediate_integrity": true,
+              "cannot_defer_to_spike": true,
+              "failure_scenario": "11 月 25 日 T1 完成，但 T2／T3 仍按 M2 排程開發；T5 依工作表不能完成，M1 卻要求整套四加五案例通過，造成提前宣告完成或無法達成里程碑。"
+            }
+          ]
+        },
+        "parser_status": "strict",
+        "attempt": 2,
+        "target_id": "astra_construct_validity",
+        "family": "openai",
+        "request_digest": "4612983149aed00e6583b5787572850eb7d5499669e2e7fe981476532fbecb5c",
+        "raw_digest": "a48e221332a1b919189ae98ee81ff049b619579ab6fc7f45189081b2faa4ed3f"
+      }
+    },
+    {
+      "seat_id": "grok_measurement_skeptic",
+      "target_id": "grok_measurement_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.7",
+          "operation": "plan-review",
+          "request_digest": "7d87ee70010a996bb877f584c0d15f162146fd423f868f2361cb3137f43aa9c9"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 6,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "02e17d48cc66af077803bb36aadb29eb49ad242ae955444c8dd5c61e0893b4e7",
+          "stderr_sha256": "13560d21169e0f0cf76b1b99ba7309f05732b85ff84a20fdee0b080e0c173f55"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "<tmp>/dispatch-author-log-gbGmAI",
+          "digest": "02e17d48cc66af077803bb36aadb29eb49ad242ae955444c8dd5c61e0893b4e7"
+        },
+        "receipt_digest": "b19ad0f6f225fc7d5444530d9cd380007f7635b3d06b3e7b2d7f646e9306faa1"
+      },
+      "transport_status": "exit_failure",
+      "usage": null,
+      "duration_ms": 5912,
+      "error": "runner exited 1: Error: Internal error: { \"message\": \"API error (status 402 Payment Required): Grok Build usage balance exhausted\", \"http_status\": 402 }",
+      "runner_stderr_tail": "pace: grok is at 100% of its 7-day window (resets 2026-11-26T11:42+08:00); named by caller, dispatching anyway — agyclaude has 100% left\ndispatch-author: runner stderr (grok/grok-4.7, rc=1): Error: Internal error: { \"message\": \"API error (status 402 Payment Required): Grok Build usage balance exhausted\", \"http_status\": 402 }",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "grok_measurement_skeptic",
+      "target_id": "grok_measurement_skeptic",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.7",
+          "operation": "plan-review",
+          "request_digest": "4dc85c3175d19abb0dd9572524497658e48b39e2f1c98d5a7f703625368e0cf0"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 6,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "02e17d48cc66af077803bb36aadb29eb49ad242ae955444c8dd5c61e0893b4e7",
+          "stderr_sha256": "13560d21169e0f0cf76b1b99ba7309f05732b85ff84a20fdee0b080e0c173f55"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "<tmp>/dispatch-author-log-s6NKdD",
+          "digest": "02e17d48cc66af077803bb36aadb29eb49ad242ae955444c8dd5c61e0893b4e7"
+        },
+        "receipt_digest": "311b15731416df14ea8fd34d1fa06267d014ffa8bda40ebfe9dbc06b877e7ee1"
+      },
+      "transport_status": "exit_failure",
+      "usage": null,
+      "duration_ms": 6161,
+      "error": "runner exited 1: Error: Internal error: { \"message\": \"API error (status 402 Payment Required): Grok Build usage balance exhausted\", \"http_status\": 402 }",
+      "runner_stderr_tail": "pace: grok is at 100% of its 7-day window (resets 2026-11-26T11:42+08:00); named by caller, dispatching anyway — agyclaude has 100% left\ndispatch-author: runner stderr (grok/grok-4.7, rc=1): Error: Internal error: { \"message\": \"API error (status 402 Payment Required): Grok Build usage balance exhausted\", \"http_status\": 402 }",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [],
+  "findings": [],
+  "backlog_candidates": [],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-11-24T04:02:27.532Z",
+  "unratified_observations": [
+    {
+      "kind": "salvage_conflict",
+      "seat_id": "astra_construct_validity",
+      "target_id": "astra_construct_validity",
+      "family": "openai",
+      "distinct_count": 2
+    }
+  ],
+  "usage": null,
+  "duration_ms": 151216
+}

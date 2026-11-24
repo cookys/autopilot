@@ -6,7 +6,7 @@
  *   close <ask_id> --evidence <ref>   Dispose ask as closed (sha 7-40 hex, 26-char ULID, d-8hex, https URL, or existing absolute path)
  *   progress <ask_id> --task <ulid>   Dispose ask as tracked under a 26-char fleet task ULID
  *   supersede <old_id> <new_id>       Dispose <old_id> as superseded by newer <new_id>
- *   list [--open]                     List asks (<= 30 lines, `id age first-60-chars`, `… N more`)
+ *   list [--open] [--answers]         List asks (<= 30 lines, `id age first-60-chars`, `… N more`)
  *   overdue [--hours 24]              List open asks older than N hours (default 24, <= 30 lines)
  *
  * Exit codes: 0 ok, 2 usage/validation error.
@@ -72,6 +72,7 @@ function loadState(env) {
   const asks = [];
   const askById = new Map();
   const disposed = new Set();
+  const repliesByAskId = new Map();
   for (let i = 0; i < rows.length; i += 1) {
     const r = rows[i];
     if (r.kind === 'ask' && typeof r.ask_id === 'string' && r.ask_id !== '') {
@@ -81,10 +82,14 @@ function loadState(env) {
     } else if (r.kind === 'disposition' && typeof r.ask_id === 'string' && r.ask_id !== '') {
       if (r.action === 'close' || r.action === 'progress' || r.action === 'supersede') {
         disposed.add(r.ask_id);
+      } else if (r.action === 'reply') {
+        const list = repliesByAskId.get(r.ask_id) || [];
+        list.push({ text: typeof r.text === 'string' ? r.text : '', at: r.at || null, index: i });
+        repliesByAskId.set(r.ask_id, list);
       }
     }
   }
-  return { asks, askById, disposed };
+  return { asks, askById, disposed, repliesByAskId };
 }
 
 function formatAge(atIso, nowMs) {
@@ -131,6 +136,7 @@ function groupAsks(entries, nowMs = Date.now()) {
       const archived = Number.isFinite(lastMs) ? (nowMs - lastMs) >= ARCHIVE_DAYS_MS : false;
       groups.push({
         ...entry,
+        ask_ids: [row.ask_id],
         count: 1,
         first_at: at,
         last_at: at,
@@ -146,6 +152,7 @@ function groupAsks(entries, nowMs = Date.now()) {
       const lastMs = at ? Date.parse(at) : NaN;
       const grouped = {
         ...entry,
+        ask_ids: [row.ask_id],
         group_key: gk,
         count: 1,
         first_at: at,
@@ -156,6 +163,9 @@ function groupAsks(entries, nowMs = Date.now()) {
       groups.push(grouped);
     } else {
       existing.count += 1;
+      if (!existing.ask_ids.includes(row.ask_id)) {
+        existing.ask_ids.push(row.ask_id);
+      }
       if (at) {
         const atMs = Date.parse(at);
         const firstMs = existing.first_at ? Date.parse(existing.first_at) : NaN;
@@ -193,11 +203,72 @@ function formatList(entries, nowMs = Date.now()) {
   return shown.join('\n');
 }
 
+function formatTaipeiTime(atIso) {
+  const ts = Date.parse(atIso);
+  if (!Number.isFinite(ts)) return '??-?? ??:??';
+  const d = new Date(ts + 8 * 3600 * 1000);
+  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(d.getUTCDate()).padStart(2, '0');
+  const hh = String(d.getUTCHours()).padStart(2, '0');
+  const min = String(d.getUTCMinutes()).padStart(2, '0');
+  return `${mm}-${dd} ${hh}:${min}`;
+}
+
+function pickLatestReply(askIds, repliesByAskId) {
+  let best = null;
+  for (const id of askIds) {
+    const list = repliesByAskId.get(id);
+    if (!list) continue;
+    for (const r of list) {
+      if (!best) {
+        best = r;
+        continue;
+      }
+      const rMs = r.at ? Date.parse(r.at) : NaN;
+      const bMs = best.at ? Date.parse(best.at) : NaN;
+      if (Number.isFinite(rMs) && Number.isFinite(bMs)) {
+        if (rMs > bMs || (rMs === bMs && r.index > best.index)) best = r;
+      } else if (Number.isFinite(rMs) && !Number.isFinite(bMs)) {
+        best = r;
+      } else if (r.index > best.index) {
+        best = r;
+      }
+    }
+  }
+  return best;
+}
+
+function formatAnswerLine(entry, disposed, repliesByAskId) {
+  const row = entry.row;
+  const askIds = entry.ask_ids || [row.ask_id];
+  const latestReply = pickLatestReply(askIds, repliesByAskId);
+  const isDisposed = askIds.some((id) => disposed.has(id));
+  const status = latestReply ? '已答' : (isDisposed ? '已處置' : '未答');
+  const timeStr = formatTaipeiTime(entry.last_at || row.at);
+  const summary = (typeof row.text === 'string' ? row.text : '').replace(/\s+/g, ' ').trim().slice(0, 40);
+  const answer = latestReply
+    ? String(latestReply.text || '').split(/\r?\n/)[0].trim().slice(0, 60)
+    : '（尚無答案）';
+  return `${status} ${timeStr} ${summary} ｜ ${answer}`;
+}
+
+function formatAnswersList(entries, disposed, repliesByAskId) {
+  if (entries.length === 0) return '';
+  const shown = entries.slice(0, MAX_VIEW_LINES).map((e) => formatAnswerLine(e, disposed, repliesByAskId));
+  if (entries.length > MAX_VIEW_LINES) {
+    shown.push(`… ${entries.length - MAX_VIEW_LINES} more`);
+  }
+  return shown.join('\n');
+}
+
 function listOutput(env, opts = {}) {
   const nowMs = opts.nowMs ?? Date.now();
-  const { asks, disposed } = loadState(env);
+  const { asks, disposed, repliesByAskId } = loadState(env);
   const selected = opts.open ? asks.filter((e) => !disposed.has(e.row.ask_id)) : asks;
   const grouped = groupAsks(selected, nowMs);
+  if (opts.answers) {
+    return formatAnswersList(grouped, disposed, repliesByAskId);
+  }
   return formatList(grouped, nowMs);
 }
 
@@ -228,7 +299,7 @@ function runCommand(argv, env = envFromProcess(), nowMs = Date.now()) {
       '  pm-ask.js close <ask_id> --evidence <ref>',
       '  pm-ask.js progress <ask_id> --task <ulid>',
       '  pm-ask.js supersede <old_id> <new_id>',
-      '  pm-ask.js list [--open]',
+      '  pm-ask.js list [--open] [--answers]',
       '  pm-ask.js overdue [--hours 24]',
     ].join('\n');
   }
@@ -336,11 +407,13 @@ function runCommand(argv, env = envFromProcess(), nowMs = Date.now()) {
 
   if (cmd === 'list') {
     let openOnly = false;
+    let answers = false;
     for (const arg of rest) {
       if (arg === '--open') openOnly = true;
+      else if (arg === '--answers') answers = true;
       else throw usageError(`pm-ask list: unknown argument ${arg}`);
     }
-    return listOutput(env, { open: openOnly, nowMs });
+    return listOutput(env, { open: openOnly, answers, nowMs });
   }
 
   if (cmd === 'overdue') {

@@ -81,7 +81,7 @@ function dispatchHangarRestart(sid, landed) {
   delete env.FLEET_AS_CLI;
   delete env.FLEET_FYI;
   const r = spawnSync(
-    process.env.FLEET_BIN || 'fleet',
+    require('../scripts/lib/fleet-task.js').bin(process.env),
     ['dispatch', target, '--size', 'XS', '--kind', 'ops', '--class', 'chat', '--priority', 'P3', '--priority-reason', 'seat restart request', text],
     { encoding: 'utf8', timeout: DISPATCH_TIMEOUT_MS, env }
   );

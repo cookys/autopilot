@@ -189,6 +189,14 @@ calls="$([ -f "$FLEET_LOG" ] && wc -l < "$FLEET_LOG" || echo 0)"
 line="$(cat "$FLEET_LOG" 2>/dev/null || true)"
 [ "$calls" -eq 1 ] && has "$line" "dispatch cookys/openclaw/hangar--claude " && ! has "$line" "dispatch cookys/openclaw/ops--claude " && ok "(j6) ops--claude dispatches to hangar--claude" || bad "(j6) calls=$calls line=$line"
 
+# (j7) no FLEET_BIN and no fleet on PATH: the dispatch still finds $HOME/.local/bin/fleet (hook PATH often lacks it)
+reset; rm -f "$FLEET_LOG"; use_context 160000; fire >/dev/null; write_handoff
+mkdir -p "$TMP/home/.local/bin" "$TMP/pathbin"; cp "$FAKE_FLEET" "$TMP/home/.local/bin/fleet"; ln -sf "$(command -v node)" "$TMP/pathbin/node"
+out="$(env -u FLEET_BIN PATH="$TMP/pathbin:/usr/bin:/bin" FAKE_FLEET_LOG="$FLEET_LOG" FLEET_ADDRESS="cookys/openclaw/ops--claude" bash -c 'printf "%s" "$0" | node "$1" 2>/dev/null' "$STOP_PAYLOAD" "$GATE")"
+calls="$([ -f "$FLEET_LOG" ] && wc -l < "$FLEET_LOG" || echo 0)"
+[ "$calls" -eq 1 ] && ! has "$out" "no fleet binary" && ok "(j7) dispatch found fleet under HOME/.local/bin without FLEET_BIN" || bad "(j7) calls=$calls out=$out"
+rm -rf "$TMP/home/.local/bin/fleet"
+
 # (k) t2_hard_block default is false (capped at 2 blocks for PM seat); explicit true enables unlimited blocks
 reset; rm -f "$TMP/home/.autopilot/config.json"; use_context 160000; fire >/dev/null
 o1="$(FLEET_ADDRESS="cookys/aimax395/pm--claude" stop)"

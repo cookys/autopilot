@@ -50,6 +50,38 @@
   },
   "entries": [
     {
+      "name": "context_budget.t2_pct_by_seat",
+      "kind": "config_key",
+      "audience": "user",
+      "type": "object",
+      "default": { "pm": 35 },
+      "readers": [
+        "scripts/lib/config-path.js",
+        "hooks/context-budget-lib.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "context_budget.t2"
+      ],
+      "summary": "Per-seat T2 threshold percentage of the known context window (e.g. {\"pm\": 35})."
+    },
+    {
+      "name": "context_budget.t2_hard_block",
+      "kind": "config_key",
+      "audience": "user",
+      "type": "boolean",
+      "default": true,
+      "readers": [
+        "scripts/lib/config-path.js",
+        "hooks/context-land-gate.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "context_budget.t2"
+      ],
+      "summary": "When true, context-land-gate keeps blocking Stop after T2 until handoff and restart_requested marker exist; false reverts to max 2 blocks."
+    },
+    {
       "name": "accounts.quota_probe_demand",
       "kind": "config_key",
       "audience": "user",

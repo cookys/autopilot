@@ -96,12 +96,16 @@ function unreachableT2Warning(cfg, window) {
  * Defaults never scale UP; a window smaller than the 200K the defaults were calibrated for
  * still scales them DOWN (so T2 can never sit above the real ceiling).
  */
-function tiersForKnownWindow(cfg, window) {
+function tiersForKnownWindow(cfg, window, seat) {
   const ratio = Number.isFinite(window) && window > 0 ? Math.min(1, window / BASE_WINDOW) : 1;
+  const seatPct = seat && cfg.t2PctBySeat && Number.isFinite(cfg.t2PctBySeat[seat]) ? cfg.t2PctBySeat[seat] : null;
+  const t2 = (!cfg.envT2 && seatPct !== null && Number.isFinite(window) && window > 0)
+    ? Math.round(window * (seatPct / 100))
+    : (cfg.explicitT2 ? cfg.t2 : Math.round(cfg.t2 * ratio));
   return {
     ...cfg,
     t1: cfg.explicitT1 ? cfg.t1 : Math.round(cfg.t1 * ratio),
-    t2: cfg.explicitT2 ? cfg.t2 : Math.round(cfg.t2 * ratio),
+    t2,
     // T3 default: 70% of an exactly known window (budgetDecision ignores it unless it is above t2).
     t3: cfg.explicitT3 ? cfg.t3 : (Number.isFinite(window) && window > 0 ? Math.round(window * T3_WINDOW_RATIO) : 0),
     inferredWindow: window,

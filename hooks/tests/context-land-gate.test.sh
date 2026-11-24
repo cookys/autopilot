@@ -189,6 +189,22 @@ calls="$([ -f "$FLEET_LOG" ] && wc -l < "$FLEET_LOG" || echo 0)"
 line="$(cat "$FLEET_LOG" 2>/dev/null || true)"
 [ "$calls" -eq 1 ] && has "$line" "dispatch cookys/openclaw/hangar--claude " && ! has "$line" "dispatch cookys/openclaw/ops--claude " && ok "(j6) ops--claude dispatches to hangar--claude" || bad "(j6) calls=$calls line=$line"
 
+# (k) t2_hard_block default is false (capped at 2 blocks for PM seat); explicit true enables unlimited blocks
+reset; rm -f "$TMP/home/.autopilot/config.json"; use_context 160000; fire >/dev/null
+o1="$(FLEET_ADDRESS="cookys/aimax395/pm--claude" stop)"
+o2="$(FLEET_ADDRESS="cookys/aimax395/pm--claude" stop)"
+o3="$(FLEET_ADDRESS="cookys/aimax395/pm--claude" stop)"
+has "$o1" '"decision":"block"' && has "$o2" '"decision":"block"' && [ -z "$o3" ] && ok "(k1) PM seat with default t2_hard_block=false caps at 2 blocks" || bad "(k1) expected 2 blocks then allow: [$o1] [$o2] [$o3]"
+
+reset; mkdir -p "$TMP/home/.autopilot"
+printf '{"context_budget":{"t2_hard_block":true}}\n' > "$TMP/home/.autopilot/config.json"
+use_context 160000; fire >/dev/null
+h1="$(FLEET_ADDRESS="cookys/aimax395/pm--claude" stop)"
+h2="$(FLEET_ADDRESS="cookys/aimax395/pm--claude" stop)"
+h3="$(FLEET_ADDRESS="cookys/aimax395/pm--claude" stop)"
+rm -f "$TMP/home/.autopilot/config.json"
+has "$h1" '"decision":"block"' && has "$h2" '"decision":"block"' && has "$h3" '"decision":"block"' && ok "(k2) PM seat with explicit t2_hard_block:true blocks 3+ times" || bad "(k2) expected 3 blocks: [$h1] [$h2] [$h3]"
+
 printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ] && { echo "PASS [context-land-gate]"; exit 0; }
 echo "FAIL [context-land-gate]"; exit 1

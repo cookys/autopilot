@@ -41,7 +41,7 @@
      - **冪等與雙寫防護**：兩個 `reply` 寫入者（`replyGate`／`writeReply` 所有呼叫端，含 `hooks/askpm-remind.js`；實際位置未查到）皆套同一契約，以 `(ask_id, turn)` 為持久冪等鍵；「查是否已寫過」與 append 必須在同一把檔案鎖內完成。當 `last_assistant_message` 為空（純工具回合）時，回溯同 turn 最後一則含文字的 assistant 訊息或工具摘要寫入 `reply`；掃描視窗不足以確定歸屬時放棄寫入（abstain），不猜。
 4. **面板位置與 fleet `origin=operator` 對接（只寫介面需求）**
    - **面板位置**：`mods/live/askpm.ts`（L3 註明 `Panel placement is paused`）。解除暫停後，放置於 pane 底部靠近提示列的熱區；**幾何排版歸 codeforge**，autopilot 僅透過 `askpmLines(view, u, folded)`（`mods/live/askpm.ts` L92）提供資料與折疊狀態。清單只在 PM 席與操作員 pane 可見，不進 web／alfred 共用介面。
-   - **fleet `origin=operator`**：目前 repo 內未查到 `origin=operator` 的正式欄位契約（「未查到」）。codeforge 的 pane 幾何與 fleet 的 `origin=operator` 契約皆為 T4 的前置相依；回覆截止訂於 **T4 開工前**，逾期未答即採「本機 only」退路上線，待契約到位後另開小單補接。本席已送出介面問題（owner：`autopilot--claude`）。
+   - **fleet `origin=operator`**：fleet 已於 2026-11-24 回覆契約：以 shell 指令 `fleet tasks --origin operator --json` 讀取（欄位 `task_id`、`title`、`state`、`origin_quote`、`days_stalled`、`next_step` 等，含原話與 ULID）；以 `operator_msg:<時間>` 記來源者不在此 feed，需另用 `fleet tasks --all --json`；MCP 側沒有同等讀取欄位，且每席只看得到自己 courier 的單（完整清單須在 PM 席的 courier 上跑）。codeforge 已回覆版位：pane 底部沒有外部 owner 也沒有預留固定區塊，全屬 `mods/live`；T4 比照 B69 的 `hasStatusRow` 機制，在 tab strip 之上加 1–2 列預設收合的摺疊條（真的畫出來才佔列），並同步更新 `doc/design/pane-design-language.md`，新字元須過 `mods/live/width-lint.test.js`。codeforge 的 pane 幾何與 fleet 的 `origin=operator` 契約皆為 T4 的前置相依；回覆截止訂於 **T4 開工前**，逾期未答即採「本機 only」退路上線，待契約到位後另開小單補接。本席已送出介面問題（owner：`autopilot--claude`）。
 
 ## 4. 子工作切分（每件 ≤ S）
 

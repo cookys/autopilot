@@ -16,10 +16,12 @@
 const fs = require('fs');
 const path = require('path');
 const { SCHEMA, append, readRows } = require('../hooks/askpm-log');
-const { groupKey } = require('./lib/ask-group-key');
+const { groupKey, normalizeQuestion } = require('./lib/ask-group-key');
 
 const MAX_VIEW_LINES = 30;
 const ARCHIVE_DAYS_MS = 14 * 24 * 3600 * 1000;
+const PREFIX_WINDOW_MS = 30 * 60 * 1000;
+const MIN_PREFIX_LEN = 8;
 const SHA_RE = /^[0-9a-f]{7,40}$/i;
 const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
 const CARD_RE = /^d-[0-9a-f]{8}$/i;
@@ -62,17 +64,18 @@ function isValidEvidence(ref) {
 function loadState(env) {
   const rawRows = readRows(env);
   if (!rawRows || rawRows.length === 0) {
-    return { asks: [], askById: new Map(), disposed: new Set() };
+    return { asks: [], askById: new Map(), disposed: new Set(), repliesByAskId: new Map(), replyCutoffMs: null };
   }
   const cutoff = rawRows.findIndex((r) => typeof r.ask_id === 'string' && r.ask_id !== '');
   if (cutoff < 0) {
-    return { asks: [], askById: new Map(), disposed: new Set() };
+    return { asks: [], askById: new Map(), disposed: new Set(), repliesByAskId: new Map(), replyCutoffMs: null };
   }
   const rows = rawRows.slice(cutoff);
   const asks = [];
   const askById = new Map();
   const disposed = new Set();
   const repliesByAskId = new Map();
+  let replyCutoffMs = null;
   for (let i = 0; i < rows.length; i += 1) {
     const r = rows[i];
     if (r.kind === 'ask' && typeof r.ask_id === 'string' && r.ask_id !== '') {
@@ -86,10 +89,14 @@ function loadState(env) {
         const list = repliesByAskId.get(r.ask_id) || [];
         list.push({ text: typeof r.text === 'string' ? r.text : '', at: r.at || null, index: i });
         repliesByAskId.set(r.ask_id, list);
+        const ts = r.at ? Date.parse(r.at) : NaN;
+        if (Number.isFinite(ts) && (replyCutoffMs === null || ts < replyCutoffMs)) {
+          replyCutoffMs = ts;
+        }
       }
     }
   }
-  return { asks, askById, disposed, repliesByAskId };
+  return { asks, askById, disposed, repliesByAskId, replyCutoffMs };
 }
 
 function formatAge(atIso, nowMs) {
@@ -123,64 +130,78 @@ function getScopeKey(row) {
   return 'default';
 }
 
+function isPrefixMatch(normA, normB) {
+  if (!normA || !normB) return false;
+  const shorter = normA.length <= normB.length ? normA : normB;
+  const longer = normA.length <= normB.length ? normB : normA;
+  return shorter.length >= MIN_PREFIX_LEN && longer.startsWith(shorter);
+}
+
+function mergeIntoGroup(existing, entry, nowMs) {
+  const row = entry.row;
+  const at = row.at || null;
+  existing.count += 1;
+  if (!existing.ask_ids.includes(row.ask_id)) {
+    existing.ask_ids.push(row.ask_id);
+  }
+  if (at) {
+    const atMs = Date.parse(at);
+    const firstMs = existing.first_at ? Date.parse(existing.first_at) : NaN;
+    const lastMs = existing.last_at ? Date.parse(existing.last_at) : NaN;
+    if (!Number.isFinite(firstMs) || (Number.isFinite(atMs) && atMs < firstMs)) {
+      existing.first_at = at;
+    }
+    if (!Number.isFinite(lastMs) || (Number.isFinite(atMs) && atMs >= lastMs)) {
+      existing.last_at = at;
+      existing.row = row;
+      existing.index = entry.index;
+    }
+  }
+  const finalLastMs = existing.last_at ? Date.parse(existing.last_at) : NaN;
+  existing.archived = Number.isFinite(finalLastMs) ? (nowMs - finalLastMs) >= ARCHIVE_DAYS_MS : false;
+}
+
 function groupAsks(entries, nowMs = Date.now()) {
   const groups = [];
   const byKey = new Map();
 
   for (const entry of entries) {
     const row = entry.row;
+    const scope = getScopeKey(row);
     const gk = typeof row.group_key === 'string' && row.group_key !== '' ? row.group_key : groupKey(row.text);
-    if (!gk) {
-      const at = row.at || null;
-      const lastMs = at ? Date.parse(at) : NaN;
-      const archived = Number.isFinite(lastMs) ? (nowMs - lastMs) >= ARCHIVE_DAYS_MS : false;
-      groups.push({
-        ...entry,
-        ask_ids: [row.ask_id],
-        count: 1,
-        first_at: at,
-        last_at: at,
-        archived,
-      });
-      continue;
+    const norm = normalizeQuestion(row.text);
+    const at = row.at || null;
+    const atMs = at ? Date.parse(at) : NaN;
+
+    let existing = gk ? byKey.get(`${gk}::${scope}`) : null;
+    if (!existing && norm.length >= MIN_PREFIX_LEN && Number.isFinite(atMs)) {
+      for (const g of groups) {
+        if (g.scope !== scope) continue;
+        const gLastMs = g.last_at ? Date.parse(g.last_at) : NaN;
+        if (!Number.isFinite(gLastMs) || Math.abs(atMs - gLastMs) > PREFIX_WINDOW_MS) continue;
+        if (isPrefixMatch(norm, normalizeQuestion(g.row.text))) {
+          existing = g;
+          break;
+        }
+      }
     }
 
-    const compositeKey = `${gk}::${getScopeKey(row)}`;
-    const existing = byKey.get(compositeKey);
-    const at = row.at || null;
     if (!existing) {
-      const lastMs = at ? Date.parse(at) : NaN;
+      const lastMs = atMs;
       const grouped = {
         ...entry,
+        scope,
         ask_ids: [row.ask_id],
-        group_key: gk,
+        group_key: gk || null,
         count: 1,
         first_at: at,
         last_at: at,
         archived: Number.isFinite(lastMs) ? (nowMs - lastMs) >= ARCHIVE_DAYS_MS : false,
       };
-      byKey.set(compositeKey, grouped);
+      if (gk) byKey.set(`${gk}::${scope}`, grouped);
       groups.push(grouped);
     } else {
-      existing.count += 1;
-      if (!existing.ask_ids.includes(row.ask_id)) {
-        existing.ask_ids.push(row.ask_id);
-      }
-      if (at) {
-        const atMs = Date.parse(at);
-        const firstMs = existing.first_at ? Date.parse(existing.first_at) : NaN;
-        const lastMs = existing.last_at ? Date.parse(existing.last_at) : NaN;
-        if (!Number.isFinite(firstMs) || (Number.isFinite(atMs) && atMs < firstMs)) {
-          existing.first_at = at;
-        }
-        if (!Number.isFinite(lastMs) || (Number.isFinite(atMs) && atMs >= lastMs)) {
-          existing.last_at = at;
-          existing.row = row;
-          existing.index = entry.index;
-        }
-      }
-      const finalLastMs = existing.last_at ? Date.parse(existing.last_at) : NaN;
-      existing.archived = Number.isFinite(finalLastMs) ? (nowMs - finalLastMs) >= ARCHIVE_DAYS_MS : false;
+      mergeIntoGroup(existing, entry, nowMs);
     }
   }
 
@@ -238,12 +259,21 @@ function pickLatestReply(askIds, repliesByAskId) {
   return best;
 }
 
-function formatAnswerLine(entry, disposed, repliesByAskId) {
+function formatAnswerLine(entry, disposed, repliesByAskId, replyCutoffMs) {
   const row = entry.row;
   const askIds = entry.ask_ids || [row.ask_id];
   const latestReply = pickLatestReply(askIds, repliesByAskId);
   const isDisposed = askIds.some((id) => disposed.has(id));
-  const status = latestReply ? '已答' : (isDisposed ? '已處置' : '未答');
+  let status;
+  if (latestReply) {
+    status = '已答';
+  } else if (isDisposed) {
+    status = '已處置';
+  } else {
+    const askMs = Date.parse(entry.last_at || row.at);
+    const isOld = replyCutoffMs === null || (Number.isFinite(askMs) && askMs < replyCutoffMs);
+    status = isOld ? '舊紀錄' : '未答';
+  }
   const timeStr = formatTaipeiTime(entry.last_at || row.at);
   const summary = (typeof row.text === 'string' ? row.text : '').replace(/\s+/g, ' ').trim().slice(0, 40);
   const answer = latestReply
@@ -252,9 +282,9 @@ function formatAnswerLine(entry, disposed, repliesByAskId) {
   return `${status} ${timeStr} ${summary} ｜ ${answer}`;
 }
 
-function formatAnswersList(entries, disposed, repliesByAskId) {
+function formatAnswersList(entries, disposed, repliesByAskId, replyCutoffMs) {
   if (entries.length === 0) return '';
-  const shown = entries.slice(0, MAX_VIEW_LINES).map((e) => formatAnswerLine(e, disposed, repliesByAskId));
+  const shown = entries.slice(0, MAX_VIEW_LINES).map((e) => formatAnswerLine(e, disposed, repliesByAskId, replyCutoffMs));
   if (entries.length > MAX_VIEW_LINES) {
     shown.push(`… ${entries.length - MAX_VIEW_LINES} more`);
   }
@@ -263,11 +293,11 @@ function formatAnswersList(entries, disposed, repliesByAskId) {
 
 function listOutput(env, opts = {}) {
   const nowMs = opts.nowMs ?? Date.now();
-  const { asks, disposed, repliesByAskId } = loadState(env);
+  const { asks, disposed, repliesByAskId, replyCutoffMs } = loadState(env);
   const selected = opts.open ? asks.filter((e) => !disposed.has(e.row.ask_id)) : asks;
   const grouped = groupAsks(selected, nowMs);
   if (opts.answers) {
-    return formatAnswersList(grouped, disposed, repliesByAskId);
+    return formatAnswersList(grouped, disposed, repliesByAskId, replyCutoffMs);
   }
   return formatList(grouped, nowMs);
 }

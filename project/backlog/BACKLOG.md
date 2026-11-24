@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0515 -->
+<!-- next-id: BL-0523 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -2544,3 +2544,107 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: 單 01M7XY35R2 第二次驗證結論
 - **Pointer**: none
+
+### 不做：PM 席拆成雙席（L6），11-29 目標日取消
+- **Id**: BL-0515
+- **Status**: open
+- **Since**: 2026-11-24
+- **Origin**: self
+- **Problem**: 有人提議把 PM 席拆成兩個 Opus 席來降成本。三家評審都選維持單席。
+- **Impact**: 雙席兩席合計只省約 3–11%，先做單席改良後邊際約 2%，還多出接線與交接成本。
+- **Trigger**: 不做：PM 裁定 ledger 29b4b76d，之後被重提時先看這列
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: PM 裁定 29b4b76d；三家評審合成 056407312
+- **Pointer**: docs/plans/evidence/2026-11-24-pm-mech-judgment/synthesis.md
+
+### 不做：常駐接線生，也不再評 Sonnet 前台
+- **Id**: BL-0516
+- **Status**: open
+- **Since**: 2026-11-24
+- **Origin**: self
+- **Problem**: 有人提議加常駐接線生或把前台換成 Sonnet 來省額度。
+- **Impact**: 三家評審認為收益不抵接線與品質風險，額度主因在別處（池漂移、整回合喚醒）。
+- **Trigger**: 不做：PM 裁定 ledger 29b4b76d，之後被重提時先看這列
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: PM 裁定 29b4b76d；三家評審合成 056407312
+- **Pointer**: docs/plans/evidence/2026-11-24-pm-mech-judgment/synthesis.md
+
+### 不做：把 Q 釘到 PM 席，也不擴大部署 Z
+- **Id**: BL-0517
+- **Status**: open
+- **Since**: 2026-11-24
+- **Origin**: self
+- **Problem**: Q 量的對象已退役、Z 的無上限 Stop 擋沒有真實使用。
+- **Impact**: 擴大只會增加每次呼叫成本；Q 改每日小量抽樣，Z 收斂為顯式開啟。
+- **Trigger**: 不做：PM 裁定 ledger 29b4b76d，之後被重提時先看這列
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: PM 裁定 29b4b76d；三家評審合成 056407312
+- **Pointer**: docs/plans/evidence/2026-11-24-pm-mech-judgment/synthesis.md
+
+### 不做：壓縮門檻直接設 200k，也不定時換 session
+- **Id**: BL-0518
+- **Status**: open
+- **Since**: 2026-11-24
+- **Origin**: self
+- **Problem**: 有人提議把壓縮門檻一次降到 200k，或固定時間換 session。
+- **Impact**: 底線未降前壓縮會過密、重問率上升；門檻改依實測與防抖規則調整。
+- **Trigger**: 不做：PM 裁定 ledger 29b4b76d，之後被重提時先看這列
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: PM 裁定 29b4b76d；三家評審合成 056407312
+- **Pointer**: docs/plans/evidence/2026-11-24-pm-mech-judgment/synthesis.md
+
+### 不做：為保暖快取製造叫醒，也不把累計數當叫醒條件
+- **Id**: BL-0519
+- **Status**: open
+- **Since**: 2026-11-24
+- **Origin**: self
+- **Problem**: 有人提議定時叫醒保持快取，或用累計量決定是否叫醒。
+- **Impact**: 叫醒本身就是整回合成本；累計數會讓同一件事反覆觸發。
+- **Trigger**: 不做：PM 裁定 ledger 29b4b76d，之後被重提時先看這列
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: PM 裁定 29b4b76d；三家評審合成 056407312
+- **Pointer**: docs/plans/evidence/2026-11-24-pm-mech-judgment/synthesis.md
+
+### 不做：重啟分類器處理收件殘餘
+- **Id**: BL-0520
+- **Status**: open
+- **Since**: 2026-11-24
+- **Origin**: self
+- **Problem**: 收件殘餘有人想再開分類器處理。
+- **Impact**: 三家評審一致不建；殘餘改由服務端收斂成 courier 一套規則。
+- **Trigger**: 不做：PM 裁定 ledger 29b4b76d，之後被重提時先看這列
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: PM 裁定 29b4b76d；三家評審合成 056407312
+- **Pointer**: docs/plans/evidence/2026-11-24-pm-mech-judgment/synthesis.md
+
+### 不做：三家 panel 當每個設計問題的預設
+- **Id**: BL-0521
+- **Status**: open
+- **Since**: 2026-11-24
+- **Origin**: self
+- **Problem**: 每個設計問題都叫三家評審，額度成本高。
+- **Impact**: 只用在難回頭的方向性決定，並記每次額度成本。
+- **Trigger**: 不做：PM 裁定 ledger 29b4b76d，之後被重提時先看這列
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: PM 裁定 29b4b76d；三家評審合成 056407312
+- **Pointer**: docs/plans/evidence/2026-11-24-pm-mech-judgment/synthesis.md
+
+### 不做：因操作員即時反應在同一小時改設計語意
+- **Id**: BL-0522
+- **Status**: open
+- **Since**: 2026-11-24
+- **Origin**: self
+- **Problem**: P0 一小時內設計語意改了三版，工程反覆。
+- **Impact**: 改語意先寫回單、等證據再動，否則已併的東西又被推翻。
+- **Trigger**: 不做：PM 裁定 ledger 29b4b76d，之後被重提時先看這列
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: PM 裁定 29b4b76d；三家評審合成 056407312
+- **Pointer**: docs/plans/evidence/2026-11-24-pm-mech-judgment/synthesis.md

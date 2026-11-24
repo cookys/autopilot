@@ -1,0 +1,1 @@
+{"attempt":1,"runner":"cc-shim","model":"glm-5.4[1m]","bin":"/home/team/.local/bin/claude","bin_version":"2.1.328 (Claude Code)","version_source":"operator-asserted","probe_rc":1,"note":"probe failed - uncharged infra abort","instrument_charged":false,"probed_at":"2026-11-23T05:08:23Z"}

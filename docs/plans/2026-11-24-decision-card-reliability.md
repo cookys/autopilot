@@ -1,0 +1,82 @@
+# 決策卡可靠度計畫（fleet 單 `01M85R7AXE`）
+
+- **Fleet 單號**：`01M85R7AXE`（`Fleet-Task: 01M85R7AXE9FSA18144YSCS57G`）
+- **目標上線日**：2026-11-26（先過本計畫三件與回歸測試，再恢復其他卡片功能擴充）
+- **依據**：[synthesis.md](file:///home/team/projects/autopilot-dev/.claude/worktrees/hetero-plan-decision-card-reliability-1EKQTh/docs/plans/evidence/2026-11-24-pm-mech-judgment/synthesis.md#L25)（第 25、111、125–126 行）
+
+---
+
+## 一、目標與里程碑
+
+先修決策卡可靠度再加功能（[synthesis.md](file:///home/team/projects/autopilot-dev/.claude/worktrees/hetero-plan-decision-card-reliability-1EKQTh/docs/plans/evidence/2026-11-24-pm-mech-judgment/synthesis.md#L25)）：消滅重問卡、`verify_failed` 與新增未送達，讓面板「看不見」與訊息「送不到」可各自獨立定位。
+
+| 里程碑 | 目標 | 驗收基準 | 預計完成 |
+|---|---|---|---|
+| M1 | 回歸案例測試化與重開防呆 | 4 張重問卡、5 張 `verify_failed` 轉為自動化測試；已答卡重開被擋並回顯原答案 | 2026-11-25 |
+| M2 | 自動轉送與故障分診落地 | 答覆帶請求 id 自動轉送；「看不見／送不到」分診上線；未送達 119 介面需求交付 hangar／fleet 線 | 2026-11-26 |
+
+---
+
+## 二、範圍（三件事）
+
+1. **已答的卡拒絕重開並回顯原答案**
+   - `scripts/open-decision.js` 在 `open`（含 `openDecision`）寫入前，除現行 live-card 去重外，需檢查同題或同指紋之 `closed`／`pending_dispatch`／`awaiting_operator_action` 已答卡片；若命中，拒絕重開（非零退出碼）並於 stderr／JSON 回顯原卡 `id`、`status`、`answer` 與 `closed_at`（[open-decision.js](file:///home/team/projects/autopilot-dev/.claude/worktrees/hetero-plan-decision-card-reliability-1EKQTh/scripts/open-decision.js#L43-L45)）。
+2. **答覆帶請求 id 自動轉送**
+   - `scripts/open-decision.js` 已支援 `--from-request <r-id>` 儲存 `from_request`（[open-decision.js](file:///home/team/projects/autopilot-dev/.claude/worktrees/hetero-plan-decision-card-reliability-1EKQTh/scripts/open-decision.js#L146)），`deliverAnswer` 亦會將面板已核實答覆經 `fleet send <executor>` 派送（[open-decision.js](file:///home/team/projects/autopilot-dev/.claude/worktrees/hetero-plan-decision-card-reliability-1EKQTh/scripts/open-decision.js#L103-L110)）。補齊當卡片帶有 `from_request` 時，答覆結案／派送路徑自動帶出請求 id 並轉送至原請求方（`scripts/request-decision.js` 對應端點）。
+3. **「看不見」和「送不到」分開診斷，並查清未送達 119 的分型**
+   - **看不見（面板／作用域層）**：`src/status/card-visibility.js`、`src/status/decision-input.js`、`src/status/scope-key.js` 與 `BL-0337` 跨 repo marker 漂移（[open-decision.js](file:///home/team/projects/autopilot-dev/.claude/worktrees/hetero-plan-decision-card-reliability-1EKQTh/scripts/open-decision.js#L48-L51)）。
+   - **送不到（派送／courier 層）**：`deliverAnswer`、`scripts/lib/fleet-decision.js`、`hooks/advisory-relay.js`、`redeliver`（[open-decision.js](file:///home/team/projects/autopilot-dev/.claude/worktrees/hetero-plan-decision-card-reliability-1EKQTh/scripts/open-decision.js#L22)）。
+   - **未送達 119 分型（hangar／fleet 線介面需求，本 repo 不實作對方端）**：要求 hangar／fleet 端對 119 筆「回覆未送達」（[synthesis.md](file:///home/team/projects/autopilot-dev/.claude/worktrees/hetero-plan-decision-card-reliability-1EKQTh/docs/plans/evidence/2026-11-24-pm-mech-judgment/synthesis.md#L24)）提供結構化分型回執（欄位：`card_id`、`answer_id`、`failure_class` 列舉如 `courier_unreachable` / `verify_failed` / `target_offline` / `scope_mismatch`、`http_or_exit_code`、`timestamp`），供本端診斷工具消費。
+
+---
+
+## 三、不做什麼
+
+- 不在本單實作 hangar／fleet 端修復（只交付 119 分型介面需求）。
+- 不新增常駐守護進程或定時輪詢（沿用 `open-decision.js` 無 daemon 原則，[open-decision.js](file:///home/team/projects/autopilot-dev/.claude/worktrees/hetero-plan-decision-card-reliability-1EKQTh/scripts/open-decision.js#L77)）。
+- 不修改 L6 雙席或卡片語意／分類規則（[synthesis.md](file:///home/team/projects/autopilot-dev/.claude/worktrees/hetero-plan-decision-card-reliability-1EKQTh/docs/plans/evidence/2026-11-24-pm-mech-judgment/synthesis.md#L132)）。
+- 不放寬 `--not-authorized`、DOA 邊界或 `--target` 生產環境拒絕閘（[open-decision.js](file:///home/team/projects/autopilot-dev/.claude/worktrees/hetero-plan-decision-card-reliability-1EKQTh/scripts/open-decision.js#L53-L60)）。
+
+---
+
+## 四、子工作切分（每件 ≤ S）
+
+| ID | 子工作 | 規模 | 可平行群組 | 主要檔案 |
+|---|---|---|---|---|
+| T1 | 已答卡拒絕重開＋回顯原答案 | S | A（可平行） | `scripts/open-decision.js` |
+| T2 | 答覆帶 `from_request` 自動轉送 | S | A（可平行） | `scripts/open-decision.js`、`scripts/request-decision.js` |
+| T3 | 「看不見」vs「送不到」分診腳本／診斷輸出 | S | A（可平行） | `scripts/open-decision.js`、`src/status/card-visibility.js` |
+| T4 | 未送達 119 分型介面規格文件（交 hangar／fleet） | XS | B（可平行） | `docs/` 介面規格（不改對方 repo） |
+| T5 | 4 張重問卡＋5 張 `verify_failed` 回歸測試 | S | C（依賴 T1–T3） | `tests/`（對應測試檔，路徑依實作選定） |
+
+---
+
+## 五、驗收與負控制（刻意違規必須被擋）
+
+| ID | 正向驗收 | 負控制（刻意違規必須被擋） |
+|---|---|---|
+| T1 | 對已 `closed` 卡以相同問題重開，指令失敗且回顯原 `id`、`answer`、`closed_at` | 刻意傳入 `--not-duplicate-of` 試圖繞過已答卡檢查 → 仍必須被擋（僅允許覆寫未決卡，不可覆寫已答卡） |
+| T2 | 帶 `from_request` 的卡經面板核實答覆後，自動轉送原請求方並記錄 `sent_message_id` | 刻意偽造或遺失 `from_request` 目標位址 → 必須拒絕靜默吞掉，保留 `pending_dispatch` 與 `dispatch_error` |
+| T3 | 模擬「面板無顯示但資料存在」與「`fleet send` 失敗」，分診明確輸出不同故障類別 | 刻意讓 `card-visibility` 與 `deliverAnswer` 同時異常 → 必須各自報錯，不可合併為單一模糊錯誤 |
+| T4 | hangar／fleet 介面需求含 119 分型欄位、列舉與對照範例 | 缺 `failure_class` 或 `card_id` 的回執格式 → 契約驗證必須拒絕 |
+| T5 | 4 張重問卡與 5 張 `verify_failed` 案例在測試套件全綠 | 刻意拿掉 T1 防呆或模擬 `verify` exit 7／非 `{ok:true}` 回應 → 測試必須轉紅（失敗） |
+
+---
+
+## 六、現成回歸案例轉測試設計
+
+- **來源**：[synthesis.md](file:///home/team/projects/autopilot-dev/.claude/worktrees/hetero-plan-decision-card-reliability-1EKQTh/docs/plans/evidence/2026-11-24-pm-mech-judgment/synthesis.md#L25) 記載「4 張重問卡；5 張卡一次 `verify_failed`；面板兩度顯示沒有待決卡」。
+- **原始卡號與日誌**：本 worktree 內**未查到**該 4 張重問卡與 5 張 `verify_failed` 卡的原始 card ID 清單（需實作 T5 時從操作紀錄或 fleet 歷史匯出補齊 fixture，不編造 ID）。
+- **轉測試方式**：
+  1. **4 張重問卡 → 重開防呆回歸測試**：以 4 組「已 `closed` 含 `answer` 的卡片 fixture」作為前置狀態，呼叫 `open-decision.js open` 重送同題，斷言 exit code 非 0、不寫入新卡、輸出含原 `answer`。
+  2. **5 張 `verify_failed` → 核實與重送狀態機測試**：以 stub `fleet` CLI 模擬 `verify` 失敗（非 0 exit）與 `fleet send` 非 `{ok:true,"message_id":...}`，斷言卡片維持 `pending_dispatch`、寫入 `dispatch_error` 與遞增 `dispatch_attempts`、絕不誤標 `closed`（[open-decision.js](file:///home/team/projects/autopilot-dev/.claude/worktrees/hetero-plan-decision-card-reliability-1EKQTh/scripts/open-decision.js#L107)）。
+
+---
+
+## 七、風險
+
+| 風險 | 影響 | 緩解方式 |
+|---|---|---|
+| 已答卡去重過嚴誤擋合理後續追問 | 操作員無法開新卡 | 僅比對標準化後同題或同請求指紋，並保留明確新題目描述可通過 |
+| hangar／fleet 119 分型尚未上線 | 歷史 119 筆無法自動回溯 | T4 先交付介面契約；本端先對新增未送達強制寫入 `dispatch_error` |
+| 原始 4＋5 案例 fixture 缺具體 ID | 測試可能只測到合成資料 | T5 開工前先從操作紀錄抽取真實欄位結構（脫敏後入庫） |

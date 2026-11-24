@@ -15,7 +15,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { SCHEMA, append, readRows } = require('../hooks/askpm-log');
+const { SCHEMA, append, readRows, isHandoffResume } = require('../hooks/askpm-log');
 const { groupKey, normalizeQuestion } = require('./lib/ask-group-key');
 
 const MAX_VIEW_LINES = 30;
@@ -78,7 +78,7 @@ function loadState(env) {
   let replyCutoffMs = null;
   for (let i = 0; i < rows.length; i += 1) {
     const r = rows[i];
-    if (r.kind === 'ask' && typeof r.ask_id === 'string' && r.ask_id !== '') {
+    if (r.kind === 'ask' && typeof r.ask_id === 'string' && r.ask_id !== '' && !isHandoffResume(r.text)) {
       const entry = { row: r, index: i };
       asks.push(entry);
       askById.set(r.ask_id, entry);

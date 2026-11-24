@@ -467,3 +467,19 @@ test('list --answers never calls an ask from the last 24 hours an old record, ev
     s.cleanup();
   }
 });
+
+test('list --answers leaves out handoff resume instructions; a real question that mentions handoff stays', () => {
+  const s = makeStore([
+    askRow('a-hf000001', 'read /run/user/1001/autopilot/handoff/35c203e4-be96-4b82-824f-7b0a46c4969c.md 接續', '2026-11-24T10:00:00.000Z', 's1'),
+    askRow('a-hf000002', '這個 handoff 是不是寫太長了', '2026-11-24T10:05:00.000Z', 's2'),
+  ]);
+  try {
+    const res = s.run(['list', '--answers']);
+    assert.equal(res.status, 0, res.stderr);
+    const lines = res.stdout.trim().split('\n');
+    assert.equal(lines.length, 1, res.stdout);
+    assert.ok(lines[0].includes('handoff 是不是寫太長'), lines[0]);
+  } finally {
+    s.cleanup();
+  }
+});

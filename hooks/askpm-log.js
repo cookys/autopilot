@@ -47,6 +47,9 @@ const SCHEMA = 'autopilot.askpm/1';
 const CONSOLE_SCHEMA = 'autopilot.console/1';
 const MAX_TEXT = 4000;
 const INJECTED_PREFIXES = ['<system-reminder>', '<task-notification>', '<local-command-', '<command-name>', '<command-message>', '<command-args>'];
+// "read <path>/handoff/<id>.md 接續" is a restart instruction, not a question for the PM.
+const HANDOFF_RESUME = /^read\s+\S*handoff\S*\.md\s+接續\s*$/i;
+function isHandoffResume(text) { return typeof text === 'string' && HANDOFF_RESUME.test(text.trim()); }
 const FLEET_CHANNEL = /<channel\b[^>]*\bsource\s*=\s*["']fleet["']/;
 
 function consoleSchemaMatches(dir) {
@@ -100,6 +103,7 @@ function isInjected(prompt) {
   if (first.startsWith('[待決回覆]') || first.startsWith('[待決回覆·更正]') || first.startsWith('[voice call · unverified]')) return true;
   if (INJECTED_PREFIXES.some((p) => trimmed.startsWith(p))) return true;
   if (FLEET_CHANNEL.test(prompt)) return true;
+  if (isHandoffResume(trimmed)) return true;
   if (trimmed.startsWith('{') && (trimmed.includes('"additionalContext"') || trimmed.includes('"hookSpecificOutput"'))) return true;
   return false;
 }
@@ -443,6 +447,7 @@ function main() {
 
 if (require.main === module) main();
 module.exports = {
+  isHandoffResume,
   isPmSession,
   isInjected,
   handle,

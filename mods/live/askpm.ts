@@ -16,7 +16,17 @@ const SUMMARY_CHARS = 40
 const WAIT_MARK = '等回報：'
 const DONE_MARK = '已回報：'
 
-export type AskRecord = { schema?: string; kind: 'ask' | 'reply'; at: string; text?: string; lines?: string[] }
+export type AskRecord = {
+  schema?: string
+  kind: 'ask' | 'reply' | 'disposition'
+  at: string
+  text?: string
+  lines?: string[]
+  ask_id?: string
+  session_id?: string
+  turn?: string | number
+  action?: string
+}
 export type AskStatus = 'replied' | 'waiting' | 'open'
 export type AskEntry = { at: string; summary: string; replyLines: string[]; status: AskStatus }
 export type AskpmModel = { entries: AskEntry[]; limit: number; narrow: boolean }
@@ -39,8 +49,11 @@ function replyText(r: AskRecord): string {
 }
 
 function shownLines(r: AskRecord): string[] {
-  if (Array.isArray(r.lines) && r.lines.length > 0) return r.lines.slice(0, 2)
-  return replyText(r).replace(/\r\n/g, '\n').split('\n').slice(0, 2)
+  const raw = Array.isArray(r.lines) && r.lines.length > 0
+    ? r.lines
+    : replyText(r).replace(/\r\n/g, '\n').split('\n')
+  const first = raw.find((l) => l.trim() !== '')
+  return first !== undefined ? [first] : []
 }
 
 export function parseAskpm(raw: string | null | undefined): AskRecord[] {
@@ -53,11 +66,15 @@ export function parseAskpm(raw: string | null | undefined): AskRecord[] {
     if (v === null || typeof v !== 'object') continue
     const o = v as Record<string, unknown>
     // kind 'turn' is an injected prompt marker. It is not an ask or a reply.
-    if ((o.kind !== 'ask' && o.kind !== 'reply') || typeof o.at !== 'string') continue
+    if ((o.kind !== 'ask' && o.kind !== 'reply' && o.kind !== 'disposition') || typeof o.at !== 'string') continue
     const rec: AskRecord = { kind: o.kind, at: o.at }
     if (typeof o.schema === 'string') rec.schema = o.schema
     if (typeof o.text === 'string') rec.text = o.text
     if (Array.isArray(o.lines)) rec.lines = o.lines.filter((x): x is string => typeof x === 'string')
+    if (typeof o.ask_id === 'string') rec.ask_id = o.ask_id
+    if (typeof o.session_id === 'string') rec.session_id = o.session_id
+    if (typeof o.turn === 'string' || typeof o.turn === 'number') rec.turn = o.turn
+    if (typeof o.action === 'string') rec.action = o.action
     out.push(rec)
   }
   return out
@@ -71,12 +88,23 @@ export function askpmView(rows: readonly AskRecord[], opts: { narrow?: boolean; 
   const limit = narrow ? NARROW_LIMIT : WIDE_LIMIT
   const asks = rows.map((r, i) => ({ r, i })).filter((x) => x.r.kind === 'ask')
   const replies = rows.map((r, i) => ({ r, i })).filter((x) => x.r.kind === 'reply')
+  const dispositions = rows.map((r, i) => ({ r, i })).filter((x) => x.r.kind === 'disposition')
   const entries: AskEntry[] = asks.map((a, n) => {
     const next = asks[n + 1]
-    const own = replies.find((x) => x.i > a.i && (next === undefined || x.i < next.i))
+    const askId = typeof a.r.ask_id === 'string' && a.r.ask_id !== '' ? a.r.ask_id : undefined
+    let own = askId !== undefined
+      ? replies.filter((x) => x.r.ask_id === askId).at(-1)
+      : undefined
+    if (own === undefined) {
+      own = replies.find((x) => x.r.ask_id === undefined && x.i > a.i && (next === undefined || x.i < next.i))
+    }
     const at = taipeiStamp(a.r.at)
     let status: AskStatus = 'open'
-    if (own !== undefined) {
+    const closedByDisposition = askId !== undefined &&
+      dispositions.some((d) => d.r.ask_id === askId && d.r.action === 'close')
+    if (closedByDisposition) {
+      status = 'replied'
+    } else if (own !== undefined) {
       const waiting = replyText(own.r).replace(/\r\n/g, '\n').split('\n').some((l) => l.startsWith(WAIT_MARK))
       status = 'replied'
       if (waiting) {

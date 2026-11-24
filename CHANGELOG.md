@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+
+## 3.0.0-alpha.7
+- ask-guard fix (Fleet task 01M7WJWV2WP1BKG0KT56SPAJX2 is the ask-guard task): the fleet binary falls back to `~/.local/bin/fleet` when the hook PATH lacks it, so the whoami seat lookup resolves; `dispatch-plan-review.js --panel-change "<reason>"` records a reviewed swap of the review panel between generations (Fleet task 01M87ADN5R1K1EG7R5R7B8YBKP). Version bumped so seat plugin caches refresh.
 - context-budget `t2_hard_block` default changed from `true` to `false` (Fleet task `01M85R143G95TSTJ781QT73CE7`, no version bump): `scripts/lib/config-path.js`, `scripts/lib/config-keys.json`, `docs/guide/settings-reference.md`, and `hooks/context-land-gate.js` now default `context_budget.t2_hard_block` to `false` (capping Stop blocks at 2 unless `t2_hard_block: true` is explicitly set).
 - pm-reduction-delivery-b (mechanism, Fleet task 01M85EMER7WY0NKX1E6560HS7Q, no version bump): `scripts/pm-act.js` and `scripts/pm-ledger.js` batch the PM seat's ledger, dispatch and reply calls (preflight failure sends nothing, the journal skips finished steps, `--check`, `--confirm`); `scripts/pm-accept-check.js` checks acceptance conditions; `scripts/switchboard-quality.js` runs the baseline and daily switchboard quality sample (10% deterministic sample, swallow check, p50/p95, second engine through the CN gate, rollback shadow and replay); config keys `pm_ledger.ledger_sh`, `pm_ledger.ledger_file`, `switchboard.second_engine_cmd`. No new hook, so hook counts are unchanged.
 - context-budget: PM seat T2 default raised from 20 to 25 percent (250k of the ~1000k window; PM ruling on Fleet task 01M85PYJ3SEDZNT1DDWDGJCMEC, evidence docs/plans/evidence/2026-11-24-compact-floor-judgment/synthesis.md).

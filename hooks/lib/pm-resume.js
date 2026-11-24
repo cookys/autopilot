@@ -88,4 +88,4 @@ function buildResumeBlock(payload, { env = process.env, runner } = {}) {
   return `\n\n${HEAD}\n<fleet-pm-resume seat="${seat.member}" role="${seat.role}">\n${out}\n</fleet-pm-resume>`;
 }
 
-module.exports = { buildResumeBlock, seatFromAddress, readMarker, writeMarker, SOURCES, ID_RE };
+module.exports = { buildResumeBlock, seatFromAddress, resolveSeat, readMarker, writeMarker, SOURCES, ID_RE };

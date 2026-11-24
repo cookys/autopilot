@@ -532,3 +532,21 @@ test('list --answers joins the hook-written kind "reply" rows back to their ask'
     s.cleanup();
   }
 });
+
+test('an ask made before the first linked reply is 舊紀錄 even when it is under 24 hours old', () => {
+  const s = makeStore([
+    askRow('a-co000001', '更早的問題', '2026-11-24T09:00:00.000Z', 's1'),
+    askRow('a-co000002', '之後的問題', '2026-11-24T11:30:00.000Z', 's1'),
+    askRow('a-co000003', '已答的問題', '2026-11-24T11:00:00.000Z', 's1'),
+    { schema: SCHEMA, kind: 'reply', at: '2026-11-24T11:04:00.000Z', ask_id: 'a-co000003', session_id: 's1', text: '好' },
+  ]);
+  try {
+    const res = s.run(['list', '--answers', '--json'], { AUTOPILOT_PM_ASK_NOW: '2026-11-24T12:00:00.000Z' });
+    const by = Object.fromEntries(JSON.parse(res.stdout).map(r => [r.ask, r.status]));
+    assert.equal(by['更早的問題'], '舊紀錄');
+    assert.equal(by['之後的問題'], '未答');
+    assert.equal(by['已答的問題'], '已答');
+  } finally {
+    s.cleanup();
+  }
+});

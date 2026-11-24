@@ -127,11 +127,12 @@ test('PostToolUse Bash: 41 lines -> 40 + pointer and full 41 lines on disk (0700
     assert.equal(typeof out, 'object');
     assert.deepEqual(out, { ...response, stdout: out.stdout, stderr: '' });
     const outLines = out.stdout.split('\n');
-    assert.equal(outLines.length, 41);
+    assert.equal(outLines.length, 31);
     assert.equal(outLines[0], 'line-1');
-    assert.equal(outLines[39], 'line-40');
-    assert.deepEqual(outLines.slice(0, 40), makeLines(40).trimEnd().split('\n'));
-    assert.equal(outLines[40], `… 1 行已截斷，全文：${expectedFile}`);
+    assert.equal(outLines[19], 'line-20');
+    assert.equal(outLines[20], `… 11 行已截斷，全文：${expectedFile}`);
+    assert.equal(outLines[21], 'line-32');
+    assert.equal(outLines[30], 'line-41');
 
     assert.equal(fs.readFileSync(expectedFile, 'utf8'), full);
     assert.equal(fs.statSync(path.dirname(expectedFile)).mode & 0o777, 0o700);
@@ -162,12 +163,19 @@ test('PostToolUse Bash: caps combined stdout and stderr and preserves response m
     const out = parsed.hookSpecificOutput.updatedToolOutput;
     const expectedFile = path.join(runtime, 'autopilot', 'pm-output', 'toolu_obj_1.txt');
     assert.equal(typeof out, 'object');
+    const expectedStdout = [
+      ...Array.from({ length: 20 }, (_, i) => `line-${i + 1}`),
+      `… 12 行已截斷，全文：${expectedFile}`,
+      ...Array.from({ length: 7 }, (_, i) => `line-${i + 33}`),
+      'line-1',
+      'line-2',
+      'line-3',
+    ].join('\n');
     assert.deepEqual(out, {
       ...response,
-      stdout: `${stdout}line-1\n… 2 行已截斷，全文：${expectedFile}`,
+      stdout: expectedStdout,
       stderr: '',
     });
-    assert.match(out.stdout, new RegExp(`… 2 行已截斷，全文：${expectedFile.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`));
     assert.equal(fs.readFileSync(expectedFile, 'utf8'), full);
   });
 });
@@ -244,9 +252,10 @@ test('PostToolUse: ledger_search_pattern lowers cap to 30 when matched', () => {
     assert.equal(matchedOver.status, 0, matchedOver.stderr);
     const out = JSON.parse(matchedOver.stdout).hookSpecificOutput.updatedToolOutput;
     const lines = out.stdout.split('\n');
-    assert.equal(lines.length, 31);
-    assert.equal(lines[29], 'line-30');
-    assert.match(lines[30], /^… 1 行已截斷，全文：/);
+    assert.equal(lines.length, 23);
+    assert.equal(lines[14], 'line-15');
+    assert.match(lines[15], /^… 9 行已截斷，全文：/);
+    assert.equal(lines[22], 'line-31');
 
     const matchedExact = runHook(
       {
@@ -360,8 +369,8 @@ test('PostToolUse mcp__*: preserves updatedMCPToolOutput shape; Read/Grep/Glob a
       assert.equal(parsed.hookSpecificOutput.updatedToolOutput, undefined);
       assert.equal(typeof parsed.hookSpecificOutput.updatedMCPToolOutput, 'string');
       const outLines = parsed.hookSpecificOutput.updatedMCPToolOutput.split('\n');
-      assert.equal(outLines.length, 41);
-      assert.match(outLines[40], /^… 5 行已截斷，全文：/);
+      assert.equal(outLines.length, 31);
+      assert.match(outLines[20], /^… 15 行已截斷，全文：/);
     }
 
     // Non-text MCP result passes through
@@ -484,10 +493,11 @@ test('PreToolUse fallback: preserves heredoc, exit 3, trailing # comment, trunca
     assert.equal(execOver.status, 3, execOver.stderr);
     const expectedFile = path.join(runtimeWithSpace, 'autopilot', 'pm-output', 'toolu_pre_over.txt');
     const outLines = execOver.stdout.replace(/\n$/, '').split('\n');
-    assert.equal(outLines.length, 41);
+    assert.equal(outLines.length, 31);
     assert.equal(outLines[0], '1');
-    assert.equal(outLines[39], '40');
-    assert.equal(outLines[40], `… 5 行已截斷，全文：${expectedFile}`);
+    assert.equal(outLines[19], '20');
+    assert.equal(outLines[20], `… 15 行已截斷，全文：${expectedFile}`);
+    assert.equal(outLines[30], 'from-heredoc-2');
     const fullDisk = fs.readFileSync(expectedFile, 'utf8');
     assert.match(fullDisk, /from-heredoc-1\nfrom-heredoc-2\n$/);
     assert.equal(fs.statSync(expectedFile).mode & 0o777, 0o600);
@@ -546,9 +556,10 @@ test('PreToolUse fallback: preserves heredoc, exit 3, trailing # comment, trunca
     const execLedger = spawnSync('bash', ['-c', wrappedLedger], { encoding: 'utf8' });
     assert.equal(execLedger.status, 0, execLedger.stderr);
     const ledgerLines = execLedger.stdout.replace(/\n$/, '').split('\n');
-    assert.equal(ledgerLines.length, 31);
-    assert.equal(ledgerLines[29], '30');
-    assert.match(ledgerLines[30], /^… 5 行已截斷，全文：/);
+    assert.equal(ledgerLines.length, 23);
+    assert.equal(ledgerLines[14], '15');
+    assert.match(ledgerLines[15], /^… 13 行已截斷，全文：/);
+    assert.equal(ledgerLines[22], '35');
 
     // Case D: non-Bash tools on PreToolUse pass through
     const hookRead = runHook(
@@ -618,8 +629,53 @@ test('PostToolUse: empty ledger_search_pattern leaves 30-line rule off; pattern 
     assert.equal(mcpRes.status, 0, mcpRes.stderr);
     const out = JSON.parse(mcpRes.stdout).hookSpecificOutput.updatedMCPToolOutput;
     const lines = out.split('\n');
-    assert.equal(lines.length, 31);
-    assert.equal(lines[29], 'line-30');
-    assert.match(lines[30], /^… 5 行已截斷，全文：/);
+    assert.equal(lines.length, 23);
+    assert.equal(lines[14], 'line-15');
+    assert.match(lines[15], /^… 13 行已截斷，全文：/);
+    assert.equal(lines[22], 'line-35');
+  });
+});
+
+test('head+tail+error truncation preserves trailing "# fail 3", middle FAIL line, and short output untouched', () => {
+  withSandbox(({ home, state, runtime, pmRepo }) => {
+    const bodyLines = Array.from({ length: 60 }, (_, i) => `line-${i + 1}`);
+    bodyLines[25] = 'FAIL tests/foo.test.js';
+    bodyLines[59] = '# fail 3';
+    const full = `${bodyLines.join('\n')}\n`;
+
+    const res = runHook(
+      {
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        tool_use_id: 'toolu_head_tail_err',
+        tool_input: { command: 'node --test' },
+        tool_response: bashResponse(full),
+        cwd: pmRepo,
+      },
+      { HOME: home, AUTOPILOT_STATE_DIR: state, XDG_RUNTIME_DIR: runtime },
+    );
+    assert.equal(res.status, 0, res.stderr);
+    const out = JSON.parse(res.stdout).hookSpecificOutput.updatedToolOutput;
+    const outLines = out.stdout.split('\n');
+    assert.equal(outLines[0], 'line-1');
+    assert.equal(outLines[19], 'line-20');
+    assert.match(outLines[20], /^… 29 行已截斷，全文：/);
+    assert.ok(outLines.includes('FAIL tests/foo.test.js'), 'middle FAIL line must be preserved');
+    assert.equal(outLines[outLines.length - 1], '# fail 3', 'trailing # fail 3 must be preserved');
+
+    // Short output (<= cap) passes through untouched
+    const shortRes = runHook(
+      {
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        tool_use_id: 'toolu_short_pass',
+        tool_input: { command: 'echo ok' },
+        tool_response: bashResponse(makeLines(10)),
+        cwd: pmRepo,
+      },
+      { HOME: home, AUTOPILOT_STATE_DIR: state, XDG_RUNTIME_DIR: runtime },
+    );
+    assert.equal(shortRes.status, 0, shortRes.stderr);
+    assert.equal(shortRes.stdout, '');
   });
 });

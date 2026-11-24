@@ -32,6 +32,7 @@ const { configPath } = require('../scripts/lib/config-path.js');
 const DEFAULT_MAX_LINES = 40;
 const LEDGER_SEARCH_MAX_LINES = 30;
 const MAX_ID_LEN = 128;
+const ERROR_LINE_RE = /error|fail|FAIL|Error|panic|exit code/;
 
 function absPath(v) {
   return typeof v === 'string' && path.isAbsolute(v) ? v : '';
@@ -200,8 +201,34 @@ function shellQuote(s) {
   return `'${String(s).replace(/'/g, `'\\''`)}'`;
 }
 
+function truncateLines(lines, cap, filePath) {
+  const headCount = Math.floor(cap / 2);
+  const tailCount = Math.floor(cap / 4);
+  const maxTotal = Math.floor(cap * 1.5);
+  const maxMid = Math.max(0, maxTotal - headCount - tailCount);
+
+  const head = lines.slice(0, headCount);
+  const tailStart = Math.max(headCount, lines.length - tailCount);
+  const tail = lines.slice(tailStart);
+
+  const mid = [];
+  for (let i = headCount; i < tailStart && mid.length < maxMid; i += 1) {
+    if (ERROR_LINE_RE.test(lines[i])) {
+      mid.push(lines[i]);
+    }
+  }
+
+  const dropped = lines.length - head.length - mid.length - tail.length;
+  const marker = `… ${dropped} 行已截斷，全文：${filePath}`;
+  return [...head, marker, ...mid, ...tail].join('\n');
+}
+
 function wrapPreToolCommand(command, outFile, cap) {
   const qFile = shellQuote(outFile);
+  const headCount = Math.floor(cap / 2);
+  const tailCount = Math.floor(cap / 4);
+  const maxTotal = Math.floor(cap * 1.5);
+  const maxMid = Math.max(0, maxTotal - headCount - tailCount);
   return [
     `( umask 077; : > ${qFile} )`,
     '__pm_cap_rc=0',
@@ -210,8 +237,21 @@ function wrapPreToolCommand(command, outFile, cap) {
     `__pm_cap_n=$(awk 'END{print NR+0}' ${qFile})`,
     `if [ "$__pm_cap_n" -gt ${cap} ]; then`,
     `  chmod 600 ${qFile} 2>/dev/null || true`,
-    `  head -n ${cap} ${qFile}`,
-    `  printf '… %d 行已截斷，全文：%s\\n' "$((__pm_cap_n - ${cap}))" ${qFile}`,
+    `  awk -v n="$__pm_cap_n" -v hc=${headCount} -v tc=${tailCount} -v mm=${maxMid} -v f=${qFile} '`,
+    '    BEGIN { tail_start = (n - tc + 1 > hc + 1) ? n - tc + 1 : hc + 1; mc = 0 }',
+    '    NR <= hc { head[NR] = $0; next }',
+    '    NR >= tail_start { tail[NR - tail_start + 1] = $0; next }',
+    '    mc < mm && /error|fail|FAIL|Error|panic|exit code/ { mc++; mid[mc] = $0 }',
+    '    END {',
+    '      tc_actual = n - tail_start + 1',
+    '      if (tc_actual < 0) tc_actual = 0',
+    '      dropped = n - hc - mc - tc_actual',
+    '      for (i = 1; i <= hc; i++) print head[i]',
+    '      printf "… %d 行已截斷，全文：%s\\n", dropped, f',
+    '      for (i = 1; i <= mc; i++) print mid[i]',
+    '      for (i = 1; i <= tc_actual; i++) print tail[i]',
+    '    }',
+    `  ' ${qFile}`,
     'else',
     `  cat ${qFile}`,
     `  rm -f ${qFile}`,
@@ -241,8 +281,7 @@ function handlePostToolUse(input, env) {
   fs.writeFileSync(filePath, fullText, { encoding: 'utf8', mode: 0o600 });
   fs.chmodSync(filePath, 0o600);
 
-  const dropped = lines.length - cap;
-  const truncated = `${lines.slice(0, cap).join('\n')}\n… ${dropped} 行已截斷，全文：${filePath}`;
+  const truncated = truncateLines(lines, cap, filePath);
   const field = toolName === 'Bash' ? 'updatedToolOutput' : 'updatedMCPToolOutput';
   return {
     hookSpecificOutput: {

@@ -302,6 +302,42 @@ function writeReply(env, text, meta = {}) {
   );
 }
 
+const CLOSE_PHRASE = /(?:收到|好了|可以了|ok\s*結案|結案|關掉)/i;
+
+function classifyDisposition(askText) {
+  if (typeof askText !== 'string' || !askText.trim()) return 'progress';
+  if (/[?？]/.test(askText)) return 'progress';
+  return CLOSE_PHRASE.test(askText) ? 'close' : 'progress';
+}
+
+function writeDisposition(env, action, meta = {}) {
+  const askId = meta && typeof meta.ask_id === 'string' && meta.ask_id !== '' ? meta.ask_id : null;
+  if (!askId) return;
+  const sessionId = meta && typeof meta.session_id === 'string' && meta.session_id !== '' ? meta.session_id : null;
+  const turn = meta && meta.turn !== undefined ? meta.turn : null;
+  const now = new Date().toISOString();
+  const row = {
+    schema: SCHEMA,
+    kind: 'disposition',
+    action: action === 'close' ? 'close' : 'progress',
+    ask_id: askId,
+    session_id: sessionId,
+    turn,
+    ts: now,
+  };
+  const dir = stateDir(env);
+  const file = logFile(env);
+  withWriteLock(
+    { storeDir: dir, lockFile: path.join(dir, 'askpm.jsonl.lock'), name: 'askpm' },
+    () => {
+      const existing = readRows(env) || [];
+      const dup = existing.some((r) => r.kind === 'disposition' && r.ask_id === askId && r.turn === turn);
+      if (dup) return;
+      appendRow(file, row);
+    },
+  );
+}
+
 function onStop(input, env) {
   if (input.agent_id) return;
   // With askpm-remind on (and PM console gate passing), askpm-remind owns the reply row.
@@ -322,6 +358,10 @@ function onStop(input, env) {
   const turn = input.turn !== undefined && input.turn !== null ? input.turn
     : (gate.ask && gate.ask.turn !== undefined && gate.ask.turn !== null ? gate.ask.turn : null);
   writeReply(env, text, { ask_id: askId, session_id: sessionId, turn });
+  if (askId) {
+    const action = classifyDisposition(gate.askText);
+    writeDisposition(env, action, { ask_id: askId, session_id: sessionId, turn });
+  }
 }
 
 function handle(input, env) {
@@ -357,6 +397,8 @@ module.exports = {
   replyBody,
   transcriptMatchesAsk,
   writeReply,
+  writeDisposition,
+  classifyDisposition,
   normClip,
   clip,
   cwdOf,

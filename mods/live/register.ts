@@ -84,7 +84,8 @@ import { DECIDE_COMPACT_MAX_ROWS, decideLayoutMode } from './pages/layout'
 import type { DecideLayoutMode } from './pages/layout'
 import { SEATS_TIMEOUT_MS, seatQuota, v74PmCounts } from './pages/now'
 import { PAGES, EXTRA_PAGES } from './pages/index'
-import { makeDecideFeed, makePmFeed, mergeDecideCards } from './v74/feeds'
+import { ASKS_LIST_TAIL, makeAsksFeed, makeDecideFeed, makePmFeed, mergeDecideCards } from './v74/feeds'
+import { askBandRows } from './askband'
 import { offerTodo } from './v74/contract'
 import type { CardNav, DecideCard, PmStatus, TodoCard, V74Ctx } from './v74/contract'
 import { v74Keylog } from './v74/keylog'
@@ -134,6 +135,7 @@ let panePage: PageId = 'now'
 const fleetFeed = makeFleetFeed()
 const pmFeed = makePmFeed()
 const decideFeed = makeDecideFeed()
+const asksFeed = makeAsksFeed()
 let durableOpenCards: DecideCard[] = [] // open-decision.js store, refreshed with the snapshot; merged with the fleet list by card id
 const durableClosedIds = new Set<string>() // ids s wrote to the card store; the fleet list can still name them until the next fetch
 export function v74ArrowFromScroll(page: string, by: number): { kind: 'move'; by: 1 | -1 } | null {
@@ -232,6 +234,12 @@ function kickV74($: EngineInterface, nowMs: number): void {
   const run = (argv: readonly string[]) => $.process.run(argv, { timeoutMs: 8000 })
   void pmFeed.refresh(run, nowMs).then(r => { if (r) void $.ui.invalidate('ui.render') }).catch(() => {})
   void decideFeed.refresh(run, nowMs).then(r => { if (r) void $.ui.invalidate('ui.render') }).catch(() => {})
+  void $.env.get('AUTOPILOT_PM_ASK_BIN').then(bin => {
+    if (typeof bin === 'string' && bin.trim() !== '') {
+      return asksFeed.refresh(run, ['node', bin.trim(), ...ASKS_LIST_TAIL], nowMs)
+    }
+    return false
+  }).then(r => { if (r) void $.ui.invalidate('ui.render') }).catch(() => {})
 }
 const V74_TODO: TodoCard[] | null = null // the todo source (fleet todo --json) is not wired: decision cards do not offer `待辦` (offerTodo) until it is
 async function v74CtxOf($: EngineInterface, withStore = false): Promise<V74Ctx> {
@@ -2724,6 +2732,10 @@ async function paneTree($: EngineInterface, e: { props: any; surface: string }, 
     ? await ($.state.get as (ref: { plugin: string; key: string }) => Promise<{ value: unknown }>)({ plugin: 'forge-stats', key: 'panel' }).then(g => g.value, () => null)
     : undefined
   const v74 = legacy ? undefined : await v74CtxOf($, boxRows !== null)
+  const askRowsRaw = asksFeed.rows()
+  const askRows = !legacy && askRowsRaw !== null && askRowsRaw.length > 0
+    ? askBandRows(askRowsRaw, boxRows !== null ? Math.max(20, decideCols - 4) : decideCols, frameNow)
+    : undefined
   const tree = Pane(
     $.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { void paneTabPress($, t, legacy) }, tr, e.props.bodyColumns,
     () => { paneTab = nextTab(paneTab); panePage = pageOfTab(paneTab); $.ui.invalidate('ui.render') },
@@ -2731,7 +2743,7 @@ async function paneTree($: EngineInterface, e: { props: any; surface: string }, 
     folded, boxRows !== null ? null : e.props.scroll ?? null,
     { state: decideState, batch: decideBatch, now: decideNow, inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } },
     decideScroll, fleet, null,
-    legacy ? null : { pages: [...PAGES, ...EXTRA_PAGES], pageId: panePage, ...(!legacy ? { pendingScroll } : {}), onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, others: fleet?.others ?? null, nowMs: frameNow, rows: boxRows ?? frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), ...(boxMaxRows === null ? {} : { maxRows: boxMaxRows }), bodyColumns: decideCols, ...(boxRows === null ? {} : { v74Box: true as const }), view: pageView, decide: { ...decideState, ...decideLocal, layoutMode: decideLayout }, v74, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { void v74Keylog($, { handler: 'input', component: 'Input', element: 'v74-note', len: [...v].length, page: panePage, cursor: decideLocal.cursor, focusOwner: 'v74-note', noteOpen: true }); decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(pageNeedsSteps(panePage) ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}), ...(panePage === 'room' ? { room: parseRoom((await readRoomText($)) ?? '') } : {}) },
+    legacy ? null : { pages: [...PAGES, ...EXTRA_PAGES], pageId: panePage, ...(!legacy ? { pendingScroll } : {}), onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, others: fleet?.others ?? null, nowMs: frameNow, rows: boxRows ?? frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), ...(boxMaxRows === null ? {} : { maxRows: boxMaxRows }), bodyColumns: decideCols, ...(boxRows === null ? {} : { v74Box: true as const }), ...(askRows !== undefined && askRows.length > 0 ? { askRows } : {}), view: pageView, decide: { ...decideState, ...decideLocal, layoutMode: decideLayout }, v74, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { void v74Keylog($, { handler: 'input', component: 'Input', element: 'v74-note', len: [...v].length, page: panePage, cursor: decideLocal.cursor, focusOwner: 'v74-note', noteOpen: true }); decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(pageNeedsSteps(panePage) ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}), ...(panePage === 'room' ? { room: parseRoom((await readRoomText($)) ?? '') } : {}) },
   )
   if (boxRows === null) await probePane($, e as never, tree)
   return tree

@@ -17,6 +17,7 @@ const fs = require('fs');
 const path = require('path');
 const { SCHEMA, append, readRows, isHandoffResume } = require('../hooks/askpm-log');
 const { groupKey, normalizeQuestion } = require('./lib/ask-group-key');
+const { maskSecrets } = require('./lib/mask-secrets');
 
 const MAX_VIEW_LINES = 30;
 const ARCHIVE_DAYS_MS = 14 * 24 * 3600 * 1000;
@@ -77,7 +78,7 @@ function loadState(env) {
   const repliesByAskId = new Map();
   let replyCutoffMs = null;
   for (let i = 0; i < rows.length; i += 1) {
-    const r = rows[i];
+    const r = typeof rows[i].text === 'string' ? { ...rows[i], text: maskSecrets(rows[i].text) } : rows[i];
     if (r.kind === 'ask' && typeof r.ask_id === 'string' && r.ask_id !== '' && !isHandoffResume(r.text)) {
       const entry = { row: r, index: i };
       asks.push(entry);

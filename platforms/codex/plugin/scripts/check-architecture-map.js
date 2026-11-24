@@ -132,7 +132,7 @@ function getChangedFiles(repo, base, head) {
   try {
     const out = execFileSync(
       'git',
-      ['-C', repo, 'diff', '--name-only', `${base}..${head}`],
+      ['-C', repo, 'diff', '--name-only', base, head],
       { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
     );
     return out

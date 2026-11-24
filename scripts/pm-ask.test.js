@@ -294,3 +294,106 @@ test('list --answers formats status, Taipei time, grouped latest reply, and --op
     s.cleanup();
   }
 });
+
+test('list --answers marks pre-cutoff and no-reply-log asks as 舊紀錄, post-cutoff as 未答', () => {
+  // (a) pre-cutoff without reply -> 舊紀錄; (b) post-cutoff without reply -> 未答
+  const s = makeStore([
+    askRow('a-old00001', 'old ask before reply writer', '2026-11-20T10:00:00.000Z'),
+    askRow('a-rep00002', 'first ask with reply', '2026-11-24T01:00:00.000Z'),
+    {
+      schema: SCHEMA,
+      kind: 'disposition',
+      at: '2026-11-24T01:05:00.000Z',
+      ask_id: 'a-rep00002',
+      action: 'reply',
+      text: 'writer is live',
+    },
+    askRow('a-new00003', 'new ask after cutoff', '2026-11-24T02:00:00.000Z'),
+  ]);
+  try {
+    const res = s.run(['list', '--answers']);
+    assert.equal(res.status, 0, res.stderr);
+    const lines = res.stdout.trim().split('\n');
+    assert.equal(lines.length, 3);
+    assert.match(lines[0], /^舊紀錄 /);
+    assert.match(lines[1], /^已答 /);
+    assert.match(lines[2], /^未答 /);
+
+    // --open still lists 舊紀錄
+    const openRes = s.run(['list', '--open']);
+    assert.equal(openRes.status, 0, openRes.stderr);
+    assert.equal(openRes.stdout.includes('a-old00001'), true);
+  } finally {
+    s.cleanup();
+  }
+
+  // (c) no reply rows at all -> 舊紀錄
+  const noReplyStore = makeStore([
+    askRow('a-only0001', 'ask when no reply rows exist', '2026-11-20T10:00:00.000Z'),
+  ]);
+  try {
+    const res = noReplyStore.run(['list', '--answers']);
+    assert.equal(res.status, 0, res.stderr);
+    assert.match(res.stdout.trim(), /^舊紀錄 /);
+  } finally {
+    noReplyStore.cleanup();
+  }
+});
+
+test('groupAsks merges prefix-matching asks within 30m in same scope, and respects boundaries', () => {
+  // (d) 3 asks with same >=8-char prefix, <=11m apart, same scope -> merged into 1 with count=3
+  const sMerged = makeStore([
+    askRow('a-pfx00001', 'fleet-glm 開好了沒?', '2026-11-24T04:49:00.000Z', 's1'),
+    askRow('a-pfx00002', 'fleet-glm 開好了沒? 我等很久了', '2026-11-24T05:00:00.000Z', 's1'),
+    askRow('a-pfx00003', 'fleet-glm 開好了沒? 我等很久了 請回我', '2026-11-24T05:07:00.000Z', 's1'),
+  ]);
+  try {
+    const res = sMerged.run(['list']);
+    assert.equal(res.status, 0, res.stderr);
+    const lines = res.stdout.trim().split('\n');
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /\(x3\)/);
+  } finally {
+    sMerged.cleanup();
+  }
+
+  // (e) same 3 asks but 40m apart -> not merged
+  const sFar = makeStore([
+    askRow('a-far00001', 'fleet-glm 開好了沒?', '2026-11-24T04:00:00.000Z', 's1'),
+    askRow('a-far00002', 'fleet-glm 開好了沒? 我等很久了', '2026-11-24T04:40:00.000Z', 's1'),
+    askRow('a-far00003', 'fleet-glm 開好了沒? 我等很久了 請回我', '2026-11-24T05:20:00.000Z', 's1'),
+  ]);
+  try {
+    const res = sFar.run(['list']);
+    assert.equal(res.status, 0, res.stderr);
+    assert.equal(res.stdout.trim().split('\n').length, 3);
+  } finally {
+    sFar.cleanup();
+  }
+
+  // (f) same time but different scope -> not merged
+  const sDiffScope = makeStore([
+    askRow('a-scp00001', 'fleet-glm 開好了沒?', '2026-11-24T04:49:00.000Z', 's1'),
+    askRow('a-scp00002', 'fleet-glm 開好了沒? 我等很久了', '2026-11-24T04:55:00.000Z', 's2'),
+  ]);
+  try {
+    const res = sDiffScope.run(['list']);
+    assert.equal(res.status, 0, res.stderr);
+    assert.equal(res.stdout.trim().split('\n').length, 2);
+  } finally {
+    sDiffScope.cleanup();
+  }
+
+  // (g) prefix only 5 chars -> not merged
+  const sShort = makeStore([
+    askRow('a-sht00001', 'abcde?', '2026-11-24T04:49:00.000Z', 's1'),
+    askRow('a-sht00002', 'abcde extra text here', '2026-11-24T04:55:00.000Z', 's1'),
+  ]);
+  try {
+    const res = sShort.run(['list']);
+    assert.equal(res.status, 0, res.stderr);
+    assert.equal(res.stdout.trim().split('\n').length, 2);
+  } finally {
+    sShort.cleanup();
+  }
+});

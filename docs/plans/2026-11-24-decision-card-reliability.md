@@ -24,7 +24,7 @@
    - **比對鍵（v1）**：正規化規則為「去空白與標點、轉小寫、取前 120 字」，指紋欄位集合為「標題或問題字串＋`executor`＋`category`」。誤擋時的逃生口為 `--supersede <card id>` 且必須附寫理由。
 2. **答覆帶請求 id 自動轉送**
    - `scripts/open-decision.js` 已支援 `--from-request <r-id>` 儲存 `from_request`（[open-decision.js](/scripts/open-decision.js#L146)），`deliverAnswer` 亦會將面板已核實答覆經 `fleet send <executor>` 派送（[open-decision.js](/scripts/open-decision.js#L103-L110)）。補齊當卡片帶有 `from_request` 時，答覆結案／派送路徑自動帶出請求 id 並轉送至原請求方（`scripts/request-decision.js` 對應端點）。
-   - **可信身分與狀態隔離**：可信的原請求方只取自卡片建立時寫入的 `from_request` 欄位（由 `open-decision.js --from-request` 在 `open` 當下以呼叫端 session 的 fleet 身分簽入），轉送以 `fleet send` 的 courier 認證 `from` 為準；轉送成功條件為收到 `message_id`。成功與失敗皆寫入獨立紀錄欄位（`forward_status`、`forward_message_id`、`forward_error`），失敗不得改動卡片自己的 `closed`／`dispatched` 狀態，沿用既有已驗證投遞閘。
+   - **可信身分與狀態轉移**：`from_request` 只是請求 id（r-id）。本 repo 內 `scripts/request-decision.js` 沒有 r-id 對應請求方位址的紀錄（未查到），所以 T2 第一步改為在 `open` 當下，由 `open-decision.js` 以呼叫端 session 的 `fleet whoami` 取得位址，與 r-id 一起存為 `from_request_addr`；位址來自呼叫端自己的認證身分，不由 r-id 反查，因此冒用他人的 r-id 也只會轉回冒用者自己。代理開卡時轉送收件者即代理者（v1 已知限制）。轉送在「答覆核實且主派送成功」之後才執行，轉送成功條件為 `fleet send` 回傳 `message_id`。成功寫 `forward_status=sent`、`forward_message_id`；失敗寫 `forward_status=failed`、`forward_error` 與 `forward_attempts`；卡片自己的 `closed`／`dispatched` 狀態一律不動；重試入口為 `open-decision.js forward <card id>`；沒有 `from_request` 的卡寫 `forward_status=skipped_no_requester`，不算失敗，也不列為負控制案例。
 3. **「看不見」和「送不到」分開診斷，並查清未送達 119 的分型**
    - **看不見（面板／作用域層）**：`src/status/card-visibility.js`、`src/status/decision-input.js`、`src/status/scope-key.js` 與 `BL-0337` 跨 repo marker 漂移（[open-decision.js](/scripts/open-decision.js#L48-L51)）。
    - **送不到（派送／courier 層）**：`deliverAnswer`、`scripts/lib/fleet-decision.js`、`hooks/advisory-relay.js`、`redeliver`（[open-decision.js](/scripts/open-decision.js#L22)）。
@@ -58,10 +58,10 @@
 
 | ID | 正向驗收 | 負控制（刻意違規必須被擋） |
 |---|---|---|
-| T1 | 對已 `closed` 卡以相同問題重開，指令失敗且回顯原 `id`、`answer`、`closed_at` | 刻意傳入 `--not-duplicate-of` 試圖繞過已答卡檢查 → 仍必須被擋（僅允許覆寫未決卡，不可覆寫已答卡） |
-| T2 | 帶 `from_request` 的卡經面板核實答覆後，自動轉送原請求方並記錄 `sent_message_id` | 刻意偽造或遺失 `from_request` 目標位址 → 必須拒絕靜默吞掉，保留 `pending_dispatch` 與 `dispatch_error` |
+| T1 | 對已 `closed` 卡以相同問題重開，指令失敗且回顯原 `id`、`answer`、`closed_at` | 刻意傳入既有的 `--not-duplicate-of`（`open-decision.js` L11、L156；只用來放行「未決的相似卡」並要附 `--not-duplicate-reason`）試圖繞過已答卡檢查 → 仍必須被擋；已答卡只能走 `--supersede <card id>` 並寫理由 |
+| T2 | 帶 `from_request` 的卡經面板核實答覆並主派送成功後，自動轉送 `from_request_addr`，成功時記 `forward_status=sent` 與 `forward_message_id`；無 `from_request` 的卡記 `skipped_no_requester` | 刻意把 `from_request_addr` 設成不存在的位址 → `forward_status=failed`、`forward_error` 有值、`forward_attempts` 遞增，卡片仍是 `closed`／`dispatched`，不得靜默吞掉；`forward <card id>` 重試入口在位址修正後轉為 `sent` |
 | T3 | 模擬「面板無顯示但資料存在」與「`fleet send` 失敗」，分診明確輸出不同故障類別 | 刻意讓 `card-visibility` 與 `deliverAnswer` 同時異常 → 必須各自報錯，不可合併為單一模糊錯誤 |
-| T4 | hangar／fleet 介面需求含 119 分型欄位、列舉與對照範例 | 缺 `failure_class` 或 `card_id` 的回執格式 → 契約驗證必須拒絕 |
+| T4 | hangar／fleet 介面需求含 119 分型欄位、列舉與對照範例；驗證器落在 T3：診斷工具讀入回執時檢查欄位，缺欄回報 `malformed` 類別 | 缺 `failure_class` 或 `card_id` 的回執 → T3 診斷工具必須回報 `malformed`，不可當成有效分型 |
 | T5a | 4 張重問卡與 `from_request` 轉送案例在測試套件全綠 | 刻意拿掉 T1 防呆或偽造 `from_request`／略過 `message_id` 檢查 → 測試必須轉紅（失敗） |
 | T5b | 5 張 `verify_failed`、分診輸出與可見性事故案例在測試套件全綠 | 刻意模擬 `verify` exit 7／非 `{ok:true}` 回應或「面板兩度顯示沒有待決卡」情境 → 狀態機必須轉紅且不得誤標 `closed` |
 

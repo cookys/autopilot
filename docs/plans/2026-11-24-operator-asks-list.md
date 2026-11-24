@@ -49,6 +49,6 @@
 
 ## 5. 風險、不做什麼與成效量法
 
-- **風險**：(1) 同題合併若關鍵詞過寬可能誤併不同子問題（如 ThinkSmart 的 ssh 與 buildroot）；解法是以 `task_id` 為主鍵，文字僅作輔助。(2) `Stop` hook 若讀取過大 transcript 可能逾時；每次最多回讀 200 行或 256 KB（取小者）。(3) `askpm.jsonl` 並發寫入採 append 單行原子寫，保留 90 天後歸檔。
+- **風險**：(1) 同題合併若關鍵詞過寬可能誤併不同子問題（如 ThinkSmart 的 ssh 與 buildroot）；解法是以 `ask_id` 為主鍵、`group_key` 僅作視圖合併，未綁群組只在正規化文字完全相同時合併。(2) `Stop` hook 若讀取過大 transcript 可能逾時；每次最多回讀 200 行或 256 KB（取小者）。(3) `askpm.jsonl` 並發寫入採 append 單行原子寫，保留 90 天後歸檔。
 - **不做什麼**：不將 capacity 帳號池用量與全線狀況等即時輪詢數字放進清單（走常駐 widget / `fleet pm status`，清單僅放連結）；清單只在 PM 席與操作員 pane 可見，不進 web／alfred 共用介面；不在本單實作 codeforge 面板幾何或修改 fleet 核心程式。
 - **成效量法**：上線後 7 天（2026-12-08）由本席所寫 `scripts/ask-repeat-rate.js`（唯讀 `askpm.jsonl`，排除合成回覆）判定：**重問率**（同一 `group_key` 在 7 天內再被問的比例）從基線 **15.7%** 降到 **≤ 8%**（約減半）且 `reply` 覆蓋率 **≥ 90%**（基線 38%）即為 PASS。

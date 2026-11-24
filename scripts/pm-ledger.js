@@ -23,8 +23,13 @@ if (cmd === 'lint' || cmd === 'write') {
   if (cmd === 'lint') process.exit(0);
   const file = config().ledger_sh;
   if (typeof file !== 'string' || !file.trim()) fail('未設定 pm_ledger.ledger_sh', 2);
-  const result = spawnSync('sh', [file], {input:text, stdio:['pipe','inherit','inherit']});
+  // ledger.sh takes argv: '<line>' '<commit subject>' (stdin is ignored and it prints usage with rc 0).
+  const line = text.replace(/\n+$/, '');
+  const subject = [...line.split('\n')[0]].slice(0, 72).join('');
+  const result = spawnSync('sh', [file, line, subject], {encoding:'utf8', stdio:['ignore','pipe','pipe']});
   if (result.error || result.status === null) fail('無法執行 ledger.sh', 2);
+  process.stdout.write(result.stdout); process.stderr.write(result.stderr);
+  if (result.status === 0 && /usage/i.test(result.stdout + result.stderr)) fail('ledger.sh 印出 usage，條目沒有寫入', 1);
   process.exit(result.status);
 }
 if (cmd === 'search') {

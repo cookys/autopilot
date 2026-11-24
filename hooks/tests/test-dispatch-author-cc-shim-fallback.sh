@@ -33,10 +33,9 @@ ANTHROPIC_BASE_URL="https://example.invalid" \
 ANTHROPIC_AUTH_TOKEN="dGVzdC10b2tlbg==" \
 bash "$DISPATCH_AUTHOR" \
   --runner cc-shim \
-  --model glm-5 \
+  --model haiku \
   --prompt-file "$PROMPT_FILE" \
-  --raw-log "$OUT_POS" \
-  --timeout 15 >/dev/null 2>&1
+  --timeout 15 >"$OUT_POS" 2>&1 < /dev/null
 RC_POS=$?
 set -e
 
@@ -56,10 +55,9 @@ ANTHROPIC_BASE_URL="https://example.invalid" \
 ANTHROPIC_AUTH_TOKEN="dGVzdC10b2tlbg==" \
 bash "$DISPATCH_AUTHOR" \
   --runner cc-shim \
-  --model glm-5 \
+  --model haiku \
   --prompt-file "$PROMPT_FILE" \
-  --raw-log "$OUT_NEG" \
-  --timeout 15 >"$TMP_DIR/neg_stdout.log" 2>&1
+  --timeout 15 >"$OUT_NEG" 2>&1 < /dev/null
 RC_NEG=$?
 set -e
 
@@ -67,7 +65,7 @@ if [ "$RC_NEG" -eq 0 ]; then
   echo "FAIL: negative control unexpectedly succeeded"
   exit 1
 fi
-if ! grep -q "claude binary not found" "$TMP_DIR/neg_stdout.log" "$OUT_NEG" 2>/dev/null; then
+if ! grep -q "claude binary not found" "$OUT_NEG" 2>/dev/null; then
   echo "FAIL: negative control did not report 'claude binary not found'"
   exit 1
 fi

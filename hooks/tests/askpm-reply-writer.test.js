@@ -18,7 +18,9 @@ function makeSandbox() {
   fs.mkdirSync(path.join(homeDir, '.autopilot'), { recursive: true });
   fs.mkdirSync(stateDir, { recursive: true });
   fs.mkdirSync(path.join(cwd, '.claude'), { recursive: true });
-  fs.writeFileSync(path.join(cwd, '.claude', 'console.json'), JSON.stringify({ schema: 'autopilot.console/1' }));
+  fs.writeFileSync(path.join(cwd, '.claude', 'console.json'), JSON.stringify({ schema: 'autopilot.console/1', mode: 'program' }));
+  fs.mkdirSync(path.join(cwd, '.git'), { recursive: true });
+  fs.writeFileSync(path.join(cwd, '.git', 'HEAD'), 'ref: refs/heads/main\n');
   fs.writeFileSync(path.join(homeDir, '.autopilot', 'config.json'), JSON.stringify({ hooks: { 'askpm-log': true } }));
   const env = {
     HOME: homeDir,
@@ -108,7 +110,7 @@ function testConcurrentProcessesAppend() {
   const script = `
     const { writeReply } = require(${JSON.stringify(askpmLogPath)});
     const env = ${JSON.stringify(env)};
-    const workerId = process.argv[2];
+    const workerId = process.argv[1];
     for (let i = 0; i < 50; i += 1) {
       writeReply(env, 'msg-' + workerId + '-' + i, {
         ask_id: 'a-' + workerId + '-' + i,

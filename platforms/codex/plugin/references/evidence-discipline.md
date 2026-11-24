@@ -1225,8 +1225,7 @@ show it; the claim covered glyphs, not legibility.
 
 Rule: a claim about how a screen looks needs the colored screen — capture with `-e`, render it, and look.
 
-Preventing artifact: `docs/plans/evidence/2026-10-06-tui-band/ansi2html.py` + headless chrome screenshot
-(recipe in that README); the band palette uses Claude Code theme keys as text color only.
+Preventing artifact: every terminal screen shown as a web page goes through `node scripts/ansi-to-html-grid.js <capture>` (page: `docs/guide/terminal-screen-to-html.md`). Its built-in gate refuses a capture without color codes (rc 3), a row whose width differs from an independent recount (rc 4) and a page that lost its color spans (rc 5); there is no switch to turn it off and no hand-written converter. The 2026-10-06 `ansi2html.py` is archived evidence only; the band palette still uses Claude Code theme keys as text color only.
 
 ## 56. A golden that is green only while untracked
 

@@ -938,7 +938,7 @@ function main(argv) {
   if (args.extra['look-target'] !== undefined && cmd !== 'open') return usage('--look-target is only an open argument');
   if (cmd !== 'open' && (args.extra['premise-source'] !== undefined || args.extra['premise-inferred'])) return usage('--premise-source 與 --premise-inferred 只用於 open');
   if (cmd === 'verify' && args._.length === 1) return verifyAnswer(args);
-  if (!['open', 'close', 'done', 'show', 'list', 'dismissed', 'backfill', 'redeliver', 'due-sweep', 'stats'].includes(cmd) || args._.length > 1) return usage(cmd ? `bad command: ${args._.join(' ')}` : 'missing command');
+  if (!['open', 'close', 'done', 'show', 'list', 'dismissed', 'backfill', 'redeliver', 'due-sweep', 'stats', 'forward'].includes(cmd) || (cmd === 'forward' ? args._.length > 2 : args._.length > 1)) return usage(cmd ? `bad command: ${args._.join(' ')}` : 'missing command');
   const sess = sessionRoot();
   const root = args['root-run-id'] !== undefined ? args['root-run-id'] : (process.env.AUTOPILOT_ROOT_RUN_ID || sess.root);
   if (root && (!SAFE_ROOT.test(root) || root === '.' || root === '..')) return usage('--root-run-id must match [A-Za-z0-9._-]+');
@@ -1073,6 +1073,7 @@ function main(argv) {
     return 0;
   }
   if (cmd === 'backfill') return backfill(args, sf, root || null);
+  if (cmd === 'forward') return forwardCommand(args);
   if (cmd === 'redeliver') {
     const badR = stray(['answer', 'executor', 'asker', 'awaiting-operator', 'reask-after', 'operator-step', 'from', 'apply', 'dispatched', 'dispatched-msg', 'all', 'irreversible', 'from-request', 'note']);
     if (badR) return usage(`--${badR} is not a redeliver argument`);
@@ -1264,6 +1265,7 @@ function main(argv) {
   const aliasErr = applyIrreversibleAlias(args, ex);
   if (aliasErr) return usage(aliasErr);
   if (ex['from-request'] !== undefined && !/^r-[0-9a-f]{8}$/.test(String(ex['from-request']))) return usage('--from-request needs an id r- plus 8 hex');
+  const fromRequestAddr = ex['from-request'] !== undefined ? fleetWhoami() : null;
   let routed = null;
     const naId = notAuthorizedBoundaryId(args['not-authorized']);
     if (operatorSteps.length === 0 && OPERATOR_STEP_HINT_IDS.has(naId)) {
@@ -1282,7 +1284,7 @@ function main(argv) {
   const r = openDecision({
     cwd: args.cwd || process.cwd(), root: root || null, session: sess.session, question: questionText, background: backgroundText,
     options, recommendation: args.recommendation, why: args.why, blocks: args.blocks, not_authorized: args['not-authorized'], source: args.source, kind: args.kind, category: ex.category, executor: ex.executor, asker: ex.asker, title: ex.title, due_at: dueAt,
-    from_request: ex['from-request'], attachments: args.attachments, look_target: lookTarget,
+    from_request: ex['from-request'], from_request_addr: fromRequestAddr, attachments: args.attachments, look_target: lookTarget,
     operator_steps: operatorSteps, repeat_of: repeat === null ? undefined : repeat.entry.id, repeat_n: repeat === null ? undefined : repeat.repeat_n,
     not_duplicate_of: duplicateOverrides, not_duplicate_reason: ex['not-duplicate-reason'], supersede: ex.supersede, supersede_reason: ex['supersede-reason'], reject_duplicates: true, require_executor: true,
   });
@@ -1359,7 +1361,7 @@ function roleGate({ not_authorized, origin, kind } = {}) {
 // lock + atomic-rename path as `open`; another entry is never touched. `origin` (e.g. "ask_user_question") marks which hook
 // opened it; the CLI never sets it. `options` = [{label, description}] (>= 2) or null.
 // Returns { status: 'ok'|'error', id, file, scope_key, message, code? }.
-function openDecision({ cwd, root, session, question, background, options, recommendation, why, blocks, not_authorized, source, origin, turn_tracked, kind, category, executor, asker, title, from_request, due_at, attachments, look_target, operator_steps, repeat_of, repeat_n, not_duplicate_of, not_duplicate_reason, supersede, supersede_reason, reject_duplicates, require_executor }) {
+function openDecision({ cwd, root, session, question, background, options, recommendation, why, blocks, not_authorized, source, origin, turn_tracked, kind, category, executor, asker, title, from_request, from_request_addr, due_at, attachments, look_target, operator_steps, repeat_of, repeat_n, not_duplicate_of, not_duplicate_reason, supersede, supersede_reason, reject_duplicates, require_executor }) {
   const routed = roleGate({ not_authorized, origin, kind });
   if (routed && routed.code === 4) return { status: 'error', code: 4, message: routed.message };
   const sf = scopeFile(cwd, root);
@@ -1376,6 +1378,7 @@ function openDecision({ cwd, root, session, question, background, options, recom
   if (text(executor)) entry.executor = executor.trim(); // who executes the answer / who asked: close --answer puts them in the dispatch JSON (BL cardtrail)
   if (text(asker)) entry.asker = asker.trim();
   if (text(from_request)) entry.from_request = from_request.trim();
+  if (text(from_request_addr)) entry.from_request_addr = from_request_addr.trim();
   if (Array.isArray(operator_steps)) {
     const steps = operator_steps.map((s) => (typeof s === 'string' ? s.trim() : '')).filter(Boolean);
     if (steps.length) entry.operator_steps = steps;
@@ -1645,11 +1648,29 @@ function parseSent(stdout) {
   } catch (_e) { return null; }
 }
 
+function fleetBin() {
+  return process.env.FLEET_BIN || process.env.AUTOPILOT_FLEET_BIN || 'fleet';
+}
+
+function fleetWhoami(timeoutMs = 5000) {
+  const r = spawnSync(fleetBin(), ['whoami'], { encoding: 'utf8', timeout: timeoutMs, env: process.env });
+  if (r.error || r.status !== 0) return null;
+  const raw = String(r.stdout || '').trim();
+  if (!raw) return null;
+  try {
+    const j = JSON.parse(raw);
+    const addr = j && (j.address || j.addr || j.identity || j.me);
+    if (typeof addr === 'string' && addr.trim()) return addr.trim();
+  } catch (_e) { /* plain text */ }
+  const first = raw.split(/\r?\n/)[0].trim();
+  return first || null;
+}
+
 function sendFleet(to, text, timeoutMs = SEND_TIMEOUT_MS) {
   const env = { ...process.env };
   delete env.FLEET_AS_CLI;
   delete env.FLEET_FYI; // the executor must act on this: not an FYI
-  const r = spawnSync(process.env.AUTOPILOT_FLEET_BIN || 'fleet', ['send', to, text], { encoding: 'utf8', timeout: timeoutMs, env });
+  const r = spawnSync(fleetBin(), ['send', to, text], { encoding: 'utf8', timeout: timeoutMs, env });
   if (r.error) {
     // a timeout can come after the hub committed the send: a message id already on stdout means it went out (a resend would duplicate it)
     const sent = parseSent(r.stdout);
@@ -1819,11 +1840,64 @@ function parkAnswer(file, id, v) {
   return { status: 'ok', id, executor: c.executor };
 }
 
+function forwardMessageText(card) {
+  const qLine = String(card.question || '').replace(/[\r\n]+/g, ' ').trim();
+  return [
+    `[決策卡答覆轉送] ${card.id}`,
+    `from_request: ${card.from_request}`,
+    `question: ${qLine}`,
+    `answer: ${card.answer !== undefined && card.answer !== null ? card.answer : ''}`,
+  ].join('\n');
+}
+
+function forwardToRequester(file, id, sender = sendFleet, { retry = false } = {}) {
+  const card = readFile(file, { all: true }).find((e) => e.id === id);
+  if (!card) return { status: 'absent', id };
+  if (!card.from_request) {
+    if (card.forward_status !== 'skipped_no_requester') {
+      patchDecision(file, id, { forward_status: 'skipped_no_requester' }, { any: true });
+    }
+    return { status: 'skipped_no_requester', id };
+  }
+  if (!retry && card.forward_status === 'sent') {
+    return { status: 'already', id, message_id: card.forward_message_id };
+  }
+  if (!card.from_request_addr) {
+    const err = 'no from_request_addr';
+    const p = patchDecision(file, id, (h) => ({
+      forward_status: 'failed',
+      forward_error: err,
+      forward_attempts: (h.forward_attempts || 0) + 1,
+    }), { any: true });
+    return { status: 'failed', id, error: err, attempts: p.entry ? p.entry.forward_attempts : 1 };
+  }
+  const r = sender(card.from_request_addr, forwardMessageText(card), SEND_TIMEOUT_MS);
+  if (r && r.ok && typeof r.message_id === 'string' && r.message_id) {
+    patchDecision(file, id, {
+      forward_status: 'sent',
+      forward_message_id: r.message_id,
+      forward_error: undefined,
+    }, { any: true });
+    return { status: 'sent', id, message_id: r.message_id };
+  }
+  const err = String((r && r.error) || 'fleet send failed').slice(0, 200);
+  const p = patchDecision(file, id, (h) => ({
+    forward_status: 'failed',
+    forward_error: err,
+    forward_attempts: (h.forward_attempts || 0) + 1,
+  }), { any: true });
+  return { status: 'failed', id, error: err, attempts: p.entry ? p.entry.forward_attempts : 1 };
+}
+
 // The CLI/library entry: park the answer, then send it (and any older unsent answer of the card).
 function deliverAnswer(file, id, v, sender = sendFleet, opts) {
   const k = parkAnswer(file, id, v);
   if (k.status === 'absent' || k.status === 'error' || k.status === 'reask') return k;
-  return sendParked(file, id, sender, opts);
+  const res = sendParked(file, id, sender, opts);
+  if (res.status === 'sent' || res.status === 'already') {
+    forwardToRequester(file, id, sender);
+  }
+  return res;
 }
 
 // An executor card whose answer cannot be delivered (no courier, verify failed, ...) is never closed: it is parked in pending_dispatch with dispatch_error naming the reason.
@@ -1975,5 +2049,23 @@ function backfill(args, sf, root) {
   return 0;
 }
 
+function forwardCommand(args, sender = sendFleet) {
+  const cardId = args._[1] !== undefined ? args._[1] : args.id;
+  if (typeof cardId !== 'string' || !SAFE_ID.test(cardId)) return usage('forward needs <card_id>');
+  const hit = findCard(args.cwd, cardId, { all: true });
+  if (!hit) { process.stderr.write(`no such decision: ${cardId}\n`); return 1; }
+  if (hit.entry.forward_status !== 'failed') {
+    process.stderr.write(`open-decision: forward refused for ${cardId}: forward_status is ${hit.entry.forward_status || 'unset'} (only 'failed' can be retried)\n`);
+    return 2;
+  }
+  const r = forwardToRequester(hit.file, cardId, sender, { retry: true });
+  if (r.status === 'sent') {
+    process.stdout.write(`forwarded ${cardId} message_id=${r.message_id}\n`);
+    return 0;
+  }
+  process.stderr.write(`open-decision: forward failed for ${cardId}: ${r.error}\n`);
+  return 9;
+}
+
 if (require.main === module) process.exitCode = main(process.argv.slice(2));
-module.exports = { main, checkNotAuthorized, openDecision, closeDecisionById, closePanelAnswer, panelAnswerText, recordDecline, isDeclineAnswer, reaskDue, awaitingTextFor, deliverAnswer, parkAnswer, parkUndelivered, sendParked, receiptLine, redeliver, recordCorrection, patchDecision, findCard, findDuplicateCards, findAnsweredDuplicate, cardFingerprint, normalizeFingerprintPart, projectScopeFiles, unboundCardsOf, readEntries: readFile, dueSweep, parseDue, SAFE_ROOT, SCHEMA };
+module.exports = { main, checkNotAuthorized, openDecision, closeDecisionById, closePanelAnswer, panelAnswerText, recordDecline, isDeclineAnswer, reaskDue, awaitingTextFor, deliverAnswer, parkAnswer, parkUndelivered, sendParked, receiptLine, redeliver, recordCorrection, patchDecision, findCard, findDuplicateCards, findAnsweredDuplicate, cardFingerprint, normalizeFingerprintPart, projectScopeFiles, unboundCardsOf, readEntries: readFile, dueSweep, parseDue, forwardToRequester, fleetWhoami, forwardCommand, SAFE_ROOT, SCHEMA };

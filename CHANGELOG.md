@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.10
+- SessionStart now injects `fleet pm resume` (role from the seat name) on startup, resume, clear and compact, framed as data with in-flight tasks first; if fleet is missing, slow or unconfigured it injects one line `resume 讀不到：<原因>` instead of skipping. New Stop hook `pm-resume-stop` (warn only, once per session) reminds when the injection failed or no in-flight task was touched (Fleet task 01M87CNSBKR1Q1N190A0P9F0BM).
+
 ## 3.0.0-alpha.9
 - open-decision answer delivery: a 32+ hex answer_digest is cut to 16 chars in the message body, because fleet refused the full one as a secret (long_hex_run) and operator answers had to be resent by hand (Fleet task 01M87CBKHW5WAMEK3SYZHS9H7P).
 

@@ -59,6 +59,7 @@
     { "stem": "subagent-fleet-task", "class": "invariant_effect" },
     { "stem": "suggest-compact", "class": "guidance", "profiles": ["guided"] },
     { "stem": "test-runner", "class": "invariant_effect" },
+    { "stem": "pm-resume-stop", "class": "invariant_effect" },
     { "stem": "unmerged-ship-advisory", "class": "invariant_effect" },
     { "stem": "version-drift-check", "class": "host_only" },
     { "stem": "work-order-adopt", "class": "invariant_effect" }

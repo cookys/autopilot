@@ -50,6 +50,18 @@
   },
   "entries": [
     {
+      "name": "AUTOPILOT_PM_RESUME_STOP",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "hooks/pm-resume-stop.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
       "name": "AUTOPILOT_PM_ASK_BIN",
       "kind": "env",
       "audience": "internal",

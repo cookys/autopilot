@@ -1740,6 +1740,9 @@ elif [[ "$RUNNER" = "kimi" ]]; then
 elif [[ "$RUNNER" = "cc-shim" ]]; then
   _ts_msg="$(token_seat_guard)" || die_precondition "$_ts_msg"
   CC_BIN="$(command -v "${BIN:-claude}" 2>/dev/null || true)"
+  if [ -z "$CC_BIN" ] && [ -x "${HOME:-}/.local/bin/${BIN:-claude}" ]; then
+    CC_BIN="$HOME/.local/bin/${BIN:-claude}"
+  fi
   [ -n "$CC_BIN" ] || die_precondition "claude binary not found: ${BIN:-claude} (cc-shim drives the Claude Code CLI)"
   # Make CC_BIN absolute before running from a scratch cwd (`cd` changes CWD).
   case "$CC_BIN" in

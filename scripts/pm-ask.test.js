@@ -212,3 +212,85 @@ test('list and overdue cap at 30 lines plus "… N more"', () => {
     s.cleanup();
   }
 });
+
+test('list --answers formats status, Taipei time, grouped latest reply, and --open filter', () => {
+  // Empty store returns empty string and exit 0
+  const emptyStore = makeStore([]);
+  try {
+    const emptyRes = emptyStore.run(['list', '--answers']);
+    assert.equal(emptyRes.status, 0, emptyRes.stderr);
+    assert.equal(emptyRes.stdout, '');
+  } finally {
+    emptyStore.cleanup();
+  }
+
+  const s = makeStore([
+    // (a) Answered ask with multiline reply (first line only)
+    askRow('a-ans00001', 'check deployment status for api server', '2026-11-16T10:00:00.000Z'),
+    {
+      schema: SCHEMA,
+      kind: 'disposition',
+      at: '2026-11-16T10:05:00.000Z',
+      ask_id: 'a-ans00001',
+      action: 'reply',
+      text: 'deployed v2 cleanly\nsecond line ignored',
+      ambiguous: true,
+    },
+    // (b) Unanswered ask + (d) UTC 16:30 -> Taipei next day 00:30
+    askRow('a-unans002', 'why did nightly build fail', '2026-11-16T16:30:00.000Z'),
+    // (c) Same topic asked twice, second one answered (and older reply vs newer reply)
+    askRow('a-dup00003', 'status of migration job', '2026-11-16T08:00:00.000Z'),
+    {
+      schema: SCHEMA,
+      kind: 'disposition',
+      at: '2026-11-16T08:10:00.000Z',
+      ask_id: 'a-dup00003',
+      action: 'reply',
+      text: 'earlier reply',
+    },
+    askRow('a-dup00004', 'status of migration job', '2026-11-16T09:00:00.000Z'),
+    {
+      schema: SCHEMA,
+      kind: 'disposition',
+      at: '2026-11-16T09:15:00.000Z',
+      ask_id: 'a-dup00004',
+      action: 'reply',
+      text: 'latest migration reply',
+    },
+    // (e) Disposed without reply -> 已處置, excluded by --open
+    askRow('a-disp0005', 'closed without reply', '2026-11-16T11:00:00.000Z'),
+    {
+      schema: SCHEMA,
+      kind: 'disposition',
+      at: '2026-11-16T11:05:00.000Z',
+      ask_id: 'a-disp0005',
+      action: 'close',
+      evidence: 'abc1234',
+    },
+  ]);
+
+  try {
+    const allRes = s.run(['list', '--answers']);
+    assert.equal(allRes.status, 0, allRes.stderr);
+    const lines = allRes.stdout.trim().split('\n');
+    assert.equal(lines.length, 4, `expected 4 grouped lines, got:\n${allRes.stdout}`);
+
+    // (a)
+    assert.equal(lines[0], '已答 11-16 18:00 check deployment status for api server ｜ deployed v2 cleanly');
+    // (b) + (d) UTC 16:30 -> Taipei 11-17 00:30
+    assert.equal(lines[1], '未答 11-17 00:30 why did nightly build fail ｜ （尚無答案）');
+    // (c) merged into 1 line with latest reply
+    assert.equal(lines[2], '已答 11-16 17:00 status of migration job ｜ latest migration reply');
+    // (e) disposed without reply
+    assert.equal(lines[3], '已處置 11-16 19:00 closed without reply ｜ （尚無答案）');
+
+    // (e) --open excludes disposed
+    const openRes = s.run(['list', '--answers', '--open']);
+    assert.equal(openRes.status, 0, openRes.stderr);
+    const openLines = openRes.stdout.trim().split('\n');
+    assert.equal(openLines.length, 3);
+    assert.equal(openRes.stdout.includes('closed without reply'), false);
+  } finally {
+    s.cleanup();
+  }
+});

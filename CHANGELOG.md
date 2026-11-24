@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.8
+- native-msg-record Stop hook blocks only on a sensitive request from a non-automated sender, once; progress, ack and fleet-cli or courier traffic no longer cost a turn (Fleet task 01M87BYVVQHAEXN8FYP1ZR441S).
+
 ## 3.0.0-alpha.7
 - ask-guard fix (Fleet task 01M7WJWV2WP1BKG0KT56SPAJX2 is the ask-guard task): the fleet binary falls back to `~/.local/bin/fleet` when the hook PATH lacks it, so the whoami seat lookup resolves; `dispatch-plan-review.js --panel-change "<reason>"` records a reviewed swap of the review panel between generations (Fleet task 01M87ADN5R1K1EG7R5R7B8YBKP). Version bumped so seat plugin caches refresh.
 - context-budget `t2_hard_block` default changed from `true` to `false` (Fleet task `01M85R143G95TSTJ781QT73CE7`, no version bump): `scripts/lib/config-path.js`, `scripts/lib/config-keys.json`, `docs/guide/settings-reference.md`, and `hooks/context-land-gate.js` now default `context_budget.t2_hard_block` to `false` (capping Stop blocks at 2 unless `t2_hard_block: true` is explicitly set).

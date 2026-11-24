@@ -259,27 +259,27 @@ function pickLatestReply(askIds, repliesByAskId) {
   return best;
 }
 
-function formatAnswerLine(entry, disposed, repliesByAskId, replyCutoffMs) {
+function statusOf(entry, disposed, repliesByAskId, replyCutoffMs) {
   const row = entry.row;
   const askIds = entry.ask_ids || [row.ask_id];
   const latestReply = pickLatestReply(askIds, repliesByAskId);
-  const isDisposed = askIds.some((id) => disposed.has(id));
-  let status;
-  if (latestReply) {
-    status = '已答';
-  } else if (isDisposed) {
-    status = '已處置';
-  } else {
-    const askMs = Date.parse(entry.last_at || row.at);
-    const isOld = replyCutoffMs === null || (Number.isFinite(askMs) && askMs < replyCutoffMs);
-    status = isOld ? '舊紀錄' : '未答';
-  }
+  if (latestReply) return { status: '已答', latestReply };
+  if (askIds.some((id) => disposed.has(id))) return { status: '已處置', latestReply: null };
+  const askMs = Date.parse(entry.last_at || row.at);
+  const isOld = replyCutoffMs === null || (Number.isFinite(askMs) && askMs < replyCutoffMs);
+  return { status: isOld ? '舊紀錄' : '未答', latestReply: null };
+}
+
+function formatAnswerLine(entry, disposed, repliesByAskId, replyCutoffMs) {
+  const row = entry.row;
+  const { status, latestReply } = statusOf(entry, disposed, repliesByAskId, replyCutoffMs);
   const timeStr = formatTaipeiTime(entry.last_at || row.at);
   const summary = (typeof row.text === 'string' ? row.text : '').replace(/\s+/g, ' ').trim().slice(0, 40);
+  const countTag = entry.count && entry.count > 1 ? ` ×${entry.count}` : '';
   const answer = latestReply
     ? String(latestReply.text || '').split(/\r?\n/)[0].trim().slice(0, 60)
     : '（尚無答案）';
-  return `${status} ${timeStr} ${summary} ｜ ${answer}`;
+  return `${status}${countTag} ${timeStr} ${summary} ｜ ${answer}`;
 }
 
 function formatAnswersList(entries, disposed, repliesByAskId, replyCutoffMs) {
@@ -297,7 +297,10 @@ function listOutput(env, opts = {}) {
   const selected = opts.open ? asks.filter((e) => !disposed.has(e.row.ask_id)) : asks;
   const grouped = groupAsks(selected, nowMs);
   if (opts.answers) {
-    return formatAnswersList(grouped, disposed, repliesByAskId, replyCutoffMs);
+    const shown = opts.open
+      ? grouped.filter((e) => statusOf(e, disposed, repliesByAskId, replyCutoffMs).status !== '舊紀錄')
+      : grouped;
+    return formatAnswersList(shown, disposed, repliesByAskId, replyCutoffMs);
   }
   return formatList(grouped, nowMs);
 }
@@ -323,7 +326,7 @@ function usageError(msg) {
 function runCommand(argv, env = envFromProcess(), nowMs = Date.now()) {
   const cmd = argv[0];
   if (!cmd || cmd === '--help' || cmd === '-h') {
-    if (!cmd) throw usageError('pm-ask: missing subcommand (close|progress|supersede|list|overdue)');
+    if (!cmd) throw usageError('pm-ask: missing subcommand (close|progress|supersede|list|overdue|where)');
     return [
       'Usage:',
       '  pm-ask.js close <ask_id> --evidence <ref>',
@@ -446,6 +449,18 @@ function runCommand(argv, env = envFromProcess(), nowMs = Date.now()) {
     return listOutput(env, { open: openOnly, answers, nowMs });
   }
 
+  if (cmd === 'where') {
+    const { isEnabled } = require('../hooks/_shared/opt-in');
+    const { logFile } = require('../hooks/askpm-log');
+    const rows = readRows(env) || [];
+    const asks = rows.filter((r) => r.kind === 'ask');
+    const last = asks.length > 0 ? asks[asks.length - 1].at : '（無）';
+    return [
+      `file ${logFile(env)}`,
+      `hook_enabled ${isEnabled('askpm-log') ? 'yes' : 'no'}（開法：~/.autopilot/config.json 設 hooks.askpm-log=true，或 AUTOPILOT_HOOK_ASKPM_LOG=1）`,
+      `rows ${rows.length} asks ${asks.length} last_ask_at ${asks.length > 0 ? formatTaipeiTime(last) + ' 台北' : last}`,
+    ].join('\n');
+  }
   if (cmd === 'overdue') {
     let hours = 24;
     for (let i = 0; i < rest.length; i += 1) {

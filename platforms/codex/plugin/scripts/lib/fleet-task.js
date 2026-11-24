@@ -25,8 +25,16 @@
 
 const { spawnSync } = require('child_process');
 
-function bin() {
-  return process.env.FLEET_BIN || 'fleet';
+// FLEET_BIN, else ~/.local/bin/fleet when it exists (hook processes often lack it on PATH,
+// which made the ask-guard whoami fallback fail as seat_unresolved), else `fleet` on PATH.
+function bin(env = process.env) {
+  if (env.FLEET_BIN) return env.FLEET_BIN;
+  const home = String(env.HOME || '');
+  if (home) {
+    const cand = require('path').join(home, '.local', 'bin', 'fleet');
+    if (require('fs').existsSync(cand)) return cand;
+  }
+  return 'fleet';
 }
 
 function run(args, timeoutMs = 15000) {

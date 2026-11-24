@@ -9,7 +9,7 @@ const path = require('node:path');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 const SCRIPT = path.join(REPO_ROOT, 'scripts', 'open-decision.js');
-const { classifyVisibility, triage } = require(path.join(REPO_ROOT, 'scripts', 'card-triage.js'));
+const { triage } = require(path.join(REPO_ROOT, 'scripts', 'card-triage.js'));
 
 function setupSandbox(fleetConfig = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-t5b-'));
@@ -200,9 +200,10 @@ test('T5b(b) visibility incident: scope_mismatch is distinct from verify_failed 
   };
   const currentRepo = '/tmp/current-repo';
 
-  const visClass = classifyVisibility(card, [], currentRepo);
-  assert.equal(visClass, 'scope_mismatch');
-  assert.notEqual(visClass, 'verify_failed');
+  const visOnly = triage({ card, visibleIds: [], repo: currentRepo });
+  assert.equal(visOnly.visibility, "scope_mismatch");
+  assert.notEqual(visOnly.delivery, "dispatch_failed");
+  assert.equal(visOnly.ok, false);
 
   const combined = triage({
     card: { ...card, dispatch_error: 'verify_failed: exit 1' },

@@ -8,7 +8,7 @@ const rowWidth = (segs: { text: string }[]): number => displayWidth(rowText(segs
 
 function makeAsk(i: number, overrides: Partial<AskRow> = {}): AskRow {
   return {
-    status: 'unanswered',
+    status: '未答',
     count: 1,
     at: '2026-11-24T10:59:00Z',
     ask: `問題${i}`,
@@ -35,7 +35,7 @@ describe('askBandRows', () => {
     const rows = Array.from({ length: 7 }, (_, i) => makeAsk(i + 1))
     const out = askBandRows(rows, 120, 0)
     expect(out.length).toBe(2)
-    const items = rowText(out[1]).split(' · ')
+    const items = rowText(out[1]).split('　')
     expect(items.length).toBe(5)
     expect(rowWidth(out[0])).toBeLessThanOrEqual(120)
     expect(rowWidth(out[1])).toBeLessThanOrEqual(120)
@@ -45,7 +45,7 @@ describe('askBandRows', () => {
     const rows = Array.from({ length: 7 }, (_, i) => makeAsk(i + 1))
     const out = askBandRows(rows, 80, 0)
     expect(out.length).toBe(2)
-    const items = rowText(out[1]).split(' · ')
+    const items = rowText(out[1]).split('　')
     expect(items.length).toBeLessThanOrEqual(3)
     expect(rowWidth(out[0])).toBeLessThanOrEqual(80)
     expect(rowWidth(out[1])).toBeLessThanOrEqual(80)
@@ -64,4 +64,14 @@ describe('askBandRows', () => {
     const out = askBandRows(rows, 120, 0)
     expect(rowText(out[0])).toContain('11-24 18:59')
   })
+})
+
+test('(g) only rows with status 未答 are counted; answered rows are not', () => {
+  const rows = [
+    { status: '未答', count: 1, at: '2026-11-24T10:59:00Z', ask: 'a', answer: null },
+    { status: '已答', count: 1, at: '2026-11-24T10:00:00Z', ask: 'b', answer: 'ok' },
+    { status: '已處置', count: 1, at: '2026-11-24T09:00:00Z', ask: 'c', answer: null },
+  ]
+  const text = askBandRows(rows, 120, 0)[0].map(s => s.text).join('')
+  expect(text).toContain('1 未答')
 })

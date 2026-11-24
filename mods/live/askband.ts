@@ -57,13 +57,22 @@ function formatSecondRowItem(r: AskRow): string {
   const ask = summarize(r.ask)
   const ans = firstLine(r.answer)
   const ansText = ans !== '' ? ans : '（尚無答案）'
-  return `${time} ${ask} → ${ansText}`
+  return `${time} ${ask} ＞ ${ansText}`
+}
+
+function formatWideItem(r: AskRow, budget: number): string {
+  const time = formatTaipeiTime(r.at).slice(6)
+  const ans = firstLine(r.answer)
+  const ansText = ans !== '' ? ans : '無答案'
+  const room = Math.max(0, budget - displayWidth(time) - 1 - 2)
+  const askRoom = Math.ceil(room / 2)
+  return `${time} ${truncateToWidth(summarize(r.ask), askRoom)}＞${truncateToWidth(ansText, room - askRoom)}`
 }
 
 export function askBandRows(rows: AskRow[], cols: number, _nowMs: number): Row[] {
   if (rows.length === 0) return []
 
-  const unanswered = rows.filter(r => r.status === 'unanswered' || r.answer === null).length
+  const unanswered = rows.filter(r => r.status === '未答').length
   const latest = rows[0]
   const latestTime = formatTaipeiTime(latest.at)
   const latestAsk = summarize(latest.ask)
@@ -79,15 +88,19 @@ export function askBandRows(rows: AskRow[], cols: number, _nowMs: number): Row[]
   if (rows.length >= 2) {
     const isWide = cols >= WIDE_COLS
     const maxItems = isWide ? MAX_WIDE_ITEMS : MAX_NARROW_ITEMS
-    const candidates = rows.slice(1, 1 + maxItems).map(formatSecondRowItem)
+    const candidates = isWide ? [] : rows.slice(1, 1 + maxItems).map(formatSecondRowItem)
 
     if (isWide) {
-      const joined = candidates.join(' · ')
-      result.push(clipRow([{ text: joined }], cols))
+      // five items must all fit the row: each gets an equal share of the width, split between the ask and the answer
+      const picked = rows.slice(1, 1 + maxItems)
+      const gap = 2
+      const budget = Math.floor((cols - gap * (picked.length - 1)) / picked.length)
+      const items = picked.map(r => formatWideItem(r, budget))
+      result.push(clipRow([{ text: items.join('　') }], cols))
     } else {
       let line = ''
       for (const item of candidates) {
-        const next = line === '' ? item : `${line} · ${item}`
+        const next = line === '' ? item : `${line}　${item}`
         if (line !== '' && displayWidth(next) > cols) break
         line = next
       }

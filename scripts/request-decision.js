@@ -101,7 +101,7 @@ function fleetEnv() {
 }
 
 function fleet(args) {
-  const bin = process.env.AUTOPILOT_FLEET_BIN || 'fleet';
+  const bin = process.env.AUTOPILOT_FLEET_BIN || require('./lib/fleet-task.js').bin(process.env);
   try {
     const r = spawnSync(bin, args, { encoding: 'utf8', timeout: 15000, env: fleetEnv() });
     if (r.error) return { ok: false, why: r.error.code === 'ENOENT' ? 'no fleet binary' : r.error.message };

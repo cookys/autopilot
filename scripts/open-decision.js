@@ -1652,7 +1652,7 @@ function parseSent(stdout) {
 }
 
 function fleetBin() {
-  return process.env.FLEET_BIN || process.env.AUTOPILOT_FLEET_BIN || 'fleet';
+  return process.env.FLEET_BIN || process.env.AUTOPILOT_FLEET_BIN || require('./lib/fleet-task.js').bin(process.env);
 }
 
 function fleetWhoami(timeoutMs = 5000) {

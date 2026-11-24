@@ -273,7 +273,8 @@ function statusOf(entry, disposed, repliesByAskId, replyCutoffMs, nowMs) {
   if (askIds.some((id) => disposed.has(id))) return { status: '已處置', latestReply: null };
   const askMs = Date.parse(entry.last_at || row.at);
   const recent = Number.isFinite(askMs) && nowMs - askMs < RECENT_MS;
-  const isOld = !recent && (replyCutoffMs === null || (Number.isFinite(askMs) && askMs < replyCutoffMs));
+  // With a known first-linked-reply time, anything asked before it can never be linked (older writers stored replies without ask_id), recent or not; the grace only covers a store with no linked reply at all.
+  const isOld = replyCutoffMs === null ? !recent : Number.isFinite(askMs) && askMs < replyCutoffMs;
   return { status: isOld ? '舊紀錄' : '未答', latestReply: null };
 }
 

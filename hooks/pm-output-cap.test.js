@@ -449,7 +449,7 @@ test('unsafe or empty tool_use_id stays inside pm-output dir and falls back to s
       );
       assert.equal(res.status, 0, res.stderr);
       const out = JSON.parse(res.stdout).hookSpecificOutput.updatedToolOutput;
-      const m = out.stdout.match(/全文：(.+)$/);
+      const m = out.stdout.match(/全文：(.+)$/m);
       assert.ok(m, 'pointer path missing');
       const writtenPath = m[1];
       assert.equal(path.dirname(writtenPath), outDir);

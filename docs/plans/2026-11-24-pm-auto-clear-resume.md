@@ -1,12 +1,12 @@
 # Plan — PM 席 200k 自動 handoff、/clear 與 `fleet pm resume` 拉回狀態（做法二）
 
-> Status: Draft (R0) | Owner: PM / autopilot | Branch: feat/pm-auto-clear-resume | Frame: 做法二（無人值守 /clear + resume）
+> Status: Draft (R0) | Owner: autopilot--claude | Fleet-Task: 01M85T56P7V70X8HJ7WN0HMYE0（PM 裁定 01M85PYJ3S 第 2 點）| Frame: 做法二（無人值守 /clear + resume）| 上線日：Phase 1–2 目標 2026-11-27 台北，Phase 3 要等 PM 席下次自然到 200k，日期以實測為準
 
 ---
 
 ## 0. Context / thesis
 
-依 [synthesis.md](file:///home/team/projects/autopilot-dev/.claude/worktrees/hetero-plan-pm-auto-clear-iBIcTe/docs/plans/evidence/2026-11-24-pm-mech-judgment/synthesis.md) 第四節第 4 項與第五節：PM 席在 200k 門檻若只靠「提醒操作員手動 `/clear` 或重啟」（做法一），會卡在人工按鍵與交接摩擦；而直接壓縮後首回合目前約 136,747 tokens（[synthesis.md](file:///home/team/projects/autopilot-dev/.claude/worktrees/hetero-plan-pm-auto-clear-iBIcTe/docs/plans/evidence/2026-11-24-pm-mech-judgment/synthesis.md) §一），且 `fleet pm resume` 已有 26 次真實使用，但強制壓縮驗收與交接停寫舊路徑尚未收尾。
+依 [synthesis.md](../../docs/plans/evidence/2026-11-24-pm-mech-judgment/synthesis.md) 第四節第 4 項與第五節：PM 席在 200k 門檻若只靠「提醒操作員手動 `/clear` 或重啟」（做法一），會卡在人工按鍵與交接摩擦；而直接壓縮後首回合目前約 136,747 tokens（[synthesis.md](../../docs/plans/evidence/2026-11-24-pm-mech-judgment/synthesis.md) §一），且 `fleet pm resume` 已有 26 次真實使用，但強制壓縮驗收與交接停寫舊路徑尚未收尾。
 
 本計畫定義**做法二**：當 PM 席 context 達門檻（約 200k）時，不靠操作員按鍵，由系統自動寫出含操作員最近的話與未完成事項的 handoff、觸發 `/clear`、再用 `fleet pm resume` 拉回狀態並重掛 cron。只有在下次 PM 席實測達 200k 跑一次真 `/clear` 且清完第一回合 ≤ 95k 時，才切換為預設；未通過則維持做法一。
 
@@ -14,10 +14,10 @@
 
 | 零件 | 現況與位置 | 與做法二的關係 |
 |---|---|---|
-| Context 量測與門檻觸發 | [`hooks/context-budget.js`](file:///home/team/projects/autopilot-dev/.claude/worktrees/hetero-plan-pm-auto-clear-iBIcTe/hooks/context-budget.js)（PostToolUse，讀 transcript `message.usage` 與 live 檔，支援 T1/T2/T3 與 `landFire` 狀態檔） | 已有真實 token 量測與 `landFire` 記錄；但註解明寫 `/clear is a USER action`，目前只做 stderr 提醒 |
-| Stop 交接閘 | [`hooks/context-land-gate.js`](file:///home/team/projects/autopilot-dev/.claude/worktrees/hetero-plan-pm-auto-clear-iBIcTe/hooks/context-land-gate.js)（Stop hook，比對 `landFire` 與 handoff mtime） | 對非 PM 席自動 `fleet dispatch` 給 hangar；對 `pm` 席目前只組 `read <path> 接續` 要模型轉交操作員（L133–L145） |
-| Handoff 格式與寫入流程 | [`skills/handoff/SKILL.md`](file:///home/team/projects/autopilot-dev/.claude/worktrees/hetero-plan-pm-auto-clear-iBIcTe/skills/handoff/SKILL.md)（Write Mode / Resume Mode） | 定義了 `目標 / 現況 / 已決事項 / 下一步 / 驗證方式 / Read-order / 陷阱` 與 `$XDG_RUNTIME_DIR/autopilot/handoff/<sid>.md` 路徑；目前無「操作員最近的話」欄位 |
-| 旁側大腦與狀態拉回 | `fleet pm resume`（見 [synthesis.md](file:///home/team/projects/autopilot-dev/.claude/worktrees/hetero-plan-pm-auto-clear-iBIcTe/docs/plans/evidence/2026-11-24-pm-mech-judgment/synthesis.md) §一，已有 26 次真實使用） | 可拉回旁側大腦狀態，但 CLI 旗標與 `/clear` 後自動呼叫接線方式「待查」 |
+| Context 量測與門檻觸發 | [`hooks/context-budget.js`](../../hooks/context-budget.js)（PostToolUse，讀 transcript `message.usage` 與 live 檔，支援 T1/T2/T3 與 `landFire` 狀態檔） | 已有真實 token 量測與 `landFire` 記錄；但註解明寫 `/clear is a USER action`，目前只做 stderr 提醒 |
+| Stop 交接閘 | [`hooks/context-land-gate.js`](../../hooks/context-land-gate.js)（Stop hook，比對 `landFire` 與 handoff mtime） | 對非 PM 席自動 `fleet dispatch` 給 hangar；對 `pm` 席目前只組 `read <path> 接續` 要模型轉交操作員（L133–L145） |
+| Handoff 格式與寫入流程 | [`skills/handoff/SKILL.md`](../../skills/handoff/SKILL.md)（Write Mode / Resume Mode） | 定義了 `目標 / 現況 / 已決事項 / 下一步 / 驗證方式 / Read-order / 陷阱` 與 `$XDG_RUNTIME_DIR/autopilot/handoff/<sid>.md` 路徑；目前無「操作員最近的話」欄位 |
+| 旁側大腦與狀態拉回 | `fleet pm resume`（見 [synthesis.md](../../docs/plans/evidence/2026-11-24-pm-mech-judgment/synthesis.md) §一，已有 26 次真實使用） | 可拉回旁側大腦狀態，但 CLI 旗標與 `/clear` 後自動呼叫接線方式「待查」 |
 
 ### 缺口清單（待補）
 
@@ -77,7 +77,7 @@ PM 席在長對話接近 200k tokens 時，依賴操作員手動 `/clear` 與貼
 - **Size**: `S`
 - **具體步驟**:
   1. 查證 PM 席對話紀錄中「操作員最近的話」與「未完成事項」的機械化擷取來源（「待查」實際路徑與欄位）。
-  2. 新增腳本產生符合 [`skills/handoff/SKILL.md`](file:///home/team/projects/autopilot-dev/.claude/worktrees/hetero-plan-pm-auto-clear-iBIcTe/skills/handoff/SKILL.md) 格式的 handoff 檔，強制包含「操作員最近的話」與「未完成事項」兩段，寫入 `sessionHandoffPath(sid)`。
+  2. 新增腳本產生符合 [`skills/handoff/SKILL.md`](../../skills/handoff/SKILL.md) 格式的 handoff 檔，強制包含「操作員最近的話」與「未完成事項」兩段，寫入 `sessionHandoffPath(sid)`。
 - **Acceptance**: 執行腳本後產出的 handoff 檔存在、mtime 更新，且包含非空的操作員最近的話與未完成事項。
 - **真實使用證據**: 在 PM 席真實對話（非合成測試資料）上跑一次腳本，確認產出檔可被 `handoff` Resume Mode 正確讀取。
 - **負控制**: 當對話紀錄缺失或無操作員發言時，腳本不得寫出空欄位冒充成功，應回傳非零 exit code 或明確標記 `missing_operator_utterance` 並保留做法一退路。
@@ -87,11 +87,11 @@ PM 席在長對話接近 200k tokens 時，依賴操作員手動 `/clear` 與貼
 - **具體步驟**:
   1. 查證 PM 席 `/clear` 的外部觸發介面（tmux send-keys / fleet control / harness API，「待查」）與 `fleet pm resume` 完整參數（「待查」）。
   2. 查證 PM 席既有 cron 清單與重掛指令（「待查」）。
-  3. 在 [`hooks/context-land-gate.js`](file:///home/team/projects/autopilot-dev/.claude/worktrees/hetero-plan-pm-auto-clear-iBIcTe/hooks/context-land-gate.js) 加入做法二開關檢查：當開關開啟且為 `pm` 席時，改為觸發「自動 `/clear` → `fleet pm resume` → cron 重掛」流程，不再要求模型轉交操作員按鍵。
+  3. 在 [`hooks/context-land-gate.js`](../../hooks/context-land-gate.js) 加入做法二開關檢查：當開關開啟且為 `pm` 席時，改為觸發「自動 `/clear` → `fleet pm resume` → cron 重掛」流程，不再要求模型轉交操作員按鍵。
 - **Acceptance**: 開關開啟下，模擬達標後無操作員按鍵即完成 `/clear`、執行 `fleet pm resume` 並恢復 cron。
 - **真實使用證據**: 在獨立的測試 session（或非峰值時段 PM 席）完成一次無按鍵 `/clear` + `fleet pm resume` + cron 重掛，留下含 timestamp 的執行紀錄。
 - **負控制**:
-  - 做法二開關關閉（預設）時，[`hooks/context-land-gate.js`](file:///home/team/projects/autopilot-dev/.claude/worktrees/hetero-plan-pm-auto-clear-iBIcTe/hooks/context-land-gate.js) 必須維持原行為（做法一），不得觸發 `/clear`。
+  - 做法二開關關閉（預設）時，[`hooks/context-land-gate.js`](../../hooks/context-land-gate.js) 必須維持原行為（做法一），不得觸發 `/clear`。
   - 非 PM 席即使在相同條件下也不得走 PM 自動 `/clear` 路徑。
 
 ### Phase 3 — 200k 真 `/clear` 實測與預設切換閘
@@ -125,7 +125,7 @@ PM 席在長對話接近 200k tokens 時，依賴操作員手動 `/clear` 與貼
 |---|---|---|
 | **`/clear` 後遺失狀態** | `/clear` 會清空對話記憶；若 handoff 漏掉操作員最近的話、未決事項或 `fleet pm resume` 未載入旁側大腦，PM 席會失憶或重複問操作員 | Phase 1 強制由腳本寫入「操作員最近的話＋未完成事項」；Phase 2 強制 `/clear` 後接 `fleet pm resume`；未完成前不切預設 |
 | **cron 重掛失敗** | `/clear` 後若 cron 未重掛，PM 席的週期巡查或續跑會靜默停擺 | 在 `fleet pm resume` 後加一步 cron 狀態驗證；若重掛失敗，發送告警給操作員並退回做法一 |
-| **清完第一回合仍 > 95k** | 目前壓縮後首回合約 136.7k（[synthesis.md](file:///home/team/projects/autopilot-dev/.claude/worktrees/hetero-plan-pm-auto-clear-iBIcTe/docs/plans/evidence/2026-11-24-pm-mech-judgment/synthesis.md) §一），若預載未先縮減，`/clear` 後仍可能超過 95k | KR4 硬性規定 ≤ 95k 才切預設，沒過就留做法一 |
+| **清完第一回合仍 > 95k** | 目前壓縮後首回合約 136.7k（[synthesis.md](../../docs/plans/evidence/2026-11-24-pm-mech-judgment/synthesis.md) §一），若預載未先縮減，`/clear` 後仍可能超過 95k | KR4 硬性規定 ≤ 95k 才切預設，沒過就留做法一 |
 | **誤觸發到非 PM 席** | 其他席位被誤 `/clear` 導致工作遺失 | 負控制限定僅 `pm` 席且顯式開啟做法二開關才生效 |
 
 ---
@@ -134,7 +134,7 @@ PM 席在長對話接近 200k tokens 時，依賴操作員手動 `/clear` 與貼
 
 - 預載縮減（查清 72.7k 與縮掉 15–25k）的實作本體（屬另一條線，但影響 KR4 是否能過 95k）。
 - 非 PM 席的自動 `/clear`（非 PM 席維持 `context-land-gate` 派單給 hangar）。
-- 雙席拆分（L6）或定時換 session（已於 [synthesis.md](file:///home/team/projects/autopilot-dev/.claude/worktrees/hetero-plan-pm-auto-clear-iBIcTe/docs/plans/evidence/2026-11-24-pm-mech-judgment/synthesis.md) §五否決）。
+- 雙席拆分（L6）或定時換 session（已於 [synthesis.md](../../docs/plans/evidence/2026-11-24-pm-mech-judgment/synthesis.md) §五否決）。
 
 ---
 

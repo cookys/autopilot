@@ -483,3 +483,23 @@ test('list --answers leaves out handoff resume instructions; a real question tha
     s.cleanup();
   }
 });
+
+test('list --answers --json gives newest-first records with status, count, ask and answer', () => {
+  const s = makeStore([
+    askRow('a-js000001', '舊的問題', '2026-11-24T09:00:00.000Z', 's1'),
+    askRow('a-js000002', '新的問題 caddy 好了嗎', '2026-11-24T10:00:00.000Z', 's2'),
+  ]);
+  try {
+    const res = s.run(['list', '--answers', '--json'], { AUTOPILOT_PM_ASK_NOW: '2026-11-24T12:00:00.000Z' });
+    assert.equal(res.status, 0, res.stderr);
+    const recs = JSON.parse(res.stdout);
+    assert.equal(recs.length, 2);
+    assert.equal(recs[0].ask, '新的問題 caddy 好了嗎');
+    assert.equal(recs[0].status, '未答');
+    assert.equal(recs[0].answer, null);
+    assert.equal(recs[0].count, 1);
+    assert.equal(s.run(['list', '--json']).status === 0, false);
+  } finally {
+    s.cleanup();
+  }
+});

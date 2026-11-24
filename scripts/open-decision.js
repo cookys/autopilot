@@ -154,6 +154,7 @@
  * Exit: 0 ok (show: at least one live card) | 1 show: none live (show --id: no such card) | 2 usage / close or --dispatched refused (card not in the needed state) / not a git repo / missing or unknown --not-authorized | 3 open refused: the boundary is inside this session's DOA (or unverifiable) | 4 write failure, or a non-PM team session refused by the role gate (nothing written) |
  *       8 close refused: the card's answer could not be claimed on the fleet courier (unreachable after bounded retries, or an unusable reply); the card stays OPEN |
  *       14 open refused: obvious duplicate live card (nothing written; --not-duplicate-of plus --not-duplicate-reason can document a distinct issue) |
+ *       15 open refused: answered card (closed/pending_dispatch/awaiting_operator_action) with matching fingerprint already exists (nothing written; --supersede <id> --supersede-reason <reason> can override) |
  *       7 open refused: --kind is not decide|go|remind|step|look, or --category is missing / not one of the seven (nothing is written) |
  *       6 open refused: --target is a production target, unlisted, or could not be judged (refuse, never escalate; nothing is written) |
  *       5 open: the card IS written and its id printed, but no live panel will show it (isolated env, no flock, unusable live dir, a watcher without --render); stderr names the reason and what to do.
@@ -445,9 +446,37 @@ function findDuplicateCards(entries, candidate) {
   }
   return result;
 }
-function liveProjectCards(cwd) {
+const ANSWERED_CARD_STATES = new Set(['closed', 'pending_dispatch', 'awaiting_operator_action']);
+function normalizeFingerprintPart(value) {
+  if (typeof value !== 'string') return '';
+  const cleaned = value.replace(/[\s\p{P}\p{S}]+/gu, '').toLowerCase();
+  return Array.from(cleaned).slice(0, 120).join('');
+}
+function cardFingerprint(card) {
+  if (!card || typeof card !== 'object') return '';
+  const topic = (typeof card.title === 'string' && card.title.trim()) ? card.title : card.question;
+  return [
+    normalizeFingerprintPart(topic),
+    normalizeFingerprintPart(card.executor),
+    normalizeFingerprintPart(card.category),
+  ].join('|');
+}
+function findAnsweredDuplicate(entries, candidate) {
+  const fp = cardFingerprint(candidate);
+  if (!fp || fp === '||') return null;
+  for (const entry of Array.isArray(entries) ? entries : []) {
+    if (!entry || entry.id === candidate.id) continue;
+    if (!ANSWERED_CARD_STATES.has(cardState(entry))) continue;
+    if (cardFingerprint(entry) === fp) return entry;
+  }
+  return null;
+}
+function allProjectCards(cwd) {
   const copies = projectScopeFiles(cwd, { all: true }).flatMap((file) => readFile(file, { all: true }).map((e) => ({ file, e })));
-  return pickCards(copies).map((item) => item.e).filter((entry) => !isClosedEntry(entry));
+  return pickCards(copies).map((item) => item.e);
+}
+function liveProjectCards(cwd) {
+  return allProjectCards(cwd).filter((entry) => !isClosedEntry(entry));
 }
 function reportRelatedCards(cwd, closedEntry) {
   for (const match of findDuplicateCards(liveProjectCards(cwd), closedEntry)) {
@@ -718,7 +747,7 @@ function takeFreeText(argv) {
 // BL cardtrail flags are lifted out like --kind/--target (parse()'s valued Set stays byte-identical to the frozen ask stub).
 // -> { rest, extra: { answer, executor, asker, 'awaiting-operator', 'reask-after', from, dispatched, 'dispatched-msg', title, note, 'operator-step', all, apply } } | { error }
 // operator-step is repeatable and may hold several steps separated by newlines. parse()'s valued Set stays untouched (frozen ask stub).
-const EXTRA_VALUED = ['answer', 'executor', 'asker', 'awaiting-operator', 'reask-after', 'from', 'dispatched', 'dispatched-msg', 'title', 'from-request', 'note', 'look-target', 'category', 'since', 'days', 'premise-source', 'withdraw', 'by', 'closed-key', 'repeat-of', 'not-duplicate-reason'];
+const EXTRA_VALUED = ['answer', 'executor', 'asker', 'awaiting-operator', 'reask-after', 'from', 'dispatched', 'dispatched-msg', 'title', 'from-request', 'note', 'look-target', 'category', 'since', 'days', 'premise-source', 'withdraw', 'by', 'closed-key', 'repeat-of', 'not-duplicate-reason', 'supersede', 'supersede-reason'];
 const EXTRA_REPEAT = ['operator-step', 'not-duplicate-of'];
 const EXTRA_SWITCH = ['all', 'apply', 'irreversible', 'premise-inferred', 'panel-done', 'panel-dismiss'];
 // The only seven kinds of question that go to the operator (operator rule 2026-11-15); everything else the PM decides.
@@ -1197,6 +1226,9 @@ function main(argv) {
   if (duplicateOverrides.some((id) => !SAFE_ID.test(id))) return usage('--not-duplicate-of needs a card id');
   if (duplicateOverrides.length && (typeof ex['not-duplicate-reason'] !== 'string' || !ex['not-duplicate-reason'].trim())) return usage('--not-duplicate-of requires a non-empty --not-duplicate-reason');
   if (!duplicateOverrides.length && ex['not-duplicate-reason'] !== undefined) return usage('--not-duplicate-reason requires --not-duplicate-of <id>');
+  if (ex.supersede !== undefined && !SAFE_ID.test(ex.supersede)) return usage('--supersede needs a card id');
+  if (ex.supersede !== undefined && (typeof ex['supersede-reason'] !== 'string' || !ex['supersede-reason'].trim())) return usage('--supersede requires a non-empty --supersede-reason');
+  if (ex.supersede === undefined && ex['supersede-reason'] !== undefined) return usage('--supersede-reason requires --supersede <id>');
   if (remind) {
     if (args.option.length || args['free-text']) return usage('a --kind remind card is a reminder, not a question: no --option and no --free-text (it is answered with `done --id <id>`)');
   } else if (isStepKind) {
@@ -1252,8 +1284,14 @@ function main(argv) {
     options, recommendation: args.recommendation, why: args.why, blocks: args.blocks, not_authorized: args['not-authorized'], source: args.source, kind: args.kind, category: ex.category, executor: ex.executor, asker: ex.asker, title: ex.title, due_at: dueAt,
     from_request: ex['from-request'], attachments: args.attachments, look_target: lookTarget,
     operator_steps: operatorSteps, repeat_of: repeat === null ? undefined : repeat.entry.id, repeat_n: repeat === null ? undefined : repeat.repeat_n,
-    not_duplicate_of: duplicateOverrides, not_duplicate_reason: ex['not-duplicate-reason'], reject_duplicates: true, require_executor: true,
+    not_duplicate_of: duplicateOverrides, not_duplicate_reason: ex['not-duplicate-reason'], supersede: ex.supersede, supersede_reason: ex['supersede-reason'], reject_duplicates: true, require_executor: true,
   });
+  if (r.status === 'answered_duplicate') {
+    const a = r.answered;
+    process.stderr.write(`拒絕開卡：已有已答卡 ${a.id}（status=${a.status}, closed_at=${a.closed_at || 'null'}, answer=${a.answer ?? 'null'}）。若要重開請加 --supersede ${a.id} --supersede-reason <理由>\n`);
+    if (args.json) process.stdout.write(`${JSON.stringify({ ok: false, error: 'answered_duplicate', id: a.id, status: a.status, answer: a.answer, closed_at: a.closed_at })}\n`);
+    return 15;
+  }
   if (r.status === 'duplicate') {
     const d = r.duplicate;
     process.stderr.write(`拒絕開卡：已有 ${d.id}（${d.title || String(args.question).slice(0, 20)}），請在那張卡上補充。真的不同請加 --not-duplicate-of ${d.id} --not-duplicate-reason <理由>\n`);
@@ -1321,7 +1359,7 @@ function roleGate({ not_authorized, origin, kind } = {}) {
 // lock + atomic-rename path as `open`; another entry is never touched. `origin` (e.g. "ask_user_question") marks which hook
 // opened it; the CLI never sets it. `options` = [{label, description}] (>= 2) or null.
 // Returns { status: 'ok'|'error', id, file, scope_key, message, code? }.
-function openDecision({ cwd, root, session, question, background, options, recommendation, why, blocks, not_authorized, source, origin, turn_tracked, kind, category, executor, asker, title, from_request, due_at, attachments, look_target, operator_steps, repeat_of, repeat_n, not_duplicate_of, not_duplicate_reason, reject_duplicates, require_executor }) {
+function openDecision({ cwd, root, session, question, background, options, recommendation, why, blocks, not_authorized, source, origin, turn_tracked, kind, category, executor, asker, title, from_request, due_at, attachments, look_target, operator_steps, repeat_of, repeat_n, not_duplicate_of, not_duplicate_reason, supersede, supersede_reason, reject_duplicates, require_executor }) {
   const routed = roleGate({ not_authorized, origin, kind });
   if (routed && routed.code === 4) return { status: 'error', code: 4, message: routed.message };
   const sf = scopeFile(cwd, root);
@@ -1346,6 +1384,10 @@ function openDecision({ cwd, root, session, question, background, options, recom
   if (typeof repeat_of === 'string' && SAFE_ID.test(repeat_of) && Number.isInteger(repeat_n) && repeat_n >= 2) { entry.repeat_of = repeat_of; entry.repeat_n = repeat_n; }
   if (Array.isArray(not_duplicate_of) && not_duplicate_of.length) entry.not_duplicate_of = [...new Set(not_duplicate_of)];
   if (typeof not_duplicate_reason === 'string' && not_duplicate_reason.trim()) entry.not_duplicate_reason = not_duplicate_reason.trim();
+  if (typeof supersede === 'string' && SAFE_ID.test(supersede) && typeof supersede_reason === 'string' && supersede_reason.trim()) {
+    entry.supersedes = supersede;
+    entry.supersede_reason = supersede_reason.trim();
+  }
   if (KINDS.includes(kind)) entry.kind = kind; // additive: absent = unspecified
   if (CATEGORIES.includes(category)) entry.category = category; // additive: set by the CLI `open` (required there); cards from before 2026-11-15 and hook-opened cards have none
   if (typeof due_at === 'string' && Number.isFinite(Date.parse(due_at))) entry.due_at = new Date(Date.parse(due_at)).toISOString(); // additive: absent = no date (dueState 'none')
@@ -1360,8 +1402,24 @@ function openDecision({ cwd, root, session, question, background, options, recom
     fs.mkdirSync(sf.dir, { recursive: true, mode: 0o700 });
     return withWriteLock({ storeDir: sf.dir, lockFile: path.join(sf.dir, `${sf.scope.project_key}.open.lock`), name: `${sf.scope.project_key}.open`, timeoutMs: 5000 }, () => {
       if (reject_duplicates === true) {
+        const allCards = allProjectCards(cwd);
+        const answeredHit = findAnsweredDuplicate(allCards, entry);
+        if (answeredHit) {
+          const canSupersede = typeof supersede === 'string' && supersede === answeredHit.id && typeof supersede_reason === 'string' && supersede_reason.trim();
+          if (!canSupersede) {
+            return {
+              status: 'answered_duplicate',
+              answered: {
+                id: answeredHit.id,
+                status: cardState(answeredHit),
+                answer: answeredHit.answer !== undefined ? answeredHit.answer : null,
+                closed_at: answeredHit.closed_at || null,
+              },
+            };
+          }
+        }
         const acknowledged = new Set(Array.isArray(not_duplicate_of) ? not_duplicate_of : []);
-        const duplicate = findDuplicateCards(liveProjectCards(cwd), entry).find((match) => !acknowledged.has(match.id));
+        const duplicate = findDuplicateCards(allCards.filter((e) => !isClosedEntry(e)), entry).find((match) => !acknowledged.has(match.id));
         if (duplicate) return { status: 'duplicate', duplicate };
       }
       const executorRequired = category === 'presence' || kind === 'step' || !['step', 'look'].includes(kind);
@@ -1917,4 +1975,4 @@ function backfill(args, sf, root) {
 }
 
 if (require.main === module) process.exitCode = main(process.argv.slice(2));
-module.exports = { main, checkNotAuthorized, openDecision, closeDecisionById, closePanelAnswer, panelAnswerText, recordDecline, isDeclineAnswer, reaskDue, awaitingTextFor, deliverAnswer, parkAnswer, parkUndelivered, sendParked, receiptLine, redeliver, recordCorrection, patchDecision, findCard, findDuplicateCards, projectScopeFiles, unboundCardsOf, readEntries: readFile, dueSweep, parseDue, SAFE_ROOT, SCHEMA };
+module.exports = { main, checkNotAuthorized, openDecision, closeDecisionById, closePanelAnswer, panelAnswerText, recordDecline, isDeclineAnswer, reaskDue, awaitingTextFor, deliverAnswer, parkAnswer, parkUndelivered, sendParked, receiptLine, redeliver, recordCorrection, patchDecision, findCard, findDuplicateCards, findAnsweredDuplicate, cardFingerprint, normalizeFingerprintPart, projectScopeFiles, unboundCardsOf, readEntries: readFile, dueSweep, parseDue, SAFE_ROOT, SCHEMA };

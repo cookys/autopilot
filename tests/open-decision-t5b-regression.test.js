@@ -222,3 +222,24 @@ test('T5b(b) visibility incident: scope_mismatch is distinct from verify_failed 
   assert.equal(combined.receipt, 'valid:verify_failed');
   assert.equal(combined.ok, false);
 });
+
+test("T5b(c): a card that failed auto-dispatch but was later delivered by hand is delivered, not dispatch_failed", () => {
+  const out = triage({
+    card: { id: "d-711f61af", status: "closed", dispatch_error: "fleet send exit 1", dispatched_message_id: "01M874RBEMFYTE53F2VRDTZY7H" },
+    repo: "/tmp/x",
+  });
+  assert.equal(out.delivery, "delivered");
+  assert.equal(out.ok, true);
+});
+
+test("T5b(d): card-triage CLI refuses a store file (not one card) with a non-zero exit", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "triage-store-"));
+  try {
+    const f = path.join(dir, "store.json");
+    fs.writeFileSync(f, JSON.stringify({ decisions: [{ id: "d-1a2b3c4d" }] }));
+    const r = spawnSync(process.execPath, [path.join(REPO_ROOT, "scripts", "card-triage.js"), "--card", f], { encoding: "utf8" });
+    assert.equal(r.status, 2, `store file must exit 2, got ${r.status}: ${r.stdout}`);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

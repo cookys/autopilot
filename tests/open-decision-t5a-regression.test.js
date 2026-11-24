@@ -268,3 +268,43 @@ test('T5a(b): from_request forwarding delivers once with same request id, and mi
     fs.rmSync(sbNoMsg.dir, { recursive: true, force: true });
   }
 });
+
+function openCard(repo, env, title, question) {
+  return runCli([
+    "open", "--category", "goal", "--title", title, "--question", question,
+    "--option", "同意::選一", "--option", "暫緩::選二", "--recommendation", "同意",
+    "--not-authorized", "goal-change:owner only", "--executor", "ns/courier/pm",
+    "--cwd", repo, "--json",
+  ], { repo, env });
+}
+
+test("T5a(c): same question with a different title is still refused, and the refusal points at the original card", () => {
+  const { dir, repo, env } = setupSandbox();
+  try {
+    const r1 = openCard(repo, env, "GPU線可代按權限框嗎？", "GPU 線可以代操作員按權限確認框嗎？");
+    assert.equal(r1.status, 0, r1.stderr);
+    const orig = JSON.parse(r1.stdout);
+    assert.equal(runCli(["close", "--id", orig.id, "--answer", "同意", "--cwd", repo], { repo, env }).status, 0);
+    assert.equal(runCli(["close", "--id", orig.id, "--dispatched", "task-t5a", "--cwd", repo], { repo, env }).status, 0);
+    const before = readCards(repo, env).length;
+    const r2 = openCard(repo, env, "GPU 負責人代按框嗎？", "GPU 線可以代操作員按權限確認框嗎？");
+    assert.equal(r2.status, 15, `title swap must be refused, got ${r2.status}: ${r2.stderr}`);
+    assert.equal(readCards(repo, env).length, before);
+    assert.ok(`${r2.stdout}${r2.stderr}`.includes(orig.id), "refusal must name the original card");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("T5a(d): a withdrawn card does not count as the answered original", () => {
+  const { dir, repo, env } = setupSandbox();
+  try {
+    const r1 = openCard(repo, env, "要發布嗎？", "今天要發布 v3 嗎？");
+    const first = JSON.parse(r1.stdout);
+    assert.equal(runCli(["close", "--id", first.id, "--withdraw", "test", "--by", "pm", "--cwd", repo], { repo, env }).status, 0);
+    const r2 = openCard(repo, env, "要發布嗎？", "今天要發布 v3 嗎？");
+    assert.equal(r2.status, 0, `a withdrawn card must not block a fresh open: ${r2.stderr}`);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

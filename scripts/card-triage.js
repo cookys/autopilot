@@ -39,6 +39,9 @@ function classifyVisibility(card, visibleIds, repo) {
 }
 
 function classifyDelivery(card) {
+  if (hasValue(card.dispatched_message_id)) {
+    return 'delivered';
+  }
   if (hasValue(card.dispatch_error)) {
     return 'dispatch_failed';
   }
@@ -131,6 +134,10 @@ function main() {
   }
 
   const card = JSON.parse(fs.readFileSync(args.card, 'utf8'));
+  if (!card || typeof card !== 'object' || Array.isArray(card) || typeof card.id !== 'string') {
+    process.stderr.write('card-triage: --card must be one card object with an id (not a store file)\n');
+    process.exit(2);
+  }
   let visibleIds;
   if (args.visibleIds) {
     visibleIds = fs

@@ -634,6 +634,8 @@ function showText(entries, { all = false, nowMs = Date.now() } = {}) {
   const out = [all ? `decisions: ${entries.length}` : `open decisions: ${pending}`];
   for (const st of ['awaiting_operator_action', 'pending_dispatch', ...(all ? ['closed'] : [])]) if (n(st)) out.push(`${st}: ${n(st)}`);
   if (notDue) out.push(`not yet due: ${notDue}`);
+  // the first line counts pending questions only; when other live states are listed below it, say how many cards the list holds so it does not read as the total
+  if (!all && entries.length > pending) out.push(`listed below: ${entries.length} (待你決定 ${pending}，其餘為待你做一步或待派工)`);
   entries.forEach((e, i) => {
     out.push('', `[${i + 1}] ${e.id}  ${e.question}`);
     const ds = live(e) ? dueState(e, nowMs) : 'none';

@@ -132,7 +132,7 @@ test('(a) PM seat triggers T2 at 36%, non-PM seat below 45% does not trigger', (
   });
 });
 
-test('(b) & (c) hard block keeps blocking on 3rd Stop until restart_requested marker appears', () => {
+test('(b) & (c) PM hard block keeps blocking past 2 Stops until the handoff is written, then relays once', () => {
   withSandbox((sb) => {
     const configFile = path.join(sb.home, '.autopilot', 'config.json');
     fs.writeFileSync(configFile, JSON.stringify({ context_budget: { t2_hard_block: true } }));
@@ -143,9 +143,7 @@ test('(b) & (c) hard block keeps blocking on 3rd Stop until restart_requested ma
     fs.writeFileSync(path.join(stateDir, `${sid}.json`), JSON.stringify({
       landFire: { t2: { at: fireAt, blocks: 0, done: false } },
     }));
-    const handoffDir = path.join(sb.runtime, 'autopilot', 'handoff');
-    fs.mkdirSync(handoffDir, { recursive: true });
-    fs.writeFileSync(path.join(handoffDir, `${sid}.md`), '# handoff\n');
+    const handoffDir = path.join(sb.live, 'handoff');
 
     const runGate = () => spawnSync(process.execPath, [GATE_HOOK], {
       input: JSON.stringify({ session_id: sid, cwd: sb.work }),
@@ -160,11 +158,12 @@ test('(b) & (c) hard block keeps blocking on 3rd Stop until restart_requested ma
       assert.strictEqual(out.decision, 'block', `Stop #${i} should be blocked`);
     }
 
-    const marker = path.join(sb.runtime, 'autopilot', `restart_requested-${sid}`);
-    fs.writeFileSync(marker, '1');
-    const finalRes = runGate();
-    assert.strictEqual(finalRes.status, 0);
-    assert.strictEqual(finalRes.stdout.trim(), '');
+    fs.mkdirSync(handoffDir, { recursive: true });
+    fs.writeFileSync(path.join(handoffDir, `${sid}.md`), '# handoff\n');
+    const relay = JSON.parse(runGate().stdout.trim());
+    assert.strictEqual(relay.decision, 'block');
+    assert.match(relay.reason, /handoff 已寫好/);
+    assert.strictEqual(runGate().stdout.trim(), '');
   });
 });
 

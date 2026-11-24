@@ -56,8 +56,7 @@
       "type": "object",
       "default": { "pm": 35 },
       "readers": [
-        "scripts/lib/config-path.js",
-        "hooks/context-budget-lib.js"
+        "scripts/lib/config-path.js"
       ],
       "doc": "docs/guide/settings-reference.md",
       "relates": [
@@ -72,14 +71,13 @@
       "type": "boolean",
       "default": true,
       "readers": [
-        "scripts/lib/config-path.js",
-        "hooks/context-land-gate.js"
+        "scripts/lib/config-path.js"
       ],
       "doc": "docs/guide/settings-reference.md",
       "relates": [
         "context_budget.t2"
       ],
-      "summary": "When true, context-land-gate keeps blocking Stop after T2 until handoff and restart_requested marker exist; false reverts to max 2 blocks."
+      "summary": "When true, context-land-gate keeps blocking Stop after T2 with no block cap for seats listed in t2_pct_by_seat (the PM seat by default) until the handoff is written; false reverts to max 2 blocks."
     },
     {
       "name": "accounts.quota_probe_demand",

@@ -28,7 +28,6 @@ const { spawnSync } = require('child_process');
 const { readContextBudget } = require('../scripts/lib/config-path.js');
 const { resolveLiveDir } = require('../scripts/lib/live-state-dir.js');
 const { ownerAddress } = require('../scripts/lib/fleet-task.js');
-const { userRuntimeBase } = require('../scripts/lib/runtime-paths.js');
 const { resolveFleetSeat } = require('./_shared/fleet-seat.js');
 const { lockStateFile, sessionIdOf, stateDirOf, sessionHandoffPath } = require('./context-budget-lib.js');
 const { gateHint } = require('./lib/gate-hint.js');
@@ -126,17 +125,8 @@ function main() {
       if (m !== null && m >= newestFireAt) { landed = p; break; }
     }
 
-    const markerPath = path.join(userRuntimeBase(process.env), `restart_requested-${sid}`);
+    const hardBlock = cfg.t2HardBlock !== false && Object.hasOwn(cfg.t2PctBySeat || {}, resolveFleetSeat(payload));
     if (landed) {
-      if (cfg.t2HardBlock !== false) {
-        if (!fs.existsSync(markerPath)) {
-          block(`handoff 已寫好（${landed}），但尚未偵測到 restart_requested marker（${markerPath}）。請建立該 marker 檔（或由 seat 回報 restart_requested）以解除阻擋。`);
-          return;
-        }
-        for (const t of pending) fires[t].done = true;
-        fs.writeFileSync(stateFile, JSON.stringify(st));
-        return;
-      }
       for (const t of pending) fires[t].done = true;
       fs.writeFileSync(stateFile, JSON.stringify(st));
       const seat = resolveFleetSeat(payload);
@@ -159,11 +149,11 @@ function main() {
     const top = pending[0];
     const f = fires[top];
     const sessionPath = paths[0];
-    if (cfg.t2HardBlock !== false) {
+    if (hardBlock) {
       f.blocks = (f.blocks || 0) + 1;
       fs.writeFileSync(stateFile, JSON.stringify(st));
-      block(`Context ${top.toUpperCase()} 已觸發，但 handoff 檔還沒寫（或比觸發時間舊）。請先寫完 handoff 到 ${sessionPath}，並建立 ${markerPath}（或由 seat 回報 restart_requested）後才能結束。（第 ${f.blocks} 次擋停）`
-        + gateHint('先回答落地清單並執行 /handoff（handoff 要新於觸發時間），再建立 restart_requested marker', 'autopilot:handoff'));
+      block(`Context ${top.toUpperCase()} 已觸發，但 handoff 檔還沒寫（或比觸發時間舊）。請先寫完 handoff 到 ${sessionPath} 才能結束；此席位沒有擋停次數上限。（第 ${f.blocks} 次擋停）`
+        + gateHint('先回答落地清單並執行 /handoff（handoff 要新於觸發時間）', 'autopilot:handoff'));
       return;
     }
     if ((f.blocks || 0) < MAX_BLOCKS) {

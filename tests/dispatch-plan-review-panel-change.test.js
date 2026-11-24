@@ -24,17 +24,40 @@ function makeSandbox() {
   fs.writeFileSync(planPath, '# Test Plan\n\n## Scope\nImplement panel change.\n');
   fs.writeFileSync(rubricPath, '# Rubric\n\n- R1: [correctness] Verify behavior.\n');
 
+  const git = (...a) => spawnSync('git', ['-C', repo, ...a], { encoding: 'utf8', env: { ...process.env, HOME: home } });
+  git('init', '-q');
+  git('config', 'user.email', 't@example.invalid');
+  git('config', 'user.name', 't');
+  git('add', '-A');
+  git('commit', '-q', '-m', 'init');
+
   return { root, home, repo, stateDir, planPath, rubricPath };
 }
 
 function makeManifest(seats) {
   return {
     schema_version: 1,
+    artifact_type: 'plan_review_manifest',
     logical_plan_id: 'plan-panel-change-test',
     minimum_distinct_families: 1,
     max_attempts_per_seat: 2,
     seats,
   };
+}
+
+let responseCounter = 0;
+// The response seam reads each entry from a file, so write every JSON string to one.
+function seamFiles(sandbox, sequence) {
+  const out = {};
+  for (const [seat, entries] of Object.entries(sequence)) {
+    out[seat] = entries.map((text) => {
+      responseCounter += 1;
+      const file = path.join(sandbox.root, `resp-${responseCounter}.json`);
+      fs.writeFileSync(file, text);
+      return file;
+    });
+  }
+  return out;
 }
 
 function runDispatch(sandbox, args, sequence) {
@@ -45,7 +68,7 @@ function runDispatch(sandbox, args, sequence) {
       HOME: sandbox.home,
       AUTOPILOT_PLAN_REVIEW_STATE_DIR: sandbox.stateDir,
       AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS: '1',
-      AUTOPILOT_PLAN_REVIEW_RESPONSE_SEQUENCE: JSON.stringify(sequence),
+      AUTOPILOT_PLAN_REVIEW_RESPONSE_SEQUENCE: JSON.stringify(seamFiles(sandbox, sequence)),
     },
   });
 }
@@ -54,6 +77,9 @@ const singleSeat = [
   {
     id: 'codex-sol',
     role: 'reviewer',
+    endpoint: 'default',
+    readiness_status: 'ready',
+    qualification_status: 'qualified',
     runner: 'codex',
     model: 'gpt-5.4',
     family: 'openai',
@@ -69,6 +95,9 @@ const threeSeats = [
   {
     id: 'agy-1',
     role: 'reviewer',
+    endpoint: 'default',
+    readiness_status: 'ready',
+    qualification_status: 'qualified',
     runner: 'agy',
     model: 'gemini-3.1-pro',
     family: 'google',
@@ -80,6 +109,9 @@ const threeSeats = [
   {
     id: 'fable-1',
     role: 'reviewer',
+    endpoint: 'default',
+    readiness_status: 'ready',
+    qualification_status: 'qualified',
     runner: 'grok',
     model: 'grok-4',
     family: 'xai',
@@ -135,8 +167,8 @@ function setupGen1(sandbox) {
     schema_version: 1,
     logical_plan_id: 'plan-panel-change-test',
     generation: 1,
-    decisions: [
-      { fingerprint, disposition: 'accepted_blocker', reason: 'fix in gen 2' },
+    findings: [
+      { fingerprint, disposition: 'accepted_blocker', rationale: 'fix in gen 2' },
     ],
   }, null, 2));
   return { dispPath };

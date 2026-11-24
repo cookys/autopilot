@@ -124,7 +124,7 @@ function groupAsks(entries, nowMs = Date.now()) {
 
   for (const entry of entries) {
     const row = entry.row;
-    const gk = typeof row.group_key === 'string' && row.group_key !== '' ? row.group_key : null;
+    const gk = typeof row.group_key === 'string' && row.group_key !== '' ? row.group_key : groupKey(row.text);
     if (!gk) {
       const at = row.at || null;
       const lastMs = at ? Date.parse(at) : NaN;

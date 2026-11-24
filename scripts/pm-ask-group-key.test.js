@@ -137,8 +137,19 @@ test('legacy events without group_key are listed without error', () => {
       text: '舊事件沒有 group_key',
     });
 
+    append(env, {
+      schema: SCHEMA,
+      kind: 'ask',
+      ask_id: 'a-30000003',
+      at: '2026-11-01T10:02:00Z',
+      text: '另一個完全不同的舊問題',
+    });
+
+    // events written before group_key existed: the key is derived from the text at read time
     const out = listOutput(env, { nowMs: Date.parse('2026-11-01T10:05:00Z') });
-    assert.equal(out.split('\n').length, 2);
+    const lines = out.split('\n');
+    assert.equal(lines.length, 2);
+    assert.ok(lines.some((l) => l.includes('(x2)')), 'same-text legacy asks merge with a count');
   } finally {
     cleanup();
   }

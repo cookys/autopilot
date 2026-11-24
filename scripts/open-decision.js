@@ -454,7 +454,7 @@ function normalizeFingerprintPart(value) {
 }
 function cardFingerprint(card) {
   if (!card || typeof card !== 'object') return '';
-  const topic = (typeof card.title === 'string' && card.title.trim()) ? card.title : card.question;
+  const topic = (typeof card.question === 'string' && card.question.trim()) ? card.question : card.title;
   return [
     normalizeFingerprintPart(topic),
     normalizeFingerprintPart(card.executor),
@@ -467,6 +467,7 @@ function findAnsweredDuplicate(entries, candidate) {
   for (const entry of Array.isArray(entries) ? entries : []) {
     if (!entry || entry.id === candidate.id) continue;
     if (!ANSWERED_CARD_STATES.has(cardState(entry))) continue;
+    if (entry.closed_via === 'withdrawn' || entry.closed_via === 'panel_dismiss') continue;
     if (cardFingerprint(entry) === fp) return entry;
   }
   return null;

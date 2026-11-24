@@ -34,11 +34,12 @@ export type PageId = 'now' | 'decide' | 'fleet' | 'quota' | 'dispatch' | 'review
 export interface Page { id: PageId; key: string; title: string; framed?: true; render(ctx: PageCtx): { body: Row[]; actions: Row[]; overflow?: true } }
 // a tab the frame's strip shows next to the pages (the old tabs that still draw the old way): `key` is its digit
 export type ExtraTab = { id: string; key: string; label: string }
-export type FrameOpts = { topAnchor?: true; scroll?: number; unfold?: (ctx: PageCtx) => { body: Row[]; actions: Row[]; overflow?: true }; pages?: readonly Page[]; extra?: readonly ExtraTab[]; active?: string }
+export type FrameOpts = { topAnchor?: true; scroll?: number; unfold?: (ctx: PageCtx) => { body: Row[]; actions: Row[]; overflow?: true }; pages?: readonly Page[]; extra?: readonly ExtraTab[]; active?: string; askRows?: readonly Row[] }
 
 // W1: the host already budgets pane borders and chat space. Use every allocated
 // body row in either placement; a second inline cap leaves padding below the strip.
 export const FRAME_MAX_ROWS = 24
+export const ASK_BAND_MIN_AVAIL = 14
 export const frameHeight = (available: number, _placement: 'dock' | 'inline' = 'inline'): number => Math.max(0, available)
 
 export { actionRows }
@@ -213,6 +214,8 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
   const S = foot.length
   if (H <= S) return foot.slice(-H).map(r => clip(r, ctx.size.cols))
   const avail = H - 1 - S
+  // the PM-asks band sits directly above the action rows; it is dropped when the surface is too short to keep a readable body (the 80x16 inline allocation)
+  const askRows: Row[] = avail >= ASK_BAND_MIN_AVAIL ? [...(opts.askRows ?? [])] : []
   const droppedDecideAct = first.actions.some(x => x.some(s => s.press === 'tab:2:decide'))
   const layout = (r: { body: Row[]; actions: Row[] }, short = false) => {
     const read = page.id === 'decide' || page.id === 'todo' || page.id === 'help'
@@ -244,7 +247,7 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
     const acts: Row[] = opts.topAnchor === true
       ? r.actions.filter(row => row.some(s => s.press !== undefined) || row.map(s => s.text).join('').trim() !== ctx.t('frame.unknown'))
       : r.actions.length === 0 ? (omitEmptyAct ? [] : [[{ text: emptyState(ctx, page), dim: true }]]) : r.actions
-    return { body, acts, room: avail - Math.min(acts.length, avail), short }
+    return { body, acts, room: avail - Math.min(acts.length, avail) - askRows.length, short }
   }
   let lay = layout(first, ctx.shortBody === true || avail <= 4)
   if ((lay.room <= 4 || avail <= 4) && ctx.shortBody !== true) {
@@ -273,8 +276,8 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
   const gap: Row[] = Array.from({ length: room - shown.length }, blank)
   const actRows = A === 0 ? [] : acts.slice(-A)
   // v7.4 box: the content starts on the first body row, the spare rows sit between it and the action rows (design S2/S3/S9)
-  if (opts.topAnchor === true) return [head, ...shown, ...gap, ...actRows, ...foot].map(r => clip(r, ctx.size.cols))
-  return [head, ...gap, ...shown, ...actRows, ...foot].map(r => clip(r, ctx.size.cols))
+  if (opts.topAnchor === true) return [head, ...shown, ...gap, ...askRows, ...actRows, ...foot].map(r => clip(r, ctx.size.cols))
+  return [head, ...gap, ...shown, ...askRows, ...actRows, ...foot].map(r => clip(r, ctx.size.cols))
 }
 
 // v7.4 top border title: clean design title (page name, source, schema, optional age) with NO warnings in the border (design S1-S10).

@@ -144,7 +144,10 @@ function readRows(env) {
   for (const line of raw.split('\n')) {
     if (!line) continue;
     let row;
-    try { row = JSON.parse(line); } catch { continue; }
+    try { row = JSON.parse(line); } catch (err) {
+      process.stderr.write(`askpm-log: skipping malformed jsonl line: ${err && err.message}\n`);
+      continue;
+    }
     if (!row || row.schema !== SCHEMA) continue;
     rows.push(row);
   }
@@ -267,9 +270,36 @@ function replyBody(input) {
   return null;
 }
 
-function writeReply(env, text) {
+function writeReply(env, text, meta = {}) {
   const norm = text.replace(/\r\n/g, '\n');
-  append(env, { schema: SCHEMA, kind: 'reply', at: new Date().toISOString(), lines: norm.split('\n').slice(0, 2), text: clip(norm) });
+  const now = new Date().toISOString();
+  const askId = meta && typeof meta.ask_id === 'string' && meta.ask_id !== '' ? meta.ask_id : null;
+  const sessionId = meta && typeof meta.session_id === 'string' && meta.session_id !== '' ? meta.session_id : null;
+  const turn = meta && meta.turn !== undefined ? meta.turn : null;
+  const row = {
+    schema: SCHEMA,
+    kind: 'reply',
+    at: now,
+    ts: now,
+    ask_id: askId,
+    session_id: sessionId,
+    turn,
+    lines: norm.split('\n').slice(0, 2),
+    text: clip(norm),
+  };
+  const dir = stateDir(env);
+  const file = logFile(env);
+  withWriteLock(
+    { storeDir: dir, lockFile: path.join(dir, 'askpm.jsonl.lock'), name: 'askpm' },
+    () => {
+      if (askId) {
+        const existing = readRows(env) || [];
+        const dup = existing.some((r) => r.kind === 'reply' && r.ask_id === askId && r.turn === turn);
+        if (dup) return;
+      }
+      appendRow(file, row);
+    },
+  );
 }
 
 function onStop(input, env) {
@@ -285,7 +315,13 @@ function onStop(input, env) {
   if (gate.askText !== null && !transcriptMatchesAsk(input, gate.askText)) return;
   const text = replyBody(input);
   if (!text) return;
-  writeReply(env, text);
+  const askId = gate.ask && typeof gate.ask.ask_id === 'string' && gate.ask.ask_id !== '' ? gate.ask.ask_id : null;
+  const sessionId = typeof input.session_id === 'string' && input.session_id !== ''
+    ? input.session_id
+    : (gate.ask && typeof gate.ask.session_id === 'string' && gate.ask.session_id !== '' ? gate.ask.session_id : null);
+  const turn = input.turn !== undefined && input.turn !== null ? input.turn
+    : (gate.ask && gate.ask.turn !== undefined && gate.ask.turn !== null ? gate.ask.turn : null);
+  writeReply(env, text, { ask_id: askId, session_id: sessionId, turn });
 }
 
 function handle(input, env) {

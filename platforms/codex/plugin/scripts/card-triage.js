@@ -39,7 +39,7 @@ function classifyVisibility(card, visibleIds, repo) {
 }
 
 function classifyDelivery(card) {
-  if (hasValue(card.dispatched_message_id)) {
+  if (hasValue(card.dispatched_message_id) || hasValue(card.dispatched_msg_id) || card.closed_via === 'fleet_message') {
     return 'delivered';
   }
   if (hasValue(card.dispatch_error)) {

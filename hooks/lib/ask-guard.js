@@ -28,7 +28,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { configPath, globToRegExp } = require('../../scripts/lib/config-path.js');
-const { whoamiSession } = require('../../scripts/lib/fleet-task.js');
+const { whoamiSession, bin: fleetBin } = require('../../scripts/lib/fleet-task.js');
 const { isPmConsole } = require('../_shared/pm-console.js');
 const { enforceFromReached } = require('./enforce-from.js');
 
@@ -47,7 +47,7 @@ function resolveSeat(env) {
   const sid = String(env.CLAUDE_CODE_SESSION_ID || '').trim();
   if (!sid) return { address: '', unresolved: false };
   const r = whoamiSession(sid, {
-    binPath: env.FLEET_BIN || 'fleet',
+    binPath: fleetBin(env),
     timeoutMs: 3000,
     env,
   });

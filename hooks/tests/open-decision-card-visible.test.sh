@@ -101,6 +101,15 @@ assert_contains "$(cat "$SB/err4")" "AUTOPILOT_LIVE_DIR" "S4 stderr says what to
 assert_contains "$(env HOME="$SB/s4/home" node "$OD" show --cwd "$R")" "Q-S4?" "S4 the card is written anyway"
 OUT4B="$(env HOME="$SB/s4/home" AUTOPILOT_RUNS_WATCH_AUTOSTART=0 node "$OD" open --category goal --executor ns/cc/exec--claude --cwd "$R" --question "Q-S4b?" --title '要改嗎' --recommendation a --option a::x --option b::y --not-authorized irreversible 2>/dev/null)"; assert_eq "0" "$?" "S4 autostart switched off: exit 0 (the owner's / a test's explicit switch)"
 
+# ---- S4c: isolated environment with AUTOPILOT_LOAD_SOURCE_TRUST_ENV=1 ----
+newrepo s4c
+OUT4C="$(env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_LIVE_DIR HOME="$SB/s4c/home" CLAUDE_CONFIG_DIR="$SB/s4c/claude" XDG_RUNTIME_DIR="$SB/s4c/xdg" \
+  AUTOPILOT_SESSION_MODE_DIR="$SB/s4c/home/.autopilot/session-mode" AUTOPILOT_RUNS_WATCH_AUTOSTART= AUTOPILOT_LOAD_SOURCE_TRUST_ENV=1 node "$OD" open --category goal --executor ns/cc/exec--claude --cwd "$R" --question "Q-S4c?" --title '要改嗎' --recommendation a --option a::x --option b::y --not-authorized irreversible 2>"$SB/err4c")"; RC4C=$?
+assert_eq "0" "$RC4C" "S4c trust env: exit 0"
+assert_contains "$OUT4C" "d-" "S4c the id is printed on stdout"
+assert_not_contains "$(cat "$SB/err4c")" "will NOT appear in any live panel" "S4c stderr does not say the card will not show"
+assert_contains "$(env HOME="$SB/s4c/home" node "$OD" show --cwd "$R")" "Q-S4c?" "S4c the card is written"
+
 # ---- S5: a watcher started by hand without --render holds the lock; open replaces it ----
 envpid() { node -e 'try{const e=JSON.parse(require("fs").readFileSync(process.argv[1]));if(e.writer&&e.writer.pid)process.stdout.write(String(e.writer.pid))}catch(_){}' "$LIVE/runs/$1.json"; }
 cmdline_has() { tr '\0' ' ' < "/proc/$1/cmdline" 2>/dev/null | grep -q -- "$2" && echo yes || echo no; }

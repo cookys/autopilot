@@ -1,6 +1,6 @@
 # Plan — PM 席 200k 自動 handoff、/clear 與 `fleet pm resume` 拉回狀態（做法二）
 
-> Status: Draft (R0) | Owner: autopilot--claude | Fleet-Task: 01M85T56P7V70X8HJ7WN0HMYE0（PM 裁定 01M85PYJ3S 第 2 點）| Frame: 做法二（無人值守 /clear + resume）| 上線日：Phase 1–2 目標 2026-11-27 台北，Phase 3 要等 PM 席下次自然到 200k，日期以實測為準
+> Status: Frozen R1 | Owner: autopilot--claude | Fleet-Task: 01M85T56P7V70X8HJ7WN0HMYE0（PM 裁定 01M85PYJ3S 第 2 點）| Frame: 做法二（無人值守 /clear + resume）| 上線日：Phase 1–2 目標 2026-11-27 台北，Phase 3 要等 PM 席下次自然到 200k，日期以實測為準
 
 ---
 
@@ -81,7 +81,7 @@ PM 席在長對話接近 200k tokens 時，依賴操作員手動 `/clear` 與貼
 | Phase 2 | 依賴 Phase 1 的 handoff 產生腳本與欄位 | **可在現行 260k 門檻試跑**：以開關關閉（預設）或受控試跑驗證接線，不切預設 |
 | Phase 3 | 依賴 Phase 2 接線完成，且**依賴預載縮減前置條件**（基準首回合低於 95k 合理範圍） | **條件達標後才排實測**：通過 KR4 後才可將做法二切換為預設 |
 
-> **呼叫鏈（Phase 2 閉合）**：`context-budget`（記 `landFire`）→ `context-land-gate`（Stop，在 `pm` 席且做法二開關開啟時呼叫 handoff 產生腳本）→ handoff 腳本 → `/clear` 注入 → `pm resume`（`fleet pm resume` + cron 重掛）。
+> **呼叫鏈（Phase 2 閉合）**：`context-budget`（記 `landFire`）→ `context-land-gate`（Stop，在 `pm` 席且做法二開關開啟時呼叫 handoff 產生腳本）→ handoff 腳本 → `/clear` 注入 → 新 session 讀 handoff 檔（`read <path> 接續`，由 `/clear` 注入後的第一則輸入帶入，注入方式「待查」）→ `fleet pm resume` + cron 重掛。
 
 ### Phase 1 — 盤點與腳本化 handoff（含操作員最近的話＋未完成事項）
 - **Size**: `S`
@@ -106,7 +106,7 @@ PM 席在長對話接近 200k tokens 時，依賴操作員手動 `/clear` 與貼
 
 ### Phase 3 — 200k 真 `/clear` 實測與預設切換閘
 - **Size**: `S`
-- **前置條件（與 [synthesis.md](../../docs/plans/evidence/2026-11-24-pm-mech-judgment/synthesis.md) 第 93 行排序一致）**: 須先查清 72.7k 預載、完成預載縮減使基準首回合低於 95k 的合理範圍，並完成 resume 驗收後，才排入 200k 門檻實測。在此之前，Phase 1–2 先在 260k 現行門檻上以開關關閉或試跑方式驗證接線，不切預設。
+- **前置條件（與 [synthesis.md](../../docs/plans/evidence/2026-11-24-pm-mech-judgment/synthesis.md) 第 93 行排序一致）**: 須先查清 72.7k 預載、完成預載縮減使基準首回合低於 95k 的合理範圍，並完成 resume 驗收後（synthesis 第 93 行寫「底線降到 80k 以下」才降到 200k；本計畫的 95k 是 PM 裁定 01M85PYJ3S 的切預設條件，兩者是不同門檻：80k 是降門檻的預載底線，95k 是 /clear 後首回合的驗收線），才排入 200k 門檻實測。在此之前，Phase 1–2 先在 260k 現行門檻上以開關關閉或試跑方式驗證接線，不切預設。
 - **具體步驟**:
   1. 僅在 PM 席開啟做法二實驗開關，等待下次 PM 席自然運作達約 200k tokens。
   2. 觀察自動 handoff、`/clear`、`fleet pm resume` 與 cron 重掛全程執行。
@@ -138,6 +138,7 @@ PM 席在長對話接近 200k tokens 時，依賴操作員手動 `/clear` 與貼
 | **cron 重掛失敗** | `/clear` 後若 cron 未重掛，PM 席的週期巡查或續跑會靜默停擺 | 在 `fleet pm resume` 後加一步 cron 狀態驗證；若重掛失敗，發送告警給操作員並退回做法一 | 由 PM 席執行手動重掛指令（「待查」，列為 Phase 2 前置查證項），並以 cron 清單/狀態查詢指令（「待查」）驗證任務已恢復排程 |
 | **清完第一回合仍 > 95k** | 目前壓縮後首回合約 136.7k（[synthesis.md](../../docs/plans/evidence/2026-11-24-pm-mech-judgment/synthesis.md) §一），若預載未先縮減，`/clear` 後仍可能超過 95k | KR4 硬性規定 ≤ 95k 才切預設，沒過就留做法一 | 將做法二開關切回關閉（維持做法一為預設），不需改程式 |
 | **誤觸發到非 PM 席** | 其他席位被誤 `/clear` 導致工作遺失 | 負控制限定僅 `pm` 席且顯式開啟做法二開關才生效 | 先關閉做法二開關止血，再從該席對應的 handoff 檔（`$XDG_RUNTIME_DIR/autopilot/handoff/<sid>.md`）讀取並恢復工作狀態 |
+| **接線腳本在 /clear 注入後、resume 前崩潰** | PM 席已清空，resume 與 cron 告警都沒執行，無人收到告警，只能事後發現 | Phase 2 的腳本先寫一行 `started` 紀錄、resume 成功後寫 `done`，並由 courier 巡查比對兩者（比對方式「待查」） | 讀該席 handoff 檔並手動執行 `fleet pm resume`；巡查看到只有 `started` 沒有 `done` 就告警 PM |
 
 ---
 
@@ -151,7 +152,7 @@ PM 席在長對話接近 200k tokens 時，依賴操作員手動 `/clear` 與貼
 
 ## 8. Open questions（上線日與回退方式）
 
-- **上線日**: 「待查」（需先完成 Phase 1–2，並等下次 PM 席自然達 200k 跑過 Phase 3 實測 ≤ 95k 後才正式切換為預設）。
+- **上線日**: Phase 1–2 目標 2026-11-27 台北（同表頭）；Phase 3 日期「待查」（需先完成 Phase 1–2，並等下次 PM 席自然達 200k 跑過 Phase 3 實測 ≤ 95k 後才正式切換為預設）。
 - **回退方式**: 將做法二開關切回關閉（恢復預設做法一：達標寫 handoff 後由 `context-land-gate` 提示操作員手動處理），不需回滾程式即可立即止血。
 - **待查項目**:
   1. PM 席無按鍵觸發 `/clear` 的實際控制介面（tmux / fleet / harness）。
@@ -162,4 +163,5 @@ PM 席在長對話接近 200k tokens 時，依賴操作員手動 `/clear` 與貼
 
 ## Review log
 
+- **R1 (2026-11-24)**: G1（astra＋本地 GLM）CONDITIONAL 10 條，五類折進修稿 6f4bc42a3；G2 因 disposition 全標 nonblocking 被判 policy_stop，改用新 logical id（-r2）重審修稿版：CONDITIONAL nonblocking_conditional、blocker 0，餘 9 條 nonblocking 中本版處理 4 條（80k／95k 說明、上線日指回表頭、新 session 讀 handoff、注入後崩潰列），其餘（KR 的 N 值、cron 量測來源、95k 口徑）依賴「待查」項，列為 Phase 1–2 的前置查證，不在計畫層猜值。
 - **R0 (2026-11-24)**: 初稿完成，依 `references/plan-template.md` 與 `synthesis.md` 撰寫，待補「待查」項目後進入審查。

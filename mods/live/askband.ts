@@ -6,7 +6,7 @@ import { PALETTE } from '../tux/palette.ts'
 
 const TAIPEI_OFFSET_MS = 8 * 60 * 60 * 1000
 const WIDE_COLS = 100
-const MAX_WIDE_ITEMS = 5
+const MAX_WIDE_ITEMS = 4
 const MAX_NARROW_ITEMS = 3
 
 const pad2 = (n: number): string => (n < 10 ? '0' + String(n) : String(n))
@@ -91,7 +91,7 @@ export function askBandRows(rows: AskRow[], cols: number, _nowMs: number): Row[]
     const candidates = isWide ? [] : rows.slice(1, 1 + maxItems).map(formatSecondRowItem)
 
     if (isWide) {
-      // five items must all fit the row: each gets an equal share of the width, split between the ask and the answer
+      // four items must all fit the row: each gets an equal share of the width, split between the ask and the answer
       const picked = rows.slice(1, 1 + maxItems)
       const gap = 2
       const budget = Math.floor((cols - gap * (picked.length - 1)) / picked.length)

@@ -31,12 +31,12 @@ describe('askBandRows', () => {
     expect(text).toContain('需要確認部署嗎？')
   })
 
-  test('(c) 7 rows, cols=120: 2 rows, 2nd row has exactly 5 items', () => {
+  test('(c) 7 rows, cols=120: 2 rows, 2nd row has exactly 4 items', () => {
     const rows = Array.from({ length: 7 }, (_, i) => makeAsk(i + 1))
     const out = askBandRows(rows, 120, 0)
     expect(out.length).toBe(2)
     const items = rowText(out[1]).split('　')
-    expect(items.length).toBe(5)
+    expect(items.length).toBe(4)
     expect(rowWidth(out[0])).toBeLessThanOrEqual(120)
     expect(rowWidth(out[1])).toBeLessThanOrEqual(120)
   })

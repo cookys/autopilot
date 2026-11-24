@@ -9069,6 +9069,76 @@
       "doc": null,
       "relates": [],
       "note": "Override the gateway-fill spool file path; set by gateway-fill-dry-run.js to point the dry run at its own spool."
+    },
+    {
+      "name": "pm_act",
+      "kind": "config_key",
+      "audience": "internal",
+      "class": "plumbing",
+      "needle": "pm_act",
+      "default": null,
+      "readers": [
+        "scripts/pm-act.js"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "PM act macro settings block (ledger and fleet commands, state dir); read by pm-act.js."
+    },
+    {
+      "name": "ledger_lint_cmd",
+      "kind": "config_key",
+      "audience": "internal",
+      "class": "plumbing",
+      "needle": "ledger_lint_cmd",
+      "default": null,
+      "readers": [
+        "scripts/pm-act.js"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "pm_act.ledger_lint_cmd: command that lints one ledger entry from stdin; default is pm-ledger.js lint."
+    },
+    {
+      "name": "ledger_write_cmd",
+      "kind": "config_key",
+      "audience": "internal",
+      "class": "plumbing",
+      "needle": "ledger_write_cmd",
+      "default": null,
+      "readers": [
+        "scripts/pm-act.js"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "pm_act.ledger_write_cmd: command that writes one ledger entry from stdin; default is pm-ledger.js write."
+    },
+    {
+      "name": "fleet_send_cmd",
+      "kind": "config_key",
+      "audience": "internal",
+      "class": "plumbing",
+      "needle": "fleet_send_cmd",
+      "default": null,
+      "readers": [
+        "scripts/pm-act.js"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "pm_act.fleet_send_cmd: optional command that sends each dispatch or reply JSON from stdin; without it pm-act prints MCP calls for the PM and waits for --confirm."
+    },
+    {
+      "name": "state_dir",
+      "kind": "config_key",
+      "audience": "internal",
+      "class": "plumbing",
+      "needle": "state_dir",
+      "default": null,
+      "readers": [
+        "scripts/pm-act.js"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "pm_act.state_dir: where pm-act keeps its journal; defaults to XDG_STATE_HOME."
     }
   ]
 }

@@ -185,7 +185,7 @@ for (const fx of CLOSED_FIXTURES) {
 test('T5a(b): from_request forwarding delivers once with same request id, and missing message_id is rejected', () => {
   const { dir, repo, env, stateFile } = setupSandbox();
   try {
-    const reqId = 'r-t5a98765';
+    const reqId = 'r-5a987650';
     const openRes = runCli(
       [
         'open',
@@ -247,7 +247,7 @@ test('T5a(b): from_request forwarding delivers once with same request id, and mi
         '--recommendation', '是',
         '--not-authorized', 'goal-change:need owner',
         '--executor', 'ns/courier/exec-1',
-        '--from-request', 'r-nomsgid1',
+        '--from-request', 'r-0a0b0c0d',
       ],
       { repo: sbNoMsg.repo, env: sbNoMsg.env },
     );
@@ -260,7 +260,10 @@ test('T5a(b): from_request forwarding delivers once with same request id, and mi
       answer_id: 'ans-nomsgid',
       answer: { option: '是', free_text: null },
     });
-    assert.notEqual(deliv.status, 'sent', 'deliverAnswer without message_id must not be marked sent');
+    assert.equal(deliv.status, 'failed', 'deliverAnswer without message_id must fail, got ' + JSON.stringify(deliv));
+    assert.match(deliv.error, /message_id/);
+    const stillOpen = readCards(sbNoMsg.repo, sbNoMsg.env).find((c) => c.id === cardId);
+    assert.notEqual(stillOpen.forward_status, 'sent');
   } finally {
     fs.rmSync(sbNoMsg.dir, { recursive: true, force: true });
   }

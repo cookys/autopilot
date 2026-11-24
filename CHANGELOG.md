@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.9
+- open-decision answer delivery: a 32+ hex answer_digest is cut to 16 chars in the message body, because fleet refused the full one as a secret (long_hex_run) and operator answers had to be resent by hand (Fleet task 01M87CBKHW5WAMEK3SYZHS9H7P).
+
 ## 3.0.0-alpha.8
 - native-msg-record Stop hook blocks only on a sensitive request from a non-automated sender, once; progress, ack and fleet-cli or courier traffic no longer cost a turn (Fleet task 01M87BYVVQHAEXN8FYP1ZR441S).
 

@@ -1698,12 +1698,15 @@ const answerDigest = (cardId, answerId, freeText, option) => crypto.createHash('
   option: nonEmpty(option),
 })).digest('hex');
 
-// The delivery text: one field per line, the receiver's rule "Operator answers on PM cards" trusts it by the attested `from`. Values are verbatim (a multi-line value continues on the next lines).
+// A hex run of 32 or more chars is cut to its first 16: fleet refuses such a body as a secret (long_hex_run).
+const shortHex = (v) => String(v).replace(/[0-9a-fA-F]{32,}/g, (m) => m.slice(0, 16));
+
+// The delivery text (answer_digest is cut to 16 chars: fleet refuses a body with a long hex run as a secret, and the full digest stays on the card): one field per line, the receiver's rule "Operator answers on PM cards" trusts it by the attested `from`. Values are verbatim (a multi-line value continues on the next lines).
 function deliveryText(c) {
   const opt = Array.isArray(c.options) ? c.options.find((o) => o.label === c.answer_option) : null;
   const optionLine = c.answer_option === null || c.answer_option === undefined ? '(none)' : (opt && opt.description ? `${c.answer_option} — ${opt.description}` : c.answer_option);
   const lines = [`[操作員答覆] ${c.id}`, `answer_id: ${c.answer_id}`, `executor: ${c.executor}`, `question: ${c.question}`, `option: ${optionLine}`,
-    `free_text: ${nonEmpty(c.answer_free_text) === null ? '(none)' : c.answer_free_text}`, `answer_digest: ${c.answer_digest}`];
+    `free_text: ${nonEmpty(c.answer_free_text) === null ? '(none)' : c.answer_free_text}`, `answer_digest: ${shortHex(c.answer_digest)}`];
   if (c.free_text_source === 'local' && nonEmpty(c.answer_free_text) !== null) lines.push('free_text_source: local (the owner\'s note, relayed from the panel line; the courier did not store it, so answer_digest does not cover it)');
   if (nonEmpty(c.request_id)) lines.push(`request_id: ${c.request_id}`);
   return lines.join('\n');

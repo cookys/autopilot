@@ -38,6 +38,7 @@ const os = require('os');
 const path = require('path');
 const { isEnabled } = require('./_shared/opt-in');
 const { isPmConsole } = require('./_shared/pm-console');
+const { maskSecrets } = require('../scripts/lib/mask-secrets');
 const { withWriteLock, appendRow } = require('../scripts/lib/jsonl-store');
 const { groupKey } = require('../scripts/lib/ask-group-key');
 
@@ -301,12 +302,12 @@ function onPrompt(input, env) {
   }
   const text = normClip(input.prompt);
   if (!isPmConsole(input.cwd)) {
-    append(env, { schema: SCHEMA, kind: 'ask', at, text });
+    append(env, { schema: SCHEMA, kind: 'ask', at, text: maskSecrets(text) });
     return { kind: 'ask' };
   }
   const sessionId = typeof input.session_id === 'string' ? input.session_id : '';
   const askId = computeAskId(sessionId, at, text);
-  append(env, { schema: SCHEMA, kind: 'ask', at, ask_id: askId, session_id: sessionId, text });
+  append(env, { schema: SCHEMA, kind: 'ask', at, ask_id: askId, session_id: sessionId, text: maskSecrets(text) });
   const reecho = findReecho(env, text, askId, at);
   return { kind: 'ask', ask_id: askId, reecho };
 }
@@ -343,8 +344,8 @@ function writeReply(env, text, meta = {}) {
     ask_id: askId,
     session_id: sessionId,
     turn,
-    lines: norm.split('\n').slice(0, 2),
-    text: clip(norm),
+    lines: maskSecrets(norm).split('\n').slice(0, 2),
+    text: maskSecrets(clip(norm)),
   };
   const dir = stateDir(env);
   const file = logFile(env);

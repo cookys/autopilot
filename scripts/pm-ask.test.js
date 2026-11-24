@@ -503,3 +503,16 @@ test('list --answers --json gives newest-first records with status, count, ask a
     s.cleanup();
   }
 });
+
+test('list --answers masks credential-looking strings in ask text (old rows stored raw)', () => {
+  const fake = ['Zq', '8Kx', 'Lm3Np', '7Rt2Vw', 'Yb5Hc', '9Df4Gj', '1Sa6Pe'].join('');
+  const s = makeStore([askRow('a-mk000001', '這組給你 ' + fake + ' 收好', '2026-11-24T10:00:00.000Z', 's1')]);
+  try {
+    const res = s.run(['list', '--answers', '--json'], { AUTOPILOT_PM_ASK_NOW: '2026-11-24T12:00:00.000Z' });
+    assert.equal(res.status, 0, res.stderr);
+    assert.equal(res.stdout.includes(fake), false);
+    assert.ok(JSON.parse(res.stdout)[0].ask.includes('〔已遮罩〕'));
+  } finally {
+    s.cleanup();
+  }
+});

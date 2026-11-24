@@ -54,7 +54,9 @@
       "kind": "config_key",
       "audience": "user",
       "type": "object",
-      "default": { "pm": 25 },
+      "default": {
+        "pm": 25
+      },
       "readers": [
         "scripts/lib/config-path.js"
       ],
@@ -9169,6 +9171,17 @@
       "doc": null,
       "relates": [],
       "note": "pm_act.state_dir: where pm-act keeps its journal; defaults to XDG_STATE_HOME."
+    },
+    {
+      "name": "AUTOPILOT_ALLOW_HAND_RUN",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/affected-suites.js"
+      ],
+      "doc": null
     }
   ]
 }

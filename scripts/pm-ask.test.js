@@ -280,7 +280,7 @@ test('list --answers formats status, Taipei time, grouped latest reply, and --op
     // (b) + (d) UTC 16:30 -> Taipei 11-17 00:30
     assert.equal(lines[1], '未答 11-17 00:30 why did nightly build fail ｜ （尚無答案）');
     // (c) merged into 1 line with latest reply
-    assert.equal(lines[2], '已答 11-16 17:00 status of migration job ｜ latest migration reply');
+    assert.equal(lines[2], '已答 ×2 11-16 17:00 status of migration job ｜ latest migration reply');
     // (e) disposed without reply
     assert.equal(lines[3], '已處置 11-16 19:00 closed without reply ｜ （尚無答案）');
 
@@ -395,5 +395,32 @@ test('groupAsks merges prefix-matching asks within 30m in same scope, and respec
     assert.equal(res.stdout.trim().split('\n').length, 2);
   } finally {
     sShort.cleanup();
+  }
+});
+
+test('list --answers --open drops 舊紀錄 groups, shows ×N for merged asks, and where reports path, hook state and last ask', () => {
+  const reply = { schema: 'autopilot.askpm/1', kind: 'disposition', action: 'reply', ask_id: 'a-new00001', at: '2026-11-24T02:00:00.000Z', text: '好了' }
+  const s = makeStore([
+    askRow('a-old00001', '很久以前的問題要夠長才行', '2026-11-19T07:07:00.000Z', 's0'),
+    askRow('a-new00001', 'caddy 改好沒 請回報狀態', '2026-11-24T01:00:00.000Z', 's1'),
+    reply,
+    askRow('a-new00002', 'fleet-glm 開好了沒?', '2026-11-24T03:00:00.000Z', 's1'),
+    askRow('a-new00003', 'fleet-glm 開好了沒? 再問一次', '2026-11-24T03:05:00.000Z', 's1'),
+  ]);
+  try {
+    const all = s.run(['list', '--answers']);
+    assert.equal(all.status, 0, all.stderr);
+    assert.ok(all.stdout.includes('舊紀錄'), all.stdout);
+    const open = s.run(['list', '--open', '--answers']);
+    assert.equal(open.status, 0, open.stderr);
+    assert.ok(!open.stdout.includes('舊紀錄'), open.stdout);
+    assert.ok(open.stdout.includes('未答 ×2'), open.stdout);
+    const where = s.run(['where']);
+    assert.equal(where.status, 0, where.stderr);
+    assert.ok(where.stdout.includes(path.join(s.state, 'askpm.jsonl')), where.stdout);
+    assert.ok(where.stdout.includes('hook_enabled no'), where.stdout);
+    assert.ok(where.stdout.includes('asks 4'), where.stdout);
+  } finally {
+    s.cleanup();
   }
 });

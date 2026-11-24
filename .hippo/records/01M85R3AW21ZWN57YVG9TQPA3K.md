@@ -1,0 +1,11 @@
+---
+id: 01M85R3AW21ZWN57YVG9TQPA3K
+kind: issue
+created: 2026-11-24T03:02:57.154Z
+---
+- **Since**: 2026-11-24
+- **Problem**: 收件殘餘有人想再開分類器處理。
+- **Impact**: 三家評審一致不建；殘餘改由服務端收斂成 courier 一套規則。
+- **Trigger**: 不做：PM 裁定 ledger 29b4b76d，之後被重提時先看這列
+- **Source**: PM 裁定 29b4b76d；三家評審合成 056407312
+- **Pointer**: docs/plans/evidence/2026-11-24-pm-mech-judgment/synthesis.md

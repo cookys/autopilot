@@ -6,7 +6,7 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { sessionHandoffPath } = require('../hooks/context-budget-lib.js');
 
-const SKIP_PREFIXES = ['<system-reminder>', '<task-notification>', '<channel'];
+const SKIP_PREFIXES = ["<system-reminder>", "<task-notification>", "<channel", "Stop hook feedback", "This session is being continued", "[SYSTEM NOTIFICATION", "<command-name>", "Caveat:", "Base directory for this skill", "[Image:"];
 const MAX_UTTERANCES = 5;
 const MAX_UTTERANCE_CHARS = 300;
 

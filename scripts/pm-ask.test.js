@@ -516,3 +516,19 @@ test('list --answers masks credential-looking strings in ask text (old rows stor
     s.cleanup();
   }
 });
+
+test('list --answers joins the hook-written kind "reply" rows back to their ask', () => {
+  const s = makeStore([
+    askRow('a-rk000001', '好了嗎', '2026-11-24T10:00:00.000Z', 's1'),
+    { schema: SCHEMA, kind: 'reply', at: '2026-11-24T10:05:00.000Z', ts: '2026-11-24T10:05:00.000Z', ask_id: 'a-rk000001', session_id: 's1', turn: 1, lines: ['好了'], text: '好了\n細節' },
+  ]);
+  try {
+    const res = s.run(['list', '--answers', '--json'], { AUTOPILOT_PM_ASK_NOW: '2026-11-24T12:00:00.000Z' });
+    assert.equal(res.status, 0, res.stderr);
+    const rec = JSON.parse(res.stdout)[0];
+    assert.equal(rec.status, '已答');
+    assert.equal(rec.answer, '好了\n細節');
+  } finally {
+    s.cleanup();
+  }
+});

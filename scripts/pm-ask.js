@@ -16,8 +16,10 @@
 const fs = require('fs');
 const path = require('path');
 const { SCHEMA, append, readRows } = require('../hooks/askpm-log');
+const { groupKey } = require('./lib/ask-group-key');
 
 const MAX_VIEW_LINES = 30;
+const ARCHIVE_DAYS_MS = 14 * 24 * 3600 * 1000;
 const SHA_RE = /^[0-9a-f]{7,40}$/i;
 const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
 const CARD_RE = /^d-[0-9a-f]{8}$/i;
@@ -98,15 +100,93 @@ function formatAge(atIso, nowMs) {
   return `${Math.floor(hours / 24)}d`;
 }
 
-function formatAskLine(row, nowMs) {
-  const age = formatAge(row.at, nowMs);
+function formatAskLine(row, nowMs, extra = {}) {
+  const age = formatAge(extra.last_at || row.at, nowMs);
   const summary = (typeof row.text === 'string' ? row.text : '').replace(/\s+/g, ' ').trim().slice(0, 60);
-  return `${row.ask_id} ${age} ${summary}`;
+  const countTag = extra.count && extra.count > 1 ? ` (x${extra.count})` : '';
+  const archivedTag = extra.archived ? ' [archived]' : '';
+  return `${row.ask_id} ${age}${countTag}${archivedTag} ${summary}`;
+}
+
+function getScopeKey(row) {
+  if (typeof row.operator === 'string' && row.operator !== '') {
+    return `op:${row.operator}`;
+  }
+  if (typeof row.session_id === 'string' && row.session_id !== '') {
+    return `sess:${row.session_id}`;
+  }
+  return 'default';
+}
+
+function groupAsks(entries, nowMs = Date.now()) {
+  const groups = [];
+  const byKey = new Map();
+
+  for (const entry of entries) {
+    const row = entry.row;
+    const gk = typeof row.group_key === 'string' && row.group_key !== '' ? row.group_key : null;
+    if (!gk) {
+      const at = row.at || null;
+      const lastMs = at ? Date.parse(at) : NaN;
+      const archived = Number.isFinite(lastMs) ? (nowMs - lastMs) >= ARCHIVE_DAYS_MS : false;
+      groups.push({
+        ...entry,
+        count: 1,
+        first_at: at,
+        last_at: at,
+        archived,
+      });
+      continue;
+    }
+
+    const compositeKey = `${gk}::${getScopeKey(row)}`;
+    const existing = byKey.get(compositeKey);
+    const at = row.at || null;
+    if (!existing) {
+      const lastMs = at ? Date.parse(at) : NaN;
+      const grouped = {
+        ...entry,
+        group_key: gk,
+        count: 1,
+        first_at: at,
+        last_at: at,
+        archived: Number.isFinite(lastMs) ? (nowMs - lastMs) >= ARCHIVE_DAYS_MS : false,
+      };
+      byKey.set(compositeKey, grouped);
+      groups.push(grouped);
+    } else {
+      existing.count += 1;
+      if (at) {
+        const atMs = Date.parse(at);
+        const firstMs = existing.first_at ? Date.parse(existing.first_at) : NaN;
+        const lastMs = existing.last_at ? Date.parse(existing.last_at) : NaN;
+        if (!Number.isFinite(firstMs) || (Number.isFinite(atMs) && atMs < firstMs)) {
+          existing.first_at = at;
+        }
+        if (!Number.isFinite(lastMs) || (Number.isFinite(atMs) && atMs >= lastMs)) {
+          existing.last_at = at;
+          existing.row = row;
+          existing.index = entry.index;
+        }
+      }
+      const finalLastMs = existing.last_at ? Date.parse(existing.last_at) : NaN;
+      existing.archived = Number.isFinite(finalLastMs) ? (nowMs - finalLastMs) >= ARCHIVE_DAYS_MS : false;
+    }
+  }
+
+  return groups;
+}
+
+function withGroupKey(row) {
+  if (!row || typeof row !== 'object') return row;
+  const gk = groupKey(row.text);
+  if (!gk) return { ...row };
+  return { ...row, group_key: gk };
 }
 
 function formatList(entries, nowMs = Date.now()) {
   if (entries.length === 0) return '';
-  const shown = entries.slice(0, MAX_VIEW_LINES).map((e) => formatAskLine(e.row, nowMs));
+  const shown = entries.slice(0, MAX_VIEW_LINES).map((e) => formatAskLine(e.row, nowMs, e));
   if (entries.length > MAX_VIEW_LINES) {
     shown.push(`… ${entries.length - MAX_VIEW_LINES} more`);
   }
@@ -117,7 +197,8 @@ function listOutput(env, opts = {}) {
   const nowMs = opts.nowMs ?? Date.now();
   const { asks, disposed } = loadState(env);
   const selected = opts.open ? asks.filter((e) => !disposed.has(e.row.ask_id)) : asks;
-  return formatList(selected, nowMs);
+  const grouped = groupAsks(selected, nowMs);
+  return formatList(grouped, nowMs);
 }
 
 function overdueOutput(env, hours = 24, nowMs = Date.now()) {
@@ -307,6 +388,8 @@ module.exports = {
   isValidEvidence,
   isValidUlid,
   loadState,
+  groupAsks,
+  withGroupKey,
   formatAge,
   formatAskLine,
   formatList,

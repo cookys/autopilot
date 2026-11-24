@@ -3516,7 +3516,7 @@ const g33Str = async ($: any, maxRows = BAND_PROPS.maxRows, bodyColumns = BAND_P
 }
 const g33Ran = (on: On) => {
   const ran: string[] = []
-  on('process.run', ($$: any, e: any) => { ran.push((e.argv as string[]).join(' ')); return { value: { exitCode: 0, stdout: g23Tasks(NOW_FRESH), stderr: '' } } })
+  on('process.run', ($$: any, e: any) => { { const line = (e.argv as string[]).join(' '); if (!line.includes('scripts/pm-ask.js')) ran.push(line) } return { value: { exitCode: 0, stdout: g23Tasks(NOW_FRESH), stderr: '' } } })
   return ran
 }
 // PM G33 (TUI guideline 1.1 rule 3): an alive forge-stats whose heartbeat says `summary_row: true` is handed ONE row under the band's own two; anything else is never asked.
@@ -3894,7 +3894,7 @@ test('G33a review g1: the heartbeat file is not the gate: a link, a non-file, an
 })
 test('G23 Fleet tab: a failing `fleet` says so; a tick while another tab shows still runs the CLI and the tab stays never-fetched (terminal)', async ($, on) => {
   const ran: string[] = []
-  on('process.run', ($$: any, e: any) => { ran.push((e.argv as string[]).join(' ')); return { value: { exitCode: 1, stdout: '', stderr: 'fleet: hub unreachable' } } })
+  on('process.run', ($$: any, e: any) => { { const line = (e.argv as string[]).join(' '); if (!line.includes('scripts/pm-ask.js')) ran.push(line) } return { value: { exitCode: 1, stdout: '', stderr: 'fleet: hub unreachable' } } })
   const w = worldEn(on, base())
   await start($, 'terminal')
   await paneParts($, 'terminal', 'now')

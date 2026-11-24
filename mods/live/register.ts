@@ -234,11 +234,10 @@ function kickV74($: EngineInterface, nowMs: number): void {
   const run = (argv: readonly string[]) => $.process.run(argv, { timeoutMs: 8000 })
   void pmFeed.refresh(run, nowMs).then(r => { if (r) void $.ui.invalidate('ui.render') }).catch(() => {})
   void decideFeed.refresh(run, nowMs).then(r => { if (r) void $.ui.invalidate('ui.render') }).catch(() => {})
+  // pm-ask.js shares one grouping algorithm with the CLI; AUTOPILOT_PM_ASK_BIN overrides the script path (tests, a pinned copy)
   void $.env.get('AUTOPILOT_PM_ASK_BIN').then(bin => {
-    if (typeof bin === 'string' && bin.trim() !== '') {
-      return asksFeed.refresh(run, ['node', bin.trim(), ...ASKS_LIST_TAIL], nowMs)
-    }
-    return false
+    const script = typeof bin === 'string' && bin.trim() !== '' ? bin.trim() : $.plugin.root + '/scripts/pm-ask.js'
+    return asksFeed.refresh(run, ['node', script, ...ASKS_LIST_TAIL], nowMs)
   }).then(r => { if (r) void $.ui.invalidate('ui.render') }).catch(() => {})
 }
 const V74_TODO: TodoCard[] | null = null // the todo source (fleet todo --json) is not wired: decision cards do not offer `待辦` (offerTodo) until it is

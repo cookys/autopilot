@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.12
+- hooks: context-land-gate, open-decision and request-decision resolve the fleet binary through bin() (HOME/.local/bin fallback), so a Stop hook with a short PATH no longer fails the hangar restart dispatch with 'no fleet binary'.
+
 ## 3.0.0-alpha.11
 - ask band: the wide collapsed band shows 4 questions per row instead of 5 (PM ruling on 01M85TGX639NV8DHSJ391JD3XW).
 

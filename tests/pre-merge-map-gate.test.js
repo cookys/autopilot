@@ -30,6 +30,7 @@ function makeTempRepo() {
   const scriptsDir = path.join(dir, 'scripts');
   fs.mkdirSync(scriptsDir, { recursive: true });
   fs.copyFileSync(CHECKER_SRC, path.join(scriptsDir, 'check-architecture-map.js'));
+  fs.writeFileSync(path.join(scriptsDir, 'check-backlog-single-writer.js'), 'process.exit(0);\n'); // stub: this test covers only the map gate
 
   return dir;
 }
@@ -54,7 +55,7 @@ describe('pre-merge-commit architecture map gate', () => {
         '',
         '| 名稱 | 狀態 | 在哪裡 | 依據 | 互動介面 | 驗收方式 |',
         '| --- | --- | --- | --- | --- | --- |',
-        '| feature-a | live | `src/a.js` | spec | CLI | unit test |',
+        '| feature-a | live | `src/a.js` | spec | 無 | unit test |',
         '',
       ].join('\n')
     );

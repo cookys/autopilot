@@ -1,11 +1,9 @@
 ---
 name: project-lifecycle
 description: >
-  Bootstrap, organize, or archive project tracking docs. Use when: "archive this project",
-  "bootstrap from plan", "set up project tracking", "clean up project docs", "update INDEX",
-  "reorganize docs/projects/", "歸檔這個專案", "建專案", "整理專案文件", project is done and
-  merged — needs cleanup. Not for: authoring a plan doc (→ references/plan-template.md), choosing what to work on
-  (→ next), or running quality gates (→ quality-pipeline).
+  Bootstrap, organize, or archive project tracking docs and INDEX.
+  Use when: "archive this project", "bootstrap from plan", "歸檔這個專案".
+  Not for: authoring plans (→ references/plan-template.md), picking next work (→ next), quality gates (→ quality-pipeline).
 ---
 
 # Project Lifecycle

@@ -1,12 +1,9 @@
 ---
 name: l5
 description: >
-  Terse CEO front-door — Level 5: like /l4 (background worktree-isolated foreman, depth-0 control
-  loop + authoritative qc) but the IMPLEMENTER is orchestrated by the engine CLI and dispatched
-  through the canonical `engine implement-review` path. Use when: "/l5 <goal>", "L5 <goal>", you want cost-arbitrage
-  or a decorrelated second engine doing the mechanical impl. Presets involvement=just-results,
-  scope=Hold, project red lines plus -x additions (override --mode / --expand / --solo). Not for: all-Claude run (→ /l4), inline
-  (→ /l3).
+  Terse CEO front-door (Level 5): worktree foreman plus heterogeneous implementer via engine implement-review.
+  Use when: "/l5 <goal>", "L5 <goal>".
+  Not for: all-Claude (→ /l4), inline (→ /l3).
 ---
 
 <!-- AUTOPILOT_CODEX_LIFECYCLE_ADAPTER_V1 -->

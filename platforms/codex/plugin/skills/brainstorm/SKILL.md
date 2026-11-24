@@ -1,13 +1,9 @@
 ---
 name: brainstorm
 description: >
-  Pre-code Socratic design exploration — when the options don't exist yet. Use when: "I haven't figured
-  out the approach", "help me think through X", "what should this even be / 還沒想清楚", "explore how to
-  do X before we build", "我不確定要怎麼做", "尚未成形 / 沒有方向". DISCOVERS the options, surfaces 2-3
-  genuinely different approaches, and GATES implementation until you approve a design. Not for: deciding
-  between options that ALREADY exist on the table (→ think-tank), external best-practice research
-  (→ survey), an approach you've already chosen (→ references/plan-template.md to author the plan, then
-  dev-flow), or a quick known fix (→ dev-flow).
+  Pre-code Socratic design exploration that surfaces 2-3 approaches and gates coding until approved.
+  Use when: "help me think through X", "還沒想清楚", "我不確定要怎麼做".
+  Not for: existing options (→ think-tank), external research (→ survey), chosen approach/quick fix (→ dev-flow).
 ---
 
 # brainstorm — discover the design before any code exists

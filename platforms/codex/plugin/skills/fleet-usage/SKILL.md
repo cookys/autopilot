@@ -1,6 +1,8 @@
 ---
 name: fleet-usage
-description: How to wait for things and move big content with the fleet CLI. Use when waiting for a background process, build, test run or file to finish (instead of sleeping or polling), when sending large output (more than about 50 lines) or a file to another agent, or when the user mentions "fleet watch", "fleet upload", "fleet fetch", a blob sha, or "fleet receipt", or a decision answer (`decision_answer`, `fleet decision`).
+description: >
+  Use fleet CLI/MCP to wait on background jobs and transfer large outputs (>50 lines).
+  Use when: "fleet watch", "fleet upload", "fleet decision".
 ---
 
 # fleet-usage

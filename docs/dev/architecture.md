@@ -77,7 +77,7 @@ The three agents carry autopilot's **Three Red Lines** into the agent layer:
 2. **Fact-driven** — every claim cites `file_path:line_number`; "probably" / "likely" are violations
 3. **Exhaustiveness** — full checklists run; clean items explicitly listed; silent omission is a violation
 
-See [`agents/README.md`](../../agents/README.md) for dispatch boundary, unified Output Contract, enum grammar, and the "autopilot methodology / role / project-specific" layer cake.
+See [`docs/dev/agents-contract.md`](agents-contract.md) for dispatch boundary, unified Output Contract, enum grammar, and the "autopilot methodology / role / project-specific" layer cake.
 
 ---
 

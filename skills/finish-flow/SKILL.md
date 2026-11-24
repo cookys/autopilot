@@ -1,13 +1,9 @@
 ---
 name: finish-flow
 description: >
-  Closing checklist for dev-flow's `finish` node at every size (XS, S, M, L, XL; bug; urgent) — guarantees
-  no step in the closing sequence gets silently compressed or skipped. On invocation, creates size-keyed
-  sub-tasks via TaskCreate so each step is individually trackable. MANDATORY at the finish node of every
-  size (lite for XS–M, full for L/XL); for urgent work that was not high-risk it also runs the post-finish
-  code-review. Use when: finishing an L/XL project, closing an urgent fix, "time to merge", "wrap this up",
-  "跑完收尾", "收掉這個專案", "finish 開始". Not for: mid-phase work, starting new work
-  (→ dev-flow), authoring a plan doc (→ references/plan-template.md).
+  Mandatory size-keyed TaskCreate closing checklist for dev-flow's finish node (lite XS–M, full L/XL).
+  Use when: "time to merge", "跑完收尾", "wrap this up".
+  Not for: mid-phase work, new work (→ dev-flow), authoring plans (→ references/plan-template.md).
 ---
 
 # finish-flow — the `finish` node checklist

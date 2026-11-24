@@ -131,7 +131,7 @@ policy. This is a checklist receipt, not a new review generation.
 
 Read `### Handoff`; route by enum.
 
-**Scope note**: table = enums `autopilot:reviewer` emits. Global grammar (`agents/README.md`) also has `AUTOPILOT_PLANNER`, `PARALLEL_DISPATCH`, `SEQUENTIAL_DISPATCH` — other methodology agents only; quality-pipeline need not consume them here.
+**Scope note**: table = enums `autopilot:reviewer` emits. Global grammar (`docs/dev/agents-contract.md`) also has `AUTOPILOT_PLANNER`, `PARALLEL_DISPATCH`, `SEQUENTIAL_DISPATCH` — other methodology agents only; quality-pipeline need not consume them here.
 
 | Enum | quality-pipeline action |
 |------|------------------------|

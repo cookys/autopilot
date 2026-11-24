@@ -1,11 +1,9 @@
 ---
 name: survey
 description: >
-  Research what the industry does — dual-agent (researcher + skeptic) tech investigation. Use when:
-  "research X", "survey", "investigate options/tradeoffs", "what do others use", "industry standard
-  for X", "compare X vs Y vs Z", "I'm not sure which to pick", "業界怎麼做", "調研一下",
-  "別人怎麼處理的". Not for: strategic priority decisions (→ think-tank), brainstorming designs,
-  or creating implementation plans.
+  Dual-agent (researcher + skeptic) external tech investigation and option comparison.
+  Use when: "survey", "what do others use", "業界怎麼做".
+  Not for: strategic priority debate (→ think-tank), design brainstorm, plans.
 ---
 
 # Survey -- Technology Research

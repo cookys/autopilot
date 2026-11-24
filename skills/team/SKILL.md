@@ -1,6 +1,8 @@
 ---
 name: team
-description: Team allocation and dependency-aware parallelization — decide when to use teams, select roles, dispatch parallel work safely. Invoke for L/XL-size tasks to evaluate whether team dispatch reduces wall-clock time.
+description: >
+  Decide when to parallelize L/XL tasks, pick team roles, and dispatch safely by dependency.
+  Use when: sizing L/XL parallel work or role allocation.
 ---
 
 # Team Allocation

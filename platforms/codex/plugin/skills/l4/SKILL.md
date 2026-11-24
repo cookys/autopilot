@@ -1,12 +1,9 @@
 ---
 name: l4
 description: >
-  Terse CEO front-door — Level 4: dispatch ONE background, worktree-isolated sub-orchestrator
-  "foreman" that runs dev-flow unattended and returns a verdict; CEO context stays clean and the
-  authoritative qc verdict is held at depth 0. Use when: "/l4 <goal>", "L4 <goal>", you want a long
-  autonomous run offloaded off the main thread. Presets involvement=just-results, scope=Hold,
-  project red lines plus -x additions (override --mode / --expand / --solo). Not for: inline execution (→ /l3), hetero impl
-  engine (→ /l5).
+  Terse CEO front-door (Level 4): one background worktree foreman running dev-flow with depth-0 qc.
+  Use when: "/l4 <goal>", "L4 <goal>".
+  Not for: inline (→ /l3), hetero impl (→ /l5).
 ---
 
 <!-- AUTOPILOT_CODEX_LIFECYCLE_ADAPTER_V1 -->

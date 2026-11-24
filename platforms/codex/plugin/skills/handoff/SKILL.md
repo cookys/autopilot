@@ -1,11 +1,9 @@
 ---
 name: handoff
 description: >
-  Write a standardized mid-work handoff doc for session continuation, and resume from one.
-  Triggers: "寫 handoff", "寫 handover", "ctx 太滿", "context 快滿", "clear session 後繼續",
-  "write a handoff", "hand off to the next session", "接手上個 session", "resume from handoff".
-  Not-for: end-of-project closing (→ finish-flow), machine snapshot on /clear (→ the session-handoff
-  hook, enable via ~/.autopilot/config.json handoff_inject), compaction recovery (→ state-checkpoint hook).
+  Write or resume a standardized mid-work handoff doc for session continuation.
+  Use when: "寫 handoff", "context 快滿", "resume from handoff".
+  Not for: project closing (→ finish-flow), /clear snapshot (→ session-handoff hook), compaction (→ state-checkpoint).
 ---
 
 # handoff

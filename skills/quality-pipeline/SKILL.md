@@ -1,11 +1,9 @@
 ---
 name: quality-pipeline
 description: >
-  Run pre-commit or pre-merge quality checks: tests, completeness scan (no stubs/TODOs/mocks),
-  code review. Use when: "quality gate", "quality checks", "run tests before merge", "check for
-  stubs", "scan for completeness", "is this ready to commit?", "pre-merge review", "品質檢查",
-  "準備好可以 commit 了嗎", "跑一下檢查". Not for: writing new tests (→ TDD), debugging CI
-  failures, or receiving external review feedback.
+  Run pre-commit/pre-merge quality gates: tests, completeness scan, and code review.
+  Use when: "quality gate", "is this ready to commit?", "品質檢查".
+  Not for: writing tests (→ TDD), CI debugging, external review feedback.
 ---
 
 # Quality Pipeline (Unified Quality Gate)

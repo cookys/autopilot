@@ -1,11 +1,9 @@
 ---
 name: l3
 description: >
-  Terse CEO front-door — Level 3: full autonomy, depth-0 writes the brief and dispatches a hands agent (model: sonnet, with the Engine: header) inline on this thread, escalate only
-  at the DOA boundary. Use when: "/l3 <goal>", "L3 <goal>", you want the "全權處理 / get it done"
-  behavior as one command without the CEO startup Q&A. Presets involvement=just-results, scope=Hold,
-  project red lines plus -x additions (override --mode / --expand). Not for: offloading to a background foreman (→ /l4), hetero
-  impl engine (→ /l5), participatory planning (→ dev-flow), research-only (→ survey).
+  Terse CEO front-door (Level 3): full autonomy inline via sonnet hands, escalating only at DOA.
+  Use when: "/l3 <goal>", "L3 <goal>".
+  Not for: background foreman (→ /l4), hetero impl (→ /l5), planning (→ dev-flow), research (→ survey).
 ---
 
 # /l3 — CEO autonomy, inline

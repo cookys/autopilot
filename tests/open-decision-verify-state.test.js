@@ -113,14 +113,7 @@ function scopeFileOf(repo) {
 }
 
 const VERIFY_FAILED_CASES = [
-  {
-    name: 'verify exits 7',
-    fleetConfig: { verifyExit: 7 },
-  },
-  {
-    name: 'verify exits 1',
-    fleetConfig: { verifyExit: 1 },
-  },
+  // The `verify` subcommand exit codes (7/9/10/11/12/13) are covered by hooks/tests/open-decision-verify.test.sh; deliverAnswer only calls `send`.
   {
     name: 'send returns {ok:false}',
     fleetConfig: { sendStdout: JSON.stringify({ ok: false, error: 'courier_unreachable' }), sendExit: 0 },
@@ -135,7 +128,7 @@ const VERIFY_FAILED_CASES = [
   },
 ];
 
-for (const tc of VERIFY_FAILED_CASES) {
+VERIFY_FAILED_CASES.forEach((tc, idx) => {
   test(`T5b (1) verify_failed state machine: ${tc.name}`, () => {
     const { dir, repo, env } = setupSandbox(tc.fleetConfig);
     try {
@@ -143,8 +136,8 @@ for (const tc of VERIFY_FAILED_CASES) {
         'open',
         '--cwd', repo,
         '--category', 'goal',
-        '--title', `測試 verify_failed: ${tc.name}`,
-        '--question', `測試 verify_failed: ${tc.name}`,
+        '--title', `核實失敗 ${idx + 1}？`,
+        '--question', `第 ${idx + 1} 組核實失敗是否仍待處理？`,
         '--option', '繼續::照計畫',
         '--option', '暫停::先停',
         '--recommendation', '繼續',
@@ -186,7 +179,7 @@ for (const tc of VERIFY_FAILED_CASES) {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
-}
+});
 
 const REASK_FIXTURES = [
   {

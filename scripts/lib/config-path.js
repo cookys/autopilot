@@ -112,7 +112,7 @@ function applyPerModel(cfg, modelId) {
 function readContextBudget(opts) {
   const o = opts || {};
   const env = o.env || process.env;
-  const cfg = { t1: 100_000, t2: 150_000, t3: 0, explicitT3: false, gap: 50_000, mode: 'warn', explicitT1: false, explicitT2: false, envT1: false, envT2: false, perModel: [], t2PctBySeat: { pm: 20 }, t2HardBlock: true, liveWrite: true, step: 50_000, warnings: [] };
+  const cfg = { t1: 100_000, t2: 150_000, t3: 0, explicitT3: false, gap: 50_000, mode: 'warn', explicitT1: false, explicitT2: false, envT1: false, envT2: false, perModel: [], t2PctBySeat: { pm: 20 }, t2HardBlock: false, liveWrite: true, step: 50_000, warnings: [] };
   try {
     const user = JSON.parse(fs.readFileSync(configPath({ env, home: o.home }), 'utf8'));
     const cb = user && user.context_budget;
@@ -136,7 +136,7 @@ function readContextBudget(opts) {
           }
         }
       }
-      if (cb.t2_hard_block === false) cfg.t2HardBlock = false;
+      if (typeof cb.t2_hard_block === 'boolean') cfg.t2HardBlock = cb.t2_hard_block;
       else if (cb.t2_hard_block !== undefined && typeof cb.t2_hard_block !== 'boolean') {
         cfg.warnings.push(`context_budget t2_hard_block ${JSON.stringify(cb.t2_hard_block)} is not boolean, so it is ignored`);
       }

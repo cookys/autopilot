@@ -125,7 +125,7 @@ function main() {
       if (m !== null && m >= newestFireAt) { landed = p; break; }
     }
 
-    const hardBlock = cfg.t2HardBlock !== false && Object.hasOwn(cfg.t2PctBySeat || {}, resolveFleetSeat(payload));
+    const hardBlock = cfg.t2HardBlock === true && Object.hasOwn(cfg.t2PctBySeat || {}, resolveFleetSeat(payload));
     if (landed) {
       for (const t of pending) fires[t].done = true;
       fs.writeFileSync(stateFile, JSON.stringify(st));

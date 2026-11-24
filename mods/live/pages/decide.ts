@@ -1046,15 +1046,15 @@ function renderV74(ctx: DecideCtx): { body: Row[]; actions: Row[] } {
   const cards = v.decide
   const staleBanners = v74StaleBanners(ctx)
   if (cards === null) {
-    const decideErr = ((v as V74DecideTrace).decideError ?? (v as V74DecideTrace).errors?.decide ?? '').trim()
+    const decideErr = (v as V74DecideTrace).decideError?.trim() || (v as V74DecideTrace).errors?.decide?.trim() || ''
     const noSrcBody = decideErr !== ''
-      ? brokenRows(GLYPHS.state.failed + ' ' + t('v74.d.no_source') + '：' + decideErr, Math.max(8, cols))
+      ? brokenRows(GLYPHS.state.failed + ' ' + decideErr + '（fleet decision list）', Math.max(8, cols))
       : [brokenRow(GLYPHS.state.failed + ' ' + t('v74.d.no_source'))]
     // In v7.4 band box mode the obsolete `shell.on_band` pointer is dropped; non-box callers keep it for backward compatibility.
     const noSrcActions: Row[] = ctx.box === true ? [] : [[seg(t('shell.on_band'))]]
     return { body: [...staleBanners, ...noSrcBody], actions: noSrcActions }
   }
-  if (cards.length === 0) return { body: [...staleBanners, [seg(GLYPHS.state.pending + ' '), dimSeg(t('page.decide.none_cards'))]], actions: [] }
+  if (cards.length === 0) return { body: [...staleBanners, [seg(GLYPHS.state.pending + ' '), dimSeg(t('v74.d.empty'))]], actions: [] }
   const dn = ctx.decide
   const nav: DecideNav = { ...NO_NAV, ...(dn ?? {}), cursor: dn?.cursor ?? v.nav.cursor, picks: dn?.picks ?? v.nav.picks, notes: dn?.notes ?? v.nav.notes, textMode: dn?.textMode ?? v.nav.noteMode }
   const cursor = Math.max(0, Math.min(cards.length - 1, nav.cursor))

@@ -909,6 +909,7 @@
   "v74.d.result": "sent {n} · {left} still open",
   "v74.d.preview": "Will send {n} · y confirms send",
   "v74.d.no_source": "decision source missing (fleet decision list)",
+  "v74.d.empty": "No pending decision cards",
   "v74.d.todo_head": "todo {k}/{n}",
   "v74.d.todo_due": "due {date}",
   "v74.d.todo_no_due": "no due date",

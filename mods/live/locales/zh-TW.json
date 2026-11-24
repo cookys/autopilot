@@ -909,6 +909,7 @@
   "v74.d.result": "已送出 {n} 張 · 尚有 {left} 張待決",
   "v74.d.preview": "將送出 {n} 張 · y 確認送出",
   "v74.d.no_source": "沒有待決來源（fleet decision list）",
+  "v74.d.empty": "目前沒有待決卡",
   "v74.d.todo_head": "待辦 {k}／{n}",
   "v74.d.todo_due": "到期 {date}",
   "v74.d.todo_no_due": "無期限",

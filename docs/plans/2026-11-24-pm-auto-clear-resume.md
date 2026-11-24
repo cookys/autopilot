@@ -36,10 +36,10 @@ PM 席在長對話接近 200k tokens 時，依賴操作員手動 `/clear` 與貼
 
 ## 2. OKR / KRs（上線條件，逐條可驗收）
 
-- **KR1（觸發不靠操作員按）**：PM 席 context 達設定門檻（約 200k）時，系統在無任何操作員鍵盤輸入下，於 1 個工作週期內自動完成 handoff 寫入並觸發 `/clear`。
+- **KR1（觸發不靠操作員按）**：PM 席 context 達設定門檻時，系統在無任何操作員鍵盤輸入下完成閉合接線：`hooks/context-budget.js` 記錄 `landFire` → `hooks/context-land-gate.js`（Stop）在 `pm` 席且做法二開關開啟時呼叫 handoff 產生腳本 → 注入 `/clear` → `fleet pm resume` + cron 重掛；handoff 檔 mtime 與 `/clear` 注入的時間差不超過 `N` 分鐘（`N` 為待定參數，「待查」）。
 - **KR2（handoff 帶操作員最近的話與未完成事項）**：自動產出的 handoff 檔必含「操作員最近的話」（原話或可追溯引用）與「未完成事項」清單，且 `context-land-gate` 驗收通過（mtime ≥ `landFire.at`）。
 - **KR3（cron 重掛）**：`/clear` 完成並執行 `fleet pm resume` 後，PM 席原掛載的 cron 任務已自動恢復運作，無須人工重建。
-- **KR4（200k 真 `/clear` 實測 ≤ 95k 才切預設）**：在下次 PM 席實戰達 200k 時執行一次真 `/clear`，清完後第一回合 context 用量 ≤ 95k tokens 才將做法二切換為預設；若 > 95k 或任一環節失敗，維持做法一為預設。
+- **KR4（200k 真 `/clear` 實測 ≤ 95k 才切預設）**：在預載縮減完成後，於下次 PM 席實戰達 200k 時執行一次真 `/clear`，清完後第一回合 context 用量（與目前基準 136,747 tokens 比較）≤ 95k tokens 才將做法二切換為預設；若 > 95k 或任一環節失敗，維持做法一為預設。95k 與 136,747 均採同一量測來源：讀 transcript 的 `message.usage` 第一則 assistant 回合的 `input` 加 `cache` 總和（「待查」確認 synthesis 當時是否使用同一口徑；若不同則須補換算）。
 
 ---
 
@@ -73,6 +73,16 @@ PM 席在長對話接近 200k tokens 時，依賴操作員手動 `/clear` 與貼
 
 ## 4. Phases（≤ M 子單切分，每單含真實使用證據與負控制）
 
+### 依賴與獨立上線狀態
+
+| Phase | 依賴條件 | 可獨立上線狀態 |
+|---|---|---|
+| Phase 1 | 無（僅依既有 transcript / handoff 格式） | **可獨立上線**：單獨上線即可改善做法一的 handoff 品質（自動補齊操作員最近的話與未完成事項） |
+| Phase 2 | 依賴 Phase 1 的 handoff 產生腳本與欄位 | **可在現行 260k 門檻試跑**：以開關關閉（預設）或受控試跑驗證接線，不切預設 |
+| Phase 3 | 依賴 Phase 2 接線完成，且**依賴預載縮減前置條件**（基準首回合低於 95k 合理範圍） | **條件達標後才排實測**：通過 KR4 後才可將做法二切換為預設 |
+
+> **呼叫鏈（Phase 2 閉合）**：`context-budget`（記 `landFire`）→ `context-land-gate`（Stop，在 `pm` 席且做法二開關開啟時呼叫 handoff 產生腳本）→ handoff 腳本 → `/clear` 注入 → `pm resume`（`fleet pm resume` + cron 重掛）。
+
 ### Phase 1 — 盤點與腳本化 handoff（含操作員最近的話＋未完成事項）
 - **Size**: `S`
 - **具體步驟**:
@@ -96,6 +106,7 @@ PM 席在長對話接近 200k tokens 時，依賴操作員手動 `/clear` 與貼
 
 ### Phase 3 — 200k 真 `/clear` 實測與預設切換閘
 - **Size**: `S`
+- **前置條件（與 [synthesis.md](../../docs/plans/evidence/2026-11-24-pm-mech-judgment/synthesis.md) 第 93 行排序一致）**: 須先查清 72.7k 預載、完成預載縮減使基準首回合低於 95k 的合理範圍，並完成 resume 驗收後，才排入 200k 門檻實測。在此之前，Phase 1–2 先在 260k 現行門檻上以開關關閉或試跑方式驗證接線，不切預設。
 - **具體步驟**:
   1. 僅在 PM 席開啟做法二實驗開關，等待下次 PM 席自然運作達約 200k tokens。
   2. 觀察自動 handoff、`/clear`、`fleet pm resume` 與 cron 重掛全程執行。
@@ -121,12 +132,12 @@ PM 席在長對話接近 200k tokens 時，依賴操作員手動 `/clear` 與貼
 
 ## 6. Risks + inversion（什麼會保證失敗？怎麼防？）
 
-| 風險 | 具體影響 | 緩解 / 防呆 |
-|---|---|---|
-| **`/clear` 後遺失狀態** | `/clear` 會清空對話記憶；若 handoff 漏掉操作員最近的話、未決事項或 `fleet pm resume` 未載入旁側大腦，PM 席會失憶或重複問操作員 | Phase 1 強制由腳本寫入「操作員最近的話＋未完成事項」；Phase 2 強制 `/clear` 後接 `fleet pm resume`；未完成前不切預設 |
-| **cron 重掛失敗** | `/clear` 後若 cron 未重掛，PM 席的週期巡查或續跑會靜默停擺 | 在 `fleet pm resume` 後加一步 cron 狀態驗證；若重掛失敗，發送告警給操作員並退回做法一 |
-| **清完第一回合仍 > 95k** | 目前壓縮後首回合約 136.7k（[synthesis.md](../../docs/plans/evidence/2026-11-24-pm-mech-judgment/synthesis.md) §一），若預載未先縮減，`/clear` 後仍可能超過 95k | KR4 硬性規定 ≤ 95k 才切預設，沒過就留做法一 |
-| **誤觸發到非 PM 席** | 其他席位被誤 `/clear` 導致工作遺失 | 負控制限定僅 `pm` 席且顯式開啟做法二開關才生效 |
+| 風險 | 具體影響 | 緩解 / 防呆 | 可執行且不改程式的恢復步驟 |
+|---|---|---|---|
+| **`/clear` 後遺失狀態** | `/clear` 會清空對話記憶；若 handoff 漏掉操作員最近的話、未決事項或 `fleet pm resume` 未載入旁側大腦，PM 席會失憶或重複問操作員 | Phase 1 強制由腳本寫入「操作員最近的話＋未完成事項」；Phase 2 強制 `/clear` 後接 `fleet pm resume`；未完成前不切預設 | 讀取該席 handoff 檔（`$XDG_RUNTIME_DIR/autopilot/handoff/<sid>.md`）並執行 `fleet pm resume` 補回旁側大腦狀態（關閉開關僅止血後續觸發，不能恢復已遺失狀態） |
+| **cron 重掛失敗** | `/clear` 後若 cron 未重掛，PM 席的週期巡查或續跑會靜默停擺 | 在 `fleet pm resume` 後加一步 cron 狀態驗證；若重掛失敗，發送告警給操作員並退回做法一 | 由 PM 席執行手動重掛指令（「待查」，列為 Phase 2 前置查證項），並以 cron 清單/狀態查詢指令（「待查」）驗證任務已恢復排程 |
+| **清完第一回合仍 > 95k** | 目前壓縮後首回合約 136.7k（[synthesis.md](../../docs/plans/evidence/2026-11-24-pm-mech-judgment/synthesis.md) §一），若預載未先縮減，`/clear` 後仍可能超過 95k | KR4 硬性規定 ≤ 95k 才切預設，沒過就留做法一 | 將做法二開關切回關閉（維持做法一為預設），不需改程式 |
+| **誤觸發到非 PM 席** | 其他席位被誤 `/clear` 導致工作遺失 | 負控制限定僅 `pm` 席且顯式開啟做法二開關才生效 | 先關閉做法二開關止血，再從該席對應的 handoff 檔（`$XDG_RUNTIME_DIR/autopilot/handoff/<sid>.md`）讀取並恢復工作狀態 |
 
 ---
 

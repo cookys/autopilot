@@ -756,8 +756,11 @@ function run() {
         require('../scripts/lib/compaction-handoff.js').recordCoverage({ sessionId: payload.session_id, text: from < 0 ? '' : context.slice(from, to < 0 ? undefined : to) });
       } catch { /* measurement only */ }
     }
+    // fleet pm resume: forced, after the size cut so a long context never drops it; every source it fires on.
+    let resumeBlock = '';
+    try { resumeBlock = require('./lib/pm-resume.js').buildResumeBlock(payload); } catch (e) { resumeBlock = `\n\n[fleet pm resume] resume 讀不到：${String(e && e.message || e).slice(0, 120)}`; }
     const output = buildSessionStartOutput({
-      context,
+      context: context + resumeBlock,
       claudePluginRoot: process.env.CLAUDE_PLUGIN_ROOT,
     });
     process.stdout.write(JSON.stringify(output, null, 2).replace(/\r\n/g, '\n') + '\n');

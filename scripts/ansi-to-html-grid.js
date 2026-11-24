@@ -54,8 +54,38 @@ function render(input) {
   if (input.endsWith('\n')) rows.pop();
   return '<!doctype html><meta charset="utf-8"><style>body{margin:0;background:#1e1e1e}.grid{font-family:monospace;white-space:pre;line-height:1.25}.row{height:1.25em}.row span{display:inline-block;text-align:center}</style><div class="grid">'+rows.map(row=>'<div class="row">'+row+'</div>').join('')+'</div>\n';
 }
+function gate(inputText, htmlText) {
+  const failures=[];
+  const colorSequences=[...inputText.matchAll(/\x1b\[([0-9;]*)m/g)].filter(m => m[1].split(';').some(x => /^(?:3[0-8]|4[0-8]|9[0-7]|10[0-7])$/.test(x)));
+  if (!colorSequences.length) failures.push({check:'color',rc:3,message:'capture 沒有色碼；請用 tmux capture-pane -e -p 重新擷取'});
+  const lines=inputText.replace(/\x1b\[[0-9;]*m/g,'').split('\n');
+  if (inputText.endsWith('\n')) lines.pop();
+  const rows=[...htmlText.matchAll(/<div class="row">([\s\S]*?)<\/div>/g)];
+  let borderWidth;
+  const independentWidth=line => [...line].reduce((sum,ch) => {
+    const c=ch.codePointAt(0);
+    return sum + ((c>=0x4e00&&c<=0x9fff)||(c>=0x3000&&c<=0x303f)||(c>=0x3040&&c<=0x30ff)||(c>=0xff00&&c<=0xff60)||(c>=0xffe0&&c<=0xffe6)||(c>=0xac00&&c<=0xd7a3) ? 2 : 1);
+  },0);
+  for (let i=0;i<Math.max(lines.length,rows.length);i++) {
+    const line=lines[i] ?? '';
+    const actual=independentWidth(line);
+    const htmlWidth=rows[i] ? [...rows[i][1].matchAll(/<span\b[^>]*\bwidth:(\d+)ch[^>]*>/g)].reduce((n,m)=>n+Number(m[1]),0) : -1;
+    let expected=htmlWidth;
+    if (/[│┃║┐┘┤┓┛┫╮╯╗╝]\s*$/.test(line)) {
+      const right=independentWidth(line.trimEnd());
+      if (borderWidth===undefined) borderWidth=right;
+      else if (right!==borderWidth) { failures.push({check:'width',rc:4,message:`第 ${i+1} 行寬度不符：${right} / ${borderWidth}`}); break; }
+    }
+    if (actual!==expected || !rows[i] || i>=lines.length) { failures.push({check:'width',rc:4,message:`第 ${i+1} 行寬度不符：${actual} / ${expected}`}); break; }
+  }
+  const nOut=[...htmlText.matchAll(/<span\b[^>]*style="[^"]*(?:^|[;"\s])(?:color|background|font-weight)\s*:/g)].length;
+  // L-00-base: 61 color sequences produce 4157 styled spans; 0.5 tolerates
+  // consolidation while still detecting substantial loss of styled output.
+  if (nOut < Math.max(1, 0.5*colorSequences.length)) failures.push({check:'spans',rc:5,message:`色彩 span 數不足：${nOut} / ${colorSequences.length}`});
+  return {ok:failures.length===0,failures};
+}
 if (require.main===module) {
   if (process.argv.length>3) { console.error('Usage: ansi-to-html-grid.js [input-file]'); process.exitCode=2; }
-  else { try { process.stdout.write(render(fs.readFileSync(process.argv[2] || 0,'utf8'))); } catch (error) { console.error(error.message); process.exitCode=1; } }
+  else { try { const input=fs.readFileSync(process.argv[2] || 0,'utf8'); const html=render(input); const result=gate(input,html); if (result.ok) process.stdout.write(html); else { for (const failure of result.failures) console.error(failure.message); process.exitCode=result.failures[0].rc; } } catch (error) { console.error(error.message); process.exitCode=1; } }
 }
-module.exports={render};
+module.exports={render,gate};

@@ -446,3 +446,20 @@ test('pane boxed statusRow: last body row is visible when no statusRow is drawn;
   expect(withStatus.length).toBe(6)
   expect(withStatus[0]).toContain('讀取失敗：pm rpc fail')
 })
+
+test('askRows: the band sits directly above the action rows, the height stays fixed, and a short surface drops it', () => {
+  const page = withBody(PAGES[0], 30, 2)
+  const ask: Row[] = [line('我問：1 未答'), line('第二列')]
+  for (const size of [{ cols: 120, rows: 30 }, { cols: 80, rows: 24 }]) {
+    const plain = frameRows(page, ctxOf(size), {})
+    const withAsk = frameRows(page, ctxOf(size), { askRows: ask })
+    expect(withAsk.length).toBe(size.rows)
+    expect(plain.length).toBe(size.rows)
+    const at = withAsk.findIndex(r => text(r).startsWith('我問：1 未答'))
+    expect(at).toBeGreaterThan(0)
+    expect(text(withAsk[at + 1])).toBe('第二列')
+  }
+  const tiny = frameRows(page, ctxOf({ cols: 80, rows: 12 }), { askRows: ask })
+  expect(tiny.some(r => text(r).startsWith('我問：'))).toBe(false)
+  expect(tiny.length).toBe(12)
+})

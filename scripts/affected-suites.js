@@ -1849,7 +1849,9 @@ async function main(argv) {
     return 0;
   }
   if (a.run && !process.env.AUTOPILOT_ALLOW_HAND_RUN) {
-    const hand = require('./lib/hand-ancestor').handAncestor();
+    let handAncestor = null;
+    try { ({ handAncestor } = require('./lib/hand-ancestor')); } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; } // test copies of this file live without lib/
+    const hand = handAncestor ? handAncestor() : null;
     if (hand) {
       process.stderr.write(`affected-suites: --run refused, started by a dispatched hand (pid ${hand.pid}: ${hand.cmd}). Hands never run suites; the rail verifies afterwards.\n`);
       return 2;

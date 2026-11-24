@@ -243,3 +243,12 @@ test("T5b(d): card-triage CLI refuses a store file (not one card) with a non-zer
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("T5b(e): the real hand-closed card shape (dispatched_msg_id + closed_via fleet_message + stale dispatch_error) is delivered", () => {
+  const out = triage({
+    card: { id: "d-711f61af", status: "closed", closed_via: "fleet_message", dispatched_msg_id: "01M874RBEMFYTE53F2VRDTZY7H", dispatch_error: "fleet send exit 1" },
+    repo: "/tmp/x",
+  });
+  assert.equal(out.delivery, "delivered");
+  assert.equal(out.ok, true);
+});

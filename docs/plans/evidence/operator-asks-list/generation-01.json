@@ -1,0 +1,436 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "01M85TGX639NV8DHSJ391JD3XW",
+  "logical_plan_id": "operator-asks-list",
+  "session_id": "loop-operator-asks-list",
+  "session_key": "9c170cce3e05056dc8556c3c4a4149ca58a0e3c46a4c28d4802fedf36bb3be4c",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": null,
+  "terminal": true,
+  "policy_reason": "required_seat_transport_exhausted",
+  "rubric_sha256": "74e4c0c11f8c3cd8da2fc6f80d2135229f2b4e4e567e9fbcf0b4449dd82c47fa",
+  "manifest_sha256": "92af26277306c08b0316f15757aefcbce8535da0ffd539d9893e9d8dc6cab274",
+  "context_sha256": null,
+  "plan_sha256": "f71034119ffc2286b2d291b2870382caad0976384aa6dd3d39108fa20423c217",
+  "plan_path": "docs/plans/2026-11-24-operator-asks-list.md",
+  "plan_git_blob_sha": "bd474d894b646657f3d57711a8601c100598e314",
+  "repo_head_sha": "fe7413a7bf4e96071feeea0bc676baccb0431541",
+  "plan_dirty_vs_head": false,
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "transport_exhausted",
+  "attempts": [
+    {
+      "seat_id": "terra_contract",
+      "target_id": "terra_contract",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-6.1-terra",
+          "operation": "plan-review",
+          "request_digest": "96f056ccb8f95468def6207659c83c0e231820f0bfc6781999a1bb67d9f50f1c"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 3,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "50e1cd625b8d33c44a4a6f45ccb333d05bdaf24d8066309cda64763d42690fea",
+          "stderr_sha256": "2ea27b43fc7481d98dcd55e107ac5ce8f1a3c3128f69a904a5b15f66cf6c8189"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "<tmp>/dispatch-author-codex-WvbTll/stdout",
+          "digest": "50e1cd625b8d33c44a4a6f45ccb333d05bdaf24d8066309cda64763d42690fea"
+        },
+        "receipt_digest": "a2d44aa26cefe04ef1f5dec0a394d5246dbc13de1d1a2ed96d2eb961bb0d8d60"
+      },
+      "transport_status": "exit_failure",
+      "usage": null,
+      "duration_ms": 42524,
+      "error": "codex transport chrome frame missing",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "available",
+      "unratified": {
+        "payload": {
+          "verdict": "STOP",
+          "findings": [
+            {
+              "rubric_id": "R1",
+              "class": "decision-now",
+              "severity": "blocking",
+              "affected_surface": "Grouping identity and repeat-answer injection",
+              "claim": "The plan does not define a safe, durable identity or lifecycle for matching repeated questions.",
+              "evidence": "Section 3 proposes a task ULID, normalized question prefix, or supersede relation, but specifies no prefix matching rule, ambiguity handling, transition when a task is bound, or treatment of multiple questions on one task.",
+              "evidence_reference": "Plan sections 3.1 and 5; T2",
+              "repair": "Define stable group and occurrence IDs, conservative matching and ambiguity rules, task-binding and supersede transitions, and tests for unrelated questions sharing a prefix or task.",
+              "blocks_next_slice_or_immediate_integrity": true,
+              "cannot_defer_to_spike": true,
+              "failure_scenario": "An operator asks two different questions about the same task; both receive the task ULID as group_key, so the second question is merged with the first and its previous answer is injected as if relevant."
+            },
+            {
+              "rubric_id": "R2",
+              "class": "decision-now",
+              "severity": "blocking",
+              "affected_surface": "Queued input and reply attribution",
+              "claim": "The plan does not establish a reachable queued-input event or an unambiguous mapping from each Stop to its ask.",
+              "evidence": "T1 requires a tool-only Stop and an injected-turn negative control, but does not test multiple queued asks, session isolation, or an event proving queued_command reaches UserPromptSubmit. The existing replyGate selects the newest ask in the shared log, and reply rows have no ask_id. The current replyBody already falls back to assistant transcript text.",
+              "evidence_reference": "Plan section 3.3 and T1; hooks/askpm-log.js replyGate, replyBody, writeReply and onStop",
+              "repair": "Specify and verify actual event sequences, persist session and turn or occurrence identity on asks and replies, define behavior for multiple pending asks and missing evidence, and add interleaving and negative-control tests.",
+              "blocks_next_slice_or_immediate_integrity": true,
+              "cannot_defer_to_spike": true,
+              "failure_scenario": "Two PM sessions share the state directory; session B writes an ask after session A, then A stops with an unreadable transcript. The newest shared ask is B's, so A's answer can be recorded against the wrong ask."
+            },
+            {
+              "rubric_id": "R3",
+              "class": "decision-now",
+              "severity": "blocking",
+              "affected_surface": "Automatic progress and closure",
+              "claim": "The proposed close trigger treats the mere presence of an identifier or URL as completion evidence and does not identify which ask the evidence resolves.",
+              "evidence": "Section 3.2 closes on a reply containing a commit SHA, card ID, or URL, and T3 accepts a card ID while testing only text without evidence. The plan also does not specify how a dispatch invocation obtains the correct ask_id.",
+              "evidence_reference": "Plan section 3.2 and T3; scripts/pm-ask.js close and progress commands",
+              "repair": "Require an explicit, ask-linked completion signal with validated outcome and define how dispatch binds an ask to a task; leave ambiguous references open. Test unrelated links, references to pending work, and multiple asks.",
+              "blocks_next_slice_or_immediate_integrity": true,
+              "cannot_defer_to_spike": true,
+              "failure_scenario": "The assistant replies that card d-12345678 is still being investigated; the proposed identifier match closes the ask even though the work is unfinished."
+            },
+            {
+              "rubric_id": "R4",
+              "class": "decision-now",
+              "severity": "blocking",
+              "affected_surface": "askpm event and view contract",
+              "claim": "The proposed data model omits event schemas, state precedence, closed-item visibility, timestamp semantics, and migration rules for existing rows.",
+              "evidence": "The current parser retains only ask and reply fields and pairs replies by position; legacy rows can lack ask_id, while pm-ask ignores rows before the first ask_id. The plan introduces grouped replies and dispositions without defining how those records are read together or how waiting maps to the new states.",
+              "evidence_reference": "Plan section 2 and T4; mods/live/askpm.ts parseAskpm and askpmView; scripts/pm-ask.js loadState",
+              "repair": "Specify versioned event fields and references, folding and status transition rules, displayed timestamp selection, closed-item behavior, and deterministic legacy-row handling; add compatibility fixtures.",
+              "blocks_next_slice_or_immediate_integrity": true,
+              "cannot_defer_to_spike": true,
+              "failure_scenario": "A legacy ask and positional reply are followed by a newly grouped ask; an ID-only reader cannot associate the legacy reply and displays an answered question as unanswered or drops it."
+            },
+            {
+              "rubric_id": "R5",
+              "class": "decision-now",
+              "severity": "blocking",
+              "affected_surface": "Codeforge, web, Alfred and fleet integration",
+              "claim": "The shared interface and external dependencies are requirements rather than an implementable, verified integration contract.",
+              "evidence": "The plan names askpmLines, which returns pane lines, while also calling for a web and Alfred shared interface; it leaves fleet origin filtering as an unconfirmed requirement and T5 as a field-list confirmation, with no producer, transport, ownership, availability or fallback contract.",
+              "evidence_reference": "Plan section 3.4 and tasks T4–T5; mods/live/askpm.ts askpmLines",
+              "repair": "Define the shared data API, producer and consumers, ownership and versioning, fleet query source and join semantics, dependency acceptance, and a fallback if external capabilities are unavailable; verify with contract fixtures or an integration test.",
+              "blocks_next_slice_or_immediate_integrity": true,
+              "cannot_defer_to_spike": true,
+              "failure_scenario": "Fleet does not expose an origin filter and the pane-line renderer is unavailable to Alfred; T4 cannot produce the promised shared list or merge operator tasks."
+            },
+            {
+              "rubric_id": "R6",
+              "class": "decision-now",
+              "severity": "non-blocking",
+              "affected_surface": "Task acceptance and dependencies",
+              "claim": "The task table does not cover several proposed behaviors, including repeat-answer injection, queued-input attribution, and safe automatic closure.",
+              "evidence": "T2 tests grouping counts only; T1 lacks a queued-input acceptance case; T3 considers any matching card ID sufficient. No task tests injected answer content or timestamp.",
+              "evidence_reference": "Plan sections 3.1–3.3 and tasks T1–T3",
+              "repair": "Assign each behavior to a task with explicit dependencies and positive and negative end-to-end acceptance cases.",
+              "blocks_next_slice_or_immediate_integrity": false,
+              "cannot_defer_to_spike": false,
+              "failure_scenario": ""
+            },
+            {
+              "rubric_id": "R7",
+              "class": "decision-now",
+              "severity": "non-blocking",
+              "affected_surface": "One-week outcome measurement",
+              "claim": "The outcome target and measurement method do not establish a decision rule for repeat-rate improvement or a comparable reply-coverage denominator.",
+              "evidence": "The plan says repeat rate should fall noticeably and reply coverage reach 90%, but does not specify the repeat-rate target, eligible population, sampling, attribution, exclusions, or handling of incomplete and grouped asks.",
+              "evidence_reference": "Plan sections 1 and 5",
+              "repair": "Define a numeric repeat-rate target, cohort and denominators, reproducible classification method, observation window, and rollout decision criteria.",
+              "blocks_next_slice_or_immediate_integrity": false,
+              "cannot_defer_to_spike": false,
+              "failure_scenario": ""
+            },
+            {
+              "rubric_id": "R8",
+              "class": "decision-now",
+              "severity": "blocking",
+              "affected_surface": "Persistence, concurrent updates and reply resurfacing",
+              "claim": "The plan does not bound transcript reads in bytes or define atomic grouping updates, privacy controls, or the scope in which prior replies may be resurfaced.",
+              "evidence": "The risk section says only to limit tail line count; the existing hook reads entire transcripts and uses a shared account state file. Its append lock protects an individual append, while the plan does not define an atomic read-modify-write operation for counts and group selection.",
+              "evidence_reference": "Plan section 5; hooks/askpm-log.js append, transcriptMatchesAsk and replyBody",
+              "repair": "Specify byte and line limits with safe boundary behavior, lock or transactional semantics for grouping and attribution, retention and access controls, and explicit session or operator authorization for resurfacing replies; test concurrent writes and cross-session isolation.",
+              "blocks_next_slice_or_immediate_integrity": true,
+              "cannot_defer_to_spike": true,
+              "failure_scenario": "Two sessions concurrently read the same group count and append updates based on that count, losing an increment; a shared group lookup can also inject one session's sensitive prior reply into another session."
+            }
+          ]
+        },
+        "parser_status": "strict",
+        "attempt": 1,
+        "target_id": "terra_contract",
+        "family": "openai",
+        "request_digest": "96f056ccb8f95468def6207659c83c0e231820f0bfc6781999a1bb67d9f50f1c",
+        "raw_digest": "50e1cd625b8d33c44a4a6f45ccb333d05bdaf24d8066309cda64763d42690fea"
+      }
+    },
+    {
+      "seat_id": "terra_contract",
+      "target_id": "terra_contract",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-6.1-terra",
+          "operation": "plan-review",
+          "request_digest": "83e279be436104d82fc0bd9df79683e5a7a5b1df4b944f120ac45eed190a5641"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 3,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "210eee44a2a94a170f06c4bbcbbc21bc4902ec7dc24f2decc3638a47eef0a29f",
+          "stderr_sha256": "989bccfb6f5d1d03746f52d92af6e715c1de750903e5d47db37471e8d73497d8"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "<tmp>/dispatch-author-codex-611Yo5/stdout",
+          "digest": "210eee44a2a94a170f06c4bbcbbc21bc4902ec7dc24f2decc3638a47eef0a29f"
+        },
+        "receipt_digest": "c3ce6b2561c837c7385f9d7c3131a0474bffdafdde6208bc87d87911ed30a844"
+      },
+      "transport_status": "exit_failure",
+      "usage": null,
+      "duration_ms": 45907,
+      "error": "codex transport chrome frame missing",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "available",
+      "unratified": {
+        "payload": {
+          "verdict": "STOP",
+          "findings": [
+            {
+              "rubric_id": "R1",
+              "class": "decision-now",
+              "severity": "blocking",
+              "affected_surface": "Question grouping and repeat-answer injection",
+              "claim": "The proposed identity can merge unrelated questions and does not define how an unbound group acquires a task identity or when a completed question starts a new lifecycle.",
+              "evidence": "Section 3 uses a fleet task ULID as the preferred group key and a normalized question prefix or supersede relation otherwise, without defining collision handling, task binding, or reopening rules.",
+              "evidence_reference": "Plan section 3, gap 1",
+              "repair": "Define conservative identity and binding rules, including distinct questions under one task, ambiguous unbound matches, explicit supersession, and repeats after closure; test each case.",
+              "blocks_next_slice_or_immediate_integrity": true,
+              "cannot_defer_to_spike": true,
+              "failure_scenario": "Two different questions about the same fleet task receive the same task-based group key, so the second question displays the first question's answer and disappears as a separate ask."
+            },
+            {
+              "rubric_id": "R2",
+              "class": "decision-now",
+              "severity": "blocking",
+              "affected_surface": "Queued input and reply attribution",
+              "claim": "The plan does not specify a reachable event and unambiguous attribution protocol for multiple pending asks, and its proposed assistant-text fallback already exists.",
+              "evidence": "The existing hook scans backward for the last assistant text within the turn and gates replies against the latest real user text; its reply rows do not carry an ask ID. The plan says to preserve an unresolved ask ID but does not define how queued input is observed or how a later Stop selects among pending asks.",
+              "evidence_reference": "hooks/askpm-log.js:161,177,216,257,270; plan section 3, gap 3 and T1",
+              "repair": "Specify and verify the actual queued-input event path, session and turn correlation, explicit reply-to-ask IDs, and behavior when attribution is ambiguous; add interleaved-session, queued-ask, injected-turn, and tool-only negative controls.",
+              "blocks_next_slice_or_immediate_integrity": true,
+              "cannot_defer_to_spike": true,
+              "failure_scenario": "An operator queues a second question while the first is running, and the next Stop records the first question's answer against the second question because the newest ask is treated as the open ask."
+            },
+            {
+              "rubric_id": "R3",
+              "class": "decision-now",
+              "severity": "blocking",
+              "affected_surface": "Automatic progress and closure",
+              "claim": "A reference-shaped token in a reply does not establish that the referenced work completed the correct ask, and the dispatch integration does not identify which ask owns a newly created task.",
+              "evidence": "The plan automatically closes on a commit SHA, card ID, or URL and progresses an ask when a dispatch creates or associates a task; its negative control covers only text with no evidence-shaped token.",
+              "evidence_reference": "Plan section 3, gap 2 and T3; scripts/pm-ask.js:157",
+              "repair": "Require explicit ask-to-task association and a completion signal tied to that ask, with a safe unresolved state when attribution or completion is uncertain; test unrelated references, examples, and tasks that are still active.",
+              "blocks_next_slice_or_immediate_integrity": true,
+              "cannot_defer_to_spike": true,
+              "failure_scenario": "A reply says that an existing card d-12345678 is still being investigated, and the proposed token match closes the ask even though the work remains unfinished."
+            },
+            {
+              "rubric_id": "R4",
+              "class": "decision-now",
+              "severity": "blocking",
+              "affected_surface": "Event schema, status projection, and legacy data",
+              "claim": "The plan does not define a compatible event and projection contract for IDs, counts, dispositions, timestamps, or preexisting records.",
+              "evidence": "Existing reply records lack ask IDs, the view associates replies by their position between asks and supports waiting, while the CLI ignores legacy asks before the first ask ID and treats progress as disposed. The plan introduces in_progress and close without defining their precedence, visibility, or migration.",
+              "evidence_reference": "mods/live/askpm.ts:19,66; hooks/askpm-log.js:270; scripts/pm-ask.js:59,79; plan section 2",
+              "repair": "Specify versioned event fields and association rules, state transitions and precedence, update-time semantics, close visibility, and deterministic handling of legacy asks, replies, waiting markers, and dispositions.",
+              "blocks_next_slice_or_immediate_integrity": true,
+              "cannot_defer_to_spike": true,
+              "failure_scenario": "A historical reply without an ask ID is replayed after grouped asks are introduced and is assigned to the wrong group or omitted, changing an answered question to unanswered."
+            },
+            {
+              "rubric_id": "R5",
+              "class": "decision-now",
+              "severity": "blocking",
+              "affected_surface": "Codeforge, fleet, web, and Alfred integration",
+              "claim": "The shared interface and external dependencies are not concrete enough to deliver the proposed view or verify its availability.",
+              "evidence": "The plan explicitly says the fleet origin field contract was not found, requests a filter without an owner or implementation dependency, and names askpmLines as the interface even though it returns pane-specific lines using a UI context; web and Alfred have no specified transport or consumer.",
+              "evidence_reference": "Plan section 3, gap 4 and T4–T5; mods/live/askpm.ts:92",
+              "repair": "Define the shared data schema, producer, transport, consumers, ownership, availability and fallback behavior, and acceptance evidence from codeforge and fleet; gate rollout on the required external capability or explicitly scope it out.",
+              "blocks_next_slice_or_immediate_integrity": true,
+              "cannot_defer_to_spike": true,
+              "failure_scenario": "Fleet does not implement the requested origin filter, so the view cannot retrieve operator-origin tasks and the advertised merged list omits them."
+            },
+            {
+              "rubric_id": "R6",
+              "class": "decision-now",
+              "severity": "blocking",
+              "affected_surface": "Task breakdown and acceptance",
+              "claim": "The tasks do not assign or verify repeat-answer injection and omit essential attribution and false-closure cases.",
+              "evidence": "Section 3 promises additionalContext injection on repeated questions, but T1–T5 contain no implementation or acceptance test for it; T1 tests only a tool-only Stop and an injected-turn negative control, while T3 accepts a card-shaped token as sufficient closure evidence.",
+              "evidence_reference": "Plan section 3, gap 1; section 4, T1–T5",
+              "repair": "Assign injection and end-to-end verification to a task, including correct prior answer and timestamp, no injection for unrelated or unanswered asks, queued replies, and evidence unrelated to completion.",
+              "blocks_next_slice_or_immediate_integrity": true,
+              "cannot_defer_to_spike": true,
+              "failure_scenario": "All listed task acceptance tests pass while no repeat-answer injection is implemented, leaving the promised behavior absent at rollout."
+            },
+            {
+              "rubric_id": "R7",
+              "class": "decision-now",
+              "severity": "non-blocking",
+              "affected_surface": "One-week outcome measurement",
+              "claim": "The outcome measurement lacks a numerical repeat-rate target, reproducible denominator and sampling rules, and rollout decision criteria.",
+              "evidence": "The plan cites a 15.7% lower-bound baseline and a separate 54.6% avoidability estimate, but asks only for a noticeable decrease and does not define how the post-launch sample or repeat classification matches the baseline.",
+              "evidence_reference": "Plan sections 1 and 5",
+              "repair": "Define the repeat-rate numerator and denominator, comparable cohort and observation window, target and minimum sample, treatment of missing data, and criteria for continuing or rolling back.",
+              "blocks_next_slice_or_immediate_integrity": false,
+              "cannot_defer_to_spike": false,
+              "failure_scenario": ""
+            },
+            {
+              "rubric_id": "R8",
+              "class": "decision-now",
+              "severity": "blocking",
+              "affected_surface": "Transcript scanning, shared persistence, and resurfaced replies",
+              "claim": "The plan leaves scan limits, concurrent attribution and writes, and privacy controls unspecified despite recording and injecting reply content.",
+              "evidence": "The plan only says to limit transcript tail lines; existing hooks read whole transcripts and use an account-wide JSONL file, while locking wraps individual appends rather than the reply gate and append together. No retention, redaction, access, or injection boundary is specified.",
+              "evidence_reference": "Plan section 5; hooks/askpm-log.js:106,110,216,261,283",
+              "repair": "Set byte, line, and time bounds with a safe incomplete-scan fallback; make attribution and deduplication atomic across sessions; define storage permissions, retention, redaction, and which reply content may be exposed or injected.",
+              "blocks_next_slice_or_immediate_integrity": true,
+              "cannot_defer_to_spike": true,
+              "failure_scenario": "Two sessions sharing the account store interleave asks and Stops, causing one session's answer to be recorded against the other session's question and later resurfaced to the wrong context."
+            }
+          ]
+        },
+        "parser_status": "strict",
+        "attempt": 2,
+        "target_id": "terra_contract",
+        "family": "openai",
+        "request_digest": "83e279be436104d82fc0bd9df79683e5a7a5b1df4b944f120ac45eed190a5641",
+        "raw_digest": "210eee44a2a94a170f06c4bbcbbc21bc4902ec7dc24f2decc3638a47eef0a29f"
+      }
+    },
+    {
+      "seat_id": "grok_skeptic",
+      "target_id": "grok_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.7",
+          "operation": "plan-review",
+          "request_digest": "d7934bf53ed06b3bb8ff3e002cebfc574c1a70232dc3788c3036d8eaf2eb60c1"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 6,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "02e17d48cc66af077803bb36aadb29eb49ad242ae955444c8dd5c61e0893b4e7",
+          "stderr_sha256": "13560d21169e0f0cf76b1b99ba7309f05732b85ff84a20fdee0b080e0c173f55"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "<tmp>/dispatch-author-log-nWWVid",
+          "digest": "02e17d48cc66af077803bb36aadb29eb49ad242ae955444c8dd5c61e0893b4e7"
+        },
+        "receipt_digest": "468e42173afc30d59705c883e51c9b55af3566b09c1cea1a33e9665022b2239d"
+      },
+      "transport_status": "exit_failure",
+      "usage": null,
+      "duration_ms": 6115,
+      "error": "runner exited 1: Error: Internal error: { \"message\": \"API error (status 402 Payment Required): Grok Build usage balance exhausted\", \"http_status\": 402 }",
+      "runner_stderr_tail": "pace: grok is at 100% of its 7-day window (resets 2026-11-26T11:42+08:00); named by caller, dispatching anyway — agyclaude has 100% left\ndispatch-author: runner stderr (grok/grok-4.7, rc=1): Error: Internal error: { \"message\": \"API error (status 402 Payment Required): Grok Build usage balance exhausted\", \"http_status\": 402 }",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "grok_skeptic",
+      "target_id": "grok_skeptic",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.7",
+          "operation": "plan-review",
+          "request_digest": "a80b2457fff612cb586f72345bba7f4f7ab52579549f40966d71ec282522e516"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 6,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "02e17d48cc66af077803bb36aadb29eb49ad242ae955444c8dd5c61e0893b4e7",
+          "stderr_sha256": "13560d21169e0f0cf76b1b99ba7309f05732b85ff84a20fdee0b080e0c173f55"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "<tmp>/dispatch-author-log-BscfZs",
+          "digest": "02e17d48cc66af077803bb36aadb29eb49ad242ae955444c8dd5c61e0893b4e7"
+        },
+        "receipt_digest": "595f69100001e46a483fb8d0852d1e48aef226ed8ad0adc8d1c0857018a92156"
+      },
+      "transport_status": "exit_failure",
+      "usage": null,
+      "duration_ms": 5682,
+      "error": "runner exited 1: Error: Internal error: { \"message\": \"API error (status 402 Payment Required): Grok Build usage balance exhausted\", \"http_status\": 402 }",
+      "runner_stderr_tail": "pace: grok is at 100% of its 7-day window (resets 2026-11-26T11:42+08:00); named by caller, dispatching anyway — agyclaude has 100% left\ndispatch-author: runner stderr (grok/grok-4.7, rc=1): Error: Internal error: { \"message\": \"API error (status 402 Payment Required): Grok Build usage balance exhausted\", \"http_status\": 402 }",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [],
+  "findings": [],
+  "backlog_candidates": [],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-11-24T04:01:53.049Z",
+  "unratified_observations": [
+    {
+      "kind": "salvage_conflict",
+      "seat_id": "terra_contract",
+      "target_id": "terra_contract",
+      "family": "openai",
+      "distinct_count": 2
+    }
+  ],
+  "usage": null,
+  "duration_ms": 100363
+}

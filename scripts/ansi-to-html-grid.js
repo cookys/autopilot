@@ -78,6 +78,32 @@ function gate(inputText, htmlText) {
     }
     if (actual!==expected || !rows[i] || i>=lines.length) { failures.push({check:'width',rc:4,message:`第 ${i+1} 行寬度不符：${actual} / ${expected}`}); break; }
   }
+  // cjk-color: the operator incident was a page whose CJK text lost its color while the rest kept it.
+  // Count CJK characters that carry a color in the input (own small SGR tracker) and in the HTML (non-default color or background).
+  const isCjk=ch => { const c=ch.codePointAt(0); return (c>=0x4e00&&c<=0x9fff)||(c>=0x3000&&c<=0x303f)||(c>=0x3040&&c<=0x30ff)||(c>=0xff00&&c<=0xff60)||(c>=0xffe0&&c<=0xffe6)||(c>=0xac00&&c<=0xd7a3); };
+  let fgOn=false, bgOn=false, cjkIn=0, at=0;
+  const scan=text => { for (const ch of text) if (isCjk(ch) && (fgOn||bgOn)) cjkIn++; };
+  for (const m of inputText.matchAll(/\x1b\[([0-9;]*)m/g)) {
+    scan(inputText.slice(at,m.index)); at=m.index+m[0].length;
+    const p=m[1]===''?['0']:m[1].split(';');
+    for (let i=0;i<p.length;i++) {
+      const n=Number(p[i]);
+      if (n===0) { fgOn=false; bgOn=false; }
+      else if (n===39) fgOn=false;
+      else if (n===49) bgOn=false;
+      else if (n===38||n===48) { if (n===38) fgOn=true; else bgOn=true; i+=p[i+1]==='5'?2:(p[i+1]==='2'?4:0); }
+      else if ((n>=30&&n<=37)||(n>=90&&n<=97)) fgOn=true;
+      else if ((n>=40&&n<=47)||(n>=100&&n<=107)) bgOn=true;
+    }
+  }
+  scan(inputText.slice(at));
+  let cjkOut=0;
+  for (const m of htmlText.matchAll(/<span\b[^>]*style="([^"]*)"[^>]*>([^<]*)<\/span>/g)) {
+    const ch=[...m[2].replace(/&nbsp;/g,' ').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>')][0];
+    const fg=/(?:^|;)color:(#[0-9a-f]{6})/i.exec(m[1]), bg=/(?:^|;)background:(#[0-9a-f]{6})/i.exec(m[1]);
+    if (ch && isCjk(ch) && ((fg && fg[1].toLowerCase()!=='#d4d4d4') || (bg && bg[1].toLowerCase()!=='#1e1e1e'))) cjkOut++;
+  }
+  if (cjkIn>0 && cjkOut<0.5*cjkIn) failures.push({check:'cjk-color',rc:6,message:`CJK 字的色彩掉了：頁面 ${cjkOut} 個有色，輸入 ${cjkIn} 個有色`});
   const nOut=[...htmlText.matchAll(/<span\b[^>]*style="[^"]*(?:^|[;"\s])(?:color|background|font-weight)\s*:/g)].length;
   // L-00-base: 61 color sequences produce 4157 styled spans; 0.5 tolerates
   // consolidation while still detecting substantial loss of styled output.

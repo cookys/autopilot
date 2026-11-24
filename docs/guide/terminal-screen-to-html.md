@@ -17,5 +17,6 @@ node scripts/ansi-to-html-grid.js capture.ans > screen.html
 - **3：色碼** — capture 必須含設色 SGR；失敗時用 `tmux capture-pane -e -p` 重新擷取。
 - **4：寬度** — 框線右邊界必須對齊，每列 HTML span 寬度總和必須符合獨立計算的顯示寬度。
 - **5：色彩 span** — 輸出必須有色彩樣式 span，數量至少為輸入設色 SGR 序列數的一半。
+- **6：CJK 色彩（cjk-color）** — 輸入裡帶色的 CJK 字，在輸出裡至少一半仍帶非預設色或底色；專抓「整頁有色、唯獨 CJK 掉色」這種事故。
 
 全部通過時退出碼為 0。程式也接受標準輸入。

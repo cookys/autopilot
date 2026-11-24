@@ -77,6 +77,18 @@ test('gate rejects HTML stripped of color styles', () => {
   assert.ok(gate(input, html).failures.some(f => f.rc === 5));
 });
 
+test('gate rejects a page whose CJK text lost its color while the rest kept it', () => {
+  const fs = require('node:fs');
+  const { gate } = require('./ansi-to-html-grid.js');
+  const input = fs.readFileSync(require('node:path').join(__dirname, 'fixtures/term-capture/L-00-base.ans'), 'utf8');
+  const isCjk = ch => /[　-ヿ一-鿿가-힣＀-｠￠-￦]/.test(ch);
+  const html = render(input).replace(/<span style="([^"]*)">([^<]*)<\/span>/g, (all, style, text) =>
+    isCjk([...text][0] || '') ? `<span style="${style.replace(/color:#[0-9a-f]{6}/i, 'color:#d4d4d4').replace(/background:#[0-9a-f]{6}/i, 'background:#1e1e1e')}">${text}</span>` : all);
+  const result = gate(input, html);
+  assert.deepEqual(result.failures.map(f => f.rc), [6]);
+  assert.ok(gate(input, render(input)).ok);
+});
+
 test('real captures pass the CLI gate', () => {
   const { spawnSync } = require('node:child_process');
   const path = require('node:path');

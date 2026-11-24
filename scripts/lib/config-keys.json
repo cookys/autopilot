@@ -50,6 +50,18 @@
   },
   "entries": [
     {
+      "name": "AUTOPILOT_PM_ASK_NOW",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/pm-ask.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
       "name": "context_budget.t2_pct_by_seat",
       "kind": "config_key",
       "audience": "user",

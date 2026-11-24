@@ -120,6 +120,7 @@ function usage() {
     --manifest-file <manifest.json> [--disposition-file <decisions.json>] \\
     [--context-file <repo-source-file>]... [--timeout <Ns|Nm>] [--state-dir <dir>] [--now <ISO-8601>] \\
     [--allow-unregistered] [--no-topology-fallbacks] [--expect-revision <git-rev>] \\
+    [--panel-change "<reason>"] \\
     [--same-family-exception "<d-xxxxxxxx|fleet message id>: <reason>"]
   node scripts/dispatch-plan-review.js --repair-recheck <g2-artifact.json> --plan-file <repaired plan> \\
     --manifest-file <manifest.json> --implementer-family <family[,family]> [--timeout <Ns|Nm>] [--out <file>]
@@ -212,6 +213,7 @@ function parseArgs(argv) {
     ['--growth-stop-ratio', 'growthStopRatio'],
     ['--now', 'now'],
     ['--same-family-exception', 'sameFamilyExceptionRaw'],
+    ['--panel-change', 'panelChangeReason'],
     ['--fleet-task', 'fleetTask'],
   ]);
   for (let index = 0; index < argv.length; index += 1) {
@@ -266,6 +268,12 @@ function parseArgs(argv) {
     const parsed = familyGate.parseException(opts.sameFamilyExceptionRaw);
     if (parsed.error) throw new CliError(`--same-family-exception ${parsed.error}`);
     opts.sameFamilyException = { source: parsed.source, reason: parsed.reason };
+  }
+  if (opts.panelChangeReason !== undefined) {
+    if (opts.panelChangeReason.trim() === '') {
+      throw new CliError('--panel-change requires a non-empty reason');
+    }
+    opts.panelChangeReason = opts.panelChangeReason.trim();
   }
   opts.timeoutSeconds = parseTimeoutSeconds(opts.timeout);
   if (opts.timeoutSeconds > opts.maxWallSeconds) {
@@ -2307,6 +2315,7 @@ function main() {
   let state;
   let growthRatio = 1;
   let growthWarning = false;
+  let panelChangeRecord = null;
   const context = {
     opts,
     manifest,
@@ -2397,13 +2406,39 @@ function main() {
           || state.ticket !== opts.ticket
           || state.logical_plan_id !== manifest.logical_plan_id
           || state.rubric_sha256 !== rubricSha
-          || state.manifest_sha256 !== manifestSha
           || !Number.isSafeInteger(state.baseline_plan_bytes)
           || state.baseline_plan_bytes < 1) {
         throw new CliError('durable identity or frozen rubric/manifest drifted', 3);
       }
-      if (sealSpec('check', opts.rubricFile, rubricSeal) !== rubricSha
-          || sealSpec('check', manifestCopy, manifestSeal) !== manifestSha) {
+      if (sealSpec('check', opts.rubricFile, rubricSeal) !== rubricSha) {
+        throw new CliError('frozen rubric/manifest drifted', 3);
+      }
+      if (state.manifest_sha256 !== manifestSha) {
+        if (!opts.panelChangeReason || !fs.existsSync(manifestCopy)) {
+          throw new CliError('durable identity or frozen rubric/manifest drifted', 3);
+        }
+        if (sealSpec('check', manifestCopy, manifestSeal) !== state.manifest_sha256) {
+          throw new CliError('frozen rubric/manifest drifted', 3);
+        }
+        const prevManifest = validateManifest(JSON.parse(fs.readFileSync(manifestCopy, 'utf8')));
+        if (JSON.stringify(canonical({ ...prevManifest, seats: [] }))
+            !== JSON.stringify(canonical({ ...manifest, seats: [] }))) {
+          throw new CliError('durable identity or frozen rubric/manifest drifted', 3);
+        }
+        panelChangeRecord = {
+          reason: opts.panelChangeReason,
+          previous_panel: prevManifest.seats.map((seat) => seat.id),
+          new_panel: manifest.seats.map((seat) => seat.id),
+          generation: opts.generation,
+          at: now.toISOString(),
+        };
+        fs.writeFileSync(manifestCopy, effective.bytes, { mode: 0o600 });
+        if (sealSpec('seal', manifestCopy, manifestSeal) !== manifestSha) {
+          throw new CliError('frozen rubric/manifest seal mismatch', 3);
+        }
+        state.manifest_sha256 = manifestSha;
+        atomicWriteJson(statePath, state);
+      } else if (sealSpec('check', manifestCopy, manifestSeal) !== manifestSha) {
         throw new CliError('frozen rubric/manifest drifted', 3);
       }
       if (contextSha && !contextResealed && sealSpec('check', contextCopy, contextSeal) !== contextSha) {
@@ -2858,6 +2893,7 @@ function main() {
           verdict: seat.verdict,
         })),
         ...(recordedException ? { same_family_exception: recordedException } : {}),
+        ...(panelChangeRecord ? { panel_change: panelChangeRecord } : {}),
         findings,
         backlog_candidates: backlogCandidates(findings),
         accepted_blocker_count: accepted.length,

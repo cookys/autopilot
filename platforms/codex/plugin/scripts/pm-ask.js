@@ -259,20 +259,24 @@ function pickLatestReply(askIds, repliesByAskId) {
   return best;
 }
 
-function statusOf(entry, disposed, repliesByAskId, replyCutoffMs) {
+const RECENT_MS = 24 * 3600 * 1000;
+
+// An ask from the last 24 h is never an old record: the reply writer may simply not have run yet on this host.
+function statusOf(entry, disposed, repliesByAskId, replyCutoffMs, nowMs) {
   const row = entry.row;
   const askIds = entry.ask_ids || [row.ask_id];
   const latestReply = pickLatestReply(askIds, repliesByAskId);
   if (latestReply) return { status: '已答', latestReply };
   if (askIds.some((id) => disposed.has(id))) return { status: '已處置', latestReply: null };
   const askMs = Date.parse(entry.last_at || row.at);
-  const isOld = replyCutoffMs === null || (Number.isFinite(askMs) && askMs < replyCutoffMs);
+  const recent = Number.isFinite(askMs) && nowMs - askMs < RECENT_MS;
+  const isOld = !recent && (replyCutoffMs === null || (Number.isFinite(askMs) && askMs < replyCutoffMs));
   return { status: isOld ? '舊紀錄' : '未答', latestReply: null };
 }
 
-function formatAnswerLine(entry, disposed, repliesByAskId, replyCutoffMs) {
+function formatAnswerLine(entry, disposed, repliesByAskId, replyCutoffMs, nowMs) {
   const row = entry.row;
-  const { status, latestReply } = statusOf(entry, disposed, repliesByAskId, replyCutoffMs);
+  const { status, latestReply } = statusOf(entry, disposed, repliesByAskId, replyCutoffMs, nowMs);
   const timeStr = formatTaipeiTime(entry.last_at || row.at);
   const summary = (typeof row.text === 'string' ? row.text : '').replace(/\s+/g, ' ').trim().slice(0, 40);
   const countTag = entry.count && entry.count > 1 ? ` ×${entry.count}` : '';
@@ -282,9 +286,9 @@ function formatAnswerLine(entry, disposed, repliesByAskId, replyCutoffMs) {
   return `${status}${countTag} ${timeStr} ${summary} ｜ ${answer}`;
 }
 
-function formatAnswersList(entries, disposed, repliesByAskId, replyCutoffMs) {
+function formatAnswersList(entries, disposed, repliesByAskId, replyCutoffMs, nowMs) {
   if (entries.length === 0) return '';
-  const shown = entries.slice(0, MAX_VIEW_LINES).map((e) => formatAnswerLine(e, disposed, repliesByAskId, replyCutoffMs));
+  const shown = entries.slice(0, MAX_VIEW_LINES).map((e) => formatAnswerLine(e, disposed, repliesByAskId, replyCutoffMs, nowMs));
   if (entries.length > MAX_VIEW_LINES) {
     shown.push(`… ${entries.length - MAX_VIEW_LINES} more`);
   }
@@ -298,11 +302,11 @@ function listOutput(env, opts = {}) {
   const grouped = groupAsks(selected, nowMs);
   if (opts.answers) {
     const shown = opts.open
-      ? grouped.filter((e) => statusOf(e, disposed, repliesByAskId, replyCutoffMs).status !== '舊紀錄')
+      ? grouped.filter((e) => statusOf(e, disposed, repliesByAskId, replyCutoffMs, nowMs).status !== '舊紀錄')
       : grouped;
     // Newest first: the 30-line cap must cut the oldest rows, not the ones the operator asked today.
     const newestFirst = [...shown].sort((a, b) => (Date.parse(b.last_at || b.row.at) || 0) - (Date.parse(a.last_at || a.row.at) || 0));
-    return formatAnswersList(newestFirst, disposed, repliesByAskId, replyCutoffMs);
+    return formatAnswersList(newestFirst, disposed, repliesByAskId, replyCutoffMs, nowMs);
   }
   return formatList(grouped, nowMs);
 }
@@ -494,7 +498,8 @@ function runCommand(argv, env = envFromProcess(), nowMs = Date.now()) {
 
 function main() {
   try {
-    const out = runCommand(process.argv.slice(2));
+    const fixedNow = Date.parse(process.env.AUTOPILOT_PM_ASK_NOW || '');
+    const out = runCommand(process.argv.slice(2), undefined, Number.isFinite(fixedNow) ? fixedNow : undefined);
     if (out) process.stdout.write(`${out}\n`);
   } catch (err) {
     process.stderr.write(`${err && err.message ? err.message : String(err)}\n`);

@@ -27,7 +27,7 @@ function makeStore(rows) {
   return {
     home,
     state,
-    run(args) {
+    run(args, extraEnv = {}) {
       return spawnSync(process.execPath, [CLI, ...args], {
         encoding: 'utf8',
         env: {
@@ -35,6 +35,8 @@ function makeStore(rows) {
           HOME: home,
           TMPDIR: home,
           AUTOPILOT_STATE_DIR: state,
+          ...(args[0] === 'list' ? { AUTOPILOT_PM_ASK_NOW: '2027-01-01T00:00:00.000Z' } : {}),
+          ...extraEnv,
         },
       });
     },
@@ -443,6 +445,24 @@ test('list --answers shows the newest asks first so the 30-line cap drops the ol
     assert.ok(lines[0].includes('question number 39'), lines[0]);
     assert.ok(lines[29].includes('question number 10'), lines[29]);
     assert.equal(lines[30], '… 10 more');
+  } finally {
+    s.cleanup();
+  }
+});
+
+test('list --answers never calls an ask from the last 24 hours an old record, even with no reply rows at all', () => {
+  const s = makeStore([
+    askRow('a-rc000001', 'older than a day question text', '2026-11-22T04:00:00.000Z', 's1'),
+    askRow('a-rc000002', 'caddy 改好沒 請回報狀態', '2026-11-24T10:59:00.000Z', 's2'),
+  ]);
+  try {
+    const res = s.run(['list', '--answers', '--open'], { AUTOPILOT_PM_ASK_NOW: '2026-11-24T12:00:00.000Z' });
+    assert.equal(res.status, 0, res.stderr);
+    const lines = res.stdout.trim().split('\n');
+    assert.equal(lines.length, 1, res.stdout);
+    assert.match(lines[0], /^未答 11-24 18:59 caddy/);
+    const all = s.run(['list', '--answers'], { AUTOPILOT_PM_ASK_NOW: '2026-11-24T12:00:00.000Z' });
+    assert.ok(all.stdout.includes('舊紀錄 11-22'), all.stdout);
   } finally {
     s.cleanup();
   }

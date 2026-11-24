@@ -93,7 +93,7 @@ test('G11 feed: parseDecideList returns [] for empty cards array and null only o
   expect(mergeDecideCards(parseDecideList('{"cards":[]}'), [])).toEqual([])
   expect(parseDecideList('not json')).toBeNull()
   expect(parseDecideList('null')).toBeNull()
-  expect(parseDecideList('{}')).toBeNull()
+  expect(parseDecideList('{}')).toEqual([]) // {} = source OK, nothing open (PM 01M85F3PA)
   expect(parseDecideList('{"cards":"nope"}')).toBeNull()
   expect(mergeDecideCards(null, [])).toBeNull()
 })
@@ -113,7 +113,7 @@ test('G11 feed: makeDecideFeed exposes error() and preserves last successful fet
   // 2. CLI failure -> retains last good cards ([]), error exposes stderr first line, fetchedMs preserves last success
   await feed.refresh(async () => ({ exitCode: 1, stdout: '', stderr: '\n  hub unreachable\nstack trace' }), NOW - 4 * MIN)
   expect(feed.cards()).toEqual([])
-  expect(feed.error()).toBe('hub unreachable')
+  expect(feed.error()).toBe('hub unreachable（rc=1）')
   expect(feed.fetchedMs()).toBe(NOW - 8 * MIN)
 
   // 3. Invalid JSON on exit 0 -> retains last good cards ([]), error set, fetchedMs NOT overwritten
@@ -149,7 +149,7 @@ test('G13 feed: makePmFeed exposes error() and preserves last successful fetched
 
   await feed.refresh(async () => ({ exitCode: 2, stdout: '', stderr: 'pm daemon offline\ndetail' }), NOW - 5 * MIN)
   expect(feed.status()).toEqual(PM_OBJ)
-  expect(feed.error()).toBe('pm daemon offline')
+  expect(feed.error()).toBe('pm daemon offline（rc=2）')
   expect(feed.fetchedMs()).toBe(NOW - 10 * MIN)
 
   await feed.refresh(async () => ({ exitCode: 0, stdout: '{"schema":"wrong"}', stderr: '' }), NOW - 2 * MIN)

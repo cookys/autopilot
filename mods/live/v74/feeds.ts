@@ -10,6 +10,10 @@ export type PmFeed = { status: () => PmStatus | null; fetchedMs: () => number | 
 export type DecideFeed = { cards: () => DecideCard[] | null; fetchedMs: () => number | null; error: () => string | null; refresh: (run: CliRunner, nowMs: number, force?: boolean) => Promise<boolean> }
 
 const firstLine = (s: string): string => s.split('\n').map(l => l.trim()).find(l => l !== '') ?? ''
+const exitError = (stderr: string, exitCode: number): string => {
+  const line = firstLine(stderr)
+  return (line !== '' ? line : 'exit') + '（rc=' + exitCode + '）'
+}
 
 // fleet decision list and the open-decision.js store name the same card by id. The list wins on a clash; a working list with no cards stays [] (not "no source").
 export function mergeDecideCards(list: readonly DecideCard[] | null, store: readonly DecideCard[]): DecideCard[] | null {
@@ -27,9 +31,12 @@ export function mergeDecideCards(list: readonly DecideCard[] | null, store: read
 export function parseDecideList(json: string): DecideCard[] | null {
   let o: unknown
   try { o = JSON.parse(json) } catch { return null }
-  if (typeof o !== 'object' || o === null || !Array.isArray((o as { cards?: unknown }).cards)) return null
+  if (typeof o !== 'object' || o === null || Array.isArray(o)) return null
+  const rec = o as Record<string, unknown>
+  if (rec.cards === undefined) return Object.keys(rec).length === 0 ? [] : null
+  if (!Array.isArray(rec.cards)) return null
   const out: DecideCard[] = []
-  for (const row of (o as { cards: unknown[] }).cards) {
+  for (const row of rec.cards) {
     if (typeof row !== 'object' || row === null) continue
     const c = (row as { card?: unknown }).card
     if (typeof c !== 'object' || c === null) continue
@@ -90,7 +97,7 @@ export function makePmFeed(ttlMs = V74_FEED_TTL_MS): PmFeed {
       triedMs = nowMs
       try {
         const r = await run(PM_STATUS_ARGV)
-        if (r.exitCode !== 0) throw new Error(firstLine(r.stderr) || 'exit ' + r.exitCode)
+        if (r.exitCode !== 0) throw new Error(exitError(r.stderr, r.exitCode))
         const parsed = parsePmStatus(r.stdout)
         if (parsed === null) throw new Error('invalid pm status json')
         status = parsed
@@ -124,7 +131,7 @@ export function makeDecideFeed(ttlMs = V74_FEED_TTL_MS): DecideFeed {
       triedMs = nowMs
       try {
         const r = await run(DECIDE_LIST_ARGV)
-        if (r.exitCode !== 0) throw new Error(firstLine(r.stderr) || 'exit ' + r.exitCode)
+        if (r.exitCode !== 0) throw new Error(exitError(r.stderr, r.exitCode))
         const parsed = parseDecideList(r.stdout)
         if (parsed === null) throw new Error('invalid decision list json')
         cards = parsed

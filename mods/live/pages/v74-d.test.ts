@@ -7,6 +7,7 @@ import { PAGES } from './index'
 import { decidePage, decideReduce, NO_NAV, v74Pool } from './decide'
 import { todoPage, dueText } from './todo'
 import { makeT } from '../i18n'
+import { PALETTE } from '../../tux/palette.ts'
 import type { DecideCard, TodoCard, V74Ctx } from '../v74/contract'
 import type { Row } from './rows'
 
@@ -80,10 +81,46 @@ test('v74-d: v74Pool adds the list cards to the send pool once (negative: same i
 test('v74-d: 待決 with a null source shows the broken row, no cards; the legacy draw (no v74) is unchanged', () => {
   const { body, actions } = decidePage.render(ctxOf({ decide: null }))
   expect(body.length).toBe(1)
-  expect(text(body[0])).toContain('沒有待決來源')
+  expect(text(body[0])).toBe('✗ 沒有待決來源（fleet decision list）')
+  expect(body[0].some(s => s.color === PALETTE.broken)).toBe(true)
   expect(actions.map(text).join('')).toContain('待決在 band 上')
   expect(pressed(actions)).toEqual([])
   expect(decidePage.render({ live: null, console: null, size: { cols: 120, rows: 30 }, t, nowMs: 0 } as never).body).toEqual([])
+})
+
+test('v74-d: 待決 separates empty list, source error with rc, and missing source', () => {
+  // 1. Empty list (source healthy, no open cards): calm state, no ✗, no error color
+  const empty = decidePage.render(ctxOf({ decide: [] }))
+  expect(empty.body.length).toBe(1)
+  expect(text(empty.body[0])).toContain('目前沒有待決卡')
+  expect(text(empty.body[0])).not.toContain('✗')
+  expect(empty.body[0].some(s => s.color === PALETTE.broken)).toBe(false)
+  expect(empty.actions).toEqual([])
+
+  const emptyEn = decidePage.render({ live: null, console: null, size: { cols: 120, rows: 30 }, t: makeT('en'), nowMs: 1794200000000, v74: v74({ decide: [] }) } as never)
+  expect(text(emptyEn.body[0])).toContain('No pending decision cards')
+  expect(text(emptyEn.body[0])).not.toContain('✗')
+
+  // 2. Source error (cards null + error): ✗ + raw error + rc + source tag, in error color
+  const errored = decidePage.render(ctxOf({ decide: null, decideError: 'bus timeout（rc=2）' }))
+  const errText = errored.body.map(text).join('')
+  expect(errText).toContain('✗')
+  expect(errText).toContain('bus timeout（rc=2）')
+  expect(errText).toContain('（fleet decision list）')
+  expect(errText).not.toContain('沒有待決來源')
+  expect(errored.body.every(r => r.some(s => s.color === PALETTE.broken))).toBe(true)
+
+  const viaErrors = decidePage.render(ctxOf({ decide: null, errors: { decide: 'cli down（rc=7）' } }))
+  const viaText = viaErrors.body.map(text).join('')
+  expect(viaText).toContain('✗')
+  expect(viaText).toContain('cli down（rc=7）')
+  expect(viaText).toContain('（fleet decision list）')
+
+  // 3. No source (cards null + no error): preserves original missing-source string
+  const missing = decidePage.render(ctxOf({ decide: null, decideError: null }))
+  expect(missing.body.length).toBe(1)
+  expect(text(missing.body[0])).toBe('✗ 沒有待決來源（fleet decision list）')
+  expect(missing.body[0].some(s => s.color === PALETTE.broken)).toBe(true)
 })
 
 test('v74-d: 待辦 shows due dates and Buttons only for the selected card', () => {

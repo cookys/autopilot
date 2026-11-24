@@ -53,11 +53,32 @@ test('v74-b: feeds parse inline json (not used at page render time)', () => {
   const cards = ['d-1', 'd-2', 'd-3'].map(id => ({ card: { card_id: id, question: 'q ' + id, options: [{ label: 'a', description: '' }, { label: 'b', description: '' }], recommendation: 'a' } }))
   expect(parseDecideList(JSON.stringify({ cards }))?.length).toBe(3)
   expect(parseDecideList('{"cards":[]}')).toEqual([])
+  expect(parseDecideList('{}')).toEqual([])
   expect(parseDecideList('not json')).toBeNull()
-  expect(parseDecideList('{}')).toBeNull()
+  expect(parseDecideList('{"cards":"nope"}')).toBeNull()
+  expect(parseDecideList('{"error":"boom"}')).toBeNull()
+  expect(parseDecideList('[]')).toBeNull()
   const feed = makePmFeed(0)
   expect(feed.status()).toBeNull()
   expect(feed.error()).toBeNull()
+})
+
+test('v74-b: makeDecideFeed treats {} as empty list, formats non-zero rc, and preserves invalid json error', async () => {
+  const t0 = 1_795_000_000_000
+  const feed = makeDecideFeed(0)
+  await feed.refresh(async () => ({ exitCode: 0, stdout: '{}\n', stderr: '' }), t0, true)
+  expect(feed.cards()).toEqual([])
+  expect(feed.error()).toBeNull()
+
+  const errFeed = makeDecideFeed(0)
+  await errFeed.refresh(async () => ({ exitCode: 2, stdout: '', stderr: '' }), t0, true)
+  expect(errFeed.cards()).toBeNull()
+  expect(errFeed.error()).toBe('exit（rc=2）')
+
+  const badJsonFeed = makeDecideFeed(0)
+  await badJsonFeed.refresh(async () => ({ exitCode: 0, stdout: 'not json', stderr: '' }), t0, true)
+  expect(badJsonFeed.cards()).toBeNull()
+  expect(badJsonFeed.error()).toBe('invalid decision list json')
 })
 
 test('v74-b: pm and decide feeds retain last-good data and fetchedMs on failure while v74BodyStatusRow displays the failure state', async () => {
@@ -83,7 +104,7 @@ test('v74-b: pm and decide feeds retain last-good data and fetchedMs on failure 
   await pmFeed.refresh(async () => ({ exitCode: 1, stdout: '', stderr: 'bus timeout' }), t1, true)
   expect(pmFeed.status()?.projects[0]?.project, 'pm feed keeps last good status after failure').toBe('alpha')
   expect(pmFeed.fetchedMs(), 'pm feed keeps last ok timestamp').toBe(t0)
-  expect(pmFeed.error()).toBe('bus timeout')
+  expect(pmFeed.error()).toBe('bus timeout（rc=1）')
 
   const decFeed = makeDecideFeed(0)
   await decFeed.refresh(async () => ({ exitCode: 0, stdout: decideJson, stderr: '' }), t0, true)
@@ -94,7 +115,7 @@ test('v74-b: pm and decide feeds retain last-good data and fetchedMs on failure 
   await decFeed.refresh(async () => ({ exitCode: 1, stdout: '', stderr: 'decision cli down' }), t1, true)
   expect(decFeed.cards()?.map(c => c.id), 'decide feed keeps last good cards after failure').toEqual(['d-keep-1'])
   expect(decFeed.fetchedMs(), 'decide feed keeps last ok timestamp').toBe(t0)
-  expect(decFeed.error()).toBe('decision cli down')
+  expect(decFeed.error()).toBe('decision cli down（rc=1）')
 
   const nav = { cursor: 0, picks: {}, notes: {}, noteMode: false }
   const v74 = {

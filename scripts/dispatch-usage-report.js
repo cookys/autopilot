@@ -38,7 +38,7 @@ function report(dir, now, days) {
     group.runs++;
     if (status === 'committed') group.committed++;
     else if (status === 'no_op') group.no_op++;
-    else if (!['running', 'reviewed', 'success'].includes(status)) group.failed++;
+    else if (!['running', 'reviewed', 'success', 'authored'].includes(status)) group.failed++;
     const usage = m.usage || m.tokens || {};
     for (const [key, value] of [['tokens_in', usage.input_tokens ?? m.tokens_in], ['tokens_out', usage.output_tokens ?? m.tokens_out]]) {
       if (typeof value === 'number' && Number.isFinite(value) && value >= 0) group[key] = (group[key] || 0) + value;

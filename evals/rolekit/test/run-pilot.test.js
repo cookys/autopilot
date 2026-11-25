@@ -189,7 +189,8 @@ test('budget: infra attempt then an auth stop, then resume: the lost attempts ar
 
 // ---- account pin (PM ruling A): the rails dispatch as the host default alias, so the runner must refuse unless that alias is --account
 const { makeFixture, readLog } = require('../../../scripts/lib/account-fixtures/shim-install');
-const acctEnv = (fx) => ({ ...process.env, AUTOPILOT_ACCOUNTS_DIR: fx.accountsDir, AUTOPILOT_LIVE_DIR: fx.liveDir, AUTOPILOT_STATE_DIR: fx.stateDir, AUTOPILOT_CONFIG: fx.configFile, XDG_RUNTIME_DIR: fx.runtimeDir });
+// the account fixture moves XDG_RUNTIME_DIR, so the real `fleet task show` cannot see the task id; a probe- role is the Fleet-Task precondition's own exempt caller
+const acctEnv = (fx) => ({ ...process.env, AUTOPILOT_DISPATCH_ROLE: 'probe-rolekit-test', AUTOPILOT_ACCOUNTS_DIR: fx.accountsDir, AUTOPILOT_LIVE_DIR: fx.liveDir, AUTOPILOT_STATE_DIR: fx.stateDir, AUTOPILOT_CONFIG: fx.configFile, XDG_RUNTIME_DIR: fx.runtimeDir });
 const setPriority = (fx, alias, priority) => {
   const reg = JSON.parse(fs.readFileSync(fx.regFile, 'utf8'));
   reg.accounts.find((x) => x.alias === alias).priority = priority;

@@ -85,6 +85,38 @@ function digestResume(out, { maxChars = 3000 } = {}) {
   return `${body}\n${instruction}`.slice(0, maxChars);
 }
 
+// Section-based cap for non-compact loads, keyed by section name (the leading upper-case token of a row, or a
+// "NAME (n)" header followed by body rows). IN_FLIGHT, NEEDS_REPLY and WAITING_ON_PM rows are always kept whole (a row over
+// maxRowChars is shortened, never dropped); every other row shares softCapChars, and each section that loses rows
+// ends with "已省略 N 列".
+const KEEP_SECTIONS = new Set(['IN_FLIGHT', 'NEEDS_REPLY', 'WAITING_ON_PM']);
+function capResumeSections(out, { softCapChars = 3000, maxRowChars = 400 } = {}) {
+  const rows = []; // { key, text, header }
+  let current = null;
+  for (const line of String(out).split(/\r?\n/)) {
+    const m = /^([A-Z][A-Z_]+)(?=\s|$)/.exec(line);
+    const headerOnly = m && /^[A-Z][A-Z_]+\s*\(\d+\)\s*$/.test(line);
+    if (headerOnly) { current = m[1]; rows.push({ key: current, text: line, header: true }); continue; }
+    if (m) { current = m[1]; rows.push({ key: current, text: line, header: false }); continue; }
+    rows.push({ key: current, text: line, header: false });
+  }
+  const short = (t) => (t.length > maxRowChars ? `${t.slice(0, maxRowChars - 3)}...` : t);
+  let budget = softCapChars;
+  const omitted = new Map();
+  const outLines = [];
+  for (const r of rows) {
+    if (KEEP_SECTIONS.has(r.key)) { outLines.push(short(r.text)); continue; }
+    if (r.header || !r.text.trim() || r.text.length + 1 <= budget) {
+      if (!(r.header || !r.text.trim())) budget -= r.text.length + 1;
+      outLines.push(r.text);
+    } else {
+      omitted.set(r.key, (omitted.get(r.key) || 0) + 1);
+    }
+  }
+  for (const [key, n] of omitted) outLines.push(`${key || '其他'} 已省略 ${n} 列`);
+  return outLines.join('\n');
+}
+
 // Returns the text to append to the session context ('' only when the source is not one of the four).
 function buildResumeBlock(payload, { env = process.env, runner } = {}) {
   const source = String(payload.source || '');
@@ -109,7 +141,7 @@ function buildResumeBlock(payload, { env = process.env, runner } = {}) {
   }
   const ids = [...new Set(out.match(ID_RE) || [])];
   writeMarker(sid, { at: Date.now(), source, ok: true, seat: seat.member, role: seat.role, ids }, env);
-  return `\n\n${HEAD}\n<fleet-pm-resume seat="${seat.member}" role="${seat.role}">\n${source === 'compact' ? digestResume(out, { maxChars: 3000 }).replace('<member>', seat.member).replace('<role>', seat.role) : out}\n</fleet-pm-resume>`;
+  return `\n\n${HEAD}\n<fleet-pm-resume seat="${seat.member}" role="${seat.role}">\n${source === 'compact' ? digestResume(out, { maxChars: 3000 }).replace('<member>', seat.member).replace('<role>', seat.role) : capResumeSections(out, { softCapChars: 3000, maxRowChars: 400 })}\n</fleet-pm-resume>`;
 }
 
-module.exports = { buildResumeBlock, seatFromAddress, resolveSeat, readMarker, writeMarker, digestResume, SOURCES, ID_RE };
+module.exports = { buildResumeBlock, seatFromAddress, resolveSeat, readMarker, writeMarker, digestResume, capResumeSections, SOURCES, ID_RE };

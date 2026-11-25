@@ -121,3 +121,25 @@ test('explicit caller model overrides agent frontmatter model and runs normal ch
     fs.rmSync(cwd, { recursive: true, force: true });
   }
 });
+
+test('M11: an allowed Agent dispatch leaves a ledger row with role, subagent_type, model, usd (usd unknown = null)', () => {
+  const live = fs.mkdtempSync(path.join(os.tmpdir(), 'dmg-ledger-'));
+  try {
+    const res = runGuard({
+      tool_name: 'Agent',
+      tool_use_id: 'toolu_m11probe',
+      tool_input: { subagent_type: 'general-purpose', model: 'haiku', description: 'x', prompt: 'Engine: haiku | Role: reviewer | Lane: x | Size: S | Used-by: n/a probe\nhi' },
+    }, { AUTOPILOT_LIVE_DIR: live });
+    assert.equal(res.status, 0);
+    const file = fs.readdirSync(live).find((n) => /^dispatch-usage-\d{6}\.jsonl$/.test(n));
+    assert.ok(file, 'ledger file written');
+    const row = JSON.parse(fs.readFileSync(path.join(live, file), 'utf8').trim().split('\n').pop());
+    assert.equal(row.run_id, 'toolu_m11probe');
+    assert.equal(row.role, 'reviewer');
+    assert.equal(row.subagent_type, 'general-purpose');
+    assert.equal(row.model, 'haiku');
+    assert.equal(row.usd, null);
+  } finally {
+    fs.rmSync(live, { recursive: true, force: true });
+  }
+});

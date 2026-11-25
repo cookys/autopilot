@@ -106,7 +106,14 @@ function alignAnswer(role, text) {
   let a; try { a = JSON.parse(text); } catch (e) { return text; }
   if (!a || typeof a !== 'object') return text;
   const strip = (p) => (typeof p === 'string' ? p.trim().replace(/\\/g, '/').replace(/^(\.\/)?input\//, '') : p);
-  if (role === 'planner' && Array.isArray(a.subtasks)) for (const s of a.subtasks) if (s && Array.isArray(s.scope)) s.scope = s.scope.map(strip);
+  if (role === 'planner' && Array.isArray(a.subtasks)) {
+    for (const s of a.subtasks) {
+      if (!s) continue;
+      if (Array.isArray(s.scope)) s.scope = s.scope.map(strip);
+      // the sandbox repo is the working directory: `cd input && node x` and `node x` are the same command
+      if (Array.isArray(s.acceptance)) s.acceptance = s.acceptance.map((c) => (typeof c === 'string' ? c.trim().replace(/^cd\s+(?:\.\/)?input\s*&&\s*/, '') : c));
+    }
+  }
   if (role === 'explorer' && Array.isArray(a.answers)) {
     for (const x of a.answers) {
       if (!x || typeof x !== 'object') continue;

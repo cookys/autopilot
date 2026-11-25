@@ -8,7 +8,7 @@
 
 - **官方網站**：https://agentclientprotocol.com/ （頁面未具名維護者，未證實；第三方摘要稱 Zed 推動並與 Google 合作，未證實）。
 - **官方 repo**：https://github.com/agentclientprotocol/agent-client-protocol 。
-- **穩定版**：協定版本 `1`。GitHub release 最新 stable 為 Schema v1.34.1（2026-11-21，標示 Latest；來源：https://github.com/agentclientprotocol/agent-client-protocol/releases ）。v1 wire schema 未變（來源：https://docs.rs/crate/agent-client-protocol/2.0.0/source/CHANGELOG.md ）。
+- **穩定版**：協定版本 `1`。GitHub release 最新 stable 為 Schema v1.35.0（2026-11-25 astra 複核；原記 v1.34.1 已過時，標示 Latest；來源：https://github.com/agentclientprotocol/agent-client-protocol/releases ）。v1 wire schema 未變（來源：https://docs.rs/crate/agent-client-protocol/2.0.0/source/CHANGELOG.md ）。
 - **v2**：GitHub 上 v2.0.0-beta.1／beta.2／beta.3 標示 Pre-release（2026-11-20 至 11-21），changelog 條目為「move ACP v2 to Preview」。網站上的 v2 draft schema：https://agentclientprotocol.com/protocol/v2/draft/schema 。第三方摘要稱 v2 draft 於 2026-07-20 公告，原公告未開啟核對，未證實。
 
 ---
@@ -23,7 +23,7 @@
 | Grok（xAI Grok Build） | 有 ACP server：`grok agent stdio`（xAI 官方文件）；Zed registry 以 `npx @xai-official/grok@1.0.89 agent stdio` 列出。穩定度：頁面未標示，未證實 | `grok -p "<prompt>"` 為 headless；`--no-alt-screen`、`--no-auto-update`（官方建議 ACP 用於 script／CI 時加此旗標）；`--output-format` 支援 plain／json／streaming-json | 串流：ACP 中 assistant 文字以 `session/update` chunks 送出（官方）。權限回呼：未證實（第三方文章稱不跳過核准，非官方來源）；headless 下用 `--always-approve` | 官方 headless 旗標：`-s`／`-r`（指定或恢復 session）、`-c`（最近 session）；ACP 的 `session/load`：未證實 | `XAI_API_KEY` 環境變數，或 `grok login` 後的快取 token；登入協定名稱：未證實 | https://docs.x.ai/build/cli/headless-scripting ；https://zed.dev/acp/agent/grok-build （版本 1.0.89 見 npx 指令；發布日期：未證實；擷取日 2026-11-23） |
 | Kimi（Kimi Code CLI） | 有 ACP server：`kimi acp`（官方；IDE 子行程入口）。穩定度：頁面未標示 experimental／beta／preview，未證實。`session/set_model` 沿用 "ACP 0.23 unstable surface"。ACP 版本以外的發布日期：未證實 | stdin／stdout JSON-RPC；啟動後等待 `initialize`，無 banner，log 寫 stderr 與 `~/.kimi-code/logs/`（路徑取自官方頁） | 串流：`session/update`。權限：`session/request_permission`；ask-user 用 `elicitation/create` | `session/load`（回放歷史）、`session/resume`（不回放）皆實作 | `authenticate` 的 `login` method（`authMethods` 含 terminal 型）；`logout` 清除 managed provider token；token 儲存機制：未證實 | https://www.kimi.com/code/docs/en/kimi-code-cli/reference/kimi-acp.html ；https://github.com/MoonshotAI/kimi-cli （頁面無發布日期，未證實；擷取日 2026-11-23） |
 | Cursor（cursor-agent CLI） | server：有，`agent acp`（官方標為 advanced、hidden 指令）。client：未證實。穩定度：未證實 | ACP 為 stdio 子程序模式，官方稱「intended for building custom clients」；非 ACP 的 print 模式：未證實 | `session/update`（如 `agent_message_chunk`）串流；`session/request_permission`，回傳 `allow-once`、`allow-always`、`reject-once`；頁面警告不回應會阻塞。另有 `cursor/ask_question` 等擴充 | `session/load` 有；`session/resume`：未證實（頁面未提及） | `cursor_login`（methodId）；預先登入用 `agent login`，或環境變數 `CURSOR_API_KEY`、`CURSOR_AUTH_TOKEN`，或旗標 `--api-key`、`--auth-token` | https://cursor.com/docs/cli/acp （2026-11-23；`.md` 版本 404） |
-| opencode | server：有，`opencode acp`（JSON-RPC over stdio，ACP protocol version 1）。client：未證實。穩定度：未標示（未證實） | ACP 模式由 client 以子程序啟動，程序在 client 關閉 stdin 後退出；非 ACP 的無頭模式：未證實 | `session/update` 回報進度、工具呼叫、用量；權限選項 `allow_once`、`allow_always`、`reject_once`，可附 diff 預覽；`session/cancel` 回 `stopReason: "cancelled"`；問題以 `elicitation/create` 表單送出 | `session/load` 有（回放訊息）；`session/resume` 與 `session/fork` 不支援（頁面原文）；另有 list、close、delete | `opencode auth login` 事先登入；預設 agent 方法 `opencode-login`；client 支援 terminal 時可執行 `opencode acp --login` | https://opencode.ai/docs/cli/acp/ （2026-11-23） |
+| opencode | server：有，`opencode acp`（JSON-RPC over stdio，ACP protocol version 1）。client：未證實。穩定度：未標示（未證實） | ACP 模式由 client 以子程序啟動，程序在 client 關閉 stdin 後退出；非 ACP 的無頭模式：未證實 | `session/update` 回報進度、工具呼叫、用量；權限選項 `allow_once`、`allow_always`、`reject_once`，可附 diff 預覽；`session/cancel` 回 `stopReason: "cancelled"`；問題以 `elicitation/create` 表單送出 | `session/load` 有（回放訊息）；`session/resume` 與 `session/fork` 已支援（astra 2026-11-25 複核官方文件，原記「不支援」已過時）；用量不含子 session，記帳要另算；另有 list、close、delete | `opencode auth login` 事先登入；預設 agent 方法 `opencode-login`；client 支援 terminal 時可執行 `opencode acp --login` | https://opencode.ai/docs/cli/acp/ （2026-11-23） |
 | Qoder（qodercli／qoder） | server：有，但指令名稱文件不一致：CLI reference 寫 `qodercli`／`--acp`，ACP 頁寫 `qoder --acp`（哪個為現行：未證實）。client：未證實。穩定度：未證實 | `-p`／`--print`：單次回應後退出，適合 CI；`-o` 支援 `text`、`json`、`stream-json`。headless 下權限行為：未證實（官方 headless 頁 404） | ACP 頁：權限設定「與 CLI 相同」，Bypass 等同 `--yolo`；串流與 `session/update`：未證實（ACP 頁未提及） | CLI 有 `--continue`（`-c`）、`--resume`（`-r [id]`）、`--session-id`、`--fork-session`；ACP 的 load／resume：未證實 | `qoder login`；環境變數 `QODER_PERSONAL_ACCESS_TOKEN` 於啟動時登入 | https://docs.qoder.com/cli/acp （2026-11-23；`/en/` 版 404）；https://docs.qoder.com/cli/cli-reference （2026-11-23）。headless 頁 https://docs.qoder.com/cli/headless 404，未直接驗證 |
 | MiniMax（MiniMax Code，指令 `mcode`） | server：有，`mcode acp`（stdin／stdout；log 走 stderr）。client：未證實。穩定度：未證實 | `mcode exec [prompt]`，輸出 `text`、`json`、`stream-json`；`--permission off` 關閉權限模式。官方明言：headless 不支援 `ask`，需人工核准時改用 TUI 或 ACP | 頁面說 ACP host 可處理權限提示、問題、取消、模型控制、Plan；串流格式與事件名：未證實 | ACP 是否支援 load／resume：未證實；TUI 有 `/sessions`（別名 `/resume`） | MiniMax Token Plan（`mcode provider use token-plan`）；API Key（`mcode provider use api-key`，預設讀 `MCODE_PROVIDER_API_KEY`）；OAuth（`mcode login` 或 `/login`） | https://code.minimax.io/docs/cli/features.md （由 agent.minimax.io 301 轉址，2026-11-23）。Zed 清單 https://zed.dev/acp/agent/minimax-code 僅見於搜尋摘要 |
 | T3 Code | ACP client（host UI）：可從 ACP Registry 加入，或在 Settings → Providers 用 Local ACP command 指定本機執行檔；直接啟動執行檔，不展開 shell。優先使用 ACP v2（官方文件稱「preview」），Registry 尚未遷移的 agent 協商 ACP v1。穩定度：官方頁與 README 未標示版號與 stable／beta 狀態（二手部落格稱 Beta，未證實） | 桌面 App（macOS、Windows、Linux）、CLI（`t3` 啟動 server 並開啟 web app）、web app（app.t3.codes）、iOS 與 Android App | 未證實（來源未描述 T3 Code 自身的串流／權限回呼細節） | 每個 thread 可用獨立 git worktree；同一 server 供各端共用 thread | 前置條件：至少一個已安裝並登入的 agent（例如 Claude Code 或 Codex CLI）；自稱「不是模型供應商」、「does not resell tokens」 | t3.codes 首頁與 GitHub README `pingdotgg/t3code`、`docs/user/providers-acp.md`（擷取日 2026-11-23） |
@@ -106,13 +106,17 @@
 
 ## 7. 待 astra、carbon 獨立評估
 
-### astra
+### astra（2026-11-25，部分同意）
 
-待回
+版本資料過時（schema v1.35.0、v2 為 beta.4，不可混同 schema 與協定版本）；opencode 已支援 resume／fork；app-server 是 codex-acp 包裝的另一套協定，單測它不算測 ACP；官方對自動派工／CI 優先建議 Codex SDK。最小試驗改為 opencode ACP 對照 CLI 100 件（取消、斷線、權限拒絕）。
 
-### carbon
+### carbon（2026-11-25，部分同意）
 
-待回
+app-server 是私有協定非 ACP，試驗標的須改選原生 ACP（opencode acp）；漏驗 ACP 是否回傳精確 token／cache 用量，缺此即不改接的硬理由；連跑 100 次無頭派工零死鎖零殘留為成功判準。
+
+### PM 裁定（2026-11-25）
+
+opencode ACP 試驗開：單一非關鍵席位、旗標預設關；先驗 token／cache 用量精確性，拿不到就停；對照 CLI 同 100 件；中國模型只跑公開來源；一天、不超過該席 7 天額度 10%；失敗率高 CLI 10 個百分點或越界一次即停。
 
 ---
 

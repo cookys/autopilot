@@ -5,7 +5,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { isDeepStrictEqual } = require('util');
-const TARGETS = { pm: 283000, lead: { fable: 250000, opus: 250000 }, worker: { sonnet: 300000, haiku: 300000 } };
+const TARGETS = { pm: 283000, lead: 250000, worker: 300000, family: { fable: 250000, opus: 250000, sonnet: 300000, haiku: 300000 } };
+const familyOf = (m) => (typeof m === 'string' ? ['fable', 'opus', 'sonnet', 'haiku'].find((f) => m.toLowerCase().includes(f)) : undefined);
 const args = process.argv.slice(2);
 function value(flag) { const i = args.indexOf(flag); return i < 0 ? undefined : args[i + 1]; }
 function hash(data) { return crypto.createHash('sha256').update(data).digest('hex'); }
@@ -26,8 +27,8 @@ try {
   if (!Array.isArray(profiles)) throw new Error('profiles must be an array');
   const rows = profiles.map(p => {
     if (!p || typeof p.host !== 'string' || typeof p.profile !== 'string' || typeof p.settings_path !== 'string' || !['pm', 'lead', 'worker'].includes(p.kind)) throw new Error('invalid profile');
-    const target = targets[p.kind];
-    const expected = typeof target === 'number' ? target : target?.[p.model];
+    // pm keeps its own fixed window; otherwise the model family (a full id like claude-opus-5-5 counts) decides, else the kind default
+    const expected = p.kind === 'pm' ? targets.pm : (targets.family || {})[familyOf(p.model)] ?? targets[p.kind];
     if (!Number.isFinite(expected) || expected <= 0) throw new Error(`missing target for ${p.kind}/${p.model || ''}`);
     let content, data, status, current;
     try { content = fs.readFileSync(p.settings_path); } catch (e) { if (e.code === 'ENOENT') return { p, expected, status: 'absent' }; return { p, expected, status: 'unreadable' }; }

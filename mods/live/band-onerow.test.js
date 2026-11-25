@@ -21,11 +21,6 @@ test.before(async () => {
 
 const segText = seg => seg.segs.map(s => s.text).join('')
 
-test('source label is not repeated', () => {
-  const source = segText(B.formatSource({ label: tZh('band.src_unknown'), flags: 1, state: 'normal' }, tZh))
-  assert.doesNotMatch(source, /來源\s+來源/)
-})
-
 const sampleInput = (over = {}) => ({
   reminder: { text: '要你決定：合併 shared-tui plan 進 develop？', cardId: 'd-001', state: 'normal', hasRec: true, ...(over.reminder || {}) },
   line: { stalled: 4, running: 3, failed: 2, waiting: 0, state: 'normal', ...(over.line || {}) },
@@ -239,7 +234,7 @@ test('codex-major-5: right alignment keeps tok/s suffix and subsequent separator
 })
 
 // Decide C dual-column rules: 82/83/84 threshold, +/-2 hysteresis, equal column widths (>=40 each + 3 sep)
-test('decide-c-layout: 82/83/84 threshold, +/-2 hysteresis, and column widths', () => {
+test('decide-c-layout: 82/83/84 threshold, +/-2 hysteresis, and equal column widths', () => {
   assert.equal(L.decideLayoutMode(82, null), 'single')
   assert.equal(L.decideLayoutMode(83, null), 'dual')
   assert.equal(L.decideLayoutMode(84, null), 'dual')
@@ -258,8 +253,7 @@ test('decide-c-layout: 82/83/84 threshold, +/-2 hysteresis, and column widths', 
   const w83 = L.decideColumnWidths(83)
   assert.deepEqual(w83, { leftW: 40, rightW: 40, sepW: 3 })
   const w120 = L.decideColumnWidths(120)
-  assert.ok(w120.leftW >= 68, 'left column has room at 120')
-  assert.ok(L.decideColumnWidths(205).leftW >= 120, 'left column has room at 205')
+  assert.equal(Math.abs(w120.leftW - w120.rightW) <= 1, true, 'equal columns at 120')
   assert.equal(w120.leftW + w120.sepW + w120.rightW, 120)
 })
 

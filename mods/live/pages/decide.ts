@@ -1025,7 +1025,11 @@ function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
     return { body: [...topBanners, headRow, sepRow, ...rightShown], actions }
   }
 
-  const { leftW, rightW } = decideColumnWidths(cols)
+  const listWant = cards.reduce((m, x) => {
+    const hasRec = x.options.some(o => o.recommended)
+    return Math.max(m, displayWidth('  00 ' + x.title) + 2 + (hasRec ? 2 : 0))
+  }, 0)
+  const { leftW, rightW } = decideColumnWidths(cols, listWant)
   const midRoom = Math.max(1, room - 2)
 
   // Left + Right header

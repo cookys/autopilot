@@ -14,7 +14,7 @@ export const PAGE_KEYS: Record<string, string> = { ...V74_KEY, pet: PET_KEY, quo
 export const V74_STRIP_ORDER = [...V74_PAGES, 'pet'] as const
 
 // Decide page C degradation rules (PM 01M837ZECP):
-// Based on band bodyColumns only: >=83 dual-column (>=40 each, 3-cell separator),
+// Based on band bodyColumns only: >=83 dual-column (equal widths, >=40 each, 3-cell separator),
 // <83 single-column, +/-2 col hysteresis around 83 (81..85), maxRows < 10 collapses to 1-row-per-card list.
 export const DECIDE_DUAL_MIN_COLS = 83
 export const DECIDE_HYSTERESIS = 2
@@ -30,10 +30,16 @@ export function decideLayoutMode(bodyColumns: number, prevMode: DecideLayoutMode
   return bodyColumns >= DECIDE_DUAL_MIN_COLS ? 'dual' : 'single'
 }
 
-export function decideColumnWidths(availCols: number): { leftW: number; rightW: number; sepW: number } {
+// wantLeft = the display width the list actually needs (longest card row). Given, the left column takes just that, at most 40% of the
+// usable width and at least DECIDE_LIST_MIN_W, so the detail on the right gets the rest. Omitted, the columns stay equal.
+export const DECIDE_LIST_MIN_W = 34
+export const DECIDE_LIST_MAX_FRAC = 0.4
+export function decideColumnWidths(availCols: number, wantLeft?: number): { leftW: number; rightW: number; sepW: number } {
   const sepW = DECIDE_COL_SEP_W
   const usable = Math.max(2, availCols - sepW)
-  const leftW = Math.min(usable - DECIDE_MIN_COL_W, Math.floor(usable * 0.6))
+  const leftW = wantLeft === undefined
+    ? Math.floor(usable / 2)
+    : Math.max(Math.min(DECIDE_LIST_MIN_W, usable - 1), Math.min(wantLeft, Math.floor(usable * DECIDE_LIST_MAX_FRAC)))
   const rightW = usable - leftW
   return { leftW, rightW, sepW }
 }

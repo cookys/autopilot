@@ -13,7 +13,7 @@ const nav = (o: Partial<typeof NO_NAV>) => ({ ...NO_NAV, ...o })
 
 for (const cols of [120, 205]) {
   test(`boxed decide CJK columns and scrollbar align at ${cols} cells`, () => {
-    const cards = [1, 2].map(i => ({ id: 'c' + i, title: '中文待決' + i, question: '如何處理？', background: '背景說明。'.repeat(100), options: [{ label: '選項甲', detail: '說明' }] }))
+    const cards = [1, 2].map(i => ({ id: 'c' + i, title: '中文待決' + i, question: '如何處理？', background: '背景說明。'.repeat(400), options: [{ label: '選項甲', detail: '說明' }] }))
     const ctx = { live: live(), console: con([], []), size: { cols: cols - 4, rows: 20 }, bodyColumns: cols, maxRows: 30, t, nowMs, box: true, pendingScroll: { list: newScroll(), detail: newScroll(), cursor: '' }, decide: nav({ cursor: 0 }), v74: { decide: cards, nav: { cursor: 0, picks: {}, notes: {}, noteMode: false } } } as never
     const body = decidePage.render(ctx).body.map(text)
     const header = body.findIndex(r => r.includes('卡 #01 / 2'))

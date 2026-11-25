@@ -86,6 +86,18 @@
       "relates": []
     },
     {
+      "name": "AUTOPILOT_QUOTA_WAIT_GUARD_MODE",
+      "kind": "env",
+      "audience": "user",
+      "default": "block",
+      "readers": [
+        "hooks/fleet-quota-wait-guard.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "group": "Hook switches",
+      "relates": []
+    },
+    {
       "name": "context_budget.t2_pct_by_seat",
       "kind": "config_key",
       "audience": "user",

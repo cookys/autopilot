@@ -1,0 +1,269 @@
+{
+  "schema_version": 1,
+  "partial": false,
+  "total_cost_usd": 5.819421,
+  "budget_usd": 6,
+  "skills": {
+    "autopilot:agent-call": {
+      "positive_total": 1,
+      "positive_hits": 1,
+      "hit_rate": 1,
+      "negative_total": 1,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    },
+    "autopilot:audit": {
+      "positive_total": 1,
+      "positive_hits": 1,
+      "hit_rate": 1,
+      "negative_total": 1,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    },
+    "autopilot:brainstorm": {
+      "positive_total": 1,
+      "positive_hits": 1,
+      "hit_rate": 1,
+      "negative_total": 1,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    },
+    "autopilot:ceo-agent": {
+      "positive_total": 1,
+      "positive_hits": 1,
+      "hit_rate": 1,
+      "negative_total": 1,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    },
+    "autopilot:debug": {
+      "positive_total": 1,
+      "positive_hits": 0,
+      "hit_rate": 0,
+      "negative_total": 1,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    },
+    "autopilot:dev-flow": {
+      "positive_total": 1,
+      "positive_hits": 1,
+      "hit_rate": 1,
+      "negative_total": 1,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    },
+    "autopilot:distill": {
+      "positive_total": 1,
+      "positive_hits": 1,
+      "hit_rate": 1,
+      "negative_total": 1,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    },
+    "autopilot:doc-sync": {
+      "positive_total": 1,
+      "positive_hits": 1,
+      "hit_rate": 1,
+      "negative_total": 1,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    },
+    "autopilot:engine-onboarding": {
+      "positive_total": 1,
+      "positive_hits": 1,
+      "hit_rate": 1,
+      "negative_total": 1,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    },
+    "autopilot:finish-flow": {
+      "positive_total": 1,
+      "positive_hits": 1,
+      "hit_rate": 1,
+      "negative_total": 1,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    },
+    "autopilot:fleet-usage": {
+      "positive_total": 1,
+      "positive_hits": 1,
+      "hit_rate": 1,
+      "negative_total": 1,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    },
+    "autopilot:handoff": {
+      "positive_total": 1,
+      "positive_hits": 1,
+      "hit_rate": 1,
+      "negative_total": 1,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    },
+    "autopilot:harness-maintenance": {
+      "positive_total": 1,
+      "positive_hits": 1,
+      "hit_rate": 1,
+      "negative_total": 1,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    },
+    "autopilot:hetero-review": {
+      "positive_total": 1,
+      "positive_hits": 1,
+      "hit_rate": 1,
+      "negative_total": 1,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    },
+    "autopilot:l3": {
+      "positive_total": 1,
+      "positive_hits": 0,
+      "hit_rate": 0,
+      "negative_total": 1,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    },
+    "autopilot:l4": {
+      "positive_total": 1,
+      "positive_hits": 0,
+      "hit_rate": 0,
+      "negative_total": 1,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    },
+    "autopilot:l5": {
+      "positive_total": 1,
+      "positive_hits": 0,
+      "hit_rate": 0,
+      "negative_total": 1,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    },
+    "autopilot:l6": {
+      "positive_total": 1,
+      "positive_hits": 0,
+      "hit_rate": 0,
+      "negative_total": 1,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    },
+    "autopilot:lead-watch": {
+      "positive_total": 1,
+      "positive_hits": 0,
+      "hit_rate": 0,
+      "negative_total": 1,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    },
+    "autopilot:learn": {
+      "positive_total": 1,
+      "positive_hits": 1,
+      "hit_rate": 1,
+      "negative_total": 1,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    },
+    "autopilot:next": {
+      "positive_total": 1,
+      "positive_hits": 1,
+      "hit_rate": 1,
+      "negative_total": 0,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    },
+    "autopilot:onboard": {
+      "positive_total": 1,
+      "positive_hits": 1,
+      "hit_rate": 1,
+      "negative_total": 0,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    },
+    "autopilot:profiling": {
+      "positive_total": 1,
+      "positive_hits": 1,
+      "hit_rate": 1,
+      "negative_total": 0,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    },
+    "autopilot:project-lifecycle": {
+      "positive_total": 1,
+      "positive_hits": 1,
+      "hit_rate": 1,
+      "negative_total": 0,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    },
+    "autopilot:quality-pipeline": {
+      "positive_total": 1,
+      "positive_hits": 1,
+      "hit_rate": 1,
+      "negative_total": 0,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    },
+    "autopilot:research-to-ship": {
+      "positive_total": 1,
+      "positive_hits": 1,
+      "hit_rate": 1,
+      "negative_total": 0,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    },
+    "autopilot:retro": {
+      "positive_total": 1,
+      "positive_hits": 1,
+      "hit_rate": 1,
+      "negative_total": 0,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    },
+    "autopilot:survey": {
+      "positive_total": 1,
+      "positive_hits": 1,
+      "hit_rate": 1,
+      "negative_total": 0,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    },
+    "autopilot:team": {
+      "positive_total": 1,
+      "positive_hits": 1,
+      "hit_rate": 1,
+      "negative_total": 0,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    },
+    "autopilot:test-strategy": {
+      "positive_total": 1,
+      "positive_hits": 1,
+      "hit_rate": 1,
+      "negative_total": 0,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    },
+    "autopilot:think-tank": {
+      "positive_total": 1,
+      "positive_hits": 1,
+      "hit_rate": 1,
+      "negative_total": 0,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    },
+    "autopilot:think-tank-dialectic": {
+      "positive_total": 1,
+      "positive_hits": 1,
+      "hit_rate": 1,
+      "negative_total": 0,
+      "negative_hits": 0,
+      "false_positive_rate": 0
+    }
+  },
+  "unscoped_negative": {
+    "total": 0,
+    "hits": 0,
+    "false_positive_rate": 0
+  }
+}

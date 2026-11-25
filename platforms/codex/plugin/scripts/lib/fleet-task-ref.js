@@ -135,26 +135,22 @@ function resolvePmGate({
     return { allowed: true, exempt: 'caller', taskId: resolveParentTaskId({ fleetTaskArg, text, env }) || null };
   }
 
-  let isPmConsole = () => false;
-  try {
-    ({ isPmConsole } = require(path.join(__dirname, '..', '..', 'hooks', '_shared', 'pm-console.js')));
-  } catch {
-    return { allowed: true, exempt: 'pm-helper-missing', taskId: null };
-  }
-
-  if (!isPmConsole(repoRoot || process.cwd())) {
-    return { allowed: true, exempt: 'non-pm-console', taskId: null };
-  }
+  const gateMode = String(env.AUTOPILOT_FLEET_TASK_GATE || '').trim().toLowerCase();
+  const warnOnly = gateMode === 'warn';
 
   const cli = String(fleetTaskArg || '').trim();
   const envFleet = String(env.AUTOPILOT_FLEET_TASK || '').trim();
   const candidate = cli || (envFleet && envFleet !== 'none' ? envFleet : '') || findTaskId(text) || '';
 
   if (!candidate) {
+    const reason = 'Fleet-Task precondition failed: missing Fleet-Task (<26-char id>). Open or pick a task (`fleet task show`) and pass `--fleet-task <id>`, set `AUTOPILOT_FLEET_TASK`, or add `Fleet-Task: <id>` to the brief/plan.';
+    if (warnOnly) {
+      return { allowed: true, warn: true, code: 'missing', note: reason };
+    }
     return {
       allowed: false,
       code: 'missing',
-      reason: 'PM Console precondition failed: missing Fleet-Task (<26-char id>). Open or pick a task (`fleet task show`) and pass `--fleet-task <id>`, set `AUTOPILOT_FLEET_TASK`, or add `Fleet-Task: <id>` to the brief/plan.',
+      reason,
     };
   }
 
@@ -171,18 +167,26 @@ function resolvePmGate({
     };
   }
   if (probe.state === 'not_found') {
+    const reason = `Fleet-Task precondition failed: Fleet-Task ${candidate} was not_found (\`fleet task show ${candidate}\`). Open or pick a valid open task.`;
+    if (warnOnly) {
+      return { allowed: true, warn: true, code: 'not_found', taskId: candidate, note: reason };
+    }
     return {
       allowed: false,
       code: 'not_found',
       taskId: candidate,
-      reason: `PM Console precondition failed: Fleet-Task ${candidate} was not_found (\`fleet task show ${candidate}\`). Open or pick a valid open task.`,
+      reason,
     };
+  }
+  const reason = `Fleet-Task precondition failed: Fleet-Task ${candidate} is closed (done/failed/cancelled). Open or pick an open task (\`fleet task show\`).`;
+  if (warnOnly) {
+    return { allowed: true, warn: true, code: 'closed', taskId: candidate, note: reason };
   }
   return {
     allowed: false,
     code: 'closed',
     taskId: candidate,
-    reason: `PM Console precondition failed: Fleet-Task ${candidate} is closed (done/failed/cancelled). Open or pick an open task (\`fleet task show\`).`,
+    reason,
   };
 }
 

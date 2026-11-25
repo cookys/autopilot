@@ -3919,7 +3919,8 @@ if [ -z "$_pm_repo" ]; then
   _pm_repo="$(git rev-parse --show-toplevel 2>/dev/null || pwd -P 2>/dev/null || true)"
 fi
 _pm_out_err="$(mktemp -t dispatch-hetero-pm-XXXXXX)"
-if _pm_resolved="$(node "$SELF_DIR/lib/fleet-task-ref.js" pm-check \
+# AUTOPILOT_PARENT_RUN_ID was exported for children above; the gate must see the caller's original value or every run looks inherited.
+if _pm_resolved="$(AUTOPILOT_PARENT_RUN_ID="${LINEAGE_PARENT:-}" node "$SELF_DIR/lib/fleet-task-ref.js" pm-check \
     --repo-root "${_pm_repo:-$PWD}" \
     ${FLEET_TASK_ARG:+--fleet-task "$FLEET_TASK_ARG"} \
     --prompt-file "$_gate_prompt" \

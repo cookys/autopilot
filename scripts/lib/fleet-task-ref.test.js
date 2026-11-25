@@ -148,7 +148,7 @@ test('resolvePmGate handles PM console, exemptions, and fail-open unavailable', 
     fs.mkdirSync(path.join(nonPmRepo, '.git'));
     fs.writeFileSync(path.join(nonPmRepo, '.git', 'HEAD'), 'ref: refs/heads/main\n');
 
-    assert.equal(resolvePmGate({ repoRoot: nonPmRepo, env: {} }).allowed, true);
+    assert.equal(resolvePmGate({ repoRoot: nonPmRepo, env: {} }).code, 'missing'); // P4: the gate no longer stops at non-PM repos
     assert.equal(resolvePmGate({ repoRoot: pmRepo, env: {} }).code, 'missing');
     assert.equal(resolvePmGate({ repoRoot: pmRepo, hasBinStub: true, env: {} }).allowed, true);
     assert.equal(resolvePmGate({ repoRoot: pmRepo, env: { AUTOPILOT_PARENT_RUN_ID: 'r1' } }).allowed, true);

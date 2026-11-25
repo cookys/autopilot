@@ -118,7 +118,7 @@ mkdir -p "$WT_PARENT"
 rc=0
 HETERO_OUT="$(HOME="$SANDBOX_HOME" PATH="$STUB_BIN:$PATH" \
   AUTOPILOT_FLEET_TASK="" AUTOPILOT_UPSTREAM_TASK_ID="" \
-  bash "$HETERO" --branch "feat/test-p4-neg" --prompt-file "$BRIEF" --worktree-parent "$WT_PARENT" 2>&1)" || rc=$?
+  bash "$HETERO" --no-campaign --branch "feat/test-p4-neg" --prompt-file "$BRIEF" --worktree-parent "$WT_PARENT" 2>&1)" || rc=$?
 assert_eq "hetero-missing-rc" "$rc" "2"
 assert_contains "hetero-missing-err" "$HETERO_OUT" "Fleet-Task"
 # Verify no worktree was created

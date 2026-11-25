@@ -17,6 +17,8 @@ printf '#!/bin/sh\nexit 0\n' > "$TEST_TMP/fleet-noop"
 chmod +x "$TEST_TMP/fleet-noop"
 export FLEET_BIN="$TEST_TMP/fleet-noop"
 
+# P4: the Fleet-Task gate now covers every seat; this suite is about other guards, so run as an exempt caller (the Fleet-Task section below unsets it).
+export AUTOPILOT_DISPATCH_ROLE=probe-model-guard-test
 # Case 1: default-on since v2.35.15 — the opt-OUT env silences it; without it the guard fires
 PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable@agy effort=low\n'"$COST_FABLE_OPUS"'\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=off run_hook dispatch-model-guard.js "$PAYLOAD"
@@ -563,6 +565,7 @@ printf 'ref: refs/heads/main\n' > "$PM_REPO/.git/HEAD"
 printf 'ref: refs/heads/main\n' > "$NON_PM_REPO/.git/HEAD"
 printf '{"schema":"autopilot.console/1","mode":"program"}\n' > "$PM_REPO/.claude/console.json"
 
+unset AUTOPILOT_DISPATCH_ROLE
 FLEET_STUB_OPEN="$TEST_TMP/fleet-open"
 FLEET_STUB_DONE="$TEST_TMP/fleet-done"
 FLEET_STUB_NF="$TEST_TMP/fleet-nf"
@@ -580,12 +583,12 @@ chmod +x "$FLEET_STUB_OPEN" "$FLEET_STUB_DONE" "$FLEET_STUB_NF" "$FLEET_STUB_COU
 # Haiku work dispatches must bind an open task; read-only Explore stays exempt.
 PAYLOAD_HAIKU='{"tool_name":"Agent","tool_input":{"model":"haiku","subagent_type":"general-purpose","prompt":"Engine: haiku\nFleet-Task: '"$PM_TASK_ID"'\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$PM_REPO"'"}'
 FLEET_BIN="$FLEET_STUB_NF" run_hook dispatch-model-guard.js "$PAYLOAD_HAIKU"
-assert_contains "$__RUN_STDOUT" '查無此單' "pm-fleet-haiku-not-found denies"
+assert_contains "$__RUN_STDOUT" 'not_found' "pm-fleet-haiku-not-found denies"
 FLEET_BIN="$FLEET_STUB_DONE" run_hook dispatch-model-guard.js "$PAYLOAD_HAIKU"
-assert_contains "$__RUN_STDOUT" '已結束' "pm-fleet-haiku-done denies"
+assert_contains "$__RUN_STDOUT" 'is closed' "pm-fleet-haiku-done denies"
 PAYLOAD_HAIKU_MISSING='{"tool_name":"Agent","tool_input":{"model":"haiku","subagent_type":"general-purpose","prompt":"Engine: haiku\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$PM_REPO"'"}'
 FLEET_BIN="$FLEET_STUB_OPEN" run_hook dispatch-model-guard.js "$PAYLOAD_HAIKU_MISSING"
-assert_contains "$__RUN_STDOUT" '缺少 Fleet-Task:' "pm-fleet-haiku-missing denies"
+assert_contains "$__RUN_STDOUT" 'missing Fleet-Task' "pm-fleet-haiku-missing denies"
 PAYLOAD_HAIKU_EXPLORE='{"tool_name":"Agent","tool_input":{"model":"haiku","subagent_type":"Explore","prompt":"Engine: haiku\nRead files."},"hook_event_name":"PreToolUse","cwd":"'"$PM_REPO"'"}'
 FLEET_BIN="$FLEET_STUB_OPEN" run_hook dispatch-model-guard.js "$PAYLOAD_HAIKU_EXPLORE"
 assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "pm-fleet-haiku-explore exempt"
@@ -615,7 +618,7 @@ assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "pm-fleet-not-foun
 
 FLEET_BIN="$FLEET_STUB_COURIER_NF" run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "pm-fleet-courier-not-found denies"
-assert_contains "$__RUN_STDOUT" '查無此單' "pm-fleet-courier-not-found explains"
+assert_contains "$__RUN_STDOUT" 'not_found' "pm-fleet-courier-not-found explains"
 
 # 4. stub open -> allow
 FLEET_BIN="$FLEET_STUB_OPEN" run_hook dispatch-model-guard.js "$PAYLOAD"
@@ -645,7 +648,9 @@ assert_contains "$__RUN_STDERR" "unavailable" "pm-fleet-unavailable logs stderr 
 # 7. non-PM console without id -> allow
 PAYLOAD_NONPM='{"tool_name":"Agent","tool_input":{"model":"sonnet","subagent_type":"general-purpose","prompt":"Engine: sonnet\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$NON_PM_REPO"'"}'
 FLEET_BIN="$FLEET_STUB_OPEN" run_hook dispatch-model-guard.js "$PAYLOAD_NONPM"
-assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "non-pm-console allows without id"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "non-pm-console now denied without id (P4: all seats)"
+# Later sections test other guards: back to an exempt caller.
+export AUTOPILOT_DISPATCH_ROLE=probe-model-guard-test
 
 # 8. Brain-tier dispatch JSONL ledger: opus with Model-Reason appends allowed:true; without Model-Reason appends allowed:false
 STATE_DIR_LEDGER="$TEST_TMP/ledger-state"

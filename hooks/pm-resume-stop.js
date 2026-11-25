@@ -33,13 +33,15 @@ function optedOut(env) {
   return typeof v === 'string' && ['false', '0', 'off', 'no'].includes(v.trim().toLowerCase());
 }
 
-// True when some tool call (not the injected context) in the transcript names one of the ids.
+// True when some tool call (not the injected context) in the transcript names one of the ids,
+// or runs `fleet pm resume` by hand (the seat already read its in-flight work itself).
 function touchedAny(transcriptPath, ids) {
-  if (!transcriptPath || !ids.length) return false;
+  if (!transcriptPath) return false;
   let text;
   try { text = fs.readFileSync(transcriptPath, 'utf8'); } catch { return true; } // cannot read: do not nag
   for (const line of text.split('\n')) {
     if (!line.includes('"tool_use"')) continue;
+    if (/fleet\s+pm\s+resume/.test(line)) return true;
     const found = line.match(ID_RE);
     if (found && found.some((id) => ids.includes(id))) return true;
   }
@@ -71,6 +73,7 @@ function decide(input, env) {
   if (marker && marker.reminded) return null;
   if (!marker) {
     if (!resolveSeat(input, env)) return null; // not a fleet seat: nothing to resume
+    if (touchedAny(input.transcript_path, [])) return null; // no injection record, but the seat ran resume itself
     return { sessionId, marker: {}, text: '[pm-resume] 這個 session 開始後沒有記錄到 fleet pm resume 的注入（可能是舊版 plugin 或 hook 沒跑）。第一步先跑 `fleet pm resume --seat <你的席位> --role <pm|lead|member>`，從 IN_FLIGHT 的單開始。' };
   }
   if (!marker.ok) return { sessionId, marker, text: '[pm-resume] 開機時 resume 沒讀到。第一步先自己跑 `fleet pm resume --seat <你的席位> --role <pm|lead|member>`，從 IN_FLIGHT 的單開始。' };

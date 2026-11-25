@@ -46,6 +46,7 @@ const ACCOUNT_RE = /^[A-Za-z0-9_.-]+(:[A-Za-z0-9_.@-]+)?$/;
 const isInt = (v) => Number.isInteger(v) && v >= 0;
 const str = (v) => (typeof v === 'string' && v.length > 0 ? v : null);
 const intOrNull = (v) => (isInt(v) ? v : null);
+const numOrNull = (v) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null);
 
 // ---- account mapping -------------------------------------------------------------------------------------
 // accountFor({runner, endpoint, endpointLocal, courier, claudeAccount, codexAccount}) -> alias string or null.
@@ -134,8 +135,10 @@ function normalizeRow(i) {
     },
     upstream: { task_id: str(x.upstream_task_id), message_id: str(x.upstream_message_id) },
     role: normalizeRole(x.role),
+    subagent_type: str(x.subagent_type),
     runner,
     model,
+    usd: numOrNull(x.usd),
     account,
     served_by: {
       runner: str(served.runner) || runner,
@@ -169,6 +172,7 @@ function validateRow(row) {
     if (!isInt(row.started_at)) return 'running_row_needs_started_at';
   } else if (!isInt(row.ended_at)) return 'ended_at_not_epoch_int';
   if (row.started_at !== null && !isInt(row.started_at)) return 'started_at_not_epoch_int';
+  if (row.usd !== null && (typeof row.usd !== 'number' || !Number.isFinite(row.usd) || row.usd < 0)) return 'usd_not_number_or_null';
   if (!USAGE_SOURCES.includes(row.usage_source)) return 'bad_usage_source';
   for (const k of USAGE_KEYS) {
     if (row.usage[k] !== null && !isInt(row.usage[k])) return `usage_${k}_not_int_or_null`;
@@ -209,8 +213,10 @@ function rowFromResult(result, ctx) {
     upstream_task_id: c.upstream_task_id,
     upstream_message_id: c.upstream_message_id,
     role: c.role,
+    subagent_type: str(c.subagent_type) || str(r.subagent_type),
     runner,
     model,
+    usd: c.usd !== undefined ? c.usd : (r.usd !== undefined ? r.usd : (r.total_cost_usd !== undefined ? r.total_cost_usd : r.cost_usd)),
     account: accountFor({ runner, endpoint, endpointLocal: c.endpointLocal, courier: c.courier, claudeAccount: c.claudeAccount, codexAccount: c.codexAccount }),
     served_by: {
       runner: str(c.served_runner),
@@ -325,7 +331,8 @@ function runAppend(args, env, nowSecs, isStart) {
   const courier = courierFromFleet(env);
   const ctx0 = { claudeAccount: claudeAccount(env), codexAccount: codexAccount(env) };
   const ctx = {
-    role: args.role, run_id: str(args.run_id), parent_run_id: str(args.parent_run_id), root_run_id: str(args.root_run_id),
+    role: args.role, subagent_type: str(args.subagent_type), run_id: str(args.run_id), parent_run_id: str(args.parent_run_id), root_run_id: str(args.root_run_id),
+    usd: args.usd !== undefined && args.usd !== '' ? Number(args.usd) : undefined,
     status: isStart ? 'running' : null,
     started_at: epochOrNull(args.started_at) !== null ? epochOrNull(args.started_at) : (isStart ? nowSecs : null),
     ended_at: isStart ? null : (epochOrNull(args.ended_at) !== null ? epochOrNull(args.ended_at) : nowSecs),

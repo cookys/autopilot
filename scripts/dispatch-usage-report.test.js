@@ -5,7 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { report } = require('./dispatch-usage-report');
+const { report, reportByRole } = require('./dispatch-usage-report');
 
 test('manifest snapshot counts only the last seven days and skips corrupt files', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-report-test-'));
@@ -42,4 +42,52 @@ test('authored status is a success, not a failure', t => {
   const g = report(dir, now, 7).by_runner.codex.by_model.alpha;
   assert.equal(g.runs, 1);
   assert.equal(g.failed, 0, 'authored must not count as failed');
+});
+
+test('reportByRole: groups by role, keeps rows with missing model as unknown, counts authored as succeeded, sums usd and unknown', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-role-report-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const nowMs = Date.now();
+  const nowSec = Math.floor(nowMs / 1000);
+  const ym = new Date(nowMs).toISOString().slice(0, 7).replace('-', '');
+  const rows = [
+    { run_id: 'r1', role: 'implementer', subagent_type: 'general-purpose', model: 'sonnet', usd: 0.25, status: 'authored', started_at: nowSec - 60, ended_at: nowSec - 10, usage: { input_tokens: 100, output_tokens: 50 } },
+    { run_id: 'r2', role: 'implementer', subagent_type: null, model: null, usd: null, status: 'committed', started_at: nowSec - 50, ended_at: nowSec - 5, usage: { input_tokens: 200, output_tokens: 25 } },
+    { run_id: 'r3', role: 'reviewer', subagent_type: 'Explore', model: 'gpt-5', usd: 0.1, status: 'runner_failed', started_at: nowSec - 40, ended_at: nowSec - 2, usage: { input_tokens: 10, output_tokens: 5 } },
+  ];
+  fs.writeFileSync(path.join(dir, `dispatch-usage-${ym}.jsonl`), rows.map((r) => JSON.stringify(r)).join('\n') + '\n');
+
+  const res = reportByRole(dir, nowMs, 7);
+  assert.equal(res.schema, 'dispatch-usage-role-report/1');
+  assert.equal(res.totals.runs, 3);
+  assert.equal(res.totals.succeeded, 2);
+  assert.equal(res.totals.failed, 1);
+  assert.equal(res.totals.tokens, 390);
+  assert.ok(Math.abs(res.totals.usd - 0.35) < 1e-9);
+  assert.equal(res.totals.usd_unknown, 1);
+  assert.equal(res.totals.model_unknown, 1);
+
+  assert.deepEqual(res.by_role.implementer, {
+    runs: 2,
+    succeeded: 2,
+    failed: 0,
+    tokens: 375,
+    usd: 0.25,
+    usd_unknown: 1,
+    model_unknown: 1,
+  });
+  assert.deepEqual(res.by_role.reviewer, {
+    runs: 1,
+    succeeded: 0,
+    failed: 1,
+    tokens: 15,
+    usd: 0.1,
+    usd_unknown: 0,
+    model_unknown: 0,
+  });
+
+  const out = path.join(dir, 'role-report.json');
+  const cli = spawnSync(process.execPath, [path.join(__dirname, 'dispatch-usage-report.js'), '--by-role', '--since', '7d', '--runs-dir', dir, '--out', out, '--json'], { encoding: 'utf8' });
+  assert.equal(cli.status, 0, cli.stderr);
+  assert.deepEqual(JSON.parse(cli.stdout), JSON.parse(fs.readFileSync(out, 'utf8')));
 });

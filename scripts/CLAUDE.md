@@ -61,7 +61,7 @@ Shared Cursor/Kimi broker transport and clone rail use the cursor-named helpers;
 **Sync, drift & release gates** — `sync-all.sh` `sync-version.js` `sync-agent-bodies.sh` `sync-model-routing.sh` `sync-codex-plugin-skills.sh` `sync-opencode-plugin.sh` `check-canonical-invariants.sh` `check-settings-changelog.js` `check-reference-sizes.js` `check-supersession-anchors.js` `check-claude-md-inventory.js` `check-tmp-residue-registry.js` `check-config-docs.js` `config-keys.json` `check-guidance-eval.js` `check-contract-schema.js` `check-hook-inventory.js` `check-js-syntax.js` `check-optin-changelog.js` `check-readme-parity.js` `check-plan-graduation.js` `preflight-portability.sh` `preflight-release.sh` `report-roster-field-consumers.js` `validate.sh` `validate-json-schema.js` `doc-drift-gate.js` `test-doc-drift-gate.sh` `check-stage-vocab.js` `layout-lint.js`
 `check-config-docs.test.js`
 
-**Sync, drift & release gates (cont.)** — `check-fixed-times.js` `check-test-exec-bits.js` `check-plan-phases.js` `plan-to-tasks.js` `tests/plan-to-tasks-join.test.sh`
+**Sync, drift & release gates (cont.)** — `check-fixed-times.js` `check-test-exec-bits.js` `check-plan-phases.js` `plan-to-tasks.js` `tests/plan-to-tasks-join.test.sh` `finish-triage.js` `look-classes.json`
 
 **Sync, drift & release gates (cont.)** — `check-quota-adapters.js` `check-events-contract.js` `check-claude-spawn-sites.js` `lib/claude-spawn-sites.json` `export-fleet-flow.js` `export-fleet-flow.test.js`
 

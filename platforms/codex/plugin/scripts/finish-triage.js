@@ -34,7 +34,16 @@ function sha256Hex(bufOrStr) {
 }
 
 function parseArgs(argv) {
-  const args = { task: '', sha: '', repo: process.cwd(), json: false };
+  const args = {
+    task: '',
+    sha: '',
+    repo: process.cwd(),
+    json: false,
+    accept: false,
+    target: '',
+    testCount: null,
+    planSnapshotPath: '',
+  };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--task' && i + 1 < argv.length) {
@@ -43,10 +52,19 @@ function parseArgs(argv) {
       args.sha = argv[++i];
     } else if (a === '--repo' && i + 1 < argv.length) {
       args.repo = argv[++i];
+    } else if (a === '--target' && i + 1 < argv.length) {
+      args.target = argv[++i];
+    } else if (a === '--test-count' && i + 1 < argv.length) {
+      const parsed = Number.parseInt(argv[++i], 10);
+      args.testCount = Number.isNaN(parsed) ? null : parsed;
+    } else if (a === '--plan-snapshot' && i + 1 < argv.length) {
+      args.planSnapshotPath = argv[++i];
+    } else if (a === '--accept') {
+      args.accept = true;
     } else if (a === '--json') {
       args.json = true;
     } else if (a === '--help' || a === '-h') {
-      console.log('Usage: node scripts/finish-triage.js --task <id> --sha <merged_sha> [--repo <dir>] [--json]');
+      console.log('Usage: node scripts/finish-triage.js --task <id> --sha <merged_sha> [--repo <dir>] [--accept] [--target <target>] [--test-count <n>] [--plan-snapshot <path>] [--json]');
       process.exit(0);
     } else {
       console.error(`Unknown argument: ${a}`);
@@ -357,9 +375,196 @@ function computeTriage(taskObj, text, repo, sha) {
   };
 }
 
+/**
+ * Placeholder interface for S3A plan snapshot sync (not yet available).
+ * Callers may pass `planSnapshot` object, `readPlanSnapshot(path)` callback,
+ * or `planSnapshotPath` to supply snapshot metadata without depending on S3A.
+ */
+function resolvePlanSnapshot(opts = {}) {
+  if (opts.planSnapshot && typeof opts.planSnapshot === 'object') {
+    return opts.planSnapshot;
+  }
+  if (typeof opts.readPlanSnapshot === 'function') {
+    return opts.readPlanSnapshot(opts.planSnapshotPath || null);
+  }
+  if (opts.planSnapshotPath && fs.existsSync(opts.planSnapshotPath)) {
+    try {
+      return JSON.parse(fs.readFileSync(opts.planSnapshotPath, 'utf8'));
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Extract acceptance receipt fields (commit, target, test_count) from
+ * explicit options, task text, or optional plan snapshot.
+ */
+function extractReceipt(text, opts = {}, snapshot = null) {
+  let commit = opts.commit || opts.sha || null;
+  if (isPlaceholder(commit)) {
+    const m = text.match(/^\s*Commit:\s*(\S+)\s*$/im);
+    commit = m && !isPlaceholder(m[1]) ? m[1].trim() : null;
+  }
+
+  let target = opts.target || (snapshot && snapshot.target) || null;
+  if (isPlaceholder(target)) {
+    const m = text.match(/^\s*Target:\s*(.+?)\s*$/im);
+    target = m && !isPlaceholder(m[1]) ? m[1].trim() : null;
+  }
+
+  let testCount = opts.testCount !== undefined && opts.testCount !== null ? opts.testCount : null;
+  if (testCount === null && snapshot && typeof snapshot.test_count === 'number') {
+    testCount = snapshot.test_count;
+  }
+  if (testCount === null) {
+    const m = text.match(/^\s*(?:Tests|Test-count|TestCount):\s*(\d+)\b/im);
+    if (m) {
+      testCount = Number.parseInt(m[1], 10);
+    }
+  }
+  if (typeof testCount !== 'number' || !Number.isInteger(testCount) || testCount < 0) {
+    testCount = null;
+  }
+
+  const missing_fields = [];
+  if (!commit) missing_fields.push('commit');
+  if (!target) missing_fields.push('target');
+  if (testCount === null) missing_fields.push('test_count');
+
+  return {
+    complete: missing_fields.length === 0,
+    commit,
+    target,
+    test_count: testCount,
+    missing_fields,
+  };
+}
+
+/**
+ * Evaluate PM acceptance for a task:
+ * - Separates merged row and live/pinned row
+ * - Validates receipt (commit, target, test_count)
+ * - Reports incomplete + waiting_on when merged but not yet live/pinned
+ */
+function evaluateAccept(opts = {}) {
+  const taskId = opts.task || '';
+  const sha = opts.sha || '';
+  const repo = opts.repo || process.cwd();
+  const sha16 = sha.slice(0, 16);
+
+  const snapshot = resolvePlanSnapshot(opts);
+  const taskObj = opts.taskObj || fetchFleetTask(taskId);
+  if (taskObj._error) {
+    return {
+      ok: false,
+      completed: false,
+      status: 'error',
+      error: taskObj._error,
+      task: taskId,
+      sha,
+      sha16,
+      waiting_on: null,
+      receipt: { complete: false, commit: sha || null, target: opts.target || null, test_count: null, missing_fields: ['commit', 'target', 'test_count'] },
+      rows: {
+        merged: { ok: false, status: 'not_merged', sha: sha || null, reason: taskObj._error },
+        live: { ok: false, status: 'not_live', reason: taskObj._error },
+      },
+    };
+  }
+
+  const text = collectTaskText(taskObj);
+  const receipt = extractReceipt(text, { commit: sha, target: opts.target, testCount: opts.testCount }, snapshot);
+  const merged = sha ? verifyMerged(repo, sha) : { ok: false, reason: 'missing commit sha' };
+  const livePin = sha16 ? verifyLivePin(text, sha16, repo, sha) : { ok: false, reason: 'missing commit sha' };
+  const used = sha16 ? verifyUsed(text, sha16) : { ok: false, reason: 'missing commit sha' };
+  const triage = sha ? computeTriage(taskObj, text, repo, sha) : { decision: 'look', reasons: ['missing commit sha'] };
+
+  const mergedRow = {
+    ok: merged.ok,
+    status: merged.ok ? 'merged' : 'not_merged',
+    sha: sha || null,
+    ...(merged.reason ? { reason: merged.reason } : {}),
+  };
+
+  const liveRow = {
+    ok: livePin.ok,
+    status: livePin.ok ? (livePin.kind === 'not-needed' ? 'not_needed' : 'live') : 'not_live',
+    ...(livePin.kind ? { kind: livePin.kind } : {}),
+    ...(livePin.host ? { host: livePin.host } : {}),
+    ...(receipt.target ? { target: receipt.target } : {}),
+    ...(livePin.reason ? { reason: livePin.reason } : {}),
+  };
+
+  let waiting_on = null;
+  let status = 'incomplete';
+  if (!receipt.complete) {
+    status = 'incomplete_receipt';
+    waiting_on = 'receipt';
+  } else if (mergedRow.ok && !liveRow.ok) {
+    status = 'incomplete';
+    waiting_on = 'live_pin';
+  } else if (!mergedRow.ok) {
+    status = 'incomplete';
+    waiting_on = 'merge';
+  } else if (!used.ok) {
+    status = 'incomplete';
+    waiting_on = 'used_verification';
+  } else {
+    status = 'complete';
+    waiting_on = null;
+  }
+
+  const ok = status === 'complete';
+
+  return {
+    ok,
+    completed: ok,
+    status,
+    waiting_on,
+    task: taskId,
+    sha,
+    sha16,
+    receipt,
+    rows: {
+      merged: mergedRow,
+      live: liveRow,
+    },
+    cells: {
+      merged,
+      live_pin: livePin,
+      used,
+    },
+    triage,
+    plan_snapshot: snapshot ? { loaded: true } : { loaded: false },
+  };
+}
+
 function main() {
   const args = parseArgs(process.argv);
   const sha16 = args.sha.slice(0, 16);
+
+  if (args.accept) {
+    const result = evaluateAccept({
+      task: args.task,
+      sha: args.sha,
+      repo: args.repo,
+      target: args.target || undefined,
+      testCount: args.testCount,
+      planSnapshotPath: args.planSnapshotPath || undefined,
+    });
+    if (args.json) {
+      console.log(JSON.stringify(result, null, 2));
+    } else {
+      console.log(`status: ${result.status}${result.waiting_on ? ` (waiting_on: ${result.waiting_on})` : ''}`);
+      console.log(`receipt: ${result.receipt.complete ? 'COMPLETE' : `INCOMPLETE (missing: ${result.receipt.missing_fields.join(', ')})`}`);
+      console.log(`merged: ${result.rows.merged.ok ? 'PASS' : 'FAIL - ' + result.rows.merged.reason}`);
+      console.log(`live: ${result.rows.live.ok ? 'PASS' : 'FAIL - ' + result.rows.live.reason}`);
+      console.log(`used: ${result.cells.used.ok ? 'PASS' : 'FAIL - ' + result.cells.used.reason}`);
+    }
+    process.exit(result.ok ? 0 : 1);
+  }
 
   const taskObj = fetchFleetTask(args.task);
   if (taskObj._error) {
@@ -399,4 +604,20 @@ function main() {
   process.exit(ok ? 0 : 1);
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  parseArgs,
+  fetchFleetTask,
+  collectTaskText,
+  verifyUsed,
+  verifyLivePin,
+  verifyMerged,
+  computeTriage,
+  resolvePlanSnapshot,
+  extractReceipt,
+  evaluateAccept,
+  main,
+};

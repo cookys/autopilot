@@ -64,7 +64,9 @@ const CLAUDE_NEGATOR_RE = /不需要讀|不必讀|不要讀|不用讀|不能讀|
 const CLAUDE_PATH_DENY = '這則訊息要對方讀真實的 ~/.claude。讀取真實 ~/.claude 需要操作員本人的卡。請改請該席用自己被允許的讀取方式提供資料，或拿掉這一步。' + gateHint('改請該席用自己被允許的讀取方式提供資料，或拿掉讀 ~/.claude 這一步', 'hooks/README.md');
 const ULID_IN_TEXT_RE = /\b[0-9A-HJKMNP-TV-Z]{26}\b/;
 const DISPATCH_OPT_IN = 'pm-dispatch-plan-guard';
+const VALID_DISPATCH_SIZES = new Set(['XS', 'S', 'M', 'L', 'XL']);
 const DISPATCH_SIZE_DENY_REASON = '每張派工都要帶 Size（XS|S|M|L|XL），請補上' + gateHint('在工單補 Size: XS|S|M|L|XL 再派', 'hooks/README.md');
+const DISPATCH_SIZE_MISMATCH_DENY_REASON = '結構化 size 與內文 Size: 不一致，兩處須為相同值' + gateHint('將結構化 size 與內文 Size: 兩處改成同一個值再派', 'hooks/README.md');
 const DISPATCH_PLAN_DENY_REASON = '工單 Size M 以上要帶「Plan: 路徑@sha」或「Plan: plan-first」' + gateHint('Size M 以上的工單補 Plan: 路徑@sha 或 Plan: plan-first 再派', 'hooks/README.md');
 
 function envBag() {
@@ -114,11 +116,23 @@ function decideDispatch(input) {
   if (!isEnabled(DISPATCH_OPT_IN)) return null;
   if (!isPmConsole(input)) return null;
   const toolInput = input.tool_input && typeof input.tool_input === 'object' ? input.tool_input : {};
-  const parsed = parseWorkOrder(toolInput.task);
-  if (!parsed.size || parsed.size === 'conflict') {
+  const hasStructuredSize = toolInput.size !== undefined && toolInput.size !== null && toolInput.size !== '';
+  if (hasStructuredSize && !VALID_DISPATCH_SIZES.has(toolInput.size)) {
     return preToolDeny(DISPATCH_SIZE_DENY_REASON);
   }
-  if (isMPlus(parsed.size)) {
+  const structuredSize = hasStructuredSize ? toolInput.size : null;
+  const parsed = parseWorkOrder(toolInput.task);
+  if (parsed.size === 'conflict') {
+    return preToolDeny(DISPATCH_SIZE_DENY_REASON);
+  }
+  if (parsed.size && structuredSize && parsed.size !== structuredSize) {
+    return preToolDeny(`結構化 size=${structuredSize} 與內文 Size: ${parsed.size} 不一致。${DISPATCH_SIZE_MISMATCH_DENY_REASON}`);
+  }
+  const effectiveSize = parsed.size || structuredSize;
+  if (!effectiveSize) {
+    return preToolDeny(DISPATCH_SIZE_DENY_REASON);
+  }
+  if (isMPlus(effectiveSize)) {
     if (!parsed.plan) {
       return preToolDeny(DISPATCH_PLAN_DENY_REASON);
     }
@@ -265,5 +279,6 @@ module.exports = {
   decide,
   WORK_ORDER_PHRASES,
   DISPATCH_SIZE_DENY_REASON,
+  DISPATCH_SIZE_MISMATCH_DENY_REASON,
   DISPATCH_PLAN_DENY_REASON,
 };

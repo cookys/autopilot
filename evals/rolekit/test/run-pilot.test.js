@@ -4,6 +4,8 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+// run-pilot stops at its Fleet-Task precondition without a task id; the tests need one (a fixed pilot task id, never read as live data).
+if (!process.env.AUTOPILOT_FLEET_TASK) process.env.AUTOPILOT_FLEET_TASK = '01M894HX0M2ERTZ1V5HVKFCSNK';
 const rp = require('../run-pilot.js');
 const { ROOT, tmp, rm } = require('./helpers.js');
 

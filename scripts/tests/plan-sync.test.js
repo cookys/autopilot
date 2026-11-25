@@ -133,4 +133,22 @@ describe('plan-to-tasks --sync', () => {
     assert.doesNotMatch(log, /\bdispatch\b/);
     assert.doesNotMatch(log, /--queue/);
   });
+  it('clips titles so a large plan snapshot stays under the fleet comment cap', () => {
+    const rows = Array.from({ length: 14 }, (_, i) => `| Q${i + 1} | S | - | node -e "process.exit(0)" | no | ${'很長的標題'.repeat(12)} ${i} |`).join('\n');
+    const plan = `# Big\n\n<!-- phases:v1 -->\n| id | size | depends_on | acceptance_cmd | needs_look | title |\n| --- | --- | --- | --- | --- | --- |\n${rows}\n<!-- /phases -->\n`;
+    fs.writeFileSync(path.join(fx.repoDir, fx.planRel), plan, 'utf8');
+    spawnSync('git', ['commit', '-qam', 'big'], { cwd: fx.repoDir, stdio: 'ignore' });
+    const commit = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: fx.repoDir, encoding: 'utf8' }).stdout.trim();
+    const sha256 = crypto.createHash('sha256').update(plan).digest('hex');
+    fs.writeFileSync(fx.receiptPath, JSON.stringify({ commit, path: fx.planRel, sha256, verdict: 'READY' }), 'utf8');
+    fs.writeFileSync(fx.tasksFile, '[]', 'utf8');
+    const res = spawnSync(process.execPath, [PLAN_TO_TASKS, '--receipt', fx.receiptPath, '--repo', fx.repoDir, '--parent', '01PARENT000000000000000000', '--sync'], {
+      encoding: 'utf8', env: { ...process.env, PLAN_TO_TASKS_FLEET_BIN: fx.fakeFleet },
+    });
+    assert.equal(res.status, 0, res.stderr);
+    const logged = fs.readFileSync(fx.fleetLog, 'utf8').split('\n').find((l) => l.startsWith('task comment'));
+    assert.ok(Buffer.byteLength(logged) < 4000, 'comment is ' + Buffer.byteLength(logged) + ' bytes');
+    const snap = JSON.parse(logged.slice(logged.indexOf('{')));
+    assert.equal(snap.phases.length, 14);
+  });
 });

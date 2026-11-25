@@ -68,7 +68,9 @@ test('--from-trace aggregates pm-events.jsonl by event and hook (context_bytes +
   ], { encoding: 'utf8', timeout: 5000 });
   const parsed = JSON.parse(out);
 
-  assert.equal(parsed.by_event.SessionStart, 83915);
+  assert.equal(parsed.by_event.SessionStart, 169576); // startup 83915 + clear 5402 + compact 80259
+  assert.equal(parsed.by_hook.SessionStart, 83915);
+  assert.equal(parsed.by_hook['SessionStart:compact'], 80259);
   assert.equal(parsed.by_event.UserPromptSubmit, 33255);
   assert.equal(parsed.by_hook['PreToolUse:Bash'], 41859);
   assert.equal(parsed.by_hook.UserPromptSubmit, 33255);

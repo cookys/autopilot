@@ -8,7 +8,7 @@
  *   node scripts/plan-to-tasks.js --receipt <freeze-receipt.json>
  *
  * Pre-checks (exit 1 on failure, zero fleet mutations):
- *   1. Receipt JSON has commit, path, sha256, verdict === 'READY'
+ *   1. Receipt JSON has commit, path, sha256, verdict === 'READY' || verdict === 'adjudicated'
  *   2. `git show <commit>:<path>` bytes sha256 === receipt.sha256
  *   3. `check-plan-phases.js` lint passes
  *
@@ -195,8 +195,8 @@ function main() {
     process.exit(1);
   }
 
-  if (receipt.verdict !== 'READY') {
-    process.stderr.write(`plan-to-tasks: receipt verdict is "${receipt.verdict}", expected "READY"\n`);
+  if (receipt.verdict !== 'READY' && receipt.verdict !== 'adjudicated') {
+    process.stderr.write(`plan-to-tasks: receipt verdict is "${receipt.verdict}", expected "READY" or "adjudicated"\n`);
     process.exit(1);
   }
 

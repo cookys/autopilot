@@ -194,5 +194,21 @@ set -e
 assert_eq "missing assignee exits 2" "2" "$rc"
 assert_eq "missing assignee zero fleet calls" "0" "$(wc -l < "$FLEET_LOG" | tr -d ' ')"
 
+# 6. P6: a terminal adjudicated receipt is accepted; an unknown verdict is not
+ADJ_RECEIPT="$TMPDIR_TEST/adjudicated.json"
+sed 's/"verdict": "READY"/"verdict": "adjudicated"/' "$RECEIPT" > "$ADJ_RECEIPT"
+BOGUS_RECEIPT="$TMPDIR_TEST/bogus-verdict.json"
+sed 's/"verdict": "READY"/"verdict": "adjudicated-ish"/' "$RECEIPT" > "$BOGUS_RECEIPT"
+: > "$FLEET_LOG"
+echo '[]' > "$FLEET_STATE"
+set +e
+(cd "$TEST_REPO" && node "$SCRIPT" --receipt "$BOGUS_RECEIPT") >/dev/null 2>&1
+rc=$?
+set -e
+assert_eq "unknown verdict exits 1" "1" "$rc"
+assert_eq "unknown verdict zero fleet calls" "0" "$(wc -l < "$FLEET_LOG" | tr -d ' ')"
+(cd "$TEST_REPO" && node "$SCRIPT" --receipt "$ADJ_RECEIPT") >/dev/null
+assert_eq "adjudicated receipt creates 3 tasks" "3" "$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).length)" "$FLEET_STATE")"
+
 echo "plan-to-tasks.test.sh: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

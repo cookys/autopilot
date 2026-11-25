@@ -1,0 +1,130 @@
+# S10 P2 positive trigger prompts (at least 2 per skill: 1 EN, 1 ZH).
+# Format: <skill-name> | <prompt>
+
+# agent-call
+autopilot:agent-call | Notify the fleet member on pane 2 that the build finished
+autopilot:agent-call | 通知 fleet 成員說測試已經跑完了
+
+# audit
+autopilot:audit | Compare the old auth implementation with the new one for feature parity
+autopilot:audit | 比對舊版與新版驗證模組的功能是否一致
+
+# brainstorm
+autopilot:brainstorm | Help me think through 2-3 design approaches before writing code
+autopilot:brainstorm | 我還沒想清楚這個功能的架構，幫我發想幾個方案
+
+# ceo-agent
+autopilot:ceo-agent | CEO mode, full authority: get the caching layer done end-to-end
+autopilot:ceo-agent | 全權處理，幫我把這個快取層搞定
+
+# debug
+autopilot:debug | Diagnose why this unit test is crashing intermittently
+autopilot:debug | 幫我除錯這個偶發性失敗的測試
+
+# dev-flow
+autopilot:dev-flow | I'm starting on adding WebSocket compression to the server
+autopilot:dev-flow | 我要開始做這支 API 的分頁功能
+
+# distill
+autopilot:distill | Turn my repeated deployment workflow into a personal custom skill
+autopilot:distill | 提煉我的重複流程做成個人 skill
+
+# doc-sync
+autopilot:doc-sync | Check for doc-vs-code drift across the repository
+autopilot:doc-sync | 檢查目前文件跟 code 同步嗎
+
+# engine-onboarding
+autopilot:engine-onboarding | Onboard a new heterogeneous model engine and qualify it as reviewer
+autopilot:engine-onboarding | 新增一個異質模型引擎並驗證它當 reviewer 的資格
+
+# finish-flow
+autopilot:finish-flow | Time to merge and wrap this feature branch up
+autopilot:finish-flow | 跑完收尾準備合併這個分支
+
+# fleet-usage
+autopilot:fleet-usage | Use fleet watch to wait on the background job and fetch its output
+autopilot:fleet-usage | 用 fleet watch 等背景工作完成並上傳結果
+
+# handoff
+autopilot:handoff | Write a standardized mid-work handoff doc before I clear the session
+autopilot:handoff | context 快滿了，幫我寫一份 handoff 文件
+
+# harness-maintenance
+autopilot:harness-maintenance | Audit and refresh Autopilot harness capability state across Codex and agy
+autopilot:harness-maintenance | 檢查並更新各個 harness 的支援狀態
+
+# hetero-review
+autopilot:hetero-review | Run a dual heterogeneous review loop on this code diff
+autopilot:hetero-review | 幫這份改動過 hetero loop review
+
+# l3
+autopilot:l3 | /l3 fix the typo in the README
+autopilot:l3 | L3 幫我修掉這個設定檔的欄位名稱
+
+# l4
+autopilot:l4 | /l4 implement the retry helper in a background worktree
+autopilot:l4 | L4 在背景 worktree 實作這個重試工具
+
+# l5
+autopilot:l5 | /l5 build the parser with a heterogeneous implementer
+autopilot:l5 | L5 用異質實作者來寫這個解析器
+
+# l6
+autopilot:l6 | /l6 implement and verify the rate limiter with hetero verification
+autopilot:l6 | L6 全委實作並用異質驗證完成限流器
+
+# lead-watch
+autopilot:lead-watch | /lead-watch check if any worker has overdue reports
+autopilot:lead-watch | 用 lead-watch 檢查有沒有逾時未回報的成員
+
+# learn
+autopilot:learn | Save this lesson: Docker volume mapping caused the wrong build path
+autopilot:learn | 記下來：這個錯誤是因為環境變數沒傳進子行程
+
+# next
+autopilot:next | What should I work on next?
+autopilot:next | 下一步做什麼比較好？
+
+# onboard
+autopilot:onboard | Onboard this repo to autopilot and scaffold .claude config files
+autopilot:onboard | 幫這個專案建立 .claude 設定
+
+# profiling
+autopilot:profiling | Profile why this endpoint has high latency and memory spikes
+autopilot:profiling | 幫我分析這支 API 為什麼延遲這麼高
+
+# project-lifecycle
+autopilot:project-lifecycle | Archive this completed project and update INDEX
+autopilot:project-lifecycle | 歸檔這個已經完成的專案
+
+# quality-pipeline
+autopilot:quality-pipeline | Is this ready to commit? Run the pre-commit quality checks
+autopilot:quality-pipeline | 幫我跑品質檢查，看能不能 commit 了
+
+# research-to-ship
+autopilot:research-to-ship | Research best practices on rate limiting, spec it out, then ship it
+autopilot:research-to-ship | 先研究業界做法再把這個主題做成正式專案
+
+# retro
+autopilot:retro | Analyze my commit history for the last week
+autopilot:retro | 幫我回顧過去一週的 commit 紀錄
+
+# survey
+autopilot:survey | Survey what libraries others use for schema validation
+autopilot:survey | 業界怎麼做分散式鎖？幫我調查幾個方案
+
+# team
+autopilot:team | Size this XL task for parallel work and pick team roles
+autopilot:team | 這個大型任務要怎麼拆給團隊平行處理？
+
+# test-strategy
+autopilot:test-strategy | Design a testing strategy and regression scope for this refactor
+autopilot:test-strategy | 幫這次重構設計測試策略與回歸範圍
+
+# think-tank
+autopilot:think-tank | I want perspectives from architect, ops, and QA on this tradeoff
+autopilot:think-tank | 這個架構取捨需要多角度分析，要辯論一下
+
+# think-tank-dialectic
+autopilot:think-tank-dialectic | This is an irreversible decision and both sides have real merit
+autopilot:think-tank-dialectic | 這個不可逆決策兩邊都有道理，需要辯證一下

@@ -1,0 +1,35 @@
+# S10 P2 negative trigger prompts (at least 1 per skill, half EN / half ZH).
+# Format: <skill-name> | <prompt>
+
+autopilot:agent-call | What is the difference between TCP and UDP?
+autopilot:audit | 幫我把這段英文翻譯成繁體中文
+autopilot:brainstorm | Show me the git log for the last 5 commits
+autopilot:ceo-agent | 幫我摘要這篇文章的重點
+autopilot:debug | Write a pure function to reverse a string in JavaScript
+autopilot:dev-flow | 今天台北的天氣如何？
+autopilot:distill | Read the README.md file and tell me what it says
+autopilot:doc-sync | 解釋一下什麼是 CAP 定理
+autopilot:engine-onboarding | Create a simple hello world script in Python
+autopilot:finish-flow | 上一個 commit 改了哪些檔案？
+autopilot:fleet-usage | Explain how async/await works in Node.js
+autopilot:handoff | 幫我算一下 123 乘以 456 等於多少
+autopilot:harness-maintenance | What is in package.json?
+autopilot:hetero-review | 寫一個正規表達式來驗證電子郵件格式
+autopilot:l3 | Hello, how are you doing today?
+autopilot:l4 | 謝謝，這樣就可以了！
+autopilot:l5 | List the HTTP status codes for client errors
+autopilot:l6 | 把這段 JSON 格式化並排序 key
+autopilot:lead-watch | Explain the difference between REST and GraphQL
+autopilot:learn | 幫我寫一個 SQL 查詢列出前十名使用者
+autopilot:next | What is the capital of Japan?
+autopilot:onboard | 這個函式庫的授權條款是什麼？
+autopilot:profiling | Write a bash one-liner to count lines in a file
+autopilot:project-lifecycle | 幫我把這段文字轉成 Markdown 表格
+autopilot:quality-pipeline | Explain how B-tree indexes work in PostgreSQL
+autopilot:research-to-ship | 幫我寫一首關於秋天的短詩
+autopilot:retro | What does HTTP 429 mean?
+autopilot:survey | 幫我把這份 CSV 轉成 JSON
+autopilot:team | Explain the difference between process and thread
+autopilot:test-strategy | 幫我寫一個簡單的二分搜尋法
+autopilot:think-tank | What time zone is UTC+8?
+autopilot:think-tank-dialectic | 幫我把這段程式碼的變數重新命名

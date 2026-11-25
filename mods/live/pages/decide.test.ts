@@ -623,15 +623,15 @@ test('ambiguous-width glyphs: circled numbers in a card title are drawn narrow, 
     const ctx = { live: null, console: null, size: { cols, rows }, t, nowMs, v74: { decide: cards, awaiting: [], pm: null, todo: null, nav: { cursor: 0, picks: {}, notes: {}, noteMode: false } } } as never
     const framed = frameRows(decidePage, ctx, { pages: PAGES, topAnchor: true })
     const joined = framed.map(r => r.map(s => s.text).join('')).join('\n')
-    expect(/[\u2461\u2462\u203b\u2192\u25cb\u2605\u201c\u201d]/u.test(joined), cols + 'x' + rows + ': no Ambiguous character of the card text is drawn').toBe(false)
+    expect(/[\u2461\u2462\u203b\u2605]/u.test(joined), cols + 'x' + rows + ': no 2-cell glyph of the card text is drawn').toBe(false)
     expect(joined, cols + 'x' + rows + ': the title keeps its text').toContain('2.Omni 8步')
     expect(framed.every(r => r.reduce((w, s) => w + displayWidth(s.text), 0) <= cols), cols + 'x' + rows + ': no row wider than the pane').toBe(true)
   }
 })
 
 test('ambiguous-width glyphs: narrowAmbiguous leaves no Ambiguous character, keeps wide CJK and ASCII, and the circled numbers become 1. 2. 3.', () => {
-  const s = '區塊:②Omni 8步…唇形對 ③PDD ① ⑳ ※ → ○ ★ “x” 中文 ok'
+  const s = '區塊:②Omni 8步…唇形對 ③PDD ① ⑳ ㉑ ㊿ ※ → ○ ★ “x” 中文 ok'
   const out = narrowAmbiguous(s)
   expect(AMBIGUOUS_CARD_RE.test(out)).toBe(false)
-  expect(out).toBe('區塊:2.Omni 8步...唇形對 3.PDD 1. 20. * -> o * "x" 中文 ok')
+  expect(out).toBe('區塊:2.Omni 8步…唇形對 3.PDD 1. 20. 21. 50. * → ○ * “x” 中文 ok')
 })

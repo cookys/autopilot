@@ -25,7 +25,7 @@ const WAITING_OPERATOR_RE = /operator|操作員/i;
 const TEXT_OPERATOR_RE = /(?:要|等|需要|請)操作員(?:本人|動手|親自|答|處理|登入|試用)|waiting_on_operator/;
 
 function runFleet(bin, args) {
-  const res = spawnSync(bin, args, { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, timeout: 60000 });
+  const res = spawnSync(bin, args, { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, timeout: 15000 });
   if (res.error) throw new Error(`fleet ${args[0]} failed: ${res.error.message}`);
   if (res.status !== 0) throw new Error(`fleet ${args.join(' ')} exited ${res.status}: ${(res.stderr || '').trim().slice(0, 200)}`);
   return res.stdout;
@@ -71,15 +71,19 @@ function findRows(tasks, cards) {
   return rows;
 }
 
+function collectRows(bin) {
+  const tasks = parseJson(runFleet(bin, ['tasks', '--all', '--json']));
+  const cards = parseJson(runFleet(bin, ['decision', 'list', '--all', '--json'])).cards || [];
+  return findRows(Array.isArray(tasks) ? tasks : tasks.tasks || [], cards);
+}
+
 function main() {
   const argv = process.argv.slice(2);
   const sendIdx = argv.indexOf('--send');
   const sendTo = sendIdx >= 0 ? argv[sendIdx + 1] : null;
   const bin = process.env.OPERATOR_STUCK_FLEET_BIN || 'fleet';
   try {
-    const tasks = parseJson(runFleet(bin, ['tasks', '--all', '--json']));
-    const cards = parseJson(runFleet(bin, ['decision', 'list', '--all', '--json'])).cards || [];
-    const rows = findRows(Array.isArray(tasks) ? tasks : tasks.tasks || [], cards);
+    const rows = collectRows(bin);
     if (argv.includes('--json')) process.stdout.write(`${JSON.stringify(rows)}\n`);
     else for (const r of rows) process.stdout.write(`${r.task_id}\t${r.lane}\t${r.need}\t${r.missing}\n`);
     if (sendTo && rows.length) {
@@ -94,4 +98,4 @@ function main() {
 }
 
 if (require.main === module) main();
-module.exports = { findRows, stuckReason };
+module.exports = { findRows, stuckReason, collectRows };

@@ -142,7 +142,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawnSync } = require('child_process');
 
 const SCRIPT_DIR = __dirname;
 // Paths come from the layout registry (scripts/lib/repo-layout.js), never from literals here.
@@ -1859,6 +1859,18 @@ function main() {
     const plansDir = opts.plansDir ? path.resolve(opts.plansDir) : path.join(repoRoot, PLANS_DIR);
     const archiveDir = archiveDirFor(repoRoot, plansDir);
     process.stdout.write(`${registerTemplateRow(repoRoot, plansDir, archiveDir, opts.registerTemplate)}\n`);
+    const planPath = path.join(plansDir, `${opts.registerTemplate}.md`);
+    if (fs.existsSync(planPath) && fs.readFileSync(planPath, 'utf8').split('\n').some((l) => l.trim() === '<!-- phases:v1 -->')) {
+      const lint = spawnSync(
+        process.execPath,
+        [path.join(SCRIPT_DIR, 'check-plan-phases.js'), planPath],
+        { encoding: 'utf8' }
+      );
+      if (lint.status !== 0) {
+        process.stderr.write(lint.stderr || `phases:v1: lint failed for ${planPath}\n`);
+        process.exit(lint.status || 1);
+      }
+    }
     process.exit(0);
   }
 

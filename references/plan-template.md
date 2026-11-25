@@ -14,8 +14,7 @@ with no `active` INDEX row is `plan_unregistered` — `scripts/dispatch-plan-rev
 
 1. **File-structure map** — which files will be touched, and each one's responsibility. A reviewer should
    see the surface area before reading a single step.
-2. **Bite-sized phases** — each phase is one coherent, independently-shippable chunk with a **dev-flow size**
-   (XS / S / M / L / XL, plus `!` for urgent or `bug` for a bug) and an explicit **acceptance** ("done when …"). Each phase of the plan maps to a graph `unit` (kind `phase`; `stage-advance.js --unit phase:i/N:label`).
+2. **Bite-sized phases** — defined in the §4 machine-readable phase table (`<!-- phases:v1 -->` … `<!-- /phases -->`), each with a **dev-flow size** (`XS` / `S` / `M` / `L` / `XL`) and an explicit **acceptance_cmd**. Each phase of the plan maps to a graph `unit` (kind `phase`; `stage-advance.js --unit phase:i/N:label`).
 3. **Every step is concrete** — the actual command, the code shape, the expected output. **Never** "add
    error handling" / "improve X" — say *which* call, *which* failure, *which* file:line. A zero-context
    engineer must be able to execute the step without guessing.
@@ -41,7 +40,7 @@ with no `active` INDEX row is `plan_unregistered` — `scripts/dispatch-plan-rev
 ## 2.5 Global Constraints     — verbatim-propagated invariants (see § below); copied UNCHANGED into every implementer + reviewer dispatch
 ## 2.6 Change-policy decisions — required Compatibility impact + Dependency decision fields
 ## 3. File-structure map      — files touched + responsibility (discipline #1)
-## 4. Phases                  — bite-sized, each with a dev-flow size + acceptance (discipline #2/#3)
+## 4. Phases                  — machine-readable phase table (`<!-- phases:v1 -->` 以此表為準; discipline #2/#3)
 ## 5. Test / validation       — what proves it; what is human-gated vs script-gated
 ## 6. Risks + inversion       — what guarantees failure (discipline #4)
 ## 7. Out of scope            — focus-as-subtraction: what you deliberately do NOT do
@@ -100,6 +99,27 @@ CHANGELOG coverage, rollback guidance, and contract validation. For `established
 maintenance health, license compatibility, transitive footprint, and supported-platform fit.
 For `custom`, explain why platform/stdlib, existing dependencies, and established libraries are
 insufficient.
+
+## Phases (§4 — machine-readable phase table)
+
+§4 以此表為準（取代自由文字 phase 格式）。表以 `<!-- phases:v1 -->` 起、`<!-- /phases -->` 止，欄位固定順序：
+
+```markdown
+<!-- phases:v1 -->
+| id | size | depends_on | acceptance_cmd | needs_look | title |
+|----|------|------------|----------------|------------|-------|
+| P1 | S    | -          | bash scripts/tests/example.test.sh | no | Example phase |
+<!-- /phases -->
+```
+
+- `id`: 唯一識別碼（如 `P1`、`P2`）。
+- `size`: `XS` / `S` / `M` / `L` / `XL`。
+- `depends_on`: 逗號分隔的 `id`，或 `-`；只能指向表中**更前面**的列（禁止前向引用與環）。
+- `acceptance_cmd`: 非空驗證指令，不得含 `TODO` 或 `TBD`。
+- `needs_look`: `yes` / `no`。
+- `title`: 非空階段標題。
+
+Lint：`node scripts/check-plan-phases.js <plan.md>`。
 
 ## Boundaries
 - **Authoring vs decomposition**: this template authors the *plan*; `agents/planner.md` decomposes an

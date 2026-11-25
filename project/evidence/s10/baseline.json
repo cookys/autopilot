@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "description_total_bytes": 8818,
+  "skills": {},
+  "targets": [
+    {
+      "hook": "PreToolUse:Bash",
+      "baseline_bytes": 41859,
+      "threshold_50pct": 20929
+    },
+    {
+      "hook": "UserPromptSubmit",
+      "baseline_bytes": 33255,
+      "threshold_50pct": 16627
+    }
+  ]
+}

@@ -17,6 +17,7 @@ This repository has its own hippo store at `.hippo/` (id `autopilot`, visibility
 
 | Script | Purpose |
 |--------|---------|
+| [`scripts/measure-seat-injection.js`](../scripts/measure-seat-injection.js) | S10 P0 seat-injection measurement and baseline gate (`--check-baseline`, `--check-budget`, `--check-targets`, `--compare`, `--from-trace`). Contract: script header; tests: `scripts/tests/measure-seat-injection.test.js`. |
 | [`scripts/wasted-turns-report.js`](../scripts/wasted-turns-report.js) | Measure wasted turns (`stop_block`, `hook_block`, `help_lookup`, `error_retry`, `repeat_chain`) and context cost from session transcripts (`--self`, `--usage-only --transcript`, `--aggregate <dir>`). Contract: `docs/plans/2026-11-21-wasted-turns.md` §4.1; tests: `scripts/wasted-turns-report.test.js`. |
 | [`scripts/lib/wasted-turns-classify.js`](../scripts/lib/wasted-turns-classify.js) | Shared classification, command normalization, Taipei-time formatting, and usage-only projection for `wasted-turns-report.js`. Contract: script header. |
 | [`scripts/build-dep-cache.js`](../scripts/build-dep-cache.js) | Build measured suite dependency caches; use before runtime-based selection. Contract: script header and `--help`. |

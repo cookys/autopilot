@@ -19,7 +19,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { execFileSync } = require('node:child_process');
+const { spawnSync, execFileSync } = require('node:child_process');
 
 const PLACEHOLDER_RE = /^(?:n\/a|tbd|none|-)$/i;
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -228,7 +228,7 @@ function verifyUsed(text, sha16) {
   return { ok: false, reason: 'Used: line not found in task comments/progress' };
 }
 
-function verifyLivePin(text, sha16) {
+function verifyLivePin(text, sha16, repo, sha) {
   const lines = text.split(/\r?\n/);
   for (const line of lines) {
     const notNeededMatch = line.match(/^\s*Pin:\s*not-needed\s+(.+?)\s*$/);
@@ -236,6 +236,18 @@ function verifyLivePin(text, sha16) {
       const reason = notNeededMatch[1].trim();
       if (isPlaceholder(reason) || reason.length < 20) {
         return { ok: false, reason: `Pin: not-needed reason too short or placeholder (${reason.length} chars, need >= 20)` };
+      }
+      const classes = loadLookClasses();
+      let touched = [];
+      try {
+        const shipped = (classes && classes.shipped) || [];
+        touched = changedFiles(repo, sha, null).filter((f) => shipped.some((re) => re.test(f)));
+        if (!classes) return { ok: false, reason: 'Pin: not-needed refused: look-classes.json unreadable (conservative)' };
+      } catch {
+        return { ok: false, reason: 'Pin: not-needed refused: cannot read the diff (conservative)' };
+      }
+      if (touched.length > 0) {
+        return { ok: false, reason: `Pin: not-needed refused: diff touches plugin-shipped path ${touched[0]}` };
       }
       return { ok: true, kind: 'not-needed', reason };
     }
@@ -289,7 +301,9 @@ function loadLookClasses() {
       try {
         const data = JSON.parse(fs.readFileSync(p, 'utf8'));
         if (Array.isArray(data.classes)) {
-          return data.classes.map((c) => ({ name: c.name, re: new RegExp(c.pattern) }));
+          const list = data.classes.map((c) => ({ name: c.name, scope: c.scope === 'changed' ? 'changed' : 'added', re: new RegExp(c.pattern) }));
+          list.shipped = (Array.isArray(data.plugin_shipped) ? data.plugin_shipped : []).map((x) => new RegExp(x));
+          return list;
         }
       } catch {
         return null;
@@ -297,6 +311,15 @@ function loadLookClasses() {
     }
   }
   return null;
+}
+
+function changedFiles(repo, sha, filter) {
+  const args = ['-C', repo, 'diff', '--name-only'];
+  if (filter) args.push(`--diff-filter=${filter}`);
+  const hasParent = spawnSync('git', ['-C', repo, 'rev-parse', '--verify', '-q', `${sha}^1`], { stdio: 'ignore' }).status === 0;
+  args.push(hasParent ? `${sha}^1` : '4b825dc642cb6eb9a060e54bf8d69288fbee4904', sha);
+  return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 5000 })
+    .split(/\r?\n/).filter(Boolean);
 }
 
 function computeTriage(taskObj, text, repo, sha) {
@@ -316,20 +339,16 @@ function computeTriage(taskObj, text, repo, sha) {
   }
 
   try {
-    const added = execFileSync(
-      'git',
-      ['-C', repo, 'diff-tree', '--no-commit-id', '--name-only', '-r', '--diff-filter=A', sha],
-      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 5000 }
-    );
-    for (const file of added.split(/\r?\n/).filter(Boolean)) {
-      for (const cls of classes) {
-        if (cls.re.test(file)) {
-          reasons.push(`added ${cls.name}: ${file}`);
-        }
+    const added = changedFiles(repo, sha, 'A');
+    const changed = changedFiles(repo, sha, null);
+    for (const cls of classes) {
+      const files = cls.scope === 'changed' ? changed : added;
+      for (const file of files) {
+        if (cls.re.test(file)) reasons.push(`${cls.scope} ${cls.name}: ${file}`);
       }
     }
   } catch {
-    reasons.push('git diff-tree failed (conservative look)');
+    reasons.push('git diff failed (conservative look)');
   }
 
   return {
@@ -350,7 +369,7 @@ function main() {
 
   const text = collectTaskText(taskObj);
   const merged = verifyMerged(args.repo, args.sha);
-  const livePin = verifyLivePin(text, sha16);
+  const livePin = verifyLivePin(text, sha16, args.repo, args.sha);
   const used = verifyUsed(text, sha16);
   const triage = computeTriage(taskObj, text, args.repo, args.sha);
 

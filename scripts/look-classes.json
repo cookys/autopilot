@@ -1,22 +1,40 @@
 {
   "version": 1,
-  "description": "File path patterns for newly added files (--diff-filter=A) that trigger conservative 'look' triage in finish-triage.js",
+  "description": "finish-triage.js look classes: scope 'added' = newly added files only (first live); scope 'changed' = any changed file; plugin_shipped = paths that ship with the plugin (Pin: not-needed is refused when the diff touches any)",
   "classes": [
     {
       "name": "hook",
-      "pattern": "^hooks/.*\\.(js|sh|json)$"
+      "pattern": "^hooks/.*\\.(js|sh|json)$",
+      "scope": "added"
     },
     {
       "name": "service",
-      "pattern": "(^|/)(systemd|services?|units?)/|\\.service$"
+      "pattern": "(^|/)(systemd|services?|units?)/|\\.service$",
+      "scope": "added"
     },
     {
       "name": "executable_script",
-      "pattern": "^(bin|scripts)/.*\\.(js|sh|py)$"
+      "pattern": "^(bin|scripts)/.*\\.(js|sh|py)$",
+      "scope": "added"
     },
     {
       "name": "github_workflow",
-      "pattern": "^\\.github/workflows/.*\\.ya?ml$"
+      "pattern": "^\\.github/workflows/.*\\.ya?ml$",
+      "scope": "added"
+    },
+    {
+      "name": "ui",
+      "scope": "changed",
+      "pattern": "^(mods/|src/(tux|ui)/)"
+    },
+    {
+      "name": "external",
+      "scope": "changed",
+      "pattern": "^(README(\\.zh-TW)?\\.md|SECURITY\\.md|LICENSE|docs/guide/)"
     }
+  ],
+  "plugin_shipped": [
+    "^(hooks|skills|agents|scripts|src|bin|mods|platforms|references|profiles|schemas|config)/",
+    "^(plugin\\.json|post-merge\\.json|\\.claude-plugin/)"
   ]
 }

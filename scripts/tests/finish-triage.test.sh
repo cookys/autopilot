@@ -126,6 +126,27 @@ EOF
 write_stub_fleet "$TMPDIR/task_ss.json"
 assert_ok "positive screenshot + pin not-needed" node "$SCRIPT" --task T2 --sha "$MERGED_SHA" --repo "$TEST_REPO"
 
+# 2b. Negative control: Pin: not-needed is refused when the diff touches a plugin-shipped path
+mkdir -p "$TEST_REPO/hooks"
+echo "x" > "$TEST_REPO/hooks/new-gate.js"
+git -C "$TEST_REPO" add hooks/new-gate.js
+git -C "$TEST_REPO" commit -q -m "add hook"
+SHIPPED_SHA="$(git -C "$TEST_REPO" rev-parse HEAD)"
+SHIPPED16="${SHIPPED_SHA:0:16}"
+PNG_SH="$TMPDIR/ss_shipped.png"
+make_png_file "$PNG_SH" "ok" "$SHIPPED16"
+cat > "$TMPDIR/task_shipped.json" <<JSON
+{
+  "id": "T2b",
+  "state": "done",
+  "comments": [
+    {"author": "dev", "at": "2026-11-25T00:00:00Z", "text": "Pin: not-needed local-only CLI change with no live daemon\nUsed: screenshot $PNG_SH"}
+  ]
+}
+JSON
+write_stub_fleet "$TMPDIR/task_shipped.json"
+assert_fail "negative pin not-needed with plugin-shipped diff" node "$SCRIPT" --task T2b --sha "$SHIPPED_SHA" --repo "$TEST_REPO"
+
 # 3. Positive triage: First-live: yes -> look
 cat > "$TMPDIR/task_first_live.json" <<EOF
 {

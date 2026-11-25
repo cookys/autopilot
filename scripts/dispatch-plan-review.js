@@ -2933,7 +2933,14 @@ function main() {
         state.repair_authorized = artifact.repair_authorized;
       }
       atomicWriteJson(statePath, state);
-      if (artifact.terminal && artifact.verdict === 'READY') {
+      const isAdjudicatedPass = artifact.terminal
+        && artifact.verdict === 'CONDITIONAL'
+        && (
+          artifact.policy_reason === 'nonblocking_conditional'
+          || artifact.policy_reason === 'generation_2_terminal'
+          || artifact.policy_reason === 'caller_generation_cap_terminal'
+        );
+      if (artifact.terminal && (artifact.verdict === 'READY' || isAdjudicatedPass)) {
         const planAbsPath = path.isAbsolute(opts.planFile)
           ? opts.planFile
           : path.resolve(opts.repoRoot, opts.planFile);
@@ -2943,7 +2950,7 @@ function main() {
           commit: artifact.repo_head_sha || null,
           path: artifact.plan_path || opts.planFile,
           sha256: artifact.plan_sha256,
-          verdict: artifact.verdict,
+          verdict: isAdjudicatedPass ? 'adjudicated' : artifact.verdict,
         });
       }
     });

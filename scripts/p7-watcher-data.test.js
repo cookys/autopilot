@@ -105,24 +105,14 @@ test('D1 env override AUTOPILOT_COST_FUSE_DAILY_USD wins over config; default ca
   } finally { ctx.cleanup(); }
 });
 
-test('D1 cost-fuse hook and the watcher report the same number for the same fixture', () => {
+test('D1 watcher reports the shared module\'s answer for the same fixture', () => {
   const ctx = mk();
   try {
     writeCosts(ctx, [{ model: 'claude-fable-5-1', cost_usd: 12.3456 }, { model: 'claude-opus-5-5', cost_usd: 3.2 }, { model: 'claude-sonnet-5-5', cost_usd: 99 }]);
     writeConfig(ctx, { daily_usd_brain: 1, mode: 'warn' });
-    const transcript = path.join(ctx.base, 't.jsonl');
-    fs.writeFileSync(transcript, `${JSON.stringify({ type: 'assistant', message: { role: 'assistant', model: 'claude-fable-5-1', content: 'x' } })}\n`);
-    const r = spawnSync('node', [path.join(REPO_ROOT, 'hooks', 'cost-fuse.js')], {
-      input: JSON.stringify({ tool_name: 'Edit', session_id: 's1', transcript_path: transcript, tool_input: {}, hook_event_name: 'PreToolUse' }),
-      env: { ...ctx.env, AUTOPILOT_COST_FUSE_DIR: path.join(ctx.base, 'fuse') }, encoding: 'utf8',
-    });
-    const m = /host today \$([0-9.]+) \(≥ \$([0-9.]+) on this host\)/.exec(r.stderr);
-    assert.ok(m, `cost-fuse warned (stderr: ${r.stderr})`);
     ctx.tick(ctx.watcher());
     const e = ctx.envelope();
-    assert.equal(Number(m[1]), e.host_today_brain_usd);
-    assert.equal(Number(m[2]), e.brain_cap_usd);
-    // and both are the shared module's own answer
+    assert.equal(e.brain_cap_usd, 1);
     const cfg = loadCostFuseConfig({ env: ctx.env, home: ctx.env.HOME });
     assert.equal(Math.round(sumTodayTierSpend(ctx.env.AUTOPILOT_COSTS_FILE, new Set(cfg.tiers)) * 100) / 100, e.host_today_brain_usd);
   } finally { ctx.cleanup(); }

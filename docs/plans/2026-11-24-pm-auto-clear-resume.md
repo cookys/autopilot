@@ -1,6 +1,6 @@
 # Plan — PM 席 200k 自動 handoff、/clear 與 `fleet pm resume` 拉回狀態（做法二）
 
-> Status: Frozen R1 | Owner: autopilot--claude | Fleet-Task: 01M85T56P7V70X8HJ7WN0HMYE0（PM 裁定 01M85PYJ3S 第 2 點）| Frame: 做法二（無人值守 /clear + resume）| 上線日：Phase 1–2 目標 2026-11-27 台北，Phase 3 要等 PM 席下次自然到 200k，日期以實測為準
+> Status: Frozen R1；Phase 2 已取消（2026-11-25，/clear 只由 courier 執行，見 pm 計畫追蹤第四版 §5 群組 2） | Owner: autopilot--claude | Fleet-Task: 01M85T56P7V70X8HJ7WN0HMYE0（PM 裁定 01M85PYJ3S 第 2 點）| Frame: 做法二（無人值守 /clear + resume）| 上線日：Phase 1–2 目標 2026-11-27 台北，Phase 3 要等 PM 席下次自然到 200k，日期以實測為準
 
 ---
 
@@ -78,7 +78,7 @@ PM 席在長對話接近 200k tokens 時，依賴操作員手動 `/clear` 與貼
 | Phase | 依賴條件 | 可獨立上線狀態 |
 |---|---|---|
 | Phase 1 | 無（僅依既有 transcript / handoff 格式） | **可獨立上線**：單獨上線即可改善做法一的 handoff 品質（自動補齊操作員最近的話與未完成事項） |
-| Phase 2 | 依賴 Phase 1 的 handoff 產生腳本與欄位 | **可在現行 260k 門檻試跑**：以開關關閉（預設）或受控試跑驗證接線，不切預設 |
+| Phase 2（已取消） | 依賴 Phase 1 的 handoff 產生腳本與欄位 | **可在現行 260k 門檻試跑**：以開關關閉（預設）或受控試跑驗證接線，不切預設 |
 | Phase 3 | 依賴 Phase 2 接線完成，且**依賴預載縮減前置條件**（基準首回合低於 95k 合理範圍） | **條件達標後才排實測**：通過 KR4 後才可將做法二切換為預設 |
 
 > **呼叫鏈（Phase 2 閉合）**：`context-budget`（記 `landFire`）→ `context-land-gate`（Stop，在 `pm` 席且做法二開關開啟時呼叫 handoff 產生腳本）→ handoff 腳本 → `/clear` 注入 → 新 session 讀 handoff 檔（`read <path> 接續`，由 `/clear` 注入後的第一則輸入帶入，注入方式「待查」）→ `fleet pm resume` + cron 重掛。
@@ -92,7 +92,9 @@ PM 席在長對話接近 200k tokens 時，依賴操作員手動 `/clear` 與貼
 - **真實使用證據**: 在 PM 席真實對話（非合成測試資料）上跑一次腳本，確認產出檔可被 `handoff` Resume Mode 正確讀取。
 - **負控制**: 當對話紀錄缺失或無操作員發言時，腳本不得寫出空欄位冒充成功，應回傳非零 exit code 或明確標記 `missing_operator_utterance` 並保留做法一退路。
 
-### Phase 2 — 無人觸發 `/clear` 與 `fleet pm resume` + cron 重掛接線
+### Phase 2 — 無人觸發 `/clear` 與 `fleet pm resume` + cron 重掛接線（已取消）
+
+> **取消（2026-11-25，PM 裁定，單 01M88WFHTR0PG20F3N59FCTKN1）**：/clear 只由 courier 執行，見 pm 計畫追蹤第四版 §5 群組 2。以下內容保留作歷史，不再施作。
 - **Size**: `M`
 - **具體步驟**:
   1. 查證 PM 席 `/clear` 的外部觸發介面（tmux send-keys / fleet control / harness API，「待查」）與 `fleet pm resume` 完整參數（「待查」）。

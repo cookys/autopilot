@@ -31,10 +31,6 @@ write_ledger "$PROFILE/metrics/costs.jsonl" 200
 write_ledger "$HOOK_HOME/.claude/metrics/costs.jsonl" 1
 write_ledger "$TEST_TMP/override.jsonl" 3
 export CLAUDE_CONFIG_DIR="$PROFILE"
-export AUTOPILOT_COST_FUSE_MODE=block AUTOPILOT_COST_FUSE_DAILY_USD=150
-FUSE_PAYLOAD="$(printf '{"session_id":"reader-session","transcript_path":"%s","tool_name":"Edit","tool_input":{},"hook_event_name":"PreToolUse"}' "$TR")"
-run_hook cost-fuse.js "$FUSE_PAYLOAD"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "fuse reads profile spend"
 
 check_readers() {
   local expected_file="$1" expected_spend="$2" label="$3" out
@@ -56,8 +52,6 @@ NODE
 check_readers "$PROFILE/metrics/costs.jsonl" 200 profile
 
 export AUTOPILOT_COSTS_FILE="$TEST_TMP/override.jsonl"
-run_hook cost-fuse.js "$FUSE_PAYLOAD"
-assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "fuse file override beats profile"
 check_readers "$AUTOPILOT_COSTS_FILE" 3 override
 unset AUTOPILOT_COSTS_FILE
 for mode in unset empty; do

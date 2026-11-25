@@ -8,7 +8,7 @@ description: >
 
 # handoff
 
-Mid-work session continuation handoff. When context is full, write the handoff as the formal continuation file for resuming after `/clear` (not just a backup); auto-compact is only a safety net.
+Mid-work session continuation handoff. handoff 只帶對話殘留，工作狀態看 resume。When context is full, write the handoff as the formal continuation file for resuming after `/clear` (not just a backup); auto-compact is only a safety net.
 
 ## Write Mode
 
@@ -99,7 +99,7 @@ Triggered by "寫 handoff", "寫 handover", "ctx 太滿", "context 快滿", "cle
 
    **Completeness & PM 席接續表**:
    - **一般席**: handoff 必須包含「目標」「現況」「下一步」三段且皆非空；「現況」提到的 worktree 都要已 commit（`git status --porcelain` 為空，或每個髒檔都列在「現況」裡）。
-   - **PM 席**: 另需「## 接續表」區塊，以下五個鍵全部要在：`operator_thread`、`artifacts`、`pending_rulings`、`subagent_outputs`、`card_notes`（`card_notes` 要含 `executor` 子欄）。值可以寫明確的「無」，不能空白，也不能缺鍵。
+   - **PM 席**: 另需「## 接續表」區塊，以下五個鍵全部要在：`operator_thread`、`artifacts`、`pending_rulings`、`subagent_outputs`、`card_notes`（`card_notes` 要含 `executor` 子欄）。值可以寫明確的「無」，不能空白，也不能缺鍵。其中 `pending_rulings` 清空前必須是空的（值必須寫「無」，有待決裁定就不能清空）。
    - **新鮮度**: handoff 的 mtime 要新於最近一筆人類使用者回合，也要新於 `last_restart_at_ms`；過時就先重寫再清空。
    - **接續第一步**: `/clear` 後的新 context 不會注入未回訊息清單，接續第一步要先跑 `fleet recent`（`unseen_only`）。
 
@@ -108,7 +108,7 @@ Triggered by "寫 handoff", "寫 handover", "ctx 太滿", "context 快滿", "cle
    ## 接續表
    operator_thread: <串接脈絡或 無>
    artifacts: <產出檔案/路徑或 無>
-   pending_rulings: <待決事項或 無>
+   pending_rulings: 無（清空前必須是空的）
    subagent_outputs: <子代理回報或 無>
    card_notes:
      executor: <地址或 無>

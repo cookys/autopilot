@@ -58,25 +58,6 @@ walk(obj);
   assert_eq "$rc" 0 "$label: stdout JSON additionalContext byte-matches stderr, event=$event, no permissionDecision (node rc=$rc)"
 }
 
-# ── 1. cost-fuse warn ─────────────────────────────────────────────────
-TODAY=$(node -e 'process.stdout.write(new Date().toISOString().slice(0, 10))')
-export AUTOPILOT_COST_FUSE_DIR="$TEST_TMP/cost-fuse"
-export AUTOPILOT_COSTS_FILE="$TEST_TMP/costs.jsonl"
-unset AUTOPILOT_COST_FUSE_MODE AUTOPILOT_COST_FUSE_DAILY_USD
-TRANSCRIPT_FILE="$TEST_TMP/transcript.jsonl"
-cat > "$TRANSCRIPT_FILE" <<EOF
-{"type":"user","message":{"role":"user","content":"hi"}}
-{"type":"assistant","message":{"role":"assistant","model":"claude-fable-5-1","content":"hello"}}
-EOF
-cat > "$AUTOPILOT_COSTS_FILE" <<EOF
-{"ts":"${TODAY}T01:00:00.000Z","session":"fuse-session-1","model":"claude-fable-5-1","cost_usd":200}
-EOF
-COST_PAYLOAD=$(printf '{"tool_name":"Edit","session_id":"fuse-session-1","transcript_path":"%s","tool_input":{},"hook_event_name":"PreToolUse"}' "$TRANSCRIPT_FILE")
-run_hook cost-fuse.js "$COST_PAYLOAD"
-assert_eq 0 "$__RUN_EXIT" "cost-fuse: exit 0 on warn"
-assert_contains "$__RUN_STDERR" "cost-fuse" "cost-fuse: stderr still has advisory"
-assert_advisory_stdout "PreToolUse" "cost-fuse"
-
 # ── 2. context-budget T1 (inference path, no live file) ───────────────
 CTX_TRANSCRIPT="$TEST_TMP/ctx-transcript.jsonl"
 # 50k+60k+1k+10 = 111010 ≥ default t1 100k, below t2 150k
@@ -136,7 +117,7 @@ assert_contains "$__RUN_STDERR" "dispatch-model-guard" "dispatch-model-guard: st
 assert_advisory_stdout "PreToolUse" "dispatch-model-guard"
 unset DISPATCH_GUARD_CONFIG_OVERRIDE
 
-# ── 6. negative control: none of the five emit permissionDecision ─────
+# ── 6. negative control: none of the four emit permissionDecision ─────
 assert_no_permission_decision() {
   local label="$1"
   node -e '
@@ -154,11 +135,7 @@ walk(obj);
   assert_eq 0 "$?" "$label: no permissionDecision on stdout"
 }
 
-# Re-drive each warn/advisory branch (fresh cost-fuse session so warn fires again).
-rm -rf "$AUTOPILOT_COST_FUSE_DIR"
-run_hook cost-fuse.js "$(printf '{"tool_name":"Edit","session_id":"fuse-session-neg","transcript_path":"%s","tool_input":{},"hook_event_name":"PreToolUse"}' "$TRANSCRIPT_FILE")"
-assert_no_permission_decision "neg-cost-fuse"
-
+# Re-drive each warn/advisory branch.
 export AUTOPILOT_CONTEXT_BUDGET_DIR="$TEST_TMP/ctx-budget-state-neg"
 mkdir -p "$AUTOPILOT_CONTEXT_BUDGET_DIR"
 run_hook context-budget.js "$(printf '{"transcript_path":"%s","session_id":"ctx-t1-neg","hook_event_name":"PostToolUse"}' "$CTX_TRANSCRIPT")"

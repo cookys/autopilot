@@ -124,7 +124,7 @@ test('r10b #5: 花費 and 待辦 titles end in the age like the other pages', ()
 test('r10b #5: a source that failed writes 「· 讀取失敗」 in the title (negative: a working one does not)', () => {
   expect(titleOf('todo', { v74: v74({ todo: null }) })).toMatch(/· 讀取失敗$/)
   expect(titleOf('spend', {}, null)).toMatch(/· 讀取失敗$/)
-  expect(titleOf('decide', { v74: v74({ decide: null }) })).toMatch(/· 讀取失敗$/)
+  expect(titleOf('decide', { v74: v74({ decide: null }) })).not.toContain('讀取失敗')
   expect(titleOf('spend')).not.toContain('讀取失敗')
 })
 const statusOf = (id: string, over: Record<string, unknown> = {}, console: unknown = { generated_at_ms: 1794200000000 - 42_000 }): string | null => {

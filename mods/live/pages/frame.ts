@@ -395,6 +395,11 @@ function v74PageAgeMs(page: Page, ctx: PageCtx): number | null {
 
 export function v74TitleSegs(page: Page, ctx: PageCtx, name: Seg, maxCols?: number): Seg[] {
   const { t } = ctx
+  if (page.id === 'decide') {
+    const ageMs = v74PageAgeMs(page, ctx)
+    const out: Seg[] = ageMs === null ? [name] : [name, { text: ' · ' + t('v74.c.decide_updated', { n: Math.floor(ageMs / 1000) }), dim: true }]
+    return maxCols === undefined ? out : maxCols <= 0 ? [] : clip(out, maxCols)
+  }
   const src = V74_SOURCES[page.id]
   if (src === undefined) {
     const out: Seg[] = [name, { text: ' · ' + t('v74.c.help_src'), dim: true }]

@@ -172,7 +172,7 @@ test('v74 host: a tab press switches the page, the band toggle closes it, no hos
 // round 2: the title on every page, content from the first body row, digits through hidden hotkey Buttons
 const TITLES: [string, string][] = [
   ['now', '╭─ 現況 · 資料 fleet pm status --json（schema fleet.pm.status v1）'],
-  ['decide', '╭─ 待決 · 資料 fleet decisions list --json（schema fleet.decisions v1）'],
+  ['decide', '╭─ 待決'],
   ['dispatch', '╭─ 派工 · 資料 autopilot status runs --json（schema autopilot.runs v1）'],
   ['review', '╭─ 審查 · 資料 autopilot status review --json（schema autopilot.review v1）'],
   ['spend', '╭─ 花費 · 資料 codeforge usage summary --json（schema usage.summary v1）'],

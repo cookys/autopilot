@@ -8,7 +8,7 @@ const { spawnSync } = require('child_process');
 const { writeMarker, readMarker } = require('../hooks/lib/pm-resume.js');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pmstop-'));
-const env = { PATH: process.env.PATH, HOME: tmp, XDG_RUNTIME_DIR: tmp, FLEET_ADDRESS: 'cookys/aimax395/pm--claude' };
+const env = { PATH: process.env.PATH, HOME: tmp, XDG_RUNTIME_DIR: tmp, FLEET_ADDRESS: 'cookys/testhost/pm--claude' };
 const ID = '01M7R4PE3RN586XSY3ET1P4YNF';
 const hook = path.join(__dirname, '..', 'hooks', 'pm-resume-stop.js');
 const stop = (sid, transcript, extraEnv = {}) => spawnSync(process.execPath, [hook], {

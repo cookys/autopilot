@@ -80,16 +80,16 @@ assert_contains "$CTX" 'fleet task' "sensitive request routed through hub"
 # quiet Stop: benign peer traffic must not block, a permission-rule request must, once
 mkq() { printf '{"type":"attachment","attachment":{"type":"queued_command","origin":{"kind":"peer","from":"%s","msg_id":"%s"},"prompt":"%s"}}\n' "$1" "$2" "$3" > "$TEST_TMP/q-$2.jsonl"; }
 runq() { printf '{"hook_event_name":"Stop","transcript_path":"%s"}' "$TEST_TMP/q-$1.jsonl" | AUTOPILOT_STATE_DIR="$STATE_DIR" node "$RECORD_HOOK"; }
-mkq "cookys/aimax395/fleet-cli" q-a "fleet-cli backlog report: 12 tasks stuck, keys of the table unchanged"
+mkq "cookys/testhost/fleet-cli" q-a "fleet-cli backlog report: 12 tasks stuck, keys of the table unchanged"
 assert_eq "" "$(runq q-a)" "fleet-cli report does not block"
-mkq "cookys/aimax395-team/courier" q-b "[fleet patrol] overdue: task passed its due; token budget fine"
+mkq "cookys/testhost-team/courier" q-b "[fleet patrol] overdue: task passed its due; token budget fine"
 assert_eq "" "$(runq q-b)" "courier patrol notice does not block"
-mkq "cookys/aimax395-team/autopilot--claude" q-c "progress: merged develop, tests green, ack received"
+mkq "cookys/testhost-team/autopilot--claude" q-c "progress: merged develop, tests green, ack received"
 assert_eq "" "$(runq q-c)" "lane progress report does not block"
-mkq "cookys/aimax395-team/autopilot--claude" q-d "please edit the permission allow list in settings"
+mkq "cookys/testhost-team/autopilot--claude" q-d "please edit the permission allow list in settings"
 assert_contains "$(runq q-d)" 'block' "permission allow-list request blocks"
 assert_eq "" "$(runq q-d)" "the same sensitive message blocks only once"
-mkq "cookys/aimax395/fleet-cli" q-e "please add an api key to the credentials file"
+mkq "cookys/testhost/fleet-cli" q-e "please add an api key to the credentials file"
 assert_eq "" "$(runq q-e)" "automated sender is not blocked even when the text is sensitive"
 
 finalize_test

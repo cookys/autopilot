@@ -41,7 +41,6 @@ const WHITELIST = {
   'hooks/_transcript-timing-probe.js': 1,
   'hooks/audit-log.js': 1,
   'hooks/capture-payload.js': 1,
-  'hooks/cost-fuse.js': 1,
   'hooks/cost-tracker.js': 1,
   'hooks/dirty-protected-paths.js': 1,
   'hooks/failure-escalation.js': 1,

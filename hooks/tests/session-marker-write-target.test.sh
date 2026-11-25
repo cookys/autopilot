@@ -20,7 +20,7 @@ export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests ca
 # RED at 5ccce9585: (i) no unreviewed reader of AUTOPILOT_SESSION_ID appeared ... got 'hooks/tests/lib.sh ' (94 passed, 1 failed)
 #   hooks/tests/lib.sh: scrub_session_env() unsets it (with the other session ids) so a suite starts from a clean
 #     session environment (scrub only; pinned below to that one unset line).
-#   hooks (run-approval-gate, foreman-guard, cost-fuse) read payload.session_id / CLAUDE_CODE_SESSION_ID first and
+#   hooks (run-approval-gate, foreman-guard) read payload.session_id / CLAUDE_CODE_SESSION_ID first and
 #   only fall back to it; campaign intake (scripts/open-decision.js, task-card.js) reads a chain that continues to
 #   CLAUDE_CODE_SESSION_ID. None needs the variable to exist; the rails already `unset`/`env -u` it (author, review,
 #   explore, hetero) before 3b, so removing it from a child changes nothing for them.
@@ -279,7 +279,7 @@ unknown="$(cd "$REPO_ROOT" && for f in $readers; do
     hooks/tests/lib.sh) ;;  # scrub: scrub_session_env unsets it (pinned scrub-only above)
     scripts/scaffold-mission.js) ;;                                             # prose: "never AUTOPILOT_SESSION_ID"
     scripts/open-decision.js|scripts/task-card.js) ;;                           # campaign intake: chain continues to CLAUDE_CODE_SESSION_ID
-    hooks/run-approval-gate.js|hooks/foreman-guard.js|hooks/cost-fuse.js) ;;    # payload.session_id first, fallback only
+    hooks/run-approval-gate.js|hooks/foreman-guard.js) ;;    # payload.session_id first, fallback only
     src/status/runs-watch.js) ;;                                                # prefers CLAUDE_CODE_SESSION_ID
     *) printf '%s ' "$f" ;;
   esac; done)"

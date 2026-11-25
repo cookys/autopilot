@@ -92,7 +92,7 @@ function usageText() {
     + '\n'
     + 'Options:\n'
     + '  --inventory <file.json>  Seat inventory (schema autopilot.rule-effect-inventory/1)\n'
-    + '  --seats <seats.tsv|auto>  seat, host, sid TSV, or "auto" to derive the seats from\n'
+    + '  --seats <seats.tsv|auto>  seat-decl.tsv (14 columns; seat, host and sid are read), or "auto" to derive the seats from\n'
     + '                             the fleet directory (`fleet peers --json`, FLEET_BIN overrides\n'
     + '                             the binary): live claude seats only; host = courier,\n'
     + '                             sid = generation. Mutually exclusive with --inventory\n'
@@ -635,37 +635,20 @@ function readTranscriptSeatTimes(transcriptPath) {
 }
 
 function loadSeatsTsv(seatsPath) {
-  let raw;
+  // The seat table has one source: hangar's seat-decl.tsv (14 columns). This check needs seat, host and sid from it.
+  let decl;
   try {
-    raw = fs.readFileSync(seatsPath, 'utf8');
+    decl = require('./lib/seat-decl').readSeatDecl(seatsPath);
   } catch (err) {
-    throw new UsageError(`cannot read seats ${seatsPath}: ${err.message}`);
+    throw new UsageError(`seats ${err.message}`);
   }
   const rows = [];
-  let headerSeen = false;
-  const lines = raw.split('\n');
-  for (let i = 0; i < lines.length; i += 1) {
-    const lineNo = i + 1;
-    let line = lines[i];
-    if (line.endsWith('\r')) line = line.slice(0, -1);
-    if (line.trim() === '' || line.startsWith('#')) continue;
-    const cols = line.split('\t').map((col) => col.trim());
-    if (!headerSeen && cols[0] === 'seat') {
-      headerSeen = true;
-      continue;
-    }
-    headerSeen = true;
-    if (cols.length !== 3) {
-      throw new UsageError(`seats ${seatsPath}: line ${lineNo}: expected 3 tab-separated columns, got ${cols.length}`);
-    }
-    const [seat, host, sid] = cols;
-    if (seat === '' || host === '' || sid === '') {
-      throw new UsageError(`seats ${seatsPath}: line ${lineNo}: seat, host and sid must be non-empty`);
-    }
-    rows.push({ seat, host, sid });
+  for (const r of decl) {
+    if (r.sid === null) continue; // a seat with no recorded session id has nothing to check
+    rows.push({ seat: r.seat, host: r.host, sid: r.sid.trim() });
   }
   if (rows.length === 0) {
-    throw new UsageError(`seats ${seatsPath}: no data rows`);
+    throw new UsageError(`seats ${seatsPath}: no data rows with a sid`);
   }
   return rows;
 }

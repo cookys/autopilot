@@ -649,9 +649,10 @@ cat > "$SEATS_PROJECTS/proj-a/sid-stale.jsonl" <<EOF
 {"type":"system","subtype":"compact_boundary","timestamp":"$SEATS_OLD_ISO"}
 EOF
 
+# seat-decl.tsv row: seat host os_account harness project_dir model pool profile perm operator_only auto_compact overlay sid lead
+seat_row() { printf '%s\t%s\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t%s\t-\n' "$1" "$2" "$3"; }
 SEATS_OK="$TEST_TMP/seats-ok.tsv"
-printf 'seat\thost\tsid\n# skipped\n\nlocal-eff\t%s\tsid-eff\nforeign-seat\t%s\tsid-foreign\n' \
-  "$LOCAL_HOST" "$OTHER_HOST" > "$SEATS_OK"
+{ printf '# skipped\n\n'; seat_row local-eff "$LOCAL_HOST" sid-eff; seat_row foreign-seat "$OTHER_HOST" sid-foreign; } > "$SEATS_OK"
 
 run_check --seats "$SEATS_OK" --rule-repo "$SEATS_REPO" --rule-ref origin/develop \
   --projects-dir "$SEATS_PROJECTS" --host "$LOCAL_HOST" --json
@@ -672,7 +673,7 @@ assert_not_contains "$ERR" "$SECRET_MARKER" "seats: secret message field absent 
 assert_neq "$SHA_SEATS_CLAUDE" "$SHA_SEATS_LATER" "fixture: later non-CLAUDE.md commit differs"
 
 SEATS_STALE="$TEST_TMP/seats-stale.tsv"
-printf 'local-stale\t%s\tsid-stale\n' "$LOCAL_HOST" > "$SEATS_STALE"
+seat_row local-stale "$LOCAL_HOST" sid-stale > "$SEATS_STALE"
 run_check --seats "$SEATS_STALE" --rule-repo "$SEATS_REPO" --projects-dir "$SEATS_PROJECTS" --host "$LOCAL_HOST"
 assert_exit_code "$RC" 1 "seats: transcript older than rule commit -> exit 1"
 STALE_V="$(printf '%s\n' "$OUT" | node -e '
@@ -682,7 +683,7 @@ process.stdout.write(lines[0].verdict + "|" + lines[0].time_source);
 assert_eq "$STALE_V" "stale|transcript" "seats: older transcript is stale with time_source transcript"
 
 SEATS_MISS="$TEST_TMP/seats-miss.tsv"
-printf 'local-miss\t%s\tsid-missing\nforeign-seat\t%s\tsid-foreign\n' "$LOCAL_HOST" "$OTHER_HOST" > "$SEATS_MISS"
+{ seat_row local-miss "$LOCAL_HOST" sid-missing; seat_row foreign-seat "$OTHER_HOST" sid-foreign; } > "$SEATS_MISS"
 run_check --seats "$SEATS_MISS" --rule-repo "$SEATS_REPO" --projects-dir "$SEATS_PROJECTS" --host "$LOCAL_HOST" --json
 assert_exit_code "$RC" 2 "seats: missing transcript -> exit 2"
 MISS_V="$(printf '%s' "$OUT" | node -e '
@@ -693,17 +694,27 @@ process.stdout.write([s.verdict, s.reason, s.time_source, d.seats.length, d.summ
 assert_eq "$MISS_V" "unknown|transcript_missing|missing|1|1|1" "seats: transcript_missing, foreign row not counted"
 
 SEATS_BAD="$TEST_TMP/seats-bad.tsv"
-printf '# c\n\nseat\thost\tsid\na\tb\n' > "$SEATS_BAD"
+printf '# c\n\n# d\na\tb\n' > "$SEATS_BAD"
 run_check --seats "$SEATS_BAD" --rule-repo "$SEATS_REPO" --host "$LOCAL_HOST"
 assert_exit_code "$RC" 3 "seats: bad column count -> exit 3"
-assert_contains "$ERR" "line 4" "seats: bad column count names the line number"
+assert_contains "$ERR" ":4: expected 14" "seats: bad column count names the line number"
+
+SEATS_OLD3="$TEST_TMP/seats-old3.tsv"
+printf 'local-eff\t%s\tsid-eff\n' "$LOCAL_HOST" > "$SEATS_OLD3"
+run_check --seats "$SEATS_OLD3" --rule-repo "$SEATS_REPO" --host "$LOCAL_HOST"
+assert_exit_code "$RC" 3 "seats: the retired 3-column seat file is refused"
+
+SEATS_OLD3="$TEST_TMP/seats-old3.tsv"
+printf 'local-eff\t%s\tsid-eff\n' "$LOCAL_HOST" > "$SEATS_OLD3"
+run_check --seats "$SEATS_OLD3" --rule-repo "$SEATS_REPO" --host "$LOCAL_HOST"
+assert_exit_code "$RC" 3 "seats: the retired 3-column seat file is refused"
 
 run_check --seats "$SEATS_OK" --inventory "$INV_EFF" --host "$LOCAL_HOST"
 assert_exit_code "$RC" 3 "seats: --seats with --inventory -> exit 3"
 
 # a) only other-host rows is not a green empty report
 SEATS_FOREIGN="$TEST_TMP/seats-foreign-only.tsv"
-printf 'foreign-seat\t%s\tsid-foreign\n' "$OTHER_HOST" > "$SEATS_FOREIGN"
+seat_row foreign-seat "$OTHER_HOST" sid-foreign > "$SEATS_FOREIGN"
 run_check --seats "$SEATS_FOREIGN" --rule-repo "$SEATS_REPO" --projects-dir "$SEATS_PROJECTS" --host "$LOCAL_HOST" --json
 assert_exit_code "$RC" 2 "seats: only other-host rows -> exit 2"
 assert_contains "$ERR" "rule-effect-check: no seat in $SEATS_FOREIGN is on host $LOCAL_HOST" \
@@ -721,7 +732,7 @@ cat > "$SEATS_PROJECTS/proj-a/sid-compact-before.jsonl" <<EOF
 {"type":"user","timestamp":"2023-01-01T00:00:00.000Z","message":"early"}
 {"type":"system","subtype":"compact_boundary","timestamp":"$SEATS_AFTER_ISO"}
 EOF
-printf 'local-compact-before\t%s\tsid-compact-before\n' "$LOCAL_HOST" > "$SEATS_COMPACT_BEFORE"
+seat_row local-compact-before "$LOCAL_HOST" sid-compact-before > "$SEATS_COMPACT_BEFORE"
 run_check --seats "$SEATS_COMPACT_BEFORE" --rule-repo "$SEATS_REPO" --rule-ref origin/develop \
   --projects-dir "$SEATS_PROJECTS" --host "$LOCAL_HOST" --json
 assert_exit_code "$RC" 0 "seats: start before rule commit but compact after -> exit 0"
@@ -739,7 +750,7 @@ cat > "$SEATS_PROJECTS/proj-a/sid-earliest.jsonl" <<EOF
 {"type":"user","timestamp":"2023-01-01T00:00:00.000Z","message":"early"}
 {"type":"assistant","timestamp":"$SEATS_AFTER_ISO","message":"later"}
 EOF
-printf 'local-earliest\t%s\tsid-earliest\n' "$LOCAL_HOST" > "$SEATS_EARLY"
+seat_row local-earliest "$LOCAL_HOST" sid-earliest > "$SEATS_EARLY"
 run_check --seats "$SEATS_EARLY" --rule-repo "$SEATS_REPO" --projects-dir "$SEATS_PROJECTS" --host "$LOCAL_HOST" --json
 assert_exit_code "$RC" 1 "seats: later non-compact lines do not refresh an early session -> exit 1"
 EARLY_V="$(printf '%s' "$OUT" | node -e '
@@ -768,7 +779,7 @@ assert_eq "$RULE_REF_V" "origin/develop|origin/develop|${SHA_SEATS_CLAUDE}" \
 
 # e) trailing space on sid still finds the transcript
 SEATS_PAD="$TEST_TMP/seats-pad.tsv"
-printf 'local-eff\t%s\tsid-eff \n' "$LOCAL_HOST" > "$SEATS_PAD"
+seat_row local-eff "$LOCAL_HOST" "sid-eff " > "$SEATS_PAD"
 run_check --seats "$SEATS_PAD" --rule-repo "$SEATS_REPO" --rule-ref origin/develop \
   --projects-dir "$SEATS_PROJECTS" --host "$LOCAL_HOST" --json
 assert_exit_code "$RC" 0 "seats: sid trailing space still finds the transcript -> exit 0"

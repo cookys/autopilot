@@ -11,14 +11,27 @@ const { redactText } = require('./lib/personal-data-redact.js');
 
 const DEFAULT_CHUNK_SIZE = 1 << 20;
 
+// Plan pm-replay-measure v4 section 2: 30 stratified segments; the screening round takes 12 of them.
 const DEFAULT_QUOTA = {
+  operator: 8,
+  lane_result: 7,
+  patrol: 5,
+  inbox_batch: 5,
+  stop_hook: 3,
+  task_notification: 2,
+};
+
+const SCREENING_QUOTA = {
   operator: 3,
   lane_result: 3,
-  patrol: 1,
-  inbox_batch: 1,
+  patrol: 2,
+  inbox_batch: 2,
   stop_hook: 1,
   task_notification: 1,
 };
+
+// Prefill prefix lengths (v4 section 2): baseline 300k, S6 PM-chat 100k, autocompact curve 150k/250k/350k/450k.
+const DEFAULT_LEVELS = [100000, 150000, 250000, 300000, 350000, 450000];
 
 /**
  * Centralized event classification rules (checked in order; first match wins).
@@ -551,7 +564,7 @@ function writeSliceOutput(outDir, session, sampleResult, options = {}) {
   fs.mkdirSync(eventsDir, { recursive: true });
 
   const seed = options.seed ?? 1;
-  const levels = options.levels ?? [200000, 300000];
+  const levels = options.levels ?? DEFAULT_LEVELS;
   const incomingIndices = incomingMessages(session).map((m) => m.index);
   const firstSelectedIndex =
     sampleResult.selected.length > 0
@@ -658,7 +671,7 @@ function parseArgs(argv) {
     sessionsDirs: [],
     out: null,
     seed: 1,
-    levels: [200000, 300000],
+    levels: [...DEFAULT_LEVELS],
     quota: { ...DEFAULT_QUOTA },
     since: null,
   };
@@ -680,6 +693,8 @@ function parseArgs(argv) {
         if (k && Number.isFinite(Number(v))) q[k] = Number(v);
       }
       args.quota = q;
+    } else if (arg === '--screening') {
+      args.quota = { ...SCREENING_QUOTA };
     } else if (arg === '--since' && argv[i + 1]) {
       args.since = argv[++i];
     }
@@ -748,7 +763,7 @@ function loadSessionsFromDirs(dirs, options = {}) {
 function main(argv = process.argv.slice(2)) {
   const args = parseArgs(argv);
   if (!args.out || args.sessionsDirs.length === 0) {
-    throw new Error('Usage: pm-replay-slice.js --sessions-dir <dir> --out <dir> [--seed N] [--levels 200000,300000] [--quota ...] [--since ISO]');
+    throw new Error('Usage: pm-replay-slice.js --sessions-dir <dir> --out <dir> [--seed N] [--levels 100000,150000,250000,300000,350000,450000] [--screening] [--quota ...] [--since ISO]');
   }
   const loadStats = { skippedBadLines: 0, loadedCount: 0 };
   const session = loadSessionsFromDirs(args.sessionsDirs, {
@@ -771,6 +786,8 @@ if (require.main === module) {
 
 module.exports = {
   DEFAULT_QUOTA,
+  SCREENING_QUOTA,
+  DEFAULT_LEVELS,
   DEFAULT_CHUNK_SIZE,
   CLASSIFICATION_RULES,
   SUPPLEMENTARY_REDACT_RULES,

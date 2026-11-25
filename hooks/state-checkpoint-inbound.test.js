@@ -138,5 +138,6 @@ test('80 unanswered messages: omits older ones with count and fleet recent --uns
   const sec = section(runHook(r, { noteBytes: 8000, cwd: path.join(__dirname, '..') }));
   assert.match(sec, /\d+ 則已省略/);
   assert.ok(sec.includes('fleet recent --unseen'));
+  assert.match(sec, /- \S+ from=/, 'newest entries are still listed in full, not only the placeholder');
   assert.ok(Buffer.byteLength(sec) <= INBOUND_BUDGET);
 });

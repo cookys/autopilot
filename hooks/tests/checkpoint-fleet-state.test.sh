@@ -215,6 +215,7 @@ while [ "$i" -lt 5 ]; do
   i=$((i+1))
 done
 printf 'not a row\n'
+printf 'RED\tnoise-orphan\tT-noise\trunning\t2026-11-14T10:00:00Z\t-\ttask not in fleet list\n'
 EOF
 chmod +x "$INIT"
 export AUTOPILOT_INITIATIVES_CMD="$INIT"
@@ -227,6 +228,7 @@ assert_contains "$OUT" "$(printf 'RED\thub 和 PM 防斷電搬移\t01M7DGY0\trun
 assert_contains "$OUT" "$(printf 'RED\tc3758 升級\t01M7DQ66\twaiting\t2026-11-14 16:00 台北\t-\twaiting,stale_24h')" "fixture c3758 rendered in Taipei"
 assert_contains "$OUT" "green: 5" "five GREEN rows collapse to a count"
 assert_contains "$OUT" "malformed: 1" "a non-matching line is counted"
+assert_not_contains "$OUT" "noise-orphan" "rows saying task not in fleet list are dropped, not listed or counted as malformed"
 assert_not_contains "$OUT" "g-0" "GREEN titles are not listed"
 REDS=$(printf '%s\n' "$OUT" | grep -c $'^RED\t' || true)
 assert_eq "$REDS" 60 "hook output keeps all 60 RED lines"

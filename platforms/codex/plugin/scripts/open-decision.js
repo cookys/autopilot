@@ -577,11 +577,25 @@ function writeEntries(sf, root, entries) {
   fs.renameSync(tmp, sf.file);
 }
 
+function mirrorFailed(kind, branch, repo, error) {
+  const detail = String(error && error.message || error).replace(/[\r\n]+/g, ' ');
+  const line = `open-decision: decision store mirror failed (${kind}, ${branch}, repo=${repo}): ${detail}; card remains authoritative`;
+  process.stderr.write(`${line}\n`);
+  try {
+    const dir = path.join(require('./lib/state-dir').stateDir(), 'open-decision');
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    fs.appendFileSync(path.join(dir, 'mirror-failures.log'), `${new Date().toISOString()} ${line}\n`, { mode: 0o600 });
+  } catch (_error) { /* the log is a side channel; stderr already carries the detail */ }
+}
+
 function mirrorCard(cwd, entry) {
+  let branch = 'setup';
+  let repo = cwd;
   try {
     const hippo = require('./lib/hippo');
-    const repo = repoTop(cwd);
+    repo = repoTop(cwd);
     if (!fs.existsSync(path.join(repo, '.hippo', 'repo.toml'))) return;
+    branch = 'detect';
     const detected = hippo.detect(repo);
     if (detected.state !== 'hippo') throw new Error(detected.reason);
     const token = /^[a-z0-9:._/-]{1,55}$/.test(entry.id) ? entry.id : crypto.createHash('sha256').update(entry.id).digest('hex').slice(0, 32);
@@ -591,18 +605,22 @@ function mirrorCard(cwd, entry) {
     const answer = entry.answer || entry.last_answer;
     if (answer) plan.steps.push({ op: 'edit', id: 'root', body: `${entry.question}\n\nAnswer: ${answer}` });
     if (isClosedEntry(entry)) plan.steps.push({ op: 'close', id: 'root', status: entry.closed_via === 'withdrawn' || entry.closed_via === 'panel_dismiss' ? 'cancelled' : 'done' });
+    branch = 'execute';
     const result = hippo.execute(repo, plan, { log: () => {} });
-    if (!result.ok) throw new Error('store write failed');
-  } catch (_error) {
-    process.stderr.write('open-decision: decision store mirror failed; card remains authoritative\n');
+    if (!result.ok) throw new Error(`store write failed: ${JSON.stringify(result.error || result.reason || result).slice(0, 300)}`);
+  } catch (error) {
+    mirrorFailed('card', branch, repo, error);
   }
 }
 
 function mirrorRuling(cwd, entry, answer) {
+  let branch = 'setup';
+  let repo = cwd;
   try {
     const hippo = require('./lib/hippo');
-    const repo = repoTop(cwd);
+    repo = repoTop(cwd);
     if (!fs.existsSync(path.join(repo, '.hippo', 'repo.toml'))) return;
+    branch = 'detect';
     const detected = hippo.detect(repo);
     if (detected.state !== 'hippo') throw new Error(detected.reason);
     const id = answer.answer_id || entry.id;
@@ -612,9 +630,11 @@ function mirrorRuling(cwd, entry, answer) {
     const body = `${ruling}\n\nOption: ${answer.answer_option || '(none)'}\nCard: ${entry.id}`;
     const plan = { key, steps: [{ op: 'create', ref: 'root', kind: 'decision', key,
       argv: ['--title', ruling.split(/\r?\n/)[0], '--status', 'open', '--tag', 'source:pm-ruling'], body }] };
-    if (!hippo.execute(repo, plan, { log: () => {} }).ok) throw new Error('store write failed');
-  } catch (_error) {
-    process.stderr.write('open-decision: decision store mirror failed; card remains authoritative\n');
+    branch = 'execute';
+    const result = hippo.execute(repo, plan, { log: () => {} });
+    if (!result.ok) throw new Error(`store write failed: ${JSON.stringify(result.error || result.reason || result).slice(0, 300)}`);
+  } catch (error) {
+    mirrorFailed('ruling', branch, repo, error);
   }
 }
 

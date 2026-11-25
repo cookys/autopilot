@@ -12,7 +12,16 @@ const cp = require('child_process');
 const { ROOT } = require('./helpers.js');
 const { makeFixture } = require(path.join(ROOT, '..', '..', 'scripts', 'lib', 'account-fixtures', 'shim-install.js'));
 const RC = path.join(ROOT, 'real-check.js');
-const KIT = path.join(ROOT, 'kits', 'reviewer');
+// real-check appends a nonce line to the COPIED role.md, so the A9 exemption (byte-identical frozen kit) can never match here.
+// The tests therefore run on staged copies of the frozen kits with one A9 line prepended; the frozen source files stay untouched.
+function stageKit(name) {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'rk-kit-' + name + '-'));
+  fs.cpSync(path.join(ROOT, 'kits', name), d, { recursive: true });
+  fs.writeFileSync(path.join(d, 'role.md'), 'A9: test fixture line.\n' + fs.readFileSync(path.join(d, 'role.md'), 'utf8'));
+  return d;
+}
+const KIT = stageKit('reviewer');
+const PLANNER_KIT = stageKit('planner');
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 const BILLING = ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY', 'AWS_BEARER_TOKEN_BEDROCK', 'KIMI_API_KEY', 'KIMI_MODEL_API_KEY', 'MOONSHOT_API_KEY', 'OPENAI_API_KEY'];
 
@@ -20,7 +29,7 @@ function world(aliases) {
   const fx = makeFixture({ aliases: aliases || [{ alias: 'a' }] });
   const base = { ...process.env }; for (const k of BILLING) delete base[k];
   delete base.AUTOPILOT_SESSION_ID;
-  const env = { ...base, ...fx.env, DISPATCH_QUIET: '1', AUTOPILOT_SETTLE_MS: '0', AUTOPILOT_ROLEKIT_A9_EXEMPT: '1' };
+  const env = { ...base, ...fx.env, DISPATCH_QUIET: '1', AUTOPILOT_SETTLE_MS: '0' };
   const out = path.join(fx.root, 'out');
   const run = (args, e, script) => {
     const r = cp.spawnSync('node', [script || RC, ...args], { encoding: 'utf8', env: { ...env, ...(e || {}) }, input: '' });
@@ -57,7 +66,7 @@ test('dry-run ok: card recorded in argv, rail record sha, nonce in reply -> met 
 }));
 
 test('dry-run ok with a kit that has plugin/ and a tool list (planner): --tools equals the kit line', withWorld((w) => {
-  const r = w.run(['--seat', 'weak1', '--account', 'a', '--kit', path.join(ROOT, 'kits', 'planner'), '--out', w.out, '--dry-run', 'ok']);
+  const r = w.run(['--seat', 'weak1', '--account', 'a', '--kit', PLANNER_KIT, '--out', w.out, '--dry-run', 'ok']);
   assert.strictEqual(r.rc, 0, r.err);
   const ev = w.evidence('dry-run-real-check-weak1.json');
   assert.strictEqual(ev.tools_arg, 'Read,Grep,Glob');

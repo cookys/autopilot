@@ -224,6 +224,7 @@ for (let i = 0; i < REASK_FIXTURES.length; i += 1) {
         '--recommendation', fx.answer,
         '--not-authorized', 'goal-change:owner only',
         '--executor', fx.executor,
+        ...(['identity', 'presence'].includes(fx.category) ? ['--operator-step-none', 'test fixture: the card only asks for a yes or no'] : []),
         '--json',
       ];
       const r1 = runCli(openArgs, { repo, env });

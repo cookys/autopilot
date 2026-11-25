@@ -6,6 +6,7 @@ import { test, expect } from 'claude-code/testing'
 import { PAGES } from './index'
 import { frameRows, actionRows } from './frame'
 import type { Page } from './frame'
+import { AMBIGUOUS_CARD_RE, narrowAmbiguous } from './layout'
 import { decidePage, decideReduce, NO_NAV, awaitingBlockRows } from './decide'
 import type { DecideNav } from './decide'
 import { routeKey } from './keys'
@@ -613,4 +614,24 @@ test('awaiting block: it folds to its heading when it would hide an option of th
     expect(framed.every(r => r.reduce((w, s) => w + displayWidth(s.text), 0) <= cols), where + ': no row wider than the pane').toBe(true)
     expect(framed.length, where + ': the frame keeps its height').toBe(rows)
   }
+})
+
+// PM dispatch 01M89K7N1W: card d-661d1428 had circled numbers in its title; the owner's terminal draws them two cells, the page counted one, the text after them overlapped.
+test('ambiguous-width glyphs: circled numbers in a card title are drawn narrow, so no row holds one and every row fits the pane', () => {
+  const cards = [{ id: 'd-661d1428', title: '區塊:②Omni 8步…唇形對 ③PDD', question: '※ 要不要合併？ → 選項 ○ ★ “引號”…', background: null, options: [{ label: '可以合併', detail: '', recommended: true }, { label: '先不要', detail: '' }] }]
+  for (const [cols, rows] of [[120, 40], [80, 24], [209, 49]] as const) {
+    const ctx = { live: null, console: null, size: { cols, rows }, t, nowMs, v74: { decide: cards, awaiting: [], pm: null, todo: null, nav: { cursor: 0, picks: {}, notes: {}, noteMode: false } } } as never
+    const framed = frameRows(decidePage, ctx, { pages: PAGES, topAnchor: true })
+    const joined = framed.map(r => r.map(s => s.text).join('')).join('\n')
+    expect(/[\u2461\u2462\u203b\u2192\u25cb\u2605\u201c\u201d]/u.test(joined), cols + 'x' + rows + ': no Ambiguous character of the card text is drawn').toBe(false)
+    expect(joined, cols + 'x' + rows + ': the title keeps its text').toContain('2.Omni 8步')
+    expect(framed.every(r => r.reduce((w, s) => w + displayWidth(s.text), 0) <= cols), cols + 'x' + rows + ': no row wider than the pane').toBe(true)
+  }
+})
+
+test('ambiguous-width glyphs: narrowAmbiguous leaves no Ambiguous character, keeps wide CJK and ASCII, and the circled numbers become 1. 2. 3.', () => {
+  const s = '區塊:②Omni 8步…唇形對 ③PDD ① ⑳ ※ → ○ ★ “x” 中文 ok'
+  const out = narrowAmbiguous(s)
+  expect(AMBIGUOUS_CARD_RE.test(out)).toBe(false)
+  expect(out).toBe('區塊:2.Omni 8步...唇形對 3.PDD 1. 20. * -> o * "x" 中文 ok')
 })

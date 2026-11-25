@@ -52,3 +52,24 @@ export function decideFullWidth(a: { boxed: boolean; effMaxRows: number; compact
     (a.effMaxRows >= DECIDE_COMPACT_MAX_ROWS && decideLayoutMode(a.bodyCols, a.layoutMode) === 'dual' && !a.styleC)
   )
 }
+
+// PM ruling 01M89KD3H9 (2026-11-25): card text and awaiting steps never reach the screen with an East Asian Ambiguous character. Terminals differ
+// (one draws it one cell, another two), so any width guess misplaces the text on the other kind. They are replaced by ASCII at render time; the
+// stored card text is never changed. Chrome glyphs (box drawing, arrows, state marks) are not card text and are not touched here.
+const AMB_WORDS: Record<string, string> = {
+  '\u203b': '*', '\u2192': '->', '\u2190': '<-', '\u2194': '<->', '\u2191': '^', '\u2193': 'v', '\u25cb': 'o', '\u25cf': '*', '\u2605': '*', '\u2606': '*',
+  '\u25a0': '#', '\u25a1': '[]', '\u25c6': '*', '\u25c7': 'o', '\u25b2': '^', '\u25b3': '^', '\u25bc': 'v', '\u25bd': 'v', '\u2014': '--', '\u2013': '-',
+  '\u2026': '...', '\u2018': "'", '\u2019': "'", '\u201c': '"', '\u201d': '"', '\u00b7': '.', '\u2022': '*', '\u00d7': 'x', '\u00b0': 'deg',
+}
+export const AMBIGUOUS_CARD_RE = /[\u2460-\u24ff\u2776-\u2793\u203b\u2190-\u2195\u25a0-\u25bd\u25c6\u25c7\u25cb\u25cf\u2605\u2606\u2014\u2013\u2026\u2018\u2019\u201c\u201d\u00b7\u2022\u00d7\u00b0]/u
+export function narrowAmbiguous(text: string): string {
+  return text.replace(new RegExp(AMBIGUOUS_CARD_RE.source, 'gu'), ch => {
+    const c = ch.codePointAt(0) as number
+    if (c >= 0x2460 && c <= 0x2473) return (c - 0x245f) + '.'
+    if (c >= 0x2474 && c <= 0x2487) return (c - 0x2473) + '.'
+    if (c >= 0x2488 && c <= 0x249b) return (c - 0x2487) + '.'
+    if (c >= 0x2776 && c <= 0x277f) return (c - 0x2775) + '.'
+    if (c >= 0x2780 && c <= 0x2793) return (((c - 0x2780) % 10) + 1) + '.'
+    return AMB_WORDS[ch] ?? '*'
+  })
+}

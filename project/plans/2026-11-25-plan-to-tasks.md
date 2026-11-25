@@ -88,7 +88,7 @@
 
 ## 7. Out of scope
 
-UI viewport 截圖閘；plan loop g2 收斂改造；代換 hangar pin（只讀回確認）；回溯舊計畫。
+證明「真的被使用」（文字證據只能擋缺漏與占位，不能證明真實使用；這由 look 卡與 PM／操作員驗收負責，ADR-0001 不加 attestation）；UI viewport 截圖閘；plan loop g2 收斂改造；代換 hangar pin（只讀回確認）；回溯舊計畫。
 
 ## 8. Open questions
 

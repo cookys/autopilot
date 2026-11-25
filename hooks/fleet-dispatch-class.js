@@ -56,6 +56,24 @@ const SHED_LINE_RE = /^\s*shed\s*:/im;
 const SHED_ROLES = new Set(['inventory', 'summary', 'chores']);
 const SHED_SIZES = new Set(['XS', 'S']);
 const PLAN_WORD_RE = /(?:^|[^a-z])plan(?:[^a-z]|$)/i;
+const EXPECT_REVISION_FLAG_RE = /--expect-revision(?:=|\s)/;
+const DISPATCH_PLAN_REVIEW_RE = /\bdispatch-plan-review\.js\b/;
+const PLAN_SHA_RE = /(?:^\s*(?:[-*]\s+)?(?:\*\*)?Plan(?:\*\*)?\s*:\s*(?:\*\*)?\S+@([0-9a-f]{7,40})(?:\*\*)?\s*$|\S+\.md@([0-9a-f]{7,40})\b)/m;
+
+function extractReferencedSha(task) {
+  if (typeof task !== 'string' || !task) return null;
+  const m = task.match(PLAN_SHA_RE);
+  return m ? (m[1] || m[2] || null) : null;
+}
+
+function applyExpectRevision(task) {
+  if (typeof task !== 'string' || !task) return task;
+  if (EXPECT_REVISION_FLAG_RE.test(task)) return task;
+  if (!DISPATCH_PLAN_REVIEW_RE.test(task)) return task;
+  const sha = extractReferencedSha(task);
+  if (!sha) return task;
+  return task.replace(DISPATCH_PLAN_REVIEW_RE, `$& --expect-revision ${sha}`);
+}
 
 function oneLine(value, maxLen = 60) {
   return String(value).replace(/[\r\n]+/g, ' ').trim().slice(0, maxLen);
@@ -209,8 +227,9 @@ function decide(input) {
   if (Object.prototype.hasOwnProperty.call(toolInput, 'class') && toolInput.class !== undefined && toolInput.class !== null) {
     if (typeof toolInput.class === 'string' && VALID_CLASSES.includes(toolInput.class)) {
       const nextTask = applyShedRouting(toolInput);
-      if (nextTask !== toolInput.task) {
-        return preToolAllowUpdated({ ...toolInput, task: nextTask }, toolInput.class);
+      const finalTask = applyExpectRevision(nextTask);
+      if (finalTask !== toolInput.task) {
+        return preToolAllowUpdated({ ...toolInput, task: finalTask }, toolInput.class);
       }
       return null;
     }
@@ -238,7 +257,8 @@ function decide(input) {
   }
 
   const nextTask = applyShedRouting(toolInput);
-  const nextInput = nextTask !== toolInput.task ? { ...toolInput, task: nextTask } : toolInput;
+  const finalTask = applyExpectRevision(nextTask);
+  const nextInput = finalTask !== toolInput.task ? { ...toolInput, task: finalTask } : toolInput;
   return preToolAllowUpdated(nextInput, mappedClass);
 }
 

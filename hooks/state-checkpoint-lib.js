@@ -232,7 +232,7 @@ function compactionStateName(sessionId) {
 // send (reply_to). Pure: takes the transcript text, returns the unanswered ones oldest first. Body text is data.
 const ANSWER_TOOL = /^mcp__(?:[\w-]+__)?fleet__(reply|task_result|send)$/;
 const CHANNEL_OPEN = /<channel\s+([^>]*)>/g;
-const INBOUND_FIRST_LINE_MAX = 20; // bytes; 8 entries (one dispatch) must fit INBOUND_BUDGET 1024
+const INBOUND_FIRST_LINE_MAX = 200; // bytes; 12+ entries fit INBOUND_BUDGET 4096
 
 function escapeInboundText(s) {
   return String(s == null ? '' : s).replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ' ').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');

@@ -112,7 +112,7 @@ function applyPerModel(cfg, modelId) {
 function readContextBudget(opts) {
   const o = opts || {};
   const env = o.env || process.env;
-  const cfg = { t1: 100_000, t2: 150_000, t3: 0, explicitT3: false, gap: 50_000, mode: 'warn', explicitT1: false, explicitT2: false, envT1: false, envT2: false, perModel: [], t2PctBySeat: { pm: 11 }, t2HardBlock: false, liveWrite: true, step: 50_000, warnings: [] };
+  const cfg = { t1: 100_000, t2: 150_000, t3: 0, explicitT3: false, gap: 50_000, mode: 'warn', explicitT1: false, explicitT2: false, envT1: false, envT2: false, perModel: [], t2PctBySeat: { pm: 20 }, t2HardBlock: false, liveWrite: true, step: 50_000, warnings: [] };
   try {
     const user = JSON.parse(fs.readFileSync(configPath({ env, home: o.home }), 'utf8'));
     const cb = user && user.context_budget;

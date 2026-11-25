@@ -38,17 +38,17 @@ const THEME_CORRESPONDENCE = {
     light: 'theme.error (deep red readable on light bg; ANSI 31)',
     meaning: 'fault or blocked alert (line ✗ failed / ⊘ stalled, QC ⏶ alert)',
   },
+  remember: {
+    role: 'PALETTE.action',
+    dark: 'theme.remember (periwinkle on dark bg, 11.2:1)',
+    light: 'theme.remember (blue on light bg, 8.6:1; suggestion was 4.40)',
+    meaning: 'pressable toggle (▾展開 / ▴收合)',
+  },
   inactive: {
     role: 'PALETTE.idle',
     dark: 'theme.inactive (muted grey on dark bg, NO dim stacking)',
     light: 'theme.inactive (readable dark grey on light bg, NO dim stacking per §2.6)',
-    meaning: 'stale (~ + ?), missing (—), or idle (無待決)',
-  },
-  subtle: {
-    role: 'PALETTE.structure',
-    dark: 'theme.subtle (low-emphasis rule/separator on dark bg)',
-    light: 'theme.subtle (low-emphasis rule/separator on light bg)',
-    meaning: 'structural band separator `│`',
+    meaning: 'stale (~ + ?), missing (—), idle (無待決), or the band separator `│` (subtle was 2.19:1 light / 2.60:1 dark, under the 3:1 non-text bar)',
   },
 }
 
@@ -171,8 +171,8 @@ test('palette 2: every band segment across normal/alert/stale/missing/idle maps 
     ['pet', 'stale', segBy(layStale, 'pet').segs, [P.idle]],
     ['pet', 'missing', B.formatPet({ text: null, state: 'missing' }).segs, [P.idle]],
 
-    ['sep', 'always', [B.BAND_SEP_SEG], [P.structure]],
-    ['toggle', 'collapsed', layNormal.toggle.segs, ['default']],
+    ['sep', 'always', [B.BAND_SEP_SEG], [P.idle]],
+    ['toggle', 'collapsed', layNormal.toggle.segs, [P.action]],
   ]
 
   process.stdout.write('\n[band-palette] Segment x State -> PALETTE Role -> ThemeKey -> Dark / Light Theme Mapping\n')

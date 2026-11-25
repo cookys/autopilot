@@ -2,6 +2,7 @@
 import { test, expect } from 'claude-code/testing'
 import { PALETTE } from '../tux/palette.ts'
 import { actionSeg } from './ui'
+import { BAND_SEP_SEG } from './band-onerow'
 import { BandBar } from './band'
 import { consoleOf, NOW } from './pages/quota.fixture'
 import type { ConsoleSnapshot } from './console'
@@ -95,6 +96,20 @@ test('R12: action role uses the accessible light-theme link token with contrast 
   expect(actionSeg('open').color).toBe('remember')
   expect(PALETTE.action).toBe('remember')
   for (const light of [[255, 255, 255], [245, 245, 245]]) expect(contrast([0, 0, 255], light)).toBeGreaterThanOrEqual(4.5)
+})
+
+// Host 2.1.326 theme values (chrome-host-contract.txt): light inactive rgb(102,102,102), dark inactive rgb(153,153,153);
+// the old separator colour subtle is rgb(175,175,175) light and rgb(80,80,80) dark. A separator is a non-text component: >= 3:1 on both themes.
+test('R13: the band separator keeps contrast >= 3:1 on light and dark backgrounds', () => {
+  const luminance = (rgb: number[]) => rgb.map(n => n / 255).map(n => n <= 0.04045 ? n / 12.92 : ((n + 0.055) / 1.055) ** 2.4).reduce((sum, n, i) => sum + n * [0.2126, 0.7152, 0.0722][i], 0)
+  const contrast = (a: number[], b: number[]) => (Math.max(luminance(a), luminance(b)) + 0.05) / (Math.min(luminance(a), luminance(b)) + 0.05)
+  const host: Record<string, { light: number[]; dark: number[] }> = { inactive: { light: [102, 102, 102], dark: [153, 153, 153] }, subtle: { light: [175, 175, 175], dark: [80, 80, 80] } }
+  expect(contrast(host.subtle.light, [255, 255, 255])).toBeLessThan(3)
+  expect(contrast(host.subtle.dark, [0, 0, 0])).toBeLessThan(3)
+  const key = BAND_SEP_SEG.color as string
+  expect(host[key], 'separator colour ' + key + ' has no host RGB in this test').toBeDefined()
+  for (const bg of [[255, 255, 255], [245, 245, 245]]) expect(contrast(host[key].light, bg)).toBeGreaterThanOrEqual(3)
+  for (const bg of [[0, 0, 0], [30, 30, 30]]) expect(contrast(host[key].dark, bg)).toBeGreaterThanOrEqual(3)
 })
 
 test('W1: dock and inline use all host body rows with the strip last', () => {

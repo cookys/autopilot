@@ -722,4 +722,23 @@ AUTOPILOT_PACE_FILE="$PACE_STALE_GEN" run_hook dispatch-model-guard.js "$PAYLOAD
 assert_eq 0 "$__RUN_EXIT" "overloaded-claude-mechanical-stale-gen-exit"
 assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "overloaded-claude-mechanical-stale-gen-allowed"
 
+# Private lane (default 308) + overloaded Claude pool -> never suggests non-Claude engines
+PAYLOAD_MECH_308='{"tool_name":"Agent","tool_input":{"model":"sonnet","prompt":"Engine: sonnet\nRole: implementer\nLane: 308\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+AUTOPILOT_PACE_FILE="$PACE_OVERLOADED" run_hook dispatch-model-guard.js "$PAYLOAD_MECH_308"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "overloaded-claude-private-lane-308-blocks"
+assert_not_contains "$__RUN_STDOUT" "agy" "overloaded-claude-private-lane-308-no-agy"
+assert_not_contains "$__RUN_STDOUT" "minimax" "overloaded-claude-private-lane-308-no-minimax"
+assert_contains "$__RUN_STDOUT" "僅限 Claude" "overloaded-claude-private-lane-308-claude-only"
+
+# Non-private lane (autopilot) + overloaded Claude pool -> unchanged behavior (suggests agy)
+PAYLOAD_MECH_AUTOPILOT='{"tool_name":"Agent","tool_input":{"model":"sonnet","prompt":"Engine: sonnet\nRole: implementer\nLane: autopilot\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+AUTOPILOT_PACE_FILE="$PACE_OVERLOADED" run_hook dispatch-model-guard.js "$PAYLOAD_MECH_AUTOPILOT"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "overloaded-claude-nonprivate-lane-blocks"
+assert_contains "$__RUN_STDOUT" "agy" "overloaded-claude-nonprivate-lane-names-agy"
+
+# Empty AUTOPILOT_DISPATCH_MODEL_GUARD_PRIVATE_LANES -> falls back to current logic
+AUTOPILOT_PACE_FILE="$PACE_OVERLOADED" AUTOPILOT_DISPATCH_MODEL_GUARD_PRIVATE_LANES="" run_hook dispatch-model-guard.js "$PAYLOAD_MECH_308"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "overloaded-claude-empty-private-lanes-blocks"
+assert_contains "$__RUN_STDOUT" "agy" "overloaded-claude-empty-private-lanes-names-agy"
+
 finalize_test

@@ -31,6 +31,7 @@ const { spawnSync } = require('child_process');
 const { lintPlanPhases } = require('./check-plan-phases');
 
 const FLEET_TIMEOUT_MS = 30000;
+const SYNC_COMMENT_MAX_BYTES = 3500;
 
 function usage() {
   process.stderr.write(
@@ -363,7 +364,16 @@ function main() {
         untracked,
         dispatchable,
       };
-      runFleet(fleetBin, ['task', 'comment', parentId, JSON.stringify(snapshot)]);
+      // fleet refuses a comment over its length cap (comment_too_long): a 12-phase plan with full titles was 4.1 KB. Titles are display-only here, so clip them, then drop them.
+      let body = JSON.stringify(snapshot);
+      if (Buffer.byteLength(body) > SYNC_COMMENT_MAX_BYTES) {
+        const clipped = { ...snapshot, phases: snapshot.phases.map((e) => ({ ...e, title: Array.from(e.title).slice(0, 20).join('') })) };
+        body = JSON.stringify(clipped);
+        if (Buffer.byteLength(body) > SYNC_COMMENT_MAX_BYTES) {
+          body = JSON.stringify({ ...snapshot, phases: snapshot.phases.map(({ title, ...rest }) => rest) });
+        }
+      }
+      runFleet(fleetBin, ['task', 'comment', parentId, body]);
       process.stdout.write(JSON.stringify({ ok: true, mode: 'sync', ...snapshot }) + '\n');
       process.exit(0);
     } catch (err) {

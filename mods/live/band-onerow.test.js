@@ -234,7 +234,7 @@ test('codex-major-5: right alignment keeps tok/s suffix and subsequent separator
 })
 
 // Decide C dual-column rules: 82/83/84 threshold, +/-2 hysteresis, equal column widths (>=40 each + 3 sep)
-test('decide-c-layout: 82/83/84 threshold, +/-2 hysteresis, and equal column widths', () => {
+test('decide-c-layout: 82/83/84 threshold, +/-2 hysteresis, and column widths', () => {
   assert.equal(L.decideLayoutMode(82, null), 'single')
   assert.equal(L.decideLayoutMode(83, null), 'dual')
   assert.equal(L.decideLayoutMode(84, null), 'dual')
@@ -253,7 +253,8 @@ test('decide-c-layout: 82/83/84 threshold, +/-2 hysteresis, and equal column wid
   const w83 = L.decideColumnWidths(83)
   assert.deepEqual(w83, { leftW: 40, rightW: 40, sepW: 3 })
   const w120 = L.decideColumnWidths(120)
-  assert.equal(Math.abs(w120.leftW - w120.rightW) <= 1, true, 'equal columns at 120')
+  assert.ok(w120.leftW >= 68, 'left column has room at 120')
+  assert.ok(L.decideColumnWidths(205).leftW >= 120, 'left column has room at 205')
   assert.equal(w120.leftW + w120.sepW + w120.rightW, 120)
 })
 

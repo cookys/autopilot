@@ -54,24 +54,26 @@
 | P6 | M | P3,P4,P5 | §5 矩陣每列 live 探針貼輸出；P4 旋鈕已刪 | yes | C2 真實驗收與 live 探針 |
 <!-- /phases -->
 
-**P1**：表以 `<!-- phases:v1 -->` 起止，欄位固定；lint 檢查表存在、id 唯一、size∈{XS,S,M,L,XL}、depends_on 已存在且無環、acceptance_cmd 非空且無 TODO/TBD、needs_look∈{yes,no}。退役：§4 自由文字格式。
+**P1**：表以 `<!-- phases:v1 -->` 起止，欄位固定；lint 檢查表存在、id 唯一、depends_on 只能指向表中更前面的列（禁止前向引用；fixture：依賴列排在前置列之前 → rc≠0）、size∈{XS,S,M,L,XL}、depends_on 已存在且無環、acceptance_cmd 非空且無 TODO/TBD、needs_look∈{yes,no}。退役：§4 自由文字格式。
 
-**P2**：`plan-to-tasks.js --frozen <commit_sha>:<path>` 以 `git show` 取該 commit 的 bytes（不讀工作樹），先跑 lint，記 sha256。取 `fleet claim plan-to-tasks:<sha256>` 序列化；依 phase 順序為每 phase 建一張子單，內文第一行 `Plan: <path>@<commit_sha> Phase: <id>`；無前置者直接派，有前置者 `--queue` 並對每個前置各給一個 `--after`（完整多前置）。完成判定＝凍結 phase id 與現有子單 `Phase:` 標記一對一（不是只看總數）；重跑只補缺的 id，中斷後可復原；不一對一則 exit 1 列出缺或多。就緒由 fleet queue 單一負責，不另寫 advance 腳本。退役：人工逐張開單派單的口述。
+**P2**：`dispatch-plan-review.js` 封存時寫凍結收據 `<plan stem>.freeze-receipt.json`（`commit`、`path`、`sha256`＝該 commit 該路徑 bytes 的 sha256、`verdict`＝READY 或終局裁決通過）。`plan-to-tasks.js --receipt <file>`（自動與手動重跑相同）先驗：`git show <commit>:<path>` 的 sha256 等於收據、收據 verdict 通過、再跑 lint；任一不符 exit 1 且零 fleet 異動。沒有收據不能呼叫。取 `fleet claim plan-to-tasks:<sha256>` 序列化；依 phase 順序為每 phase 建一張子單，內文第一行 `Plan: <path>@<commit_sha> Phase: <id>`；無前置者直接派，有前置者 `--queue` 並對每個前置各給一個 `--after`（完整多前置）。完成判定＝凍結 phase id 與現有子單 `Phase:` 標記一對一（不是只看總數）；重跑只補缺的 id，中斷後可復原；不一對一則 exit 1 列出缺或多。建單依拓樸序（前置先建，表序為同層排序）。就緒由 fleet queue 單一負責，不另寫 advance 腳本。退役：人工逐張開單派單的口述。
 
 **P3**：只做驗證：stub fleet 上三前置 join 在三張都 done 前不釋放、done 後恰釋放一次；並行跑兩個 plan-to-tasks.js 只建一組；中斷（建到一半 kill）後重跑補齊。
 
 **P4**：`fleet-task-ref.js` 拿掉 non-pm-console 放行；`dispatch-hetero.sh` 在建 worktree 與啟引擎前呼叫同一 pm-check；`dispatch-author.sh`、`dispatch-plan-review.js`、`hetero-review-loop.js`、hook 共用 §2.5 的解析順序與狀態判定；保留 exempt 角色 `^(engine-qualify|probe-)`。更新既有測試的 stub fleet，使 P4 單獨進 develop 不紅。退役：`checkPmFleetTask` 的重複實作。
 
-**P5**：`finish-triage.js --task <id> --sha <merged_sha>`。三格：merged＝`git merge-base --is-ancestor` 對 origin/develop；live pin＝單上有 `Pinned: <host> <sha16>`（sha16＝該 sha 前 16 碼），或 `Pin: not-needed <≥20 字理由>` 且該 sha 的 diff 不碰任何隨 plugin 出貨的路徑；Used＝`Used: <screenshot|command|url> <ref>`，ref 必須可解析（檔案存在且非空、或 https URL），並含該 merged sha，`n/a|TBD|none|-` 與空值一律拒。分流：`look` 若下列任一成立——phase 表 `needs_look: yes`、diff 路徑命中 `look-classes.json` 的 UI／互動／對外類、diff 新增可執行檔、服務或 hook 註冊（`--diff-filter=A`，即首次上線）、單文有 `First-live: yes`；單或 diff 讀不到、類別不明一律 `look`（保守）。僅當全不成立且測試紅綠與反向探針收據齊才 `skip`。`finish-flow` Checklist 第 7 項改呼叫它。退役：該項口述判斷。
+**P5**：`finish-triage.js --task <id> --sha <merged_sha>`。三格：merged＝`git merge-base --is-ancestor` 對 origin/develop；live pin＝單上有 `Pinned: <host> <sha16>`（sha16＝該 sha 前 16 碼），或 `Pin: not-needed <≥20 字理由>` 且該 sha 的 diff 不碰任何隨 plugin 出貨的路徑；live pin 的證據是 hangar 換版腳本寫的讀回檔（`Pinned: <host> <readback file>`；檔內 host 與完整 sha 前 16 碼須與該 sha 相符）。Used＝`Used: command <file>`（檔內有 `cmd:` 行、`rc=0`、含該 sha 前 16 碼）或 `Used: screenshot <png>`（PNG ≥ 2 KB，並有同名 `.meta` 記動作與該 sha16）；URL 不收（語法本身可偽造 sha）。`n/a|TBD|none|-`、空檔、sha 不符、rc≠0 一律拒，皆為負控制 fixture。分流：`look` 若下列任一成立——phase 表 `needs_look: yes`、diff 路徑命中 `look-classes.json` 的 UI／互動／對外類、diff 新增可執行檔、服務或 hook 註冊（`--diff-filter=A`，即首次上線）、單文有 `First-live: yes`；單或 diff 讀不到、類別不明一律 `look`（保守）。僅當全不成立且測試紅綠與反向探針收據齊才 `skip`。`finish-flow` Checklist 第 7 項改呼叫它。退役：該項口述判斷。
 
 **P6**：以 fleet state-contract C2 走 P1→P5；對 §5 每列做 live 反向探針；把 P4 旋鈕改 enforce 並刪除。
 
 ## 5. Test / validation（gate → 負控制 → live 反向探針）
 
+每列探針是 commit 進 `scripts/probes/<gate>.sh` 的腳本：先跑合法基準（必須成功），再做故意違規，斷言閘專屬錯誤字樣（P4 為 `fleet_task_gate`，不是參數錯誤），最後清理；零脈絡工程師直接執行。
+
 | gate | 負控制（先紅） | live 反向探針（故意違規，預期） |
 |---|---|---|
 | P1 lint | 三種壞表 rc≠0 | 對真計畫副本刪一欄跑 `node scripts/check-plan-phases.js <file>` → rc≠0 |
-| P2 完成判定 | stub 缺一張／多一張 → exit 1 | 對真 fleet 用 `--frozen` 帶故意少一 phase 的 commit → exit 1 且不派工 |
+| P2 完成判定 | stub 缺一張／多一張 → exit 1 | `scripts/probes/p2.sh`：用 receipt 的 sha256 與少一 phase 的 commit 不符 → exit 1、零 fleet 異動 |
 | P3 join | 三前置少一張 done 時不釋放 | 真 fleet 上手動讓一前置不 done，確認後繼仍 queued |
 | P4 單號 | 拔閘轉紅 | 非 PM 席不帶單號跑 `scripts/dispatch-hetero.sh` → exit 2 且無引擎行程；fleet 停掉時 → fail-open 一行 stderr |
 | P5 三格 | 各格缺／填 `n/a`／sha 不符 → rc≠0 | 對一個 UI 變更 sha 跑 `node scripts/finish-triage.js` → `look`；對新增 hook 的 sha → `look`；拿掉 Used 行 → rc≠0 |

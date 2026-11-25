@@ -278,6 +278,48 @@ function handleGuard(reason, mode, { acknowledged = false, onAllow = null } = {}
   );
 }
 
+function parseFrontmatterModel(markdown) {
+  const m = String(markdown || '').match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
+  if (!m) return '';
+  const modelLine = m[1].match(/^\s*model\s*:\s*(.+?)\s*$/m);
+  if (!modelLine) return '';
+  let val = modelLine[1].trim();
+  if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+    val = val.slice(1, -1).trim();
+  } else {
+    val = val.replace(/\s+#.*$/, '').trim();
+  }
+  return val;
+}
+
+function resolveAgentFrontmatterModel(subagentType, cwd) {
+  const rawType = String(subagentType || '').trim();
+  if (!rawType) return '';
+  const agentName = rawType.includes(':') ? rawType.split(':').pop().trim() : rawType;
+  if (!agentName || /[\\/]/.test(agentName) || agentName === '.' || agentName === '..') {
+    return '';
+  }
+  const candidates = [];
+  if (cwd) {
+    candidates.push(path.join(cwd, 'agents', `${agentName}.md`));
+    candidates.push(path.join(cwd, '.claude', 'agents', `${agentName}.md`));
+  }
+  const pluginRoot = path.resolve(__dirname, '..');
+  candidates.push(path.join(pluginRoot, 'agents', `${agentName}.md`));
+
+  for (const filePath of candidates) {
+    try {
+      if (fs.existsSync(filePath)) {
+        const model = parseFrontmatterModel(fs.readFileSync(filePath, 'utf8'));
+        if (model) return model;
+      }
+    } catch {
+      // try next candidate
+    }
+  }
+  return '';
+}
+
 function engineTokenFromPrompt(prompt) {
   let firstLine = null;
   for (const line of String(prompt || '').split('\n')) {
@@ -673,8 +715,15 @@ try {
     }
     process.exit(0);
   };
-  const modelRaw = String(toolInput.model || '').trim();
+  const explicitModelRaw = String(toolInput.model || '').trim();
+  const agentModelRaw = !explicitModelRaw
+    ? resolveAgentFrontmatterModel(toolInput.subagent_type, cwd)
+    : '';
+  const modelRaw = explicitModelRaw || agentModelRaw;
   const model = modelRaw.toLowerCase();
+  const effectiveToolInput = (!explicitModelRaw && agentModelRaw)
+    ? { ...toolInput, model: agentModelRaw }
+    : toolInput;
 
   // model empty: the worker-level default decides outright — allow on sonnet via
   // updatedInput. The header check has nothing to match against and does not run

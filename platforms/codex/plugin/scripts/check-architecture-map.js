@@ -3,7 +3,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { execFileSync } = require('node:child_process');
+const { execFileSync, spawnSync } = require('node:child_process');
 
 const REQUIRED_HEADERS = ['名稱', '狀態', '在哪裡', '依據', '互動介面', '驗收方式'];
 const REQUESTED_HEADERS = ['名稱', '狀態', '在哪裡'];
@@ -15,6 +15,7 @@ function parseArgs(argv) {
     base: 'HEAD~1',
     head: 'HEAD',
     mode: 'block',
+    runInteraction: false,
   };
   for (let i = 2; i < argv.length; i++) {
     const flag = argv[i];
@@ -34,6 +35,8 @@ function parseArgs(argv) {
       }
       args.mode = val;
       i++;
+    } else if (flag === '--run-interaction') {
+      args.runInteraction = true;
     }
   }
   return args;
@@ -75,7 +78,7 @@ function parseArchitectureTable(markdown) {
     if (isSeparatorRow(cells)) {
       continue;
     }
-    const row = {};
+    const row = { _raw: lines[i].trim() };
     for (let c = 0; c < headers.length; c++) {
       row[headers[c]] = (cells[c] || '').trim();
     }
@@ -144,8 +147,27 @@ function getChangedFiles(repo, base, head) {
   }
 }
 
+function getChangedArchLines(repo, base, head) {
+  try {
+    const out = execFileSync(
+      'git',
+      ['-C', repo, 'diff', '-U0', base, head, '--', 'ARCHITECTURE.md'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
+    );
+    const added = new Set();
+    for (const line of out.split(/\r?\n/)) {
+      if (line.startsWith('+') && !line.startsWith('+++ ')) {
+        added.add(line.slice(1).trim());
+      }
+    }
+    return added;
+  } catch {
+    return new Set();
+  }
+}
+
 function checkArchitectureMap(options) {
-  const { repo, base, head, mode } = options;
+  const { repo, base, head, mode, runInteraction } = options;
   const mapPath = path.join(repo, 'ARCHITECTURE.md');
 
   if (!fs.existsSync(mapPath)) {
@@ -163,6 +185,9 @@ function checkArchitectureMap(options) {
 
   const changedFiles = getChangedFiles(repo, base, head);
   const archUpdated = changedFiles.includes('ARCHITECTURE.md');
+  const changedArchLines = runInteraction
+    ? getChangedArchLines(repo, base, head)
+    : new Set();
 
   for (const row of rows) {
     const rowName = row['名稱'] || '(unnamed)';
@@ -221,13 +246,38 @@ function checkArchitectureMap(options) {
             row: rowName,
             detail: `interaction script not found: ${scriptRel}`,
           });
+        } else if (runInteraction && changedArchLines.has(row._raw)) {
+          const res = spawnSync(scriptAbs, [], {
+            cwd: repo,
+            timeout: 120_000,
+            stdio: ['ignore', 'pipe', 'pipe'],
+            encoding: 'utf8',
+          });
+          if (res.error || res.status !== 0) {
+            const code =
+              res.status !== null && res.status !== undefined
+                ? String(res.status)
+                : res.signal
+                  ? `signal ${res.signal}`
+                  : res.error?.code || res.error?.message || 'unknown';
+            const stderrTail = (res.stderr || '').slice(-300);
+            findings.push({
+              rule: 'interaction_script_failed',
+              row: rowName,
+              detail: `interaction script failed (${scriptRel}, exit ${code}): ${stderrTail}`,
+            });
+          }
         }
       }
     }
   }
 
   const hasBlocking = findings.some((f) => {
-    if (f.rule === 'missing_columns' || f.rule === 'missing_interaction_script') {
+    if (
+      f.rule === 'missing_columns' ||
+      f.rule === 'missing_interaction_script' ||
+      f.rule === 'interaction_script_failed'
+    ) {
       return true;
     }
     if (f.rule === 'unupdated_row' && mode === 'block') {

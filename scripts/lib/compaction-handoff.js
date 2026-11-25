@@ -52,7 +52,7 @@ const MODEL_ROOM_MIN = 1800; // below this much room for the model note the flee
 // BODY_CAP before any other section is sized. When more are unanswered than fit, the newest are kept and the count of
 // older ones is written. Bodies are data: every field is escaped (the restore block is wrapped in a tag).
 const RESERVED_CAP = Math.floor(BODY_CAP * 0.4);
-const INBOUND_BUDGET = 1024;
+const INBOUND_BUDGET = 4096;
 const INBOUND_REREAD_PLACEHOLDER = 'compaction 前可能有 fleet 訊息沒讀到：呼叫 `recent` 並設 `unseen_only=true`，或執行 `fleet recent --unseen`（待上線）';
 // A note written within this long ago, or whose size/mtime moves while it is read, may be mid-write (the model writes
 // it with the Write tool; atomicity is not under our control, so the reader guards).
@@ -331,7 +331,7 @@ function inboundSection(items, budget = INBOUND_BUDGET) {
     const meta = [`kind=${e(it.kind)}`];
     if (it.disposition) meta.push(`disposition=${e(it.disposition)}`);
     if (it.reply_to) meta.push(`reply_to=${e(it.reply_to)}`);
-    let t = `- ${e(it.message_id)} from=${e(it.from)} ${meta.join(' ')} | ${e(it.first_line, 60)}\n`;
+    let t = `- ${e(it.message_id)} from=${e(it.from)} ${meta.join(' ')} | ${e(it.first_line, 200)}\n`;
     if (it.kind === 'dispatch') t += `  fleet task show ${e(it.message_id)}\n`;
     return t;
   };
@@ -340,7 +340,7 @@ function inboundSection(items, budget = INBOUND_BUDGET) {
   const wakes = items.filter(isPatrol);
   const wakeLine = wakes.length ? `${wakes.length} patrol wakes (oldest ${e(wakes[0].message_id)}, newest ${e(wakes[wakes.length - 1].message_id)})\n` : '';
   const render = (kept, omitted) => `## Unanswered Fleet Messages (reserved, never cut)\n這 ${kept.length + wakes.length} 則在壓縮前到達，請重讀：\n`
-    + kept.map(lines).join('') + wakeLine + (omitted ? `省略 ${omitted} 則較舊的\n` : '') + `${INBOUND_REREAD_PLACEHOLDER}\n\n`;
+    + kept.map(lines).join('') + wakeLine + (omitted ? `${omitted} 則已省略\n` : '') + `${INBOUND_REREAD_PLACEHOLDER}\n\n`;
   let kept = [];
   for (let i = chats.length - 1; i >= 0; i--) {
     const next = [chats[i], ...kept];
@@ -584,6 +584,7 @@ function initiativesPart(deadlineAt) {
   for (const line of text.split('\n')) {
     const raw = line.replace(/\s+$/, '');
     if (!raw) continue;
+    if (raw.includes('task not in fleet list')) continue;
     const row = parseInitiative(raw);
     if (!row) { malformed += 1; continue; }
     if (row.color === 'GREEN') green += 1;

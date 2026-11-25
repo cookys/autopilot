@@ -266,6 +266,17 @@
             "onFailure": "continue"
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit|mcp__fleet__send|mcp__fleet__task_comment|mcp__fleet__task_result",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/promise-needs-id-guard.js",
+            "timeout": 5,
+            "onFailure": "continue"
+          }
+        ]
       }
     ],
     "PostToolUse": [

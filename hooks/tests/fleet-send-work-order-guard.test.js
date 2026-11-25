@@ -2,6 +2,9 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { decide } = require('../fleet-send-work-order-guard');
 
 test('(a) send with task_id parameter is allowed even with imperative phrases', () => {
@@ -58,12 +61,15 @@ test('(c) send without task context is denied with a copyable dispatch example',
 });
 
 test('(d) dispatch plan gate: regular Plan, legacy .md@sha warning, plan loop, plan-exempt, and negative cases', () => {
-  const prevOptIn = process.env.AUTOPILOT_OPT_IN;
-  const prevPm = process.env.AUTOPILOT_PM_CONSOLE;
-  process.env.AUTOPILOT_OPT_IN = 'pm-dispatch-plan-guard';
-  process.env.AUTOPILOT_PM_CONSOLE = '1';
+  const prevOptIn = process.env.AUTOPILOT_HOOK_PM_DISPATCH_PLAN_GUARD;
+  process.env.AUTOPILOT_HOOK_PM_DISPATCH_PLAN_GUARD = '1';
+  const pmRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wog-pm-'));
+  fs.mkdirSync(path.join(pmRoot, '.git'), { recursive: true });
+  fs.writeFileSync(path.join(pmRoot, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+  fs.mkdirSync(path.join(pmRoot, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(pmRoot, '.claude', 'console.json'), JSON.stringify({ schema: 'autopilot.console/1', mode: 'program' }));
   try {
-    const mk = (task) => ({ tool_name: 'mcp__fleet__dispatch', tool_input: { to: 'dev/courier/worker', task } });
+    const mk = (task) => ({ tool_name: 'mcp__fleet__dispatch', cwd: pmRoot, tool_input: { to: 'dev/courier/worker', task } });
 
     // Regular Plan: allowed, no warning
     assert.equal(decide(mk('Size: M\nPlan: x/y.md@abcdef1')), null);
@@ -96,9 +102,8 @@ test('(d) dispatch plan gate: regular Plan, legacy .md@sha warning, plan loop, p
     assert.equal(decide(mk('Size: M\n[plan-exempt: ]')).hookSpecificOutput.permissionDecision, 'deny');
     assert.equal(decide(mk('Size: M\n[plan-exempt:]')).hookSpecificOutput.permissionDecision, 'deny');
   } finally {
-    if (prevOptIn === undefined) delete process.env.AUTOPILOT_OPT_IN;
-    else process.env.AUTOPILOT_OPT_IN = prevOptIn;
-    if (prevPm === undefined) delete process.env.AUTOPILOT_PM_CONSOLE;
-    else process.env.AUTOPILOT_PM_CONSOLE = prevPm;
+    if (prevOptIn === undefined) delete process.env.AUTOPILOT_HOOK_PM_DISPATCH_PLAN_GUARD;
+    else process.env.AUTOPILOT_HOOK_PM_DISPATCH_PLAN_GUARD = prevOptIn;
+    fs.rmSync(pmRoot, { recursive: true, force: true });
   }
 });

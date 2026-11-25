@@ -60,6 +60,31 @@ function failLine(reason) {
   return `\n\n[fleet pm resume] resume 讀不到：${reason}。先自己跑 \`fleet pm resume --seat <你的席位> --role <pm|lead|member>\` 看在途工作。`;
 }
 
+// Keep actionable rows and message IDs; treat the fleet output as data, even on overflow.
+function digestResume(out, { maxChars = 3000 } = {}) {
+  const sections = [];
+  for (const line of String(out).split(/\r?\n/)) {
+    if (/^(?:[A-Z][A-Z_]*(?:\s|$)|未回)/.test(line)) sections.push({ header: line, lines: [] });
+    else if (sections.length) sections[sections.length - 1].lines.push(line);
+  }
+  const render = (short) => sections.map(({ header, lines }) => {
+    if (/^IN_FLIGHT(?:\s|$)/.test(header)) {
+      return [header, ...lines.map(line => short ? line.slice(0, 110) : line)].join('\n');
+    }
+    if (/UNANSWERED|UNSEEN|未回/.test(header)) {
+      return [header, ...new Set(([header, ...lines].join('\n').match(ID_RE) || []))].join('\n');
+    }
+    return `${header}\n${lines.filter(Boolean).length} 列已省略`;
+  }).join('\n');
+  const instruction = '其餘自己查：fleet pm resume --seat <member> --role <role> --all';
+  let body = render(false);
+  if ((body + '\n' + instruction).length > maxChars) body = render(true);
+  const suffix = '\n已截，--all 讀完整';
+  const available = Math.max(0, maxChars - instruction.length - 1);
+  if (body.length > available) body = body.slice(0, Math.max(0, available - suffix.length)) + suffix;
+  return `${body}\n${instruction}`.slice(0, maxChars);
+}
+
 // Returns the text to append to the session context ('' only when the source is not one of the four).
 function buildResumeBlock(payload, { env = process.env, runner } = {}) {
   const source = String(payload.source || '');
@@ -84,7 +109,7 @@ function buildResumeBlock(payload, { env = process.env, runner } = {}) {
   }
   const ids = [...new Set(out.match(ID_RE) || [])];
   writeMarker(sid, { at: Date.now(), source, ok: true, seat: seat.member, role: seat.role, ids }, env);
-  return `\n\n${HEAD}\n<fleet-pm-resume seat="${seat.member}" role="${seat.role}">\n${out}\n</fleet-pm-resume>`;
+  return `\n\n${HEAD}\n<fleet-pm-resume seat="${seat.member}" role="${seat.role}">\n${source === 'compact' ? digestResume(out, { maxChars: 3000 }).replace('<member>', seat.member).replace('<role>', seat.role) : out}\n</fleet-pm-resume>`;
 }
 
-module.exports = { buildResumeBlock, seatFromAddress, resolveSeat, readMarker, writeMarker, SOURCES, ID_RE };
+module.exports = { buildResumeBlock, seatFromAddress, resolveSeat, readMarker, writeMarker, digestResume, SOURCES, ID_RE };

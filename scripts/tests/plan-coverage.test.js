@@ -1,0 +1,133 @@
+'use strict';
+
+const { describe, it, beforeEach, afterEach } = require('node:test');
+const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
+
+const PLAN_TO_TASKS = path.resolve(__dirname, '..', 'plan-to-tasks.js');
+
+const SAMPLE_PLAN = `# Coverage Plan
+
+## Phases
+
+<!-- phases:v1 -->
+| id | size | depends_on | acceptance_cmd | needs_look | title |
+| --- | --- | --- | --- | --- | --- |
+| P1 | S | - | node -e "process.exit(0)" | no | Phase One |
+| P2 | S | P1 | node -e "process.exit(0)" | no | Phase Two |
+| P3 | M | P2 | node -e "process.exit(0)" | yes | Phase Three |
+<!-- /phases -->
+`;
+
+function setupFixture() {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-coverage-test-'));
+  const repoDir = path.join(tmpDir, 'repo');
+  fs.mkdirSync(path.join(repoDir, 'docs', 'plans'), { recursive: true });
+  const planRel = 'docs/plans/2026-11-25-cov.md';
+  const planAbs = path.join(repoDir, planRel);
+  fs.writeFileSync(planAbs, SAMPLE_PLAN, 'utf8');
+
+  spawnSync('git', ['init'], { cwd: repoDir, stdio: 'ignore' });
+  spawnSync('git', ['config', 'user.email', 'test@example.com'], { cwd: repoDir, stdio: 'ignore' });
+  spawnSync('git', ['config', 'user.name', 'Test'], { cwd: repoDir, stdio: 'ignore' });
+  spawnSync('git', ['add', planRel], { cwd: repoDir, stdio: 'ignore' });
+  spawnSync('git', ['commit', '-m', 'init'], { cwd: repoDir, stdio: 'ignore' });
+
+  const commit = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: repoDir, encoding: 'utf8' }).stdout.trim();
+  const sha256 = crypto.createHash('sha256').update(fs.readFileSync(planAbs)).digest('hex');
+  const receiptPath = path.join(tmpDir, 'receipt.json');
+  fs.writeFileSync(receiptPath, JSON.stringify({ commit, path: planRel, sha256, verdict: 'READY' }), 'utf8');
+
+  const tasksFile = path.join(tmpDir, 'tasks.json');
+  const fakeFleet = path.join(tmpDir, 'fake-fleet.sh');
+  fs.writeFileSync(
+    fakeFleet,
+    `#!/usr/bin/env bash
+set -euo pipefail
+if [[ "\${1:-}" == "whoami" ]] || [[ "\${1:-} \${2:-}" == "event emit" ]]; then
+  exit 0
+fi
+if [[ "\${1:-}" == "tasks" ]]; then
+  cat "${tasksFile}"
+  exit 0
+fi
+echo "unexpected fleet call: $*" >&2
+exit 1
+`,
+    { mode: 0o755 }
+  );
+
+  return { tmpDir, repoDir, planRel, receiptPath, tasksFile, fakeFleet };
+}
+
+describe('plan-to-tasks --coverage', () => {
+  let fx;
+
+  beforeEach(() => {
+    fx = setupFixture();
+  });
+
+  afterEach(() => {
+    fs.rmSync(fx.tmpDir, { recursive: true, force: true });
+  });
+
+  it('exits 1 when any phase has no corresponding fleet task (negative control)', () => {
+    fs.writeFileSync(
+      fx.tasksFile,
+      JSON.stringify([
+        {
+          task_id: '01CHILD1000000000000000000',
+          status: 'done',
+          title: `Plan: ${fx.planRel} Phase: P1`,
+        },
+      ]),
+      'utf8'
+    );
+
+    const res = spawnSync(
+      process.execPath,
+      [PLAN_TO_TASKS, '--receipt', fx.receiptPath, '--repo', fx.repoDir, '--coverage'],
+      { encoding: 'utf8', env: { ...process.env, PLAN_TO_TASKS_FLEET_BIN: fx.fakeFleet } }
+    );
+    assert.equal(res.status, 1);
+    const out = JSON.parse(res.stdout);
+    assert.equal(out.ok, false);
+    assert.equal(out.gaps, 2);
+    assert.equal(out.covered, 1);
+  });
+
+  it('exits 0 when all phases are covered (gaps === 0)', () => {
+    fs.writeFileSync(
+      fx.tasksFile,
+      JSON.stringify([
+        {
+          task_id: '01CHILD1000000000000000000',
+          status: 'done',
+          title: `Plan: ${fx.planRel} Phase: P1, P2`,
+        },
+        {
+          task_id: '01CHILD2000000000000000000',
+          status: 'pending',
+          title: `Plan: ${fx.planRel} Phase: P3`,
+        },
+      ]),
+      'utf8'
+    );
+
+    const res = spawnSync(
+      process.execPath,
+      [PLAN_TO_TASKS, '--receipt', fx.receiptPath, '--repo', fx.repoDir, '--coverage'],
+      { encoding: 'utf8', env: { ...process.env, PLAN_TO_TASKS_FLEET_BIN: fx.fakeFleet } }
+    );
+    assert.equal(res.status, 0, res.stderr);
+    const out = JSON.parse(res.stdout);
+    assert.equal(out.ok, true);
+    assert.equal(out.gaps, 0);
+    assert.equal(out.covered, 3);
+    assert.equal(out.total, 3);
+  });
+});

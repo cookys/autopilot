@@ -5,7 +5,9 @@
  * plan-to-tasks.js — materialize a frozen plan's phases:v1 table into fleet child tasks.
  *
  * Usage:
- *   node scripts/plan-to-tasks.js --receipt <freeze-receipt.json>
+ *   node scripts/plan-to-tasks.js --receipt <freeze-receipt.json> [--repo <dir>]
+ *   --repo: read the receipt commit from that git repo instead of cwd.
+ *   PLAN_TO_TASKS_ASSIGNEE_MAP="P1=addr,P2=addr": per-phase executor override.
  *
  * Pre-checks (exit 1 on failure, zero fleet mutations):
  *   1. Receipt JSON has commit, path, sha256, verdict === 'READY' || verdict === 'adjudicated'
@@ -36,6 +38,7 @@ function usage() {
 
 function parseArgs(argv) {
   let receiptPath = null;
+  let repoDir = null;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '-h' || arg === '--help') {
@@ -50,6 +53,14 @@ function parseArgs(argv) {
       receiptPath = argv[++i];
     } else if (arg.startsWith('--receipt=')) {
       receiptPath = arg.slice('--receipt='.length);
+    } else if (arg === '--repo') {
+      if (i + 1 >= argv.length) {
+        usage();
+        process.exit(2);
+      }
+      repoDir = argv[++i];
+    } else if (arg.startsWith('--repo=')) {
+      repoDir = arg.slice('--repo='.length);
     } else {
       process.stderr.write(`plan-to-tasks: unknown argument: ${arg}\n`);
       usage();
@@ -61,7 +72,7 @@ function parseArgs(argv) {
     usage();
     process.exit(2);
   }
-  return { receiptPath };
+  return { receiptPath, repoDir };
 }
 
 function parsePhasesTable(markdown) {
@@ -181,7 +192,7 @@ function parseCreatedTaskId(raw) {
 }
 
 function main() {
-  const { receiptPath } = parseArgs(process.argv.slice(2));
+  const { receiptPath, repoDir } = parseArgs(process.argv.slice(2));
 
   let receipt;
   try {
@@ -201,7 +212,7 @@ function main() {
     process.exit(1);
   }
 
-  const gitRes = spawnSync('git', ['show', `${receipt.commit}:${receipt.path}`], {
+  const gitRes = spawnSync('git', [...(repoDir ? ['-C', repoDir] : []), 'show', `${receipt.commit}:${receipt.path}`], {
     encoding: null,
     maxBuffer: 10 * 1024 * 1024,
     timeout: 15000,
@@ -238,6 +249,19 @@ function main() {
     process.stderr.write('plan-to-tasks: set PLAN_TO_TASKS_ASSIGNEE (fleet address that executes the phases)\n');
     process.exit(2);
   }
+
+  // PLAN_TO_TASKS_ASSIGNEE_MAP="P1=addr,P2=addr": per-phase executors; unlisted phases use PLAN_TO_TASKS_ASSIGNEE.
+  const assigneeMap = new Map();
+  for (const pair of (process.env.PLAN_TO_TASKS_ASSIGNEE_MAP || '').split(',')) {
+    const [k, v] = pair.split('=').map((x) => (x || '').trim());
+    if (!k || !v) continue;
+    if (!frozenIds.has(k)) {
+      process.stderr.write(`plan-to-tasks: PLAN_TO_TASKS_ASSIGNEE_MAP names unknown phase "${k}"\n`);
+      process.exit(2);
+    }
+    assigneeMap.set(k, v);
+  }
+  const assigneeFor = (id) => assigneeMap.get(id) || assignee;
 
   try {
     const lockName = `plan-to-tasks-${receipt.sha256.slice(0, 16)}`;
@@ -279,7 +303,7 @@ function main() {
         `Acceptance: ${phase.acceptanceCmd}`,
       ].join('\n');
 
-      const args = ['dispatch', assignee, '--size', phase.size];
+      const args = ['dispatch', assigneeFor(phase.id), '--size', phase.size];
       if (parentId) args.push('--parent', parentId);
       if (phase.deps.length > 0) {
         args.push('--queue');

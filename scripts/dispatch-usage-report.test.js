@@ -33,3 +33,13 @@ test('manifest snapshot counts only the last seven days and skips corrupt files'
   assert.equal(cli.status, 0, cli.stderr);
   assert.deepEqual(JSON.parse(cli.stdout), JSON.parse(fs.readFileSync(out)));
 });
+
+test('authored status is a success, not a failure', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-report-authored-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const now = Date.now();
+  fs.writeFileSync(path.join(dir, 'a.manifest.json'), JSON.stringify({ runner: 'codex', model: 'alpha', final_status: 'authored', started_at: new Date(now).toISOString() }));
+  const g = report(dir, now, 7).by_runner.codex.by_model.alpha;
+  assert.equal(g.runs, 1);
+  assert.equal(g.failed, 0, 'authored must not count as failed');
+});

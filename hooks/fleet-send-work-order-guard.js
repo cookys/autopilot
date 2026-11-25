@@ -68,6 +68,7 @@ const VALID_DISPATCH_SIZES = new Set(['XS', 'S', 'M', 'L', 'XL']);
 const DISPATCH_SIZE_DENY_REASON = '每張派工都要帶 Size（XS|S|M|L|XL），請補上' + gateHint('在工單補 Size: XS|S|M|L|XL 再派', 'hooks/README.md');
 const DISPATCH_SIZE_MISMATCH_DENY_REASON = '結構化 size 與內文 Size: 不一致，兩處須為相同值' + gateHint('將結構化 size 與內文 Size: 兩處改成同一個值再派', 'hooks/README.md');
 const DISPATCH_PLAN_DENY_REASON = '工單 Size M 以上要帶「Plan: 路徑@sha」或「Plan: plan-first」' + gateHint('Size M 以上的工單補 Plan: 路徑@sha 或 Plan: plan-first 再派', 'hooks/README.md');
+const DISPATCH_LEGACY_PLAN_DENY_REASON = '舊寫法 `.md@sha` 已退役，請改 `Plan: <路徑>@<sha>`' + gateHint('將舊寫法 `.md@sha` 改成 `Plan: <路徑>@<sha>` 表頭再派', 'hooks/README.md');
 
 function envBag() {
   return process.env;
@@ -137,12 +138,7 @@ function decideDispatch(input) {
       return preToolDeny(DISPATCH_PLAN_DENY_REASON);
     }
     if (parsed.plan.legacy) {
-      return {
-        hookSpecificOutput: {
-          hookEventName: 'PreToolUse',
-          additionalContext: '警告：偵測到舊寫法 `.md@sha`，請改寫成 `Plan: <路徑>@<sha>` 表頭（過渡期暫時放行）。',
-        },
-      };
+      return preToolDeny(DISPATCH_LEGACY_PLAN_DENY_REASON);
     }
   }
   return null;

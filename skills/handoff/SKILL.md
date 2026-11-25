@@ -8,7 +8,7 @@ description: >
 
 # handoff
 
-Mid-work session continuation handoff. When context is full, write the handoff as a backup and keep working; auto-compact restores context.
+Mid-work session continuation handoff. When context is full, write the handoff as the formal continuation file for resuming after `/clear` (not just a backup); auto-compact is only a safety net.
 
 ## Write Mode
 
@@ -97,6 +97,23 @@ Triggered by "寫 handoff", "寫 handover", "ctx 太滿", "context 快滿", "cle
    - [Gotchas discovered this session that would burn a later reader of this backup]
    ```
 
+   **Completeness & PM 席接續表**:
+   - **一般席**: handoff 必須包含「目標」「現況」「下一步」三段且皆非空；「現況」提到的 worktree 都要已 commit（`git status --porcelain` 為空，或每個髒檔都列在「現況」裡）。
+   - **PM 席**: 另需「## 接續表」區塊，以下五個鍵全部要在：`operator_thread`、`artifacts`、`pending_rulings`、`subagent_outputs`、`card_notes`（`card_notes` 要含 `executor` 子欄）。值可以寫明確的「無」，不能空白，也不能缺鍵。
+   - **新鮮度**: handoff 的 mtime 要新於最近一筆人類使用者回合，也要新於 `last_restart_at_ms`；過時就先重寫再清空。
+   - **接續第一步**: `/clear` 後的新 context 不會注入未回訊息清單，接續第一步要先跑 `fleet recent`（`unseen_only`）。
+
+   PM 席「## 接續表」可照抄範例：
+   ```yaml
+   ## 接續表
+   operator_thread: <串接脈絡或 無>
+   artifacts: <產出檔案/路徑或 無>
+   pending_rulings: <待決事項或 無>
+   subagent_outputs: <子代理回報或 無>
+   card_notes:
+     executor: <地址或 無>
+   ```
+
 3.5. **Route the durable content out** (a handoff is a snapshot and gets deleted — Resume Mode step 5.
    Anything left only in it is scheduled for destruction):
 
@@ -125,7 +142,7 @@ Triggered by "寫 handoff", "寫 handover", "ctx 太滿", "context 快滿", "cle
    Report what you routed in step 4 so the user can see what outlived the handoff.
 
 4. **Response to User**:
-   Reply with the file path, and a reminder that the machine snapshot (`handoff_inject`, see hooks/README.md) is a backup. For the PM seat (or when no fleet seat is resolved), include the paste-ready line: `read <path> 接續`. For non-PM fleet seats, do **not** relay a restart line to the operator — `context-land-gate` dispatches the restart task to hangar automatically. Auto-compact restores context; keep working.
+   Reply with the file path, and a reminder that the machine snapshot (`handoff_inject`, see hooks/README.md) is a backup. For the PM seat (or when no fleet seat is resolved), include the paste-ready line: `read <path> 接續`. For non-PM fleet seats, do **not** relay a restart line to the operator — `context-land-gate` dispatches the restart task to hangar automatically. Use this handoff to resume after `/clear`; auto-compact is only a safety net.
 
 ## Resume Mode
 
@@ -144,4 +161,4 @@ Triggered by "read ...HANDOFF.md 接續" or "接手上個 session" or "resume fr
 
 ## Proactive Offer Rule
 
-When context pressure signals occur (a compaction just happened; or the conversation is long and the user hints at wrapping/切換), write the handoff as a backup and keep working; auto-compact restores context. OFFER in one sentence: "需要我寫 handoff 檔案當備份嗎？寫完繼續做。" (The user should never have to ask "需要寫 handoff 嗎?" themselves).
+When context pressure signals occur (a compaction just happened; or the conversation is long and the user hints at wrapping/切換), write the handoff as the formal continuation file for resuming after `/clear` (auto-compact is only a safety net). OFFER in one sentence: "需要我寫 handoff 檔案嗎？寫完可 /clear 接續。" (The user should never have to ask "需要寫 handoff 嗎?" themselves).

@@ -15,7 +15,7 @@ import { PALETTE } from '../../tux/palette.ts'
 import { pickedTone, wrapPlain } from '../ui'
 import type { KeyAction } from './keys'
 import type { Page, PageCtx } from './frame'
-import { TINY_FRAME_ROWS, actionRows as frameActionRows } from './layout'
+import { TINY_FRAME_ROWS, actionRows as frameActionRows, decideFullWidth } from './layout'
 import { brokenRow, pendingMissingReason, pendingSourceMissing, wrapRow, WRAP_HANG } from './rows'
 import type { Row } from './rows'
 import { DECIDE_COL_SEP_W, DECIDE_COMPACT_MAX_ROWS, DECIDE_DUAL_MIN_COLS, DECIDE_HYSTERESIS, DECIDE_MIN_COL_W, STRIP_SPLIT_COLS, decideColumnWidths, decideLayoutMode } from './layout'
@@ -220,7 +220,7 @@ function awaitingCardRows(c: DurableAwaiting, ctx: PageCtx): Row[] {
 // The rows as the frame will draw them: a reading page's body wraps at min(80, cols) with a hanging indent (frame.ts layout), so a
 // page that cuts its own content counts the wrapped rows, not the rows it returned.
 function frameWrap(rows: Row[], ctx: PageCtx): Row[] {
-  const width = Math.min(80, ctx.size.cols)
+  const width = decideFullWidth({ boxed: ctx.v74 !== undefined && ctx.box === true, effMaxRows: ctx.maxRows ?? ctx.size.rows, compactExpanded: ctx.decide?.compactExpanded === true, bodyCols: ctx.bodyColumns ?? ctx.size.cols, layoutMode: ctx.decide?.layoutMode ?? null, styleC: ctx.decide?.style === 'C' }) ? ctx.size.cols : Math.min(80, ctx.size.cols)
   return rows.flatMap(x => {
     const lead = /^ */.exec(x.map(sg => sg.text).join(''))?.[0].length ?? 0
     return wrapRow(x, width, Math.max(WRAP_HANG, Math.min(lead, Math.max(0, width - 4))))
@@ -231,7 +231,10 @@ export function frameBodyRoom(ctx: PageCtx, actions: number): number {
   const strip = ctx.size.cols < STRIP_SPLIT_COLS ? 2 : 1
   return Math.max(0, H - 1 - (H <= TINY_FRAME_ROWS ? strip : strip + 1) - actions)
 }
-export function awaitingBlockRows(awaiting: DurableAwaiting[] | null | undefined, ctx: PageCtx, cap: number): Row[] {
+// A card with no operator step has nothing to do: it is not drawn and not counted.
+const withSteps = (a: DurableAwaiting[] | null | undefined): DurableAwaiting[] | null | undefined => a?.filter(c => c.operator_steps.length > 0)
+export function awaitingBlockRows(awaitingAll: DurableAwaiting[] | null | undefined, ctx: PageCtx, cap: number): Row[] {
+  const awaiting = withSteps(awaitingAll)
   if (awaiting === null || awaiting === undefined || awaiting.length === 0 || cap < 1) return []
   const cardRowsOf = (c: DurableAwaiting): Row[] => awaitingCardRows(c, ctx)
   const out: Row[] = [[dimSeg(ctx.t('v74.d.await_head', { n: awaiting.length }))] as Row]
@@ -250,7 +253,8 @@ export function awaitingBlockRows(awaiting: DurableAwaiting[] | null | undefined
 // area; the action area is 4-6 rows and cannot hold full steps). It takes at most a third of the pane, and never so much that
 // the page would drop to the compact (< DECIDE_COMPACT_MAX_ROWS) layout or to the 4-row action area (rows < 32).
 const AWAIT_KEEP_CARD = 3
-export function awaitingBodyCap(ctx: PageCtx, awaiting?: DurableAwaiting[] | null, room?: number): number {
+export function awaitingBodyCap(ctx: PageCtx, awaitingAll?: DurableAwaiting[] | null, room?: number): number {
+  const awaiting = withSteps(awaitingAll)
   const rows = ctx.maxRows ?? ctx.size.rows
   const third = Math.floor(rows / 3)
   const keepCompact = rows >= DECIDE_COMPACT_MAX_ROWS ? rows - DECIDE_COMPACT_MAX_ROWS : third

@@ -43,3 +43,12 @@ export function decideColumnWidths(availCols: number, wantLeft?: number): { left
   const rightW = usable - leftW
   return { leftW, rightW, sepW }
 }
+
+// The full-width decide layouts (dual column, compact list) lay out to exact cols; the frame does not wrap them at 80, and a page that
+// wraps its own rows the way the frame will (decide.ts frameWrap) must not either. Lives here so frame.ts and decide.ts share it.
+export function decideFullWidth(a: { boxed: boolean; effMaxRows: number; compactExpanded: boolean; bodyCols: number; layoutMode: DecideLayoutMode | null; styleC: boolean }): boolean {
+  return a.boxed && (
+    (a.effMaxRows < DECIDE_COMPACT_MAX_ROWS && !a.compactExpanded) ||
+    (a.effMaxRows >= DECIDE_COMPACT_MAX_ROWS && decideLayoutMode(a.bodyCols, a.layoutMode) === 'dual' && !a.styleC)
+  )
+}

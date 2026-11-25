@@ -6,6 +6,7 @@ const os = require('os');
 const path = require('path');
 const rp = require('../run-pilot.js');
 const { ROOT, tmp, rm } = require('./helpers.js');
+process.env.AUTOPILOT_ROLEKIT_A9_EXEMPT = '1';
 
 const base = (out, extra = {}) => ({ account: 'dry', out, dryRun: true, timeout: '10m', modelWeak: 'claude-haiku-4-5', modelStrong: 'claude-sonnet-4-5', ...extra });
 const firstKey = () => rp.loadPlan().ordered[0];

@@ -20,7 +20,7 @@ function world(aliases) {
   const fx = makeFixture({ aliases: aliases || [{ alias: 'a' }] });
   const base = { ...process.env }; for (const k of BILLING) delete base[k];
   delete base.AUTOPILOT_SESSION_ID;
-  const env = { ...base, ...fx.env, DISPATCH_QUIET: '1', AUTOPILOT_SETTLE_MS: '0' };
+  const env = { ...base, ...fx.env, DISPATCH_QUIET: '1', AUTOPILOT_SETTLE_MS: '0', AUTOPILOT_ROLEKIT_A9_EXEMPT: '1' };
   const out = path.join(fx.root, 'out');
   const run = (args, e, script) => {
     const r = cp.spawnSync('node', [script || RC, ...args], { encoding: 'utf8', env: { ...env, ...(e || {}) }, input: '' });

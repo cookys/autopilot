@@ -76,6 +76,12 @@ function fetchFleetTask(taskId) {
 
 function collectTaskText(taskObj) {
   const parts = [];
+  if (typeof taskObj.title === 'string') {
+    parts.push(taskObj.title);
+  }
+  if (typeof taskObj.body === 'string') {
+    parts.push(taskObj.body);
+  }
   if (Array.isArray(taskObj.comments)) {
     for (const c of taskObj.comments) {
       if (c && typeof c.text === 'string') {
@@ -325,7 +331,7 @@ function changedFiles(repo, sha, filter) {
 function computeTriage(taskObj, text, repo, sha) {
   const reasons = [];
 
-  if (taskObj.needs_look === true || /^\s*Needs-look:\s*yes\s*$/im.test(text)) {
+  if (taskObj.needs_look === true || /(?:^|\|)\s*Needs-Look:\s*yes\s*(?:\||$)/im.test(text)) {
     reasons.push('needs_look');
   }
   if (/^\s*First-live:\s*yes\s*$/im.test(text)) {

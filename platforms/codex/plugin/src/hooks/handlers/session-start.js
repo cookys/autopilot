@@ -69,6 +69,19 @@ function openDecisionCardLine(cwd) {
     + (by.pending_dispatch.length ? `\nAnswered, not dispatched yet (${by.pending_dispatch.length}): ${ids(by.pending_dispatch)}` : '');
 }
 
+// PM seat only: open tasks stuck on the operator with no live decision card (scripts/operator-stuck-no-card.js, PM ruling 01M8AEPWKZ).
+// Fail-open: any error, a missing script or a slow fleet gives ''. The list is advisory data for the PM, never an instruction.
+function stuckNoCardLines() {
+  try {
+    const { resolveFleetSeat } = require('../../../hooks/_shared/fleet-seat.js');
+    if (resolveFleetSeat({}) !== 'pm') return '';
+    const { collectRows } = require('../../../scripts/operator-stuck-no-card.js');
+    const rows = collectRows(process.env.OPERATOR_STUCK_FLEET_BIN || 'fleet');
+    if (!rows.length) return '';
+    return `\nOperator-blocked tasks without a live decision card (${rows.length}):` + rows.slice(0, 12).map((r) => `\n- ${r.task_id} | ${r.lane} | ${r.need} | ${r.missing}`).join('');
+  } catch { return ''; }
+}
+
 // F4 landing-file pickup (fleet plan oc-f4 R4.1): <git-common-dir>/fleet/decision-answers/<card_id>.json, schema fleet.decision-answer/1, written by
 // the card's courier for a console answer. The file is a pickup hint, not a credential: it is acted on only after `fleet decision verify
 // <card_id> <answer_id> --content-sha256 <content_sha256>` exits 0, and then the line carries the STORED answer verify printed, never the file's
@@ -122,7 +135,7 @@ ${ownerQuestionLine()}
 When the owner answers in the live panel, a message whose first line is [待決回覆] arrives: act on the answers; the cards close automatically.
 To show the owner a file or a diff, use the show tool; do not paste the content.
 Cross-harness token discipline (advisory only): read ${TOKEN_DISCIPLINE_DOC}.
-${sessionStartBriefHeaderLine()}${openDecisionCardLine(cwd)}${landedAnswerLines(cwd)}`;
+${sessionStartBriefHeaderLine()}${openDecisionCardLine(cwd)}${landedAnswerLines(cwd)}${stuckNoCardLines()}`;
 }
 
 // Appended to a trimmed recovery body. Counted inside the room left for that body.
@@ -409,4 +422,5 @@ module.exports = {
   buildSessionStartOutput,
   openDecisionEntries,
   openDecisionCardLine,
+  stuckNoCardLines,
 };

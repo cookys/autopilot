@@ -69,7 +69,7 @@ function handle(input, env) {
     // because the block reason is now the last user entry in the transcript.
     const pending = typeof remindedRow.pending_reply === 'string' ? remindedRow.pending_reply : null;
     if (pending && pending.trim()) {
-      writeReply(env, pending);
+      writeReply(env, pending, { ask_id: askId, session_id: gate.ask.session_id });
     }
     return null;
   }
@@ -79,7 +79,7 @@ function handle(input, env) {
 
   if (hasDisposition) {
     const text = replyBody(input);
-    if (text) writeReply(env, text);
+    if (text) writeReply(env, text, { ask_id: askId, session_id: gate.ask.session_id });
     return null;
   }
 

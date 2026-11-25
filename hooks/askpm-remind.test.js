@@ -255,6 +255,10 @@ test('Stop 1 blocks undisposed ask; Stop 2 never blocks and writes Stop 1 pendin
     assert.equal(replies.length, 1, 'exactly one reply row per ask');
     assert.equal(replies[0].text, '建議今晚 20:00 部署\n等待確認');
     assert.deepEqual(replies[0].lines, ['建議今晚 20:00 部署', '等待確認']);
+    const feed = s.runPmAsk(['list', '--answers', '--open', '--json']);
+    assert.equal(feed.status, 0, feed.stderr);
+    assert.equal(JSON.parse(feed.stdout)[0].answer, '建議今晚 20:00 部署\n等待確認');
+    assert.equal(replies[0].ask_id, askRow.ask_id);
   } finally {
     s.cleanup();
   }
@@ -279,6 +283,7 @@ test('Stop 1 on already-disposed ask writes reply without blocking', () => {
     const replies = s.readRows().filter((r) => r.kind === 'reply');
     assert.equal(replies.length, 1);
     assert.equal(replies[0].text, '已開卡 d-1234abcd');
+    assert.equal(replies[0].ask_id, askId);
   } finally {
     s.cleanup();
   }

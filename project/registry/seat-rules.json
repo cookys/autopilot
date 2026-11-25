@@ -1,0 +1,117 @@
+{
+  "schema": "seat-rules/1",
+  "description": "S10 P1 Seat Rules Registry (v1). Known limitation: external sources (global CLAUDE.md, PM CLAUDE.md) are checked only if readable; otherwise reported as 未檢查 (neither pass nor fail).",
+  "warnings": {
+    "skills_missing_not_for": [
+      "fleet-usage",
+      "harness-maintenance",
+      "lead-watch",
+      "team"
+    ]
+  },
+  "rules": [
+    {
+      "id": "claude-no-hosted-ci",
+      "source": "CLAUDE.md",
+      "anchor": "never add a hosted workflow",
+      "guarantee": "text",
+      "seat": "all"
+    },
+    {
+      "id": "claude-no-credentials",
+      "source": "CLAUDE.md",
+      "anchor": "Never read, print or copy credentials",
+      "guarantee": "text",
+      "seat": "all"
+    },
+    {
+      "id": "claude-no-force-push",
+      "source": "CLAUDE.md",
+      "anchor": "共用分支一律禁止 force-push 和改寫歷史",
+      "guarantee": "text",
+      "seat": "all"
+    },
+    {
+      "id": "claude-no-hardcoded-dispatch",
+      "source": "CLAUDE.md",
+      "anchor": "Don't hardcode dispatch model/mode in skill files",
+      "guarantee": "text",
+      "seat": "all"
+    },
+    {
+      "id": "claude-sandbox-test",
+      "source": "CLAUDE.md",
+      "anchor": "worktree 和測試一律用沙箱 HOME 或暫存目錄",
+      "guarantee": "text",
+      "seat": "all"
+    },
+    {
+      "id": "agents-no-hand-author",
+      "source": "AGENTS.md",
+      "anchor": "Depth-0 never hand-authors substance",
+      "guarantee": "text",
+      "seat": "depth0"
+    },
+    {
+      "id": "agents-read-raw-log",
+      "source": "AGENTS.md",
+      "anchor": "Read the raw child log BEFORE classifying a failure",
+      "guarantee": "text",
+      "seat": "depth0"
+    },
+    {
+      "id": "agents-no-bare-detached",
+      "source": "AGENTS.md",
+      "anchor": "Never dispatch background work you cannot be woken for",
+      "guarantee": "text",
+      "seat": "depth0"
+    },
+    {
+      "id": "agents-no-grep-fail",
+      "source": "AGENTS.md",
+      "anchor": "never `grep FAIL` over a log",
+      "guarantee": "text",
+      "seat": "depth0"
+    },
+    {
+      "id": "hook-dispatch-model-guard",
+      "source": "CLAUDE.md",
+      "anchor": "Don't hardcode dispatch model/mode in skill files",
+      "guarantee": "hook",
+      "hook": "hooks/dispatch-model-guard.js",
+      "event": "PreToolUse",
+      "matcher": "Task|Agent",
+      "deny_fixture": {
+        "tool_name": "Agent",
+        "tool_input": {
+          "description": "test opus dispatch",
+          "model": "opus",
+          "prompt": "do something"
+        }
+      },
+      "seat": "all"
+    },
+    {
+      "id": "tool-read-only-research",
+      "source": "AGENTS.md",
+      "anchor": "read-only",
+      "guarantee": "tool",
+      "disallowed_tools": ["Write", "Edit", "Bash"],
+      "seat": "research"
+    },
+    {
+      "id": "ext-global-claude-md",
+      "source": "~/.claude/CLAUDE.md",
+      "anchor": "Never",
+      "guarantee": "external",
+      "seat": "global"
+    },
+    {
+      "id": "ext-pm-claude-md",
+      "source": "~/.claude/projects/pm/CLAUDE.md",
+      "anchor": "Never",
+      "guarantee": "external",
+      "seat": "pm"
+    }
+  ]
+}

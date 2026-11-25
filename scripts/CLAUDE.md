@@ -63,7 +63,7 @@ Shared Cursor/Kimi broker transport and clone rail use the cursor-named helpers;
 
 **Sync, drift & release gates (cont.)** — `check-fixed-times.js` `check-test-exec-bits.js` `check-plan-phases.js` `lib/plan-inventory-lint.js` `plan-to-tasks.js` `tests/plan-to-tasks-join.test.sh` `finish-triage.js` `look-classes.json` `probes/p1.sh` `probes/p2.sh` `probes/p3.sh` `probes/p4.sh`
 
-**Sync, drift & release gates (cont.)** — `check-quota-adapters.js` `check-events-contract.js` `check-claude-spawn-sites.js` `lib/claude-spawn-sites.json` `export-fleet-flow.js` `export-fleet-flow.test.js`
+**Sync, drift & release gates (cont.)** — `check-quota-adapters.js` `check-events-contract.js` `check-claude-spawn-sites.js` `lib/claude-spawn-sites.json` `export-fleet-flow.js` `export-fleet-flow.test.js` `check-seat-rules.js` `tests/check-seat-rules.test.js`
 
 **Sync, drift & release gates (cont.)** — `gen-tux.js` `tux-manifest.js` `ansi-to-html-grid.js` `ansi-to-html-grid.test.js`（使用方式見 [終端畫面轉 HTML](../docs/guide/terminal-screen-to-html.md)）
 

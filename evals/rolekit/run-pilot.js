@@ -58,8 +58,8 @@ const refuse = (m) => { const e = new Error(m); e.refusal = true; return e; };
 const lastJsonLine = (s) => { const l = String(s).split('\n').filter((x) => x.startsWith('{')).pop(); return l ? JSON.parse(l) : null; };
 
 function parseArgs(argv) {
-  const val = new Set(['--account', '--out', '--model-weak', '--model-strong', '--timeout', '--cap-usd', '--scenario', '--roles']);
-  const flag = new Set(['--dry-run']);
+  const val = new Set(['--account', '--out', '--model-weak', '--model-strong', '--timeout', '--cap-usd', '--scenario', '--roles', '--arms']);
+  const flag = new Set(['--dry-run', '--format-parity']);
   const o = { timeout: '10m' };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
@@ -117,6 +117,13 @@ function stopKind(text) {
 }
 
 // ---- kits
+// the kit's own output-format paragraph(s): from the line starting `Output:` up to (not including) `Done when:`, byte for byte
+function formatBlock(role) {
+  const t = fs.readFileSync(path.join(ROOT, 'kits', role, 'role.md'), 'utf8');
+  const a = t.indexOf('\nOutput:'); const b = t.indexOf('\nDone when:');
+  if (a < 0 || b < a) throw refuse(`kits/${role}/role.md has no Output: .. Done when: span`);
+  return t.slice(a + 1, b).trimEnd();
+}
 function kitFor(arm, role) { return arm === 'B' ? path.join(ROOT, 'kits', role) : arm === 'C' ? path.join(ROOT, 'placebo', role) : null; }
 function transportFor(role) { return validateKit(path.join(ROOT, 'kits', role)).tools.length === 0 ? 'author' : 'hetero'; }
 // The rails refuse an empty tools line (they want the word `none`); the frozen reviewer and verifier kits have an empty line.
@@ -155,6 +162,7 @@ function attempt(ctx, c, n) {
     const kitArgs = kit ? ['--role-kit', railKitDir(kit, path.join(tmp, 'kit'))] : [];
     const transport = transportFor(c.role);
     let prompt = fs.readFileSync(path.join(taskDir, 'prompt.md'), 'utf8');
+    if (ctx.opts.formatParity && c.arm !== 'B') prompt += `\n\n${formatBlock(c.role)}`; // PM ruling 01M89GX0JR: A/C/D get the kit's Output section verbatim, B unchanged
     const env = { ...ctx.env, ...(ctx.dry ? { RKRUN_CELL: `${c.arm}|${c.seat}|${c.role}|${c.task}|${c.rep}`, RKRUN_TASK_DIR: taskDir } : {}) };
     let r; let railOut; let answerText = ''; let workdir = null;
     if (transport === 'author') { // the input is appended to the prompt; the child has no cwd content
@@ -316,11 +324,13 @@ function run(opts, env = process.env) {
   }
   const summary = { dry_run: ctx.dry, account: opts.account, scheduled: plan.keys.length, skipped_already_recorded: 0, ran: 0, stopped: null, spent_usd: 0, cap_usd: cap };
   const share30 = (plan.prereg.cost.estimate_usd_high * 30) / plan.keys.length;
+  const armSet = opts.arms ? new Set(opts.arms.split(',')) : null;
   const roleSet = opts.roles ? new Set(opts.roles.split(',')) : null;
   if (roleSet) { const bad = [...roleSet].filter((r) => !plan.prereg.design.roles.includes(r)); if (bad.length) throw refuse(`--roles: unknown role ${bad.join(',')} (known: ${plan.prereg.design.roles.join(',')})`); }
   for (const key of plan.ordered) {
     if (done.has(key)) { summary.skipped_already_recorded += 1; continue; }
     const c = parseKey(key);
+    if (armSet && !armSet.has(c.arm)) continue; // --arms narrows the walk like --roles
     if (roleSet && !roleSet.has(c.role)) continue; // --roles narrows the walk; the schedule digest and the other cells are untouched
     if (rows.length >= 30 && rows.slice(0, 30).reduce((n, r) => n + r.cost_usd, 0) > 2 * share30 && !state.stoploss_waived) { summary.stopped = { kind: 'cap', at: key, why: 'stop-loss: the first 30 cells cost more than 2x their share of the high estimate' }; break; }
     const res = runCell(ctx, c, key);
@@ -376,4 +386,4 @@ function main() {
   }
 }
 if (require.main === module) main();
-module.exports = { pinProblem, parseArgs, checkEnv, loadPlan, costOf, extractAnswer, stopKind, kitApplied, railKitDir, transportFor, defaultScenario, run, EXIT };
+module.exports = { pinProblem, formatBlock, parseArgs, checkEnv, loadPlan, costOf, extractAnswer, stopKind, kitApplied, railKitDir, transportFor, defaultScenario, run, EXIT };

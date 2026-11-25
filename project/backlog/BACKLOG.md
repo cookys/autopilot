@@ -2648,3 +2648,16 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: PM 裁定 29b4b76d；三家評審合成 056407312
 - **Pointer**: docs/plans/evidence/2026-11-24-pm-mech-judgment/synthesis.md
+
+### GLM reviewer 資格考未過，下次 GLM 版本更新時再考
+- **Id**: BL-0523
+- **Status**: open
+- **Since**: 2026-11-25
+- **Origin**: self
+- **Problem**: GLM-5.3 與 GLM-5.4 的 reviewer 科（思考關、T1 主機宣告、/v1/messages）都是 degraded、evaluation_passed=false：known-bad 敏感度漏抓（artifact oracle 拒 known-bad-01、02、07、17、20）、輸出不是 {verdict,findings} 格式、witness call 超出 case domain、defect-reversal mutation control 失敗。
+- **Impact**: GLM 不能當 reviewer 席；verification_author 科已過，只用於白名單 T0／T1 內容，不受影響。
+- **Trigger**: GLM 出新版本（5.5 以上）或雲端開放思考開的協定時重考，用 /home/team/.tmp/glm-qual 的 cell 腳本與 QRP_CN_WORK_TIER=T1 宣告（題庫 leak-scan 0 命中）
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: PM 裁定 01M89NZGZZ（單 01M83BNDZB）；第 5 輪結果見單留言
+- **Pointer**: docs/plans/evidence/2026-11-25-glm-qualify-r5/README.md

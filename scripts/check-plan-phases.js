@@ -13,6 +13,7 @@
  */
 
 const fs = require('fs');
+const { lintPlanInventory } = require('./lib/plan-inventory-lint');
 
 const VALID_SIZES = new Set(['XS', 'S', 'M', 'L', 'XL']);
 const VALID_NEEDS_LOOK = new Set(['yes', 'no']);
@@ -133,6 +134,8 @@ function lintPlanPhases(markdown) {
 
     if (id) seenIds.add(id);
   }
+
+  errors.push(...lintPlanInventory(markdown));
 
   return errors;
 }

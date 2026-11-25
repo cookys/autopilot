@@ -1,7 +1,7 @@
 // keys.test.ts — r2 §3.2 / v7.4 B key table
 import { test, expect } from 'claude-code/testing'
 import { routeKey } from './keys'
-import { V74_KEY, PET_KEY } from '../v74/contract'
+import { V74_KEY, PET_KEY, pickIndex, pickKeys } from '../v74/contract'
 
 type St = { page: string; paneFocus: boolean; focusedButton: boolean; textMode: boolean }
 const st = (o: Partial<St>): St => ({ page: 'now', paneFocus: true, focusedButton: false, textMode: false, ...o })
@@ -92,4 +92,12 @@ test('keys: a/b/c/m/s mean nothing outside decide/todo (no pick, page, note or s
     }
   }
   expect(bad.join(' ')).toBe('')
+})
+
+test('R6: routed letters resolve against the card and ambiguous labels stay positional', () => {
+  const action = routeKey('a', st({ page: 'decide' }))
+  if (action.kind !== 'pick') throw new Error('expected pick')
+  expect(pickIndex([{ label: 'B 先不要' }, { label: 'A 可以' }], action.index)).toBe(1)
+  expect(pickKeys([{ label: 'first' }, { label: 'second' }])).toEqual(['a', 'b'])
+  expect(pickKeys([{ label: 'A first' }, { label: 'A second' }])).toEqual(['a', 'b'])
 })

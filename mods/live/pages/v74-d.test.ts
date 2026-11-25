@@ -159,3 +159,27 @@ test('v74-d: a short allocation keeps the selected card on screen', () => {
   const { body } = decidePage.render(ctxOf({ nav: { cursor: 2, picks: {}, notes: {}, noteMode: false } }, 14, 120))
   expect(body.map(text).join('\n')).toContain('a: 80 欄')
 })
+
+test('R6: letters label both the key and the selected option', () => {
+  const cards = [{ ...decide[0], options: [
+    { label: 'B 先不要', detail: '', recommended: false },
+    { label: 'A 可以', detail: '', recommended: false },
+  ] }]
+  const ctx = ctxOf({ decide: cards })
+  const body = decidePage.render(ctx).body
+  expect(body.map(text).join('\n')).toContain('a: A 可以')
+  expect(pressed(body)).toContain('key:a')
+  expect(decideReduce(NO_NAV, { kind: 'pick', index: 0 }, ctx, 0).nav.picks[cards[0].id]).toBe(1)
+  // Reverse control: the old positional mapping selects B, so it fails the A assertion.
+  expect(cards[0].options[0].label.startsWith('A ')).toBe(false)
+})
+
+test('R6: todo action labels use the option letters', () => {
+  const cards = [{ ...todo[0], options: [
+    { label: 'B 先不要', detail: '', recommended: false },
+    { label: 'A 可以', detail: '', recommended: false },
+  ] }]
+  const actions = todoPage.render(ctxOf({ todo: cards })).actions
+  expect(actions.map(text).join('\n')).toContain('[a] A 可以')
+  expect(pressed(actions)).toContain('key:a')
+})

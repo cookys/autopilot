@@ -109,6 +109,8 @@ L0 狀態帶／冷區頂 (1 列) ▲ 要你決定 (2) │ M·l4·verify │ ● 
 
 ---
 
+- 操作員固定準則 R1（上半部不放可點元素）與 R6（按 a 一定選到標 A 的選項）的機械檢查在 `mods/live/pages/upper-clickables.test.ts`；準則全文的唯一歸屬檔在 codeforge `doc/design/pane-design-language.md`「操作員固定準則」（PM 01M88CCDQD）。
+
 ## 4. 展開卡片 mockup（v1.3 熱區定稿版）
 
 以下四個 ASCII mockup（`§4.1`–`§4.4`）與一個窄寬度 `110` 欄退讓檢證示意，以兩張真實決策卡（`d-f7181ecb` 與 `d-076daf85`）繪出遵循熱區原則與「單一事實只出現於唯一位置」之 L0–L3 視圖；右欄「我問的問題」5 筆為標註 `fixture` 之模擬提問。

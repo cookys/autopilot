@@ -71,6 +71,43 @@ export const PET_KEY = '0' // the pet keeps its own tab (operator rule, PM 01M78
 // Digits only switch pages. Letters act on 待決/待辦 only: a/b/c pick for the card at the cursor, m note (待決), s send all (待決). ↑↓ (j/k) move the card cursor on 待決/待辦 and scroll elsewhere; Enter folds the section at the cursor unless a Button has focus.
 export const PICK_KEYS = ['a', 'b', 'c'] as const
 
+// Operator rule R6: the pick key follows the option's own letter, not its position — pressing a always picks the option labelled A.
+// An option whose label starts with a single ASCII letter (A-Z or a-z) followed by a space, ':', '.', ')', '）', '、' or the end of
+// the label claims that letter (lower case). The claims are honoured only while every claim on the card is unique, names a key the
+// pick handler already accepts (PICK_KEYS), and no non-lettered option's positional key is stolen by a claim; any other card (a
+// duplicate, a letter the handler cannot take, a collision) falls back to the positional keys wholesale — today's behaviour.
+// One key per option ('' = the pick handler does not reach that option). The drawn `x:` prefix and the `press` of the same option
+// must come from one call, so the letter shown is the letter that picks.
+const PICK_LETTER = /^([A-Za-z])(?:[ :.:)）、]|$)/
+export const pickKeys = (options: { label: string }[]): string[] => {
+  const n = Math.min(options.length, PICK_KEYS.length)
+  const letter = (i: number): string | null => (i >= n ? null : PICK_LETTER.exec(options[i].label)?.[1]?.toLowerCase() ?? null)
+  const claimed: (string | null)[] = []
+  let ok = true
+  const seen = new Set<string>()
+  for (let i = 0; i < n; i++) {
+    const l = letter(i)
+    claimed.push(l)
+    if (l !== null) {
+      if (!PICK_KEYS.includes(l as (typeof PICK_KEYS)[number]) || seen.has(l)) { ok = false; break }
+      seen.add(l)
+    }
+  }
+  if (ok) {
+    const used = new Set<string>()
+    for (let i = 0; i < n; i++) {
+      const k = claimed[i] ?? String(PICK_KEYS[i])
+      if (used.has(k)) { ok = false; break }
+      used.add(k)
+    }
+  }
+  return options.map((_, i) => (i < n ? (ok ? claimed[i] ?? String(PICK_KEYS[i]) : String(PICK_KEYS[i])) : ''))
+}
+// The option a pressed pick key selects (R6): the pressed key names the letter (its position in PICK_KEYS), the letter names the
+// option. A key the pick handler does not accept (the legacy 4th pick) keeps its position. -1 = the card has no option with that key.
+export const pickIndex = (options: { label: string }[], key: number): number =>
+  key < 0 || key >= PICK_KEYS.length ? key : pickKeys(options).indexOf(String(PICK_KEYS[key]))
+
 // ---- what every v7.4 page receives (PageCtx.v74); a null field means the source is missing (draw the broken marker, never invent rows) ----
 export type V74Ctx = {
   pm: PmStatus | null

@@ -20,7 +20,7 @@ import { brokenRow, pendingMissingReason, pendingSourceMissing, wrapRow, WRAP_HA
 import type { Row } from './rows'
 import { DECIDE_COL_SEP_W, DECIDE_COMPACT_MAX_ROWS, DECIDE_DUAL_MIN_COLS, DECIDE_HYSTERESIS, DECIDE_MIN_COL_W, STRIP_SPLIT_COLS, decideColumnWidths, decideLayoutMode } from './layout'
 import type { DecideLayoutMode } from './layout'
-import { PICK_KEYS } from '../v74/contract'
+import { PICK_KEYS, pickIndex, pickKeys } from '../v74/contract'
 import { fixedWindow, keyed, keyedGrow, thumbOf } from '../scrollmath'
 import type { DecideCard } from '../v74/contract'
 
@@ -38,6 +38,10 @@ const LETTERS = 'abcde'
 const MAX_OPTS = 5
 const CURSOR_MARK = '\u2023' // ‣ (U+2023, EAW=N, width=1): selected card cursor, distinct from fold glyph ▸
 const letterOf = (i: number): string => (i < MAX_OPTS ? LETTERS[i] : 'f' + (i + 1))
+// R6: the letter a drawn option shows is the key that picks it — both read one call of contract.pickKeys on the card's options.
+// Beyond the pick keys the legacy lettering stays: letterOf in the lists, the old digit on the held/summary lines.
+const pickLetter = (c: { options: { label: string }[] }, at: number): string => pickKeys(c.options)[at] || letterOf(at)
+const pickDigit = (c: { options: { label: string }[] }, at: number): string => pickKeys(c.options)[at] || String(PICK_KEYS[at] ?? at + 1)
 
 type Item = { kind: 'own'; d: LiveDecision } | { kind: 'con'; c: ConsoleCard }
 type Far = { id: string; title: string; seat: string }
@@ -150,8 +154,12 @@ export function decideReduce(nav: DecideNav, key: KeyAction, ctx: PageCtx, nowMs
     case 'text_cancel': return same({ textMode: false, textBuf: '' })
     case 'note': return d === null || d.id === null || heldNow || sentNow ? same({}) : same({ textMode: true, textBuf: nav.notes[d.id] ?? '', opt: null })
     case 'pick': {
-      if (d === null || d.id === null || heldNow || sentNow || decideDialog(d) || key.index >= Math.min(d.options.length, MAX_OPTS)) return same({})
-      return same({ picks: { ...nav.picks, [d.id]: key.index }, opt: null })
+      // R6: the pressed key names the letter, the letter names the option (contract.pickIndex); a key the handler does not
+      // accept (the legacy 4th pick) keeps its position
+      if (d === null || d.id === null || heldNow || sentNow || decideDialog(d)) return same({})
+      const at = pickIndex(d.options, key.index)
+      if (at < 0 || at >= Math.min(d.options.length, MAX_OPTS)) return same({})
+      return same({ picks: { ...nav.picks, [d.id]: at }, opt: null })
     }
     case 'move': {
       if (d === null || d.options.length <= MAX_OPTS) return same({})
@@ -304,8 +312,9 @@ function optionSegs(d: LiveDecision, i: number, nav: DecideNav, ctx: PageCtx): S
   const picked = decidePick(d, nav) === i
   const label = i < MAX_OPTS ? d.options[i].label : ctx.t('page.decide.opt_n', { n: i + 1, label: d.options[i].label })
   // G11: the option is a Button (press `key:<letter>`, the pane turns it into the key's action) so it works by click where the pane cannot take the keyboard; the old 6th-and-later options (f6..) keep plain text
-  const press = i < MAX_OPTS ? { press: 'key:' + letterOf(i) } : {}
-  const out: Seg[] = [seg('[' + letterOf(i) + '] ' + label, picked ? { ...pickedTone(), ...press } : press)]
+  const key = pickKeys(d.options)[i] || letterOf(i)
+  const press = i < MAX_OPTS ? { press: 'key:' + key } : {}
+  const out: Seg[] = [seg('[' + key + '] ' + label, picked ? { ...pickedTone(), ...press } : press)]
   if (rec) out.push(seg(' ' + GLYPHS.structure.recommend, { color: PALETTE.attention, ...press }))
   return out
 }
@@ -608,6 +617,7 @@ function v74Card(c: DecideCard, i: number, selected: boolean, nav: DecideNav, ct
   const { t } = ctx
   const cols = ctx.size.cols
   const out: Row[] = []
+  const keys = pickKeys(c.options)
   const mark = selected ? CURSOR_MARK : ' '
   const title = seg(c.title, selected ? { color: PALETTE.here, here: true } : {})
   const box = ctx.box === true
@@ -636,19 +646,19 @@ function v74Card(c: DecideCard, i: number, selected: boolean, nav: DecideNav, ct
     const tone = picked === k ? pickedTone() : o.recommended ? { color: PALETTE.attention } : {}
     if (box && k > 0) out.push([seg('')])
     if (!selected || k >= THREE || box) {
-      const text = selected && k < THREE ? PICK_KEYS[k] + ': ' + o.label + rec + markPick : truncateToWidth(o.label, room) + rec + markPick
+      const text = selected && k < THREE ? keys[k] + ': ' + o.label + rec + markPick : truncateToWidth(o.label, room) + rec + markPick
       const row = selected && k < THREE
         ? [seg('      '), seg(text, tone)]
         : [seg('      ' + DOT + ' '), seg(text, tone)]
       out.push(box ? row : truncateSegs(row, cols))
       return
     }
-    const press = 'key:' + PICK_KEYS[k]
-    const label = PICK_KEYS[k] + ': ' + truncateToWidth(o.label, room) + rec + markPick
+    const press = 'key:' + keys[k]
+    const label = keys[k] + ': ' + truncateToWidth(o.label, room) + rec + markPick
     const pad = ' '.repeat(Math.max(2, 14 - displayWidth(label)))
     out.push(truncateSegs([seg('      '), seg(label, { press, ...tone }), ...(o.detail === '' ? [] : [seg(pad), dimSeg(o.detail)])], cols))
   })
-  if (held) out.push([seg('      '), dimSeg(t('v74.d.held', { k: picked === undefined ? '-' : String(PICK_KEYS[picked] ?? picked + 1) }))])
+  if (held) out.push([seg('      '), dimSeg(t('v74.d.held', { k: picked === undefined ? '-' : pickDigit(c, picked) }))])
   else if (sent) out.push([seg('      '), dimSeg(t('v74.d.sent'))])
   const note = notes[c.id] ?? ''
   const noteText = selected && nav.textMode ? nav.textBuf + CARET : note === '' ? t('v74.d.note_empty') : note
@@ -673,7 +683,7 @@ function boxSummary(c: DecideCard, i: number, nav: DecideNav, ctx: PageCtx): Row
   const sent = nav.sent[c.id] !== undefined && nav.fixing?.[c.id] === undefined
   const recIx = c.options.findIndex(o => o.recommended)
   const tail = sent ? t('v74.d.sent') : held ? t('v74.d.sum_held') : picked !== undefined && c.options[picked] !== undefined
-    ? t('v74.d.sum_pick', { k: PICK_KEYS[picked] ?? String(picked + 1), label: c.options[picked].label })
+    ? t('v74.d.sum_pick', { k: pickDigit(c, picked), label: c.options[picked].label })
     : recIx >= 0 ? t('v74.d.sum_rec', { label: c.options[recIx].label }) : ''
   const lead = '   ' + String(i + 1) + '. '
   const q = c.title + '：' + c.question
@@ -696,6 +706,7 @@ function boxOpen(c: DecideCard, i: number, nav: DecideNav, ctx: PageCtx, fit: Fi
   const { t } = ctx
   const width = Math.min(80, ctx.size.cols)
   const gap = fit.loose ? [[seg('')]] : []
+  const keys = pickKeys(c.options)
   const picked = nav.picks[c.id]
   const held = nav.hold?.[c.id] !== undefined
   const sent = nav.sent[c.id] !== undefined && nav.fixing?.[c.id] === undefined
@@ -706,12 +717,12 @@ function boxOpen(c: DecideCard, i: number, nav: DecideNav, ctx: PageCtx, fit: Fi
     if (k > 0 && fit.between) out.push([seg('')])
     const mark = picked === k ? ' ' + GLYPHS.structure.answer : ''
     const tone = picked === k ? pickedTone() : o.recommended ? { color: PALETTE.attention } : {}
-    const label = (k < THREE ? PICK_KEYS[k] + ': ' : DOT + ' ') + o.label
+    const label = (k < THREE ? keys[k] + ': ' : DOT + ' ') + o.label
     const rec = o.recommended ? [seg('  ' + GLYPHS.structure.recommend + ' ' + t('v74.d.rec'), { color: PALETTE.attention })] : []
-    out.push([seg('    '), seg(label + mark, { ...tone, ...(ctx.pendingScroll !== undefined && !held && !sent && k < THREE ? { press: 'key:' + PICK_KEYS[k] } : {}) }), ...rec])
+    out.push([seg('    '), seg(label + mark, { ...tone, ...(ctx.pendingScroll !== undefined && !held && !sent && k < THREE ? { press: 'key:' + keys[k] } : {}) }), ...rec])
     if (o.detail !== '' && fit.desc) out.push(...wrapRow([seg('       '), dimSeg(o.detail)], width, 7))
   })
-  if (held) out.push([seg('    '), dimSeg(t('v74.d.held', { k: picked === undefined ? '-' : String(PICK_KEYS[picked] ?? picked + 1) }))])
+  if (held) out.push([seg('    '), dimSeg(t('v74.d.held', { k: picked === undefined ? '-' : pickDigit(c, picked) }))])
   else if (sent) out.push([seg('    '), dimSeg(t('v74.d.sent'))])
   const note = nav.notes[c.id] ?? ''
   const noteText = nav.textMode ? nav.textBuf + CARET : note === '' ? t('v74.d.note_empty') : note
@@ -773,7 +784,7 @@ function boxBody(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: numb
     const room = ctx.size.cols - 4 - displayWidth(base) - 3
     for (const [k, c] of hidden.entries()) {
       const at = nav.picks[c.id]
-      const one = String(from + k + 1) + (at === undefined ? '' : GLYPHS.structure.answer + letterOf(at))
+      const one = String(from + k + 1) + (at === undefined ? '' : GLYPHS.structure.answer + pickLetter(c, at))
       const next = list === '' ? one : list + ' ' + one
       if (displayWidth(next) > room) { list += '…'; break }
       list = next
@@ -816,6 +827,7 @@ function renderBoxC(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
     return { body: [...topBanners, countRow, ...full.slice(0, bgRoom)], actions: [] }
   }
   const build = (between: boolean, desc: boolean, omitted: boolean, showBg = true): { rows: Row[]; headEnd: number } => {
+    const keys = pickKeys(c.options)
     const countText = t('v74.d.c_count', { k: cursor + 1, n: cards.length }) + ageSuffix + (omitted ? ' ' + DOT + ' ' + t('v74.d.c_desc_omitted') : '')
     const out: Row[] = [[dimSeg(countText)]]
     out.push(...wrapRow([seg(CURSOR_MARK + '  '), seg(c.title, { color: PALETTE.here, here: true }), seg('：' + c.question)], cols, 3))
@@ -843,12 +855,12 @@ function renderBoxC(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
       if (k > 0 && between) out.push([seg('')])
       const mark = picked === k ? ' ' + GLYPHS.structure.answer : ''
       const tone = picked === k ? pickedTone() : o.recommended ? { color: PALETTE.attention } : {}
-      const label = (k < THREE ? PICK_KEYS[k] + ': ' : DOT + ' ') + o.label
+      const label = (k < THREE ? keys[k] + ': ' : DOT + ' ') + o.label
       const rec = o.recommended ? [seg('  ' + GLYPHS.structure.recommend + ' ' + t('v74.d.rec'), { color: PALETTE.attention })] : []
-      out.push([seg('  '), seg(label + mark, { ...tone, ...(ctx.pendingScroll !== undefined && !held && !sent && k < THREE ? { press: 'key:' + PICK_KEYS[k] } : {}) }), ...rec])
+      out.push([seg('  '), seg(label + mark, { ...tone, ...(ctx.pendingScroll !== undefined && !held && !sent && k < THREE ? { press: 'key:' + keys[k] } : {}) }), ...rec])
       if (o.detail !== '' && desc) out.push(...wrapRow([seg('     '), dimSeg(o.detail)], cols, 5))
     })
-    if (held) out.push([seg('  '), dimSeg(t('v74.d.held', { k: picked === undefined ? '-' : String(PICK_KEYS[picked] ?? picked + 1) }))])
+    if (held) out.push([seg('  '), dimSeg(t('v74.d.held', { k: picked === undefined ? '-' : pickDigit(c, picked) }))])
     else if (sent) out.push([seg('  '), dimSeg(t('v74.d.sent'))])
     const note = nav.notes[c.id] ?? ''
     const noteText = nav.textMode ? nav.textBuf + CARET : note === '' ? t('v74.d.note_empty') : note
@@ -869,12 +881,13 @@ function renderBoxC(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
       seg(c.title, { color: PALETTE.here, here: true }),
       seg('：' + c.question),
     ], cols)
+    const optKeys = pickKeys(c.options)
     const optSegsOf = (o: DecideCard['options'][number], k: number): Seg[] => {
       const mark = picked === k ? ' ' + GLYPHS.structure.answer : ''
       const tone = picked === k ? pickedTone() : o.recommended ? { color: PALETTE.attention } : {}
-      const label = (k < THREE ? PICK_KEYS[k] + ': ' : DOT + ' ') + o.label
+      const label = (k < THREE ? optKeys[k] + ': ' : DOT + ' ') + o.label
       const rec = o.recommended ? [seg(' ' + GLYPHS.structure.recommend, { color: PALETTE.attention })] : []
-      return [seg(label + mark, { ...tone, ...(ctx.pendingScroll !== undefined && !held && !sent && k < THREE ? { press: 'key:' + PICK_KEYS[k] } : {}) }), ...rec]
+      return [seg(label + mark, { ...tone, ...(ctx.pendingScroll !== undefined && !held && !sent && k < THREE ? { press: 'key:' + optKeys[k] } : {}) }), ...rec]
     }
     const stacked: Row[] = [qRow, ...c.options.map((o, k) => truncateSegs([seg('  '), ...optSegsOf(o, k)], cols))]
     if (stacked.length <= room) {
@@ -911,7 +924,7 @@ function renderBoxCompactList(ctx: PageCtx, cards: DecideCard[], nav: DecideNav,
     const hasRec = item.options.some(o => o.recommended)
     const mark = isCur ? CURSOR_MARK + ' ' : '  '
     const num = String(idx + 1).padStart(2, '0') + ' '
-    const suffix = (hasRec ? ' ' + GLYPHS.structure.recommend : '') + (p !== undefined ? ' ' + GLYPHS.structure.answer + letterOf(p) : ' ' + GLYPHS.state.pending)
+    const suffix = (hasRec ? ' ' + GLYPHS.structure.recommend : '') + (p !== undefined ? ' ' + GLYPHS.structure.answer + pickLetter(item, p) : ' ' + GLYPHS.state.pending)
     const titleRoom = Math.max(4, cols - displayWidth(mark + num + suffix))
     const title = truncateToWidth(item.title, titleRoom)
     const pad = ' '.repeat(Math.max(0, cols - displayWidth(mark + num + title + suffix)))
@@ -939,14 +952,15 @@ function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
   const held = nav.hold?.[c.id] !== undefined
   const sent = nav.sent[c.id] !== undefined && nav.fixing?.[c.id] === undefined
   const recIx = c.options.findIndex(o => o.recommended)
-  const statusText = sent ? t('v74.d.sent') : held ? t('v74.d.sum_held') : picked !== undefined ? `${GLYPHS.structure.answer} ${letterOf(picked)}` : GLYPHS.state.pending
-  const recText = recIx >= 0 ? ` · ${GLYPHS.structure.recommend} ${letterOf(recIx)}` : ''
+  const statusText = sent ? t('v74.d.sent') : held ? t('v74.d.sum_held') : picked !== undefined ? `${GLYPHS.structure.answer} ${pickLetter(c, picked)}` : GLYPHS.state.pending
+  const recText = recIx >= 0 ? ` · ${GLYPHS.structure.recommend} ${pickLetter(c, recIx)}` : ''
   const single = cards.length === 1
 
   // Build right-pane detail lines for `c` in operator order (UX gate §14, matching single-card C): title -> background -> options -> note.
   // Option buttons use `a: label` (3-cell prefix) to match the host hotkey draw width so the right-edge scrollbar aligns on every row.
   const buildDetail = (detailW: number): Row[] => {
     const innerW = Math.max(10, detailW - 2)
+    const keys = pickKeys(c.options)
     const out: Row[] = []
     out.push(...wrapRow([seg(c.title, { color: PALETTE.here, here: true }), seg('：' + c.question)], innerW, 2))
     out.push(...labelledBox(t('v74.d.bg'), c.background ?? t('v74.d.bg_none'), innerW))
@@ -955,12 +969,12 @@ function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
       if (k > 0) out.push([seg('')])
       const mark = picked === k ? ' ' + GLYPHS.structure.answer : ''
       const tone = picked === k ? pickedTone() : o.recommended ? { color: PALETTE.attention } : {}
-      const keyLabel = (k < PICK_KEYS.length ? PICK_KEYS[k] : letterOf(k))
+      const keyLabel = (k < PICK_KEYS.length ? keys[k] : letterOf(k))
       const rec = o.recommended ? [seg('  ' + GLYPHS.structure.recommend + ' ' + t('v74.d.rec'), { color: PALETTE.attention })] : []
-      out.push(...wrapRow([seg('  '), seg(`${keyLabel}: ${o.label}${mark}`, { ...tone, ...(ctx.pendingScroll !== undefined && !held && !sent && k < PICK_KEYS.length ? { press: 'key:' + PICK_KEYS[k] } : {}) }), ...rec], innerW, 6))
+      out.push(...wrapRow([seg('  '), seg(`${keyLabel}: ${o.label}${mark}`, { ...tone, ...(ctx.pendingScroll !== undefined && !held && !sent && k < PICK_KEYS.length ? { press: 'key:' + keys[k] } : {}) }), ...rec], innerW, 6))
       if (o.detail !== '') out.push(...wrapRow([seg('      '), dimSeg(o.detail)], innerW, 6))
     })
-    if (held) out.push([seg('  '), dimSeg(t('v74.d.held', { k: picked === undefined ? '-' : String(PICK_KEYS[picked] ?? picked + 1) }))])
+    if (held) out.push([seg('  '), dimSeg(t('v74.d.held', { k: picked === undefined ? '-' : pickDigit(c, picked) }))])
     else if (sent) out.push([seg('  '), dimSeg(t('v74.d.sent'))])
     const note = nav.notes[c.id] ?? ''
     const noteText = nav.textMode ? nav.textBuf + CARET : note === '' ? t('v74.d.note_empty') : note
@@ -1028,7 +1042,7 @@ function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
     const hasRec = item.options.some(o => o.recommended)
     const mark = isCur ? CURSOR_MARK + ' ' : '  '
     const num = String(idx + 1).padStart(2, '0') + ' '
-    const suffix = (hasRec ? ' ' + GLYPHS.structure.recommend : '') + (p !== undefined ? ' ' + GLYPHS.structure.answer + letterOf(p) : ' ' + GLYPHS.state.pending)
+    const suffix = (hasRec ? ' ' + GLYPHS.structure.recommend : '') + (p !== undefined ? ' ' + GLYPHS.structure.answer + pickLetter(item, p) : ' ' + GLYPHS.state.pending)
     const titleRoom = Math.max(4, leftW - displayWidth(mark + num + suffix))
     const title = truncateToWidth(item.title, titleRoom)
     const pad = ' '.repeat(Math.max(0, leftW - displayWidth(mark + num + title + suffix)))
@@ -1140,7 +1154,7 @@ function renderV74(ctx: DecideCtx): { body: Row[]; actions: Row[] } {
       if (decideLine(cardToLive(c), nav) === null || at === null || nav.hold?.[c.id] !== undefined) return []
       const cut = (x: string, n: number): string => { const a = [...x]; return a.length > n ? a.slice(0, n - 1).join('') + '…' : x }
       const note = (nav.notes[c.id] ?? '').trim()
-      const text = (i + 1) + '. ' + cut(c.title, 14) + ' ' + GLYPHS.structure.answer + ' ' + letterOf(at) + ' ' + cut(c.options[at]?.label ?? '', 12) + (note === '' ? '' : ' ' + DOT + ' ' + t('v74.d.pv_note', { note: cut(note, 24) }))
+      const text = (i + 1) + '. ' + cut(c.title, 14) + ' ' + GLYPHS.structure.answer + ' ' + pickLetter(c, at) + ' ' + cut(c.options[at]?.label ?? '', 12) + (note === '' ? '' : ' ' + DOT + ' ' + t('v74.d.pv_note', { note: cut(note, 24) }))
       return [text]
     })
     const resultRow: Row[] = m === undefined || m === null ? [] : [[dimSeg(GLYPHS.state.done + ' ' + t('v74.d.result', { n: m.n, left: m.left }))] as Row]

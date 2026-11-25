@@ -1223,11 +1223,24 @@ if [ "$RUNNER" = "agy" ]; then
     || die_precondition "agy verification-author requires bwrap filesystem/process isolation"
 fi
 
-if [ "$RUNNER" = "kimi" ]; then
-  command -v node >/dev/null 2>&1 || die_precondition "node binary not found: node (required for kimi broker)"
-  command -v git >/dev/null 2>&1 || die_precondition "git binary not found: git (required for kimi broker)"
+KIMI_VIA_BROKER=0
+if [ "$RUNNER" = "kimi" ] && [ "${AUTOPILOT_KIMI_LOCAL_ALLOW:-}" != "1" ]; then
+  # Default kimi seat is the shared broker (the local CLI is stopped, see kimi-local-stop.js,
+  # which stays untouched). AUTOPILOT_KIMI_LOCAL_ALLOW=1 is the fixture seam for the local CLI.
+  KIMI_VIA_BROKER=1
+  command -v node >/dev/null 2>&1 || die_precondition "node binary not found (required for kimi broker)"
+  command -v git >/dev/null 2>&1 || die_precondition "git binary not found (required for kimi broker)"
   KIMI_BROKER_JS="$_AUTHOR_SELF_DIR/lib/cursor-broker-run.js"
   [[ -r "$KIMI_BROKER_JS" ]] || die_precondition "cursor-broker-run.js not found beside dispatch-author.sh"
+elif [ "$RUNNER" = "kimi" ]; then
+  _kimi_stop="$(node "$_AUTHOR_SELF_DIR/lib/kimi-local-stop.js" check 2>&1)" || die_precondition "$_kimi_stop"
+  KIMI_BIN="$(runner_bin_fallback "${BIN:-kimi}")"
+  command -v "$KIMI_BIN" >/dev/null 2>&1 || die_precondition "kimi binary not found: $KIMI_BIN"
+  # The adapter (src/runners/kimi.js) spawns `kimi` by name. When the fallback found it off PATH
+  # (~/.kimi-code/bin), append that one directory so the adapter finds the same binary this check did.
+  case "$KIMI_BIN" in /*) PATH="$PATH:$(dirname "$KIMI_BIN")" ;; esac
+  KIMI_JS="$(cd "$(dirname "$0")" && pwd)/dispatch-author-kimi.js"
+  [[ -r "$KIMI_JS" ]] || die_precondition "dispatch-author-kimi.js not found beside dispatch-author.sh"
 fi
 
 if [[ -n "${AUTOPILOT_SETTLE_MS:-}" && ! "$AUTOPILOT_SETTLE_MS" =~ ^[0-9]+$ ]]; then
@@ -1703,27 +1716,24 @@ elif [[ "$RUNNER" = "cursor" ]]; then
   author_remap_kill_exit "$AUTHOR_TIMEOUT_START"
   set -e
   rm -rf "$CURSOR_CWD"; CURSOR_CWD=""
-elif [[ "$RUNNER" = "kimi" ]]; then
-  # Dispatch via kimi-broker (cursor-broker-run.js). The CN gate above requires a
-  # non-git sandbox cwd, while cursor-broker-run.js clones a git worktree. Build a
-  # disposable git repo in a separate temp dir (core.sharedRepository=group, 2770)
-  # seeded from the sandbox, run the broker, and copy added/modified files back.
+elif [[ "$RUNNER" = "kimi" && "$KIMI_VIA_BROKER" -eq 1 ]]; then
+  # The CN gate requires a non-git sandbox cwd, while cursor-broker-run.js clones a git
+  # worktree: seed a disposable git repo (group-shared, 2770) from the sandbox, run the
+  # broker there, then copy added/modified files back. Effort is not carried by the broker.
   KIMI_TMP_REPO="$(mktemp -d -t dispatch-author-kimirepo-XXXXXX)"
   KIMI_BROKER_OUT="$(mktemp -t dispatch-author-kimiout-XXXXXX)"
-  chmod 2770 "$KIMI_TMP_REPO"
   cp -a "$PWD/." "$KIMI_TMP_REPO/" 2>/dev/null || true
   git -C "$KIMI_TMP_REPO" init -q --shared=group
-  chmod -R g+rwX "$KIMI_TMP_REPO/.git"
+  chmod -R g+rwX "$KIMI_TMP_REPO"
   chmod 2770 "$KIMI_TMP_REPO" "$KIMI_TMP_REPO/.git"
   git -C "$KIMI_TMP_REPO" add -A
-  git -C "$KIMI_TMP_REPO" -c user.name="autopilot-dispatch" -c user.email="autopilot@localhost" \
-    commit -q --allow-empty -m "sandbox snapshot"
+  git -C "$KIMI_TMP_REPO" -c user.name=autopilot-dispatch -c user.email=autopilot@localhost commit -q --allow-empty -m "sandbox snapshot"
   author_kill_grace
   set +e
   AUTHOR_TIMEOUT_START=$SECONDS
   author_watch_prepare "$RUNNER_ERR_FILE"
   "${AUTHOR_WATCH_CMD[@]}" ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} node "$KIMI_BROKER_JS" \
-    "$KIMI_TMP_REPO" "$PROMPT_FILE" "$MODEL" "$AUTHOR_HARD_S" "$AUTHOR_RUN_ID" "$KIMI_BROKER_OUT" kimi \
+    "$KIMI_TMP_REPO" "$PROMPT_FILE" "$MODEL" "$AUTHOR_HARD_S" "${AUTHOR_RUN_ID:-author-$$-$RANDOM}" "$KIMI_BROKER_OUT" kimi \
     </dev/null > "$RAW_LOG" 2>"$RUNNER_ERR_FILE"
   RUNNER_EXIT=$?
   author_remap_kill_exit "$AUTHOR_TIMEOUT_START"
@@ -1731,22 +1741,47 @@ elif [[ "$RUNNER" = "kimi" ]]; then
   if [ "$RUNNER_EXIT" -eq 0 ]; then
     while IFS= read -r -d '' _kimi_rel; do
       [ -n "$_kimi_rel" ] || continue
-      if [ -e "$KIMI_TMP_REPO/$_kimi_rel" ]; then
-        mkdir -p "$(dirname "$PWD/$_kimi_rel")"
-        cp -a "$KIMI_TMP_REPO/$_kimi_rel" "$PWD/$_kimi_rel"
-      fi
+      [ -e "$KIMI_TMP_REPO/$_kimi_rel" ] || continue
+      mkdir -p "$(dirname "$PWD/$_kimi_rel")"
+      cp -a "$KIMI_TMP_REPO/$_kimi_rel" "$PWD/$_kimi_rel"
     done < <(git -C "$KIMI_TMP_REPO" status --porcelain -z | node -e '
-      const fs = require("fs");
-      const buf = fs.readFileSync(0);
-      const entries = buf.toString("utf8").split("\0").filter(Boolean);
-      for (const e of entries) {
-        const code = e.slice(0, 2);
-        const file = e.slice(3);
-        if (code.includes("D")) continue;
-        process.stdout.write(file + "\0");
-      }
-    ')
+      const e = require("fs").readFileSync(0).toString("utf8").split("\0").filter(Boolean);
+      for (const x of e) { if (!x.slice(0, 2).includes("D")) process.stdout.write(x.slice(3) + "\0"); }')
   fi
+elif [[ "$RUNNER" = "kimi" ]]; then
+  # The transport lives in `src/runners/kimi.js` (contract-pinned by
+  # hooks/tests/dispatch-author-kimi.test.sh); this branch only supplies the
+  # shell-side contract — authored text on stdout into $RAW_LOG, non-zero exit
+  # otherwise — via scripts/dispatch-author-kimi.js. The adapter owns the
+  # scratch cwd, the required-CLI-surface probe, argv shape, and the UTF-8 /
+  # empty-output rejections, so none of that is duplicated here.
+  #
+  # `timeout` wraps it the same way the grok branch wraps its own:
+  # the enforced deadline is the hang backstop and stays a shell concern.
+  # STDERR is appended to $RAW_LOG rather than discarded — there is
+  # no known benign chatter to filter, and a swallowed adapter error would
+  # surface downstream as the unfalsifiable `empty_output`.
+  #
+  # Forward the hard cap, not the idle limit. The shim dies 5 s before
+  # --timeout-seconds; an idle-sized value would kill a working kimi before the
+  # outer watcher can extend. The shim still reports kimi_timeout 5 s early.
+  KIMI_TIMEOUT_ARGS=(--timeout-seconds "$AUTHOR_HARD_S")
+  KIMI_AGENT_ARGS=()
+  if [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ]; then
+    KIMI_KIT_DIR="$(mktemp -d -t dispatch-author-kimikit-XXXXXX)" || die_precondition "could not create the kimi role-kit dir"
+    role_kit_write_kimi_agent "$ROLE_KIT_DIR" "$KIMI_KIT_DIR/agent.md"
+    KIMI_AGENT_ARGS=(--agent-file "$KIMI_KIT_DIR/agent.md")
+  fi
+  author_kill_grace
+  set +e
+  AUTHOR_TIMEOUT_START=$SECONDS
+  # kimi.js reads --prompt-file, so stdin is /dev/null (avoids SIGTTOU on a tty).
+  author_watch_prepare
+  "${AUTHOR_WATCH_CMD[@]}" ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} node "$KIMI_JS" --model "$MODEL" --prompt-file "$PROMPT_FILE" \
+    ${KIMI_TIMEOUT_ARGS[@]+"${KIMI_TIMEOUT_ARGS[@]}"} ${KIMI_AGENT_ARGS[@]+"${KIMI_AGENT_ARGS[@]}"} </dev/null > "$RAW_LOG" 2>>"$RAW_LOG"
+  RUNNER_EXIT=$?
+  author_remap_kill_exit "$AUTHOR_TIMEOUT_START"
+  set -e
 elif [[ "$RUNNER" = "cc-shim" ]]; then
   _ts_msg="$(token_seat_guard)" || die_precondition "$_ts_msg"
   CC_BIN="$(command -v "${BIN:-claude}" 2>/dev/null || true)"
@@ -2184,16 +2219,11 @@ if [[ "$CODEX_TRANSPORT" -eq 1 && -n "$CODEX_SESSION_ID" ]]; then
 fi
 if [[ "$RUNNER" = "kimi" && -n "${KIMI_BROKER_OUT:-}" && -s "${KIMI_BROKER_OUT:-}" ]]; then
   _kimi_usage_json="$(node -e '
-    const fs = require("fs");
     try {
-      const d = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-      if (d && d.usage && typeof d.usage === "object") {
-        process.stdout.write(JSON.stringify(d.usage));
-      }
+      const d = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+      if (d && d.usage && typeof d.usage === "object") process.stdout.write(JSON.stringify(d.usage));
     } catch (_) {}
   ' "$KIMI_BROKER_OUT" 2>/dev/null || true)"
-  if [ -n "$_kimi_usage_json" ]; then
-    AUTHOR_EXTRA="${AUTHOR_EXTRA}, \"usage\": ${_kimi_usage_json}"
-  fi
+  [ -n "$_kimi_usage_json" ] && AUTHOR_EXTRA="${AUTHOR_EXTRA}, \"usage\": ${_kimi_usage_json}"
 fi
 emit_result "authored" "$RAW_LOG" "null" 0 "$AUTHOR_EXTRA"

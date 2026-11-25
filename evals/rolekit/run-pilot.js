@@ -100,6 +100,22 @@ function costOf(result, seat, rates) {
 }
 
 // ---- answers
+// The planner and explorer prompts say "the repository under input/" and the explorer kit asks for "the question number", so a correct answer may
+// carry input/<repo path> and q "1"; the checker (a stamped file) grades repo-relative paths and q1. Align the answer's spelling, never its content.
+function alignAnswer(role, text) {
+  let a; try { a = JSON.parse(text); } catch (e) { return text; }
+  if (!a || typeof a !== 'object') return text;
+  const strip = (p) => (typeof p === 'string' ? p.trim().replace(/\\/g, '/').replace(/^(\.\/)?input\//, '') : p);
+  if (role === 'planner' && Array.isArray(a.subtasks)) for (const s of a.subtasks) if (s && Array.isArray(s.scope)) s.scope = s.scope.map(strip);
+  if (role === 'explorer' && Array.isArray(a.answers)) {
+    for (const x of a.answers) {
+      if (!x || typeof x !== 'object') continue;
+      if (typeof x.q === 'number' || (typeof x.q === 'string' && /^\d+$/.test(x.q.trim()))) x.q = `q${String(x.q).trim()}`;
+      if (Array.isArray(x.citations)) for (const c of x.citations) if (c && typeof c === 'object') c.file = strip(c.file);
+    }
+  }
+  return JSON.stringify(a);
+}
 function extractAnswer(text) {
   const t = String(text).trim();
   const ok = (s) => { try { JSON.parse(s); return true; } catch (e) { return false; } };
@@ -200,7 +216,7 @@ function attempt(ctx, c, n) {
     out.kit_applied = ['B', 'C'].includes(c.arm) ? kitApplied(c.arm, c.role, r.role_kit) : false;
     if (['B', 'C'].includes(c.arm) && !out.kit_applied) { out.infra = 'kit not applied (rail role_kit record differs from the compiled kit)'; return out; }
     if (['A', 'D'].includes(c.arm) && r.role_kit) { out.infra = 'a kit was recorded on a no-kit arm'; return out; }
-    const answerFile = path.join(ctx.out, 'answers', `${cellId}.json`); fs.writeFileSync(answerFile, extractAnswer(answerText));
+    const answerFile = path.join(ctx.out, 'answers', `${cellId}.json`); fs.writeFileSync(answerFile, alignAnswer(c.role, extractAnswer(answerText)));
     const chk = cp.spawnSync('node', [path.join(ROOT, 'checks/check-cell.js'), '--role', c.role, '--task-dir', taskDir, '--answer', answerFile, ...(workdir ? ['--workdir', workdir] : [])], { encoding: 'utf8' });
     let line = {}; try { line = JSON.parse(chk.stdout.trim().split('\n').pop()); } catch (e) { line = { detail: `check output unreadable: ${chk.stderr}` }; }
     out.check_rc = chk.status; out.parse_ok = line.parse_ok === true; out.detail = String(line.detail || '').slice(0, 300);
@@ -386,4 +402,4 @@ function main() {
   }
 }
 if (require.main === module) main();
-module.exports = { pinProblem, formatBlock, parseArgs, checkEnv, loadPlan, costOf, extractAnswer, stopKind, kitApplied, railKitDir, transportFor, defaultScenario, run, EXIT };
+module.exports = { pinProblem, formatBlock, parseArgs, checkEnv, loadPlan, costOf, extractAnswer, alignAnswer, stopKind, kitApplied, railKitDir, transportFor, defaultScenario, run, EXIT };

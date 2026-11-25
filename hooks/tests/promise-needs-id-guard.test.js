@@ -74,3 +74,15 @@ test('negative control: AUTOPILOT_PROMISE_ID_GUARD=0 allows counterexamples', ()
   );
   assert.equal(out, null);
 });
+
+test('mention is not a promise: trigger phrases inside 「」, backticks or quotes are allowed (PM 2026-11-26 false positives)', () => {
+  const say = (content) => decide({ tool_name: 'mcp__fleet__send', tool_input: { to: 'pm', content } });
+  assert.equal(say('lint 抓「已開卡」「等操作員」這類說法卻抽不到卡號的單'), null);
+  assert.equal(say('判準：文字出現 `waiting_on_operator` 或 `已開卡` 但沒有 d- 編號'), null);
+  assert.equal(say('比對 "已報 PM 開憑證卡" 這種句子'), null);
+});
+
+test('negative control: the same phrase outside quotes is still denied', () => {
+  const out = decide({ tool_name: 'mcp__fleet__send', tool_input: { to: 'pm', content: '這張單已開卡，等操作員' } });
+  assert.equal(out.hookSpecificOutput.permissionDecision, 'deny');
+});

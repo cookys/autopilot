@@ -15,7 +15,7 @@ import { PALETTE } from '../../tux/palette.ts'
 import { pickedTone, wrapPlain } from '../ui'
 import type { KeyAction } from './keys'
 import type { Page, PageCtx } from './frame'
-import { TINY_FRAME_ROWS, actionRows as frameActionRows, decideFullWidth } from './layout'
+import { TINY_FRAME_ROWS, actionRows as frameActionRows, decideFullWidth, narrowAmbiguous } from './layout'
 import { brokenRow, pendingMissingReason, pendingSourceMissing, wrapRow, WRAP_HANG } from './rows'
 import type { Row } from './rows'
 import { DECIDE_COL_SEP_W, DECIDE_COMPACT_MAX_ROWS, DECIDE_DUAL_MIN_COLS, DECIDE_HYSTERESIS, DECIDE_MIN_COL_W, STRIP_SPLIT_COLS, decideColumnWidths, decideLayoutMode } from './layout'
@@ -1137,7 +1137,20 @@ function renderBoxV74(ctx: DecideCtx, cards: DecideCard[], nav: DecideNav, curso
   return renderBoxD(ctx, cards, nav, cursor, actions, topBanners)
 }
 
-function renderV74(ctx: DecideCtx): { body: Row[]; actions: Row[] } {
+// The card fields the owner reads, with Ambiguous-width characters swapped for ASCII (render time only; the cards themselves stay as sent).
+const narrowCards = (ctx: DecideCtx): DecideCtx => {
+  const v = ctx.v74
+  if (v === undefined) return ctx
+  const n = (s: string): string => narrowAmbiguous(s)
+  const nn = (s: string | null): string | null => (s === null ? null : n(s))
+  return { ...ctx, v74: { ...v,
+    decide: v.decide === null ? null : v.decide.map(c => ({ ...c, title: n(c.title), question: n(c.question), background: nn(c.background), options: c.options.map(o => ({ ...o, label: n(o.label), detail: n(o.detail) })) })),
+    awaiting: v.awaiting === undefined || v.awaiting === null ? v.awaiting : v.awaiting.map(a => ({ ...a, title: nn(a.title), question: n(a.question), operator_steps: a.operator_steps.map(n) })),
+  } }
+}
+
+function renderV74(ctx0: DecideCtx): { body: Row[]; actions: Row[] } {
+  const ctx = narrowCards(ctx0)
   const { t } = ctx
   const cols = ctx.size.cols
   const v = ctx.v74 as NonNullable<PageCtx['v74']>

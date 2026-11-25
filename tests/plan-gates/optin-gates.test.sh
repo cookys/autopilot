@@ -48,4 +48,9 @@ assert_contains "$ADOPT_ON_OUT" '"adopted":true' "work-order-adopt-on-adopted"
 assert_contains "$ADOPT_ON_OUT" '"taskId":"01M88GP63J9GTMXM23MNW5HSRK"' "work-order-adopt-on-taskid"
 assert_contains "$(cat "$TEST_TMP/adopt.stderr")" "adopt:01M88GP63J9GTMXM23MNW5HSRK:sess-optin-test" "work-order-adopt-on-stderr"
 
+# Repo config must actually enable both opt-in gates (settings.json knobs ON).
+SETTINGS="$(cat "$REPO_ROOT/.claude/settings.json")"
+assert_contains "$SETTINGS" '"AUTOPILOT_HOOK_PM_DISPATCH_PLAN_GUARD": "1"' "settings-enables-pm-dispatch-plan-guard"
+assert_contains "$SETTINGS" '"AUTOPILOT_HOOK_WORK_ORDER_ADOPT": "1"' "settings-enables-work-order-adopt"
+
 finalize_test

@@ -62,7 +62,7 @@ const {
 const { BRIEF_HEAD_WINDOW, headLines, findHeadMatch } = require('./lib/brief-head.js');
 const { gateHint } = require('./lib/gate-hint.js');
 const { isPmConsole, pmConsoleStatus } = require('./_shared/pm-console.js');
-const { resolvePmGate } = require('../scripts/lib/fleet-task-ref.js');
+const { resolvePmGate, findTaskId } = require('../scripts/lib/fleet-task-ref.js');
 const { resolveFleetSeat } = require('./_shared/fleet-seat.js');
 const { ensurePrivateDir } = require('../scripts/lib/runtime-paths.js');
 const { stateDir } = require('../scripts/lib/state-dir.js');

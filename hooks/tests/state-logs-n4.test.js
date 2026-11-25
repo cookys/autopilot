@@ -34,7 +34,7 @@ test('subagent-budget writes ticket-usage.jsonl to AUTOPILOT_STATE_DIR with mode
   fs.mkdirSync(runtime, { recursive: true, mode: 0o700 });
   fs.mkdirSync(proj, { recursive: true });
 
-  const sid = 'sess-n4-1';
+  const sid = `sess-n4-${process.pid}-${Date.now()}`;
   const ticket = '01ZZZZZZZZZZZZZZZZZZZZZZZZ';
   const now = Date.now();
   const r = spawnSync(process.execPath, [
@@ -88,9 +88,11 @@ test('dispatch-model-guard shadow log writes to AUTOPILOT_STATE_DIR and XDG_STAT
   const xdgState = path.join(tmp, 'xdg-state');
   fs.mkdirSync(home, { recursive: true });
   fs.mkdirSync(runtime, { recursive: true, mode: 0o700 });
+  const fleetStub = path.join(tmp, 'fleet-stub.sh');
+  fs.writeFileSync(fleetStub, '#!/bin/sh\necho \'{"state":"open"}\'\n', { mode: 0o755 });
 
   const payload = {
-    session_id: 'sess-n4-guard',
+    session_id: `sess-n4-guard-${process.pid}-${Date.now()}`,
     cwd: tmp,
     tool_name: 'Agent',
     tool_input: {
@@ -107,6 +109,7 @@ test('dispatch-model-guard shadow log writes to AUTOPILOT_STATE_DIR and XDG_STAT
     AUTOPILOT_MECHANICAL_REROUTE: 'shadow',
     AUTOPILOT_SEAT_ROLE: 'lead',
     AUTOPILOT_DISPATCH_MODEL_GUARD_MODE: 'remind',
+    FLEET_BIN: fleetStub,
   });
   assert.equal(res1.status, 0, res1.stderr);
 
@@ -127,6 +130,7 @@ test('dispatch-model-guard shadow log writes to AUTOPILOT_STATE_DIR and XDG_STAT
     AUTOPILOT_MECHANICAL_REROUTE: 'shadow',
     AUTOPILOT_SEAT_ROLE: 'lead',
     AUTOPILOT_DISPATCH_MODEL_GUARD_MODE: 'remind',
+    FLEET_BIN: fleetStub,
   });
   assert.equal(res2.status, 0, res2.stderr);
   assert.equal(fs.existsSync(path.join(xdgState, 'autopilot', 'mechanical-reroute-shadow.jsonl')), true);

@@ -208,6 +208,15 @@ function awaitingCardRows(c: DurableAwaiting, ctx: PageCtx): Row[] {
 }
 // The body rows the frame leaves a page (frame.ts frameRows: head, the foot = key-hint border row + strip, the border row
 // dropped at <= TINY_FRAME_ROWS, and the action rows). The page cuts its own content to this so the frame never cuts the tail.
+// The rows as the frame will draw them: a reading page's body wraps at min(80, cols) with a hanging indent (frame.ts layout), so a
+// page that cuts its own content counts the wrapped rows, not the rows it returned.
+function frameWrap(rows: Row[], ctx: PageCtx): Row[] {
+  const width = Math.min(80, ctx.size.cols)
+  return rows.flatMap(x => {
+    const lead = /^ */.exec(x.map(sg => sg.text).join(''))?.[0].length ?? 0
+    return wrapRow(x, width, Math.max(WRAP_HANG, Math.min(lead, Math.max(0, width - 4))))
+  })
+}
 export function frameBodyRoom(ctx: PageCtx, actions: number): number {
   const H = ctx.size.rows
   const strip = ctx.size.cols < STRIP_SPLIT_COLS ? 2 : 1
@@ -1152,7 +1161,7 @@ function renderV74(ctx: DecideCtx): { body: Row[]; actions: Row[] } {
       ...sendRows,
       ...resultRow,
     ], staleBanners)
-    return { body: aw.length === 0 ? boxed.body : [...boxed.body.slice(0, Math.max(0, room - aw.length)), ...aw], actions: boxed.actions }
+    return { body: aw.length === 0 ? boxed.body : [...frameWrap(boxed.body, ctx).slice(0, Math.max(0, room - aw.length)), ...aw], actions: boxed.actions }
   }
   const head = ruleTo(GLYPHS.structure.open + ' ' + t('v74.d.head', { n: cards.length, k: cursor + 1 }), cols)
   // 等你動手: at the bottom of the body, directly above the action rows (awaitingBodyCap)
@@ -1171,12 +1180,7 @@ function renderV74(ctx: DecideCtx): { body: Row[]; actions: Row[] } {
   if (aw.length === 0) return { body: listed, actions }
   // the frame cuts an overlong body at its tail, so with the 等你動手 block under the list the list is wrapped here the way the
   // frame wraps a reading page (min(80, cols), hanging indent) and cut to its room: the block is never the part that is dropped
-  const width = Math.min(80, cols)
-  const wrapped = listed.flatMap(x => {
-    const lead = /^ */.exec(x.map(sg => sg.text).join(''))?.[0].length ?? 0
-    return wrapRow(x, width, Math.max(WRAP_HANG, Math.min(lead, Math.max(0, width - 4))))
-  })
-  return { body: [...wrapped.slice(0, Math.max(0, frameBodyRoom(ctx, actions.length) - aw.length)), ...aw], actions }
+  return { body: [...frameWrap(listed, ctx).slice(0, Math.max(0, frameBodyRoom(ctx, actions.length) - aw.length)), ...aw], actions }
 }
 
 export const decidePage: Page = { id: 'decide', key: '2', title: '待決', framed: true, render }

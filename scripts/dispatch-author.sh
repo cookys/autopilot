@@ -1728,16 +1728,22 @@ elif [[ "$RUNNER" = "kimi" && "$KIMI_VIA_BROKER" -eq 1 ]]; then
   chmod 2770 "$KIMI_TMP_REPO" "$KIMI_TMP_REPO/.git"
   git -C "$KIMI_TMP_REPO" add -A
   git -C "$KIMI_TMP_REPO" -c user.name=autopilot-dispatch -c user.email=autopilot@localhost commit -q --allow-empty -m "sandbox snapshot"
+  # The broker accepts timeout_s only in 60..3600; clamp the hard cap into that window.
+  KIMI_BROKER_TIMEOUT_S="$AUTHOR_HARD_S"
+  [ "$KIMI_BROKER_TIMEOUT_S" -gt 3600 ] && KIMI_BROKER_TIMEOUT_S=3600
+  [ "$KIMI_BROKER_TIMEOUT_S" -lt 60 ] && KIMI_BROKER_TIMEOUT_S=60
   author_kill_grace
   set +e
   AUTHOR_TIMEOUT_START=$SECONDS
   author_watch_prepare "$RUNNER_ERR_FILE"
   "${AUTHOR_WATCH_CMD[@]}" ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} node "$KIMI_BROKER_JS" \
-    "$KIMI_TMP_REPO" "$PROMPT_FILE" "$MODEL" "$AUTHOR_HARD_S" "${AUTHOR_RUN_ID:-author-$$-$RANDOM}" "$KIMI_BROKER_OUT" kimi \
+    "$KIMI_TMP_REPO" "$PROMPT_FILE" "$MODEL" "$KIMI_BROKER_TIMEOUT_S" "${AUTHOR_RUN_ID:-author-$$-$RANDOM}" "$KIMI_BROKER_OUT" kimi \
     </dev/null > "$RAW_LOG" 2>"$RUNNER_ERR_FILE"
   RUNNER_EXIT=$?
   author_remap_kill_exit "$AUTHOR_TIMEOUT_START"
   set -e
+  # The kimi CLI log prefixes the first line with a bullet and indents body lines by two spaces; the frame markers must start a line.
+  [ "$RUNNER_EXIT" -eq 0 ] && sed -i -e 's/^  //' -e 's/^• //' "$RAW_LOG"
   if [ "$RUNNER_EXIT" -eq 0 ]; then
     while IFS= read -r -d '' _kimi_rel; do
       [ -n "$_kimi_rel" ] || continue

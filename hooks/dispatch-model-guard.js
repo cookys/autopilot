@@ -379,6 +379,60 @@ const MECHANICAL_ROLES = new Set([
 const MECHANICAL_READONLY_ROLES = new Set([
   'log', 'logs', 'log-reading', 'stats', 'statistics', 'inventory',
 ]);
+const READONLY_ROLES = new Set([
+  'reviewer', 'researcher', 'auditor', 'explorer', 'reader', 'analyst', 'inspector', 'scout',
+  ...MECHANICAL_READONLY_ROLES,
+]);
+
+// Shadow-only observation for subagent_type=general-purpose with a read-only Role header.
+// Precedence: mechanicalReroute > readonlyRoleShadow. When mechanicalReroute matches the
+// same dispatch (e.g. Role: stats|logs|inventory on a PM/lead seat), mechanicalReroute
+// takes precedence and governs the actual decision; readonlyRoleShadow only logs what
+// it would do if enabled (without altering allow/deny).
+function checkReadonlyRoleShadow(toolInput, prompt) {
+  try {
+    const subagentType = String(toolInput.subagent_type || '').trim();
+    if (subagentType !== 'general-purpose') return;
+
+    const head = headLines(prompt, 6);
+    const fields = head.flatMap((line) => line.split('|').map((f) => f.trim()));
+    let matchedRole = '';
+    for (const field of fields) {
+      const m = field.match(/^Role:\s*([A-Za-z][\w-]*)/i);
+      if (m) {
+        const candidate = m[1].toLowerCase();
+        if (READONLY_ROLES.has(candidate)) {
+          matchedRole = candidate;
+        }
+        break;
+      }
+    }
+    if (!matchedRole) return;
+
+    const model = String(toolInput.model || '').trim().toLowerCase();
+    const mechanicalConflict = MECHANICAL_ROLES.has(matchedRole);
+    const entry = {
+      ts: new Date().toISOString(),
+      hook: 'dispatch-model-guard',
+      subagent_type: subagentType,
+      model,
+      role: matchedRole,
+      would_action: 'exempt_readonly_role',
+      ...(mechanicalConflict ? { precedence: 'mechanical_reroute' } : {}),
+    };
+    const laneField = fields.find((f) => /^Lane:\s*\S/i.test(f));
+    if (laneField) entry.Lane = laneField.replace(/^Lane:\s*/i, '').trim().slice(0, 120);
+    const taskId = findTaskId(head.join('\n'));
+    if (taskId) entry['Fleet-Task'] = taskId;
+
+    const ensured = ensurePrivateDir(stateDir(process.env));
+    if (ensured.ok) {
+      fs.appendFileSync(path.join(ensured.path, 'readonly-role-shadow.jsonl'), JSON.stringify(entry) + '\n', { mode: 0o600 });
+    }
+  } catch {
+    // fail-open on shadow log write errors
+  }
+}
 
 // Never break a normal Agent call: any throw inside the reroute check allows.
 function checkMechanicalReroute(input, toolInput, prompt) {
@@ -733,6 +787,7 @@ try {
     // that need no model still run, exactly as on the old allow path.
     checkPmFleetTask(input, toolInput, promptAbsent);
     checkMechanicalReroute(input, toolInput, promptAbsent);
+    checkReadonlyRoleShadow(toolInput, promptAbsent);
     checkOverloadedClaudeMechanical(toolInput, promptAbsent, advisories);
     checkBriefSizeUsedByStages(config, promptAbsent, advisories);
     // One advisory line for the default; it rides the same stderr + additionalContext
@@ -802,6 +857,7 @@ try {
 
   // Mechanical subagent reroute on PM / lead seats.
   checkMechanicalReroute(input, toolInput, promptRaw);
+  checkReadonlyRoleShadow(toolInput, promptRaw);
   checkOverloadedClaudeMechanical(toolInput, promptRaw, advisories);
 
   // Size / Used-by / Stages check for autopilot briefs (Lane: present).

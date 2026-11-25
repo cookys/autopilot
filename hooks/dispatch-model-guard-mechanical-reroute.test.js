@@ -212,5 +212,30 @@ const envWinRow = JSON.parse(logLines().pop());
 assert.strictEqual(envWinRow.seat, 'lead');
 assert.strictEqual(envWinRow.seat_source, 'env');
 
+// 11. readonlyRoleShadow: general-purpose + read-only Role logs shadow entry without altering decision;
+// non-readonly Role is untouched; mechanicalReroute takes precedence on conflict.
+const roLogPath = path.join(fakeState, 'readonly-role-shadow.jsonl');
+const roLogLines = () => (fs.existsSync(roLogPath) ? fs.readFileSync(roLogPath, 'utf8').trim().split('\n').filter(Boolean) : []);
+const beforeRo = roLogLines().length;
+
+const roRev = runHook(call('Engine: sonnet\nRole: reviewer\nLane: test-lane\nReview this.'), {});
+assert.strictEqual(roRev.status, 0);
+assert.strictEqual(decision(roRev), undefined, 'readonlyRoleShadow must not alter allow outcome');
+assert.strictEqual(roLogLines().length, beforeRo + 1, 'readonlyRoleShadow logs reviewer');
+const roRevRow = JSON.parse(roLogLines().pop());
+assert.deepStrictEqual([roRevRow.subagent_type, roRevRow.role, roRevRow.would_action], ['general-purpose', 'reviewer', 'exempt_readonly_role']);
+
+// Non-readonly Role: implementer must not log
+const nonRo = runHook(call('Engine: sonnet\nRole: implementer\nDo work.'), {});
+assert.strictEqual(decision(nonRo), undefined);
+assert.strictEqual(roLogLines().length, beforeRo + 1, 'non-readonly Role must not log');
+
+// Conflict precedence: mechanicalReroute > readonlyRoleShadow
+const conflictEnf = runHook(call('Engine: sonnet\nRole: stats\nDo stats.'), LEAD('enforce'));
+assert.strictEqual(decision(conflictEnf), 'deny', 'mechanicalReroute enforce still denies on conflict');
+const conflictSh = runHook(call('Engine: sonnet\nRole: stats\nDo stats.'), LEAD('shadow'));
+assert.strictEqual(decision(conflictSh), undefined);
+assert.strictEqual(JSON.parse(roLogLines().pop()).precedence, 'mechanical_reroute');
+
 fs.rmSync(tmpRoot, { recursive: true, force: true });
 console.log('PASS: dispatch-model-guard-mechanical-reroute.test.js');

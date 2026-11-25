@@ -45,6 +45,15 @@ async function run() {
     );
   });
 
+  await test('runReplay needs a pool that is on the whitelist, and only a whitelisted one runs', async () => {
+    const m = { pool_whitelist: ['pool-a'], total_cap: 1000, events: [{ id: 'e1' }], treatments: ['OFF', 'ON'] };
+    await assert.rejects(() => runReplay({ manifest: m, modelRunner: createMockModelRunner() }), /Pool rejected/);
+    await assert.rejects(() => runReplay({ manifest: m, poolId: 'pool-z', modelRunner: createMockModelRunner() }), /Pool rejected/);
+    const ok = await runReplay({ manifest: m, poolId: 'pool-a', modelRunner: createMockModelRunner() });
+    assert.equal(ok.poolId, 'pool-a');
+    assert.equal(ok.dryRun, false);
+  });
+
   await test('runReplay executes ABBA schedule with mock modelRunner when dryRunModel is set', async () => {
     const res = await runReplay({
       manifest: {

@@ -597,3 +597,20 @@ test('awaiting block: the dual columns keep one separator column and the options
     }
   }
 })
+
+// PM ruling 01M89BCVGB (2026-11-25): the focused card's options are never left to a scroll; when the 等你動手 block would hide one,
+// the block folds to its heading row. Host box allocations 13 / 17 rows and the 24-row screen, cards with and without steps.
+test('awaiting block: it folds to its heading when it would hide an option of the focused card', () => {
+  const cards = Array.from({ length: 3 }, (_, i) => ({ id: 'd-fold' + i, title: '合併計畫 ' + i, question: '要不要合併這一輪的修正？', background: null, options: [{ label: '可以合併', detail: '', recommended: true }, { label: '先不要', detail: '', recommended: false }, { label: '另外再議', detail: '', recommended: false }] }))
+  const steps = ['到機櫃把評測機第二槽的電源線插到備用插座，插好後等前面板燈號變成常亮', '在操作台跑一次讀回指令，確認畫面顯示的 sha 和卡片上寫的一致', '回到這張卡按完成']
+  const withStep = [{ id: 'd-aw01', title: '插電', question: '插電？', operator_steps: steps }]
+  const flat = (rows: { text: string }[][]) => rows.map(r => r.map(s => s.text).join('')).join('\n').replace(/[\s│]+/g, '')
+  for (const [cols, rows, maxRows] of [[116, 13, 13], [196, 17, 17], [76, 12, 12], [120, 40, 40], [209, 49, 49]] as const) for (const aw of [withStep, []]) {
+    const ctx = { live: null, console: null, size: { cols, rows }, t, nowMs, box: true, maxRows, v74: { decide: cards, awaiting: aw, pm: null, todo: null, nav: { cursor: 0, picks: {}, notes: {}, noteMode: false } } } as never
+    const framed = frameRows(decidePage, ctx, { pages: PAGES, topAnchor: true })
+    const where = cols + 'x' + rows + ' (maxRows ' + maxRows + ', ' + aw.length + ' awaiting)'
+    for (const label of ['可以合併', '先不要', '另外再議']) expect(flat(framed), where + ': option ' + label).toContain(label)
+    expect(framed.every(r => r.reduce((w, s) => w + displayWidth(s.text), 0) <= cols), where + ': no row wider than the pane').toBe(true)
+    expect(framed.length, where + ': the frame keeps its height').toBe(rows)
+  }
+})

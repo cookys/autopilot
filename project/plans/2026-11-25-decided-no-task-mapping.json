@@ -1,0 +1,30 @@
+{
+  "schema": "autopilot.decided-no-task-mapping/1",
+  "decided_by": "autopilot--claude (proposal for PM review; PM applies)",
+  "decided_at": "2026-11-25",
+  "fleet_task": "01M883AEHTJWZH95JSY1MSKEFX",
+  "entries": [
+    { "id": "01M7DZ8RGX5QE39XAQ0E3MD86T", "no_task": "ruling-only: mobile client route and phasing; execution is tracked by the owning lane plan, no single work order id was recorded" },
+    { "id": "01M7G7QCJV6ZPY8102SEM70F7V", "no_task": "operator-answer: Qoder subscription kept; follow-up (qoderclicn removal report, Qwen Code test) closed by the 11-18 engine qualification work" },
+    { "id": "01M7GBYY1NK6DTRH5AXGST6G0N", "no_task": "ruling-only: GPU line batching rule; carried by the GPU line standing rules, no separate work order" },
+    { "id": "01M7GCC063S1SEQY1F1WC0BWN7", "no_task": "ruling-only: wasted-seam plan; carried by the GPU line plan, work order not recorded here" },
+    { "id": "01M7GE74WN0EB3WC5V51TB097A", "no_task": "ruling-only: miss-fix mechanisms (plan 2873c5f); items shipped as separate repo changes, superseded by the shipped hooks" },
+    { "id": "01M7GXHPZPVXFKNXDHN77KMB9C", "no_task": "operator-answer: card d-db09275c postponed; tracked by the card id, not a task" },
+    { "id": "01M7PET4Y5Z8SZDW7870YHSXF9", "no_task": "ruling-only: CN-model route gate switched to input-shape control; shipped, superseded by the from-scratch route (55e73b38f)" },
+    { "id": "01M7QG96N7H6SVYD1S7K1J3CBC", "no_task": "closed: recovery-host disk move ruling; carried out under the fleet task whose short prefix is 01M7M2GT (full id not resolvable from this lane)" },
+    { "id": "01M7RBS9QJWTPDS5ZMBDEZZJGC", "no_task": "ruling-only: SWE benchmark v2 direction; executed by the GPU line plan, work order not recorded here" },
+    { "id": "01M7RBVXDWVVJW3BMRD488098G", "no_task": "operator-answer: card d-bceef75a answer B recorded; tracked by the card id" },
+    { "id": "01M7S77N81MXBYW9G38DEKKM56", "no_task": "operator-answer: card d-7bbf72a2 and d-f3bb3637; tracked by the card ids, PM account move closed" },
+    { "id": "01M7S8ESCHD9EW8T28SHHY30ZC", "no_task": "ruling-only: KR1 B1 UI bind; card d-b42bb9aa carries it" },
+    { "id": "01M7SAN7JQ30BGCH2AXW7TXQ5F", "no_task": "ruling-only: pm-account move plan review cap; card d-178a6eb6 carries it, plan superseded by the executed move" },
+    { "id": "01M7TYXJQKYEX7SCSBD69DV4RA", "no_task": "closed: three fleet patrol checks shipped and live (running/waiting evidence-due flag, digest ordering, dashboard); superseded by the patrol rules" },
+    { "id": "01M7VGG13MR11D7T85YHVB4M1D", "no_task": "ruling-only: voicepg-rs v0.3.0 phasing, plan loop re-lineage; tracked by the plan review ledger (short prefix 01M7VD7Y)" },
+    { "id": "01M7VX4AXAD0Q8365G9KTZBY8V", "no_task": "closed: find-everything-fix-once mechanized in the hetero review loop (class sweep, findings-fix-by-class); shipped" },
+    { "id": "01M7XS5Q53HTBE6F2WFYM7KKZM", "no_task": "closed: CVE and update pass approved under the 11-15 updater-class row; carried out under short prefix 01M7XRZ8 (full id not resolvable from this lane)" },
+    { "id": "01M7XYAK2A7M3MKRS71FFM2XY3", "no_task": "ruling-only: standby de-root choice C; carried by device lane task short prefix 01M7XQ7295 (not visible here)" },
+    { "id": "01M7XYE4ZWGPR0DZKT7VYYT8A3", "no_task": "closed: tier-1 delete of evidence directories; infra lane task short prefix 01M7WRF1 carried it (not visible here)" },
+    { "id": "01M85QRJVTAVSE2DK08TNMWRXZ", "no_task": "closed: PM host autopilot checkout swap done and recorded, one-time operation" },
+    { "id": "01M85QZK0JX0XX5MW0YPKV66G6", "no_task": "ruling-only: PM mechanization review adopted; follow-ups are separate fleet tasks (P4/P5/Q/Z lines, 01M85PYJ3S)" },
+    { "id": "01M85R6FTW6K8S2MQ3KK6H0XWM", "no_task": "closed: pm-act live verification done and recorded, one-time operation" }
+  ]
+}

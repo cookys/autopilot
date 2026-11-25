@@ -47,7 +47,11 @@ test('r8 #8: other cards are one summary row each; the card at the cursor is ope
   expect(left.some(l => l.startsWith('  01 ' + decide[0].title))).toBe(true)
   expect(left.some(l => l.startsWith('  03 ' + decide[2].title))).toBe(true)
   expect(right.join('\n')).toContain(decide[1].question)
-  expect(right.filter(l => l.startsWith('    背景')).length).toBe(1)
+  // card 02 has no background: its row is omitted (operator ruling 01M8879S), not a 沒有補充 placeholder
+  expect(right.filter(l => l.startsWith('    背景')).length).toBe(0)
+  expect(right.join('\n')).not.toContain('沒有補充')
+  const withBg = decidePage.render(ctxOf({ nav: { cursor: 2, picks: {}, notes: {}, noteMode: false } })).body.map(text)
+  expect(withBg.filter(l => l.includes('背景')).length).toBe(1)
   expect(right.filter(l => /^ {2}[abc]: /.test(l)).length).toBeGreaterThan(0)
 })
 
@@ -155,7 +159,8 @@ test('r8-1: the open card follows the cursor, ‣ and the head count with it, th
     const order = left.map(l => /^(?:‣ |  )0(\d) T/.exec(l)?.[1]).filter(x => x !== undefined)
     expect(order.join('')).toBe('1234')
     expect(right.join('\n')).toContain('T' + (at + 1) + '：Q' + (at + 1) + '？')
-    expect(right.filter(l => l.startsWith('    背景')).length).toBe(1)
+    // only card 03 (index 2) carries a background in the fixture; the others draw no 背景 row
+    expect(right.filter(l => l.startsWith('    背景')).length).toBe(at === 2 ? 1 : 0)
   }
 })
 

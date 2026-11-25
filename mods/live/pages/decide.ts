@@ -125,7 +125,8 @@ export function decideReduce(nav: DecideNav, key: KeyAction, ctx: PageCtx, nowMs
     if (compactMode && nav.compactExpanded === true) return same({ compactExpanded: false, detailOffset: 0 })
     if (compactMode && nav.compactExpanded !== true) return same({ compactExpanded: true, detailOffset: 0 })
     if (d === null) return same({})
-    const bgRaw = d.background ?? ctx.t('v74.d.bg_none')
+    if (!d.background) return same({})
+    const bgRaw = d.background
     const bgLines = bgRaw.split('\n')
     const bgLabelW = displayWidth('  ' + ctx.t('v74.d.bg') + '  ')
     const hasMoreBg = bgLines.length > 1 || displayWidth(bgLines[0]) > ctx.size.cols - bgLabelW
@@ -632,9 +633,10 @@ function v74Card(c: DecideCard, i: number, selected: boolean, nav: DecideNav, ct
     ? [seg(mark + '  ' + String(i + 1) + '. ', selected ? {} : { press: 'card:' + i }), title, seg('：' + c.question), ...ageTail]
     : [seg(mark + '  ' + String(i + 1) + '. '), title, seg('：' + c.question), ...ageTail]
   out.push(box ? head : truncateSegs(head, cols))
-  const bg = c.background ?? t('v74.d.bg_none')
+  const bg = c.background
   // J1: the real Pane draws cards through this path (not boxOpen): the open card's background is shown in full (one row per line, wrapped on the label's hanging indent, never cut), the frame scrolls it; the other cards keep one cut row
-  if (selected) out.push(...labelledBox(t('v74.d.bg'), bg, cols))
+  if (!bg) { /* no background: no row (operator ruling 01M8879S) */ }
+  else if (selected) out.push(...labelledBox(t('v74.d.bg'), bg, cols))
   else { const first = bg.split('\n')[0]; out.push(box ? [seg('    '), dimSeg(t('v74.d.bg')), seg('   ' + first)] : truncateSegs([seg('    '), dimSeg(t('v74.d.bg')), seg('   ' + first)], cols)) }
   const picked = picks[c.id]
   const held = nav.hold?.[c.id] !== undefined
@@ -712,7 +714,7 @@ function boxOpen(c: DecideCard, i: number, nav: DecideNav, ctx: PageCtx, fit: Fi
   const sent = nav.sent[c.id] !== undefined && nav.fixing?.[c.id] === undefined
   const heading = wrapRow([seg(CURSOR_MARK + '  ' + String(i + 1) + '. '), seg(c.title, { color: PALETTE.here, here: true }), seg('：' + c.question)], ctx.pendingScroll === undefined ? ctx.size.cols : width, 5)
   const out: Row[] = [...(ctx.pendingScroll === undefined ? heading.slice(0, 1) : heading), ...gap]
-  out.push(...labelledBox(t('v74.d.bg'), c.background ?? t('v74.d.bg_none'), width), ...gap)
+  if (c.background) out.push(...labelledBox(t('v74.d.bg'), c.background, width), ...gap)
   c.options.forEach((o, k) => {
     if (k > 0 && fit.between) out.push([seg('')])
     const mark = picked === k ? ' ' + GLYPHS.structure.answer : ''
@@ -806,7 +808,7 @@ function renderBoxC(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
   if (nav.bgOpen === true) {
     const width = Math.max(20, Math.min(80, cols) - 1)
     const countRow: Row = [dimSeg(t('v74.d.c_count', { k: cursor + 1, n: cards.length }) + ageSuffix)]
-    const full = labelledBox(t('v74.d.bg'), c.background ?? t('v74.d.bg_none'), width).flatMap(r => wrapRow(r, width, BOX_LABEL_HANG))
+    const full = labelledBox(t('v74.d.bg'), c.background ?? '', width).flatMap(r => wrapRow(r, width, BOX_LABEL_HANG))
     const bgRoom = Math.max(1, ctx.size.rows - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - 1 - 1 - topBanners.length)
     if (ctx.pendingScroll !== undefined) {
       const model = ctx.pendingScroll.detail
@@ -831,8 +833,8 @@ function renderBoxC(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
     const countText = t('v74.d.c_count', { k: cursor + 1, n: cards.length }) + ageSuffix + (omitted ? ' ' + DOT + ' ' + t('v74.d.c_desc_omitted') : '')
     const out: Row[] = [[dimSeg(countText)]]
     out.push(...wrapRow([seg(CURSOR_MARK + '  '), seg(c.title, { color: PALETTE.here, here: true }), seg('：' + c.question)], cols, 3))
-    if (showBg) {
-      const bgRaw = c.background ?? t('v74.d.bg_none')
+    if (showBg && c.background) {
+      const bgRaw = c.background
       const bgLines = bgRaw.split('\n')
       const bgFirst = bgLines[0]
       const expandHint = '  ' + DOT + ' ' + t('v74.d.c_expand')
@@ -963,8 +965,7 @@ function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
     const keys = pickKeys(c.options)
     const out: Row[] = []
     out.push(...wrapRow([seg(c.title, { color: PALETTE.here, here: true }), seg('：' + c.question)], innerW, 2))
-    out.push(...labelledBox(t('v74.d.bg'), c.background ?? t('v74.d.bg_none'), innerW))
-    out.push([seg('')])
+    if (c.background) { out.push(...labelledBox(t('v74.d.bg'), c.background, innerW)); out.push([seg('')]) }
     c.options.forEach((o, k) => {
       if (k > 0) out.push([seg('')])
       const mark = picked === k ? ' ' + GLYPHS.structure.answer : ''

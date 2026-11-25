@@ -894,7 +894,6 @@
   "v74.e.rv_decided": "Decided for you {n}",
   "v74.d.head": "{n} cards need you · card {k}",
   "v74.d.bg": "Context",
-  "v74.d.bg_none": "none given",
   "v74.d.note": "note: ",
   "v74.d.note_empty": "(empty)",
   "v74.d.held": "sending ({k}) - u to undo",

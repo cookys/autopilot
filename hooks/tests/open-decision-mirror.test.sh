@@ -57,6 +57,8 @@ BROKEN="$(HIPPO_BIN="$TEST_TMP/missing-hippo" node -e 'const x=require(process.a
 assert_eq "$RC" 0 'broken store preserves exit code'
 assert_contains "$BROKEN" '"status":"ok"' 'broken store preserves card creation'
 assert_contains "$(cat "$TEST_TMP/broken.err")" 'decision store mirror failed' 'broken store gives hint'
+assert_contains "$(cat "$TEST_TMP/broken.err")" '(card, detect, repo=' 'broken store names the failing branch and repo'
+assert_contains "$(cat "$TEST_TMP/broken.err")" "$R" 'broken store hint carries the repo path'
 FILES_REPO="$(hs_mkrepo files)"
 cat > "$TEST_TMP/hippo-spy" <<'EOF'
 #!/bin/sh

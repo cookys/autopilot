@@ -694,7 +694,7 @@ function recordAgentDispatchUsage(input, toolInput, prompt, effectiveModel) {
   try {
     let role = null;
     for (const line of headLines(prompt || '', 10)) {
-      const m = /^Role:[ \t]*(\S+)/i.exec(line);
+      const m = /(?:^|\|)[ \t]*Role:[ \t]*([A-Za-z-]+)/i.exec(line);
       if (m) { role = m[1].trim().toLowerCase(); break; }
     }
     const subagentType = String(toolInput.subagent_type || '').trim() || null;

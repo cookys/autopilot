@@ -172,7 +172,7 @@ function validateRow(row) {
     if (!isInt(row.started_at)) return 'running_row_needs_started_at';
   } else if (!isInt(row.ended_at)) return 'ended_at_not_epoch_int';
   if (row.started_at !== null && !isInt(row.started_at)) return 'started_at_not_epoch_int';
-  if (row.usd !== null && (typeof row.usd !== 'number' || !Number.isFinite(row.usd) || row.usd < 0)) return 'usd_not_number_or_null';
+  if (row.usd !== undefined && row.usd !== null && (typeof row.usd !== 'number' || !Number.isFinite(row.usd) || row.usd < 0)) return 'usd_not_number_or_null';
   if (!USAGE_SOURCES.includes(row.usage_source)) return 'bad_usage_source';
   for (const k of USAGE_KEYS) {
     if (row.usage[k] !== null && !isInt(row.usage[k])) return `usage_${k}_not_int_or_null`;

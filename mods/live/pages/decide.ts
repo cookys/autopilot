@@ -274,8 +274,9 @@ function optionSegs(d: LiveDecision, i: number, nav: DecideNav, ctx: PageCtx): S
   const picked = decidePick(d, nav) === i
   const label = i < MAX_OPTS ? d.options[i].label : ctx.t('page.decide.opt_n', { n: i + 1, label: d.options[i].label })
   // G11: the option is a Button (press `key:<letter>`, the pane turns it into the key's action) so it works by click where the pane cannot take the keyboard; the old 6th-and-later options (f6..) keep plain text
-  const press = i < MAX_OPTS ? { press: 'key:' + letterOf(i) } : {}
-  const out: Seg[] = [seg('[' + letterOf(i) + '] ' + label, picked ? { ...pickedTone(), ...press } : press)]
+  const key = pickKeys(d.options)[i] || letterOf(i)
+  const press = i < MAX_OPTS ? { press: 'key:' + key } : {}
+  const out: Seg[] = [seg('[' + key + '] ' + label, picked ? { ...pickedTone(), ...press } : press)]
   if (rec) out.push(seg(' ' + GLYPHS.structure.recommend, { color: PALETTE.attention, ...press }))
   return out
 }

@@ -85,70 +85,36 @@ function digestResume(out, { maxChars = 3000 } = {}) {
   return `${body}\n${instruction}`.slice(0, maxChars);
 }
 
-// Section-based cap for non-compact loads: IN_FLIGHT and NEEDS_REPLY keep every row (max 400 chars/row)
-// outside the soft cap; other sections share a 3,000-char soft cap with "已省略 N 列" on truncation.
+// Section-based cap for non-compact loads, keyed by section name (the leading upper-case token of a row, or a
+// "NAME (n)" header followed by body rows). IN_FLIGHT and NEEDS_REPLY rows are always kept whole (a row over
+// maxRowChars is shortened, never dropped); every other row shares softCapChars, and each section that loses rows
+// ends with "已省略 N 列".
+const KEEP_SECTIONS = new Set(['IN_FLIGHT', 'NEEDS_REPLY']);
 function capResumeSections(out, { softCapChars = 3000, maxRowChars = 400 } = {}) {
-  const sections = [];
+  const rows = []; // { key, text, header }
+  let current = null;
   for (const line of String(out).split(/\r?\n/)) {
-    if (/^(?:[A-Z][A-Z_]*(?:\s|$)|未回)/.test(line)) {
-      sections.push({ header: line, lines: [] });
-    } else if (sections.length) {
-      sections[sections.length - 1].lines.push(line);
+    const m = /^([A-Z][A-Z_]+)(?=\s|$)/.exec(line);
+    const headerOnly = m && /^[A-Z][A-Z_]+\s*\(\d+\)\s*$/.test(line);
+    if (headerOnly) { current = m[1]; rows.push({ key: current, text: line, header: true }); continue; }
+    if (m) { current = m[1]; rows.push({ key: current, text: line, header: false }); continue; }
+    rows.push({ key: current, text: line, header: false });
+  }
+  const short = (t) => (t.length > maxRowChars ? `${t.slice(0, maxRowChars - 3)}...` : t);
+  let budget = softCapChars;
+  const omitted = new Map();
+  const outLines = [];
+  for (const r of rows) {
+    if (KEEP_SECTIONS.has(r.key)) { outLines.push(short(r.text)); continue; }
+    if (r.header || !r.text.trim() || r.text.length + 1 <= budget) {
+      if (!(r.header || !r.text.trim())) budget -= r.text.length + 1;
+      outLines.push(r.text);
     } else {
-      sections.push({ header: '', lines: [line] });
+      omitted.set(r.key, (omitted.get(r.key) || 0) + 1);
     }
   }
-
-  let remaining = softCapChars;
-  const rendered = [];
-
-  for (const { header, lines } of sections) {
-    if (/^(?:IN_FLIGHT|NEEDS_REPLY)(?:\s|$)/.test(header)) {
-      const cappedLines = lines.map((line) => (
-        line.length > maxRowChars ? `${line.slice(0, maxRowChars - 3)}...` : line
-      ));
-      rendered.push([header, ...cappedLines].join('\n'));
-      continue;
-    }
-
-    if (remaining <= 0) continue;
-
-    const kept = header ? [header] : [];
-    if (kept.join('\n').length > remaining) continue;
-
-    let truncatedAt = -1;
-    for (let i = 0; i < lines.length; i++) {
-      const restCount = lines.slice(i + 1).filter(Boolean).length;
-      const withLine = [...kept, lines[i]];
-      const worstCase = restCount > 0
-        ? [...withLine, `已省略 ${restCount} 列`].join('\n')
-        : withLine.join('\n');
-      if (worstCase.length <= remaining) {
-        kept.push(lines[i]);
-      } else {
-        truncatedAt = i;
-        break;
-      }
-    }
-
-    if (truncatedAt !== -1) {
-      const omitted = lines.slice(truncatedAt).filter(Boolean).length;
-      if (omitted > 0) {
-        const marker = `已省略 ${omitted} 列`;
-        if ([...kept, marker].join('\n').length <= remaining) {
-          kept.push(marker);
-        }
-      }
-    }
-
-    const sectionText = kept.join('\n');
-    if (sectionText) {
-      rendered.push(sectionText);
-      remaining = Math.max(0, remaining - sectionText.length - 1);
-    }
-  }
-
-  return rendered.join('\n');
+  for (const [key, n] of omitted) outLines.push(`${key || '其他'} 已省略 ${n} 列`);
+  return outLines.join('\n');
 }
 
 // Returns the text to append to the session context ('' only when the source is not one of the four).

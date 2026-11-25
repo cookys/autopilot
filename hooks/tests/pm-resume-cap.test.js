@@ -39,6 +39,7 @@ function runTests() {
   const waitingStart = capped.indexOf('WAITING_ON_PM (40)');
   assert(waitingStart !== -1, 'Expected WAITING_ON_PM header to be present');
   const waitingPortion = capped.slice(waitingStart);
+  assert(/WAITING_ON_PM 已省略 \d+ 列/.test(capped), 'omission marker must name the section');
   assert(waitingPortion.length <= 3000, `Other sections exceeded 3000 chars: ${waitingPortion.length}`);
 
   // 2. Single row > 400 chars in IN_FLIGHT / NEEDS_REPLY is shortened, not dropped.
@@ -67,6 +68,16 @@ function runTests() {
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }
 
+  
+  // 4. Real fleet format: one row per line, keyed by leading token.
+  const real = ['RESUME x', ...Array.from({length: 20}, (_, i) => 'IN_FLIGHT 01M89' + i + ' ' + 'y'.repeat(300)), 'NEEDS_REPLY 0（無）', ...Array.from({length: 60}, (_, i) => 'TASK 01M' + i + ' ' + 't'.repeat(100))].join('\n');
+  const realOut = capResumeSections(real);
+  assert.strictEqual(realOut.split('\n').filter((l) => l.startsWith('IN_FLIGHT')).length, 20, 'all real-format IN_FLIGHT rows kept');
+  assert(/TASK 已省略 \d+ 列/.test(realOut), 'real-format TASK overflow reports omission');
+  assert(realOut.split('\n').filter((l) => l.startsWith('IN_FLIGHT')).every((l) => l.length <= 400), 'real-format rows shortened to 400');
+
+  // 5. Reverse probe: whole-output slice (the old behavior) would lose rows.
+  assert(real.slice(0, 3000).split('\n').filter((l) => l.startsWith('IN_FLIGHT')).length < 20, 'sanity: naive slice drops rows');
   console.log('PASS: pm-resume-cap.test.js');
 }
 

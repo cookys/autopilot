@@ -2074,17 +2074,6 @@
       "note": "Fleet task id (ULID). The dispatch rails set it for the child from the brief's Fleet-Task: line and record it as fleet_task in manifests and cost rows (lib/event-attribution.js). Also the id for scripts/request-decision.js when --task is omitted. After a successful send it runs fleet task progress <id> blocked_human with the waiting_on_operator status."
     },
     {
-      "name": "AUTOPILOT_FLEET_TASK_GATE",
-      "kind": "env",
-      "audience": "internal",
-      "class": "plumbing",
-      "default": null,
-      "readers": [
-        "scripts/lib/fleet-task-ref.js"
-      ],
-      "note": "Temporary P4 knob: warn lets a dispatch without an open Fleet-Task through with a note instead of exit 2. Removed in plan-to-tasks P6."
-    },
-    {
       "name": "AUTOPILOT_QUOTA_WATCH_TO",
       "kind": "env",
       "audience": "internal",

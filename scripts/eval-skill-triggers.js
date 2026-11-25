@@ -112,10 +112,13 @@ function parseStreamJsonTriggers(ndjsonText) {
   return { triggeredSkills, costUsd };
 }
 
+// The account layer (claude-account.js exec --pick) supplies the credential straight into the child env; it never
+// reaches argv, a log or this process. The temp HOME/CLAUDE_CONFIG_DIR in `env` keep the run off the real config.
 function defaultRunner({ prompt, pluginDir, timeoutMs, env }) {
   const stdout = execFileSync(
-    'claude',
+    process.execPath,
     [
+      path.join(__dirname, 'claude-account.js'), 'exec', '--pick', '--purpose', 'skill-trigger-eval', '--', 'claude',
       '-p',
       prompt,
       '--plugin-dir',

@@ -62,21 +62,23 @@
 
 **P4**：`fleet-task-ref.js` 拿掉 non-pm-console 放行；`dispatch-hetero.sh` 在建 worktree 與啟引擎前呼叫同一 pm-check；`dispatch-author.sh`、`dispatch-plan-review.js`、`hetero-review-loop.js`、hook 共用 §2.5 的解析順序與狀態判定；保留 exempt 角色 `^(engine-qualify|probe-)`。更新既有測試的 stub fleet，使 P4 單獨進 develop 不紅。退役：`checkPmFleetTask` 的重複實作。
 
-**P5**：`finish-triage.js --task <id> --sha <merged_sha>`。三格：merged＝`git merge-base --is-ancestor` 對 origin/develop；live pin＝單上有 `Pinned: <host> <sha16>`（sha16＝該 sha 前 16 碼），或 `Pin: not-needed <≥20 字理由>` 且該 sha 的 diff 不碰任何隨 plugin 出貨的路徑；live pin 的證據是 hangar 換版腳本寫的讀回檔（`Pinned: <host> <readback file>`；檔內 host 與完整 sha 前 16 碼須與該 sha 相符）。Used＝`Used: command <file>`（檔內有 `cmd:` 行、`rc=0`、含該 sha 前 16 碼）或 `Used: screenshot <png>`（PNG ≥ 2 KB，並有同名 `.meta` 記動作與該 sha16）；URL 不收（語法本身可偽造 sha）。`n/a|TBD|none|-`、空檔、sha 不符、rc≠0 一律拒，皆為負控制 fixture。分流：`look` 若下列任一成立——phase 表 `needs_look: yes`、diff 路徑命中 `look-classes.json` 的 UI／互動／對外類、diff 新增可執行檔、服務或 hook 註冊（`--diff-filter=A`，即首次上線）、單文有 `First-live: yes`；單或 diff 讀不到、類別不明一律 `look`（保守）。僅當全不成立且測試紅綠與反向探針收據齊才 `skip`。`finish-flow` Checklist 第 7 項改呼叫它。退役：該項口述判斷。
+**P5**：`finish-triage.js --task <id> --sha <merged_sha>`。三格：merged＝`git merge-base --is-ancestor` 對 origin/develop；live pin＝單上有 `Pinned: <host> <sha16>`（sha16＝該 sha 前 16 碼），或 `Pin: not-needed <≥20 字理由>` 且該 sha 的 diff 不碰任何隨 plugin 出貨的路徑；live pin 的證據是 hangar 換版腳本寫的讀回檔（`Pinned: <host> <readback file>`；檔內 host 與完整 sha 前 16 碼須與該 sha 相符）。Used＝`Used: command <file>`：檔內須有 `cmd:` 行、`rc=0`、`out-sha256:` 與其下輸出區塊（≥ 3 行），腳本重算輸出區塊 sha256 須相符，且輸出區塊含該 sha 前 16 碼；或 `Used: screenshot <png>`：PNG ≥ 2 KB，`.meta` 內有 `png-sha256:`（腳本重算須相符）、`action:`、`result: ok`、該 sha 前 16 碼。URL 不收。負控制 fixture：`n/a|TBD|none|-`、空檔、只有 cmd／rc／sha 而輸出區塊為空或不足 3 行、輸出被改而 out-sha256 不符、png 被換而 png-sha256 不符、result 非 ok、sha 不符、rc≠0，各自 rc≠0。分流：`look` 若下列任一成立——phase 表 `needs_look: yes`、diff 路徑命中 `look-classes.json` 的 UI／互動／對外類、diff 新增可執行檔、服務或 hook 註冊（`--diff-filter=A`，即首次上線）、單文有 `First-live: yes`；單或 diff 讀不到、類別不明一律 `look`（保守）。僅當全不成立且測試紅綠與反向探針收據齊才 `skip`。`finish-flow` Checklist 第 7 項改呼叫它。退役：該項口述判斷。
 
 **P6**：以 fleet state-contract C2 走 P1→P5；對 §5 每列做 live 反向探針；把 P4 旋鈕改 enforce 並刪除。
 
 ## 5. Test / validation（gate → 負控制 → live 反向探針）
 
-每列探針是 commit 進 `scripts/probes/<gate>.sh` 的腳本：先跑合法基準（必須成功），再做故意違規，斷言閘專屬錯誤字樣（P4 為 `fleet_task_gate`，不是參數錯誤），最後清理；零脈絡工程師直接執行。
+每列探針是 commit 進 `scripts/probes/<gate>.sh` 的腳本，結構固定：(1) 在 `mktemp -d` 沙箱 HOME 建 fixture；(2) 以合法參數跑一次基準，必須 rc=0；(3) 只改一個參數做故意違規；(4) 斷言 rc 與閘專屬字樣；(5) 無論成敗 trap 清掉沙箱。零脈絡工程師直接執行。各 gate 的基準與違規見下表。
 
-| gate | 負控制（先紅） | live 反向探針（故意違規，預期） |
+| gate | 負控制（先紅） | live 反向探針：基準參數 → 唯一違規 → 斷言（fixture／清理在腳本內） |
 |---|---|---|
-| P1 lint | 三種壞表 rc≠0 | 對真計畫副本刪一欄跑 `node scripts/check-plan-phases.js <file>` → rc≠0 |
-| P2 完成判定 | stub 缺一張／多一張 → exit 1 | `scripts/probes/p2.sh`：用 receipt 的 sha256 與少一 phase 的 commit 不符 → exit 1、零 fleet 異動 |
-| P3 join | 三前置少一張 done 時不釋放 | 真 fleet 上手動讓一前置不 done，確認後繼仍 queued |
-| P4 單號 | 拔閘轉紅 | 非 PM 席不帶單號跑 `scripts/dispatch-hetero.sh` → exit 2 且無引擎行程；fleet 停掉時 → fail-open 一行 stderr |
-| P5 三格 | 各格缺／填 `n/a`／sha 不符 → rc≠0 | 對一個 UI 變更 sha 跑 `node scripts/finish-triage.js` → `look`；對新增 hook 的 sha → `look`；拿掉 Used 行 → rc≠0 |
+| P1 lint | 三種壞表 rc≠0 | `p1.sh`：基準＝真計畫副本 rc=0 → 刪 acceptance_cmd 欄 → 斷言 rc≠0 且 stderr 含 `phases:v1` |
+| P2 完成判定 | stub 缺一張／多一張 → exit 1 | `p2.sh`：基準＝stub fleet、正確 receipt、`plan-to-tasks.js --receipt r.json` rc=0 且子單數＝phase 數 → 把 receipt 的 sha256 改一位 → 斷言 rc=1、stub fleet 呼叫記錄為 0 次 |
+| P3 join | 三前置少一張 done 時不釋放 | `p3.sh`：基準＝stub fleet 三前置全 done → 後繼釋放恰 1 次 → 讓一前置為 running → 斷言後繼仍 queued、釋放 0 次 |
+| P4 單號 | 拔閘轉紅 | `p4.sh`：沙箱 HOME＋非 PM 席身分；基準＝帶 open 單號的 `scripts/dispatch-hetero.sh --runner stub` rc=0 → 只拿掉 `Fleet-Task:` 行 → 斷言 rc=2、stderr 含 `fleet_task_gate`、stub 引擎行程數 0；另一例 fleet 停掉 → rc=0 且 stderr 一行 `unavailable` |
+| P5 三格 | 上段各 fixture rc≠0 | `p5.sh`：基準＝合成 repo 內純內部 sha、三格證據齊 → `skip` rc=0 → 只把變更路徑換成 UI 類 → 斷言 `look`；改為新增 hook 註冊 → `look`；只刪 Used 行 → rc≠0 |
+
+每支腳本的清理＝trap 刪沙箱；P6 對真環境各跑一次並貼輸出。
 
 腳本可驗：P1–P5。需人看：P6 與 look 卡。
 

@@ -1,6 +1,6 @@
 # PM 席省額度計畫的 replay 量測：同一批輸入量出每個開關 ON 和 OFF 的差
 
-Status: 計畫 v4（v3 的 plan review 阻擋已摺入，見 §10；v4 加入第 0 段離線估算與第 1 段 replay 分段，等 PM 裁定凍結）；fleet 單 01M838P3WFXNM885HK3S6ZGSXP；量測對象是 PM 省額度計畫 01M8350QM7GTW20VH5YP2EAK0H。
+Status: 計畫 v4 凍結（PM 裁定 2026-11-25，原定 11-24 逾期後順延）；v3 的 plan review 阻擋已摺入（見 §10），v4 加入第 0 段離線估算與第 1 段 replay 分段；fleet 單 01M838P3WFXNM885HK3S6ZGSXP；量測對象是 PM 省額度計畫 01M8350QM7GTW20VH5YP2EAK0H。
 出處：操作員 11-23 原話「你如果是要比量，每天的任務也不同，這樣比也沒意義吧？想辦法設計 replay 方式？」
 
 ## 0. 分段（PM 第二次裁定：離線優先）
@@ -63,7 +63,7 @@ S1 每日數字前後比，會被當天工作量和種類干擾。反例：S2 �
 
 ## 8. 交付與日期
 
-計畫凍結後才做 harness（`pm-replay-slice.js`、`pm-replay-run.js`、stub 層、測試），交便宜席實作、本席審。日期：11-24 凍結；11-26 harness 完成並過 §3 負控制；11-27 PM 帳號切片、祕密掃描與 manifest 凍結簽核；11-28 篩選輪與報告。完整輪另排。
+計畫凍結後才做 harness（`pm-replay-slice.js`、`pm-replay-run.js`、stub 層、測試），交便宜席實作、本席審。日期（PM 11-25 裁定，凍結逾期順延一天）：11-25 凍結；11-27 harness 完成並過 §3 負控制；11-28 PM 帳號切片、祕密掃描與 manifest 凍結簽核；11-29 篩選輪與報告。完整輪另排。非 PM 池：PM 11-25 裁定嚴格隔離下目前沒有合格池，只跑小一級模型 dry run，完整輪等 11-29T20Z 後 PM 另裁。
 
 ## 9. 不做
 

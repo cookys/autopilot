@@ -1,26 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
-// 待換成 lib/replay-pool.js
-let replayPool;
-try {
-  replayPool = require('./lib/replay-pool.js');
-} catch {
-  replayPool = {
-    selectPool(manifest, opts = {}) {
-      const whitelist = Array.isArray(manifest && manifest.pool_whitelist)
-        ? manifest.pool_whitelist
-        : [];
-      if (opts.dryRunModel) {
-        return { ok: true, poolId: `dry-run:${opts.dryRunModel}`, dryRun: true };
-      }
-      if (whitelist.length === 0) {
-        return { ok: false, reason: 'no pool_whitelist in manifest and no --dry-run-model specified' };
-      }
-      return { ok: true, poolId: whitelist[0], dryRun: false };
-    },
-  };
-}
+const { checkPool } = require('./lib/replay-pool.js');
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -96,11 +77,12 @@ function createMockModelRunner() {
  * Run replay according to manifest, arm(s), and injected modelRunner.
  * Rejects if neither --dry-run-model nor a valid pool is available.
  */
-async function runReplay({ manifest, arm, dryRunModel, modelRunner }) {
+async function runReplay({ manifest, arm, dryRunModel, poolId, modelRunner }) {
   if (!manifest || typeof manifest !== 'object') {
     throw new Error('manifest is required');
   }
-  const poolCheck = replayPool.selectPool(manifest, { dryRunModel });
+  // A small-model dry run needs no pool; anything else must name a whitelisted pool (fail closed).
+  const poolCheck = dryRunModel ? { ok: true, poolId: `dry-run:${dryRunModel}`, dryRun: true } : { ...checkPool(manifest, poolId), poolId };
   if (!poolCheck.ok) {
     throw new Error(`Pool rejected: ${poolCheck.reason}`);
   }
@@ -149,6 +131,7 @@ function parseArgs(argv) {
     else if (a === '--manifest') out.manifest = argv[++i];
     else if (a === '--arm') out.arm = argv[++i];
     else if (a === '--dry-run-model') out.dryRunModel = argv[++i];
+    else if (a === '--pool') out.poolId = argv[++i];
   }
   return out;
 }
@@ -182,6 +165,7 @@ async function main() {
     manifest,
     arm: args.arm,
     dryRunModel: args.dryRunModel,
+    poolId: args.poolId,
     modelRunner: createMockModelRunner(),
   });
   console.log(JSON.stringify(out, null, 2));

@@ -4343,7 +4343,19 @@ elif [ "$IS_KIMI" -eq 1 ]; then
       [ -n "$_kimi_avail_msg" ] || _kimi_avail_msg="kimi broker socket not accessible: run under the socket's group (e.g. sg lanegit -c ...)"
       die_precondition "$_kimi_avail_msg"
     fi
-    [ "$_kimi_avail_rc" -eq 0 ] || die_precondition "kimi broker unavailable or quota exhausted"
+    if [ "$_kimi_avail_rc" -ne 0 ]; then
+      _qwc_json="$(node "$SELF_DIR/quota-wait-check.js" --engine kimi --json 2>/dev/null || true)"
+      _qwc_verdict="$(node -e 'try{const d=JSON.parse(process.argv[1]);process.stdout.write(d.verdict||"unknown")}catch{process.stdout.write("unknown")}' "$_qwc_json" 2>/dev/null || echo "unknown")"
+      _qwc_reading="$(node -e 'try{const d=JSON.parse(process.argv[1]);process.stdout.write(d.reading_line||"")}catch{}' "$_qwc_json" 2>/dev/null || true)"
+      if [ "$_qwc_verdict" = "has_quota" ]; then
+        printf '[quota-wait-check] kimi has_quota (%s); proceeding without quota wait\n' "$_qwc_reading" >&2
+      elif [ "$_qwc_verdict" = "exhausted" ]; then
+        [ -n "$_qwc_reading" ] && printf '%s\n' "$_qwc_reading" >&2
+        die_precondition "kimi broker unavailable or quota exhausted${_qwc_reading:+ ($_qwc_reading)}"
+      else
+        die_precondition "kimi broker unavailable (quota status unknown; not claiming exhausted)"
+      fi
+    fi
     command -v "${AUTOPILOT_KIMI_GROUP_WRAPPER:-sg}" >/dev/null 2>&1 || die_precondition "kimi broker group wrapper not found"
   else
   _kimi_stop="$(node "$SELF_DIR/lib/kimi-local-stop.js" check 2>&1)" || die_precondition "$_kimi_stop"

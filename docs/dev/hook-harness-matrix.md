@@ -24,6 +24,7 @@ In `hooks/harness-support-evidence.json`, a `fired` row (a probe run saw the eve
 | `dispatch-model-guard` | PreToolUse<br>未驗證 | — | — | — |
 | `failure-escalation` | PostToolUse<br>未驗證 | — | — | — |
 | `fleet-dispatch-class` | PreToolUse<br>未驗證 | — | — | — |
+| `fleet-quota-wait-guard` | PreToolUse<br>未驗證 | — | — | — |
 | `fleet-send-work-order-guard` | PreToolUse<br>未驗證 | — | — | — |
 | `fleet-stop` | Stop<br>未驗證 | — | — | — |
 | `foreman-guard` | PreToolUse<br>未驗證 | — | — | — |

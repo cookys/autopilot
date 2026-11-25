@@ -1032,7 +1032,7 @@ function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
   const leftHead = padRowTo([dimSeg(leftW >= 34 ? ctx.t('v74.d.list_long', { n: cards.length }) : ctx.t('v74.d.list_short', { n: cards.length }))], leftW)
   const rightHead = padRowTo([dimSeg(`${ctx.t('v74.d.card_of', { k: String(cursor + 1).padStart(2, '0'), n: cards.length })} · ${statusText}${recText}${ageSuffix}`)], rightW)
   const headRow: Row = [...leftHead, dimSeg(' ' + GLYPHS.structure.bandSep + ' '), ...rightHead]
-  const sepRow: Row = [dimSeg(GLYPHS.structure.rule.repeat(leftW + 3 + rightW))]
+  const sepRow: Row = [dimSeg(GLYPHS.structure.rule.repeat(leftW + 1) + GLYPHS.structure.bandSep + GLYPHS.structure.rule.repeat(rightW + 1))]
 
   // Left pane with independent scroll + scrollMargin = 2.
   // Selected card is plain text (not a Button) so host Down/Up is not eaten as cursor-at-self (r7); non-selected cards carry card:N.

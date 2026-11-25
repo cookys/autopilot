@@ -7,8 +7,11 @@
 'use strict';
 
 const assert = require('assert');
+const { test, after } = require('node:test');
 const fs = require('fs');
 const os = require('os');
+const { execFileSync } = require('child_process');
+const origPath = process.env.PATH || ''; 
 const path = require('path');
 
 const { checkEngineQuota } = require('./quota-wait-check.js');
@@ -34,6 +37,7 @@ fs.writeFileSync(fakeTasksFile, JSON.stringify({
   ],
 }));
 
+test('quota readings', () => {
 // 1. quota-wait-check: carbon -> agy (has_quota), codex (exhausted), missing file -> unknown
 const agyRes = checkEngineQuota('carbon', { quotaJsonFile: fakeQuotaFile });
 assert.strictEqual(agyRes.resolved_engine, 'agy');
@@ -45,6 +49,9 @@ assert.strictEqual(codexRes.verdict, 'exhausted');
 const missingRes = checkEngineQuota('agy', { quotaJsonFile: path.join(tmpDir, 'nonexistent.json') });
 assert.strictEqual(missingRes.verdict, 'unknown');
 
+});
+
+test('no reading blocked', () => {
 // 2. Negative control: "等 carbon 額度" with NO reading -> blocked
 const denyNoReading = evaluateQuotaWaitGuard({
   tool_name: 'mcp__fleet__task_comment',
@@ -52,6 +59,9 @@ const denyNoReading = evaluateQuotaWaitGuard({
 });
 assert.strictEqual(denyNoReading.action, 'deny');
 
+});
+
+test('available quota blocked', () => {
 // 3. Negative control: "等 carbon 額度" WITH has_quota reading -> still blocked & prompts direct dispatch
 const denyHasQuota = evaluateQuotaWaitGuard({
   tool_name: 'mcp__fleet__task_result',
@@ -62,6 +72,9 @@ const denyHasQuota = evaluateQuotaWaitGuard({
 assert.strictEqual(denyHasQuota.action, 'deny');
 assert.ok(denyHasQuota.reason.includes('直接派工'), 'should prompt direct dispatch');
 
+});
+
+test('exhausted quota allowed', () => {
 // 4. Positive control: "等 codex 額度" WITH exhausted reading -> allowed
 const allowExhausted = evaluateQuotaWaitGuard({
   tool_name: 'mcp__fleet__send',
@@ -71,12 +84,13 @@ const allowExhausted = evaluateQuotaWaitGuard({
 });
 assert.strictEqual(allowExhausted.action, 'allow');
 
+});
+
+test('fleet failure unknown', () => {
 // 5. fleet command failure -> unknown, never treated as exhausted
-const { execFileSync } = require('child_process');
 const failBinDir = path.join(tmpDir, 'fail-bin');
 fs.mkdirSync(failBinDir);
 fs.writeFileSync(path.join(failBinDir, 'fleet'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
-const origPath = process.env.PATH || '';
 process.env.PATH = `${failBinDir}:${origPath}`;
 try {
   const failRes = checkEngineQuota('agy');
@@ -85,6 +99,9 @@ try {
   process.env.PATH = origPath;
 }
 
+});
+
+test('warn and off', () => {
 // 6. Knob: warn / off
 const warnRes = evaluateQuotaWaitGuard(
   { tool_input: { text: '等 carbon 額度' } },
@@ -98,6 +115,9 @@ const offRes = evaluateQuotaWaitGuard(
 );
 assert.strictEqual(offRes.action, 'allow');
 
+});
+
+test('dispatch wiring', () => {
 // 7. dispatch-hetero wiring: fake fleet in PATH returning has_quota JSON
 const okBinDir = path.join(tmpDir, 'ok-bin');
 fs.mkdirSync(okBinDir);
@@ -115,8 +135,11 @@ const qwcParsed = JSON.parse(qwcOut);
 assert.strictEqual(qwcParsed.verdict, 'has_quota');
 assert.strictEqual(qwcParsed.resolved_engine, 'kimi');
 const dispatchSh = fs.readFileSync(path.join(__dirname, 'dispatch-hetero.sh'), 'utf8');
-assert.ok(dispatchSh.includes('quota-wait-check.js --engine kimi --json'), 'dispatch-hetero.sh must wire quota-wait-check.js');
+assert.ok(dispatchSh.includes('node "$SELF_DIR/quota-wait-check.js" --engine kimi --json'), 'dispatch-hetero.sh must wire quota-wait-check.js');
 
+});
+
+test('sweep', () => {
 // 8. Sweep test (read-only, including open-fleet-tasks/*.txt and comments)
 const openTasksDir = path.join(tmpDir, 'open-fleet-tasks');
 fs.mkdirSync(openTasksDir);
@@ -133,5 +156,8 @@ assert.strictEqual(sweep.rows[0].verdict, 'has_quota');
 assert.strictEqual(sweep.rows[1].engine, 'codex');
 assert.strictEqual(sweep.rows[1].verdict, 'exhausted');
 
+});
+
+after(() => {
 fs.rmSync(tmpDir, { recursive: true, force: true });
-console.log('PASS quota-wait-guard.test.js');
+});

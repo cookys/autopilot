@@ -1,7 +1,7 @@
 # Changelog
 
-## Unreleased
-
+## 3.0.0-alpha.14
+- dispatch-model-guard: private-lane Claude-only suggestion. AUTOPILOT_DISPATCH_MODEL_GUARD_PRIVATE_LANES (default `308`) lanes never get a non-Claude engine suggestion when the Claude pool is overloaded; the hook now advises waiting for Claude capacity or switching Claude model/pool. Non-private lanes unchanged (ops 308 ruling).
 - Compact SessionStart summarizes fleet resume and caps injection (fixture: 19820 → 7999 characters).
 
 ## 3.0.0-alpha.13

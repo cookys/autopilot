@@ -16,7 +16,7 @@ import { pickedTone, wrapPlain } from '../ui'
 import type { KeyAction } from './keys'
 import type { Page, PageCtx } from './frame'
 import { actionRows as frameActionRows } from './layout'
-import { brokenRow, pendingMissingReason, pendingSourceMissing, wrapRow } from './rows'
+import { brokenRow, pendingMissingReason, pendingSourceMissing, wrapRow, WRAP_HANG } from './rows'
 import type { Row } from './rows'
 import { DECIDE_COL_SEP_W, DECIDE_COMPACT_MAX_ROWS, DECIDE_DUAL_MIN_COLS, DECIDE_HYSTERESIS, DECIDE_MIN_COL_W, STRIP_SPLIT_COLS, decideColumnWidths, decideLayoutMode } from './layout'
 import type { DecideLayoutMode } from './layout'
@@ -196,7 +196,7 @@ const widthOf = (segs: Seg[]): number => segs.reduce((w, s) => w + displayWidth(
 // whole or not at all (a hint row names the hidden ones). Zero cards: no rows.
 export function awaitingBlockRows(awaiting: DurableAwaiting[] | null | undefined, ctx: PageCtx, cap: number): Row[] {
   if (awaiting === null || awaiting === undefined || awaiting.length === 0 || cap < 1) return []
-  const cols = Math.max(8, ctx.size.cols)
+  const cols = Math.max(8, Math.min(80, ctx.size.cols)) // the frame wraps a read page's body at min(80, cols): wrap here first so it never adds rows
   const cardRowsOf = (c: DurableAwaiting): Row[] => {
     const title = (c.title ?? '').trim() !== '' ? c.title : c.question
     const rows: Row[] = wrapRow([seg('  ' + title)], cols, 2)
@@ -218,6 +218,18 @@ export function awaitingBlockRows(awaiting: DurableAwaiting[] | null | undefined
   if (left > 0 && out.length + 1 <= cap) out.push([dimSeg(ctx.t('v74.d.pv_more', { n: left }))] as Row)
   return out
 }
+// The block lives at the bottom of the BODY, directly above the action area (R1: information grows upward from the action
+// area; the action area is 4-6 rows and cannot hold full steps). It takes at most a third of the pane, and never so much that
+// the page would drop to the compact (< DECIDE_COMPACT_MAX_ROWS) layout or to the 4-row action area (rows < 32).
+export function awaitingBodyCap(ctx: PageCtx): number {
+  const rows = ctx.maxRows ?? ctx.size.rows
+  const third = Math.floor(rows / 3)
+  const keepCompact = rows >= DECIDE_COMPACT_MAX_ROWS ? rows - DECIDE_COMPACT_MAX_ROWS : third
+  const keepActions = ctx.size.rows >= 32 ? ctx.size.rows - 32 : third
+  return Math.max(0, Math.min(third, keepCompact, keepActions))
+}
+// The page drawn with `k` fewer rows (the box renderers size their body from ctx.size.rows / maxRows), for the block below it.
+const shrunk = <C extends PageCtx>(ctx: C, k: number): C => (k === 0 ? ctx : { ...ctx, size: { ...ctx.size, rows: ctx.size.rows - k }, ...(ctx.maxRows === undefined ? {} : { maxRows: ctx.maxRows - k }) })
 const WIDE = 100 // columns from which the cards use the wide form (labelled rows, the executor at the right)
 
 function truncateSegs(row: Row, cols: number): Row {
@@ -1085,7 +1097,7 @@ function renderV74(ctx: DecideCtx): { body: Row[]; actions: Row[] } {
     const noSrcActions: Row[] = ctx.box === true ? [] : [[seg(t('shell.on_band'))]]
     return { body: [...staleBanners, ...noSrcBody], actions: noSrcActions }
   }
-  if (cards.length === 0) return { body: [...staleBanners, [seg(GLYPHS.state.pending + ' '), dimSeg(t('v74.d.empty'))]], actions: awaitingBlockRows(v.awaiting, ctx, frameActionRows(ctx.size.rows)) }
+  if (cards.length === 0) return { body: [...staleBanners, [seg(GLYPHS.state.pending + ' '), dimSeg(t('v74.d.empty'))], ...awaitingBlockRows(v.awaiting, ctx, Math.max(awaitingBodyCap(ctx), ctx.size.rows - 4 - frameActionRows(ctx.size.rows)))], actions: [] }
   const dn = ctx.decide
   const nav: DecideNav = { ...NO_NAV, ...(dn ?? {}), cursor: dn?.cursor ?? v.nav.cursor, picks: dn?.picks ?? v.nav.picks, notes: dn?.notes ?? v.nav.notes, textMode: dn?.textMode ?? v.nav.noteMode }
   const cursor = Math.max(0, Math.min(cards.length - 1, nav.cursor))
@@ -1109,8 +1121,8 @@ function renderV74(ctx: DecideCtx): { body: Row[]; actions: Row[] } {
     // 等你動手 takes the action rows under the preview: the preview reserves its own rows (the heading plus at most one
     // hidden-count row), the block takes what is left, and the sum never exceeds the frame's action area (frame.ts throws above it).
     const full = frameActionRows(ctx.size.rows)
-    const aw = awaitingBlockRows(v.awaiting, ctx, Math.max(0, full - resultRow.length - (plan.length > 0 ? 2 : 1)))
-    const cap = Math.max(0, full - resultRow.length - aw.length)
+    const aw = awaitingBlockRows(v.awaiting, ctx, awaitingBodyCap(ctx))
+    const cap = Math.max(0, full - resultRow.length)
     const shown = plan.length + 1 <= cap ? plan : plan.slice(0, Math.max(0, cap - 2))
     const rest = plan.length - shown.length
     const previewRows: Row[] = [
@@ -1119,26 +1131,36 @@ function renderV74(ctx: DecideCtx): { body: Row[]; actions: Row[] } {
       ...(rest > 0 ? [[dimSeg('  ' + t('v74.d.pv_more', { n: rest }))] as Row] : []),
     ]
     const sendRows: Row[] = nav.armed === true && plan.length > 0 ? previewRows : [[seg(sendText, { press: 'key:s' })]]
-    return renderBoxV74(ctx, cards, nav, cursor, [
+    const boxed = renderBoxV74(shrunk(ctx, aw.length), cards, nav, cursor, [
       ...sendRows,
       ...resultRow,
-      ...aw,
     ], staleBanners)
+    return { body: [...boxed.body, ...aw], actions: boxed.actions }
   }
   const head = ruleTo(GLYPHS.structure.open + ' ' + t('v74.d.head', { n: cards.length, k: cursor + 1 }), cols)
-  // 等你動手: under the card list (the body) and the send row, above the footer; the action area holds frameActionRows rows
-  actions.push(...awaitingBlockRows(v.awaiting, ctx, Math.max(0, frameActionRows(ctx.size.rows) - actions.length)))
+  // 等你動手: at the bottom of the body, directly above the action rows (awaitingBodyCap)
+  const aw = awaitingBlockRows(v.awaiting, ctx, awaitingBodyCap(ctx))
   if (ctx.pendingScroll !== undefined) {
-    const room = Math.max(1, ctx.size.rows - 1 - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - actions.length - staleBanners.length)
-    return { body: [...staleBanners, ...pendingBody(ctx, cards, nav, cursor, room)], actions }
+    const room = Math.max(1, ctx.size.rows - 1 - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - actions.length - staleBanners.length - aw.length)
+    return { body: [...staleBanners, ...pendingBody(ctx, cards, nav, cursor, room), ...aw], actions }
   }
   const blocks = cards.map((c, i) => [...v74Card(c, i, i === cursor, nav, ctx, nav.picks, nav.notes), [seg('')]])
   // a short allocation: leading cards go first so the selected one stays on screen (the frame cuts the tail)
-  const room = Math.max(1, ctx.size.rows - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - actions.length)
+  const room = Math.max(1, ctx.size.rows - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - actions.length - aw.length)
   let first = 0
   const total = (): number => 1 + staleBanners.length + blocks.slice(first).reduce((n, b) => n + b.length, 0)
   while (total() > room && first < cursor) first++
-  return { body: [head, ...staleBanners, ...blocks.slice(first).flat()], actions }
+  const listed = [head, ...staleBanners, ...blocks.slice(first).flat()]
+  if (aw.length === 0) return { body: listed, actions }
+  // the frame cuts an overlong body at its tail, so with the 等你動手 block under the list the list is wrapped here the way the
+  // frame wraps a reading page (min(80, cols), hanging indent) and cut to its room: the block is never the part that is dropped
+  const width = Math.min(80, cols)
+  const wrapped = listed.flatMap(x => {
+    const lead = /^ */.exec(x.map(sg => sg.text).join(''))?.[0].length ?? 0
+    return wrapRow(x, width, Math.max(WRAP_HANG, Math.min(lead, Math.max(0, width - 4))))
+  })
+  // the frame's foot is the key-hint border row plus the strip (frame.ts foot), one row more than `room` counts
+  return { body: [...wrapped.slice(0, Math.max(0, room - 1)), ...aw], actions }
 }
 
 export const decidePage: Page = { id: 'decide', key: '2', title: '待決', framed: true, render }

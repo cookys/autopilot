@@ -526,3 +526,23 @@ test('awaiting block: a long step wraps onto continuation rows in full (never cu
   const none = frameRows(decidePage, ctx(undefined), { pages: PAGES })
   expect(none.some(r => rowText(r).includes(t('v74.d.await_head', { n: 1 })))).toBe(false)
 })
+
+// Canary 2026-11-25 (pin 078bb1fbd): the block lived in the 4-6 row action area, so a card with three long steps never fit and
+// the operator saw only 「等你動手 2 張 / …另 2 張」 at 80x24, 120x40 and 200x50. It now sits at the bottom of the body.
+test('awaiting block: a card with several long steps shows every step under a full card page, docked and boxed, at 80 / 120 / 200 columns', () => {
+  const bg = Array.from({ length: 80 }, (_, i) => '第 ' + String(i + 1).padStart(2, '0') + ' 行：假資料，用來把內文撐得比 Pane 高。').join('\n')
+  const cards = Array.from({ length: 8 }, (_, i) => ({ id: 'd-full' + i, title: '卡 ' + i, question: '問題 ' + i + '？', background: i === 0 ? bg : null, options: [{ label: 'A 可以', detail: '', recommended: true }, { label: 'B 不行', detail: '', recommended: false }] }))
+  const steps = ['到機櫃把評測機第二槽的電源線插到備用插座（插座在機櫃背面左下角，標示 UPS-2 的那一排），插好後等前面板燈號由閃爍變成常亮', '在操作台跑一次讀回指令，確認畫面顯示的 sha 和卡片上寫的一致', '回到這張卡按完成']
+  const aw = [{ id: 'd-aw01', title: '評測機第二槽插電', question: '插電？', operator_steps: steps }]
+  const flat = (rows: { text: string }[][]) => rows.map(r => r.map(s => s.text).join('')).join('\n').replace(/[\s│]+/g, '')
+  for (const [cols, rows] of [[80, 24], [120, 40], [200, 50]] as const) for (const box of [false, true]) {
+    const ctx = { live: null, console: null, size: { cols, rows }, t, nowMs, ...(box ? { box: true, maxRows: rows } : {}), v74: { decide: cards, awaiting: aw, pm: null, todo: null, nav: { cursor: 0, picks: {}, notes: {}, noteMode: false } } } as never
+    const framed = frameRows(decidePage, ctx, { pages: PAGES })
+    const text = flat(framed)
+    const where = cols + 'x' + rows + (box ? ' boxed' : ' docked')
+    expect(framed.length, where + ': the frame keeps its height').toBe(rows)
+    expect(text, where + ': heading').toContain(t('v74.d.await_head', { n: 1 }).replace(/\s+/g, ''))
+    for (const s of steps) expect(text, where + ': step whole: ' + s.slice(0, 12)).toContain(s.replace(/\s+/g, ''))
+    expect(framed.every(r => r.reduce((w, s) => w + displayWidth(s.text), 0) <= cols), where + ': no row wider than the pane').toBe(true)
+  }
+})

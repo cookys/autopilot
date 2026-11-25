@@ -45,3 +45,10 @@ test('alignAnswer leaves other roles and unparseable text untouched', () => {
   assert.strictEqual(alignAnswer('reviewer', '{"q":"1"}'), '{"q":"1"}');
   assert.strictEqual(alignAnswer('explorer', 'not json'), 'not json');
 });
+
+test('planner acceptance: a leading "cd input &&" is the same command and is stripped; the rest is untouched', () => {
+  const { alignAnswer } = require('../run-pilot.js');
+  const raw = JSON.stringify({ subtasks: [{ id: 'a', scope: ['x.js'], acceptance: ['cd input && node t.js', 'cd ./input&&bash run.sh', 'cd other && node t.js', 'node t.js'] }] });
+  const out = JSON.parse(alignAnswer('planner', raw));
+  assert.deepEqual(out.subtasks[0].acceptance, ['node t.js', 'bash run.sh', 'cd other && node t.js', 'node t.js']);
+});

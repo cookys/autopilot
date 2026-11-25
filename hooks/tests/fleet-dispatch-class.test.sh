@@ -275,4 +275,21 @@ assert_eq 0 "$?" "shed-8: built no-shed mutant"
 NEG_SHED_OUT="$(HOME="$SHED_TMP/home" AUTOPILOT_BURN_MORE="$BM_FILE" node "$MUTANT_SHED" <<< "$(build_dispatch_payload "$SHED_TASK_1")")"
 assert_not_contains "$NEG_SHED_OUT" 'Shed: hit' "shed-8: negative-control RED without applyShedRouting"
 
+# --- Auto-inject --expect-revision when task references a plan sha ---
+# (1) positive: Plan: <path>@<sha> + dispatch-plan-review.js without --expect-revision -> injects --expect-revision <sha>
+EXP_REV_TASK_1=$'Engine: sonnet\nRole: plan-reviewer\nSize: M\nPlan: docs/plans/2026-11-26-sample.md@abc1234\nRun node scripts/dispatch-plan-review.js --plan-file docs/plans/2026-11-26-sample.md'
+__RUN_STDOUT="$(node "$HOOK_PATH" <<< "$(build_dispatch_payload "$EXP_REV_TASK_1")")"
+assert_contains "$__RUN_STDOUT" '--expect-revision abc1234' "expect-rev-1: injects --expect-revision abc1234"
+
+# (2) negative: no sha (Plan: plan-first) -> unchanged
+EXP_REV_TASK_2=$'Engine: sonnet\nRole: plan-reviewer\nSize: M\nPlan: plan-first\nRun node scripts/dispatch-plan-review.js --plan-file docs/plans/2026-11-26-sample.md'
+__RUN_STDOUT="$(node "$HOOK_PATH" <<< "$(build_dispatch_payload "$EXP_REV_TASK_2")")"
+assert_not_contains "$__RUN_STDOUT" '--expect-revision' "expect-rev-2: no sha leaves command unchanged"
+
+# (3) negative: already has --expect-revision -> unchanged
+EXP_REV_TASK_3=$'Engine: sonnet\nRole: plan-reviewer\nSize: M\nPlan: docs/plans/2026-11-26-sample.md@abc1234\nRun node scripts/dispatch-plan-review.js --expect-revision def5678 --plan-file docs/plans/2026-11-26-sample.md'
+__RUN_STDOUT="$(node "$HOOK_PATH" <<< "$(build_dispatch_payload "$EXP_REV_TASK_3")")"
+assert_contains "$__RUN_STDOUT" '--expect-revision def5678' "expect-rev-3: preserves explicit --expect-revision"
+assert_not_contains "$__RUN_STDOUT" '--expect-revision abc1234' "expect-rev-3: does not duplicate --expect-revision"
+
 finalize_test

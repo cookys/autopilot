@@ -61,31 +61,21 @@ sub="${2:-}"
 if [ "$cmd" = "claim" ]; then
   exit 0
 fi
-if [ "$cmd" = "task" ] && [ "$sub" = "list" ]; then
+if [ "$cmd" = "tasks" ]; then
   cat "$TEST_FLEET_STATE"
   exit 0
 fi
-if [ "$cmd" = "task" ] && [ "$sub" = "create" ]; then
+if [ "$cmd" = "dispatch" ]; then
   shift 2
-  title=""
-  body=""
-  while [ $# -gt 0 ]; do
-    case "$1" in
-      --title) title="$2"; shift 2 ;;
-      --body) body="$2"; shift 2 ;;
-      --queue) shift ;;
-      --after) shift 2 ;;
-      *) shift ;;
-    esac
-  done
+  body="${*: -1}"
   new_id="$(node -e "
     const fs = require('fs');
     const state = JSON.parse(fs.readFileSync(process.argv[1], 'utf8'));
     const id = 'T-' + (state.length + 1);
-    state.push({ id, title: process.argv[2], body: process.argv[3] });
+    state.push({ task_id: id, title: process.argv[2].split('\\n')[0] });
     fs.writeFileSync(process.argv[1], JSON.stringify(state));
-    process.stdout.write(JSON.stringify({ id }));
-  " "$TEST_FLEET_STATE" "$title" "$body")"
+    process.stdout.write(id);
+  " "$TEST_FLEET_STATE" "$body")"
   echo "$new_id"
   exit 0
 fi
@@ -94,6 +84,7 @@ STUB
 chmod +x "$STUB_FLEET"
 
 export PLAN_TO_TASKS_FLEET_BIN="$STUB_FLEET"
+export PLAN_TO_TASKS_ASSIGNEE="test/courier/member"
 export TEST_FLEET_LOG="$FLEET_LOG"
 export TEST_FLEET_STATE="$FLEET_STATE"
 
@@ -166,9 +157,9 @@ assert_eq "bad lint zero fleet calls" "0" "$(wc -l < "$FLEET_LOG" | tr -d ' ')"
 echo '[]' > "$FLEET_STATE"
 (cd "$TEST_REPO" && node "$SCRIPT" --receipt "$RECEIPT") >/dev/null
 assert_eq "normal creation creates 3 tasks" "3" "$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).length)" "$FLEET_STATE")"
-assert_eq "P1 has no --queue" "0" "$(grep "P1:" "$FLEET_LOG" | grep -c -- "--queue" || true)"
-assert_eq "P2 has --queue --after T-1" "1" "$(grep "P2:" "$FLEET_LOG" | grep -c -- "--queue --after T-1" || true)"
-assert_eq "P3 has --queue --after T-1 --after T-2" "1" "$(grep "P3:" "$FLEET_LOG" | grep -c -- "--queue --after T-1 --after T-2" || true)"
+assert_eq "P1 has no --queue" "0" "$(grep "Phase: P1" "$FLEET_LOG" | grep -c -- "--queue" || true)"
+assert_eq "P2 has --queue --after T-1" "1" "$(grep "Phase: P2" "$FLEET_LOG" | grep -c -- "--queue --after T-1" || true)"
+assert_eq "P3 has --queue --after T-1 --after T-2" "1" "$(grep "Phase: P3" "$FLEET_LOG" | grep -c -- "--queue --after T-1 --after T-2" || true)"
 
 # 3. Rerun idempotency (remove P3 from state, rerun should only create P3)
 node -e "
@@ -178,14 +169,14 @@ node -e "
 " "$FLEET_STATE"
 : > "$FLEET_LOG"
 (cd "$TEST_REPO" && node "$SCRIPT" --receipt "$RECEIPT") >/dev/null
-assert_eq "rerun creates only 1 task" "1" "$(grep -c "task create" "$FLEET_LOG" || true)"
-assert_eq "rerun creates P3" "1" "$(grep -c "P3:" "$FLEET_LOG" || true)"
+assert_eq "rerun creates only 1 task" "1" "$(grep -c "^dispatch" "$FLEET_LOG" || true)"
+assert_eq "rerun creates P3" "1" "$(grep -c "Phase: P3" "$FLEET_LOG" || true)"
 
 # 4. Extra unknown Phase -> exit 1
 node -e "
   const fs = require('fs');
   const s = JSON.parse(fs.readFileSync(process.argv[1], 'utf8'));
-  s.push({ id: 'T-99', title: 'P99: Unknown', body: 'Plan: docs/plans/2026-11-25-sample.md@$COMMIT_SHA Phase: P99' });
+  s.push({ task_id: 'T-99', title: 'Plan: docs/plans/2026-11-25-sample.md@$COMMIT_SHA Phase: P99' });
   fs.writeFileSync(process.argv[1], JSON.stringify(s));
 " "$FLEET_STATE"
 set +e
@@ -193,6 +184,15 @@ set +e
 rc=$?
 set -e
 assert_eq "unknown phase exits 1" "1" "$rc"
+
+# 5. Missing assignee -> exit 2, zero fleet calls
+: > "$FLEET_LOG"
+set +e
+(cd "$TEST_REPO" && env -u PLAN_TO_TASKS_ASSIGNEE -u AUTOPILOT_FLEET_ADDRESS node "$SCRIPT" --receipt "$RECEIPT") >/dev/null 2>&1
+rc=$?
+set -e
+assert_eq "missing assignee exits 2" "2" "$rc"
+assert_eq "missing assignee zero fleet calls" "0" "$(wc -l < "$FLEET_LOG" | tr -d ' ')"
 
 echo "plan-to-tasks.test.sh: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

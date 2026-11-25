@@ -19,6 +19,7 @@
  *
  * Node >= 20.10, built-ins only.
  * Fleet binary: PLAN_TO_TASKS_FLEET_BIN (default: `fleet`).
+ * PLAN_TO_TASKS_ASSIGNEE (required): address that executes phases; PLAN_TO_TASKS_PARENT (optional): parent task id.
  */
 
 const crypto = require('crypto');
@@ -151,7 +152,7 @@ function runFleet(fleetBin, args) {
 }
 
 function extractPhaseMarker(task, planPath, commitSha) {
-  const text = String(task.body || task.description || '');
+  const text = String(task.title || task.body || '');
   const firstLine = text.split(/\r?\n/)[0] || '';
   const exactPrefix = `Plan: ${planPath}@${commitSha} Phase: `;
   if (firstLine.startsWith(exactPrefix)) {
@@ -172,14 +173,10 @@ function parseTaskList(raw) {
 
 function parseCreatedTaskId(raw) {
   const trimmed = raw.trim();
-  if (!trimmed) throw new Error('fleet task create returned empty output');
-  try {
-    const obj = JSON.parse(trimmed);
-    if (obj && obj.id) return String(obj.id);
-  } catch (_) {
-    // fall through to plain-text id
-  }
-  return trimmed.split(/\s+/)[0];
+  if (!trimmed) throw new Error('fleet dispatch returned empty output');
+  const m = trimmed.match(/\b[0-9A-HJKMNP-TV-Z]{26}\b/) || trimmed.match(/\bT-\d+\b/);
+  if (!m) throw new Error(`fleet dispatch output has no task id: ${trimmed.slice(0, 120)}`);
+  return m[0];
 }
 
 function main() {
@@ -235,21 +232,28 @@ function main() {
   const phases = topoSort(parsePhasesTable(planText));
   const frozenIds = new Set(phases.map((p) => p.id));
   const fleetBin = process.env.PLAN_TO_TASKS_FLEET_BIN || 'fleet';
+  const assignee = process.env.PLAN_TO_TASKS_ASSIGNEE || process.env.AUTOPILOT_FLEET_ADDRESS || '';
+  if (!assignee) {
+    process.stderr.write('plan-to-tasks: set PLAN_TO_TASKS_ASSIGNEE (fleet address that executes the phases)\n');
+    process.exit(2);
+  }
 
   try {
     runFleet(fleetBin, ['claim', `plan-to-tasks:${receipt.sha256}`]);
 
-    const existingTasks = parseTaskList(runFleet(fleetBin, ['task', 'list', '--json']));
+    const existingTasks = parseTaskList(runFleet(fleetBin, ['tasks', '--all', '--json']));
     const phaseToTaskId = new Map();
     const unknownPhases = [];
 
+    const parentId = process.env.PLAN_TO_TASKS_PARENT || '';
     for (const task of existingTasks) {
+      if (parentId && String(task.parent_task_id || task.parent_id || '') !== parentId) continue;
       const phaseId = extractPhaseMarker(task, receipt.path, receipt.commit);
       if (!phaseId) continue;
       if (!frozenIds.has(phaseId)) {
         unknownPhases.push(phaseId);
       } else if (!phaseToTaskId.has(phaseId)) {
-        phaseToTaskId.set(phaseId, String(task.id));
+        phaseToTaskId.set(phaseId, String(task.task_id || task.id));
       }
     }
 
@@ -265,11 +269,13 @@ function main() {
 
       const body = [
         `Plan: ${receipt.path}@${receipt.commit} Phase: ${phase.id}`,
-        `Size: ${phase.size} | Needs-Look: ${phase.needsLook}`,
+        `Role: implementer | Size: ${phase.size} | Needs-Look: ${phase.needsLook}`,
+        `Title: ${phase.title}`,
         `Acceptance: ${phase.acceptanceCmd}`,
       ].join('\n');
 
-      const args = ['task', 'create', '--title', `${phase.id}: ${phase.title}`, '--body', body];
+      const args = ['dispatch', assignee, '--size', phase.size];
+      if (parentId) args.push('--parent', parentId);
       if (phase.deps.length > 0) {
         args.push('--queue');
         for (const dep of phase.deps) {
@@ -280,6 +286,7 @@ function main() {
           args.push('--after', depTaskId);
         }
       }
+      args.push(body);
 
       const createdOut = runFleet(fleetBin, args);
       const createdId = parseCreatedTaskId(createdOut);

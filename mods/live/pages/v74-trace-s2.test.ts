@@ -182,7 +182,9 @@ test('G04 (4): V74_SOURCES matches design titles and v74TitleSegs puts no warnin
   const staleTitle = v74TitleSegs(pageOf('decide'), ctxOf({
     v74: v74Of({ decideFetchedMs: NOW - 8 * MIN, ages: { decide: NOW - 8 * MIN } }),
   }), { text: '待決' })
-  expect(segsText(staleTitle)).toBe('待決 · 資料 fleet decisions list --json（schema fleet.decisions v1）· 8 分')
+  expect(segsText(staleTitle)).toBe('待決 · 480 秒前更新')
+  const noAgeTitle = v74TitleSegs(pageOf('decide'), ctxOf({ v74: v74Of({ decideFetchedMs: null, ages: {} }) }), { text: '待決' })
+  expect(segsText(noAgeTitle)).toBe('待決')
   expect(segsText(staleTitle)).not.toContain('>5 分')
   expect(staleTitle.some(s => s.color === PALETTE.attention || s.color === PALETTE.broken)).toBe(false)
 })
@@ -293,7 +295,7 @@ test('G04 (2): boxed Pane places console mostSevere and stale warnings on first 
   } as never))
   const decTop = flat(staleDecTree.find(n => n.kind === 'Box' && n.props.key === 'v74-top') as Node)
   const decRow0 = flat(staleDecTree.find(n => n.kind === 'Box' && n.props.key === 'v74-row0') as Node)
-  expect(decTop).toContain('╭─ 待決 · 資料 fleet decisions list --json（schema fleet.decisions v1）')
+  expect(decTop).toContain('╭─ 待決 · 480 秒前更新')
   expect(decTop).not.toContain('>5 分')
   expect(decRow0).toContain('8 分（>5 分過舊）')
 

@@ -153,6 +153,7 @@
   "console.command.src.slots": "槽位",
   "console.command.src.metrics": "指標",
   "console.command.src.changes": "變更",
+  "v74.c.decide_updated": "{n} 秒前更新",
   "console.command.age_s": "{n} 秒前",
   "console.command.age_m": "{n} 分前",
   "console.command.age_h": "{n} 小時前",

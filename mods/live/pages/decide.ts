@@ -1025,14 +1025,18 @@ function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
     return { body: [...topBanners, headRow, sepRow, ...rightShown], actions }
   }
 
-  const { leftW, rightW } = decideColumnWidths(cols)
+  const listWant = cards.reduce((m, x) => {
+    const hasRec = x.options.some(o => o.recommended)
+    return Math.max(m, displayWidth('  00 ' + x.title) + 2 + (hasRec ? 2 : 0))
+  }, 0)
+  const { leftW, rightW } = decideColumnWidths(cols, listWant)
   const midRoom = Math.max(1, room - 2)
 
   // Left + Right header
   const leftHead = padRowTo([dimSeg(leftW >= 34 ? ctx.t('v74.d.list_long', { n: cards.length }) : ctx.t('v74.d.list_short', { n: cards.length }))], leftW)
   const rightHead = padRowTo([dimSeg(`${ctx.t('v74.d.card_of', { k: String(cursor + 1).padStart(2, '0'), n: cards.length })} · ${statusText}${recText}${ageSuffix}`)], rightW)
   const headRow: Row = [...leftHead, dimSeg(' ' + GLYPHS.structure.bandSep + ' '), ...rightHead]
-  const sepRow: Row = [dimSeg(GLYPHS.structure.rule.repeat(leftW + 3 + rightW))]
+  const sepRow: Row = [dimSeg(GLYPHS.structure.rule.repeat(leftW + 1) + GLYPHS.structure.bandSep + GLYPHS.structure.rule.repeat(rightW + 1))]
 
   // Left pane with independent scroll + scrollMargin = 2.
   // Selected card is plain text (not a Button) so host Down/Up is not eaten as cursor-at-self (r7); non-selected cards carry card:N.

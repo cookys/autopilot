@@ -153,6 +153,7 @@
   "console.command.src.slots": "Slots",
   "console.command.src.metrics": "Metrics",
   "console.command.src.changes": "Changes",
+  "v74.c.decide_updated": "updated {n}s ago",
   "console.command.age_s": "{n}s ago",
   "console.command.age_m": "{n}m ago",
   "console.command.age_h": "{n}h ago",

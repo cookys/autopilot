@@ -30,10 +30,16 @@ export function decideLayoutMode(bodyColumns: number, prevMode: DecideLayoutMode
   return bodyColumns >= DECIDE_DUAL_MIN_COLS ? 'dual' : 'single'
 }
 
-export function decideColumnWidths(availCols: number): { leftW: number; rightW: number; sepW: number } {
+// wantLeft = the display width the list actually needs (longest card row). Given, the left column takes just that, at most 40% of the
+// usable width and at least DECIDE_LIST_MIN_W, so the detail on the right gets the rest. Omitted, the columns stay equal.
+export const DECIDE_LIST_MIN_W = 34
+export const DECIDE_LIST_MAX_FRAC = 0.4
+export function decideColumnWidths(availCols: number, wantLeft?: number): { leftW: number; rightW: number; sepW: number } {
   const sepW = DECIDE_COL_SEP_W
   const usable = Math.max(2, availCols - sepW)
-  const leftW = Math.floor(usable / 2)
+  const leftW = wantLeft === undefined
+    ? Math.floor(usable / 2)
+    : Math.max(Math.min(DECIDE_LIST_MIN_W, usable - 1), Math.min(wantLeft, Math.floor(usable * DECIDE_LIST_MAX_FRAC)))
   const rightW = usable - leftW
   return { leftW, rightW, sepW }
 }

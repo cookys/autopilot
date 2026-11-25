@@ -236,7 +236,7 @@ export function formatSource(source: OneRowInput['source'], t: T): OneRowSegment
   const prefix = (st === 'stale' ? '~6' : '6 ') + word + ' '
   const name = st === 'missing' || source.label === null || source.label === ''
     ? padRightToWidth(GLYPHS.structure.empty, 4)
-    : padRightToWidth(source.label, 4)
+    : padRightToWidth(source.label === t('band.onerow.source') ? '' : source.label, 4)
   const num = fmtCount3(source.flags, st)
   const tail = (displayWidth(num) > 3 ? '' : ' ') + GLYPHS.structure.residue + num
   const full = prefix + name + tail

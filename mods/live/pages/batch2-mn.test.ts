@@ -137,6 +137,16 @@ test('N3 (S1-full-p1-160x40 row 16): a reason kept whole wraps at a clause bound
   expect(framed[at + 1].trim()).not.toBe('')
 })
 
+test('background wrapping keeps closing punctuation off continuation starts', () => {
+  for (const punctuation of ['。', '，', '）']) {
+    const input = '背景甲乙丙丁' + punctuation + 'B：後續文字'
+    const lines = wrapRow([{ text: input }], 12, 2).map(text)
+    expect(lines.join('').replace(/ /g, '')).toBe(input)
+    for (const line of lines) expect(M.displayWidth(line)).toBeLessThanOrEqual(12)
+    for (const line of lines.slice(1)) expect(/^[。，）]/.test(line.trimStart())).toBe(false)
+  }
+})
+
 test('N4 (S5-stale-10min-p1-160x40 row 11): a stale overview keeps the old host value with ✗ and says 資料已過期 once', () => {
   const stale = fleetSnap({ generated: NOW - 12 * MIN, hosts: { at_ms: NOW - 12 * MIN, state: 'expired' }, tasks: { at_ms: NOW - 12 * MIN, state: 'stale' } })
   for (const cols of [160, 80]) {

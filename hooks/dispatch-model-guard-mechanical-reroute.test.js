@@ -14,10 +14,11 @@ const fakeCwd = path.join(tmpRoot, 'cwd');
 const fakeRuntime = path.join(tmpRoot, 'runtime');
 fs.mkdirSync(fakeCwd, { recursive: true });
 fs.mkdirSync(fakeRuntime, { recursive: true });
-const logPath = path.join(fakeRuntime, 'autopilot', 'mechanical-reroute-shadow.jsonl');
+const fakeState = path.join(tmpRoot, 'state');
+const logPath = path.join(fakeState, 'mechanical-reroute-shadow.jsonl');
 
 function baseEnv(extra) {
-  const env = { ...process.env, XDG_RUNTIME_DIR: fakeRuntime, AUTOPILOT_DISPATCH_MODEL_GUARD_MODE: 'remind' };
+  const env = { ...process.env, XDG_RUNTIME_DIR: fakeRuntime, AUTOPILOT_STATE_DIR: fakeState, AUTOPILOT_PACE_FILE: path.join(tmpRoot, 'no-pace.json'), AUTOPILOT_DISPATCH_MODEL_GUARD_MODE: 'remind' };
   for (const k of ['AUTOPILOT_SEAT_ROLE', 'AUTOPILOT_MECHANICAL_REROUTE', 'CLAUDE_CODE_SESSION_ID', 'AUTOPILOT_SESSION_ID', 'FLEET_ADDRESS']) delete env[k];
   return { ...env, ...extra };
 }

@@ -62,9 +62,10 @@ const {
 const { BRIEF_HEAD_WINDOW, headLines, findHeadMatch } = require('./lib/brief-head.js');
 const { gateHint } = require('./lib/gate-hint.js');
 const { isPmConsole, pmConsoleStatus } = require('./_shared/pm-console.js');
-const { resolvePmGate } = require('../scripts/lib/fleet-task-ref.js');
+const { resolvePmGate, findTaskId } = require('../scripts/lib/fleet-task-ref.js');
 const { resolveFleetSeat } = require('./_shared/fleet-seat.js');
-const { userRuntimeBase, ensurePrivateDir } = require('../scripts/lib/runtime-paths.js');
+const { ensurePrivateDir } = require('../scripts/lib/runtime-paths.js');
+const { stateDir } = require('../scripts/lib/state-dir.js');
 const { SEEN_AT_FRESH_MS } = require('../scripts/lib/pace-reading.js');
 // default-on since v2.35.15 (was opt-in). Opt out: AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=off
 // (or `- mode: off` in .claude/dispatch-guard-config.md). Set AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=warn
@@ -406,11 +407,9 @@ function mechanicalReroute(input, toolInput, prompt) {
     if (intentional) entry.intentional = true;
 
     try {
-      const base = userRuntimeBase(process.env);
-      // tmpfs only: the helper falls back to /tmp/autopilot-<uid> when XDG_RUNTIME_DIR is unusable; skip then.
-      const ensured = base.startsWith('/tmp/') ? { ok: false } : ensurePrivateDir(base);
+      const ensured = ensurePrivateDir(stateDir(process.env));
       if (ensured.ok) {
-        fs.appendFileSync(path.join(ensured.path, 'mechanical-reroute-shadow.jsonl'), JSON.stringify(entry) + '\n');
+        fs.appendFileSync(path.join(ensured.path, 'mechanical-reroute-shadow.jsonl'), JSON.stringify(entry) + '\n', { mode: 0o600 });
       }
     } catch {
       // fail-open on shadow log write errors

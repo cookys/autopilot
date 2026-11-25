@@ -331,9 +331,21 @@ function cacheFile(sessionId) {
   return path.join(L.liveBase(), 'subagent-budget', 'cache', `${sanitizeSessionId(sessionId)}.json`);
 }
 
-function ticketLedgerFile() {
+function ticketLedgerFile(env = process.env) {
+  const { stateDir } = require('../scripts/lib/state-dir.js');
+  return path.join(stateDir(env), 'subagent-budget', 'ticket-usage.jsonl');
+}
+
+function legacyTicketLedgerFile() {
   const L = require('./live-session-lib.js');
   return path.join(L.liveBase(), 'subagent-budget', 'ticket-usage.jsonl');
+}
+
+function roleFromBrief(brief) {
+  if (typeof brief !== 'string' || !brief) return '';
+  const firstLine = brief.split(/\r?\n/, 1)[0];
+  const m = firstLine.match(/(?:^|\|)\s*Role:\s*([^|\r\n]+)/i);
+  return m ? m[1].trim() : '';
 }
 
 function entryUsd(e) {
@@ -346,24 +358,32 @@ function entryUsd(e) {
 
 function readTicketLedgerRows() {
   const rows = [];
+  let raw = '';
   try {
-    const raw = fs.readFileSync(ticketLedgerFile(), 'utf8');
-    for (const line of raw.split('\n')) {
-      const s = line.trim();
-      if (!s) continue;
-      try {
-        const row = JSON.parse(s);
-        if (row && typeof row === 'object') rows.push(row);
-      } catch { /* skip malformed line */ }
-    }
-  } catch { /* absent or unreadable ledger */ }
+    raw = fs.readFileSync(ticketLedgerFile(), 'utf8');
+  } catch {
+    try {
+      raw = fs.readFileSync(legacyTicketLedgerFile(), 'utf8');
+    } catch { /* absent or unreadable ledger */ }
+  }
+  for (const line of raw.split('\n')) {
+    const s = line.trim();
+    if (!s) continue;
+    try {
+      const row = JSON.parse(s);
+      if (row && typeof row === 'object') rows.push(row);
+    } catch { /* skip malformed line */ }
+  }
   return rows;
 }
 
-function recordTicketLedger(sessionId, entries, now) {
+function recordTicketLedger(sessionId, entries, now, toolInput = {}) {
   if (!sessionId || !entries) return;
   try {
     const sid = String(sessionId);
+    const model = toolInput && typeof toolInput.model === 'string' ? toolInput.model.trim() : '';
+    const subagentType = toolInput && typeof toolInput.subagent_type === 'string' ? toolInput.subagent_type.trim() : '';
+    const role = roleFromBrief(toolInput && typeof toolInput.prompt === 'string' ? toolInput.prompt : '');
     const existing = new Map();
     for (const row of readTicketLedgerRows()) {
       if (row.session === sid && row.subagent) {
@@ -378,12 +398,24 @@ function recordTicketLedger(sessionId, entries, now) {
       const key = `${e.ticket}\0${name}`;
       const prev = existing.get(key);
       if (prev !== undefined && Math.abs(prev - usd) <= 1e-9) continue;
-      toAppend.push(JSON.stringify({ ts: now, ticket: e.ticket, session: sid, subagent: name, usd }));
+      toAppend.push(JSON.stringify({
+        ts: now,
+        ticket: e.ticket,
+        session: sid,
+        subagent: name,
+        usd,
+        model,
+        subagent_type: subagentType,
+        role,
+      }));
     }
     if (toAppend.length > 0) {
+      const { ensurePrivateDir } = require('../scripts/lib/runtime-paths.js');
       const file = ticketLedgerFile();
-      fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-      fs.appendFileSync(file, toAppend.join('\n') + '\n', { mode: 0o600 });
+      const ensured = ensurePrivateDir(path.dirname(file));
+      if (ensured.ok) {
+        fs.appendFileSync(path.join(ensured.path, path.basename(file)), toAppend.join('\n') + '\n', { mode: 0o600 });
+      }
     }
   } catch { /* fail-open if ledger cannot be written */ }
 }
@@ -665,7 +697,7 @@ function run(payload) {
     const sub = (typeof payload.agent_id === 'string' && payload.agent_id) || OWN_TRANSCRIPT_RE.test(payload.transcript_path);
     if (!(needLane && !sub && !laneFromBrief(brief)) && !ticket) return;
   }
-  if (raw && ticketBudgetEnabled) recordTicketLedger(payload.session_id, raw, now);
+  if (raw && ticketBudgetEnabled) recordTicketLedger(payload.session_id, raw, now, input);
   const entries = withLanes(raw || {});
 
   let lane = laneFromBrief(brief);

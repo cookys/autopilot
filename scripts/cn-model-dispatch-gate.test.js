@@ -28,12 +28,12 @@ test('(a) local qwen with cwd inside a private git checkout is allowed', () => f
 }));
 test('(b) Kimi in a fresh sandbox containing only the brief is allowed', () => fixture((root) => {
   const cwd = path.join(root, 'sandbox'); fs.mkdirSync(cwd); const prompt = brief(cwd);
-  const got = check({ runner: 'kimi', model: 'kimi', endpoint: 'kimi', cwd, files: [prompt], env: endpointEnv('kimi', 'https://api.moonshot.cn/v1') });
+  const got = check({ runner: 'kimi', model: 'kimi', endpoint: 'kimi', cwd, files: [prompt], env: { ...endpointEnv('kimi', 'https://api.moonshot.cn/v1'), AUTOPILOT_CN_WORK_TIER: 'T0' } });
   assert.equal(got.allowed, true);
 }));
 test('(b2) Kimi broker endpoint name is allowed without a resolvable URL', () => fixture((root) => {
   const cwd = path.join(root, 'sandbox'); fs.mkdirSync(cwd); const prompt = brief(cwd);
-  const got = check({ runner: 'kimi', model: 'kimi-code/kimi-for-coding', endpoint: 'kimi', cwd, files: [prompt], env: {} });
+  const got = check({ runner: 'kimi', model: 'kimi-code/kimi-for-coding', endpoint: 'kimi', cwd, files: [prompt], env: { AUTOPILOT_CN_WORK_TIER: 'T0' } });
   assert.equal(got.allowed, true);
 }));
 test('(c) Kimi in a git checkout is refused as private workdir', () => fixture((root) => {
@@ -87,4 +87,25 @@ test('(i) a raw Chinese cloud URL remains barred', () => fixture((root) => {
   const got = check({ runner: 'cc-shim', model: 'GLM-5.3', endpoint: 'https://api.bigmodel.cn/anthropic', cwd, files: [prompt], env: {} });
   assert.equal(got.allowed, false);
   assert.equal(got.cls, 'restricted_operator_private_workdir');
+}));
+test('(l) restricted operator without declared work tier is barred as restricted_operator_not_public_source', () => fixture((root) => {
+  const cwd = path.join(root, 'sandbox'); fs.mkdirSync(cwd); const prompt = brief(cwd);
+  const got = check({ runner: 'kimi', model: 'kimi', endpoint: 'kimi', cwd, files: [prompt], env: endpointEnv('kimi', 'https://api.moonshot.cn/v1') });
+  assert.equal(got.allowed, false);
+  assert.equal(got.cls, 'restricted_operator_not_public_source');
+}));
+test('(m) restricted operator with T0, clean sandbox, and clean brief is allowed', () => fixture((root) => {
+  const cwd = path.join(root, 'sandbox'); fs.mkdirSync(cwd); const prompt = brief(cwd);
+  const got = check({ runner: 'kimi', model: 'kimi', endpoint: 'kimi', cwd, files: [prompt], opts: { tier: 'T0' }, tier: 'T0', env: { ...endpointEnv('kimi', 'https://api.moonshot.cn/v1'), AUTOPILOT_CN_WORK_TIER: 'T0' } });
+  assert.equal(got.allowed, true);
+}));
+test('(n) restricted operator minimax with T1 is barred', () => fixture((root) => {
+  const cwd = path.join(root, 'sandbox'); fs.mkdirSync(cwd); const prompt = brief(cwd);
+  const got = check({ runner: 'cc-shim', model: 'minimax', endpoint: 'minimax', cwd, files: [prompt], tier: 'T1', env: { ...endpointEnv('minimax', 'https://api.minimax.chat/v1'), AUTOPILOT_CN_WORK_TIER: 'T1' } });
+  assert.equal(got.allowed, false);
+}));
+test('(o) restricted operator kimi with T1 is allowed', () => fixture((root) => {
+  const cwd = path.join(root, 'sandbox'); fs.mkdirSync(cwd); const prompt = brief(cwd);
+  const got = check({ runner: 'kimi', model: 'kimi', endpoint: 'kimi', cwd, files: [prompt], tier: 'T1', env: { ...endpointEnv('kimi', 'https://api.moonshot.cn/v1'), AUTOPILOT_CN_WORK_TIER: 'T1' } });
+  assert.equal(got.allowed, true);
 }));

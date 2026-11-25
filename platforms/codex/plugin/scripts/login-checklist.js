@@ -77,11 +77,19 @@ function render(items) {
 }
 
 function main(argv) {
+  const usage = 'usage: login-checklist.js (--hosts <file> | --seat-decl <seat-decl.tsv>) [--json]\n';
   const hi = argv.indexOf('--hosts');
-  const extra = argv.filter((a, i) => a !== '--json' && a !== '--hosts' && i !== hi + 1);
-  if (hi < 0 || !argv[hi + 1] || extra.length) { process.stderr.write('usage: login-checklist.js --hosts <file> [--json]\n'); return 2; }
+  const si = argv.indexOf('--seat-decl');
+  const srcIdx = hi >= 0 ? hi : si;
+  const extra = argv.filter((a, i) => a !== '--json' && a !== '--hosts' && a !== '--seat-decl' && i !== srcIdx + 1);
+  if ((hi >= 0) === (si >= 0) || !argv[srcIdx + 1] || extra.length) { process.stderr.write(usage); return 2; }
   let items;
-  try { items = build(validate(JSON.parse(fs.readFileSync(argv[hi + 1], 'utf8')))); } catch (e) { process.stderr.write(`login-checklist: ${e.message}\n`); return 2; }
+  try {
+    const entries = hi >= 0
+      ? JSON.parse(fs.readFileSync(argv[hi + 1], 'utf8'))
+      : require('./lib/seat-decl').loginEntries(require('./lib/seat-decl').readSeatDecl(argv[si + 1]));
+    items = build(validate(entries));
+  } catch (e) { process.stderr.write(`login-checklist: ${e.message}\n`); return 2; }
   process.stdout.write(argv.includes('--json') ? `${JSON.stringify(items, null, 2)}\n` : `${render(items)}\n`);
   return 0;
 }

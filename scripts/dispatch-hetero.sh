@@ -3913,6 +3913,26 @@ fi
 _gate_cwd="${SCRATCH_WORK_DIR:-$(pwd)}"
 _gate_prompt="${SCRATCH_WORK_DIR:+$SCRATCH_WORK_DIR/brief.md}"
 _gate_prompt="${_gate_prompt:-$PROMPT_FILE}"
+# Fleet-Task gate (P4): before any worktree or runner launch, require open Fleet-Task unless exempt.
+_pm_repo="${REPO_ROOT:-}"
+if [ -z "$_pm_repo" ]; then
+  _pm_repo="$(git rev-parse --show-toplevel 2>/dev/null || pwd -P 2>/dev/null || true)"
+fi
+_pm_out_err="$(mktemp -t dispatch-hetero-pm-XXXXXX)"
+if _pm_resolved="$(node "$SELF_DIR/lib/fleet-task-ref.js" pm-check \
+    --repo-root "${_pm_repo:-$PWD}" \
+    ${FLEET_TASK_ARG:+--fleet-task "$FLEET_TASK_ARG"} \
+    --prompt-file "$_gate_prompt" \
+    --bin-stub "${BIN_SUPPLIED:-0}" 2>"$_pm_out_err")"; then
+  if [ -s "$_pm_out_err" ]; then cat "$_pm_out_err" >&2 || true; fi
+  [ -n "$_pm_resolved" ] && [ -z "${FLEET_TASK_ARG:-}" ] && FLEET_TASK_ARG="$_pm_resolved"
+  rm -f "$_pm_out_err" 2>/dev/null || true
+else
+  _pm_msg="$(tr '\n' ' ' < "$_pm_out_err" 2>/dev/null | sed 's/[[:space:]]*$//')"
+  rm -f "$_pm_out_err" 2>/dev/null || true
+  die_precondition "${_pm_msg:-Fleet-Task precondition failed}"
+fi
+unset _pm_repo _pm_out_err _pm_resolved _pm_msg
 _tfg_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner "$RUNNER" --model "$MODEL" --endpoint "${ENDPOINT:-$RUNNER}" --cwd "$_gate_cwd" --prompt-file "$_gate_prompt" 2>&1 >/dev/null)" \
   || die_precondition "${_tfg_msg:-cn_model_dispatch_barred unknown restricted_operator_unknown_endpoint (01M7E2A1, d-1dfcf757)}"
 unset _tfg_msg

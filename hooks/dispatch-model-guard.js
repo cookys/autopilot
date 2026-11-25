@@ -62,7 +62,7 @@ const {
 const { BRIEF_HEAD_WINDOW, headLines, findHeadMatch } = require('./lib/brief-head.js');
 const { gateHint } = require('./lib/gate-hint.js');
 const { isPmConsole, pmConsoleStatus } = require('./_shared/pm-console.js');
-const { findTaskId, checkTaskOpen } = require('../scripts/lib/fleet-task-ref.js');
+const { resolvePmGate } = require('../scripts/lib/fleet-task-ref.js');
 const { resolveFleetSeat } = require('./_shared/fleet-seat.js');
 const { userRuntimeBase, ensurePrivateDir } = require('../scripts/lib/runtime-paths.js');
 const { SEEN_AT_FRESH_MS } = require('../scripts/lib/pace-reading.js');
@@ -306,7 +306,6 @@ const PM_READ_ONLY_SUBAGENT_TYPES = Object.freeze(new Set(['Explore', 'Plan', 'w
 
 function checkPmFleetTask(input, toolInput, prompt) {
   warnIfPmSeatUndetermined(input);
-  if (!isPmConsole(input)) return;
   const subagentType = String(toolInput.subagent_type || '').trim();
   if (PM_READ_ONLY_SUBAGENT_TYPES.has(subagentType)) return;
   const hasEngine = Boolean(engineTokenFromPrompt(prompt))
@@ -314,30 +313,19 @@ function checkPmFleetTask(input, toolInput, prompt) {
   if (!hasEngine) return;
 
   const head = headLines(prompt, BRIEF_HEAD_WINDOW).join('\n');
-  const taskId = findTaskId(head);
-  if (!taskId) {
+  const res = resolvePmGate({
+    repoRoot: (input && input.cwd) || process.cwd(),
+    text: head,
+  });
+  if (!res.allowed) {
     emitDeny(
-      'PM Console 派工硬阻擋：此 subagent brief 帶有 Engine: 標頭，但前 10 行缺少 Fleet-Task: <26-char id> 綁定。請先開啟或挑選對應的 fleet 任務（使用 fleet task show <id> 確認狀態為 open），並將「Fleet-Task: <id>」加入 brief 前 10 行後再重新派工。'
+      res.reason
       + gateHint('先開或挑一個 open 的 fleet 任務，把 Fleet-Task: <id> 放進 brief 前 10 行再派工', 'hooks/README.md')
     );
   }
-
-  const probe = checkTaskOpen(taskId);
-  if (probe.state === 'open') return;
-  if (probe.state === 'unavailable') {
-    process.stderr.write(`dispatch-model-guard: fleet task ${taskId} check unavailable — allowing (fail-open)\n`);
-    return;
+  if (res.note) {
+    process.stderr.write(`dispatch-model-guard: ${res.note}\n`);
   }
-  if (probe.state === 'not_found') {
-    emitDeny(
-      `PM Console 派工硬阻擋：查無此單 Fleet-Task: ${taskId}。PM 席位自己的 courier 沒有此任務；若任務開在其他 courier，請綁定此 courier 持有的 open 任務，並將「Fleet-Task: <id>」加入 brief 前 10 行後再重新派工。`
-      + gateHint('改綁此 courier 持有的 open 任務（fleet task show <id> 確認），把新的 Fleet-Task: <id> 放進 brief 前 10 行', 'hooks/README.md')
-    );
-  }
-  emitDeny(
-    `PM Console 派工硬阻擋：brief 中的 Fleet-Task: ${taskId} 已結束（closed: done/failed/cancelled）。請開啟或挑選進行中的 open 任務（使用 fleet task show ${taskId} 確認），並將新的「Fleet-Task: <id>」加入 brief 前 10 行後再重新派工。`
-    + gateHint('改綁進行中的 open 任務，把新的 Fleet-Task: <id> 放進 brief 前 10 行再派工', 'hooks/README.md')
-  );
 }
 
 const MECHANICAL_ROLES = new Set([

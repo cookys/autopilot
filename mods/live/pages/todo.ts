@@ -5,7 +5,7 @@ import { GLYPHS } from '../../tux/glyphs.ts'
 import { PALETTE } from '../../tux/palette.ts'
 import { displayWidth, truncateToWidth } from '../model'
 import type { Seg } from '../model'
-import { PICK_KEYS } from '../v74/contract'
+import { PICK_KEYS, pickKeys } from '../v74/contract'
 import type { TodoCard } from '../v74/contract'
 import type { Page, PageCtx } from './frame'
 import { STRIP_SPLIT_COLS } from './layout'
@@ -55,9 +55,10 @@ function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
   const cur = cards[cursor]
   const picked = v.nav.picks[cur.id]
   const opts: Row = [seg('')]
+  const keys = pickKeys(cur.options) // R6: the drawn `[x]` and the press are the same key that picks
   cur.options.slice(0, PICK_KEYS.length).forEach((o, k) => {
     if (k > 0) opts.push(seg('   '))
-    opts.push(seg('[' + PICK_KEYS[k] + '] ' + truncateToWidth(o.label, Math.max(4, Math.floor(cols / 3) - 6)), { press: 'key:' + PICK_KEYS[k], ...(picked === k ? { color: PALETTE.here } : {}) }))
+    opts.push(seg('[' + keys[k] + '] ' + truncateToWidth(o.label, Math.max(4, Math.floor(cols / 3) - 6)), { press: 'key:' + keys[k], ...(picked === k ? { color: PALETTE.here } : {}) }))
   })
   const actions: Row[] = [[seg(' ' + t('v74.d.todo_for', { k: cursor + 1 }))], opts, [dimSeg(' ' + t('v74.d.todo_move'))]]
   const room = Math.max(1, ctx.size.rows - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - actions.length)

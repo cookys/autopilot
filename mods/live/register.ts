@@ -86,7 +86,7 @@ import { SEATS_TIMEOUT_MS, seatQuota, v74PmCounts } from './pages/now'
 import { PAGES, EXTRA_PAGES } from './pages/index'
 import { ASKS_LIST_TAIL, cutTitle, makeAsksFeed, makeDecideFeed, makePmFeed, mergeDecideCards } from './v74/feeds'
 import { askBandRows } from './askband'
-import { offerTodo } from './v74/contract'
+import { offerTodo, pickIndex } from './v74/contract'
 import type { CardNav, DecideCard, PmStatus, TodoCard, V74Ctx } from './v74/contract'
 import { v74Keylog } from './v74/keylog'
 import { frameHeight } from './pages/frame'
@@ -1915,7 +1915,10 @@ async function frameKeyBody($: EngineInterface, k: KeyAction): Promise<void> {
       else if (k.kind === 'cursor') await update($, V74_NAV, () => ({ ...nav, cursor: Math.min(last, Math.max(0, k.at)) }))
       else if (k.kind === 'pick') {
         const c = cards[nav.cursor]
-        if (c !== undefined) await update($, V74_NAV, () => ({ ...nav, picks: { ...nav.picks, [c.id]: k.index } }))
+        if (c !== undefined) {
+          const at = pickIndex(c.options, k.index) // R6: the pressed letter picks the option it labels, not the position (contract.pickKeys)
+          if (at >= 0 && at < c.options.length) await update($, V74_NAV, () => ({ ...nav, picks: { ...nav.picks, [c.id]: at } }))
+        }
       }
     } else {
       const v = pageView[id] ?? (id === 'review' ? DEFAULT_REVIEW_VIEW : { focus: 0, expanded: false })

@@ -210,5 +210,21 @@ assert_eq "unknown verdict zero fleet calls" "0" "$(wc -l < "$FLEET_LOG" | tr -d
 (cd "$TEST_REPO" && node "$SCRIPT" --receipt "$ADJ_RECEIPT") >/dev/null
 assert_eq "adjudicated receipt creates 3 tasks" "3" "$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).length)" "$FLEET_STATE")"
 
+# 7. --repo reads the commit from another repo; ASSIGNEE_MAP routes single phases
+echo '[]' > "$FLEET_STATE"
+: > "$FLEET_LOG"
+(cd "$TMPDIR_TEST" && PLAN_TO_TASKS_ASSIGNEE_MAP="P2=other/courier/pm" node "$SCRIPT" --receipt "$RECEIPT" --repo "$TEST_REPO") >/dev/null
+assert_eq "--repo creates 3 tasks from outside the repo" "3" "$(grep -c '^dispatch' "$FLEET_LOG" || true)"
+assert_eq "map routes P2 to the override" "1" "$(grep -c '^dispatch other/courier/pm .*' "$FLEET_LOG" || true)"
+assert_eq "unmapped phases keep the default assignee" "2" "$(grep -c '^dispatch test/courier/member ' "$FLEET_LOG" || true)"
+echo '[]' > "$FLEET_STATE"
+: > "$FLEET_LOG"
+set +e
+(cd "$TMPDIR_TEST" && PLAN_TO_TASKS_ASSIGNEE_MAP="P9=other/courier/pm" node "$SCRIPT" --receipt "$RECEIPT" --repo "$TEST_REPO") >/dev/null 2>&1
+rc=$?
+set -e
+assert_eq "map naming an unknown phase exits 2" "2" "$rc"
+assert_eq "unknown map phase makes zero dispatches" "0" "$(grep -c '^dispatch' "$FLEET_LOG" || true)"
+
 echo "plan-to-tasks.test.sh: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -30,7 +30,7 @@ fi
 if [ -f "$REPO_ROOT/ARCHITECTURE.md" ] && [ -f "$REPO_ROOT/scripts/check-architecture-map.js" ]; then
   # git removes MERGE_HEAD before this hook runs, so diff HEAD against the tree about to be committed
   __MAP_TREE="$(git write-tree)"
-  if MAP_OUT="$(node "$REPO_ROOT/scripts/check-architecture-map.js" --repo "$REPO_ROOT" --base HEAD --head "$__MAP_TREE" --mode warn 2>&1)"; then
+  if MAP_OUT="$(node "$REPO_ROOT/scripts/check-architecture-map.js" --repo "$REPO_ROOT" --base HEAD --head "$__MAP_TREE" --mode warn --run-interaction 2>&1)"; then
     if [ -n "$MAP_OUT" ]; then
       echo "$MAP_OUT" >&2
     fi

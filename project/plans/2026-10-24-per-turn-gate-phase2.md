@@ -1,6 +1,6 @@
 # Plan - per-turn gate, phase 2 (BL-0055): a Stop-hook adapter and its ON/OFF evaluation
 
-> Status: P2-4 verdict written (`docs/plans/evidence/2026-10-25-per-turn-gate-p2-4/VERDICT.md`), default decision pending the owner (card d-7d8444a3); not archived yet. Earlier status: draft, awaiting plan review. Written after owner decision d-35748784 (2026-10-24, Taipei time): GO on a plan for the stages after P1. Follow-up to section 4 of `project/plans/2026-10-20-per-turn-gate.md`; no code here; needs its own plan review.
+> Status: not-pursued（不做）。依 2026-11-21 稽核（PM 01M7XQRV）與下一行稽核證據更正；原狀態：P2-4 verdict written (`docs/plans/evidence/2026-10-25-per-turn-gate-p2-4/VERDICT.md`), default decision pending the owner (card d-7d8444a3); not archived yet. Earlier status: draft, awaiting plan review. Written after owner decision d-35748784 (2026-10-24, Taipei time): GO on a plan for the stages after P1. Follow-up to section 4 of `project/plans/2026-10-20-per-turn-gate.md`; no code here; needs its own plan review.
 > 稽核（2026-11-21，PM 01M7XQRV）：不做。每回合閘整條線已裁示不做；板頭另有 d-32849d39「A: default off」、d-7d8444a3 預設待裁，追蹤列已移除。證據：966e3f62e（PM 2026-11-05 移除 14 條 not doing 列）；docs/plans/evidence/2026-10-25-per-turn-gate-p2-4/VERDICT.md。
 
 ## 0. Thesis

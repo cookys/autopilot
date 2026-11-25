@@ -1,5 +1,5 @@
 ---
-status: implemented
+Status: shipped（已出貨）。依 2026-11-21 稽核（PM 01M7XQRV）與下一行稽核證據更正；原狀態：implemented
 date: 2026-08-03
 size: L
 entry_level: l5

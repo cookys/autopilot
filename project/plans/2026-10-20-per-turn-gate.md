@@ -1,6 +1,6 @@
 # Plan — per-turn gate (BL-0055): hook probe (P0) and baseline measurement (P1)
 
-> Status: plan review v3 CONDITIONAL at generation cap; depth-0 adjudicated 2026-10-23: 7 blocking findings fixed without re-review; P0 probe requires a separate owner approval with a cost estimate
+> Status: not-pursued（不做）。依 2026-11-21 稽核（PM 01M7XQRV）與下一行稽核證據更正；原狀態：plan review v3 CONDITIONAL at generation cap; depth-0 adjudicated 2026-10-23: 7 blocking findings fixed without re-review; P0 probe requires a separate owner approval with a cost estimate
 > 稽核（2026-11-21，PM 01M7XQRV）：不做。每回合閘整條線已裁示不做；板頭另有 d-32849d39「A: default off」、d-7d8444a3 預設待裁，追蹤列已移除。證據：966e3f62e（PM 2026-11-05 移除 14 條 not doing 列）；docs/plans/evidence/2026-10-25-per-turn-gate-p2-4/VERDICT.md。
 
 ## 0. Thesis and evidence

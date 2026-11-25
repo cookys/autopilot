@@ -1,6 +1,6 @@
 # Plan - fable-skills absorption
 
-> Status: CLOSED-NOT-PURSUED (Board CEO-delegated ruling 2026-08-23) — largely superseded by evidence-discipline promotion, skill-contract-card, and review checklists; residual value does not clear 成績單前置 with zero demand signal. Re-entry: an incident an unabsorbed guardrail would have prevented. Original: R0 authored 2026-07-08, triaged 2026-07-31.
+> Status: not-pursued（不做）。依 2026-11-21 稽核（PM 01M7XQRV）與下一行稽核證據更正；原狀態：CLOSED-NOT-PURSUED (Board CEO-delegated ruling 2026-08-23) — largely superseded by evidence-discipline promotion, skill-contract-card, and review checklists; residual value does not clear 成績單前置 with zero demand signal. Re-entry: an incident an unabsorbed guardrail would have prevented. Original: R0 authored 2026-07-08, triaged 2026-07-31.
 > 稽核（2026-11-21，PM 01M7XQRV）：不做。板頭「CLOSED-NOT-PURSUED (Board CEO-delegated ruling 2026-08-23)」，已被 evidence-discipline 升級與 skill-contract-card 取代。證據：板頭原句；追蹤列 2026-08-28 由 1631709a7 移除。
 > Owner: pending Board decision.
 > Branch: develop.

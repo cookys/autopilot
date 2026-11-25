@@ -343,3 +343,22 @@ test('month split: a run starting in December and ending in January keeps every 
   assert.strictEqual(rows.length, 2);
   assert.strictEqual(rows[rows.length - 1].status, 'committed'); // last row wins
 });
+
+test('role, subagent_type, model, usd: present values kept, missing become null, never estimated', () => {
+  const full = rowOf({ runner: 'codex', model: 'gpt-5', subagent_type: 'Explore', total_cost_usd: 0.42, status: 'committed' }, { role: 'reviewer' });
+  assert.strictEqual(full.role, 'reviewer');
+  assert.strictEqual(full.subagent_type, 'Explore');
+  assert.strictEqual(full.model, 'gpt-5');
+  assert.strictEqual(full.usd, 0.42);
+  assert.strictEqual(U.validateRow(full), null);
+
+  const missing = rowOf({ runner: 'codex', status: 'committed' }, { role: 'implementer' });
+  assert.strictEqual(missing.role, 'implementer');
+  assert.strictEqual(missing.subagent_type, null);
+  assert.strictEqual(missing.model, null);
+  assert.strictEqual(missing.usd, null);
+  assert.strictEqual(U.validateRow(missing), null);
+
+  const badUsd = Object.assign({}, full, { usd: -1 });
+  assert.strictEqual(U.validateRow(badUsd), 'usd_not_number_or_null');
+});

@@ -67,6 +67,7 @@ const { resolveFleetSeat } = require('./_shared/fleet-seat.js');
 const { ensurePrivateDir } = require('../scripts/lib/runtime-paths.js');
 const { stateDir } = require('../scripts/lib/state-dir.js');
 const { SEEN_AT_FRESH_MS } = require('../scripts/lib/pace-reading.js');
+const { normalizeRow: normalizeUsageRow, appendRow: appendUsageRow } = require('../scripts/lib/dispatch-usage.js');
 // default-on since v2.35.15 (was opt-in). Opt out: AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=off
 // (or `- mode: off` in .claude/dispatch-guard-config.md). Set AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=warn
 // to downgrade overloaded-Claude mechanical blocks to warnings. The 2026-09-04 cuda quota digest:
@@ -688,6 +689,34 @@ function recordBrainTierDispatch(input, prompt, modelRaw, reason, allowed) {
   }
 }
 
+// Fail-open: record allowed Agent/Task dispatches into the dispatch_usage/1 ledger.
+function recordAgentDispatchUsage(input, toolInput, prompt, effectiveModel) {
+  try {
+    let role = null;
+    for (const line of headLines(prompt || '', 10)) {
+      const m = /(?:^|\|)[ \t]*Role:[ \t]*([A-Za-z-]+)/i.exec(line);
+      if (m) { role = m[1].trim().toLowerCase(); break; }
+    }
+    const subagentType = String(toolInput.subagent_type || '').trim() || null;
+    const model = String(effectiveModel || '').trim() || null;
+    const runId = String(input.tool_use_id || '').trim() || `agent-${Date.now()}-${process.pid}`;
+    const nowSecs = Math.floor(Date.now() / 1000);
+    appendUsageRow(normalizeUsageRow({
+      run_id: runId,
+      role,
+      subagent_type: subagentType,
+      runner: 'claude-native',
+      model,
+      usd: null,
+      status: 'running',
+      started_at: nowSecs,
+      ended_at: null,
+    }));
+  } catch {
+    // fail-open: never block dispatch on usage ledger write failure
+  }
+}
+
 // Autopilot dispatch briefs (Lane: present in the first 5 lines) must carry
 // `Size: XS|S|M|L|XL` and `Used-by: user|e2e|n/a <reason>` in the head lines,
 // gated behind `brief_size_used_by: warn|deny` (default `warn`).
@@ -762,6 +791,7 @@ try {
   if (briefWarning) advisories.push(briefWarning);
   // Advisory exit: the dispatch proceeds; warnings/hints ride additionalContext (and stderr).
   const exitAllow = () => {
+    recordAgentDispatchUsage(input, toolInput, typeof toolInput.prompt === 'string' ? toolInput.prompt : '', modelRaw);
     if (advisories.length > 0) {
       const msg = advisories.join('\n');
       process.stderr.write(msg + '\n');
@@ -793,9 +823,11 @@ try {
     // One advisory line for the default; it rides the same stderr + additionalContext
     // channel as every other advisory of this hook.
     if (mainSeatIsNonClaude()) {
+      recordAgentDispatchUsage(input, toolInput, promptAbsent, null);
       advisories.push('預設 worker 等級 inherit（主席是本地／非 Claude 模型）');
       exitAllow();
     }
+    recordAgentDispatchUsage(input, toolInput, promptAbsent, 'sonnet');
     advisories.push('預設 worker 等級 sonnet');
     const msg = advisories.join('\n');
     process.stderr.write(msg + '\n');

@@ -484,27 +484,45 @@ function checkOverloadedClaudeMechanical(toolInput, prompt, advisories) {
   ));
   if (!claudeOverloaded) return;
 
-  const heteroReservePct = (typeof pace.hetero_reserve_pct === 'number' && Number.isFinite(pace.hetero_reserve_pct))
-    ? pace.hetero_reserve_pct
-    : 50;
-  const agyReserveCeiling = 100 - heteroReservePct;
-
-  const overCeilingPools = new Set(
-    pace.rows
-      .filter((r) => {
-        if (!r || typeof r.used_pct !== 'number' || !Number.isFinite(r.used_pct) || typeof r.pool !== 'string') return false;
-        const ceiling = r.pool.toLowerCase() === 'agy' ? agyReserveCeiling : 85;
-        return r.used_pct >= ceiling;
-      })
-      .map((r) => r.pool.toLowerCase())
+function privateLanes(env = process.env) {
+  const raw = env.AUTOPILOT_DISPATCH_MODEL_GUARD_PRIVATE_LANES === undefined
+    ? '308'
+    : String(env.AUTOPILOT_DISPATCH_MODEL_GUARD_PRIVATE_LANES);
+  return new Set(
+    raw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
   );
-  const targets = Array.isArray(pace.burn_more?.targets_in_order)
-    ? pace.burn_more.targets_in_order.filter((t) => typeof t === 'string' && t.trim() !== '').map((t) => t.trim())
-    : [];
-  const suggested = targets.find((t) => !overCeilingPools.has(t.toLowerCase())) || targets[0] || 'agy';
+}
 
-  const msg = `dispatch-model-guard: Claude pool is overloaded; mechanical subagent (Role: ${matchedRole}) must not land on Claude. Use ${suggested} instead (set AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=warn to warn only).`
-    + gateHint(`改派 ${suggested} 引擎；要降級為警示才設 AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=warn`, 'hooks/README.md');
+  const lane = laneFromBrief(prompt);
+  const isPrivateLane = lane !== null && privateLanes().has(lane.toLowerCase());
+
+  let msg;
+  if (isPrivateLane) {
+    msg = `dispatch-model-guard: Claude pool is overloaded; mechanical subagent (Role: ${matchedRole}) on private lane (${lane}) is Claude-only. Wait for Claude pool capacity to recover or switch to another Claude model/pool (set AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=warn to warn only).`
+      + gateHint(`等待 Claude 池容量回來，或改用另一個 Claude 模型/池；此 lane（${lane}）僅限 Claude。要降級為警示才設 AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=warn`, 'hooks/README.md');
+  } else {
+    const heteroReservePct = (typeof pace.hetero_reserve_pct === 'number' && Number.isFinite(pace.hetero_reserve_pct))
+      ? pace.hetero_reserve_pct
+      : 50;
+    const agyReserveCeiling = 100 - heteroReservePct;
+
+    const overCeilingPools = new Set(
+      pace.rows
+        .filter((r) => {
+          if (!r || typeof r.used_pct !== 'number' || !Number.isFinite(r.used_pct) || typeof r.pool !== 'string') return false;
+          const ceiling = r.pool.toLowerCase() === 'agy' ? agyReserveCeiling : 85;
+          return r.used_pct >= ceiling;
+        })
+        .map((r) => r.pool.toLowerCase())
+    );
+    const targets = Array.isArray(pace.burn_more?.targets_in_order)
+      ? pace.burn_more.targets_in_order.filter((t) => typeof t === 'string' && t.trim() !== '').map((t) => t.trim())
+      : [];
+    const suggested = targets.find((t) => !overCeilingPools.has(t.toLowerCase())) || targets[0] || 'agy';
+
+    msg = `dispatch-model-guard: Claude pool is overloaded; mechanical subagent (Role: ${matchedRole}) must not land on Claude. Use ${suggested} instead (set AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=warn to warn only).`
+      + gateHint(`改派 ${suggested} 引擎；要降級為警示才設 AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=warn`, 'hooks/README.md');
+  }
   if (process.env.AUTOPILOT_DISPATCH_MODEL_GUARD_MODE === 'warn') {
     advisories.push(msg);
     return;

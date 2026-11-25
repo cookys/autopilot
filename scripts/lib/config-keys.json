@@ -9207,6 +9207,18 @@
       "doc": null,
       "relates": [],
       "note": "pm_act.state_dir: where pm-act keeps its journal; defaults to XDG_STATE_HOME."
+    },
+    {
+      "name": "AUTOPILOT_DISPATCH_MODEL_GUARD_PRIVATE_LANES",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": "308",
+      "readers": [
+        "hooks/dispatch-model-guard.js"
+      ],
+      "doc": null,
+      "relates": []
     }
   ]
 }

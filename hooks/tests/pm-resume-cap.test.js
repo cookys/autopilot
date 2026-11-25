@@ -7,21 +7,21 @@ const path = require('path');
 const { capResumeSections, buildResumeBlock } = require('../lib/pm-resume.js');
 
 function runTests() {
-  // 1. Reverse probe: 20 IN_FLIGHT rows (300 chars each = 6000+ chars) + 5 NEEDS_REPLY rows + overflowing WAITING_ON_PM.
+  // 1. Reverse probe: 20 IN_FLIGHT rows (300 chars each = 6000+ chars) + 5 NEEDS_REPLY rows + overflowing PLAN_GAPS.
   const inFlightRows = Array.from({ length: 20 }, (_, i) => {
     const prefix = `01M89VND4KYEMRFWDJEEAED${String(i).padStart(3, '0')} `;
     return prefix + 'x'.repeat(300 - prefix.length);
   });
   const needsReplyRows = Array.from({ length: 5 }, (_, i) => `NR-${i} please reply to this item`);
-  const waitingRows = Array.from({ length: 40 }, (_, i) => `WAIT-${i} ` + 'w'.repeat(100));
+  const gapRows = Array.from({ length: 40 }, (_, i) => `GAP-${i} ` + 'w'.repeat(100));
 
   const fixture = [
     'IN_FLIGHT (20)',
     ...inFlightRows,
     'NEEDS_REPLY (5)',
     ...needsReplyRows,
-    'WAITING_ON_PM (40)',
-    ...waitingRows,
+    'PLAN_GAPS (40)',
+    ...gapRows,
   ].join('\n');
 
   const capped = capResumeSections(fixture, { softCapChars: 3000, maxRowChars: 400 });
@@ -33,13 +33,13 @@ function runTests() {
     assert(capped.includes(row), `Missing NEEDS_REPLY row: ${row}`);
   }
   assert(/已省略 \d+ 列/.test(capped), 'Expected truncated section to include 已省略 N 列');
-  assert(!capped.includes(waitingRows[39]), 'Expected overflowing WAITING_ON_PM tail to be omitted');
+  assert(!capped.includes(gapRows[39]), 'Expected overflowing PLAN_GAPS tail to be omitted');
 
   // Verify non-exempt section stays within softCapChars (3000).
-  const waitingStart = capped.indexOf('WAITING_ON_PM (40)');
-  assert(waitingStart !== -1, 'Expected WAITING_ON_PM header to be present');
+  const waitingStart = capped.indexOf('PLAN_GAPS (40)');
+  assert(waitingStart !== -1, 'Expected PLAN_GAPS header to be present');
   const waitingPortion = capped.slice(waitingStart);
-  assert(/WAITING_ON_PM 已省略 \d+ 列/.test(capped), 'omission marker must name the section');
+  assert(/PLAN_GAPS 已省略 \d+ 列/.test(capped), 'omission marker must name the section');
   assert(waitingPortion.length <= 3000, `Other sections exceeded 3000 chars: ${waitingPortion.length}`);
 
   // 2. Single row > 400 chars in IN_FLIGHT / NEEDS_REPLY is shortened, not dropped.
@@ -78,6 +78,11 @@ function runTests() {
 
   // 5. Reverse probe: whole-output slice (the old behavior) would lose rows.
   assert(real.slice(0, 3000).split('\n').filter((l) => l.startsWith('IN_FLIGHT')).length < 20, 'sanity: naive slice drops rows');
+  // 6. WAITING_ON_PM is a keep-whole section like NEEDS_REPLY: 40 rows all printed.
+  const wait = ['WAITING_ON_PM (40)', ...Array.from({ length: 40 }, (_, i) => 'W' + i + ' ' + 'w'.repeat(150))].join('\n');
+  const waitOut = capResumeSections(wait);
+  for (let i = 0; i < 40; i++) assert(waitOut.includes('W' + i + ' '), 'WAITING_ON_PM row ' + i + ' must be kept');
+  assert(!/已省略/.test(waitOut), 'WAITING_ON_PM is never omitted');
   console.log('PASS: pm-resume-cap.test.js');
 }
 

@@ -86,10 +86,10 @@ function digestResume(out, { maxChars = 3000 } = {}) {
 }
 
 // Section-based cap for non-compact loads, keyed by section name (the leading upper-case token of a row, or a
-// "NAME (n)" header followed by body rows). IN_FLIGHT and NEEDS_REPLY rows are always kept whole (a row over
+// "NAME (n)" header followed by body rows). IN_FLIGHT, NEEDS_REPLY and WAITING_ON_PM rows are always kept whole (a row over
 // maxRowChars is shortened, never dropped); every other row shares softCapChars, and each section that loses rows
 // ends with "已省略 N 列".
-const KEEP_SECTIONS = new Set(['IN_FLIGHT', 'NEEDS_REPLY']);
+const KEEP_SECTIONS = new Set(['IN_FLIGHT', 'NEEDS_REPLY', 'WAITING_ON_PM']);
 function capResumeSections(out, { softCapChars = 3000, maxRowChars = 400 } = {}) {
   const rows = []; // { key, text, header }
   let current = null;

@@ -20,7 +20,7 @@ const { execFileSync } = require('child_process');
 const { checkEngineQuota, normalizeEngine } = require('./quota-wait-check.js');
 
 const QUOTA_WAIT_RE = /等\s*([A-Za-z0-9_.-]*)\s*額度|quota[\s_-]*wait|wait(?:ing)?\s+(?:for|on)\s+quota/i;
-const SWEEP_MATCH_RE = /等\s*([A-Za-z0-9_.-]*)\s*額度|額度|quota/i;
+const SWEEP_MATCH_RE = QUOTA_WAIT_RE;
 
 function readOpenFleetTaskFiles(dir) {
   const targetDir = dir || process.env.AUTOPILOT_OPEN_FLEET_TASKS_DIR || '/run/user/1001/autopilot/open-fleet-tasks';
@@ -32,9 +32,11 @@ function readOpenFleetTaskFiles(dir) {
       const fullPath = path.join(targetDir, name);
       try {
         const content = fs.readFileSync(fullPath, 'utf8');
-        const id = name.replace(/\.txt$/, '');
-        const firstLine = content.split(/\r?\n/)[0] || '';
-        tasks.push({ id, status: 'open', title: firstLine, content });
+        // One task per line: "<26-char id> <state> <title>".
+        for (const line of content.split(/\r?\n/)) {
+          const m = /^([0-9A-Z]{26})\s+(\S+)\s+(.*)$/.exec(line);
+          if (m) tasks.push({ id: m[1], status: m[2], title: m[3] });
+        }
       } catch {
         // ignore unreadable task file
       }
@@ -51,7 +53,7 @@ function readFleetTasks(opts = {}) {
     : [];
   const mergeExtra = (baseTasks) => {
     if (!extraTasks.length) return baseTasks;
-    const seen = new Set(baseTasks.map((t) => t && t.id).filter(Boolean));
+    const seen = new Set(baseTasks.map((t) => t && (t.id || t.task_id)).filter(Boolean));
     const merged = baseTasks.slice();
     for (const t of extraTasks) {
       if (!t.id || !seen.has(t.id)) merged.push(t);
@@ -87,7 +89,7 @@ function readFleetTasks(opts = {}) {
 
 function extractTaskText(task) {
   if (!task || typeof task !== 'object') return '';
-  const parts = [task.id, task.title, task.content, task.description, task.note, task.status_note, task.last_comment];
+  const parts = [task.id || task.task_id, task.title, task.content, task.description, task.note, task.status_note, task.last_comment];
   if (Array.isArray(task.comments)) {
     for (const c of task.comments) {
       if (typeof c === 'string') parts.push(c);
@@ -123,8 +125,8 @@ function sweepQuotaWaitTasks(opts = {}) {
       ? checkEngineQuota(engine, opts)
       : { verdict: 'unknown', pct_5h: null, pct_7d: null, reset_at: null, observed_at: null };
     rows.push({
-      id: task.id || '(no-id)',
-      status: task.status || 'unknown',
+      id: task.id || task.task_id || '(no-id)',
+      status: task.status || task.state || 'unknown',
       engine,
       verdict: quota.verdict,
       pct_5h: quota.pct_5h,

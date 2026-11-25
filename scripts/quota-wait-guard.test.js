@@ -143,7 +143,7 @@ test('sweep', () => {
 // 8. Sweep test (read-only, including open-fleet-tasks/*.txt and comments)
 const openTasksDir = path.join(tmpDir, 'open-fleet-tasks');
 fs.mkdirSync(openTasksDir);
-fs.writeFileSync(path.join(openTasksDir, '01TESTTASK0000000000000003.txt'), '等待 codex 額度恢復\n');
+fs.writeFileSync(path.join(openTasksDir, '01TESTTASK0000000000000003.txt'), '01TESTTASK0000000000000003 waiting 等 codex 額度\n');
 const sweep = sweepQuotaWaitTasks({
   tasksJsonFile: fakeTasksFile,
   quotaJsonFile: fakeQuotaFile,

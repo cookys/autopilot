@@ -295,3 +295,70 @@ test('pm-cost-s2: send and reply refusals name task_comment(task_id, text) and t
     assert.match(reason, /task_result\(message_id, result, content\)/);
   }
 });
+
+test('M2: reply to a fleet message with task_id auto-prepends task_id via updatedInput', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fleet-m2-'));
+  const transcriptPath = path.join(dir, 'transcript.jsonl');
+  const taskId = '01M7RSNEWJ85N4906CNC4Z3QFX';
+  const entry = {
+    message: {
+      content: `<channel source="fleet" from="ns/hostA/pm--claude" message_id="msg-123">\ntask_id: ${taskId}\n請確認這件事\n</channel>`,
+    },
+  };
+  fs.writeFileSync(transcriptPath, JSON.stringify(entry) + '\n', 'utf8');
+  try {
+    const out = guard.decide({
+      tool_name: 'mcp__fleet__reply',
+      transcript_path: transcriptPath,
+      tool_input: { message_id: 'msg-123', content: '請你修一下 foo.js' },
+    });
+    assert.equal(out.hookSpecificOutput.permissionDecision, 'allow');
+    assert.equal(out.hookSpecificOutput.updatedInput.content, `task_id: ${taskId}\n請你修一下 foo.js`);
+    assert.equal(out.hookSpecificOutput.updatedInput.message_id, 'msg-123');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('M2: reply when task_id cannot be inferred from transcript is still denied', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fleet-m2-miss-'));
+  const transcriptPath = path.join(dir, 'transcript.jsonl');
+  const entry = {
+    message: {
+      content: '<channel source="fleet" from="ns/hostA/pm--claude" message_id="msg-456">\n沒有單號的訊息\n</channel>',
+    },
+  };
+  fs.writeFileSync(transcriptPath, JSON.stringify(entry) + '\n', 'utf8');
+  try {
+    const out = guard.decide({
+      tool_name: 'mcp__fleet__reply',
+      transcript_path: transcriptPath,
+      tool_input: { message_id: 'msg-456', content: '請你修一下 foo.js' },
+    });
+    assert.equal(out.hookSpecificOutput.permissionDecision, 'deny');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('M2: reply that already carries task_id is allowed without duplicating task_id', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fleet-m2-dup-'));
+  const transcriptPath = path.join(dir, 'transcript.jsonl');
+  const taskId = '01M7RSNEWJ85N4906CNC4Z3QFX';
+  const entry = {
+    message: {
+      content: `<channel source="fleet" from="ns/hostA/pm--claude" message_id="msg-789">\ntask_id: ${taskId}\n請確認這件事\n</channel>`,
+    },
+  };
+  fs.writeFileSync(transcriptPath, JSON.stringify(entry) + '\n', 'utf8');
+  try {
+    const out = guard.decide({
+      tool_name: 'mcp__fleet__reply',
+      transcript_path: transcriptPath,
+      tool_input: { message_id: 'msg-789', content: `task_id: ${taskId}\n請你修一下 foo.js` },
+    });
+    assert.equal(out, null);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

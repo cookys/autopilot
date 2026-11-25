@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "description": "File path patterns for newly added files (--diff-filter=A) that trigger conservative 'look' triage in finish-triage.js",
+  "classes": [
+    {
+      "name": "hook",
+      "pattern": "^hooks/.*\\.(js|sh|json)$"
+    },
+    {
+      "name": "service",
+      "pattern": "(^|/)(systemd|services?|units?)/|\\.service$"
+    },
+    {
+      "name": "executable_script",
+      "pattern": "^(bin|scripts)/.*\\.(js|sh|py)$"
+    },
+    {
+      "name": "github_workflow",
+      "pattern": "^\\.github/workflows/.*\\.ya?ml$"
+    }
+  ]
+}

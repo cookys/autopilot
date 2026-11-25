@@ -15,7 +15,7 @@ import { GLYPHS } from '../../tux/glyphs.ts'
 import { PALETTE } from '../../tux/palette.ts'
 import { PAGES } from './index'
 import { ageUnit } from './now'
-import { DECIDE_COMPACT_MAX_ROWS, PAGE_KEYS, STRIP_SPLIT_COLS, TINY_FRAME_ROWS, V74_STRIP_ORDER, actionRows, decideLayoutMode } from './layout'
+import { DECIDE_COMPACT_MAX_ROWS, PAGE_KEYS, STRIP_SPLIT_COLS, TINY_FRAME_ROWS, V74_STRIP_ORDER, actionRows, decideFullWidth, decideLayoutMode } from './layout'
 import type { DecideLayoutMode } from './layout'
 import { V74_KEY } from '../v74/contract'
 import { WRAP_HANG, brokenRow, decisionCount, poolsNeedLook, sourceMissing, staleBadge, unknownPoolCount, wrapRow } from './rows'
@@ -221,10 +221,7 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
     // Dual-column decide (renderBoxD) and compact list (renderBoxCompactList) already lay out to exact ctx.size.cols; wrapping at 80 splits rows in half and hides bottom scroll hints.
     const bodyCols = ctx.bodyColumns ?? ctx.size.cols
     const effMaxRows = ctx.maxRows ?? ctx.size.rows
-    const fullWidthDecide = page.id === 'decide' && ctx.v74 !== undefined && ctx.box === true && (
-      (effMaxRows < DECIDE_COMPACT_MAX_ROWS && ctx.decide?.compactExpanded !== true) ||
-      (effMaxRows >= DECIDE_COMPACT_MAX_ROWS && decideLayoutMode(bodyCols, ctx.decide?.layoutMode ?? null) === 'dual' && !styleC(page, ctx))
-    )
+    const fullWidthDecide = page.id === 'decide' && decideFullWidth({ boxed: ctx.v74 !== undefined && ctx.box === true, effMaxRows, compactExpanded: ctx.decide?.compactExpanded === true, bodyCols, layoutMode: ctx.decide?.layoutMode ?? null, styleC: styleC(page, ctx) })
     const body = r.body.filter(x => read || x.some(s => s.text.trim() !== '')).flatMap(x => {
       if (opts.topAnchor === true && x.map(s => s.text).join('').trimStart().startsWith(GLYPHS.structure.open + ' ') && x.map(s => s.text).join('').trimEnd().endsWith(GLYPHS.structure.rule)) { // only section rules (they end in ─); a ▾ legend row is text
         const row = x.map(s => ({ ...s }))

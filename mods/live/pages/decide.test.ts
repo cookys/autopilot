@@ -570,3 +570,30 @@ test('awaiting block: in the host box allocations (5 / 13 / 17 rows) the first c
     expect(framed.every(r => r.reduce((w, s) => w + displayWidth(s.text), 0) <= cols), where + ': no row wider than the pane').toBe(true)
   }
 })
+
+// Canary 2026-11-25 (pins ce554da6d, a9bc2ebe3): with a 等你動手 block the boxed dual page was wrapped again at 80 columns (frameWrap)
+// so the columns collapsed into one, the separator broke into pieces and the detail lost its options. A card with no step is no item.
+test('awaiting block: the dual columns keep one separator column and the options stay visible at 209x49, 120x40 and 80x24; a stepless card is not counted', () => {
+  const bg = Array.from({ length: 4 }, (_, i) => '第 ' + String(i + 1).padStart(2, '0') + ' 行：背景說明。').join('\n')
+  const cards = Array.from({ length: 3 }, (_, i) => ({ id: 'd-dual' + i, title: '合併計畫 ' + i, question: '要不要合併這一輪的修正？', background: i === 0 ? bg : null, options: [{ label: '可以合併', detail: '', recommended: true }, { label: '先不要', detail: '', recommended: false }] }))
+  const aw = [
+    { id: 'd-aw01', title: '插電', question: '插電？', operator_steps: ['到機櫃把第二槽電源線插好', '回到這張卡按完成'] },
+    { id: 'd-aw02', title: '沒有步驟的卡', question: '空？', operator_steps: [] },
+  ]
+  const rowText = (r: { text: string }[]) => r.map(s => s.text).join('')
+  for (const [cols, rows] of [[209, 49], [120, 40], [80, 24]] as const) {
+    const ctx = { live: null, console: null, size: { cols, rows }, t, nowMs, box: true, maxRows: rows, v74: { decide: cards, awaiting: aw, pm: null, todo: null, nav: { cursor: 0, picks: {}, notes: {}, noteMode: false } } } as never
+    const framed = frameRows(decidePage, ctx, { pages: PAGES })
+    const texts = framed.map(rowText)
+    const where = cols + 'x' + rows
+    expect(texts.some(x => x.includes(t('v74.d.await_head', { n: 1 }))), where + ': only the card with a step is counted').toBe(true)
+    expect(texts.some(x => x.includes('沒有步驟的卡')), where + ': the stepless card is not drawn').toBe(false)
+    expect(texts.join('\n'), where + ': an option is visible').toContain('可以合併')
+    expect(framed.every(r => r.reduce((w, s) => w + displayWidth(s.text), 0) <= cols), where + ': no row wider than the pane').toBe(true)
+    if (cols >= 120) {
+      const seps = texts.filter(x => x.includes('│')).map(x => displayWidth(x.slice(0, x.indexOf('│'))))
+      expect(seps.length, where + ': the dual columns are drawn').toBeGreaterThan(3)
+      expect(new Set(seps).size, where + ': one separator column').toBe(1)
+    }
+  }
+})

@@ -35,7 +35,6 @@ function resolveSeat(payload, env) {
 
 function markerFile(sessionId, env) {
   const base = userRuntimeBase(env);
-  if (base.startsWith('/tmp/')) return null;
   const ensured = ensurePrivateDir(path.join(base, 'pm-resume'));
   if (!ensured.ok) return null;
   return path.join(ensured.path, `${String(sessionId).replace(/[^A-Za-z0-9_-]/g, '_')}.json`);

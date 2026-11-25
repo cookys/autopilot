@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 3.0.0-alpha.13
+- pm-resume: the injection marker is written even when the runtime base is under /tmp (hosts without XDG_RUNTIME_DIR), so the Stop reminder no longer repeats every turn; a hand-run fleet pm resume counts as touched.
+
 ## 3.0.0-alpha.12
 - hooks: context-land-gate, open-decision and request-decision resolve the fleet binary through bin() (HOME/.local/bin fallback), so a Stop hook with a short PATH no longer fails the hangar restart dispatch with 'no fleet binary'.
 

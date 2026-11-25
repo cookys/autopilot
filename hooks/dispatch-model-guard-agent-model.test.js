@@ -17,6 +17,7 @@ function runGuard(payload, env = {}) {
       ...process.env,
       AUTOPILOT_DISPATCH_MODEL_GUARD_MODE: '',
       AUTOPILOT_MECHANICAL_REROUTE: 'off',
+      AUTOPILOT_FLEET_TASK: '01M7ZDSR7X7C6GVSB6T3Q6YC3G',
       ...env,
     },
   });

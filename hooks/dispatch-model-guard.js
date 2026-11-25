@@ -721,9 +721,6 @@ try {
     : '';
   const modelRaw = explicitModelRaw || agentModelRaw;
   const model = modelRaw.toLowerCase();
-  const effectiveToolInput = (!explicitModelRaw && agentModelRaw)
-    ? { ...toolInput, model: agentModelRaw }
-    : toolInput;
 
   // model empty: the worker-level default decides outright — allow on sonnet via
   // updatedInput. The header check has nothing to match against and does not run

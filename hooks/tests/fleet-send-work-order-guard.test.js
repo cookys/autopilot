@@ -107,3 +107,53 @@ test('(d) dispatch plan gate: regular Plan, legacy .md@sha warning, plan loop, p
     fs.rmSync(pmRoot, { recursive: true, force: true });
   }
 });
+
+test('(e) dispatch structured size vs task Size: mismatch, fallback, invalid, and missing', () => {
+  const prevOptIn = process.env.AUTOPILOT_HOOK_PM_DISPATCH_PLAN_GUARD;
+  process.env.AUTOPILOT_HOOK_PM_DISPATCH_PLAN_GUARD = '1';
+  const pmRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wog-pm-size-'));
+  fs.mkdirSync(path.join(pmRoot, '.git'), { recursive: true });
+  fs.writeFileSync(path.join(pmRoot, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+  fs.mkdirSync(path.join(pmRoot, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(pmRoot, '.claude', 'console.json'), JSON.stringify({ schema: 'autopilot.console/1', mode: 'program' }));
+  try {
+    const mk = (task, size) => ({
+      tool_name: 'mcp__fleet__dispatch',
+      cwd: pmRoot,
+      tool_input: size === undefined ? { to: 'dev/courier/worker', task } : { to: 'dev/courier/worker', size, task },
+    });
+
+    // 正例：結構化 size=M、內文 Size: M、有 Plan，放行
+    assert.equal(decide(mk('Size: M\nPlan: x/y.md@abcdef1', 'M')), null);
+
+    // 反例（核心）：結構化 size=S、內文 Size: L + Plan，被拒，理由含兩個值
+    const mismatchSL = decide(mk('Size: L\nPlan: x/y.md@abcdef1', 'S'));
+    assert.equal(mismatchSL.hookSpecificOutput.permissionDecision, 'deny');
+    assert.match(mismatchSL.hookSpecificOutput.permissionDecisionReason, /size=S/);
+    assert.match(mismatchSL.hookSpecificOutput.permissionDecisionReason, /Size:\s*L/);
+
+    // 反例（反向）：結構化 size=L、內文 Size: S，被拒
+    const mismatchLS = decide(mk('Size: S\n小任務', 'L'));
+    assert.equal(mismatchLS.hookSpecificOutput.permissionDecision, 'deny');
+    assert.match(mismatchLS.hookSpecificOutput.permissionDecisionReason, /size=L/);
+    assert.match(mismatchLS.hookSpecificOutput.permissionDecisionReason, /Size:\s*S/);
+
+    // 結構化 size=M、內文沒寫 Size、沒有 plan：被拒（缺 plan）
+    const mNoPlan = decide(mk('沒有寫 Size 也沒有 plan', 'M'));
+    assert.equal(mNoPlan.hookSpecificOutput.permissionDecision, 'deny');
+
+    // 結構化 size=S、內文沒寫 Size：放行
+    assert.equal(decide(mk('沒有寫 Size 的小任務', 'S')), null);
+
+    // 結構化 size=XXL 與結構化 size=m（小寫）：被拒
+    assert.equal(decide(mk('Size: M\nPlan: x/y.md@abcdef1', 'XXL')).hookSpecificOutput.permissionDecision, 'deny');
+    assert.equal(decide(mk('Size: M\nPlan: x/y.md@abcdef1', 'm')).hookSpecificOutput.permissionDecision, 'deny');
+
+    // 兩者都沒有：被拒（原行為）
+    assert.equal(decide(mk('沒有寫 Size')).hookSpecificOutput.permissionDecision, 'deny');
+  } finally {
+    if (prevOptIn === undefined) delete process.env.AUTOPILOT_HOOK_PM_DISPATCH_PLAN_GUARD;
+    else process.env.AUTOPILOT_HOOK_PM_DISPATCH_PLAN_GUARD = prevOptIn;
+    fs.rmSync(pmRoot, { recursive: true, force: true });
+  }
+});

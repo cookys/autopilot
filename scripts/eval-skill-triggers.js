@@ -115,6 +115,16 @@ function parseStreamJsonTriggers(ndjsonText) {
 // The account layer (claude-account.js exec --pick) supplies the credential straight into the child env; it never
 // reaches argv, a log or this process. The temp HOME/CLAUDE_CONFIG_DIR in `env` keep the run off the real config.
 function defaultRunner({ prompt, pluginDir, timeoutMs, env }) {
+  // --max-turns 2 ends a run that invoked a skill with a non-zero exit but a complete stream; the stream is the evidence.
+  try {
+    return runClaude({ prompt, pluginDir, timeoutMs, env });
+  } catch (err) {
+    if (err && typeof err.stdout === 'string' && err.stdout.includes('"type"') && !err.killed) return err.stdout;
+    throw err;
+  }
+}
+
+function runClaude({ prompt, pluginDir, timeoutMs, env }) {
   const stdout = execFileSync(
     process.execPath,
     [
@@ -128,6 +138,7 @@ function defaultRunner({ prompt, pluginDir, timeoutMs, env }) {
       '2',
       '--output-format',
       'stream-json',
+      '--verbose',
     ],
     {
       encoding: 'utf8',

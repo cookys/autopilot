@@ -181,4 +181,94 @@ function cleanup(dir) {
   }
 }
 
-console.log('All 5 architecture map gate test cases passed.');
+// (f) --run-interaction: changed interaction row + script exit 0 -> ok
+{
+  const repo = initSandboxRepo();
+  try {
+    fs.mkdirSync(path.join(repo, 'tests', 'interaction'), { recursive: true });
+    const scriptPath = path.join(repo, 'tests', 'interaction', 'pass.sh');
+    fs.writeFileSync(scriptPath, '#!/bin/sh\nexit 0\n');
+    fs.chmodSync(scriptPath, 0o755);
+    fs.writeFileSync(
+      path.join(repo, 'ARCHITECTURE.md'),
+      [
+        '| 名稱 | 狀態 | 在哪裡 | 依據 | 互動介面 | 驗收方式 |',
+        '| --- | --- | --- | --- | --- | --- |',
+        '| CLI | live | bin/** | docs/cli.md | terminal | tests/interaction/pass.sh |',
+      ].join('\n') + '\n'
+    );
+    git(repo, 'add', '.');
+    git(repo, 'commit', '-m', 'add passing interaction script');
+
+    const { exitCode, parsed } = runGate(repo, ['--run-interaction']);
+    assert.equal(exitCode, 0);
+    assert.equal(parsed.ok, true);
+    assert.deepEqual(parsed.findings, []);
+  } finally {
+    cleanup(repo);
+  }
+}
+
+// (g) --run-interaction: changed interaction row + script exit 1 -> interaction_script_failed
+{
+  const repo = initSandboxRepo();
+  try {
+    fs.mkdirSync(path.join(repo, 'tests', 'interaction'), { recursive: true });
+    const scriptPath = path.join(repo, 'tests', 'interaction', 'fail.sh');
+    fs.writeFileSync(scriptPath, '#!/bin/sh\necho "boom" >&2\nexit 1\n');
+    fs.chmodSync(scriptPath, 0o755);
+    fs.writeFileSync(
+      path.join(repo, 'ARCHITECTURE.md'),
+      [
+        '| 名稱 | 狀態 | 在哪裡 | 依據 | 互動介面 | 驗收方式 |',
+        '| --- | --- | --- | --- | --- | --- |',
+        '| CLI | live | bin/** | docs/cli.md | terminal | tests/interaction/fail.sh |',
+      ].join('\n') + '\n'
+    );
+    git(repo, 'add', '.');
+    git(repo, 'commit', '-m', 'add failing interaction script');
+
+    const { exitCode, parsed } = runGate(repo, ['--run-interaction']);
+    assert.equal(exitCode, 1);
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.findings[0].rule, 'interaction_script_failed');
+    assert.ok(parsed.findings[0].detail.includes('tests/interaction/fail.sh'));
+    assert.ok(parsed.findings[0].detail.includes('boom'));
+  } finally {
+    cleanup(repo);
+  }
+}
+
+// (h) --run-interaction: unchanged interaction row is not executed even if script would fail
+{
+  const repo = initSandboxRepo();
+  try {
+    fs.mkdirSync(path.join(repo, 'tests', 'interaction'), { recursive: true });
+    const scriptPath = path.join(repo, 'tests', 'interaction', 'fail.sh');
+    fs.writeFileSync(scriptPath, '#!/bin/sh\nexit 1\n');
+    fs.chmodSync(scriptPath, 0o755);
+    fs.writeFileSync(
+      path.join(repo, 'ARCHITECTURE.md'),
+      [
+        '| 名稱 | 狀態 | 在哪裡 | 依據 | 互動介面 | 驗收方式 |',
+        '| --- | --- | --- | --- | --- | --- |',
+        '| CLI | live | bin/** | docs/cli.md | terminal | tests/interaction/fail.sh |',
+      ].join('\n') + '\n'
+    );
+    git(repo, 'add', '.');
+    git(repo, 'commit', '-m', 'initial arch map with failing script');
+
+    fs.writeFileSync(path.join(repo, 'README.md'), '# updated\n');
+    git(repo, 'add', '.');
+    git(repo, 'commit', '-m', 'unrelated change');
+
+    const { exitCode, parsed } = runGate(repo, ['--mode', 'warn', '--run-interaction']);
+    assert.equal(exitCode, 0);
+    assert.equal(parsed.ok, true);
+    assert.deepEqual(parsed.findings, []);
+  } finally {
+    cleanup(repo);
+  }
+}
+
+console.log('All 8 architecture map gate test cases passed.');

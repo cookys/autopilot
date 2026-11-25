@@ -507,3 +507,16 @@ test('CLI main prints skipped_bad_lines and loaded_items counts to stderr withou
     fs.rmSync(tmpBase, { recursive: true, force: true });
   }
 });
+
+const slice = require('./pm-replay-slice.js');
+test('v4 defaults: 30 strata, six prefill levels, --screening gives the 12-segment quota', () => {
+  const sum = (q) => Object.values(q).reduce((a, b) => a + b, 0);
+  assert.equal(sum(slice.DEFAULT_QUOTA), 30);
+  assert.deepEqual(slice.DEFAULT_QUOTA, { operator: 8, lane_result: 7, patrol: 5, inbox_batch: 5, stop_hook: 3, task_notification: 2 });
+  assert.deepEqual(slice.DEFAULT_LEVELS, [100000, 150000, 250000, 300000, 350000, 450000]);
+  const def = slice.parseArgs([]);
+  assert.deepEqual(def.levels, slice.DEFAULT_LEVELS);
+  const scr = slice.parseArgs(['--screening']);
+  assert.equal(sum(scr.quota), 12);
+  for (const k of Object.keys(slice.DEFAULT_QUOTA)) assert.ok(scr.quota[k] <= slice.DEFAULT_QUOTA[k]);
+});

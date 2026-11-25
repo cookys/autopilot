@@ -20,6 +20,8 @@ const DENY_REASON = '承諾要帶物件 id：請補 d- 卡號或請求訊息 id'
 const TRIGGER_RE = /已報 PM 開.{0,4}卡|已開卡|卡在排|等操作員|waiting_on_operator|等 operator/;
 const CARD_ID_RE = /d-[0-9a-f]{8}/;
 const FLEET_ID_RE = /[0-9A-Z]{26}/;
+// A phrase inside 「…」, `…` or "…" is being talked about, not promised: drop quoted spans before matching.
+const QUOTED_SPAN_RE = /「[^」]*」|`[^`]*`|"[^"]*"/g;
 const CLAUSE_SPLIT_RE = /[。；;\n]+/;
 const HANDOFF_RUN_PATH_RE = /^\/run\/user\/\d+\/autopilot\/handoff\/[^/]+\.md$/;
 
@@ -87,7 +89,7 @@ function decide(input, env = envBag()) {
   const clauses = text.split(CLAUSE_SPLIT_RE);
   for (const clause of clauses) {
     if (!clause) continue;
-    if (TRIGGER_RE.test(clause) && !hasObjectId(clause)) {
+    if (TRIGGER_RE.test(clause.replace(QUOTED_SPAN_RE, '')) && !hasObjectId(clause)) {
       return preToolDeny(DENY_REASON);
     }
   }

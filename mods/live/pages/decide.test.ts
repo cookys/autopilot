@@ -546,3 +546,27 @@ test('awaiting block: a card with several long steps shows every step under a fu
     expect(framed.every(r => r.reduce((w, s) => w + displayWidth(s.text), 0) <= cols), where + ': no row wider than the pane').toBe(true)
   }
 })
+
+// Canary 2 (pin b67c04a2e, sandbox harness): the host gives the AbovePrompt box 5 / 13 / 17 rows at 80x24 / 120x40 / 200x50, so a
+// third of the box never held one card's steps (120x40 drew 「等你動手 2 張 / …另 2 張」) and at 5 rows the frame cut the block off.
+// The block grows to the first card whole (up to half the body), keeps its heading at any size, and the card box gives way.
+test('awaiting block: in the host box allocations (5 / 13 / 17 rows) the first card shows every step, and the heading survives the smallest box', () => {
+  const bg = Array.from({ length: 80 }, (_, i) => '第 ' + String(i + 1).padStart(2, '0') + ' 行：假資料。').join('\n')
+  // titles and options wider than 80 columns: the frame wraps a reading page at 80, so a page that counts unwrapped rows overflows
+  const long = '要不要把這一輪的修正併進開發分支並且在測試機上先換版、讀回、拍照，再交給操作員的面板換版'
+  const cards = Array.from({ length: 21 }, (_, i) => ({ id: 'd-host' + i, title: '卡 ' + i + ' ' + long, question: long + '？', background: i === 0 ? bg : null, options: [{ label: 'A 可以，' + long, detail: '', recommended: true }, { label: 'B 不行', detail: '', recommended: false }] }))
+  const steps = ['到機櫃把評測機第二槽的電源線插到備用插座（插座在機櫃背面左下角，標示 UPS-2 的那一排），插好後等前面板燈號由閃爍變成常亮', '在操作台跑一次讀回指令，確認畫面顯示的 sha 和卡片上寫的一致', '回到這張卡按完成']
+  const aw = [{ id: 'd-aw01', title: '評測機第二槽插電', question: '插電？', operator_steps: steps }, { id: 'd-aw02', title: '換線', question: '換？', operator_steps: ['換上新的網路線'] }]
+  const flat = (rows: { text: string }[][]) => rows.map(r => r.map(s => s.text).join('')).join('\n').replace(/[\s│]+/g, '')
+  // maxRows below DECIDE_COMPACT_MAX_ROWS draws the compact card list (the canary-2 120x40 shot): its rows wrap in the frame too
+  for (const [cols, rows, whole, maxRows] of [[76, 5, false, 5], [116, 13, true, 13], [116, 13, true, 9], [196, 17, true, 17]] as const) {
+    const ctx = { live: null, console: null, size: { cols, rows }, t, nowMs, box: true, maxRows, v74: { decide: cards, awaiting: aw, pm: null, todo: null, nav: { cursor: 0, picks: {}, notes: {}, noteMode: false } } } as never
+    const framed = frameRows(decidePage, ctx, { pages: PAGES, topAnchor: true })
+    const text = flat(framed)
+    const where = cols + 'x' + rows + ' box (maxRows ' + maxRows + ')'
+    expect(framed.length, where + ': the frame keeps its height').toBe(rows)
+    expect(text, where + ': heading').toContain(t('v74.d.await_head', { n: 2 }).replace(/\s+/g, ''))
+    if (whole) for (const s of steps) expect(text, where + ': step whole: ' + s.slice(0, 12)).toContain(s.replace(/\s+/g, ''))
+    expect(framed.every(r => r.reduce((w, s) => w + displayWidth(s.text), 0) <= cols), where + ': no row wider than the pane').toBe(true)
+  }
+})

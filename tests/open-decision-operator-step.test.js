@@ -36,4 +36,18 @@ test('exception', () => { const r = run('identity', ['--operator-step-none', '�
 test('blank exception', () => { const r = run('identity', ['--operator-step-none', '   ']); assert.strictEqual(r.status, 2); assert.strictEqual(r.cards.length, 0); });
 for (const kind of ['go', 'remind', 'step', 'look']) test(`${kind} missing`, () => { const r = run('identity', [], kind); assert.strictEqual(r.status, 2, r.stderr); assert.strictEqual(r.cards.length, 0); });
 test('short individual step', () => { const r = run('identity', ['--operator-step', '短步驟', '--operator-step', '在 https://example.com 執行 `run` 並驗證結果']); assert.strictEqual(r.status, 2); assert.match(r.stderr, /12/); });
+// Library route (hooks call openDecision() directly, no CLI): the same guard must refuse there (task 01M88ASYJ7).
+const { openDecision } = require('../scripts/open-decision.js');
+function lib(extra) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'opstep-lib-'));
+  const repo = path.join(root, 'repo'); fs.mkdirSync(repo);
+  execFileSync('git', ['init', '-q'], { cwd: repo });
+  process.env.HOME = path.join(root, 'home'); fs.mkdirSync(process.env.HOME);
+  return openDecision({ cwd: repo, root: null, session: 'synthetic', question: '要處理這件事情嗎？', options: null, category: 'identity', ...extra });
+}
+for (const cat of ['identity', 'presence']) test(`library ${cat} missing steps refused`, () => { const r = lib({ category: cat }); assert.strictEqual(r.status, 'operator_step_refused'); assert.ok(r.reasons.length >= 1); });
+test('library vague step refused', () => { const r = lib({ operator_steps: ['請設定密碼'] }); assert.strictEqual(r.status, 'operator_step_refused'); });
+test('library complete steps accepted', () => { const r = lib({ operator_steps: ['打開 https://10.0.0.5/ 執行 `設定密碼` 並確認結果'] }); assert.strictEqual(r.status, 'ok', JSON.stringify(r)); });
+test('library no category (hook cards) unchanged', () => { const r = lib({ category: undefined }); assert.strictEqual(r.status, 'ok', JSON.stringify(r)); });
+test('library exception reason accepted', () => { const r = lib({ operator_step_none: '無須操作' }); assert.strictEqual(r.status, 'ok', JSON.stringify(r)); });
 console.log(`${count} cases passed`);

@@ -170,6 +170,7 @@ const { scopeFromCwd } = require('../src/status/project-key');
 const { scopeKeyOf, commonDirOf, listScopeFiles, readScopeFile, cardState, pickCards, isOpenEntry, isClosedEntry, isAwaitingEntry, isPendingDispatchEntry, dueState, dueRank } = require('../src/status/scope-key');
 const { withWriteLock } = require('./lib/jsonl-store');
 const { checkOperatorSteps } = require('./lib/operator-step-check');
+const OPERATOR_STEP_HINT = 'open-decision: 缺少 --operator-step：請說明位置（網址/IP/主機:port/檔案路徑）、動作（指令或點哪裡）、驗證（做完如何確認）。例如：--operator-step \'打開 https://10.0.0.5/ 執行 `設定密碼` 並確認結果\'；若無須操作可用 --operator-step-none "理由"。';
 
 const SCHEMA = 'autopilot.decision/2';
 const SAFE_ROOT = /^[A-Za-z0-9._-]+$/;
@@ -1225,19 +1226,7 @@ function main(argv) {
   const backgroundText = repeat === null ? args.background : [repeatContext(repeat.entry, repeat), text(args.background)].filter(Boolean).join('\n');
   if (args.kind !== undefined && !KINDS.includes(args.kind)) { process.stderr.write(`open-decision: refused: --kind must be one of ${KINDS.join(' | ')} (got "${args.kind}"); nothing written\n`); return 7; }
   if (!CATEGORIES.includes(args.extra.category)) { process.stderr.write(`open-decision: ${CATEGORY_REFUSAL}（收到 ${args.extra.category === undefined ? '沒有 --category' : `"${args.extra.category}"`}；沒有寫入任何東西）\n`); return 7; }
-  if (['identity', 'presence'].includes(ex.category)) {
-    const none = ex['operator-step-none'];
-    if (none !== undefined && !none.trim()) return usage('--operator-step-none 需要非空白理由');
-    if (none === undefined) {
-      const steps = Array.isArray(ex['operator-step']) ? ex['operator-step'] : [];
-      if (!steps.length) {
-        process.stderr.write('open-decision: 缺少 --operator-step：請說明位置（網址/IP/主機:port/檔案路徑）、動作（指令或點哪裡）、驗證（做完如何確認）。例如：--operator-step \'打開 https://10.0.0.5/ 執行 `設定密碼` 並確認結果\'；若無須操作可用 --operator-step-none "理由"。\n');
-        return 2;
-      }
-      const checked = checkOperatorSteps(steps);
-      if (!checked.ok) { checked.reasons.forEach((reason) => process.stderr.write(`open-decision: ${reason}\n`)); return 2; }
-    }
-  }
+  if (ex['operator-step-none'] !== undefined && !ex['operator-step-none'].trim()) return usage('--operator-step-none 需要非空白理由');
   const remind = args.kind === 'remind';
   const isStepKind = args.kind === 'step' || args.kind === 'look';
   const duplicateOverrides = Array.isArray(ex['not-duplicate-of']) ? ex['not-duplicate-of'] : [];
@@ -1305,6 +1294,7 @@ function main(argv) {
     operator_steps: operatorSteps, operator_step_none: ex['operator-step-none'], repeat_of: repeat === null ? undefined : repeat.entry.id, repeat_n: repeat === null ? undefined : repeat.repeat_n,
     not_duplicate_of: duplicateOverrides, not_duplicate_reason: ex['not-duplicate-reason'], supersede: ex.supersede, supersede_reason: ex['supersede-reason'], reject_duplicates: true, require_executor: true,
   });
+  if (r.status === 'operator_step_refused') { r.reasons.forEach((reason) => process.stderr.write(reason.startsWith('open-decision:') ? `${reason}\n` : `open-decision: ${reason}\n`)); return 2; }
   if (r.status === 'answered_duplicate') {
     const a = r.answered;
     process.stderr.write(`拒絕開卡：已有已答卡 ${a.id}（status=${a.status}, closed_at=${a.closed_at || 'null'}, answer=${a.answer ?? 'null'}）。若要重開請加 --supersede ${a.id} --supersede-reason <理由>\n`);
@@ -1381,6 +1371,12 @@ function roleGate({ not_authorized, origin, kind } = {}) {
 function openDecision({ cwd, root, session, question, background, options, recommendation, why, blocks, not_authorized, source, origin, turn_tracked, kind, category, executor, asker, title, from_request, from_request_addr, due_at, attachments, look_target, operator_steps, operator_step_none, repeat_of, repeat_n, not_duplicate_of, not_duplicate_reason, supersede, supersede_reason, reject_duplicates, require_executor }) {
   const routed = roleGate({ not_authorized, origin, kind });
   if (routed && routed.code === 4) return { status: 'error', code: 4, message: routed.message };
+  if (['identity', 'presence'].includes(category) && !text(operator_step_none)) { // the operator must act himself: every caller (CLI and hooks) needs concrete steps (task 01M887PEJQ, 01M88ASYJ7)
+    const given = (Array.isArray(operator_steps) ? operator_steps : []).map((s) => (typeof s === 'string' ? s.trim() : '')).filter(Boolean);
+    if (!given.length) return { status: 'operator_step_refused', reasons: [OPERATOR_STEP_HINT] };
+    const checked = checkOperatorSteps(given);
+    if (!checked.ok) return { status: 'operator_step_refused', reasons: checked.reasons };
+  }
   const sf = scopeFile(cwd, root);
   if (!sf) return { status: 'error', message: 'not inside a git repository' };
   const entry = {

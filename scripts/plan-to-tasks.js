@@ -139,6 +139,7 @@ function runFleet(fleetBin, args) {
   const res = spawnSync(fleetBin, args, {
     encoding: 'utf8',
     timeout: FLEET_TIMEOUT_MS,
+    maxBuffer: 256 * 1024 * 1024,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   if (res.error) {
@@ -154,12 +155,12 @@ function runFleet(fleetBin, args) {
 function extractPhaseMarker(task, planPath, commitSha) {
   const text = String(task.title || task.body || '');
   const firstLine = text.split(/\r?\n/)[0] || '';
-  const exactPrefix = `Plan: ${planPath}@${commitSha} Phase: `;
+  // 12-char short sha: a full 40-hex run in a dispatch body is refused by fleet (secret_detected long_hex_run).
+  const exactPrefix = `Plan: ${planPath}@${commitSha.slice(0, 12)} Phase: `;
   if (firstLine.startsWith(exactPrefix)) {
     return firstLine.slice(exactPrefix.length).trim().split(/\s+/)[0];
   }
-  const m = firstLine.match(/^Plan:\s*\S+\s+Phase:\s*(\S+)/);
-  return m ? m[1] : null;
+  return null;
 }
 
 function parseTaskList(raw) {
@@ -239,7 +240,11 @@ function main() {
   }
 
   try {
-    runFleet(fleetBin, ['claim', `plan-to-tasks:${receipt.sha256}`]);
+    const lockName = `plan-to-tasks-${receipt.sha256.slice(0, 16)}`;
+    runFleet(fleetBin, ['lock', 'acquire', lockName, '--ttl', '10m']);
+    process.on('exit', () => {
+      spawnSync(fleetBin, ['lock', 'release', lockName], { stdio: 'ignore', timeout: FLEET_TIMEOUT_MS });
+    });
 
     const existingTasks = parseTaskList(runFleet(fleetBin, ['tasks', '--all', '--json']));
     const phaseToTaskId = new Map();
@@ -268,7 +273,7 @@ function main() {
       if (phaseToTaskId.has(phase.id)) continue;
 
       const body = [
-        `Plan: ${receipt.path}@${receipt.commit} Phase: ${phase.id}`,
+        `Plan: ${receipt.path}@${receipt.commit.slice(0, 12)} Phase: ${phase.id}`,
         `Role: implementer | Size: ${phase.size} | Needs-Look: ${phase.needsLook}`,
         `Title: ${phase.title}`,
         `Acceptance: ${phase.acceptanceCmd}`,

@@ -90,4 +90,9 @@ describe('plan-inventory-lint', () => {
     });
     assert.deepEqual(negControlErrors, []);
   });
+  it('6. 一般功能計畫的摘要含「簡單」「清單」「卡片」「等待時間」也不是機制類（不誤擋）', () => {
+    const plain = '# 加一個 CSV 匯出按鈕\n\n簡單功能：在清單頁加按鈕，樣式沿用卡片，等待時間不變。\n\n## 設計\n按鈕呼叫既有匯出函式。\n';
+    assert.equal(isMechanismPlan(plain), false);
+    assert.deepEqual(lintPlanInventory(plain), []);
+  });
 });

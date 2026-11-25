@@ -8,13 +8,20 @@
  * of the mechanism keywords.
  */
 
+// Multi-character terms only: bare 單 / 卡 / 等待 hit ordinary words (簡單, 清單, 卡片, 等待時間)
+// and would block general feature plans.
 const MECHANISM_KEYWORDS = [
-  '單',
+  '工單',
+  '子單',
+  '父單',
+  '單號',
+  'fleet task',
   '計畫列',
   '收據',
   '裁定',
-  '等待',
-  '卡',
+  'waiting_on',
+  '待決卡',
+  '決策卡',
   '接續',
   '巡查',
   '守門',

@@ -1,6 +1,6 @@
 # Plan — outcome-shaped quality gate: pre-push re-derives "tests ran green against this diff" (opt-in)
 
-> Status: active · Owner: cookys · Frame: M, three deliverables (record writer, checker, hook wiring)
+> Status: shipped（已出貨）。依 2026-11-21 稽核（PM 01M7XQRV）與下一行稽核證據更正；原狀態：active · Owner: cookys · Frame: M, three deliverables (record writer, checker, hook wiring)
 > 稽核（2026-11-21，PM 01M7XQRV）：已完成。已實作，計畫檔頭狀態過時（建議改標已出貨或歸檔）。證據：9f1c1a2dc（BL-0050 v1）。
 > Source: BL-0050 (row removed when this plan took over; the original entry file is in git at 57c4093f1). Owner ruled 2026-10-19: write the plan first.
 > Binding constraint: [ADR-0001](../../docs/dev/adr/0001-verification-over-attestation.md) Decision 5 (`docs/dev/adr/0001-verification-over-attestation.md`): no hash chains, event ledgers, witness receipts, attestation issuers, trust roots.

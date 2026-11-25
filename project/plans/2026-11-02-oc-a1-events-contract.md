@@ -1,6 +1,6 @@
 # Plan — A1 Events contract: `autopilot status events --since <cursor> --json` and schema `autopilot.events/1`
 
-> Status: draft for plan review · Owner: operator (decisions), fleet session (coordinates), autopilot (owns the code) ·
+> Status: shipped（已出貨）。依 2026-11-21 稽核（PM 01M7XQRV）與下一行稽核證據更正；原狀態：draft for plan review · Owner: operator (decisions), fleet session (coordinates), autopilot (owns the code) ·
 > 稽核（2026-11-21，PM 01M7XQRV）：已完成。已實作，計畫檔頭狀態過時（建議改標已出貨或歸檔）。證據：oc-a1 已併；板頭 draft 過時。
 > Branch: `plan/oc-a1-events` · Size: M (four phases E1–E4, each shippable alone) ·
 > Frame: deliverable D3 phase A1 of the operator-console plan (`docs/plans/2026-11-01-operator-console.md` in the fleet repo, approved 2026-11-01). It is the read-only, model-free event feed that the console (D5 C1/C2), the anomaly cards (D3 A4) and the dashboard (D6 G1) consume. autopilot = project management; the feed only restates what its existing stores already hold.

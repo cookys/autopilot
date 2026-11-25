@@ -1,6 +1,6 @@
 # Plan — Integration ledger, input containment, and the two silent gates
 
-> Status: **R0 — DRAFT** (authored depth-0, 2026-09-12) · Owner: depth-0 session under CEO delegation ·
+> Status: shipped（已出貨）。依 2026-11-21 稽核（PM 01M7XQRV）與下一行稽核證據更正；原狀態：**R0 — DRAFT** (authored depth-0, 2026-09-12) · Owner: depth-0 session under CEO delegation ·
 > 稽核（2026-11-21，PM 01M7XQRV）：已完成。已實作，計畫檔頭狀態過時（建議改標已出貨或歸檔）。證據：933f38f23 v2.36.28 PASS；6b9f9a3fd。
 > Branch: develop (units via managed campaign worktrees) · Frame: two peer reports, re-derived locally
 

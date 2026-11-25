@@ -1,5 +1,5 @@
 ---
-status: approved
+Status: shipped（已出貨）。依 2026-11-21 稽核（PM 01M7XQRV）與下一行稽核證據更正；原狀態：approved
 date: 2026-08-01
 size: L
 entry_level: l6

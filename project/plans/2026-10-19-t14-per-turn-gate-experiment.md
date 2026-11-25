@@ -1,6 +1,6 @@
 # Plan — t14 per-turn verification gate experiment (BL-0055)
 
-> Status: S1-S6 done, verdict FAIL (FAIL-TRADE). Report: project/projects/_archive/2026/10/2026-10-19-t14-gate-batch/report.md · Owner: cookys · Branch: lane/bl0055 · Frame: M, one experiment, four build slices then one run
+> Status: shipped（已出貨）。依 2026-11-21 稽核（PM 01M7XQRV）與下一行稽核證據更正；原狀態：S1-S6 done, verdict FAIL (FAIL-TRADE). Report: project/projects/_archive/2026/10/2026-10-19-t14-gate-batch/report.md · Owner: cookys · Branch: lane/bl0055 · Frame: M, one experiment, four build slices then one run
 > 稽核（2026-11-21，PM 01M7XQRV）：已完成。已實作，計畫檔頭狀態過時（建議改標已出貨或歸檔）。證據：archive 2026/10/2026-10-19-t14-gate-batch/report.md；FAIL-TRADE 已有結論。
 > Source: BL-0055 (`project/backlog/BACKLOG.md:311-321`). Decision: panel card d-8bc3d286, 2026-10-19 ("open the experiment").
 > Pre-registration: the thresholds in §2 are frozen when this plan is committed. Nothing in §2 changes after the first pilot run.

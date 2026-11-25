@@ -1,5 +1,5 @@
 ---
-status: review-pending-r4
+Status: shipped（已出貨）。依 2026-11-21 稽核（PM 01M7XQRV）與下一行稽核證據更正；原狀態：review-pending-r4
 date: 2026-08-04
 size: H
 entry_level: l5

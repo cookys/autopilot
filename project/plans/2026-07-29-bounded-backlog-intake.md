@@ -1,7 +1,7 @@
 # Bounded Backlog Intake
 
 > 稽核（2026-11-21，PM 01M7XQRV）：已完成。已實作並歸檔，計畫檔頭狀態過時，建議改標 shipped/歸檔。證據：archive 2026/07 README：C1-C11 聯審完成。
-Status: frozen review intake; no implementation is authorized by this document.
+Status: shipped（已出貨）。依 2026-11-21 稽核（PM 01M7XQRV）與下一行稽核證據更正；原狀態：frozen review intake; no implementation is authorized by this document.
 
 ## Project goal
 

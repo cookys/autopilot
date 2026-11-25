@@ -1,6 +1,6 @@
 # Plan — Codex payload residual install-time spike
 
-> Status: FROZEN FOR EXECUTION
+> Status: shipped（已出貨）。依 2026-11-21 稽核（PM 01M7XQRV）與下一行稽核證據更正；原狀態：FROZEN FOR EXECUTION
 > 稽核（2026-11-21，PM 01M7XQRV）：已完成。已實作並歸檔，計畫檔頭狀態過時，建議改標 shipped/歸檔。證據：archive 2026/08/2026-08-02-codex-payload-residual-spike README；plans/_archive 2026/08 鏡像更正。
 > Owner: depth-0 CEO with the existing worktree-isolated L4 foreman transcript
 > Size: L (one report-only, three-probe decision bundle)

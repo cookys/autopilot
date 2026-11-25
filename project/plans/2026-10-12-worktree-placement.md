@@ -2,7 +2,7 @@
 
 > 稽核（2026-11-21，PM 01M7XQRV）：已完成。已實作，計畫檔頭狀態過時（建議改標已出貨或歸檔）。證據：598e363ea；e56eb9caf 歸檔。
 **Date:** 2026-10-12
-**Status:** ✅ merged to develop as `598e363e` (Unreleased, 3.0.0 line) — project archived: [project README](../projects/_archive/2026/10/2026-10-12-worktree-placement/README.md)
+Status: shipped（已出貨）。依 2026-11-21 稽核（PM 01M7XQRV）與下一行稽核證據更正；原狀態：** ✅ merged to develop as `598e363e` (Unreleased, 3.0.0 line) — project archived: [project README](../projects/_archive/2026/10/2026-10-12-worktree-placement/README.md)
 **Size:** L (one deliverable, four phases that build on each other)
 **Branch:** `feat/worktree-placement-rule`
 **Project:** [`docs/projects/_archive/2026/10/2026-10-12-worktree-placement/`](../projects/_archive/2026/10/2026-10-12-worktree-placement/README.md) — goal and the seven success criteria live there; this plan references them as C1–C7.

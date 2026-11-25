@@ -8,7 +8,7 @@
  *                                       [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>]
  *                                       [--doa-role <role>] [--doa-tier <tier>] [--target <deploy target>] [--source <who/where>]
  *                                       [--title <short card title, <= 20 characters>] [--kind <decide|go|remind|step|look>] [--premise-source <file>] [--premise-inferred] [--attach <path-or-URL>]...
- *                                       [--operator-step <text>]... [--not-duplicate-of <id>]... [--not-duplicate-reason <reason>]   (repeatable overrides for a confirmed distinct issue)
+ *                                       [--operator-step <text>]... [--operator-step-none <reason>] [--not-duplicate-of <id>]... [--not-duplicate-reason <reason>]   (repeatable overrides for a confirmed distinct issue)
  *                                       (repeatable operator steps, or several steps in one value separated by newlines:
  *                                         what the operator must do himself after answering; stored as operator_steps)
  *                                       [--root-run-id <id>] [--cwd <dir>] [--json]     (prints the new id; --json: {ok,id,file,scope_key})
@@ -38,7 +38,7 @@
  * ({schema, root_run_id, repo_identity, project_key, decisions: [...]}), scope_key = project_key, or project_key--<root>
  * (root through the watcher's safeSegment). Each entry: id, question, background, options [{label, description}] | null,
  * recommendation, why, blocks, not_authorized (why the owner must decide, depth-0 may not), source, opened_at, opened_by_session (+ origin, set only by hooks/ask-decision.js),
- * optional operator_steps (string[], what the operator must do after answering; absent = none), not_duplicate_of (string[], explicitly overridden duplicate ids),
+ * optional operator_steps (string[], what the operator must do after answering), operator_step_none (reason no steps are needed), not_duplicate_of (string[], explicitly overridden duplicate ids),
  * and not_duplicate_reason (the operator's reason for treating those cards as distinct).
  * `open` appends one entry and never overwrites another. `close --id` KEEPS the entry (BL cardtrail): status 'closed', closed_at (ISO UTC), answer
  * (the answer text, null for a withdrawal); idempotent. The file is never removed. "The entry is in the file" does NOT mean "the card is open":
@@ -169,6 +169,7 @@ const path = require('path');
 const { scopeFromCwd } = require('../src/status/project-key');
 const { scopeKeyOf, commonDirOf, listScopeFiles, readScopeFile, cardState, pickCards, isOpenEntry, isClosedEntry, isAwaitingEntry, isPendingDispatchEntry, dueState, dueRank } = require('../src/status/scope-key');
 const { withWriteLock } = require('./lib/jsonl-store');
+const { checkOperatorSteps } = require('./lib/operator-step-check');
 
 const SCHEMA = 'autopilot.decision/2';
 const SAFE_ROOT = /^[A-Za-z0-9._-]+$/;
@@ -750,7 +751,7 @@ function takeFreeText(argv) {
 // BL cardtrail flags are lifted out like --kind/--target (parse()'s valued Set stays byte-identical to the frozen ask stub).
 // -> { rest, extra: { answer, executor, asker, 'awaiting-operator', 'reask-after', from, dispatched, 'dispatched-msg', title, note, 'operator-step', all, apply } } | { error }
 // operator-step is repeatable and may hold several steps separated by newlines. parse()'s valued Set stays untouched (frozen ask stub).
-const EXTRA_VALUED = ['answer', 'executor', 'asker', 'awaiting-operator', 'reask-after', 'from', 'dispatched', 'dispatched-msg', 'title', 'from-request', 'note', 'look-target', 'category', 'since', 'days', 'premise-source', 'withdraw', 'by', 'closed-key', 'repeat-of', 'not-duplicate-reason', 'supersede', 'supersede-reason'];
+const EXTRA_VALUED = ['answer', 'executor', 'asker', 'awaiting-operator', 'reask-after', 'from', 'dispatched', 'dispatched-msg', 'title', 'from-request', 'note', 'look-target', 'category', 'since', 'days', 'premise-source', 'withdraw', 'by', 'closed-key', 'repeat-of', 'not-duplicate-reason', 'supersede', 'supersede-reason', 'operator-step-none'];
 const EXTRA_REPEAT = ['operator-step', 'not-duplicate-of'];
 const EXTRA_SWITCH = ['all', 'apply', 'irreversible', 'premise-inferred', 'panel-done', 'panel-dismiss'];
 // The only seven kinds of question that go to the operator (operator rule 2026-11-15); everything else the PM decides.
@@ -1224,6 +1225,19 @@ function main(argv) {
   const backgroundText = repeat === null ? args.background : [repeatContext(repeat.entry, repeat), text(args.background)].filter(Boolean).join('\n');
   if (args.kind !== undefined && !KINDS.includes(args.kind)) { process.stderr.write(`open-decision: refused: --kind must be one of ${KINDS.join(' | ')} (got "${args.kind}"); nothing written\n`); return 7; }
   if (!CATEGORIES.includes(args.extra.category)) { process.stderr.write(`open-decision: ${CATEGORY_REFUSAL}（收到 ${args.extra.category === undefined ? '沒有 --category' : `"${args.extra.category}"`}；沒有寫入任何東西）\n`); return 7; }
+  if (['identity', 'presence'].includes(ex.category)) {
+    const none = ex['operator-step-none'];
+    if (none !== undefined && !none.trim()) return usage('--operator-step-none 需要非空白理由');
+    if (none === undefined) {
+      const steps = Array.isArray(ex['operator-step']) ? ex['operator-step'] : [];
+      if (!steps.length) {
+        process.stderr.write('open-decision: 缺少 --operator-step：請說明位置（網址/IP/主機:port/檔案路徑）、動作（指令或點哪裡）、驗證（做完如何確認）。例如：--operator-step \'打開 https://10.0.0.5/ 執行 `設定密碼` 並確認結果\'；若無須操作可用 --operator-step-none "理由"。\n');
+        return 2;
+      }
+      const checked = checkOperatorSteps(steps);
+      if (!checked.ok) { checked.reasons.forEach((reason) => process.stderr.write(`open-decision: ${reason}\n`)); return 2; }
+    }
+  }
   const remind = args.kind === 'remind';
   const isStepKind = args.kind === 'step' || args.kind === 'look';
   const duplicateOverrides = Array.isArray(ex['not-duplicate-of']) ? ex['not-duplicate-of'] : [];
@@ -1288,7 +1302,7 @@ function main(argv) {
     cwd: args.cwd || process.cwd(), root: root || null, session: sess.session, question: questionText, background: backgroundText,
     options, recommendation: args.recommendation, why: args.why, blocks: args.blocks, not_authorized: args['not-authorized'], source: args.source, kind: args.kind, category: ex.category, executor: ex.executor, asker: ex.asker, title: ex.title, due_at: dueAt,
     from_request: ex['from-request'], from_request_addr: fromRequestAddr, attachments: args.attachments, look_target: lookTarget,
-    operator_steps: operatorSteps, repeat_of: repeat === null ? undefined : repeat.entry.id, repeat_n: repeat === null ? undefined : repeat.repeat_n,
+    operator_steps: operatorSteps, operator_step_none: ex['operator-step-none'], repeat_of: repeat === null ? undefined : repeat.entry.id, repeat_n: repeat === null ? undefined : repeat.repeat_n,
     not_duplicate_of: duplicateOverrides, not_duplicate_reason: ex['not-duplicate-reason'], supersede: ex.supersede, supersede_reason: ex['supersede-reason'], reject_duplicates: true, require_executor: true,
   });
   if (r.status === 'answered_duplicate') {
@@ -1364,7 +1378,7 @@ function roleGate({ not_authorized, origin, kind } = {}) {
 // lock + atomic-rename path as `open`; another entry is never touched. `origin` (e.g. "ask_user_question") marks which hook
 // opened it; the CLI never sets it. `options` = [{label, description}] (>= 2) or null.
 // Returns { status: 'ok'|'error', id, file, scope_key, message, code? }.
-function openDecision({ cwd, root, session, question, background, options, recommendation, why, blocks, not_authorized, source, origin, turn_tracked, kind, category, executor, asker, title, from_request, from_request_addr, due_at, attachments, look_target, operator_steps, repeat_of, repeat_n, not_duplicate_of, not_duplicate_reason, supersede, supersede_reason, reject_duplicates, require_executor }) {
+function openDecision({ cwd, root, session, question, background, options, recommendation, why, blocks, not_authorized, source, origin, turn_tracked, kind, category, executor, asker, title, from_request, from_request_addr, due_at, attachments, look_target, operator_steps, operator_step_none, repeat_of, repeat_n, not_duplicate_of, not_duplicate_reason, supersede, supersede_reason, reject_duplicates, require_executor }) {
   const routed = roleGate({ not_authorized, origin, kind });
   if (routed && routed.code === 4) return { status: 'error', code: 4, message: routed.message };
   const sf = scopeFile(cwd, root);
@@ -1386,6 +1400,7 @@ function openDecision({ cwd, root, session, question, background, options, recom
     const steps = operator_steps.map((s) => (typeof s === 'string' ? s.trim() : '')).filter(Boolean);
     if (steps.length) entry.operator_steps = steps;
   }
+  if (text(operator_step_none)) entry.operator_step_none = operator_step_none.trim();
   if (typeof title === 'string' && title !== '') entry.title = title; // additive: absent = the readers derive one (cardTitle in src/status/decision-input.js)
   if (typeof repeat_of === 'string' && SAFE_ID.test(repeat_of) && Number.isInteger(repeat_n) && repeat_n >= 2) { entry.repeat_of = repeat_of; entry.repeat_n = repeat_n; }
   if (Array.isArray(not_duplicate_of) && not_duplicate_of.length) entry.not_duplicate_of = [...new Set(not_duplicate_of)];

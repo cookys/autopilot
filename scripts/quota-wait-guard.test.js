@@ -71,7 +71,21 @@ const allowExhausted = evaluateQuotaWaitGuard({
 });
 assert.strictEqual(allowExhausted.action, 'allow');
 
-// 5. Knob: warn / off
+// 5. fleet command failure -> unknown, never treated as exhausted
+const { execFileSync } = require('child_process');
+const failBinDir = path.join(tmpDir, 'fail-bin');
+fs.mkdirSync(failBinDir);
+fs.writeFileSync(path.join(failBinDir, 'fleet'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+const origPath = process.env.PATH || '';
+process.env.PATH = `${failBinDir}:${origPath}`;
+try {
+  const failRes = checkEngineQuota('agy');
+  assert.strictEqual(failRes.verdict, 'unknown');
+} finally {
+  process.env.PATH = origPath;
+}
+
+// 6. Knob: warn / off
 const warnRes = evaluateQuotaWaitGuard(
   { tool_input: { text: '等 carbon 額度' } },
   { AUTOPILOT_QUOTA_WAIT_GUARD_MODE: 'warn' },
@@ -84,12 +98,40 @@ const offRes = evaluateQuotaWaitGuard(
 );
 assert.strictEqual(offRes.action, 'allow');
 
-// 6. Sweep test (read-only)
-const sweep = sweepQuotaWaitTasks({ tasksJsonFile: fakeTasksFile, quotaJsonFile: fakeQuotaFile });
+// 7. dispatch-hetero wiring: fake fleet in PATH returning has_quota JSON
+const okBinDir = path.join(tmpDir, 'ok-bin');
+fs.mkdirSync(okBinDir);
+fs.writeFileSync(
+  path.join(okBinDir, 'fleet'),
+  `#!/bin/sh\ncat <<'EOF'\n{"observed_at":"2026-11-25T09:00:00Z","harness":{"kimi":{"pct_5h":12,"pct_7d":20,"reset_at":"2026-11-25T14:00:00Z"}}}\nEOF\n`,
+  { mode: 0o755 },
+);
+const qwcOut = execFileSync(
+  process.execPath,
+  [path.join(__dirname, 'quota-wait-check.js'), '--engine', 'kimi', '--json'],
+  { env: { ...process.env, PATH: `${okBinDir}:${origPath}` }, encoding: 'utf8' },
+);
+const qwcParsed = JSON.parse(qwcOut);
+assert.strictEqual(qwcParsed.verdict, 'has_quota');
+assert.strictEqual(qwcParsed.resolved_engine, 'kimi');
+const dispatchSh = fs.readFileSync(path.join(__dirname, 'dispatch-hetero.sh'), 'utf8');
+assert.ok(dispatchSh.includes('quota-wait-check.js --engine kimi --json'), 'dispatch-hetero.sh must wire quota-wait-check.js');
+
+// 8. Sweep test (read-only, including open-fleet-tasks/*.txt and comments)
+const openTasksDir = path.join(tmpDir, 'open-fleet-tasks');
+fs.mkdirSync(openTasksDir);
+fs.writeFileSync(path.join(openTasksDir, '01TESTTASK0000000000000003.txt'), '等待 codex 額度恢復\n');
+const sweep = sweepQuotaWaitTasks({
+  tasksJsonFile: fakeTasksFile,
+  quotaJsonFile: fakeQuotaFile,
+  openFleetTasksDir: openTasksDir,
+});
 assert.strictEqual(sweep.ok, true);
-assert.strictEqual(sweep.rows.length, 1);
+assert.strictEqual(sweep.rows.length, 2);
 assert.strictEqual(sweep.rows[0].engine, 'agy');
 assert.strictEqual(sweep.rows[0].verdict, 'has_quota');
+assert.strictEqual(sweep.rows[1].engine, 'codex');
+assert.strictEqual(sweep.rows[1].verdict, 'exhausted');
 
 fs.rmSync(tmpDir, { recursive: true, force: true });
 console.log('PASS quota-wait-guard.test.js');

@@ -15,19 +15,57 @@
 'use strict';
 
 const fs = require('fs');
+const path = require('path');
 const { execFileSync } = require('child_process');
 const { checkEngineQuota, normalizeEngine } = require('./quota-wait-check.js');
 
 const QUOTA_WAIT_RE = /等\s*([A-Za-z0-9_.-]*)\s*額度|quota[\s_-]*wait|wait(?:ing)?\s+(?:for|on)\s+quota/i;
+const SWEEP_MATCH_RE = /等\s*([A-Za-z0-9_.-]*)\s*額度|額度|quota/i;
+
+function readOpenFleetTaskFiles(dir) {
+  const targetDir = dir || process.env.AUTOPILOT_OPEN_FLEET_TASKS_DIR || '/run/user/1001/autopilot/open-fleet-tasks';
+  const tasks = [];
+  try {
+    if (!fs.existsSync(targetDir)) return tasks;
+    for (const name of fs.readdirSync(targetDir)) {
+      if (!name.endsWith('.txt')) continue;
+      const fullPath = path.join(targetDir, name);
+      try {
+        const content = fs.readFileSync(fullPath, 'utf8');
+        const id = name.replace(/\.txt$/, '');
+        const firstLine = content.split(/\r?\n/)[0] || '';
+        tasks.push({ id, status: 'open', title: firstLine, content });
+      } catch {
+        // ignore unreadable task file
+      }
+    }
+  } catch {
+    // ignore missing directory
+  }
+  return tasks;
+}
 
 function readFleetTasks(opts = {}) {
-  if (opts.tasksData) return { ok: true, tasks: opts.tasksData };
+  const extraTasks = (opts.openFleetTasksDir || (!opts.tasksData && !opts.tasksJsonFile && !process.env.AUTOPILOT_FLEET_TASKS_JSON_FILE))
+    ? readOpenFleetTaskFiles(opts.openFleetTasksDir)
+    : [];
+  const mergeExtra = (baseTasks) => {
+    if (!extraTasks.length) return baseTasks;
+    const seen = new Set(baseTasks.map((t) => t && t.id).filter(Boolean));
+    const merged = baseTasks.slice();
+    for (const t of extraTasks) {
+      if (!t.id || !seen.has(t.id)) merged.push(t);
+    }
+    return merged;
+  };
+  if (opts.tasksData) return { ok: true, tasks: mergeExtra(opts.tasksData) };
   const mockFile = opts.tasksJsonFile || process.env.AUTOPILOT_FLEET_TASKS_JSON_FILE;
   if (mockFile) {
     try {
       const raw = fs.readFileSync(mockFile, 'utf8');
       const parsed = JSON.parse(raw);
-      return { ok: true, tasks: Array.isArray(parsed) ? parsed : (parsed.tasks || []) };
+      const list = Array.isArray(parsed) ? parsed : (parsed.tasks || []);
+      return { ok: true, tasks: mergeExtra(list) };
     } catch (err) {
       return { ok: false, error: `讀取任務假檔失敗 (${mockFile}): ${err.message}`, tasks: [] };
     }
@@ -39,10 +77,24 @@ function readFleetTasks(opts = {}) {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     const parsed = JSON.parse(out);
-    return { ok: true, tasks: Array.isArray(parsed) ? parsed : (parsed.tasks || []) };
+    const list = Array.isArray(parsed) ? parsed : (parsed.tasks || []);
+    return { ok: true, tasks: mergeExtra(list) };
   } catch (err) {
+    if (extraTasks.length) return { ok: true, tasks: extraTasks };
     return { ok: false, error: `fleet tasks --json 執行失敗: ${err.message}`, tasks: [] };
   }
+}
+
+function extractTaskText(task) {
+  if (!task || typeof task !== 'object') return '';
+  const parts = [task.id, task.title, task.content, task.description, task.note, task.status_note, task.last_comment];
+  if (Array.isArray(task.comments)) {
+    for (const c of task.comments) {
+      if (typeof c === 'string') parts.push(c);
+      else if (c && typeof c === 'object') parts.push(c.body || c.text || c.content || '');
+    }
+  }
+  return parts.filter((v) => typeof v === 'string' && v.trim()).join(' ');
 }
 
 function guessEngineFromTask(task) {
@@ -64,10 +116,8 @@ function sweepQuotaWaitTasks(opts = {}) {
   }
   const rows = [];
   for (const task of res.tasks) {
-    const text = [task.id, task.title, task.content, task.description, task.note, task.status_note]
-      .filter((v) => typeof v === 'string')
-      .join(' ');
-    if (!QUOTA_WAIT_RE.test(text)) continue;
+    const text = extractTaskText(task);
+    if (!SWEEP_MATCH_RE.test(text)) continue;
     const engine = guessEngineFromTask(task);
     const quota = engine && engine !== 'unknown'
       ? checkEngineQuota(engine, opts)

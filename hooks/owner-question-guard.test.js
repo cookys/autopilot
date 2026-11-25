@@ -1,4 +1,5 @@
 'use strict';
+process.env.AUTOPILOT_ALLOW_SCRATCH_CARD = '1'; // this suite opens cards in temp repos on purpose (scratch-card guard, scripts/open-decision.js)
 // Shared rules: hooks/lib/owner-question-rules.js.
 
 // Synthetic paraphrases only. Real transcripts are operator-owned replay inputs.

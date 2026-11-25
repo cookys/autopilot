@@ -1388,6 +1388,17 @@ function roleGate({ not_authorized, origin, kind } = {}) {
 // lock + atomic-rename path as `open`; another entry is never touched. `origin` (e.g. "ask_user_question") marks which hook
 // opened it; the CLI never sets it. `options` = [{label, description}] (>= 2) or null.
 // Returns { status: 'ok'|'error', id, file, scope_key, message, code? }.
+// A card opened from a scratch repo is published to the real hub by the courier's ledger discovery; when the scratch repo is deleted the card
+// is an orphan that shows as a real "Needs you" question (2026-11-25: four preview cards). Previews run with a sandbox HOME and AUTOPILOT_CARD_NOTIFY=off.
+const SCRATCH_ROOTS = [os.tmpdir(), '/tmp', '/var/tmp', path.join(os.homedir(), '.tmp')];
+function scratchCardRefusal(sf) {
+  if (process.env.AUTOPILOT_CARD_NOTIFY === 'off' || process.env.AUTOPILOT_ALLOW_SCRATCH_CARD === '1') return null;
+  const common = commonDirOf(sf.scope.repo_identity) || '';
+  const inScratch = common.includes('/scratchpad/') || SCRATCH_ROOTS.some((r) => r && (common === r || common.startsWith(`${r}${path.sep}`)));
+  if (!inScratch) return null;
+  return `refused: the repo's git dir ${common} is under a scratch/temp path, so the courier would publish this card to the real hub and leave an orphan when the repo is deleted. Preview with a sandbox HOME and AUTOPILOT_CARD_NOTIFY=off (or AUTOPILOT_ALLOW_SCRATCH_CARD=1 to override).`;
+}
+
 function openDecision({ cwd, root, session, question, background, options, recommendation, why, blocks, not_authorized, source, origin, turn_tracked, kind, category, executor, asker, title, from_request, from_request_addr, due_at, attachments, look_target, operator_steps, operator_step_none, repeat_of, repeat_n, not_duplicate_of, not_duplicate_reason, supersede, supersede_reason, reject_duplicates, require_executor }) {
   const routed = roleGate({ not_authorized, origin, kind });
   if (routed && routed.code === 4) return { status: 'error', code: 4, message: routed.message };
@@ -1399,6 +1410,8 @@ function openDecision({ cwd, root, session, question, background, options, recom
   }
   const sf = scopeFile(cwd, root);
   if (!sf) return { status: 'error', message: 'not inside a git repository' };
+  const scratch = scratchCardRefusal(sf);
+  if (scratch) return { status: 'error', code: 4, message: scratch };
   const entry = {
     id: `d-${crypto.randomBytes(4).toString('hex')}`,
     question,

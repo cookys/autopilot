@@ -9,12 +9,13 @@
 | 公開 repo 的 lint 與風格檢查 | T0 | 對公開開源專案的 clone 跑 lint、列出違規 | 公開 repo 的原樣 clone，放在 git 工作樹以外的空沙箱 | 只收報告文字；要改檔另開 diff，由非中國席審 |
 | 公開文件翻譯 | T0 | 公開文件、公開 README、公開 changelog 的中英互譯 | 公開網頁或公開 repo 的原文 | 譯文以檔案回傳，非中國席抽查 |
 | 去識別題庫的 bench | T1 | SWE34 去識別題、rolekit 這類已去識別、不含內部名稱的題目 | 去識別後的題目包（leak-scan 乾淨） | 只收分數與回答，不收可執行 hook |
+| 資格考合成題庫 | T1 | engine-qualify 的 reviewer／verification_author 合成題（`evals/capability-evidence-corpus.json`、`evals/va-capability-evidence-corpus.json`、各自 generator、`evals/reviewer-bench`） | 倉庫內合成題；宣告前 leak-scan（host、home_path、tmp_claude_path、run_user_path）0 命中，輸出與 sha 附在單上（PM 01M89MZ75V，2026-11-25） | 只收分數與判定；範圍只限這份合成題庫 |
 
 ## 不在白名單的（一律 T2 以上，硬拒）
 
 - 任何私有 repo、內部需求、fleet 內部訊息、操作員資料。
 - 從私有需求改寫成中性 brief：改寫不降級，仍是 T2。
-- 手寫的 brief 沒有佇列生產者標籤時預設 T2；本版在佇列（計畫 P3）上線前，由本席對上面三類逐張宣告 T0/T1，並在單上寫明來源。
+- 手寫的 brief 沒有佇列生產者標籤時預設 T2；本版在佇列（計畫 P3）上線前，由本席對上面四類逐張宣告 T0/T1，並在單上寫明來源。
 
 ## 運作規則
 

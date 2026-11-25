@@ -60,7 +60,7 @@ test('(c) send without task context is denied with a copyable dispatch example',
   assert.match(reason, /Size:/);
 });
 
-test('(d) dispatch plan gate: regular Plan, legacy .md@sha warning, plan loop, plan-exempt, and negative cases', () => {
+test('(d) dispatch plan gate: regular Plan, legacy .md@sha deny, plan loop, plan-exempt, and negative cases', () => {
   const prevOptIn = process.env.AUTOPILOT_HOOK_PM_DISPATCH_PLAN_GUARD;
   process.env.AUTOPILOT_HOOK_PM_DISPATCH_PLAN_GUARD = '1';
   const pmRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wog-pm-'));
@@ -78,11 +78,12 @@ test('(d) dispatch plan gate: regular Plan, legacy .md@sha warning, plan loop, p
     const noPlan = decide(mk('Size: M\n沒有 plan 標記'));
     assert.equal(noPlan.hookSpecificOutput.permissionDecision, 'deny');
 
-    // Legacy .md@sha without Plan: header: allowed with PreToolUse additionalContext warning
+    // Legacy .md@sha without Plan: header: denied (retired)
     const legacy = decide(mk('Size: M\n見 knowledge/plans/2026-11-25-fleet-routing-mechanization.md@64d739bf5a34'));
     assert.equal(legacy.hookSpecificOutput.hookEventName, 'PreToolUse');
-    assert.equal(legacy.hookSpecificOutput.permissionDecision, undefined);
-    assert.match(legacy.hookSpecificOutput.additionalContext, /Plan: <路徑>@<sha>/);
+    assert.equal(legacy.hookSpecificOutput.permissionDecision, 'deny');
+    assert.match(legacy.hookSpecificOutput.permissionDecisionReason, /已退役/);
+    assert.match(legacy.hookSpecificOutput.permissionDecisionReason, /Plan: <路徑>@<sha>/);
 
     // Legacy .md@ with <7 hex chars: denied
     const shortSha = decide(mk('Size: M\n見 a.md@abc123'));

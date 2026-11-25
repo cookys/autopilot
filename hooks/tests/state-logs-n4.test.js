@@ -35,7 +35,7 @@ test('subagent-budget writes ticket-usage.jsonl to AUTOPILOT_STATE_DIR with mode
   fs.mkdirSync(proj, { recursive: true });
 
   const sid = 'sess-n4-1';
-  const ticket = '01M88SBJ98BE0ARFCJ8N226K1Q';
+  const ticket = '01ZZZZZZZZZZZZZZZZZZZZZZZZ';
   const now = Date.now();
   const r = spawnSync(process.execPath, [
     FIXTURE,
@@ -96,7 +96,7 @@ test('dispatch-model-guard shadow log writes to AUTOPILOT_STATE_DIR and XDG_STAT
     tool_input: {
       model: 'sonnet',
       subagent_type: 'general-purpose',
-      prompt: 'Engine: sonnet | Role: researcher | Lane: test-lane\nbody',
+      prompt: 'Engine: sonnet\nRole: stats\nLane: test-lane\nFleet-Task: 01M7ZDSR7X7C6GVSB6T3Q6YC3G\nbody',
     },
   };
 
@@ -104,8 +104,9 @@ test('dispatch-model-guard shadow log writes to AUTOPILOT_STATE_DIR and XDG_STAT
     HOME: home,
     XDG_RUNTIME_DIR: runtime,
     AUTOPILOT_STATE_DIR: state,
-    AUTOPILOT_MECHANICAL_REROUTE_MODE: 'shadow',
-    AUTOPILOT_FLEET_SEAT: 'pm',
+    AUTOPILOT_MECHANICAL_REROUTE: 'shadow',
+    AUTOPILOT_SEAT_ROLE: 'lead',
+    AUTOPILOT_DISPATCH_MODEL_GUARD_MODE: 'remind',
   });
   assert.equal(res1.status, 0, res1.stderr);
 
@@ -116,15 +117,16 @@ test('dispatch-model-guard shadow log writes to AUTOPILOT_STATE_DIR and XDG_STAT
   const row = JSON.parse(fs.readFileSync(shadow1, 'utf8').trim().split('\n')[0]);
   assert.equal(row.model, 'sonnet');
   assert.equal(row.subagent_type, 'general-purpose');
-  assert.equal(row.role, 'researcher');
+  assert.equal(row.role, 'stats');
 
   const res2 = runHook(DISPATCH_GUARD, payload, {
     HOME: home,
     XDG_RUNTIME_DIR: runtime,
     AUTOPILOT_STATE_DIR: '',
     XDG_STATE_HOME: xdgState,
-    AUTOPILOT_MECHANICAL_REROUTE_MODE: 'shadow',
-    AUTOPILOT_FLEET_SEAT: 'pm',
+    AUTOPILOT_MECHANICAL_REROUTE: 'shadow',
+    AUTOPILOT_SEAT_ROLE: 'lead',
+    AUTOPILOT_DISPATCH_MODEL_GUARD_MODE: 'remind',
   });
   assert.equal(res2.status, 0, res2.stderr);
   assert.equal(fs.existsSync(path.join(xdgState, 'autopilot', 'mechanical-reroute-shadow.jsonl')), true);
@@ -148,14 +150,15 @@ test('fail-open when state dir is unwritable', () => {
     tool_input: {
       model: 'sonnet',
       subagent_type: 'general-purpose',
-      prompt: 'Engine: sonnet | Role: researcher | Lane: test-lane\nbody',
+      prompt: 'Engine: sonnet\nRole: stats\nLane: test-lane\nFleet-Task: 01M7ZDSR7X7C6GVSB6T3Q6YC3G\nbody',
     },
   }, {
     HOME: home,
     XDG_RUNTIME_DIR: runtime,
     AUTOPILOT_STATE_DIR: roState,
-    AUTOPILOT_MECHANICAL_REROUTE_MODE: 'shadow',
-    AUTOPILOT_FLEET_SEAT: 'pm',
+    AUTOPILOT_MECHANICAL_REROUTE: 'shadow',
+    AUTOPILOT_SEAT_ROLE: 'lead',
+    AUTOPILOT_DISPATCH_MODEL_GUARD_MODE: 'remind',
   });
   assert.equal(res.status, 0, res.stderr);
 

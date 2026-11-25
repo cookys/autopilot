@@ -4,6 +4,8 @@ import { PET_KEY, V74_KEY, V74_PAGES } from '../v74/contract.ts'
 
 export const STRIP_SPLIT_COLS = 66
 // the action area of a frame: 6 rows from 32 rows up, else 4 (the 待決 send preview lists its cards inside this)
+// at <= 3 rows (the host's 80x16 inline allocation) the frame drops its key-hint border row (frame.ts foot)
+export const TINY_FRAME_ROWS = 3
 export const actionRows = (rows: number): number => (rows >= 32 ? 6 : 4)
 
 // v7.4 tab digits (sub-task B); quota is not a tab (folded into spend).

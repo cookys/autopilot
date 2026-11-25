@@ -15,7 +15,7 @@ import { PALETTE } from '../../tux/palette.ts'
 import { pickedTone, wrapPlain } from '../ui'
 import type { KeyAction } from './keys'
 import type { Page, PageCtx } from './frame'
-import { actionRows as frameActionRows } from './layout'
+import { TINY_FRAME_ROWS, actionRows as frameActionRows } from './layout'
 import { brokenRow, pendingMissingReason, pendingSourceMissing, wrapRow, WRAP_HANG } from './rows'
 import type { Row } from './rows'
 import { DECIDE_COL_SEP_W, DECIDE_COMPACT_MAX_ROWS, DECIDE_DUAL_MIN_COLS, DECIDE_HYSTERESIS, DECIDE_MIN_COL_W, STRIP_SPLIT_COLS, decideColumnWidths, decideLayoutMode } from './layout'
@@ -194,18 +194,28 @@ const widthOf = (segs: Seg[]): number => segs.reduce((w, s) => w + displayWidth(
 // else the question) and every step in full as a numbered list. A long step wraps onto continuation rows under its text by
 // display width (CJK = 2), never cut. No buttons, no keys. `cap` = the action rows the frame can still afford; a card shows
 // whole or not at all (a hint row names the hidden ones). Zero cards: no rows.
+// One awaiting card as drawn: its title, then every step whole (wrapped, never cut). The frame wraps a read page's body at
+// min(80, cols), so the rows are wrapped here first and the frame adds none.
+function awaitingCardRows(c: DurableAwaiting, ctx: PageCtx): Row[] {
+  const cols = Math.max(8, Math.min(80, ctx.size.cols))
+  const title = (c.title ?? '').trim() !== '' ? c.title : c.question
+  const rows: Row[] = wrapRow([seg('  ' + title)], cols, 2)
+  c.operator_steps.forEach((s, i) => {
+    const prefix = '  ' + String(i + 1) + '. '
+    rows.push(...wrapRow([seg(prefix + s)], cols, displayWidth(prefix)))
+  })
+  return rows
+}
+// The body rows the frame leaves a page (frame.ts frameRows: head, the foot = key-hint border row + strip, the border row
+// dropped at <= TINY_FRAME_ROWS, and the action rows). The page cuts its own content to this so the frame never cuts the tail.
+export function frameBodyRoom(ctx: PageCtx, actions: number): number {
+  const H = ctx.size.rows
+  const strip = ctx.size.cols < STRIP_SPLIT_COLS ? 2 : 1
+  return Math.max(0, H - 1 - (H <= TINY_FRAME_ROWS ? strip : strip + 1) - actions)
+}
 export function awaitingBlockRows(awaiting: DurableAwaiting[] | null | undefined, ctx: PageCtx, cap: number): Row[] {
   if (awaiting === null || awaiting === undefined || awaiting.length === 0 || cap < 1) return []
-  const cols = Math.max(8, Math.min(80, ctx.size.cols)) // the frame wraps a read page's body at min(80, cols): wrap here first so it never adds rows
-  const cardRowsOf = (c: DurableAwaiting): Row[] => {
-    const title = (c.title ?? '').trim() !== '' ? c.title : c.question
-    const rows: Row[] = wrapRow([seg('  ' + title)], cols, 2)
-    c.operator_steps.forEach((s, i) => {
-      const prefix = '  ' + String(i + 1) + '. '
-      rows.push(...wrapRow([seg(prefix + s)], cols, displayWidth(prefix)))
-    })
-    return rows
-  }
+  const cardRowsOf = (c: DurableAwaiting): Row[] => awaitingCardRows(c, ctx)
   const out: Row[] = [[dimSeg(ctx.t('v74.d.await_head', { n: awaiting.length }))] as Row]
   let at = 0
   while (at < awaiting.length) {
@@ -221,12 +231,19 @@ export function awaitingBlockRows(awaiting: DurableAwaiting[] | null | undefined
 // The block lives at the bottom of the BODY, directly above the action area (R1: information grows upward from the action
 // area; the action area is 4-6 rows and cannot hold full steps). It takes at most a third of the pane, and never so much that
 // the page would drop to the compact (< DECIDE_COMPACT_MAX_ROWS) layout or to the 4-row action area (rows < 32).
-export function awaitingBodyCap(ctx: PageCtx): number {
+const AWAIT_KEEP_CARD = 3
+export function awaitingBodyCap(ctx: PageCtx, awaiting?: DurableAwaiting[] | null, room?: number): number {
   const rows = ctx.maxRows ?? ctx.size.rows
   const third = Math.floor(rows / 3)
   const keepCompact = rows >= DECIDE_COMPACT_MAX_ROWS ? rows - DECIDE_COMPACT_MAX_ROWS : third
   const keepActions = ctx.size.rows >= 32 ? ctx.size.rows - 32 : third
-  return Math.max(0, Math.min(third, keepCompact, keepActions))
+  const base = Math.max(0, Math.min(third, keepCompact, keepActions))
+  if (awaiting === null || awaiting === undefined || awaiting.length === 0 || room === undefined) return base
+  // canary 2 (b67c04a2e, host box 13 / 17 rows): a third of a small box never holds one card's steps. The block grows to the
+  // first card whole (heading + its rows) while the card box above keeps AWAIT_KEEP_CARD rows (the selected card's title and an
+  // option), and keeps at least its heading row while the room has two rows.
+  const need = 1 + awaitingCardRows(awaiting[0], ctx).length
+  return Math.min(room, Math.max(base, Math.min(need, room - AWAIT_KEEP_CARD), room >= 2 ? 1 : 0))
 }
 // The page drawn with `k` fewer rows (the box renderers size their body from ctx.size.rows / maxRows), for the block below it.
 const shrunk = <C extends PageCtx>(ctx: C, k: number): C => (k === 0 ? ctx : { ...ctx, size: { ...ctx.size, rows: ctx.size.rows - k }, ...(ctx.maxRows === undefined ? {} : { maxRows: ctx.maxRows - k }) })
@@ -1118,10 +1135,7 @@ function renderV74(ctx: DecideCtx): { body: Row[]; actions: Row[] } {
       return [text]
     })
     const resultRow: Row[] = m === undefined || m === null ? [] : [[dimSeg(GLYPHS.state.done + ' ' + t('v74.d.result', { n: m.n, left: m.left }))] as Row]
-    // 等你動手 takes the action rows under the preview: the preview reserves its own rows (the heading plus at most one
-    // hidden-count row), the block takes what is left, and the sum never exceeds the frame's action area (frame.ts throws above it).
     const full = frameActionRows(ctx.size.rows)
-    const aw = awaitingBlockRows(v.awaiting, ctx, awaitingBodyCap(ctx))
     const cap = Math.max(0, full - resultRow.length)
     const shown = plan.length + 1 <= cap ? plan : plan.slice(0, Math.max(0, cap - 2))
     const rest = plan.length - shown.length
@@ -1131,15 +1145,18 @@ function renderV74(ctx: DecideCtx): { body: Row[]; actions: Row[] } {
       ...(rest > 0 ? [[dimSeg('  ' + t('v74.d.pv_more', { n: rest }))] as Row] : []),
     ]
     const sendRows: Row[] = nav.armed === true && plan.length > 0 ? previewRows : [[seg(sendText, { press: 'key:s' })]]
+    // 等你動手: the bottom of the body, directly above the action rows; the card box above gives way so the frame never cuts it
+    const room = frameBodyRoom(ctx, sendRows.length + resultRow.length)
+    const aw = awaitingBlockRows(v.awaiting, ctx, awaitingBodyCap(ctx, v.awaiting, room))
     const boxed = renderBoxV74(shrunk(ctx, aw.length), cards, nav, cursor, [
       ...sendRows,
       ...resultRow,
     ], staleBanners)
-    return { body: [...boxed.body, ...aw], actions: boxed.actions }
+    return { body: aw.length === 0 ? boxed.body : [...boxed.body.slice(0, Math.max(0, room - aw.length)), ...aw], actions: boxed.actions }
   }
   const head = ruleTo(GLYPHS.structure.open + ' ' + t('v74.d.head', { n: cards.length, k: cursor + 1 }), cols)
   // 等你動手: at the bottom of the body, directly above the action rows (awaitingBodyCap)
-  const aw = awaitingBlockRows(v.awaiting, ctx, awaitingBodyCap(ctx))
+  const aw = awaitingBlockRows(v.awaiting, ctx, awaitingBodyCap(ctx, v.awaiting, frameBodyRoom(ctx, actions.length)))
   if (ctx.pendingScroll !== undefined) {
     const room = Math.max(1, ctx.size.rows - 1 - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - actions.length - staleBanners.length - aw.length)
     return { body: [...staleBanners, ...pendingBody(ctx, cards, nav, cursor, room), ...aw], actions }
@@ -1159,8 +1176,7 @@ function renderV74(ctx: DecideCtx): { body: Row[]; actions: Row[] } {
     const lead = /^ */.exec(x.map(sg => sg.text).join(''))?.[0].length ?? 0
     return wrapRow(x, width, Math.max(WRAP_HANG, Math.min(lead, Math.max(0, width - 4))))
   })
-  // the frame's foot is the key-hint border row plus the strip (frame.ts foot), one row more than `room` counts
-  return { body: [...wrapped.slice(0, Math.max(0, room - 1)), ...aw], actions }
+  return { body: [...wrapped.slice(0, Math.max(0, frameBodyRoom(ctx, actions.length) - aw.length)), ...aw], actions }
 }
 
 export const decidePage: Page = { id: 'decide', key: '2', title: '待決', framed: true, render }

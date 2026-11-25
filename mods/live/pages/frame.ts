@@ -15,7 +15,7 @@ import { GLYPHS } from '../../tux/glyphs.ts'
 import { PALETTE } from '../../tux/palette.ts'
 import { PAGES } from './index'
 import { ageUnit } from './now'
-import { DECIDE_COMPACT_MAX_ROWS, PAGE_KEYS, STRIP_SPLIT_COLS, V74_STRIP_ORDER, actionRows, decideLayoutMode } from './layout'
+import { DECIDE_COMPACT_MAX_ROWS, PAGE_KEYS, STRIP_SPLIT_COLS, TINY_FRAME_ROWS, V74_STRIP_ORDER, actionRows, decideLayoutMode } from './layout'
 import type { DecideLayoutMode } from './layout'
 import { V74_KEY } from '../v74/contract'
 import { WRAP_HANG, brokenRow, decisionCount, poolsNeedLook, sourceMissing, staleBadge, unknownPoolCount, wrapRow } from './rows'
@@ -104,7 +104,6 @@ const V74_BORDER_KEY: Record<string, string> = {
   help: 'v74.b.border.help', pet: 'v74.b.border.pet', quota: 'v74.b.border.quota', forge: 'v74.b.border.default',
 }
 
-const TINY_FRAME_ROWS = 3
 // design-narrow: the short form of the hint keeps every key class (move, pick, send, Esc) and drops only the words and the ctrl+x tab clause
 const V74_SHORT_KEY: Record<string, string> = {
   decide: 'v74.b.short.decide', todo: 'v74.b.short.todo', pet: 'v74.b.short.pet',

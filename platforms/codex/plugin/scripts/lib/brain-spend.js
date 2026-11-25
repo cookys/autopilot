@@ -2,8 +2,8 @@
 
 // scripts/lib/brain-spend.js — the ONE implementation of "today's tier spend vs the cost-fuse cap" (stage-graph P7 D1).
 //
-// Two readers share it so the number can never drift: hooks/cost-fuse.js (the PreToolUse fuse) and the runs watcher
-// (src/status/runs-watch.js -> envelope fields host_today_brain_usd / brain_cap_usd, read by the band's spend slot).
+// Read by the runs watcher (src/status/runs-watch.js -> envelope fields host_today_brain_usd / brain_cap_usd, read by the
+// band's spend slot). `hooks/cost-fuse.js` is retired (no longer a hook).
 //
 //   loadCostFuseConfig({ env, home, defaultDailyUsdBrain? }) -> { mode, daily_usd_brain, tiers }   (~/.autopilot/config.json `cost_fuse`, then
 //                                        env overrides AUTOPILOT_COST_FUSE_MODE / AUTOPILOT_COST_FUSE_DAILY_USD)

@@ -7,6 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 const { userRuntimeBase } = require('./lib/runtime-paths.js');
+const { stateDir } = require('./lib/state-dir.js');
 
 function parseSinceMs(spec) {
   const m = String(spec || '2h').trim().match(/^(\d+(?:\.\d+)?)([smhd])$/i);
@@ -36,7 +37,9 @@ for (let i = 0; i < args.length; i++) {
 }
 
 const cutoff = Date.now() - parseSinceMs(sinceSpec);
-const logFile = path.join(userRuntimeBase(process.env), 'mechanical-reroute-shadow.jsonl');
+// The log lives in the state dir; fall back once to the old tmpfs location (pre-N4 rows).
+const stateLog = path.join(stateDir(process.env), 'mechanical-reroute-shadow.jsonl');
+const logFile = fs.existsSync(stateLog) ? stateLog : path.join(userRuntimeBase(process.env), 'mechanical-reroute-shadow.jsonl');
 
 const bySeat = {};
 const byRole = {};

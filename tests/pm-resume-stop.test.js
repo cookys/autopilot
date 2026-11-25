@@ -51,5 +51,28 @@ t('opt-out and exit code: never blocks', () => {
   assert.strictEqual(stop('a7', null).status, 0);
 });
 
+t('a hand-run `fleet pm resume` counts as touched, with a marker or without one', () => {
+  const manual = transcript([`{"type":"assistant","message":{"content":[{"type":"tool_use","input":{"command":"fleet pm resume --seat pm--claude --role pm"}}]}}`]);
+  writeMarker('a8', { ok: true, ids: [ID] }, env);
+  assert.strictEqual(stop('a8', manual).stderr, '');
+  assert.strictEqual(stop('a9', manual).stderr, '', 'no marker but the seat ran resume itself');
+});
+
+t('no XDG_RUNTIME_DIR (runtime base under /tmp): the marker still round-trips, so the reminder cannot repeat every turn', () => {
+  const bare = { PATH: process.env.PATH, HOME: tmp, FLEET_ADDRESS: env.FLEET_ADDRESS };
+  const sid = `nox-${process.pid}`;
+  try {
+    writeMarker(sid, { ok: true, ids: [ID] }, bare);
+    assert.strictEqual(readMarker(sid, bare).ok, true);
+    const tr = transcript(['{}']);
+    const run = () => spawnSync(process.execPath, [hook], { input: JSON.stringify({ session_id: sid, transcript_path: tr }), encoding: 'utf8', env: bare });
+    assert.match(run().stderr, /一張都沒碰過/);
+    assert.strictEqual(run().stderr, '', 'second Stop is silent');
+  } finally {
+    const base = `/tmp/autopilot-${process.getuid()}/pm-resume`;
+    try { fs.rmSync(path.join(base, `${sid}.json`), { force: true }); } catch { /* best effort */ }
+  }
+});
+
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(`${n} passed`);

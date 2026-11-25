@@ -72,7 +72,8 @@ const ELLIPSIS = '\u2026'
 const UP_TRI = '\u25B4' // GLYPHS.structure.open is ▾; ▴ is the collapsed/expanded opposite arrow per spec §2.5
 const REMIND_LEAD = '\u2023' // ‣ (U+2023, EAW=N, width=1): reminder lead, distinct from fold glyph ▸ and QC ⏶
 
-export const BAND_SEP_SEG: Seg = { text: ' ' + GLYPHS.structure.bandSep + ' ', color: PALETTE.structure }
+// Contrast: host subtle is rgb(175,175,175) on light (2.19:1) and rgb(80,80,80) on dark (2.60:1), under the 3:1 non-text bar; inactive is 5.74 / 7.37.
+export const BAND_SEP_SEG: Seg = { text: ' ' + GLYPHS.structure.bandSep + ' ', color: PALETTE.idle }
 
 export function dataStateOf(ageMs: number | null, missing: boolean, staleFlag = false): DataState {
   if (missing) return 'missing'
@@ -332,10 +333,10 @@ function buildToggle(expanded: boolean, maxCols: number, t: T): { segs: Seg[]; w
   const arrow = expanded ? UP_TRI : GLYPHS.structure.open
   const word = expanded ? t('band.onerow.collapse') : t('band.onerow.expand')
   const full = ' ' + arrow + word
-  if (maxCols >= displayWidth(full)) return { segs: [{ text: full }], width: displayWidth(full), expanded }
+  if (maxCols >= displayWidth(full)) return { segs: [{ text: full, color: PALETTE.action }], width: displayWidth(full), expanded }
   const compact = arrow + word
-  if (maxCols >= displayWidth(compact)) return { segs: [{ text: compact }], width: displayWidth(compact), expanded }
-  return { segs: [{ text: arrow }], width: displayWidth(arrow), expanded }
+  if (maxCols >= displayWidth(compact)) return { segs: [{ text: compact, color: PALETTE.action }], width: displayWidth(compact), expanded }
+  return { segs: [{ text: arrow, color: PALETTE.action }], width: displayWidth(arrow), expanded }
 }
 
 function buildReminderRaw(inp: OneRowInput, t: T): { text: string; idle: boolean; stale: boolean; color?: ThemeKey } {

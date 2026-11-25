@@ -9231,6 +9231,18 @@
       ],
       "doc": null,
       "relates": []
+    },
+    {
+      "name": "AUTOPILOT_PROMISE_ID_GUARD",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": "on",
+      "readers": [
+        "hooks/promise-needs-id-guard.js"
+      ],
+      "doc": null,
+      "relates": []
     }
   ]
 }

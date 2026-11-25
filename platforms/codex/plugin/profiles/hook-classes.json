@@ -27,6 +27,7 @@
     { "stem": "failure-escalation", "class": "invariant_effect" },
     { "stem": "fleet-dispatch-class", "class": "invariant_effect" },
     { "stem": "fleet-send-work-order-guard", "class": "invariant_effect" },
+    { "stem": "promise-needs-id-guard", "class": "invariant_effect" },
     { "stem": "fleet-quota-wait-guard", "class": "invariant_effect" },
     { "stem": "fleet-stop", "class": "invariant_effect" },
     { "stem": "foreman-guard", "class": "invariant_effect" },

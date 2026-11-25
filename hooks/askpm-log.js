@@ -41,6 +41,7 @@ const { isPmConsole } = require('./_shared/pm-console');
 const { maskSecrets } = require('../scripts/lib/mask-secrets');
 const { withWriteLock, appendRow } = require('../scripts/lib/jsonl-store');
 const { groupKey } = require('../scripts/lib/ask-group-key');
+const { stateDir } = require('../scripts/lib/state-dir');
 
 const SCHEMA = 'autopilot.askpm/1';
 // mods/live/console.ts inlines this schema inside consoleModeOf and does not export it.
@@ -83,16 +84,6 @@ function cwdOf(input) {
 
 function isPmSession(input) {
   return hasPmConsole(cwdOf(input));
-}
-
-function stateDir(env) {
-  const abs = (v) => (typeof v === 'string' && path.isAbsolute(v) ? v : '');
-  const over = abs(env.AUTOPILOT_STATE_DIR);
-  if (over) return over;
-  const xdg = abs(env.XDG_STATE_HOME);
-  if (xdg) return path.join(xdg, 'autopilot');
-  const home = abs(env.HOME) || os.homedir();
-  return path.join(home, '.local', 'state', 'autopilot');
 }
 
 function isInjected(prompt) {

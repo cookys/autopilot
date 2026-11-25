@@ -2933,6 +2933,19 @@ function main() {
         state.repair_authorized = artifact.repair_authorized;
       }
       atomicWriteJson(statePath, state);
+      if (artifact.terminal && artifact.verdict === 'READY') {
+        const planAbsPath = path.isAbsolute(opts.planFile)
+          ? opts.planFile
+          : path.resolve(opts.repoRoot, opts.planFile);
+        const planStem = path.basename(planAbsPath, path.extname(planAbsPath));
+        const freezeReceiptPath = path.join(path.dirname(planAbsPath), `${planStem}.freeze-receipt.json`);
+        atomicWriteJson(freezeReceiptPath, {
+          commit: artifact.repo_head_sha || null,
+          path: artifact.plan_path || opts.planFile,
+          sha256: artifact.plan_sha256,
+          verdict: artifact.verdict,
+        });
+      }
     });
     // Same-node update: ONLY the families of seats whose review completed (transport ok + verdict parsed).
     // Manifest / planned families are written nowhere. Fail-open.

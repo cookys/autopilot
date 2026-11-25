@@ -798,8 +798,6 @@
     "hooks/tests/check-tip-verify-default.test.sh:106:sh-node",
     "hooks/tests/check-tip-verify-default.test.sh:115:sh-node",
     "hooks/tests/codex-mirror-require-closure.test.sh:108:sh-node",
-    "hooks/tests/cost-fuse.test.sh:96:sh-node",
-    "hooks/tests/cost-fuse.test.sh:235:sh-node",
     "hooks/tests/dispatch-discuss.test.sh:308:sh-node",
     "hooks/tests/dispatch-hetero-backlog-reconcile.test.sh:109:sh-node",
     "hooks/tests/dispatch-hetero-tip-verify.test.sh:272:sh-node",

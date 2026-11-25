@@ -10,7 +10,7 @@ const { spawnSync } = require('node:child_process');
 const { lintPlanPhases } = require('../check-plan-phases');
 const { isMechanismPlan, lintPlanInventory } = require('../lib/plan-inventory-lint');
 
-const FIXTURE_PATH = path.join(__dirname, 'fixtures', 'plan-tracking-resume-v3.md');
+const FIXTURE_PATH = path.join(__dirname, '..', '..', 'tests', 'fixtures', 'plan-tracking-resume-v3.md');
 const CHECK_SCRIPT = path.join(__dirname, '..', 'check-plan-phases.js');
 
 function runCheckCli(markdown) {

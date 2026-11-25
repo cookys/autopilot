@@ -334,4 +334,9 @@ assert_eq "$(kimi_effort_seen --effort medium)" "NONE" "dispatch-author.sh kimi 
 OUT="$(tf_env env DISPATCH_DETACH=0 DISPATCH_QUIET=1 bash "$AUTHOR" --runner kimi --model kimi-code/k3 --prompt-file "$TF_PROMPT" --effort xhigh 2>&1)"
 assert_contains "$OUT" 'low|high|max' "dispatch-author.sh kimi --effort xhigh refusal names the accepted values"
 
+# kimi branch routes through kimi-broker without calling kimi-local-stop.js check:
+# even with AUTOPILOT_KIMI_LOCAL_ALLOW unset, it must not fail with kimi_local_stopped.
+BROKER_NO_ALLOW_OUT="$(env -u AUTOPILOT_KIMI_LOCAL_ALLOW DISPATCH_DETACH=0 DISPATCH_QUIET=1 bash "$AUTHOR" --runner kimi --model kimi-code/k3 --prompt-file "$TF_PROMPT" 2>/dev/null || true)"
+assert_not_contains "$BROKER_NO_ALLOW_OUT" "kimi_local_stopped" "dispatch-author.sh kimi does not call kimi-local-stop.js when AUTOPILOT_KIMI_LOCAL_ALLOW is unset"
+
 finalize_test

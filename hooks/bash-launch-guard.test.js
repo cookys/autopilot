@@ -2491,3 +2491,13 @@ test('auto-rewrite: unquoted no-match glob under zsh returns allow with updatedI
   assert.strictEqual(r.updatedInput.command, "echo '*.nonexistent_ext_xyz'");
   assert.match(r.ctx, /已自動改寫：echo \*\.nonexistent_ext_xyz → echo '\*\.nonexistent_ext_xyz'/);
 });
+
+// S10 P5: the auto-rewrite note shows a short head of each side, not the whole command twice.
+test('rewrite note is clipped: a long rewritten command adds under 400 bytes of context', () => {
+  const longTail = ' && echo ' + 'x'.repeat(900);
+  const cmd = 'git config a =b' + longTail;
+  const r = run(cmd, { shell: 'zsh' });
+  assert.match(r.ctx, /已自動改寫/);
+  assert.ok(Buffer.byteLength(r.ctx) < 400, `ctx is ${Buffer.byteLength(r.ctx)} bytes`);
+  assert.ok(r.updatedInput && r.updatedInput.command.includes('x'.repeat(900)), 'the rewritten command itself is untouched');
+});

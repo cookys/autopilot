@@ -296,6 +296,13 @@ function emitDeny(reason) {
   })}\n`);
 }
 
+// The rewrite is applied through updatedInput, so the model never needs to copy it back: show only a short head of
+// each side (S10 P5: the full command twice was the largest repeated PreToolUse:Bash advisory).
+function rewriteNote(prev, next) {
+  const clip = (t) => { const one = String(t).replace(/\s+/g, ' ').trim(); return one.length > 60 ? `${one.slice(0, 60)}…(${one.length} 字元)` : one; };
+  return `已自動改寫：${clip(prev)} → ${clip(next)}`;
+}
+
 function classify(tool, input) {
   if (DELEGATION_TOOLS.has(tool)) return 'delegation';
   if (READ_CLASS_TOOLS.has(tool)) return 'read';
@@ -358,7 +365,7 @@ function classify(tool, input) {
         if (ls.rewrite && ls.rewrite !== cmd && !detectBareLs(ls.rewrite)) {
           const prev = cmd;
           cmd = ls.rewrite;
-          launchWarns.push(`已自動改寫：${prev} → ${cmd}`);
+          launchWarns.push(rewriteNote(prev, cmd));
         } else {
           emitDeny(`bash-launch-guard (${ls.rule}): ${ls.why}. Set AUTOPILOT_BASH_GUARD_LS_MODE=warn|off `
             + '(or depth0_delegate_gate.bare_ls in ~/.autopilot/config.json) to relax.'
@@ -416,7 +423,7 @@ function classify(tool, input) {
           if (z.rewrite && z.rewrite !== cmd && !detectZshExpansion(z.rewrite, zshCwd)) {
             const prev = cmd;
             cmd = z.rewrite;
-            launchWarns.push(`已自動改寫：${prev} → ${cmd}`);
+            launchWarns.push(rewriteNote(prev, cmd));
           } else {
             const zRewrite = z.rewrite ? `\n改寫後的指令（直接照抄）：${z.rewrite}` : '';
             launchWarns.push(`bash-launch-guard (${z.rule}, warn only): ${z.why}${zRewrite}`);

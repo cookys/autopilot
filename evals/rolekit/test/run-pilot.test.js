@@ -254,3 +254,29 @@ test('resume: an out dir that has results but no attempts ledger is refused befo
     assert.ok(!fs.existsSync(path.join(d, 'attempts.jsonl')));
   } finally { rm(d); }
 });
+
+// ---- format parity (PM ruling 01M89GX0JR): A/C/D get the kit's Output section verbatim; --arms narrows the walk
+test('formatBlock: the kit Output paragraph byte for byte, nothing from Done when onward', () => {
+  for (const role of ['planner', 'implementer', 'reviewer', 'verifier', 'debugger', 'explorer']) {
+    const kit = fs.readFileSync(path.join(ROOT, 'kits', role, 'role.md'), 'utf8');
+    const b = rp.formatBlock(role);
+    assert.ok(b.startsWith('Output:'), role);
+    assert.ok(kit.includes(b), `${role}: not a verbatim slice of the kit`);
+    assert.ok(!b.includes('Done when'), role);
+    assert.ok(!b.includes('Escalate'), role);
+  }
+});
+
+test('parseArgs: --format-parity is a flag, --arms takes a value', () => {
+  const o = rp.parseArgs(['--account', 'a', '--out', 'x', '--dry-run', '--format-parity', '--arms', 'A,C,D']);
+  assert.strictEqual(o.formatParity, true); assert.strictEqual(o.arms, 'A,C,D');
+});
+
+test('run --arms A,D: only those arms are walked and B is untouched', () => {
+  const d = tmp();
+  try {
+    const res = rp.run(base(d, { arms: 'A,D', formatParity: true, capUsd: '0.02' }));
+    const arms = new Set(res.rows.map((r) => r.arm));
+    assert.ok(![...arms].some((a) => a === 'B' || a === 'C'), [...arms].join());
+  } finally { rm(d); }
+});

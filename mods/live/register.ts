@@ -84,7 +84,7 @@ import { DECIDE_COMPACT_MAX_ROWS, decideLayoutMode } from './pages/layout'
 import type { DecideLayoutMode } from './pages/layout'
 import { SEATS_TIMEOUT_MS, seatQuota, v74PmCounts } from './pages/now'
 import { PAGES, EXTRA_PAGES } from './pages/index'
-import { ASKS_LIST_TAIL, makeAsksFeed, makeDecideFeed, makePmFeed, mergeDecideCards } from './v74/feeds'
+import { ASKS_LIST_TAIL, cutTitle, makeAsksFeed, makeDecideFeed, makePmFeed, mergeDecideCards } from './v74/feeds'
 import { askBandRows } from './askband'
 import { offerTodo } from './v74/contract'
 import type { CardNav, DecideCard, PmStatus, TodoCard, V74Ctx } from './v74/contract'
@@ -104,7 +104,7 @@ import {
   readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readQcAt, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
   paneWidth, DEFAULT_PANE_COLS, slotTab, slotUnfolds, sparkText, truncateToWidth, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
 } from './model'
-import type { AccountView, ActivityItem, Counts, DecideState, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveDecision, LiveSnapshot, LookTarget, Manifest, PaneLine, PaneTab, Seg, Slot, SlotId, QuotaWindow, Sources, SourceGroup } from './model'
+import type { AccountView, ActivityItem, Counts, DecideState, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveDecision, LiveSnapshot, LookTarget, Manifest, DurableAwaiting, PaneLine, PaneTab, Seg, Slot, SlotId, QuotaWindow, Sources, SourceGroup } from './model'
 
 const TICK_MS = 5000
 const FACTS_PRUNE_MS = 60_000
@@ -137,6 +137,7 @@ const pmFeed = makePmFeed()
 const decideFeed = makeDecideFeed()
 const asksFeed = makeAsksFeed()
 let durableOpenCards: DecideCard[] = [] // open-decision.js store, refreshed with the snapshot; merged with the fleet list by card id
+let durableAwaiting: DurableAwaiting[] = [] // the store's answered cards still waiting on the operator's own step (awaiting_operator_action); the decide page's 等你動手 block
 const durableClosedIds = new Set<string>() // ids s wrote to the card store; the fleet list can still name them until the next fetch
 export function v74ArrowFromScroll(page: string, by: number): { kind: 'move'; by: 1 | -1 } | null {
   if ((page !== 'decide' && page !== 'todo') || by === 0) return null
@@ -224,7 +225,7 @@ function mergedDecide(): DecideCard[] | null {
 function liveToDecideCard(d: LiveDecision): DecideCard | null {
   if (d.id === null || d.id === '') return null
   return {
-    id: d.id, title: d.title ?? d.id.slice(0, 8), question: d.question, background: d.background,
+    id: d.id, title: d.title ?? (d.question !== '' ? cutTitle(d.question) : d.id.slice(0, 8)), question: d.question, background: d.background,
     options: d.options.map(o => ({ label: o.label, detail: o.description, recommended: d.recommendation === o.label })),
   }
 }
@@ -254,6 +255,7 @@ async function v74CtxOf($: EngineInterface, withStore = false): Promise<V74Ctx> 
     pmFetchedMs: pmFeed.fetchedMs(),
     pmError: pmErr,
     decide,
+    awaiting: durableAwaiting,
     decideFetchedMs: decideFeed.fetchedMs(),
     decideError: decErr,
     fleetError: fltErr,
@@ -832,10 +834,11 @@ async function launchFailure($: EngineInterface, autopilotHome: string, key: str
 
 async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{ snap: LiveSnapshot; counts: Counts | null; acceptance: string | null }> {
   durableOpenCards = []
+  durableAwaiting = []
   const none = (snap: LiveSnapshot) => ({ snap, counts: null, acceptance: null })
   const STATE_TEXT = stateText(t)
   const home = await $.env.get('HOME')
-  if (!home) { durableOpenCards = []; return none(plain('no-pointer', STATE_TEXT.noPointer)) }
+  if (!home) { durableOpenCards = []; durableAwaiting = []; return none(plain('no-pointer', STATE_TEXT.noPointer)) }
   const pointerText = await readText($, home + '/.autopilot/live-pointer.json')
   if (pointerText === null) return none(plain('no-pointer', STATE_TEXT.noPointer))
   const parsed = parseJson(pointerText)
@@ -854,6 +857,7 @@ async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{
   if (scope === null) {
     const wt = await orphanResidueCount($)
     durableOpenCards = []
+    durableAwaiting = []
     return none(plain('no-project', wt > 0 ? STATE_TEXT.noProjectWt(wt) : STATE_TEXT.noProject))
   }
 
@@ -968,6 +972,7 @@ async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{
   const commonDir = commonDirOf(identity) ?? await commonDirAt($, await $.session.cwd().catch(() => ''))
   const durable = await readDurableDecisions($, commonDir, scope.key, identity, nowMs)
   durableOpenCards = durable.open.flatMap(d => { const c = liveToDecideCard(d); return c === null ? [] : [c] })
+  durableAwaiting = durable.awaiting
   const dismissed = (await read($, DECIDE).catch(() => NO_DECIDE)).dismissed ?? {}
   const baseDecisions = jobModel === null || !jobModel.needs_decision ? [] : jobModel.decisions
   const mergedPending = mergeDurableDecisions(baseDecisions, durable, dismissed)
@@ -1284,8 +1289,8 @@ async function execScript($: EngineInterface, script: (typeof CLEAN_SCRIPTS)[num
   return r.stdout
 }
 
-async function readDurableDecisions($: EngineInterface, commonDir: string | null, projectKey: string, identity: unknown, nowMs: number): Promise<{ open: LiveDecision[]; closedIds: Set<string> }> {
-  if (commonDir === null) return { open: [], closedIds: new Set() }
+async function readDurableDecisions($: EngineInterface, commonDir: string | null, projectKey: string, identity: unknown, nowMs: number): Promise<{ open: LiveDecision[]; closedIds: Set<string>; awaiting: DurableAwaiting[] }> {
+  if (commonDir === null) return { open: [], closedIds: new Set(), awaiting: [] }
   const dir = commonDir + '/autopilot/decisions'
   let names: string[] = []
   try {
@@ -1295,7 +1300,7 @@ async function readDurableDecisions($: EngineInterface, commonDir: string | null
       .sort()
       .slice(0, MAX_PATH_FILES)
   } catch (_e) {
-    return { open: [], closedIds: new Set() }
+    return { open: [], closedIds: new Set(), awaiting: [] }
   }
   const texts: string[] = []
   for (const name of names) {

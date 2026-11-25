@@ -974,6 +974,7 @@
   "legend.help.recommend": "recommended option",
   "v74.d.pv_note": "note: {note}",
   "v74.d.pv_more": "…{n} more",
+  "v74.d.await_head": "Awaiting your action {n}",
   "v74.b.border.armed": "y confirm send · x cancel preview",
   "v74.b.short.armed": "y confirm · x cancel",
   "v74.f.chart_note": "each cell = spend added in 1 hour (USD, relative height only, not tokens), from spend-history, last {n} h",

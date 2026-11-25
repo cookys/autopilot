@@ -7,6 +7,7 @@ import { makeT } from '../i18n'
 import { PALETTE } from '../../tux/palette.ts'
 import { parseDecideList, makeDecideFeed, makePmFeed } from '../v74/feeds'
 import { parsePmStatus } from '../v74/contract'
+import { displayWidth } from '../model'
 
 const t = makeT('zh-TW')
 const st = (page: string) => ({ page, paneFocus: true, focusedButton: false, textMode: false })
@@ -61,6 +62,25 @@ test('v74-b: feeds parse inline json (not used at page render time)', () => {
   const feed = makePmFeed(0)
   expect(feed.status()).toBeNull()
   expect(feed.error()).toBeNull()
+})
+
+test('v74-b: the decide list title is the card title, else the question cut to 40 display columns — never the kind word', () => {
+  const mk = (card: Record<string, unknown>) => parseDecideList(JSON.stringify({ cards: [{ card }] }))
+  const opt = { label: 'a', description: '' }
+  // an explicit title wins
+  expect(mk({ card_id: 'd-t1', title: '插電', question: '評測機第二槽插電？', options: [opt] })?.[0].title).toBe('插電')
+  // no title: a fitting question stays whole
+  expect(mk({ card_id: 'd-t2', question: 'short question', options: [opt] })?.[0].title).toBe('short question')
+  // the old bug: the kind word ("decide") is never shown as the title
+  const kinded = mk({ card_id: 'd-t3', kind: 'decide', question: 'q3', options: [opt] })?.[0]
+  expect(kinded?.title).toBe('q3')
+  expect(kinded?.title).not.toBe('decide')
+  // a long question (CJK = 2 columns) is cut by code points so title + '...' stays within 40 display columns
+  const long = '把評測機第二槽的電源線插到備用插座上並確認燈號常亮後再回報'
+  const cut = mk({ card_id: 'd-t4', question: long, options: [opt] })?.[0]
+  expect(cut?.title).toBe(long.slice(0, 18) + '...')
+  expect(displayWidth(cut?.title ?? '')).toBeLessThanOrEqual(40)
+  expect(cut?.title?.endsWith('...')).toBe(true)
 })
 
 test('v74-b: makeDecideFeed treats {} as empty list, formats non-zero rc, and preserves invalid json error', async () => {

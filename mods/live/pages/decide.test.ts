@@ -6,7 +6,7 @@ import { test, expect } from 'claude-code/testing'
 import { PAGES } from './index'
 import { frameRows, actionRows } from './frame'
 import type { Page } from './frame'
-import { decidePage, decideReduce, NO_NAV } from './decide'
+import { decidePage, decideReduce, NO_NAV, awaitingBlockRows } from './decide'
 import type { DecideNav } from './decide'
 import { routeKey } from './keys'
 import { makeT } from '../i18n'
@@ -490,4 +490,39 @@ test('v74 boxed decide scrolls card detail on ArrowDown/PageDown and resets on p
   out = draw(curNav)
   expect(out.join('\n')).toContain('卡 #02 / 2')
   expect(pendingScroll.detail.offset).toBe(0)
+})
+
+// ---- 等你動手: answered cards that still wait on the operator's own step (durable store, status awaiting_operator_action) ----
+test('awaiting block: a long step wraps onto continuation rows in full (never cut); the block sits under the card list, above the footer; absent without cards', () => {
+  const card = { id: 'd-card01', title: '一張卡', question: '這張卡的問題？', background: null, options: [{ label: '可以', detail: '', recommended: true }, { label: '不行', detail: '', recommended: false }] }
+  const step = '把評測機第二槽的電源線插到備用插座上，確認燈號常亮之後在回報通道回報結果並附上照片'
+  const aw = [{ id: 'd-aw01', title: '插電', question: '評測機第二槽插電？', operator_steps: [step, '短步驟'] }]
+  const ctx = (awaiting: unknown) => ({ live: null, console: null, size: { cols: 80, rows: 40 }, t, nowMs, v74: { decide: [card], awaiting, pm: null, todo: null, nav: { cursor: 0, picks: {}, notes: {}, noteMode: false } } }) as never
+
+  // unit: heading, then the card's title row, then every step numbered and whole; a long step wraps under its own indent
+  const rows = awaitingBlockRows(aw, ctx(aw), 100)
+  const stepRows = rows.map(r => r.map(s => s.text).join(''))
+  expect(stepRows[0]).toBe(t('v74.d.await_head', { n: 1 }))
+  expect(stepRows[1]).toContain('插電')
+  expect(stepRows[2].startsWith('  1. ')).toBe(true)
+  expect(stepRows[3].startsWith('    '), 'continuation row is indented under the step text').toBe(true)
+  expect(stepRows[4]).toContain('2. 短步驟')
+  expect(stepRows.join('').replace(/\s+/g, ''), 'the step is whole across its rows').toContain(step.replace(/\s+/g, ''))
+  expect(stepRows.every(l => !l.includes('…')), 'no step is cut').toBe(true)
+  expect(rows.every(r => r.reduce((w, s) => w + displayWidth(s.text), 0) <= 80)).toBe(true)
+
+  // frame: the block is under the card list (the body) and the send row, above the footer rows (border + strip)
+  const framed = frameRows(decidePage, ctx(aw), { pages: PAGES })
+  const rowText = (r: { text: string }[]) => r.map(s => s.text).join('')
+  const idxHead = framed.findIndex(r => rowText(r).includes(t('v74.d.await_head', { n: 1 })))
+  const idxCard = framed.findIndex(r => rowText(r).includes('這張卡的問題？'))
+  expect(idxHead).toBeGreaterThan(-1)
+  expect(idxCard).toBeGreaterThan(-1)
+  expect(idxCard, 'the card list is above the block').toBeLessThan(idxHead)
+  expect(idxHead, 'the block is above the footer (border + strip)').toBeLessThan(framed.length - 2)
+  expect(framed.every(r => r.reduce((w, s) => w + displayWidth(s.text), 0) <= 80)).toBe(true)
+
+  // zero awaiting cards: the block is absent
+  const none = frameRows(decidePage, ctx(undefined), { pages: PAGES })
+  expect(none.some(r => rowText(r).includes(t('v74.d.await_head', { n: 1 })))).toBe(false)
 })

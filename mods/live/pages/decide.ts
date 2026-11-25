@@ -9,7 +9,7 @@
 // Glyph usage: ▸ (GLYPHS.structure.folded) is reserved for folded sections/disclosures; active card cursor uses ‣ (U+2023, EAW=N, width=1).
 import type { ConsoleCard } from '../console'
 import { DECIDE_UNDO_MS, NO_DECIDE, TRACE_STALE_MIN, TRACE_STALE_MS, decideDialog, decideFillText, decideLine, decidePick, displayWidth, isStepCard, liveAgeMs, recommendedIndex, truncateToWidth } from '../model'
-import type { DecideState, LiveDecision, Seg } from '../model'
+import type { DecideState, DurableAwaiting, LiveDecision, Seg } from '../model'
 import { GLYPHS } from '../../tux/glyphs.ts'
 import { PALETTE } from '../../tux/palette.ts'
 import { pickedTone, wrapPlain } from '../ui'
@@ -187,6 +187,37 @@ export function decideReduce(nav: DecideNav, key: KeyAction, ctx: PageCtx, nowMs
 const seg = (text: string, o: Partial<Seg> = {}): Seg => ({ text, ...o })
 const dimSeg = (text: string): Seg => ({ text, dim: true })
 const widthOf = (segs: Seg[]): number => segs.reduce((w, s) => w + displayWidth(s.text), 0)
+
+// 等你動手: the durable store's answered cards that still wait on the operator's own step (status awaiting_operator_action,
+// scripts/open-decision.js operator_steps). A bottom block of the page (drawn as action rows: under the card list and the
+// send preview, above the footer, inside the frame's height budget): a heading row, then per card a title row (the title,
+// else the question) and every step in full as a numbered list. A long step wraps onto continuation rows under its text by
+// display width (CJK = 2), never cut. No buttons, no keys. `cap` = the action rows the frame can still afford; a card shows
+// whole or not at all (a hint row names the hidden ones). Zero cards: no rows.
+export function awaitingBlockRows(awaiting: DurableAwaiting[] | null | undefined, ctx: PageCtx, cap: number): Row[] {
+  if (awaiting === null || awaiting === undefined || awaiting.length === 0 || cap < 1) return []
+  const cols = Math.max(8, ctx.size.cols)
+  const cardRowsOf = (c: DurableAwaiting): Row[] => {
+    const title = (c.title ?? '').trim() !== '' ? c.title : c.question
+    const rows: Row[] = wrapRow([seg('  ' + title)], cols, 2)
+    c.operator_steps.forEach((s, i) => {
+      const prefix = '  ' + String(i + 1) + '. '
+      rows.push(...wrapRow([seg(prefix + s)], cols, displayWidth(prefix)))
+    })
+    return rows
+  }
+  const out: Row[] = [[dimSeg(ctx.t('v74.d.await_head', { n: awaiting.length }))] as Row]
+  let at = 0
+  while (at < awaiting.length) {
+    const cr = cardRowsOf(awaiting[at])
+    if (out.length + cr.length > cap) break
+    out.push(...cr)
+    at++
+  }
+  const left = awaiting.length - at
+  if (left > 0 && out.length + 1 <= cap) out.push([dimSeg(ctx.t('v74.d.pv_more', { n: left }))] as Row)
+  return out
+}
 const WIDE = 100 // columns from which the cards use the wide form (labelled rows, the executor at the right)
 
 function truncateSegs(row: Row, cols: number): Row {
@@ -1054,7 +1085,7 @@ function renderV74(ctx: DecideCtx): { body: Row[]; actions: Row[] } {
     const noSrcActions: Row[] = ctx.box === true ? [] : [[seg(t('shell.on_band'))]]
     return { body: [...staleBanners, ...noSrcBody], actions: noSrcActions }
   }
-  if (cards.length === 0) return { body: [...staleBanners, [seg(GLYPHS.state.pending + ' '), dimSeg(t('v74.d.empty'))]], actions: [] }
+  if (cards.length === 0) return { body: [...staleBanners, [seg(GLYPHS.state.pending + ' '), dimSeg(t('v74.d.empty'))]], actions: awaitingBlockRows(v.awaiting, ctx, frameActionRows(ctx.size.rows)) }
   const dn = ctx.decide
   const nav: DecideNav = { ...NO_NAV, ...(dn ?? {}), cursor: dn?.cursor ?? v.nav.cursor, picks: dn?.picks ?? v.nav.picks, notes: dn?.notes ?? v.nav.notes, textMode: dn?.textMode ?? v.nav.noteMode }
   const cursor = Math.max(0, Math.min(cards.length - 1, nav.cursor))
@@ -1075,7 +1106,11 @@ function renderV74(ctx: DecideCtx): { body: Row[]; actions: Row[] } {
       return [text]
     })
     const resultRow: Row[] = m === undefined || m === null ? [] : [[dimSeg(GLYPHS.state.done + ' ' + t('v74.d.result', { n: m.n, left: m.left }))] as Row]
-    const cap = frameActionRows(ctx.size.rows) - resultRow.length
+    // 等你動手 takes the action rows under the preview: the preview reserves its own rows (the heading plus at most one
+    // hidden-count row), the block takes what is left, and the sum never exceeds the frame's action area (frame.ts throws above it).
+    const full = frameActionRows(ctx.size.rows)
+    const aw = awaitingBlockRows(v.awaiting, ctx, Math.max(0, full - resultRow.length - (plan.length > 0 ? 2 : 1)))
+    const cap = Math.max(0, full - resultRow.length - aw.length)
     const shown = plan.length + 1 <= cap ? plan : plan.slice(0, Math.max(0, cap - 2))
     const rest = plan.length - shown.length
     const previewRows: Row[] = [
@@ -1087,9 +1122,12 @@ function renderV74(ctx: DecideCtx): { body: Row[]; actions: Row[] } {
     return renderBoxV74(ctx, cards, nav, cursor, [
       ...sendRows,
       ...resultRow,
+      ...aw,
     ], staleBanners)
   }
   const head = ruleTo(GLYPHS.structure.open + ' ' + t('v74.d.head', { n: cards.length, k: cursor + 1 }), cols)
+  // 等你動手: under the card list (the body) and the send row, above the footer; the action area holds frameActionRows rows
+  actions.push(...awaitingBlockRows(v.awaiting, ctx, Math.max(0, frameActionRows(ctx.size.rows) - actions.length)))
   if (ctx.pendingScroll !== undefined) {
     const room = Math.max(1, ctx.size.rows - 1 - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - actions.length - staleBanners.length)
     return { body: [...staleBanners, ...pendingBody(ctx, cards, nav, cursor, room)], actions }

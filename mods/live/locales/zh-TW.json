@@ -974,6 +974,7 @@
   "legend.help.recommend": "助手建議的選項",
   "v74.d.pv_note": "附註：{note}",
   "v74.d.pv_more": "…另 {n} 張",
+  "v74.d.await_head": "等你動手 {n} 張",
   "v74.b.border.armed": "y 確認送出 · x 取消預覽",
   "v74.b.short.armed": "y 確認 · x 取消",
   "v74.f.chart_note": "每格 = 1 小時新增的花費（USD，只畫相對高低，不是 token），來源 spend-history，最近 {n} 小時",

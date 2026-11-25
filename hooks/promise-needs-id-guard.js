@@ -67,7 +67,9 @@ function extractText(input) {
     return typeof toolInput.new_string === 'string' ? toolInput.new_string : null;
   }
   if (FLEET_TOOLS.has(name)) {
-    return typeof toolInput.content === 'string' ? toolInput.content : null;
+    // send/task_result carry `content`; task_comment carries `text`
+    const body = name === 'mcp__fleet__task_comment' ? toolInput.text : toolInput.content;
+    return typeof body === 'string' ? body : null;
   }
   return null;
 }

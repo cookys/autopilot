@@ -51,6 +51,7 @@ export function fleetLines(s: PmStatus): FleetLine[] {
 }
 
 // ---- decision cards (待決 S3) and todo cards (待辦 S9) ----
+import type { DurableAwaiting } from '../model'
 export type CardOption = { label: string; detail: string; recommended: boolean }
 export type DecideCard = { id: string; title: string; question: string; background: string | null; options: CardOption[] }
 export type TodoCard = { id: string; title: string; dueMs: number | null; question: string; options: CardOption[] } // source not live: fixtures/v74/todo.json
@@ -76,6 +77,7 @@ export type V74Ctx = {
   pmFetchedMs: number | null
   pmError?: string | null
   decide: DecideCard[] | null
+  awaiting?: DurableAwaiting[] | null // answered cards that still wait on the operator's own step (durable store, status awaiting_operator_action)
   decideFetchedMs?: number | null
   decideError?: string | null
   fleetError?: string | null

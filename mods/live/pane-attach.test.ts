@@ -640,6 +640,29 @@ test('pane-attach 2 pure: a card opened with --attach carries show:<path> press 
   expect(hrefsOf(stripped)).toEqual([])
 })
 
+// awaiting_operator_action (scripts/open-decision.js operator_steps): answered cards that still wait on the operator's own step.
+// The durable parser returns them apart from `open` (with their operator_steps), and they still shadow older open copies.
+test('pane-attach pure: readDurableDecisionFiles returns awaiting cards with their operator_steps, apart from open and closed', () => {
+  const rawStore = j(durableStore([
+    { id: 'd-aw01', title: '插電', question: '評測機第二槽插電？', status: 'awaiting_operator_action', opened_at: PUBLISHED, operator_steps: ['把電源線插到備用插座', '確認燈號常亮', '  回報  '] },
+    { id: 'd-aw02', question: '沒有步驟的已答卡', status: 'awaiting_operator_action', opened_at: PUBLISHED },
+    { id: 'd-open01', question: '還開著的卡', status: 'open', kind: 'decide', opened_at: PUBLISHED, options: [OPT('核准'), OPT('退回')] },
+    { id: 'd-closed01', question: '已結的卡', status: 'closed', opened_at: PUBLISHED },
+  ]))
+  const durable = readDurableDecisionFiles([rawStore], { project_key: KEY, repo_identity: 'git-common-dir:' + REPO + '/.git' }, NOW_FRESH)
+  expect(durable.open.map(d => d.id)).toEqual(['d-open01'])
+  expect([...durable.closedIds].sort()).toEqual(['d-aw01', 'd-aw02', 'd-closed01'])
+  expect(durable.awaiting).toEqual([
+    { id: 'd-aw01', title: '插電', question: '評測機第二槽插電？', operator_steps: ['把電源線插到備用插座', '確認燈號常亮', '回報'] },
+    { id: 'd-aw02', title: null, question: '沒有步驟的已答卡', operator_steps: [] },
+  ])
+  // an open copy of the same id in a second file is shadowed by the answered one (no open card, no awaiting loss)
+  const rawOpen = j(durableStore([{ id: 'd-aw01', question: '評測機第二槽插電？', status: 'open', kind: 'decide', opened_at: PUBLISHED, options: [OPT('核准')] }]))
+  const shadowed = readDurableDecisionFiles([rawStore, rawOpen], { project_key: KEY, repo_identity: 'git-common-dir:' + REPO + '/.git' }, NOW_FRESH)
+  expect(shadowed.open.map(d => d.id)).toEqual(['d-open01'])
+  expect(shadowed.awaiting.map(a => a.id)).toEqual(['d-aw01', 'd-aw02'])
+})
+
 for (const surface of SURFACES) {
   test('pane-attach 2 mounted: a card opened with --attach renders a pressable Button for a local file path and a clickable Link for an https URL (' + surface + ')', async ($, on) => {
     const storeFile = DECISIONS_DIR + '/' + KEY + '--' + ROOT + '.json'

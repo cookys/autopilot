@@ -1082,10 +1082,16 @@ function parseLookTarget(v: unknown): LookTarget | null {
 
 // Direct read of <git-common-dir>/autopilot/decisions/<scope>.json (the durable store scripts/open-decision.js writes), so cards and `給你看` items appear at once and survive
 // pane reload even before the watcher republishes model.json; closed entries shadow any older open copy in model.json.
-export function readDurableDecisionFiles(texts: readonly string[], want: { project_key: string; repo_identity: unknown }, nowMs: number): { open: LiveDecision[]; closedIds: Set<string> } {
+// `awaiting` returns the answered cards that still wait on the operator's own step (status awaiting_operator_action) with their operator_steps
+// (scripts/open-decision.js `open --operator-step`), apart from `open`: they are never a question.
+export type DurableAwaiting = { id: string; title: string | null; question: string; operator_steps: string[] }
+function parseOperatorSteps(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string' && s.trim() !== '').map(s => s.trim()) : []
+}
+export function readDurableDecisionFiles(texts: readonly string[], want: { project_key: string; repo_identity: unknown }, nowMs: number): { open: LiveDecision[]; closedIds: Set<string>; awaiting: DurableAwaiting[] } {
   const optText = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null)
   const rankOf = (status: string): number => (status === 'closed' ? 3 : status !== 'open' ? 2 : 1)
-  const bestById = new Map<string, { rank: number; card: LiveDecision | null; order: number }>()
+  const bestById = new Map<string, { rank: number; card: LiveDecision | null; order: number; awaiting: DurableAwaiting | null }>()
   const unnamed: { card: LiveDecision; order: number }[] = []
   let seq = 0
   for (const text of texts) {
@@ -1126,12 +1132,19 @@ export function readDurableDecisionFiles(texts: readonly string[], want: { proje
         look_target: parseLookTarget(d.look_target),
       } : null
       const order = seq++
+      const awaiting: DurableAwaiting | null = id === null ? null : status === 'awaiting_operator_action'
+        ? { id, title: optText(d.title), question: d.question, operator_steps: parseOperatorSteps(d.operator_steps) }
+        : null
       if (id === null) {
         if (card !== null) unnamed.push({ card, order })
         continue
       }
       const prev = bestById.get(id)
-      if (prev === undefined || rank > prev.rank || (rank === prev.rank && card !== null)) bestById.set(id, { rank, card, order: prev === undefined ? order : prev.order })
+      const wins = prev === undefined || rank > prev.rank || (rank === prev.rank && card !== null)
+      if (wins) {
+        const adoptAwaiting = prev === undefined || rank > prev.rank
+        bestById.set(id, { rank, card, order: prev === undefined ? order : prev.order, awaiting: adoptAwaiting ? awaiting : prev.awaiting })
+      }
     }
   }
   const closedIds = new Set<string>()
@@ -1141,7 +1154,9 @@ export function readDurableDecisionFiles(texts: readonly string[], want: { proje
     else openOrdered.push({ card: v.card, order: v.order })
   }
   openOrdered.sort((a, b) => a.order - b.order)
-  return { open: openOrdered.map(x => x.card), closedIds }
+  const awaiting: DurableAwaiting[] = []
+  for (const v of bestById.values()) if (v.awaiting !== null) awaiting.push(v.awaiting)
+  return { open: openOrdered.map(x => x.card), closedIds, awaiting }
 }
 
 export function mergeDurableDecisions(base: readonly LiveDecision[], durable: { open: readonly LiveDecision[]; closedIds: ReadonlySet<string> }, dismissed: Readonly<Record<string, number>> = {}): LiveDecision[] {

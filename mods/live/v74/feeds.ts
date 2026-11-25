@@ -1,5 +1,6 @@
 // v74/feeds.ts — PM status and decision list feeds for PageCtx.v74 (sub-task B). Impure CLI runners live in register.ts.
 import { parsePmStatus, type DecideCard, type CardOption, type PmStatus } from './contract'
+import { cellWidth, displayWidth } from '../../tux/width.ts'
 
 export const PM_STATUS_ARGV = ['fleet', 'pm', 'status', '--json'] as const
 export const DECIDE_LIST_ARGV = ['fleet', 'decision', 'list', '--json'] as const
@@ -18,16 +19,39 @@ const exitError = (stderr: string, exitCode: number): string => {
   return (line !== '' ? line : 'exit') + '（rc=' + exitCode + '）'
 }
 
-// fleet decision list and the open-decision.js store name the same card by id. The list wins on a clash; a working list with no cards stays [] (not "no source").
+// The courier list has no title field of its own (an older build showed the card's `kind` word, i.e. "decide"): the title falls back
+// to the question, cut by code points to TITLE_MAX display columns (CJK = 2) plus '...'.
+const TITLE_MAX = 40
+export const cutTitle = (text: string): string => {
+  if (displayWidth(text) <= TITLE_MAX) return text
+  let out = ''
+  let w = 0
+  for (const ch of text) {
+    const cw = cellWidth(ch.codePointAt(0)!)
+    if (w + cw > TITLE_MAX - 3) break
+    out += ch
+    w += cw
+  }
+  return out + '...'
+}
+
+// fleet decision list and the open-decision.js store name the same card by id. The list wins on a clash: the list card keeps its place
+// and its question/options, but takes the store card's title when the store has one (the store card, mapped from the durable entry,
+// carries the real title the list lacks). A working list with no cards stays [] (not "no source").
 export function mergeDecideCards(list: readonly DecideCard[] | null, store: readonly DecideCard[]): DecideCard[] | null {
   if (list === null && store.length === 0) return null
+  const storeTitles = new Map<string, string>()
+  for (const c of store) if (c.id !== '' && c.title !== '') storeTitles.set(c.id, c.title)
   const seen = new Set<string>()
   const out: DecideCard[] = []
-  for (const c of [...(list ?? []), ...store]) {
-    if (c.id === '' || seen.has(c.id)) continue
+  const push = (c: DecideCard, adoptStoreTitle: boolean): void => {
+    if (c.id === '' || seen.has(c.id)) return
     seen.add(c.id)
-    out.push(c)
+    const title = adoptStoreTitle ? storeTitles.get(c.id) : undefined
+    out.push(title !== undefined && title !== c.title ? { ...c, title } : c)
   }
+  for (const c of list ?? []) push(c, true)
+  for (const c of store) push(c, false)
   return out
 }
 
@@ -46,8 +70,10 @@ export function parseDecideList(json: string): DecideCard[] | null {
     const card = c as Record<string, unknown>
     const id = typeof card.card_id === 'string' ? card.card_id : ''
     if (id === '') continue
-    const title = typeof card.kind === 'string' && card.kind !== '' ? card.kind : id.slice(0, 8)
+    // The list has no title field: the card's title when it has one, else the question cut to TITLE_MAX display columns (never the `kind` word)
     const question = typeof card.question === 'string' ? card.question : ''
+    const rawTitle = typeof card.title === 'string' && card.title !== '' ? card.title : question
+    const title = rawTitle !== '' ? cutTitle(rawTitle) : id.slice(0, 8)
     const background = typeof card.background === 'string' ? card.background : null
     const options: CardOption[] = []
   const opts = card.options

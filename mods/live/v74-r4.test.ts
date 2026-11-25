@@ -117,7 +117,14 @@ test('r4 sources: fleet list and the card store merge by id, and the list wins',
   const list: DecideCard[] = [{ id: 'from-list', title: '單', question: 'q', background: null, options: [{ label: '乙', detail: '', recommended: true }] }, { id: 'from-store', title: '單上的', question: 'q2', background: null, options: [{ label: '丙', detail: '', recommended: false }] }]
   const both = mergeDecideCards(list, store)
   expect(both?.map(c => c.id)).toEqual(['from-list', 'from-store'])
-  expect(both?.find(c => c.id === 'from-store')?.title).toBe('單上的')
+  // the clash keeps the list card (its question and options), but takes the store card's title (the real one, the list has none)
+  const clash = both?.find(c => c.id === 'from-store')
+  expect(clash?.title).toBe('店')
+  expect(clash?.question).toBe('q2')
+  expect(clash?.options.map(o => o.label)).toEqual(['丙'])
+  // a store card without a title keeps the list card's title
+  const bareStore: DecideCard[] = [{ id: 'from-store', title: '', question: 'q', background: null, options: [{ label: '甲', detail: '', recommended: false }] }]
+  expect(mergeDecideCards(list, bareStore)?.find(c => c.id === 'from-store')?.title).toBe('單上的')
   expect(mergeDecideCards(null, store)?.map(c => c.id)).toEqual(['from-store'])
   expect(mergeDecideCards(null, [])).toBeNull()
   expect(mergeDecideCards([], [])).toEqual([])

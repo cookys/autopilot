@@ -37,6 +37,18 @@ function inside(root, p) {
   return p === root || p.startsWith(root + path.sep);
 }
 
+function isFrozenPilotRole(roleBytes) {
+  const base = path.resolve(__dirname, '../../evals/rolekit');
+  for (const group of ['kits', 'placebo']) {
+    let roles;
+    try { roles = fs.readdirSync(path.join(base, group)); } catch { continue; }
+    for (const r of roles) {
+      try { if (sha256(fs.readFileSync(path.join(base, group, r, 'role.md'))) === sha256(roleBytes)) return true; } catch { /* no such role */ }
+    }
+  }
+  return false;
+}
+
 function walkSymlinks(root, dir) {
   for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, ent.name);
@@ -79,7 +91,11 @@ function check(dir) {
   if (role.includes(0)) fail('role.md contains a NUL byte');
   let roleText;
   try { roleText = new TextDecoder('utf-8', { fatal: true }).decode(role); } catch { fail('role.md is not valid UTF-8'); }
-  if (!/^A9:/m.test(roleText)) fail('role.md missing the A9 rule line');
+  // Pilot-only exemption (PM 01M894HX0M ruling B): the 11-05 stamped pilot kits predate the A9 line. It applies only when the knob
+  // is set AND this role.md is byte-identical to a frozen file under evals/rolekit/{kits,placebo}/<role>/ (the pilot rail stages a
+  // copy of the kit, so a path test alone would miss it). Any other kit, and any run without the knob, still needs the A9 line.
+  const a9Exempt = process.env.AUTOPILOT_ROLEKIT_A9_EXEMPT === '1' && isFrozenPilotRole(role);
+  if (!a9Exempt && !/^A9:/m.test(roleText)) fail('role.md missing the A9 rule line');
 
   const toolsRaw = readKitFile(root, 'tools');
   if (toolsRaw.length > TOOLS_MAX_BYTES) fail(`tools file is over the ${TOOLS_MAX_BYTES} byte cap`);

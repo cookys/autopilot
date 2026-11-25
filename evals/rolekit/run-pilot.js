@@ -226,7 +226,7 @@ function runCell(ctx, c, key) {
   }
   const infra = !last;
   return {
-    row: { role: c.role, task: c.task, rep: c.rep, arm: c.arm, seat: c.seat, pass: infra ? 0 : last.pass, infra, parse_ok: infra ? false : last.parse_ok, kit_applied: infra ? false : last.kit_applied === true,
+    row: { a9_exempt: true, role: c.role, task: c.task, rep: c.rep, arm: c.arm, seat: c.seat, pass: infra ? 0 : last.pass, infra, parse_ok: infra ? false : last.parse_ok, kit_applied: infra ? false : last.kit_applied === true,
       cost_usd: Math.round(st.cost * 1e6) / 1e6, cost_source: st.source, check_rc: infra || last.check_rc === undefined ? null : last.check_rc, detail: infra ? st.lastInfra : last.detail, attempts: st.infraAttempts + (infra ? 0 : 1) },
   };
 }
@@ -281,7 +281,7 @@ function run(opts, env = process.env) {
       'reviewer and verifier kits have an empty tools line, which the rails refuse; they are dispatched from a byte-for-byte copy of the frozen kit with tools = none; kit_applied compares the frozen role.md sha256',
       '--account is enforced by verification, not by the rails: the rails run as the host default alias (claude-account.js run --pin-default); the runner refuses to start, to resume under another account, and to start an attempt unless claude-account.js resolves that default to --account; a default switched by someone else mid-attempt cannot be detected',
       'cost_usd is the rail total_cost_usd when present, else the cost-model.json per-cell rate; cost_source says which, per row'] };
-  const ctx = { opts, out, rates, dry: !!opts.dryRun, env: { ...env, AUTOPILOT_DISPATCH_RUNS_DIR: path.join(out, 'rail-runs'), DISPATCH_QUIET: '1' } };
+  const ctx = { opts, out, rates, dry: !!opts.dryRun, env: { ...env, AUTOPILOT_DISPATCH_RUNS_DIR: path.join(out, 'rail-runs'), DISPATCH_QUIET: '1', AUTOPILOT_ROLEKIT_A9_EXEMPT: '1' } };
   fs.mkdirSync(ctx.env.AUTOPILOT_DISPATCH_RUNS_DIR, { recursive: true });
   if (ctx.dry) setupDry(ctx, plan);
   const layer = accountLayerState(ctx.env);

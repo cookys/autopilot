@@ -17,6 +17,7 @@ This repository has its own hippo store at `.hippo/` (id `autopilot`, visibility
 
 | Script | Purpose |
 |--------|---------|
+| [`scripts/eval-skill-triggers.js`](../scripts/eval-skill-triggers.js) | S10 P2 skill trigger evaluator (`--should-trigger`, `--should-not-trigger`, `--out`, `--compare`, `--budget-usd`): runs prompts with isolated temp `HOME` and `CLAUDE_CONFIG_DIR`, counts only assistant `Skill` `tool_use` blocks (ignoring `system/init`). Contract: script header; tests: `scripts/tests/eval-skill-triggers.test.js`. |
 | [`scripts/measure-seat-injection.js`](../scripts/measure-seat-injection.js) | S10 P0 seat-injection measurement and baseline gate (`--check-baseline`, `--check-budget`, `--check-targets`, `--compare`, `--from-trace`). Contract: script header; tests: `scripts/tests/measure-seat-injection.test.js`. |
 | [`scripts/wasted-turns-report.js`](../scripts/wasted-turns-report.js) | Measure wasted turns (`stop_block`, `hook_block`, `help_lookup`, `error_retry`, `repeat_chain`) and context cost from session transcripts (`--self`, `--usage-only --transcript`, `--aggregate <dir>`). Contract: `docs/plans/2026-11-21-wasted-turns.md` §4.1; tests: `scripts/wasted-turns-report.test.js`. |
 | [`scripts/check-seat-rules.js`](../scripts/check-seat-rules.js) | Verify `project/registry/seat-rules.json` against repo sources (`text`, `tool`, `hook` with deny-fixture execution, `external`), `--config <snapshot>`, and `--strict`. Tests: `scripts/tests/check-seat-rules.test.js`. |

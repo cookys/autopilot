@@ -141,8 +141,13 @@ function contradictions(opts, userCfg, findings) {
   if (!win || win.enabled === false) return;
   if (Number.isFinite(win.configured) && win.configured > 0) {
     const compactAt = win.configured - AUTOCOMPACT_BUFFER;
-    if (b.t2 > 0 && b.t2 + b.gap > compactAt) {
-      findings.push({ rule: 't2_gap_over_window', key: 'context_budget.t2', detail: `t2 ${b.t2} + gap ${b.gap} = ${b.t2 + b.gap} is above the compaction point ${compactAt} (autoCompactWindow ${win.configured} - ${AUTOCOMPACT_BUFFER})`, suggestion: `autoCompactWindow ${b.t2 + b.gap + AUTOCOMPACT_BUFFER} or lower t2/gap` });
+    const pct = opts.seat && b.t2PctBySeat[opts.seat];
+    const contextWindow = Number.isFinite(opts.contextWindow) ? opts.contextWindow : 1_000_000;
+    const useSeat = !b.envT2 && Number.isFinite(pct);
+    const t2 = useSeat ? Math.round(contextWindow * pct / 100) : b.t2;
+    const source = useSeat ? `seat ${opts.seat} ${pct}% of ${contextWindow}` : 'config';
+    if (t2 > 0 && t2 + b.gap > compactAt) {
+      findings.push({ rule: 't2_gap_over_window', key: 'context_budget.t2', detail: `t2 ${t2} (${source}) + gap ${b.gap} = ${t2 + b.gap} is above the compaction point ${compactAt} (autoCompactWindow ${win.configured} - ${AUTOCOMPACT_BUFFER})`, suggestion: `autoCompactWindow ${t2 + b.gap + AUTOCOMPACT_BUFFER} or lower t2/gap` });
     }
   } else if (win.configured === null && !(win.per_model && Object.keys(win.per_model).length) && !(Number.isFinite(opts.contextWindow) && opts.contextWindow < 1_000_000)) {
     findings.push({ rule: 'no_autocompact_window', key: 'autoCompactWindow', detail: 'no auto-compact window is set: a 1M-window session compacts only near 1M. Keep working; write a handoff file as a backup', suggestion: `set "autoCompactWindow": 250000 in ~/.claude/settings.json; keep context_budget.t2 plus context_budget.gap at most autoCompactWindow minus ${AUTOCOMPACT_BUFFER} in ~/.autopilot/config.json` });
@@ -159,7 +164,7 @@ function changedDefaults(entries, userSchema, findings) {
   }
 }
 
-/** audit({ env?, home?, configFile?, projectDir?, registryFile?, resolve?, contextWindow? }) -> result object (see header). */
+/** audit({ env?, home?, configFile?, projectDir?, registryFile?, resolve?, seat?, contextWindow? }) -> result object (see header). */
 function audit(opts = {}) {
   const env = opts.env || process.env;
   const file = opts.configFile || configPath({ env, home: opts.home });

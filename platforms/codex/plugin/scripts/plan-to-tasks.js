@@ -33,19 +33,28 @@ const { lintPlanPhases } = require('./check-plan-phases');
 const FLEET_TIMEOUT_MS = 30000;
 
 function usage() {
-  process.stderr.write('Usage: node scripts/plan-to-tasks.js --receipt <freeze-receipt.json>\n');
+  process.stderr.write(
+    'Usage: node scripts/plan-to-tasks.js --receipt <freeze-receipt.json> [--repo <dir>] [--parent <id>] [--sync | --coverage]\n'
+  );
 }
 
 function parseArgs(argv) {
   let receiptPath = null;
   let repoDir = null;
+  let parentId = null;
+  let sync = false;
+  let coverage = false;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '-h' || arg === '--help') {
       usage();
       process.exit(0);
     }
-    if (arg === '--receipt') {
+    if (arg === '--sync') {
+      sync = true;
+    } else if (arg === '--coverage') {
+      coverage = true;
+    } else if (arg === '--receipt') {
       if (i + 1 >= argv.length) {
         usage();
         process.exit(2);
@@ -61,6 +70,14 @@ function parseArgs(argv) {
       repoDir = argv[++i];
     } else if (arg.startsWith('--repo=')) {
       repoDir = arg.slice('--repo='.length);
+    } else if (arg === '--parent') {
+      if (i + 1 >= argv.length) {
+        usage();
+        process.exit(2);
+      }
+      parentId = argv[++i];
+    } else if (arg.startsWith('--parent=')) {
+      parentId = arg.slice('--parent='.length);
     } else {
       process.stderr.write(`plan-to-tasks: unknown argument: ${arg}\n`);
       usage();
@@ -72,7 +89,12 @@ function parseArgs(argv) {
     usage();
     process.exit(2);
   }
-  return { receiptPath, repoDir };
+  if (sync && coverage) {
+    process.stderr.write('plan-to-tasks: --sync and --coverage are mutually exclusive\n');
+    usage();
+    process.exit(2);
+  }
+  return { receiptPath, repoDir, parentId, sync, coverage };
 }
 
 function parsePhasesTable(markdown) {
@@ -163,15 +185,37 @@ function runFleet(fleetBin, args) {
   return res.stdout || '';
 }
 
-function extractPhaseMarker(task, planPath, commitSha) {
+function extractPhaseMarkers(task, planPath, commitSha) {
   const text = String(task.title || task.body || '');
-  const firstLine = text.split(/\r?\n/)[0] || '';
-  // 12-char short sha: a full 40-hex run in a dispatch body is refused by fleet (secret_detected long_hex_run).
-  const exactPrefix = `Plan: ${planPath}@${commitSha.slice(0, 12)} Phase: `;
-  if (firstLine.startsWith(exactPrefix)) {
-    return firstLine.slice(exactPrefix.length).trim().split(/\s+/)[0];
+  const shaPrefix = `Plan: ${planPath}@${commitSha.slice(0, 12)} Phase: `;
+  const plainPrefix = `Plan: ${planPath} Phase: `;
+  const ids = [];
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    let rest = null;
+    if (line.startsWith(plainPrefix)) {
+      rest = line.slice(plainPrefix.length);
+    } else if (line.startsWith(shaPrefix)) {
+      rest = line.slice(shaPrefix.length);
+    }
+    if (rest !== null) {
+      for (const token of rest.split(',')) {
+        const id = token.trim().split(/\s+/)[0];
+        if (id && !ids.includes(id)) ids.push(id);
+      }
+    }
   }
-  return null;
+  return ids;
+}
+
+function classifyTaskStatus(tasksForPhase) {
+  if (tasksForPhase.length === 0) return 'untracked';
+  const statuses = tasksForPhase.map((t) => String(t.status || t.state || '').toLowerCase());
+  if (statuses.every((s) => s === 'done' || s === 'closed' || s === 'completed')) return 'done';
+  if (statuses.some((s) => s === 'in_progress' || s === 'running' || s === 'active' || s === 'claimed')) {
+    return 'in_progress';
+  }
+  return 'pending';
 }
 
 function parseTaskList(raw) {
@@ -192,7 +236,7 @@ function parseCreatedTaskId(raw) {
 }
 
 function main() {
-  const { receiptPath, repoDir } = parseArgs(process.argv.slice(2));
+  const { receiptPath, repoDir, parentId: cliParentId, sync, coverage } = parseArgs(process.argv.slice(2));
 
   let receipt;
   try {
@@ -244,6 +288,90 @@ function main() {
   const phases = topoSort(parsePhasesTable(planText));
   const frozenIds = new Set(phases.map((p) => p.id));
   const fleetBin = process.env.PLAN_TO_TASKS_FLEET_BIN || 'fleet';
+  const parentId = cliParentId || process.env.PLAN_TO_TASKS_PARENT || '';
+
+  if (sync || coverage) {
+    if (sync && !parentId) {
+      process.stderr.write('plan-to-tasks: --sync requires --parent <id> or PLAN_TO_TASKS_PARENT\n');
+      process.exit(2);
+    }
+    try {
+      const existingTasks = parseTaskList(runFleet(fleetBin, ['tasks', '--all', '--json']));
+      const phaseToTasks = new Map(phases.map((p) => [p.id, []]));
+
+      for (const task of existingTasks) {
+        if (parentId && String(task.parent_task_id || task.parent_id || '') !== parentId) continue;
+        const matchedIds = extractPhaseMarkers(task, receipt.path, receipt.commit);
+        for (const phaseId of matchedIds) {
+          if (phaseToTasks.has(phaseId)) {
+            phaseToTasks.get(phaseId).push(task);
+          }
+        }
+      }
+
+      if (coverage) {
+        const phaseRows = phases.map((p) => {
+          const matched = phaseToTasks.get(p.id) || [];
+          const taskIds = matched.map((t) => String(t.task_id || t.id));
+          return {
+            id: p.id,
+            title: p.title,
+            covered: taskIds.length > 0,
+            task_ids: taskIds,
+          };
+        });
+        const gaps = phaseRows.filter((r) => !r.covered).length;
+        const covered = phaseRows.length - gaps;
+        process.stdout.write(
+          JSON.stringify({
+            ok: gaps === 0,
+            mode: 'coverage',
+            total: phaseRows.length,
+            covered,
+            gaps,
+            phases: phaseRows,
+          }) + '\n'
+        );
+        process.exit(gaps === 0 ? 0 : 1);
+      }
+
+      // --sync mode: build plan-sync:v1 snapshot, write to parent task, list dispatchable only (no auto-dispatch, no --queue)
+      const phaseEntries = phases.map((p) => {
+        const matched = phaseToTasks.get(p.id) || [];
+        return {
+          id: p.id,
+          size: p.size,
+          depends_on: p.deps,
+          needs_look: String(p.needsLook).toLowerCase() === 'yes',
+          title: p.title,
+          task_ids: matched.map((t) => String(t.task_id || t.id)),
+          status: classifyTaskStatus(matched),
+        };
+      });
+      const statusById = new Map(phaseEntries.map((e) => [e.id, e.status]));
+      const untracked = phaseEntries.filter((e) => e.task_ids.length === 0).map((e) => e.id);
+      const dispatchable = phaseEntries
+        .filter((e) => e.task_ids.length === 0 && e.depends_on.every((d) => statusById.get(d) === 'done'))
+        .map((e) => e.id);
+
+      const snapshot = {
+        schema: 'plan-sync:v1',
+        plan_path: receipt.path,
+        parent_task_id: parentId,
+        synced_at: new Date().toISOString(),
+        phases: phaseEntries,
+        untracked,
+        dispatchable,
+      };
+      runFleet(fleetBin, ['task', 'comment', parentId, JSON.stringify(snapshot)]);
+      process.stdout.write(JSON.stringify({ ok: true, mode: 'sync', ...snapshot }) + '\n');
+      process.exit(0);
+    } catch (err) {
+      process.stderr.write(`plan-to-tasks: ${err.message}\n`);
+      process.exit(1);
+    }
+  }
+
   const assignee = process.env.PLAN_TO_TASKS_ASSIGNEE || process.env.AUTOPILOT_FLEET_ADDRESS || '';
   if (!assignee) {
     process.stderr.write('plan-to-tasks: set PLAN_TO_TASKS_ASSIGNEE (fleet address that executes the phases)\n');
@@ -274,15 +402,15 @@ function main() {
     const phaseToTaskId = new Map();
     const unknownPhases = [];
 
-    const parentId = process.env.PLAN_TO_TASKS_PARENT || '';
     for (const task of existingTasks) {
       if (parentId && String(task.parent_task_id || task.parent_id || '') !== parentId) continue;
-      const phaseId = extractPhaseMarker(task, receipt.path, receipt.commit);
-      if (!phaseId) continue;
-      if (!frozenIds.has(phaseId)) {
-        unknownPhases.push(phaseId);
-      } else if (!phaseToTaskId.has(phaseId)) {
-        phaseToTaskId.set(phaseId, String(task.task_id || task.id));
+      const phaseIds = extractPhaseMarkers(task, receipt.path, receipt.commit);
+      for (const phaseId of phaseIds) {
+        if (!frozenIds.has(phaseId)) {
+          unknownPhases.push(phaseId);
+        } else if (!phaseToTaskId.has(phaseId)) {
+          phaseToTaskId.set(phaseId, String(task.task_id || task.id));
+        }
       }
     }
 

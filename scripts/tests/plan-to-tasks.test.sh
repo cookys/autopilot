@@ -58,7 +58,7 @@ set -euo pipefail
 echo "$*" >> "$TEST_FLEET_LOG"
 cmd="${1:-}"
 sub="${2:-}"
-if [ "$cmd" = "claim" ]; then
+if [ "$cmd" = "lock" ]; then
   exit 0
 fi
 if [ "$cmd" = "tasks" ]; then
@@ -176,7 +176,7 @@ assert_eq "rerun creates P3" "1" "$(grep -c "Phase: P3" "$FLEET_LOG" || true)"
 node -e "
   const fs = require('fs');
   const s = JSON.parse(fs.readFileSync(process.argv[1], 'utf8'));
-  s.push({ task_id: 'T-99', title: 'Plan: docs/plans/2026-11-25-sample.md@$COMMIT_SHA Phase: P99' });
+  s.push({ task_id: 'T-99', title: 'Plan: docs/plans/2026-11-25-sample.md@${COMMIT_SHA:0:12} Phase: P99' });
   fs.writeFileSync(process.argv[1], JSON.stringify(s));
 " "$FLEET_STATE"
 set +e

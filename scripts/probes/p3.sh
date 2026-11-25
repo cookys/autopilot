@@ -47,7 +47,7 @@ cat > "$STUB_FLEET" <<'STUB'
 set -euo pipefail
 echo "$*" >> "$TEST_FLEET_LOG"
 case "${1:-}" in
-  claim) exit 0 ;;
+  lock) exit 0 ;;
   tasks) cat "$TEST_FLEET_STATE"; exit 0 ;;
   dispatch)
     shift 2

@@ -69,8 +69,13 @@ set -euo pipefail
 echo "$*" >> "$TEST_FLEET_LOG"
 cmd="${1:-}"
 
-if [ "$cmd" = "claim" ]; then
-  key="${2:-}"
+if [ "$cmd" = "lock" ] && [ "${2:-}" = "release" ]; then
+  rm -rf "$TEST_FLEET_LOCK/${3:-}"
+  exit 0
+fi
+
+if [ "$cmd" = "lock" ]; then
+  key="${3:-}"
   lock_dir="$TEST_FLEET_LOCK/$key"
   mkdir -p "$TEST_FLEET_LOCK"
   if mkdir "$lock_dir" 2>/dev/null; then

@@ -5,7 +5,33 @@
   "minimum_distinct_families": 2,
   "max_attempts_per_seat": 2,
   "seats": [
-    {"id": "astra_chair", "runner": "codex", "model": "gpt-6-astra", "effort": "high", "endpoint": "default", "role": "chair", "family": "openai", "readiness_status": "ready", "qualification_status": "qualified", "required": true, "excluded_families": [], "fallbacks": []},
-    {"id": "grok_deep", "runner": "grok", "model": "grok-4.6", "effort": "xhigh", "endpoint": "default", "role": "deep-reviewer", "family": "xai", "readiness_status": "ready", "qualification_status": "qualified", "required": true, "excluded_families": [], "fallbacks": []}
+    {
+      "id": "astra_chair",
+      "runner": "codex",
+      "model": "gpt-6-astra",
+      "effort": "high",
+      "endpoint": "default",
+      "role": "chair",
+      "family": "openai",
+      "readiness_status": "ready",
+      "qualification_status": "qualified",
+      "required": true,
+      "excluded_families": [],
+      "fallbacks": []
+    },
+    {
+      "id": "argon_deep",
+      "runner": "agy",
+      "model": "gemini-4-argon-high",
+      "effort": "high",
+      "endpoint": "@none",
+      "role": "deep-reviewer",
+      "family": "google",
+      "readiness_status": "ready",
+      "qualification_status": "qualified",
+      "required": true,
+      "excluded_families": [],
+      "fallbacks": []
+    }
   ]
 }

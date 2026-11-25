@@ -1860,7 +1860,7 @@ function main() {
     const archiveDir = archiveDirFor(repoRoot, plansDir);
     process.stdout.write(`${registerTemplateRow(repoRoot, plansDir, archiveDir, opts.registerTemplate)}\n`);
     const planPath = path.join(plansDir, `${opts.registerTemplate}.md`);
-    if (fs.existsSync(planPath) && fs.readFileSync(planPath, 'utf8').includes('<!-- phases:v1 -->')) {
+    if (fs.existsSync(planPath) && fs.readFileSync(planPath, 'utf8').split('\n').some((l) => l.trim() === '<!-- phases:v1 -->')) {
       const lint = spawnSync(
         process.execPath,
         [path.join(SCRIPT_DIR, 'check-plan-phases.js'), planPath],

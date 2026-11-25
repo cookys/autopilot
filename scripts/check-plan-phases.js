@@ -32,7 +32,7 @@ function isSeparatorRow(cells) {
 
 function lintPlanPhases(markdown) {
   const errors = [];
-  const startMatches = [...markdown.matchAll(/<!--\s*phases:v1\s*-->/g)];
+  const startMatches = [...markdown.matchAll(/^<!--\s*phases:v1\s*-->[ \t]*$/gm)];
   if (startMatches.length === 0) {
     errors.push('phases:v1: missing <!-- phases:v1 --> table');
     return errors;

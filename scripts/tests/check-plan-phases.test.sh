@@ -155,5 +155,16 @@ else
   FAIL=$((FAIL + 1))
 fi
 
+# prose mention of the marker (inline code) must not count as a second table
+{
+  echo 'The table opens with `<!-- phases:v1 -->` and closes with `<!-- /phases -->`.'
+  echo '<!-- phases:v1 -->'
+  echo '| id | size | depends_on | acceptance_cmd | needs_look | title |'
+  echo '|---|---|---|---|---|---|'
+  echo '| P1 | S | - | true | no | a |'
+  echo '<!-- /phases -->'
+} > "$TMPDIR_TEST/prose_mention.md"
+assert_ok "prose_mention" "$TMPDIR_TEST/prose_mention.md"
+
 echo "check-plan-phases.test.sh: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

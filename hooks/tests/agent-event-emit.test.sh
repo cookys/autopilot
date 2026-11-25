@@ -159,4 +159,42 @@ assert_file_exists "$TEST_TMP/fallback.jsonl" "local fleet fallback emits"
 assert_eq 0 "$?" "missing fleet is fail soft"
 assert_eq 1 "$(wc -l < "$TEST_TMP/missing-stderr" | tr -d ' ')" "missing fleet prints one hint"
 
+# seat is the emitting session's bare address, never a whole whoami line or the shell CLI identity (01M7V4ZB46 live read-back bug)
+SEAT_FLEET="$TEST_TMP/seat-fleet"
+cat > "$SEAT_FLEET" <<'EOF2'
+#!/usr/bin/env bash
+if [ "${1:-}" = "whoami" ]; then
+  if [ "${2:-}" = "--session" ] && [ "${4:-}" = "--json" ]; then
+    echo '{"address":"ns/courier/real-seat","member":"real-seat"}'
+  elif [ "${2:-}" = "--json" ]; then
+    echo '{"address":"ns/courier/fleet-cli","member":"fleet-cli"}'
+  else
+    echo "address:   ns/courier/fleet-cli   (this CLI's identity; replies land in fleet inbox)"
+  fi
+  exit 0
+fi
+cat >> "${FAKE_FLEET_LOG:?}"
+EOF2
+chmod +x "$SEAT_FLEET"
+(
+  unset AUTOPILOT_FLEET_ADDRESS FLEET_ADDRESS
+  export AUTOPILOT_FLEET_BIN="$SEAT_FLEET" FAKE_FLEET_LOG="$TEST_TMP/seat1.jsonl" TMPDIR="$TEST_TMP/seat1-tmp" CLAUDE_CODE_SESSION_ID=sess-seat-1
+  mkdir -p "$TMPDIR"
+  . "$EMIT_SH"
+  agent_event_emit_init implementer fleet seat-run-1
+  agent_event_emit_accepted
+)
+assert_contains "$(cat "$TEST_TMP/seat1.jsonl")" '"seat":"ns/courier/real-seat"' "seat is the session address from whoami --session --json"
+(
+  unset AUTOPILOT_FLEET_ADDRESS FLEET_ADDRESS CLAUDE_CODE_SESSION_ID AUTOPILOT_SESSION_ID
+  export AUTOPILOT_FLEET_BIN="$SEAT_FLEET" FAKE_FLEET_LOG="$TEST_TMP/seat2.jsonl" TMPDIR="$TEST_TMP/seat2-tmp"
+  mkdir -p "$TMPDIR"
+  . "$EMIT_SH"
+  agent_event_emit_init implementer fleet seat-run-2
+  agent_event_emit_accepted
+)
+seat2="$(cat "$TEST_TMP/seat2.jsonl")"
+assert_contains "$seat2" '"seat":"ns/courier/fleet-cli"' "no session id: bare address from whoami --json, not the whole line"
+assert_not_contains "$seat2" "this CLI" "seat carries no whoami prose"
+
 finalize_test

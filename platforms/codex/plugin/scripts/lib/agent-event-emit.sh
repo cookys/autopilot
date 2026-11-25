@@ -63,24 +63,43 @@ _aee_fleet_bin() {
   fi
 }
 
+# The seat is the address of the session that emits, never the shell CLI's own identity (fleet-cli) and never a
+# whole `fleet whoami` line. Order: env address, then `fleet whoami --session <id> --json`, then plain whoami.
+_aee_addr_of() {
+  # stdin: whoami output, JSON or text. Prints the bare address (namespace/courier/member) or nothing.
+  local first
+  first="$(head -n 1 | tr -d '\r')"
+  case "$first" in
+    \{*) printf '%s' "$first" | sed -n 's/.*"address"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' ;;
+    *) first="${first#address:}"; set -- $first; printf '%s' "${1:-}" ;;
+  esac
+}
+
 _aee_resolve_seat() {
-  if [ -n "${AUTOPILOT_FLEET_ADDRESS:-}" ]; then
-    printf '%s' "$AUTOPILOT_FLEET_ADDRESS"
+  local env_addr="${FLEET_ADDRESS:-${AUTOPILOT_FLEET_ADDRESS:-}}"
+  if [ -n "$env_addr" ]; then
+    printf '%s' "${env_addr%%@*}"
     return 0
   fi
-  local cache_file="${TMPDIR:-/tmp}/autopilot-fleet-seat-${USER:-$(id -u)}.txt"
+  local sid="${CLAUDE_CODE_SESSION_ID:-${AUTOPILOT_SESSION_ID:-}}"
+  local cache_file="${TMPDIR:-/tmp}/autopilot-fleet-seat-${USER:-$(id -u)}-${sid:-nosession}.txt"
   if [ -r "$cache_file" ]; then
     local cached
     cached="$(head -n 1 "$cache_file" 2>/dev/null | tr -d '\r\n')"
+    case "$cached" in ''|*[[:space:]]*) cached='' ;; esac
     if [ -n "$cached" ]; then
       printf '%s' "$cached"
       return 0
     fi
   fi
-  local fleet_bin
+  local fleet_bin who=""
   fleet_bin="$(_aee_fleet_bin)" || fleet_bin="fleet"
-  local who
-  who="$("$fleet_bin" whoami 2>/dev/null | head -n 1 | tr -d '\r\n' || true)"
+  if [ -n "$sid" ]; then
+    who="$("$fleet_bin" whoami --session "$sid" --json 2>/dev/null | _aee_addr_of || true)"
+  fi
+  if [ -z "$who" ]; then
+    who="$("$fleet_bin" whoami --json 2>/dev/null | _aee_addr_of || true)"
+  fi
   if [ -n "$who" ]; then
     printf '%s\n' "$who" > "$cache_file" 2>/dev/null || true
     printf '%s' "$who"

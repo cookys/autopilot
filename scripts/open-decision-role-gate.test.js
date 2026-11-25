@@ -1,4 +1,5 @@
 'use strict';
+process.env.AUTOPILOT_ALLOW_SCRATCH_CARD = '1'; // this suite opens cards in temp repos on purpose (scratch-card guard, scripts/open-decision.js)
 require('./lib/test-git-env.js');
 const { test } = require('node:test');
 const assert = require('node:assert/strict');

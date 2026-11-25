@@ -1,4 +1,5 @@
 'use strict';
+process.env.AUTOPILOT_ALLOW_SCRATCH_CARD = '1'; // this suite opens cards in temp repos on purpose (scratch-card guard, scripts/open-decision.js)
 require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 // Run: node --test scripts/qualification-feed-trust.test.js
 //

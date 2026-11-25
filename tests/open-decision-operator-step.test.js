@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 'use strict';
+process.env.AUTOPILOT_ALLOW_SCRATCH_CARD = '1'; // this suite opens cards in temp repos on purpose (scratch-card guard, scripts/open-decision.js)
 const assert = require('assert');
 const { execFileSync, spawnSync } = require('child_process');
 const fs = require('fs');

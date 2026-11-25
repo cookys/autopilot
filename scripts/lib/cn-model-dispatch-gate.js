@@ -131,6 +131,10 @@ function check(opts = {}) {
   if (!operator) return { allowed: false, family, cls: 'restricted_operator_unknown_endpoint', line: refusalLine(family, 'restricted_operator_unknown_endpoint') };
   if (!operator.restricted) return { allowed: true, family };
   const block = (cls) => ({ allowed: false, family, cls, line: refusalLine(family, cls) });
+  // d-38676fad (2026-11-25): restricted operators take only public-source work. The caller must declare the tier (opts.tier or
+  // AUTOPILOT_CN_WORK_TIER): T0/T1 pass, MiniMax takes T0 only, anything else (including undeclared, i.e. any brief rewritten from private requirements) is T2 and stops here.
+  const tier = String(opts.tier || env.AUTOPILOT_CN_WORK_TIER || '').toUpperCase();
+  if (!(tier === 'T0' || (tier === 'T1' && family !== 'minimax'))) return block('restricted_operator_not_public_source');
   if (!freshSandbox(cwd, files)) return block('restricted_operator_private_workdir');
   if (!scanBrief(files)) return block('restricted_operator_brief_scan');
   return { allowed: true, family };

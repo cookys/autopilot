@@ -269,6 +269,12 @@ export function awaitingBodyCap(ctx: PageCtx, awaitingAll?: DurableAwaiting[] | 
 }
 // The page drawn with `k` fewer rows (the box renderers size their body from ctx.size.rows / maxRows), for the block below it.
 const shrunk = <C extends PageCtx>(ctx: C, k: number): C => (k === 0 ? ctx : { ...ctx, size: { ...ctx.size, rows: ctx.size.rows - k }, ...(ctx.maxRows === undefined ? {} : { maxRows: ctx.maxRows - k }) })
+// How many options of `c` are on screen in these rows (whitespace and box rules ignored, so a wrapped label still counts).
+function optionsShown(rows: Row[], c: DecideCard): number {
+  const letters = (x: string): string => x.replace(/[^\p{L}\p{N}]+/gu, '')
+  const flat = letters(rows.map(r => r.map(x => x.text).join('')).join(''))
+  return c.options.filter(o => flat.includes(letters(o.label))).length
+}
 const WIDE = 100 // columns from which the cards use the wide form (labelled rows, the executor at the right)
 
 function truncateSegs(row: Row, cols: number): Row {
@@ -1180,11 +1186,15 @@ function renderV74(ctx: DecideCtx): { body: Row[]; actions: Row[] } {
     // 等你動手: the bottom of the body, directly above the action rows; the card box above gives way so the frame never cuts it
     const room = frameBodyRoom(ctx, sendRows.length + resultRow.length)
     const aw = awaitingBlockRows(v.awaiting, ctx, awaitingBodyCap(ctx, v.awaiting, room))
-    const boxed = renderBoxV74(shrunk(ctx, aw.length), cards, nav, cursor, [
-      ...sendRows,
-      ...resultRow,
-    ], staleBanners)
-    return { body: aw.length === 0 ? boxed.body : [...frameWrap(boxed.body, ctx).slice(0, Math.max(0, room - aw.length)), ...aw], actions: boxed.actions }
+    // PM ruling 01M89BCVGB: the focused card's options are never left to a scroll. When the block hides one, it folds to its heading row.
+    const drawn = (blk: Row[]): { body: Row[]; actions: Row[] } => {
+      const boxed = renderBoxV74(shrunk(ctx, blk.length), cards, nav, cursor, [...sendRows, ...resultRow], staleBanners)
+      return { body: blk.length === 0 ? boxed.body : [...frameWrap(boxed.body, ctx).slice(0, Math.max(0, room - blk.length)), ...blk], actions: boxed.actions }
+    }
+    const whole = drawn(aw)
+    if (aw.length <= 1) return whole
+    const folded = drawn(aw.slice(0, 1))
+    return optionsShown(folded.body, cards[cursor]) > optionsShown(whole.body, cards[cursor]) ? folded : whole
   }
   const head = ruleTo(GLYPHS.structure.open + ' ' + t('v74.d.head', { n: cards.length, k: cursor + 1 }), cols)
   // 等你動手: at the bottom of the body, directly above the action rows (awaitingBodyCap)

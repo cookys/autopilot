@@ -226,9 +226,10 @@ function decide(input) {
 
   if (Object.prototype.hasOwnProperty.call(toolInput, 'class') && toolInput.class !== undefined && toolInput.class !== null) {
     if (typeof toolInput.class === 'string' && VALID_CLASSES.includes(toolInput.class)) {
-      const nextTask = applyExpectRevision(applyShedRouting(toolInput));
-      if (nextTask !== toolInput.task) {
-        return preToolAllowUpdated({ ...toolInput, task: nextTask }, toolInput.class);
+      const nextTask = applyShedRouting(toolInput);
+      const finalTask = applyExpectRevision(nextTask);
+      if (finalTask !== toolInput.task) {
+        return preToolAllowUpdated({ ...toolInput, task: finalTask }, toolInput.class);
       }
       return null;
     }
@@ -255,8 +256,9 @@ function decide(input) {
     );
   }
 
-  const nextTask = applyExpectRevision(applyShedRouting(toolInput));
-  const nextInput = nextTask !== toolInput.task ? { ...toolInput, task: nextTask } : toolInput;
+  const nextTask = applyShedRouting(toolInput);
+  const finalTask = applyExpectRevision(nextTask);
+  const nextInput = finalTask !== toolInput.task ? { ...toolInput, task: finalTask } : toolInput;
   return preToolAllowUpdated(nextInput, mappedClass);
 }
 

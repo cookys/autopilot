@@ -73,6 +73,10 @@ function wrapHanging(row: Row, cols: number, hang: number): Row[] {
         if (k > i && (k - i) * 2 >= j - i) j = k
       }
     }
+    // Keep closing punctuation with its preceding character without exceeding the row width.
+    if (j < chars.length && /[。，、；：！？）］｝〉》」』】]/.test(chars[j].ch)) {
+      while (j > i + 1 && /[。，、；：！？）］｝〉》」』】]/.test(chars[j].ch)) j--
+    }
     if (j === i) j = i + 1
     lines.push(chars.slice(i, j))
     i = j

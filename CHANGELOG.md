@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Compact SessionStart summarizes fleet resume and caps injection (fixture: 19820 → 7999 characters).
+
 ## 3.0.0-alpha.13
 - pm-resume: the injection marker is written even when the runtime base is under /tmp (hosts without XDG_RUNTIME_DIR), so the Stop reminder no longer repeats every turn; a hand-run fleet pm resume counts as touched.
 

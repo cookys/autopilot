@@ -91,7 +91,7 @@
       "audience": "user",
       "type": "object",
       "default": {
-        "pm": 20
+        "pm": 11
       },
       "readers": [
         "scripts/lib/config-path.js"

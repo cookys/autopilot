@@ -14,5 +14,5 @@ assert.equal(check(11, 'pm'), undefined);
 assert.match(check(20, 'pm').detail, /seat pm 20% of 1000000/);
 assert.match(check(25, 'pm').detail, /seat pm 25% of 1000000/);
 assert.equal(check(20, undefined), undefined);
-assert.equal(check(11, 'pm', { AUTOPILOT_CONTEXT_BUDGET_T2: '150000' }), undefined);
+assert.equal(check(20, 'pm', { AUTOPILOT_CONTEXT_BUDGET_T2: '100000' }), undefined);
 console.log('PASS config-audit seat: 5 cases');

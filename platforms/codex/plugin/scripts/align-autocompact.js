@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { isDeepStrictEqual } = require('util');
-const TARGETS = { pm: 283000, lead: 250000, worker: 300000, family: { fable: 250000, opus: 250000, sonnet: 300000, haiku: 300000 } };
+const TARGETS = { pm: 200000, lead: 250000, worker: 300000, family: { fable: 250000, opus: 250000, sonnet: 300000, haiku: 300000 } };
 const familyOf = (m) => (typeof m === 'string' ? ['fable', 'opus', 'sonnet', 'haiku'].find((f) => m.toLowerCase().includes(f)) : undefined);
 const args = process.argv.slice(2);
 function value(flag) { const i = args.indexOf(flag); return i < 0 ? undefined : args[i + 1]; }

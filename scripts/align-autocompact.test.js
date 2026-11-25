@@ -26,15 +26,15 @@ r = run('--apply'); assert.equal(r.status, 2); assert.equal(fs.readFileSync(chan
 r = run('--apply', '--yes-go', 'test-go'); assert.equal(r.status, 0, r.stderr); assert.match(r.stdout, /audit\thost\tdiverged/); assert.match(r.stdout, /rollback\tcp --/);
 const backup = fs.readdirSync(path.dirname(changed)).find(n => n.startsWith('settings.json.bak.')); assert.ok(backup);
 const sha = s => crypto.createHash('sha256').update(s).digest('hex'); assert.equal(sha(fs.readFileSync(path.join(path.dirname(changed), backup))), sha(original));
-assert.deepStrictEqual(JSON.parse(fs.readFileSync(changed)), { ...JSON.parse(original), autoCompactWindow: 250000 }); assert.deepStrictEqual(JSON.parse(fs.readFileSync(unset)), { extra: true, autoCompactWindow: 283000 }); assert.equal(fs.readFileSync(bad, 'utf8'), '{broken');
+assert.deepStrictEqual(JSON.parse(fs.readFileSync(changed)), { ...JSON.parse(original), autoCompactWindow: 250000 }); assert.deepStrictEqual(JSON.parse(fs.readFileSync(unset)), { extra: true, autoCompactWindow: 320000 }); assert.equal(fs.readFileSync(bad, 'utf8'), '{broken');
 const before = fs.statSync(changed).mtimeMs; const entries = fs.readdirSync(path.dirname(changed)); r = run('--apply', '--yes-go', 'test-go'); assert.equal(r.status, 0); assert.match(r.stdout, /already_aligned/); assert.equal(fs.statSync(changed).mtimeMs, before); assert.deepEqual(fs.readdirSync(path.dirname(changed)), entries);
 r = run('--check'); assert.equal(r.status, 0);
 // real hangar list shapes: full model ids, null models, a pm with an opus model
 const mf = path.join(root, 'mf'); fs.mkdirSync(mf);
 const mk = (name, kind, model) => { const f = path.join(mf, name + '.json'); fs.writeFileSync(f, JSON.stringify({})); return { host: 'h', profile: name, kind, model, settings_path: f }; };
-const famList = path.join(root, 'fam.json'); fs.writeFileSync(famList, JSON.stringify([mk('w-opus', 'worker', 'claude-opus-5-5'), mk('w-null', 'worker', null), mk('w-sonnet', 'worker', 'claude-sonnet-5-5'), mk('pm-opus', 'pm', 'claude-opus-5-5'), mk('lead-null', 'lead', null)]));
+const famList = path.join(root, 'fam.json'); fs.writeFileSync(famList, JSON.stringify([mk('w-opus', 'worker', 'claude-opus-5-5'), mk('w-null', 'worker', null), mk('w-sonnet', 'worker', 'claude-sonnet-5-5'), mk('pm-opus', 'pm', 'claude-opus-5-5'), mk('pm-second', 'pm', null), mk('pm-sonnet', 'pm', 'claude-sonnet-5-5'), mk('lead-null', 'lead', null)]));
 const fam = spawnSync(process.execPath, [script, '--profiles', famList, '--check'], { encoding: 'utf8' });
 assert.equal(fam.status, 1, fam.stderr);
 const exp = Object.fromEntries(fam.stdout.trim().split('\n').slice(1).map(l => { const c = l.split('\t'); return [c[1], c[4]]; }));
-assert.deepStrictEqual(exp, { 'w-opus': '250000', 'w-null': '300000', 'w-sonnet': '300000', 'pm-opus': '283000', 'lead-null': '250000' });
-console.log('PASS align-autocompact: 7 cases');
+assert.deepStrictEqual(exp, { 'w-opus': '250000', 'w-null': '300000', 'w-sonnet': '300000', 'pm-opus': '320000', 'pm-second': '320000', 'pm-sonnet': '320000', 'lead-null': '250000' });
+console.log('PASS align-autocompact: 7 cases (every pm profile reads TARGETS.pm)');

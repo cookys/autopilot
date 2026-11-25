@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-11-25 | [plan-to-tasks：計畫凍結後自動開子單、派工標頭與 Fleet-Task 閘、收尾目檢分流](../plans/2026-11-25-plan-to-tasks.md) | active | — | [plan](../plans/2026-11-25-plan-to-tasks.md) |
 | 2026-11-23 | [PM 席省額度計畫的 replay 量測：同一批輸入量出每個開關 ON 和 OFF 的差](../plans/2026-11-23-pm-replay-measure.md) | active | — | [plan](../plans/2026-11-23-pm-replay-measure.md) |
 | 2026-11-21 | [wasted turns: measure, pick one fix per item, staged rollout](../../docs/plans/2026-11-21-wasted-turns.md) | active | — | [plan](../../docs/plans/2026-11-21-wasted-turns.md) |
 | 2026-11-12 | [ctx-reset W2: sweep lane that resets idle large-context sessions (draft, awaiting plan review)](../plans/2026-11-12-ctx-reset-sweep.md) | active | — | [plan](../plans/2026-11-12-ctx-reset-sweep.md) |

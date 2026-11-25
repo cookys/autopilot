@@ -151,4 +151,15 @@ describe('plan-to-tasks --sync', () => {
     const snap = JSON.parse(logged.slice(logged.indexOf('{')));
     assert.equal(snap.phases.length, 14);
   });
+  it('does not let a cancelled task claim a phase', () => {
+    fs.writeFileSync(fx.tasksFile, JSON.stringify([
+      { task_id: '01CANCELLED00000000000000', parent_task_id: '01PARENT000000000000000000', status: 'cancelled', title: `Plan: ${fx.planRel} Phase: P1\nRole: implementer | Size: S | Needs-Look: no` },
+    ]), 'utf8');
+    const res = spawnSync(process.execPath, [PLAN_TO_TASKS, '--receipt', fx.receiptPath, '--repo', fx.repoDir, '--parent', '01PARENT000000000000000000', '--sync'], {
+      encoding: 'utf8', env: { ...process.env, PLAN_TO_TASKS_FLEET_BIN: fx.fakeFleet },
+    });
+    assert.equal(res.status, 0, res.stderr);
+    const out = JSON.parse(res.stdout);
+    assert.ok(out.untracked.includes('P1'));
+  });
 });

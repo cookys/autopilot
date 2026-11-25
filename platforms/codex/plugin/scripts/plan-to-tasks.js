@@ -301,6 +301,8 @@ function main() {
       const phaseToTasks = new Map(phases.map((p) => [p.id, []]));
 
       for (const task of existingTasks) {
+        // a cancelled duplicate must not claim a phase (same-title tasks were mis-attached)
+        if (['cancelled', 'canceled'].includes(String(task.status || task.state || '').toLowerCase())) continue;
         if (parentId && String(task.parent_task_id || task.parent_id || '') !== parentId) continue;
         const matchedIds = extractPhaseMarkers(task, receipt.path, receipt.commit);
         for (const phaseId of matchedIds) {

@@ -165,7 +165,7 @@ calls2="$([ -f "$FLEET_LOG" ] && wc -l < "$FLEET_LOG" || echo 0)"
 
 # (j2) PM seat -> old operator message, zero dispatches
 reset; rm -f "$FLEET_LOG"; use_context 160000; fire >/dev/null; write_handoff
-out="$(FLEET_BIN="$FAKE_FLEET" FAKE_FLEET_LOG="$FLEET_LOG" FLEET_ADDRESS="cookys/aimax395/pm--claude" stop)"
+out="$(FLEET_BIN="$FAKE_FLEET" FAKE_FLEET_LOG="$FLEET_LOG" FLEET_ADDRESS="cookys/testhost/pm--claude" stop)"
 calls="$([ -f "$FLEET_LOG" ] && wc -l < "$FLEET_LOG" || echo 0)"
 [ "$calls" -eq 0 ] && has "$out" "read $HANDOFF 接續" && has "$out" "轉給操作員" && ok "(j2) PM seat keeps operator relay with zero dispatches" || bad "(j2) calls=$calls out=$out"
 
@@ -199,17 +199,17 @@ rm -rf "$TMP/home/.local/bin/fleet"
 
 # (k) t2_hard_block default is false (capped at 2 blocks for PM seat); explicit true enables unlimited blocks
 reset; rm -f "$TMP/home/.autopilot/config.json"; use_context 160000; fire >/dev/null
-o1="$(FLEET_ADDRESS="cookys/aimax395/pm--claude" stop)"
-o2="$(FLEET_ADDRESS="cookys/aimax395/pm--claude" stop)"
-o3="$(FLEET_ADDRESS="cookys/aimax395/pm--claude" stop)"
+o1="$(FLEET_ADDRESS="cookys/testhost/pm--claude" stop)"
+o2="$(FLEET_ADDRESS="cookys/testhost/pm--claude" stop)"
+o3="$(FLEET_ADDRESS="cookys/testhost/pm--claude" stop)"
 has "$o1" '"decision":"block"' && has "$o2" '"decision":"block"' && [ -z "$o3" ] && ok "(k1) PM seat with default t2_hard_block=false caps at 2 blocks" || bad "(k1) expected 2 blocks then allow: [$o1] [$o2] [$o3]"
 
 reset; mkdir -p "$TMP/home/.autopilot"
 printf '{"context_budget":{"t2_hard_block":true}}\n' > "$TMP/home/.autopilot/config.json"
 use_context 160000; fire >/dev/null
-h1="$(FLEET_ADDRESS="cookys/aimax395/pm--claude" stop)"
-h2="$(FLEET_ADDRESS="cookys/aimax395/pm--claude" stop)"
-h3="$(FLEET_ADDRESS="cookys/aimax395/pm--claude" stop)"
+h1="$(FLEET_ADDRESS="cookys/testhost/pm--claude" stop)"
+h2="$(FLEET_ADDRESS="cookys/testhost/pm--claude" stop)"
+h3="$(FLEET_ADDRESS="cookys/testhost/pm--claude" stop)"
 rm -f "$TMP/home/.autopilot/config.json"
 has "$h1" '"decision":"block"' && has "$h2" '"decision":"block"' && has "$h3" '"decision":"block"' && ok "(k2) PM seat with explicit t2_hard_block:true blocks 3+ times" || bad "(k2) expected 3 blocks: [$h1] [$h2] [$h3]"
 

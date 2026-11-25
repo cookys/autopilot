@@ -193,10 +193,14 @@ function buildUpdateNotice(lastSeenTuple, currentTuple, changelogText) {
 // and append at most CONFIG_AUDIT_MAX_LINES lines. Advisory only: any failure yields '' and the notice is unchanged.
 // Switched off by the same update_check / AUTOPILOT_UPDATE_CHECK knob as the notice itself.
 const CONFIG_AUDIT_MAX_LINES = 5;
+// Seat kind for the config audit (pm / lead / other / ): the T2 of a seat with a percentage default is not the config t2.
+function auditSeat() {
+  try { return require('./_shared/fleet-seat.js').resolveFleetSeat({}) || undefined; } catch { return undefined; }
+}
 function configAuditBlock(homeDir) {
   try {
     const lib = require('../scripts/lib/config-audit.js');
-    const lines = lib.formatLines(lib.audit({ home: homeDir, projectDir: process.env.CLAUDE_PROJECT_DIR }));
+    const lines = lib.formatLines(lib.audit({ home: homeDir, projectDir: process.env.CLAUDE_PROJECT_DIR, seat: auditSeat() }));
     if (!lines.length) return '';
     const clip = (l) => (l.length > 200 ? `${l.slice(0, 197)}...` : l);
     const shown = lines.slice(0, CONFIG_AUDIT_MAX_LINES - 2).map((l) => `- ${clip(l)}`);
@@ -215,7 +219,7 @@ function configPairBlock(homeDir) {
     if (process.env.AUTOPILOT_CONFIG_PAIR_CHECK === '0') return '';
     if (readOptOutFlag(homeDir)) return '';
     const lib = require('../scripts/lib/config-audit.js');
-    const audited = lib.audit({ home: homeDir, projectDir: process.env.CLAUDE_PROJECT_DIR });
+    const audited = lib.audit({ home: homeDir, projectDir: process.env.CLAUDE_PROJECT_DIR, seat: auditSeat() });
     const lines = lib.formatLines({
       findings: (audited.findings || []).filter((f) => f && f.rule === 't2_gap_over_window'),
     });

@@ -113,6 +113,16 @@ function preToolDeny(reason) {
   };
 }
 
+function preToolAllowUpdatedInput(updatedInput) {
+  return {
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'allow',
+      updatedInput,
+    },
+  };
+}
+
 function decideDispatch(input) {
   if (!isEnabled(DISPATCH_OPT_IN)) return null;
   if (!isPmConsole(input)) return null;
@@ -250,6 +260,15 @@ function decide(input, env = envBag()) {
     // A reply that answers a task carries task context and is fine; an uncontexted work order is not.
     const asks = isReplyWorkOrder(toolInput.content);
     if (!asks || hasTaskContext(toolInput)) return null;
+    const hit = fleetChannel(input.transcript_path, toolInput.message_id);
+    const idMatch = hit && typeof hit.body === 'string' ? BODY_TASK_ID_RE.exec(hit.body) : null;
+    if (idMatch) {
+      const content = typeof toolInput.content === 'string' ? toolInput.content : '';
+      return preToolAllowUpdatedInput({
+        ...toolInput,
+        content: `task_id: ${idMatch[1]}\n${content}`,
+      });
+    }
     return preToolDeny(REPLY_DENY_REASON);
   }
   const hasNoTask = typeof toolInput.content === 'string' && /\[no-task/i.test(toolInput.content);

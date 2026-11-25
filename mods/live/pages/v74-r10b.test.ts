@@ -20,6 +20,11 @@ const v74 = (o: Partial<V74Ctx> = {}): V74Ctx => ({ pm: null, pmFetchedMs: null,
 const ctxOf = (o: Partial<V74Ctx>, rows = 40, cols = 120) => ({ live: null, console: null, size: { cols, rows }, t, nowMs: 1794200000000, v74: v74(o), box: true }) as never
 const text = (r: Row): string => r.map(s => s.text).join('')
 
+test('help explains the four band line states', () => {
+  const all = renderHelp(ctxOf({})).body.map(text).join('\n')
+  for (const phrase of ['⊘ 閒置', '◉ 進行中', '✗ 已失敗結束', '⋯ 等待中']) expect(all).toContain(phrase)
+})
+
 test('r10b #1: a picked answer is marked with the answer arrow, never the pending-card diamond', () => {
   const ctx = { ...(ctxOf({}) as object), decide: { ...NO_NAV, cursor: 0, picks: { [decide[0].id]: 0 } } } as never
   const { actions, body } = decidePage.render(ctx)

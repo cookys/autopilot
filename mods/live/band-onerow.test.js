@@ -21,6 +21,11 @@ test.before(async () => {
 
 const segText = seg => seg.segs.map(s => s.text).join('')
 
+test('source label is not repeated', () => {
+  const source = segText(B.formatSource({ label: tZh('band.src_unknown'), flags: 1, state: 'normal' }, tZh))
+  assert.doesNotMatch(source, /來源\s+來源/)
+})
+
 const sampleInput = (over = {}) => ({
   reminder: { text: '要你決定：合併 shared-tui plan 進 develop？', cardId: 'd-001', state: 'normal', hasRec: true, ...(over.reminder || {}) },
   line: { stalled: 4, running: 3, failed: 2, waiting: 0, state: 'normal', ...(over.line || {}) },

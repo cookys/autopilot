@@ -80,3 +80,21 @@ test('isMPlus: identifies M, L, XL only', () => {
   assert.equal(isMPlus('conflict'), false);
   assert.equal(isMPlus(null), false);
 });
+
+test('parse: supports legacy .md@sha, plan loop/plan-loop, and [plan-exempt: reason]', () => {
+  assert.deepEqual(
+    parse('Size: M\n見 knowledge/plans/2026-11-25-fleet-routing-mechanization.md@64d739bf5a34').plan,
+    { path: 'knowledge/plans/2026-11-25-fleet-routing-mechanization.md', sha: '64d739bf5a34', legacy: true },
+  );
+  assert.equal(parse('Size: M\n見 docs/plans/a.md@abc123').plan, null);
+  assert.equal(parse('Size: M\nPlan: x/y.md@abcdef1\n見 other.md@1234567').plan.legacy, undefined);
+
+  assert.equal(parse('Size: L\n跑 plan loop').plan, 'plan-first');
+  assert.equal(parse('Size: L\n跑 PLAN-LOOP').plan, 'plan-first');
+  assert.equal(parse('Size: L\n只有 plan 一個字').plan, null);
+  assert.equal(parse('Size: L\nplanloop').plan, null);
+
+  assert.deepEqual(parse('Size: M\n[plan-exempt: 純文件錯字修正]').plan, { exempt: '純文件錯字修正' });
+  assert.equal(parse('Size: M\n[plan-exempt: ]').plan, null);
+  assert.equal(parse('Size: M\n[plan-exempt:]').plan, null);
+});

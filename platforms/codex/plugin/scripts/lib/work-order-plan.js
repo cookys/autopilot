@@ -22,6 +22,9 @@ const BRACKET_TAG_RE = /\[([^\[\]\r\n]+)\]/g;
 const SIZE_TOKEN_RE = /^(!)?(XS|S|M|L|XL)(!)?$/;
 const PLAN_LINE_RE = /^\s*(?:[-*]\s+)?(?:\*\*)?Plan(?:\*\*)?\s*:\s*(?:\*\*)?\s*(?:plan-first|(\S+)@([0-9a-f]{7,40}))(?:\*\*)?\s*$/;
 const PLAN_FIRST_ONLY_RE = /^\s*plan-first\s*$/;
+const PLAN_LOOP_RE = /\bplan[- ]loop\b/i;
+const PLAN_EXEMPT_RE = /\[plan-exempt:\s*([^\]\r\n]*)\]/;
+const LEGACY_MD_SHA_RE = /(\S+\.md)@([0-9a-f]{7,})\b/;
 
 function isMPlus(size) {
   return typeof size === 'string' && M_PLUS_SIZES.has(size);
@@ -142,6 +145,21 @@ function parse(text) {
         plan = 'plan-first';
         break;
       }
+    }
+  }
+  if (plan === null && PLAN_LOOP_RE.test(text)) {
+    plan = 'plan-first';
+  }
+  if (plan === null) {
+    const em = PLAN_EXEMPT_RE.exec(text);
+    if (em && em[1].trim().length > 0) {
+      plan = { exempt: em[1].trim() };
+    }
+  }
+  if (plan === null) {
+    const lm = LEGACY_MD_SHA_RE.exec(text);
+    if (lm) {
+      plan = { path: lm[1], sha: lm[2], legacy: true };
     }
   }
 

@@ -118,8 +118,18 @@ function decideDispatch(input) {
   if (!parsed.size || parsed.size === 'conflict') {
     return preToolDeny(DISPATCH_SIZE_DENY_REASON);
   }
-  if (isMPlus(parsed.size) && !parsed.plan) {
-    return preToolDeny(DISPATCH_PLAN_DENY_REASON);
+  if (isMPlus(parsed.size)) {
+    if (!parsed.plan) {
+      return preToolDeny(DISPATCH_PLAN_DENY_REASON);
+    }
+    if (parsed.plan.legacy) {
+      return {
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse',
+          additionalContext: '警告：偵測到舊寫法 `.md@sha`，請改寫成 `Plan: <路徑>@<sha>` 表頭（過渡期暫時放行）。',
+        },
+      };
+    }
   }
   return null;
 }

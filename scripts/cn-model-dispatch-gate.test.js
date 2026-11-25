@@ -38,14 +38,14 @@ test('(b2) Kimi broker endpoint name is allowed without a resolvable URL', () =>
 }));
 test('(c) Kimi in a git checkout is refused as private workdir', () => fixture((root) => {
   const cwd = path.join(root, 'repo'); repo(cwd); const prompt = brief(cwd);
-  const got = check({ runner: 'kimi', model: 'kimi', endpoint: 'kimi', cwd, files: [prompt], env: endpointEnv('kimi', 'https://api.moonshot.cn/v1') });
+  const got = check({ runner: 'kimi', model: 'kimi', endpoint: 'kimi', cwd, files: [prompt], env: { ...endpointEnv('kimi', 'https://api.moonshot.cn/v1'), AUTOPILOT_CN_WORK_TIER: 'T0' } });
   assert.equal(got.cls, 'restricted_operator_private_workdir');
 }));
 test('(d) inventory host and credential-shaped brief content are refused', () => fixture((root) => {
   const cwd = path.join(root, 'sandbox'); fs.mkdirSync(cwd);
   for (const contents of ['Contact testhost-a for access.\n', 'Authorization: Bearer sk-123456789012345678901234\n']) {
     const prompt = brief(cwd, contents);
-    const got = check({ runner: 'kimi', model: 'kimi', endpoint: 'kimi', cwd, files: [prompt], env: endpointEnv('kimi', 'https://api.moonshot.cn/v1') });
+    const got = check({ runner: 'kimi', model: 'kimi', endpoint: 'kimi', cwd, files: [prompt], env: { ...endpointEnv('kimi', 'https://api.moonshot.cn/v1'), AUTOPILOT_CN_WORK_TIER: 'T0' } });
     assert.equal(got.cls, 'restricted_operator_brief_scan'); fs.unlinkSync(prompt);
   }
 }));
@@ -84,7 +84,7 @@ test('(k) the same endpoint name resolving to a private address not listed as lo
 }));
 test('(i) a raw Chinese cloud URL remains barred', () => fixture((root) => {
   const cwd = path.join(root, 'repo'); repo(cwd); const prompt = brief(cwd);
-  const got = check({ runner: 'cc-shim', model: 'GLM-5.3', endpoint: 'https://api.bigmodel.cn/anthropic', cwd, files: [prompt], env: {} });
+  const got = check({ runner: 'cc-shim', model: 'GLM-5.3', endpoint: 'https://api.bigmodel.cn/anthropic', cwd, files: [prompt], env: { AUTOPILOT_CN_WORK_TIER: 'T0' } });
   assert.equal(got.allowed, false);
   assert.equal(got.cls, 'restricted_operator_private_workdir');
 }));

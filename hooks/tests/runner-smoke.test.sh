@@ -76,6 +76,8 @@ export FLEET_LOG="$TEST_TMP/fake-fleet-calls.log"
 
 cat > "$FAKE_BIN/fleet" <<'EOF'
 #!/usr/bin/env bash
+# `fleet event emit` and `fleet whoami` are the rails' own identity and event channel, not the smoke notify under test.
+case "${1:-}" in event) cat >/dev/null; exit 0 ;; whoami) exit 1 ;; esac
 printf '%s\n' "$*" >> "$FLEET_LOG"
 exit 0
 EOF
@@ -990,5 +992,18 @@ if (row.cli_last_line.includes(process.argv[2])) process.exit(2);
 process.stdout.write("ok");
 ' "$SECRET_RECEIPTS/2026-11-30.json" "$FAKE_KEY")"
 assert_eq "$SECRET_CHECK" "ok" "cli_last_line masks API-key-shaped token"
+
+# --- Fleet-Task gate: the smoke child env is an exempt probe caller (11-25 ptt-p4b made the gate repo-wide) ---
+GATE_OUT="$(env -u AUTOPILOT_FLEET_TASK -u AUTOPILOT_DISPATCH_ROLE -u AUTOPILOT_PARENT_RUN_ID -u AUTOPILOT_UPSTREAM_TASK_ID node -e '
+const { buildSmokeChildEnv } = require(process.argv[1] + "/scripts/runner-smoke.js");
+const { resolvePmGate } = require(process.argv[1] + "/scripts/lib/fleet-task-ref.js");
+const base = { PATH: process.env.PATH };
+const paths = { childTmp: "/tmp", runsDir: "/tmp", sessionModeDir: "/tmp" };
+const env = buildSmokeChildEnv(base, paths, "codex");
+const ok = resolvePmGate({ repoRoot: "/tmp", text: "x", env });
+const bad = resolvePmGate({ repoRoot: "/tmp", text: "x", env: { ...env, AUTOPILOT_DISPATCH_ROLE: "" }, timeoutMs: 100 });
+process.stdout.write((ok.allowed ? "allowed" : "denied") + "/" + (bad.allowed ? "allowed" : "denied"));
+' "$REPO_ROOT")"
+assert_eq "$GATE_OUT" "allowed/denied" "smoke child env passes the Fleet-Task gate; without the probe role the same call is denied"
 
 finalize_test

@@ -381,6 +381,8 @@ function buildSmokeChildEnv(baseEnv, paths, runner) {
   env.TMPDIR = paths.childTmp;
   env.DISPATCH_QUIET = '1';
   env.DISPATCH_DETACH = '0';
+  // Unattended probe, not repo work: the Fleet-Task gate exempts probe- callers (fleet-task-ref.js EXEMPT_CALLER_RE).
+  env.AUTOPILOT_DISPATCH_ROLE = 'probe-runner-smoke';
   env.AUTOPILOT_DISPATCH_USAGE = 'off';
   env.AUTOPILOT_DISPATCH_MANIFEST = '0';
   env.AUTOPILOT_DISPATCH_RUNS_DIR = paths.runsDir;
@@ -858,6 +860,7 @@ module.exports = {
   SMOKE_SCHEMA,
   RUNNER_SMOKE_TARGETS,
   appendSmokePassesToOverlay,
+  buildSmokeChildEnv,
   localDateString,
   parseArgs,
   resolveReceiptDir,

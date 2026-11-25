@@ -1985,7 +1985,9 @@ function cnGateRefusal(runner, model, endpoint, content) {
   try {
     const file = path.join(dir, 'case.txt');
     fs.writeFileSync(file, content);
-    const c = require('./lib/cn-model-dispatch-gate').check({ runner, model, endpoint, cwd: dir, files: [file] });
+    // QRP_CN_WORK_TIER is declared by the host cell script outside the sandbox (PM 01M89N3DW6); the broker
+    // still refuses any AUTOPILOT_ name in the provider environment, so the sandboxed process cannot self-declare.
+    const c = require('./lib/cn-model-dispatch-gate').check({ runner, model, endpoint, cwd: dir, files: [file], tier: process.env.QRP_CN_WORK_TIER || '' });
     return c.allowed ? '' : c.line;
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });

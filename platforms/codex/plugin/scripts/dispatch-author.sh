@@ -1223,7 +1223,16 @@ if [ "$RUNNER" = "agy" ]; then
     || die_precondition "agy verification-author requires bwrap filesystem/process isolation"
 fi
 
-if [ "$RUNNER" = "kimi" ]; then
+KIMI_VIA_BROKER=0
+if [ "$RUNNER" = "kimi" ] && [ "${AUTOPILOT_KIMI_LOCAL_ALLOW:-}" != "1" ]; then
+  # Default kimi seat is the shared broker (the local CLI is stopped, see kimi-local-stop.js,
+  # which stays untouched). AUTOPILOT_KIMI_LOCAL_ALLOW=1 is the fixture seam for the local CLI.
+  KIMI_VIA_BROKER=1
+  command -v node >/dev/null 2>&1 || die_precondition "node binary not found (required for kimi broker)"
+  command -v git >/dev/null 2>&1 || die_precondition "git binary not found (required for kimi broker)"
+  KIMI_BROKER_JS="$_AUTHOR_SELF_DIR/lib/cursor-broker-run.js"
+  [[ -r "$KIMI_BROKER_JS" ]] || die_precondition "cursor-broker-run.js not found beside dispatch-author.sh"
+elif [ "$RUNNER" = "kimi" ]; then
   _kimi_stop="$(node "$_AUTHOR_SELF_DIR/lib/kimi-local-stop.js" check 2>&1)" || die_precondition "$_kimi_stop"
   KIMI_BIN="$(runner_bin_fallback "${BIN:-kimi}")"
   command -v "$KIMI_BIN" >/dev/null 2>&1 || die_precondition "kimi binary not found: $KIMI_BIN"
@@ -1479,6 +1488,8 @@ CNATIVE_CFG=""   # seeded credentials-only CLAUDE_CONFIG_DIR for claude-native (
 CURSOR_CWD=""
 CURSOR_ERR=""
 KIMI_KIT_DIR=""   # --role-kit on kimi: rail-owned dir holding the generated agent file
+KIMI_TMP_REPO=""
+KIMI_BROKER_OUT=""
 RUNNER_ERR_FILE=""
 AUTHOR_WRAP_FILE=""
 AUTHOR_PARSE_FILE=""
@@ -1496,6 +1507,8 @@ cleanup() {
   [ -n "$CURSOR_CWD" ] && rm -rf "$CURSOR_CWD" || true
   [ -n "$CURSOR_ERR" ] && rm -f "$CURSOR_ERR" || true
   [ -n "$KIMI_KIT_DIR" ] && rm -rf "$KIMI_KIT_DIR" || true
+  [ -n "$KIMI_TMP_REPO" ] && rm -rf "$KIMI_TMP_REPO" || true
+  [ -n "$KIMI_BROKER_OUT" ] && rm -f "$KIMI_BROKER_OUT" || true
   [ -n "$RUNNER_ERR_FILE" ] && rm -f "$RUNNER_ERR_FILE" || true
   [ -n "$AUTHOR_WRAP_FILE" ] && rm -f "$AUTHOR_WRAP_FILE" || true
   [ -n "$AUTHOR_PARSE_FILE" ] && rm -f "$AUTHOR_PARSE_FILE" || true
@@ -1703,6 +1716,44 @@ elif [[ "$RUNNER" = "cursor" ]]; then
   author_remap_kill_exit "$AUTHOR_TIMEOUT_START"
   set -e
   rm -rf "$CURSOR_CWD"; CURSOR_CWD=""
+elif [[ "$RUNNER" = "kimi" && "$KIMI_VIA_BROKER" -eq 1 ]]; then
+  # The CN gate requires a non-git sandbox cwd, while cursor-broker-run.js clones a git
+  # worktree: seed a disposable git repo (group-shared, 2770) from the sandbox, run the
+  # broker there, then copy added/modified files back. Effort is not carried by the broker.
+  KIMI_TMP_REPO="$(mktemp -d -t dispatch-author-kimirepo-XXXXXX)"
+  KIMI_BROKER_OUT="$(mktemp -t dispatch-author-kimiout-XXXXXX)"
+  cp -a "$PWD/." "$KIMI_TMP_REPO/" 2>/dev/null || true
+  git -C "$KIMI_TMP_REPO" init -q --shared=group
+  chmod -R g+rwX "$KIMI_TMP_REPO"
+  chmod 2770 "$KIMI_TMP_REPO" "$KIMI_TMP_REPO/.git"
+  git -C "$KIMI_TMP_REPO" add -A
+  git -C "$KIMI_TMP_REPO" -c user.name=autopilot-dispatch -c user.email=autopilot@localhost commit -q --allow-empty -m "sandbox snapshot"
+  # The broker accepts timeout_s only in 60..3600; clamp the hard cap into that window.
+  KIMI_BROKER_TIMEOUT_S="$AUTHOR_HARD_S"
+  [ "$KIMI_BROKER_TIMEOUT_S" -gt 3600 ] && KIMI_BROKER_TIMEOUT_S=3600
+  [ "$KIMI_BROKER_TIMEOUT_S" -lt 60 ] && KIMI_BROKER_TIMEOUT_S=60
+  author_kill_grace
+  set +e
+  AUTHOR_TIMEOUT_START=$SECONDS
+  author_watch_prepare "$RUNNER_ERR_FILE"
+  "${AUTHOR_WATCH_CMD[@]}" ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} node "$KIMI_BROKER_JS" \
+    "$KIMI_TMP_REPO" "$PROMPT_FILE" "$MODEL" "$KIMI_BROKER_TIMEOUT_S" "${AUTHOR_RUN_ID:-author-$$-$RANDOM}" "$KIMI_BROKER_OUT" kimi \
+    </dev/null > "$RAW_LOG" 2>"$RUNNER_ERR_FILE"
+  RUNNER_EXIT=$?
+  author_remap_kill_exit "$AUTHOR_TIMEOUT_START"
+  set -e
+  # The kimi CLI log prefixes the first line with a bullet and indents body lines by two spaces; the frame markers must start a line.
+  [ "$RUNNER_EXIT" -eq 0 ] && sed -i -e 's/^  //' -e 's/^• //' "$RAW_LOG"
+  if [ "$RUNNER_EXIT" -eq 0 ]; then
+    while IFS= read -r -d '' _kimi_rel; do
+      [ -n "$_kimi_rel" ] || continue
+      [ -e "$KIMI_TMP_REPO/$_kimi_rel" ] || continue
+      mkdir -p "$(dirname "$PWD/$_kimi_rel")"
+      cp -a "$KIMI_TMP_REPO/$_kimi_rel" "$PWD/$_kimi_rel"
+    done < <(git -C "$KIMI_TMP_REPO" status --porcelain -z | node -e '
+      const e = require("fs").readFileSync(0).toString("utf8").split("\0").filter(Boolean);
+      for (const x of e) { if (!x.slice(0, 2).includes("D")) process.stdout.write(x.slice(3) + "\0"); }')
+  fi
 elif [[ "$RUNNER" = "kimi" ]]; then
   # The transport lives in `src/runners/kimi.js` (contract-pinned by
   # hooks/tests/dispatch-author-kimi.test.sh); this branch only supplies the
@@ -2171,5 +2222,14 @@ fi
 AUTHOR_EXTRA="$(strict_result_fields "clean")"
 if [[ "$CODEX_TRANSPORT" -eq 1 && -n "$CODEX_SESSION_ID" ]]; then
   AUTHOR_EXTRA="${AUTHOR_EXTRA}, \"session_id\": \"$(json_escape "$CODEX_SESSION_ID")\""
+fi
+if [[ "$RUNNER" = "kimi" && -n "${KIMI_BROKER_OUT:-}" && -s "${KIMI_BROKER_OUT:-}" ]]; then
+  _kimi_usage_json="$(node -e '
+    try {
+      const d = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+      if (d && d.usage && typeof d.usage === "object") process.stdout.write(JSON.stringify(d.usage));
+    } catch (_) {}
+  ' "$KIMI_BROKER_OUT" 2>/dev/null || true)"
+  [ -n "$_kimi_usage_json" ] && AUTHOR_EXTRA="${AUTHOR_EXTRA}, \"usage\": ${_kimi_usage_json}"
 fi
 emit_result "authored" "$RAW_LOG" "null" 0 "$AUTHOR_EXTRA"

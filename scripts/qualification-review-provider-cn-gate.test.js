@@ -48,6 +48,9 @@ try {
   check(gate.check({ ...base, tier: 'T1' }).allowed === true, 'T1 declared by the host passes the gate for a clean payload');
   check(gate.check({ ...base, tier: '' }).allowed === false, 'negative control: an empty tier does not pass');
 } finally { fs.rmSync(sandbox, { recursive: true, force: true }); }
+// api.z.ai is Zhipu's international host: it must be classified as the restricted zhipu operator, not "unknown endpoint".
+const zai = run({ QRP_BASE_URL: 'https://api.z.ai/api/anthropic', QRP_CN_WORK_TIER: 'T1' }, DIRTY);
+check(/cn_model_dispatch_barred zhipu restricted_operator_brief_scan/.test(zai.stderr), `api.z.ai is a restricted zhipu endpoint and a dirty payload is scanned there (got: ${zai.stderr.slice(0, 160)})`);
 const t1dirty = run({ ...REMOTE, QRP_CN_WORK_TIER: 'T1' }, DIRTY);
 check(/cn_model_dispatch_barred/.test(t1dirty.stderr), 'T1 does not pass a payload with internal markers');
 console.log(`PASS [qualification-review-provider-cn-gate] ${passed} assertions`);

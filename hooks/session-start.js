@@ -739,6 +739,9 @@ function run() {
       } catch { /* calibration is best-effort */ }
     }
 
+    let resumeBlock = '';
+    try { resumeBlock = require('./lib/pm-resume.js').buildResumeBlock(payload); } catch (e) { resumeBlock = `\n\n[fleet pm resume] resume 讀不到：${String(e && e.message || e).slice(0, 120)}`; }
+    const contextLimit = source === 'compact' ? Math.max(4000, 8000 - resumeBlock.length) : EXTRA_CONTEXT_LIMIT;
     const context = composeSessionStartContext({
       compactionRecovery,
       budgetWarning,
@@ -747,8 +750,8 @@ function run() {
       disableWarning,
       updateNotice,
       injectHandoffSection,
-      limit: EXTRA_CONTEXT_LIMIT,
-      keep: EXTRA_CONTEXT_KEEP,
+      limit: contextLimit,
+      keep: contextLimit - 1,
     });
     // Coverage measurement (scripts/checkpoint-coverage.js): the ids named by the text that was actually injected (the
     // restored-state body after any cut to the limit), not the full file. Best-effort.
@@ -760,9 +763,6 @@ function run() {
         require('../scripts/lib/compaction-handoff.js').recordCoverage({ sessionId: payload.session_id, text: from < 0 ? '' : context.slice(from, to < 0 ? undefined : to) });
       } catch { /* measurement only */ }
     }
-    // fleet pm resume: forced, after the size cut so a long context never drops it; every source it fires on.
-    let resumeBlock = '';
-    try { resumeBlock = require('./lib/pm-resume.js').buildResumeBlock(payload); } catch (e) { resumeBlock = `\n\n[fleet pm resume] resume 讀不到：${String(e && e.message || e).slice(0, 120)}`; }
     const output = buildSessionStartOutput({
       context: context + resumeBlock,
       claudePluginRoot: process.env.CLAUDE_PLUGIN_ROOT,

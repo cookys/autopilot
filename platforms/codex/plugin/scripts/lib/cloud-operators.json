@@ -1,7 +1,7 @@
 {
   "operators": [
     { "operator": "moonshot", "restricted": true, "endpoints": ["kimi", "moonshot", "moonshot_cn", "kimi_cn", "moonshot_v1"], "host_suffixes": ["moonshot.cn", "moonshot.ai"] },
-    { "operator": "zhipu", "restricted": true, "endpoints": ["glm", "zhipu", "zhipu_ai", "glm_cn"], "host_suffixes": ["bigmodel.cn", "zhipuai.cn"] },
+    { "operator": "zhipu", "restricted": true, "endpoints": ["glm", "zhipu", "zhipu_ai", "glm_cn"], "host_suffixes": ["bigmodel.cn", "zhipuai.cn", "z.ai"] },
     { "operator": "alibaba_dashscope", "restricted": true, "endpoints": ["qwen", "dashscope", "qwen_cn", "aliyun_qwen", "alibaba", "aliyun", "dashscope_cn"], "host_suffixes": ["dashscope.aliyuncs.com", "aliyuncs.com", "qwen.ai"] },
     { "operator": "deepseek", "restricted": true, "endpoints": ["deepseek", "deepseek_api"], "host_suffixes": ["deepseek.com"] },
     { "operator": "minimax", "restricted": true, "endpoints": ["minimax", "minimax_cn", "minimax_anthropic"], "host_suffixes": ["minimax.io", "minimaxi.com"] },

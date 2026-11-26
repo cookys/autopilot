@@ -77,6 +77,9 @@ import type { LeftItem } from './shell'
 import type { FleetLaneSum, RoomRow } from './shell'
 import { focusAnchorKey, Pane, noteInputKey, resetNoteInputs } from './pane'
 import { routeKey } from './pages/keys'
+import { PANE_COLS, wideNext } from './wide/geometry'
+import { WIDE_TABS, wideBand, wideStatusText } from './wide/band'
+import { WideBandTree } from './wide/tree'
 import type { KeyAction } from './pages/keys'
 import { decideReduce, NO_NAV, v74Pool } from './pages/decide'
 import type { DecideNav } from './pages/decide'
@@ -86,7 +89,7 @@ import { SEATS_TIMEOUT_MS, seatQuota, v74PmCounts } from './pages/now'
 import { PAGES, EXTRA_PAGES } from './pages/index'
 import { ASKS_LIST_TAIL, cutTitle, makeAsksFeed, makeDecideFeed, makePmFeed, mergeDecideCards } from './v74/feeds'
 import { askBandRows } from './askband'
-import { offerTodo, pickIndex } from './v74/contract'
+import { offerTodo, pickIndex, PICK_KEYS, V74_PAGES } from './v74/contract'
 import type { CardNav, DecideCard, PmStatus, TodoCard, V74Ctx } from './v74/contract'
 import { v74Keylog } from './v74/keylog'
 import { frameHeight } from './pages/frame'
@@ -1713,10 +1716,12 @@ const framePageId = (): string => panePage
 // v7.4: the page is a full-width framed tree inside the AbovePrompt band, not a host Pane. `v74Open` is its open/closed state (the band's ▴/▾, /live-pane, the i, a slot, Esc);
 // `bandLegacy` is the last AbovePrompt draw's legacyTabs (the host's old layout keeps the host Pane and its ui.open / ui.close).
 let v74Open = false
+// console v5: the wide band (wide/geometry.ts) is on for the last band draw; the pane then docks 94 columns wide and Tab cycles the pages. Set only in the v7.4 band draw.
+let bandWide = false
 // `bandLegacy` is null until the first AbovePrompt draw of this session: the mode is not known yet, so an open asked before it (`/live-pane` at startup) is only recorded
 // (v74Open) and the first draw opens the host Pane when it turns out to be the old layout.
 let bandLegacy: boolean | null = null
-const openHostPane = ($: EngineInterface): Promise<unknown> => $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: true, closeOnEscape: true })
+const openHostPane = ($: EngineInterface): Promise<unknown> => $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: true, closeOnEscape: true, ...(bandWide ? { columns: PANE_COLS } : {}) } as never)
 async function openPane($: EngineInterface): Promise<void> {
   if (bandLegacy === true) await openHostPane($)
   else $.ui.invalidate('ui.render')
@@ -1789,7 +1794,7 @@ async function restorePaneFocus($: EngineInterface, reopen: boolean, key: string
   await Promise.resolve()
   await Promise.resolve()
   if (panePlacementEpoch !== epochAtMove) return
-  if (reopen && paneOpened) await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: true, closeOnEscape: true }).catch(() => undefined)
+  if (reopen && paneOpened) await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: true, closeOnEscape: true, ...(bandWide ? { columns: PANE_COLS } : {}) } as never).catch(() => undefined)
   if (key === null || panePlacementEpoch !== epochAtMove) return
   await $.ui.focus({ requestId: PANE_ID, key }).catch(() => undefined)
 }
@@ -1942,6 +1947,7 @@ export async function paneKey($: EngineInterface, key: string, over: { paneFocus
     armed: page === 'decide' && decideLocal.armed === true,
     bgOpen: page === 'decide' && decideLocal.bgOpen === true,
     compactExpanded: page === 'decide' && decideLocal.compactExpanded === true,
+    wide: bandWide,
   })
   if (act.kind !== 'none' && act.kind !== 'pass' && act.kind !== 'button') await frameKey($, act)
   return act
@@ -2303,6 +2309,9 @@ export function registerLive(on: Parameters<Register>[0]): void {
     }
     const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge, usageOn, moreTo, con, bandPreset, consoleOn && consoleSnap !== null ? bandQuotaSeg(normalizedPools(consoleSnap), bandNow, t, qSrc) : null, paneOpen || v74, legacyTabs, forgeRow !== null, legacyTabs ? undefined : () => { void togglePane() }, paneOpen)
     // v7.4: single-row fixed-column band (2026-11-23-band-layout v4) + framed page within maxRows.
+    // console v5 is opt-in while the 209-column suites still pin the v7.4 frame: AUTOPILOT_LIVE_V5=1 and the size switch (wide/geometry.ts) both have to hold
+    const v5On = v74 && (await $.env.get('AUTOPILOT_LIVE_V5').catch(() => undefined)) === '1'
+    bandWide = v5On && wideNext(bandWide, columns, rows)
     if (v74) {
       decideMaxRows = rows
       decideCols = paneWidth(columns)
@@ -2359,6 +2368,15 @@ export function registerLive(on: Parameters<Register>[0]): void {
         pet: { text: petText, state: petText === null ? 'missing' : 'normal' },
         // Codex R3 Major3 / Carbon R3 M1: band toggle MUST match actual visible pane state (never ▴收合 when no pane is shown).
         expanded: showBox,
+      }
+      if (bandWide) {
+        // console v5 wide band (P1 skeleton): the page's own rows go in the list / reply columns as they are; P3/P4 re-skin them, P2 moves the overflow to the pane
+        const pageNo = Math.max(1, (V74_PAGES as readonly string[]).indexOf(panePage) + 1)
+        const list = pageNo === 2 && decideCards !== null ? decideCards.map((c, i) => (c === curCard ? GLYPHS.structure.folded + ' ' : '  ') + String(i + 1) + ' ' + cardSentenceOf(c)) : []
+        const reply = pageNo === 2 && curCard !== null ? [curCard.question, ...curCard.options.map((o, i) => PICK_KEYS[i] + ': ' + o.label)] : remText !== null ? [remText] : []
+        const status = wideStatusText({ verdict: '進行中', running: fleetCounts?.running ?? null, failed: oneRowInput.line.failed, stalled: fleetCounts?.stuck ?? null, pending: pendCount, act: null, tps: lastStep?.tps ?? null, spark: sparkBars, labels: { fleet: '艦隊', pending: '待決', act: '動手' } })
+        await logBandGeometry($, rows, columns, 17)
+        return WideBandTree(el, wideBand({ page: pageNo, tabs: WIDE_TABS, stepTitle: '', list, reply, status, hints: '' }))
       }
       const onOneRowSegment = (id: BandSegmentId) => {
         const target = bandSlotPage(id, false)

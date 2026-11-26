@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
+# lib.sh owns TEST_TMP and the EXIT trap (cleanup_test_tmp). Do not replace that trap.
+. "$(dirname "$0")/lib.sh"
 set -eu
 ROOT=$(git rev-parse --show-toplevel)
+# After lib.sh, TMPDIR is under TEST_TMP, so this directory is removed with it.
 T=$(mktemp -d)
-trap 'rm -rf "$T"' EXIT
 export AUTOPILOT_LIVE_DIR="$T/live" HOME="$T/home" AUTOPILOT_CARD_NOTIFY=off AUTOPILOT_FLEET_BIN="$T/fleet" FLEET_LOG="$T/send" FLEET_ADDRESS=lane/host/member
 mkdir -p "$HOME" "$T/repo"
 git -C "$T/repo" init -q
@@ -48,4 +50,5 @@ data.decisions[0].asker = 'lane/host/member'; fs.writeFileSync(p, JSON.stringify
 NODE
 (cd "$T/repo" && node "$ROOT/scripts/list-lane-cards.js" --json) > "$T/list"
 node -e 'const x=JSON.parse(require("fs").readFileSync(process.argv[1])); if(!x.some(c=>c.opener === "lane/host/member")) process.exit(1)' "$T/list"
-printf 'PASS pm-only\n' 
+printf 'PASS pm-only\n'
+finalize_test

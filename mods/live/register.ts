@@ -83,6 +83,14 @@ import { wideCrossNote, wideDecide } from './wide/decide'
 import type { WideCard, WideDecideInput, WideDecideOverflow } from './wide/decide'
 import { WideBandTree } from './wide/tree'
 import type { PaneModel } from './wide/pane'
+import { wideNow } from './wide/now'
+import { wideDispatch } from './wide/dispatch'
+import { wideReview } from './wide/review'
+import { wideSpend } from './wide/spend'
+import { wideHygiene } from './wide/hygiene'
+import { wideFleet } from './wide/fleet'
+import { wideTodo } from './wide/todo'
+import { wideHelp } from './wide/help'
 import type { KeyAction } from './pages/keys'
 import { decideReduce, NO_NAV, v74Pool } from './pages/decide'
 import type { DecideNav } from './pages/decide'
@@ -1734,7 +1742,12 @@ function widePaneModel(): PaneModel {
   const none = (n: number): (string | null)[] => Array.from({ length: n }, () => null) // no source for a page's summary yet: the pane says 無
   const summaries = none(9)
   if (cards !== null) summaries[1] = `${cards.length} 張要你選`
+  const hygSum = wideHygiene({ residue: snapshot?.detail.residue ?? null, loadSource: snapshot?.detail.load_source ?? null, focus: pageView.hygiene?.focus ?? 0, stale: snapshot?.state === 'stale' }).summary
+  if (hygSum !== null) summaries[5] = hygSum
   if (counts !== null) summaries[6] = `執行 ${counts.running} · 失敗 ${counts.failed} · ${GLYPHS.state.waiting} ${counts.stuck}`
+  const todoSum = wideTodo({ todo: V74_TODO, cursor: decideLocal.cursor, picks: decideLocal.opt ? {} : {}, notes: {} }).summary
+  if (todoSum !== null) summaries[7] = todoSum
+  summaries[8] = wideHelp(pageView.help?.focus ?? 0).summary
   return {
     page, tabs: WIDE_TABS, moved: page === 2 ? wideDecideOverflow.steps : wideOverflow.reply, more: page === 2 ? wideDecideOverflow.list : wideOverflow.list, pin: [], ctx: [], ctxFold: false, ctxOpen: widePaneCtxOpen,
     lanes: rows === null ? null : rows.slice(0, 12).map(r => ({ state: mark(r.sid), name: r.line.label, speed: r.word, task: r.line.lead_display ?? '' })),
@@ -2396,7 +2409,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
         expanded: showBox,
       }
       if (bandWide) {
-        // console v5 wide band (P1 skeleton): the page's own rows go in the list / reply columns as they are; P3/P4 re-skin them, P2 moves the overflow to the pane
+        // console v5 wide band: page 2 is wide/decide.ts (P3), the others wide/<page>.ts (P4)
         const pageNo = Math.max(1, (V74_PAGES as readonly string[]).indexOf(panePage) + 1)
         const status = wideStatusText({ verdict: '進行中', running: fleetCounts?.running ?? null, failed: oneRowInput.line.failed, stalled: fleetCounts?.stuck ?? null, pending: pendCount, act: durableAwaiting.length, tps: lastStep?.tps ?? null, spark: sparkBars, labels: { fleet: '艦隊', pending: '待決', act: '動手' } })
         let list: string[] = []
@@ -2415,12 +2428,96 @@ export function registerLive(on: Parameters<Register>[0]): void {
           notice: decideLocal.stale === true && decideLocal.armed === true ? { kind: 'changed' } : null,
           source: decideCards === null && decideFeed.error() !== null ? { reason: decideFeed.error() ?? '', retrySec: 30 } : null,
         }
+        const widePage = (() => {
+          switch (pageNo) {
+            case 1:
+              return wideNow({
+                pending: pendCount,
+                act: (snapshot?.awaiting ?? []).length,
+                residue: snap?.detail.residue?.needs_human_count ?? null,
+                fleetTotal: fleetCounts ? fleetCounts.running + fleetCounts.waiting + fleetCounts.stuck + (oneRowInput.line.failed ?? 0) : null,
+                running: fleetCounts?.running ?? null,
+                failed: oneRowInput.line.failed,
+                stalled: fleetCounts?.stuck ?? null,
+                ctxPct: null,
+                sessionTokens: null,
+                qcOwed: qcState === null ? null : qcState.state === 'owed' ? 1 : 0,
+                proxyDecided: null,
+                oldestPendingAge: null,
+                oldestPendingQuestion: curCard?.question ?? null,
+                pmUpdatedAt: null,
+                pmAge: null,
+                failedNames: [],
+                recentDone: [],
+                stale: liveStale,
+                missingPm: pmNow === null,
+                missingConsole: consoleSnap === null,
+              })
+            case 3:
+              return wideDispatch({
+                items: (snap?.runs ?? []).map(r => ({
+                  state: r.ended ? (r.final_status === 'done' ? 'done' : 'failed') : 'running',
+                  label: r.lane ?? r.run_id ?? '—',
+                  engine: r.runner ?? r.model ?? '—',
+                  dur: r.elapsed_s !== null ? `${r.elapsed_s}s` : '—',
+                  runId: r.run_id ?? undefined,
+                })),
+                cursor: 0,
+                recentRounds: [],
+                stale: liveStale,
+                missing: snap === null,
+              })
+            case 4:
+              return wideReview({
+                items: snap?.review.code ? [{
+                  label: snap.review.code.branch ?? snap.review.code.head?.slice(0, 8) ?? '—',
+                  engine: snap.review.code.seats[0]?.family ?? snap.review.code.seats[0]?.id ?? '—',
+                  verdict: snap.review.code.seats[0]?.verdict ?? snap.review.code.seats[0]?.status ?? '—',
+                }] : [],
+                cursor: 0,
+                qcOwed: qcState === null ? null : qcState.state === 'owed' ? 1 : 0,
+                qcTarget: qcState?.range ?? null,
+                decidedCount: snap?.detail.decisions?.rows.length ?? null,
+                decidedSummary: null,
+                recentReviews: [],
+                stale: liveStale,
+                missing: snap === null,
+              })
+            case 5:
+              return wideSpend({
+                pct5h: null,
+                reset5h: null,
+                eta5h: null,
+                hitBeforeReset: null,
+                ratePerHour: null,
+                pct7d: null,
+                reset7d: null,
+                pools: [],
+                todayTokens: null,
+                tps: lastStep?.tps ?? null,
+                seatUsage: [],
+                stale: liveStale,
+                missing: consoleSnap === null && snap === null,
+              })
+            case 6:
+              return wideHygiene({ residue: snap?.detail.residue ?? null, loadSource: snap?.detail.load_source ?? null, focus: pageView.hygiene?.focus ?? 0, stale: liveStale })
+            case 7:
+              return wideFleet({ lines: consoleSnap?.lines ?? null, counts: consoleSnap !== null ? consoleFleetCounts(consoleSnap, t) : null, steps, nowMs: bandNow, t, focus: pageView.fleet?.focus ?? 0, stale: lineStaleFlag })
+            case 8:
+              return wideTodo({ todo: V74_TODO, cursor: decideLocal.cursor, picks: {}, notes: {}, stale: liveStale })
+            case 9:
+              return wideHelp(pageView.help?.focus ?? 0)
+            default:
+              return null
+          }
+        })()
         if (pageNo === 2) {
           const d = wideDecide(wideIn)
           list = d.list; reply = d.reply; stepTitle = d.stepTitle; hints = d.hints
           wideDecideOverflow = d.overflow
         } else {
           wideDecideOverflow = { steps: [], list: [] }
+          if (widePage !== null) { list = widePage.list; reply = widePage.reply; stepTitle = widePage.stepTitle; hints = widePage.hints }
           // C1-C3: another page is shown while a card is open; the band keeps one line about it
           if (curCard !== null) {
             const pk = decideState.picks[curCard.id]
@@ -2429,7 +2526,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
           }
         }
         await logBandGeometry($, rows, columns, 17)
-        const wide = wideBand({ page: pageNo, tabs: WIDE_TABS, stepTitle, list, reply, status, hints })
+        const wide = wideBand({ page: pageNo, tabs: WIDE_TABS, stepTitle, list, reply, status, hints, ...(widePage?.replyKeep !== undefined ? { replyKeep: widePage.replyKeep } : {}) })
         wideOverflow = wide.overflow
         return WideBandTree(el, wide)
       }

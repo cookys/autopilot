@@ -90,6 +90,33 @@ function exceptionAllows(p, ownRoot, isWrite, envMode) {
   }
   return false;
 }
+function cardUsageAllowed() {
+  const os = require('node:os');
+  const { spawnSync } = require('node:child_process');
+  const dir = path.join(process.env.XDG_RUNTIME_DIR || os.tmpdir(), 'autopilot', 'card-exceptions');
+  let names;
+  try { names = fs.readdirSync(dir); } catch { return false; }
+  for (const name of names) {
+    if (!/^d-[0-9a-f]{8}\.json$/.test(name)) continue;
+    try {
+      const file = path.join(dir, name);
+      const grant = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (grant.card !== name.slice(0, -5) || typeof grant.answer !== 'string' || !grant.answer ||
+          !/^[0-9a-f]{64}$/.test(grant.content_sha256) || grant.mode !== 'usage' || typeof grant.verified_at !== 'string') continue;
+      const verified = Date.parse(grant.verified_at);
+      if (!Number.isFinite(verified)) continue;
+      const age = Date.now() - verified;
+      if (age >= 0 && age <= 600000) return true;
+      const result = spawnSync(process.env.AUTOPILOT_FLEET_BIN || 'fleet',
+        ['decision', 'verify', grant.card, grant.answer, '--content-sha256', grant.content_sha256], { timeout: 3000 });
+      if (result.status !== 0) continue;
+      grant.verified_at = new Date().toISOString();
+      fs.writeFileSync(file, JSON.stringify(grant), { mode: 0o600 });
+      return true;
+    } catch { /* Invalid or inaccessible grants never authorize. */ }
+  }
+  return false;
+}
 function projectRoot(payload) {
   const project = process.env.CLAUDE_PROJECT_DIR || payload.cwd || process.cwd();
   const hash = path.resolve(project).replace(/[^a-zA-Z0-9]/g, '-');
@@ -116,8 +143,10 @@ function targetDecision(raw, payload, { write = false } = {}) {
   if (typeof raw !== 'string' || !raw) return null;
   const p = expand(raw, payload.cwd || process.cwd()); const homes = protectedHomes(); const root = configRoot(p, homes);
   if (!root) return null;
+  const mode = process.env.AUTOPILOT_CLAUDE_HOME_EXCEPTION;
   for (const own of ownProjectRoots(payload)) {
-    if (exceptionAllows(p, own, write, process.env.AUTOPILOT_CLAUDE_HOME_EXCEPTION)) return null;
+    if (exceptionAllows(p, own, write, mode)) return null;
+    if (!write && mode !== 'usage' && exceptionAllows(p, own, false, 'usage') && cardUsageAllowed()) return null;
   }
   return p;
 }

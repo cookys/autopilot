@@ -28,7 +28,7 @@ Shared Cursor/Kimi broker transport and clone rail use the cursor-named helpers;
 **Worktree & branch lifecycle** — `reap-dispatch-branches.sh` `reap-dispatch-worktrees.sh` `reap-build-artifacts.js` `lib/build-artifacts.js` `lib/disk-guard.js` `accept-dev-channel-prompt.sh` `reap-scratch-checkouts.js` `scratch-closeout.sh` `repo-residue-sweep.js` `prune-plugin-cache.js` `resolve-repo-placement.js` `pin-evidence-anchors.js` `lifecycle-residue-receipt.js` `write-task-status-input.js` `record-integration.js` `check-inputs-landed.js` `check-containment.js` `land-branch.js` `lib/worktree-reap.sh` `lib/worktree-intent.sh` `lib/prune-tmp-residue.sh` `lib/worktree-activity.js` `lib/tmp-residue.js` `lib/tmp-residue-registry.json` `register-external-run.js`
 `prune-merged-branch.js` `count-merged-remote-branches.js` `finish-hygiene-check.sh` `lib/worktree-removal-log.js`
 
-**Mission, campaign & session state** — `check-blueprint-conformance.js` `decision-ledger.js` `open-decision.js` `lib/operator-step-check.js` `decision-claim.js` `fleet-card-mirror.js` `lib/card-notice.js` `probe-unknown.js` `build-rehydration-bundle.js` `check-stall-fuse.js` `next-pick.js`
+**Mission, campaign & session state** — `check-blueprint-conformance.js` `decision-ledger.js` `open-decision.js` `lib/operator-step-check.js` `decision-claim.js` `card-exception-grant.js` `fleet-card-mirror.js` `lib/card-notice.js` `probe-unknown.js` `build-rehydration-bundle.js` `check-stall-fuse.js` `next-pick.js`
 
 **Session efficiency** — `wasted-turns-report.js` `lib/wasted-turns-classify.js` `wasted-turns-report.test.js`
 **Mission, campaign & session state (cont.)** — `pm-ledger.js`

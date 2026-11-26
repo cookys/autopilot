@@ -30,7 +30,7 @@ import type { PoolEta } from './pages/spend'
 import type { DecideNav } from './pages/decide'
 import type { KeyAction } from './pages/keys'
 import type { ConsoleSnapshot } from './console'
-import type { Page, PageCtx, PageId, Row } from './pages/frame'
+import type { BodyWindow, Page, PageCtx, PageId, Row } from './pages/frame'
 import type { ScrollModel } from './scroll'
 import type { Step } from './speed'
 import { PET_KEY, V74_KEY } from './v74/contract'
@@ -162,7 +162,7 @@ export type PageView = { focus: number; expanded: boolean; folded?: boolean }
 // view: focus index + expanded flag per page id (fleet, quota, spend); decide: the 待決 page's nav; onPress gets a Seg `press` that is not a tab switch (fleet:see:, fleet:fold, fill:...); onKey gets a page-local key (the host has no raw key hook: the keys are hidden hotkey Buttons); epoch rotates Button keys after a dock <-> inline move (B56)
 // the screen-order rank of every Button the framed page drew (`card:N`, `p:row:col`): the ring's step direction is read from it (register.ts, ui.focus)
 export const paneRank = new Map<string, number>()
-export type FramePane = { wide?: { model: PaneModel; onPage: (n: number) => void; onKey: (key: string) => void }; pendingScroll?: PageCtx['pendingScroll']; poolEta?: PoolEta | null; meter?: MeterPack | null; room?: readonly { seq: number; from: string; kind: string; text: string }[]; pages: readonly Page[]; pageId?: PageId; onPage?: (id: PageId) => void; console: ConsoleSnapshot | null; nowMs: number; rows: number; maxRows?: number; bodyColumns?: number; scroll?: number; view?: Record<string, PageView>; decide?: DecideNav; v74?: V74Ctx; v74Box?: true; askRows?: readonly Row[]; onPress?: (id: string) => void; onKey?: (k: KeyAction) => void; onText?: (v: string) => void; epoch?: number; steps?: readonly Step[]; pet?: unknown; others?: OthersView | null }
+export type FramePane = { wide?: { model: PaneModel; onPage: (n: number) => void; onKey: (key: string) => void }; pendingScroll?: PageCtx['pendingScroll']; poolEta?: PoolEta | null; meter?: MeterPack | null; room?: readonly { seq: number; from: string; kind: string; text: string }[]; pages: readonly Page[]; pageId?: PageId; onPage?: (id: PageId) => void; console: ConsoleSnapshot | null; nowMs: number; rows: number; maxRows?: number; bodyColumns?: number; scroll?: number; onScroll?: (to: number) => void; onWindow?: (page: PageId, w: BodyWindow) => void; view?: Record<string, PageView>; decide?: DecideNav; v74?: V74Ctx; v74Box?: true; askRows?: readonly Row[]; onPress?: (id: string) => void; onKey?: (k: KeyAction) => void; onText?: (v: string) => void; epoch?: number; steps?: readonly Step[]; pet?: unknown; others?: OthersView | null }
 const COMMON_KEYS: Record<string, KeyAction> = { z: { kind: 'fold' } } // the host takes a digit or a lowercase letter as a hotkey: Space is z here. j / k (next / previous card) are carried by the `[j] [k]` hint Buttons of the 待決 action row
 const CARD_KEYS: Record<string, KeyAction> = { a: { kind: 'pick', index: 0 }, b: { kind: 'pick', index: 1 }, c: { kind: 'pick', index: 2 } }
 const DECIDE_KEYS: Record<string, KeyAction> = { ...CARD_KEYS, d: { kind: 'pick', index: 3 }, e: { kind: 'expand' }, v: { kind: 'style' }, j: { kind: 'move', by: 1 }, k: { kind: 'move', by: -1 }, m: { kind: 'note' }, n: { kind: 'move', by: 1 }, p: { kind: 'move', by: -1 }, u: { kind: 'undo' }, h: { kind: 'prev' }, l: { kind: 'next' }, f: { kind: 'fill' }, s: { kind: 'submit' } }
@@ -179,6 +179,8 @@ export const framedPage = (frame: FramePane | null, tab: PaneTab): Page | undefi
   if (frame.pageId !== undefined) return frame.pages.find(p => p.framed === true && p.id === frame.pageId)
   return frame.pages.find(p => p.framed === true && PAGE_TAB[p.id] === tab)
 }
+// the pages whose cut body scrolls by key: no cards (待決 / 待辦 keep j / k for cards) and no focus rows (艦隊 / 額度 / 審查 keep theirs)
+export const SCROLL_PAGES: ReadonlySet<string> = new Set(['now', 'dispatch', 'spend', 'hygiene', 'help', 'forge', 'room', 'pet'])
 const HINT_AT = /(^|\s)\[[a-z]\] \S/
 const HINT_SPLIT = /(?<=^|\s)(?=\[[a-z]\] \S)/
 // v7.4: the framed page drawn as a full-width box (frame.rows tall, borders included): the title in the top border, the key hint in the bottom border, `│` on both sides, and the tab row
@@ -218,7 +220,8 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
   const drawn: Page = page.id === 'fleet' ? { ...page, render: c => fleetPageView(c, view) } : page.id === 'quota' ? { ...page, render: c => renderQuota(c, view) } : page.id === 'review' ? { ...page, render: c => renderReview(c, view) } : page.id === 'spend' ? { ...page, render: c => renderSpend(c, view) } : page
   // free rows go to content first: a folded page (fleet lines, a pool's seats, spend details) is drawn open when the open body fits whole in the rows the surface has left, unless folded by key
   const unfold = view.expanded || view.folded === true ? undefined : page.id === 'fleet' ? (c: PageCtx) => fleetPageView(c, { ...view, expanded: true }) : page.id === 'quota' ? (c: PageCtx) => renderQuota(c, { ...view, expanded: true }) : page.id === 'spend' ? (c: PageCtx) => renderSpend(c, { ...view, expanded: true }) : undefined
-  const rows: Row[] = frameRows(drawn, ctx, { ...(box ? { topAnchor: true as const } : {}), pages: frame.pages, ...(unfold === undefined ? {} : { unfold }), ...(frame.scroll === undefined ? {} : { scroll: frame.scroll }), ...(frame.askRows === undefined ? {} : { askRows: frame.askRows }) })
+  let bodyWin: BodyWindow = { from: 0, max: 0, room: 0 }
+  const rows: Row[] = frameRows(drawn, ctx, { onWindow: w => { bodyWin = w; frame.onWindow?.(page.id, w) }, ...(box ? { topAnchor: true as const } : {}), pages: frame.pages, ...(unfold === undefined ? {} : { unfold }), ...(frame.scroll === undefined ? {} : { scroll: frame.scroll }), ...(frame.askRows === undefined ? {} : { askRows: frame.askRows }) })
   const stripCount = effFrameRows <= 3 ? stripN : stripN + 1 // bottom border row (omitted at <= 3 rows) + tab strip
   // the action rows are exactly the ones the page returned (the frame pads nothing): only those rows may bind a `[x]` hint, never the body rows above them
   const avail = Math.max(0, effFrameRows - 1 - stripCount)
@@ -309,10 +312,14 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
       paneRank.set(focusAnchorKey(epoch), rows.length * 1000)
       for (const [at, letter] of ['j', 'k', 'n', 'p', 'm'].entries()) paneRank.set('pn:' + letter + ep, rows.length * 1000 + at + 1)
     }
+    // a cut body (the `↓ 還有 N 列` row is drawn) on a page with no cards and no focus rows scrolls by j / k: a letter with no Button is handed to the prompt (F1)
+    const scrollHot = i === rows.length - 1 && !typing && Button !== undefined && bodyWin.max > 0 && SCROLL_PAGES.has(page.id) && frame.onScroll !== undefined
+      ? [['j', 1], ['k', -1]].filter(([l]) => !used.has(l as string)).map(([l, by]) => <Box key={'sk:' + l} width={0} height={0} overflow="hidden"><Button key={'ps:' + l + ep} plain hotkey={l as string} onPress={() => frame.onScroll?.(Math.min(bodyWin.max, Math.max(0, bodyWin.from + (by as number))))}>{l as string}</Button></Box>)
+      : []
     const navHot = i === rows.length - 1 && !typing && Button !== undefined && (page.id === 'decide' || page.id === 'todo')
       ? (page.id === 'decide' && frame.v74 !== undefined ? [['j', 1], ['k', -1], ['n', 1], ['p', -1], ['m', 0]] : [['j', 1], ['k', -1]]).filter(([l]) => !used.has(l as string)).map(([l, by]) => <Box key={'hk:' + l} width={0} height={0} overflow="hidden"><Button key={'pn:' + l + ep} plain hotkey={l as string} onPress={() => frame.onKey?.(keys[l as string] ?? { kind: 'move', by: by as 1 | -1 })}>{l as string}</Button></Box>)
       : []
-    return <Box key={'f' + i} {...(frame.pendingScroll !== undefined && page.id === 'decide' ? { width: cols, height: 1, overflow: 'hidden' as const } : {})}>{nodes}{i === rows.length - 1 ? [focusAnchor(el, epoch), ...navHot] : null}</Box>
+    return <Box key={'f' + i} {...(frame.pendingScroll !== undefined && page.id === 'decide' ? { width: cols, height: 1, overflow: 'hidden' as const } : {})}>{nodes}{i === rows.length - 1 ? [focusAnchor(el, epoch), ...navHot, ...scrollHot] : null}</Box>
   }
   if (!box) return <Box {...(epoch > 0 ? { key: 'frame:' + epoch } : {})} flexDirection="column" height={frame.rows}>{rows.map(drawRow)}</Box>
   const rule = GLYPHS.structure.rule
@@ -391,7 +398,11 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
   const expandKey = Button === undefined || typing ? [] : [
     <Box key="lkw" width={0} height={0} overflow="hidden"><Button key={'letter:w' + ep} plain hotkey="w" onPress={() => frame.onKey?.({ kind: 'toggle_expand' })}><Text>{''}</Text></Button></Box>,
   ]
-  const bottom = <Box key="v74-bottom" height={1} width={fullCols} overflow="hidden"><Text {...bc}>{GLYPHS.structure.frameBL + rule + '  ' + fit.hint + '  ' + rule.repeat(padN) + '  '}</Text>{tabs}<Text {...bc}>{'  ' + rule + GLYPHS.structure.frameBR}</Text>{hidden}{letters}{expandKey}</Box>
+  // the boxed frame draws no last page row, so the zero-size j / k scroll Buttons of a cut body sit on the bottom border with the other hidden hotkeys
+  const scrollKeys = Button === undefined || typing || bodyWin.max <= 0 || !SCROLL_PAGES.has(page.id) || frame.onScroll === undefined ? [] : [['j', 1], ['k', -1]].filter(([l]) => !used.has(l as string)).map(([l, by]) => (
+    <Box key={'bsk' + l} width={0} height={0} overflow="hidden"><Button key={'ps:' + l + ep} plain hotkey={l as string} onPress={() => frame.onScroll?.(Math.min(bodyWin.max, Math.max(0, bodyWin.from + (by as number))))}>{l as string}</Button></Box>
+  ))
+  const bottom = <Box key="v74-bottom" height={1} width={fullCols} overflow="hidden"><Text {...bc}>{GLYPHS.structure.frameBL + rule + '  ' + fit.hint + '  ' + rule.repeat(padN) + '  '}</Text>{tabs}<Text {...bc}>{'  ' + rule + GLYPHS.structure.frameBR}</Text>{hidden}{letters}{expandKey}{scrollKeys}</Box>
   return <Box {...(epoch > 0 ? { key: 'v74:' + epoch } : {})} flexDirection="column">{top}{inner}{bottom}</Box>
 }
 

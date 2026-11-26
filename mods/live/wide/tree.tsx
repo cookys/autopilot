@@ -5,7 +5,7 @@ import type { PaneRole, WidePane } from './pane'
 
 type El = (props: Record<string, unknown>) => unknown
 // the band's role names map to palette roles; plain text keeps the host's default colour
-export const COLOR: Record<WideRole, string | undefined> = { frame: PALETTE.idle, fold: PALETTE.needs_human, current: PALETTE.action, text: undefined }
+export const COLOR: Record<WideRole, string | undefined> = { frame: PALETTE.idle, fold: PALETTE.needs_human, current: PALETTE.action, action: PALETTE.action, text: undefined }
 
 function hotkeys(el: { Box: El; Text: El; Button?: El }, onKey: (key: string) => void, epoch: number, surface: string) {
   const { Box, Text, Button } = el
@@ -33,7 +33,7 @@ export function WideBandTree(el: { Box: El; Text: El; Button?: El }, band: WideB
 }
 
 // the wide pane (pane.ts): one row per line; each `其他頁` summary row is a Button that jumps to its page (the digit keys do the same through pages/keys.ts)
-const PANE_COLOR: Record<PaneRole, string | undefined> = { frame: PALETTE.idle, text: undefined, dim: PALETTE.idle, key: PALETTE.needs_human, ok: PALETTE.done, err: PALETTE.broken, warn: PALETTE.attention }
+const PANE_COLOR: Record<PaneRole, string | undefined> = { frame: PALETTE.idle, text: undefined, dim: PALETTE.idle, key: PALETTE.needs_human, ok: PALETTE.done, err: PALETTE.broken, warn: PALETTE.attention, action: PALETTE.action }
 export function WidePaneTree(el: { Box: El; Text: El; Button?: El }, pane: WidePane, onPage: (n: number) => void, onKey: (key: string) => void, epoch: number) {
   const { Box, Text, Button } = el
   const click = new Map(pane.clicks.map(c => [c.row, c.page]))

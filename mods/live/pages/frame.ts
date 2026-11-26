@@ -35,7 +35,8 @@ export type PageId = 'now' | 'decide' | 'fleet' | 'quota' | 'dispatch' | 'review
 export interface Page { id: PageId; key: string; title: string; framed?: true; render(ctx: PageCtx): { body: Row[]; actions: Row[]; overflow?: true } }
 // a tab the frame's strip shows next to the pages (the old tabs that still draw the old way): `key` is its digit
 export type ExtraTab = { id: string; key: string; label: string }
-export type FrameOpts = { topAnchor?: true; scroll?: number; unfold?: (ctx: PageCtx) => { body: Row[]; actions: Row[]; overflow?: true }; pages?: readonly Page[]; extra?: readonly ExtraTab[]; active?: string; askRows?: readonly Row[] }
+export type BodyWindow = { from: number; max: number; room: number } // the body window of the last frame: where it stands, the largest legal offset (0 = the body is not cut), the rows it shows
+export type FrameOpts = { topAnchor?: true; scroll?: number; onWindow?: (w: BodyWindow) => void; unfold?: (ctx: PageCtx) => { body: Row[]; actions: Row[]; overflow?: true }; pages?: readonly Page[]; extra?: readonly ExtraTab[]; active?: string; askRows?: readonly Row[] }
 
 // W1: the host already budgets pane borders and chat space. Use every allocated
 // body row in either placement; a second inline cap leaves padding below the strip.
@@ -261,13 +262,19 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
   const A = Math.min(acts.length, avail) // the action rows give way last-first only when the surface cannot hold head + actions + strip
   const head: Row = [{ text: ctx.t('tab.' + page.id) }, ...(mostSevere(ctx) === null ? [] : [{ text: '  ' }, mostSevere(ctx) as Seg])]
   let shown: Row[]
+  const hinted = !short && room > 4 // a window with room for hint rows; a short one (<= 4 rows) shows items only
+  const maxFrom = body.length <= room ? 0 : hinted ? body.length - room + 1 : body.length - room // the end of a hinted window keeps its `↑ more` row, so it stands one row further
+  const from = Math.max(0, Math.min(opts.scroll ?? 0, maxFrom))
+  opts.onWindow?.({ from, max: maxFrom, room })
   if (body.length <= room) shown = body
+  else if (!hinted) shown = body.slice(from, from + room) // short-body mode (<= 4 rows): drop the scroll hints so every row shows an item
   else {
-    const from = Math.max(0, Math.min(opts.scroll ?? 0, body.length - room))
-    if (from + room >= body.length || short || room <= 4) shown = body.slice(from, from + room) // at the end, or in short-body mode (<= 4 rows): drop the scroll hint so every row shows an item
+    const up: Row[] = from > 0 ? [[{ text: ctx.t('frame.more', { n: from, arrow: GLYPHS.structure.up }), dim: true }]] : []
+    const avail = room - up.length
+    if (from + avail >= body.length) shown = [...up, ...body.slice(from, from + avail)] // at the end: only the `↑ more` row remains
     else {
-      const keep = Math.max(0, room - 1)
-      shown = [...body.slice(from, from + keep), ...(room === 0 ? [] : [[{ text: ctx.t('frame.more', { n: body.length - from - keep, arrow: GLYPHS.structure.behind }), dim: true }] as Row])]
+      const keep = Math.max(0, avail - 1)
+      shown = [...up, ...body.slice(from, from + keep), [{ text: ctx.t('frame.more', { n: body.length - from - keep, arrow: GLYPHS.structure.behind }), dim: true }] as Row]
     }
   }
   const gap: Row[] = Array.from({ length: room - shown.length }, blank)

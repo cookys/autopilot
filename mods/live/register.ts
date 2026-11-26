@@ -75,10 +75,11 @@ import { collapsedRowMark, initialBandCollapsed, toggleBand, toggleFold, type Ba
 import type { Card } from './shell'
 import type { LeftItem } from './shell'
 import type { FleetLaneSum, RoomRow } from './shell'
-import { focusAnchorKey, Pane, noteInputKey, resetNoteInputs } from './pane'
+import { focusAnchorKey, Pane, noteInputKey, resetNoteInputs, SCROLL_PAGES } from './pane'
 import { routeKey } from './pages/keys'
 import { PANE_COLS, wideNext } from './wide/geometry'
-import { WIDE_TABS, wideBand, wideStatusText } from './wide/band'
+import { WIDE_TABS, listRowText, wideBand, wideStatusText } from './wide/band'
+import type { WideListRow } from './wide/band'
 import { wideCrossNote, wideDecide } from './wide/decide'
 import type { WideCard, WideDecideInput, WideDecideOverflow } from './wide/decide'
 import { WideBandTree } from './wide/tree'
@@ -86,7 +87,7 @@ import type { PaneModel } from './wide/pane'
 import { wideNow } from './wide/now'
 import { wideDispatch } from './wide/dispatch'
 import { wideReview } from './wide/review'
-import { METER_MAX_BYTES, METER_PACK_DIR, meteringRows, parseMeterPack } from './pages/metering'
+import { METER_MAX_BYTES, METER_PACK_DIR, meteringPaneBlock, meteringWideRows, parseMeterPack } from './pages/metering'
 import type { MeterPack } from './pages/metering'
 import { wideSpend } from './wide/spend'
 import { wideHygiene } from './wide/hygiene'
@@ -208,8 +209,8 @@ export function v74FocusCursor(cursor: number, element: unknown): { kind: 'curso
 // ui.scroll. On the 待決/待辦 pages a person's move to another tab is the arrow: the ring stays and the
 // cursor moves. Tab order is the strip's (V74_PAGE_ORDER); a jump of more than one is the wrap.
 const V74_PAGE_ORDER = ['now', 'decide', 'dispatch', 'review', 'spend', 'hygiene', 'fleet', 'todo', 'help']
-export function v74TabStep(page: string, element: unknown, origin: unknown): { kind: 'move'; by: 1 | -1 } | null {
-  if ((page !== 'decide' && page !== 'todo') || typeof element !== 'string') return null
+export function v74TabStep(page: string, element: unknown, origin: unknown, anyPage = false): { kind: 'move'; by: 1 | -1 } | null {
+  if ((!anyPage && page !== 'decide' && page !== 'todo') || typeof element !== 'string') return null
   if ((origin as { kind?: unknown } | undefined)?.kind !== 'person') return null
   const m = /^tab:(\w+)(?::\d+)?$/.exec(element)
   if (m === null || m[1] === page) return null
@@ -1737,6 +1738,17 @@ async function paneTabPress($: EngineInterface, t: PaneTab, legacy = false): Pro
 
 // ---- the framed pages' own state (pages/*.ts are pure): focus + fold per page id, and the 待決 page's nav (cursor, fold, note text) beside the DECIDE atom ----
 let pageView: Record<string, { focus: number; expanded: boolean; folded?: boolean }> = {}
+// the body offset of a cut page (pane.tsx SCROLL_PAGES), one per page id, and the last draw's window (written by the frame: where it stands, the largest legal offset, the rows it shows)
+const pageScroll: Record<string, number> = {}
+let bodyWin: { page: string; from: number; max: number; room: number } = { page: '', from: 0, max: 0, room: 0 }
+const bodyCut = (page: string): boolean => SCROLL_PAGES.has(page) && bodyWin.page === page && bodyWin.max > 0
+// move the cut body of the current page by `by` rows (clamped to [0, max]); false when this page does not scroll or nothing is cut, so the caller keeps its own meaning for the key
+function scrollBody($: EngineInterface, by: number): boolean {
+  if (!SCROLL_PAGES.has(panePage) || bodyWin.page !== panePage || bodyWin.max <= 0 || by === 0) return false
+  pageScroll[panePage] = Math.min(bodyWin.max, Math.max(0, bodyWin.from + by))
+  void $.ui.invalidate('ui.render')
+  return true
+}
 // how many rows of a page can hold the focus (▸): fleet shows FOLD_AT lines until unfolded, quota every pool, spend its two meter rows; the clamp for j/k and fold
 const focusRows = (id: string, expanded: boolean): number => {
   if (id === 'fleet') { const n = consoleSnap?.lines === null || consoleSnap === null ? 0 : fleetRowsOf(consoleSnap.lines).length; return expanded ? n : Math.min(FOLD_AT, n) }
@@ -1762,7 +1774,7 @@ let bandWide = false
 let wideHostOpen = false
 export let wideDecideOverflow: WideDecideOverflow = { steps: [], list: [] } // rows the wide 待決 page could not fit: P2's pane draws them (steps after the question, the list's tail)
 // console v5 wide pane (wide/pane.ts): what the band's last draw could not fit (band.ts overflow) and whether `e` has opened the context; the pane draws them
-let wideOverflow: { list: string[]; reply: string[] } = { list: [], reply: [] }
+let wideOverflow: { list: WideListRow[]; reply: string[] } = { list: [], reply: [] }
 let widePaneCtxOpen = false
 let wideSummaries: (string | null)[] = Array.from({ length: 9 }, () => null) // the last wide band draw's per-page summaries (P5b)
 let wideHist: { title: string; rows: string[] } | null = null // the shown page's history block from the last wide band draw
@@ -1783,9 +1795,10 @@ function widePaneModel(): PaneModel {
   if (todoSum !== null) summaries[7] = todoSum
   summaries[8] = wideHelp(pageView.help?.focus ?? 0).summary
   return {
-    page, tabs: WIDE_TABS, moved: page === 2 ? wideDecideOverflow.steps : wideOverflow.reply, more: page === 2 ? wideDecideOverflow.list : wideOverflow.list, pin: [], ctx: [], ctxFold: false, ctxOpen: widePaneCtxOpen,
+    page, tabs: WIDE_TABS, moved: page === 2 ? wideDecideOverflow.steps : wideOverflow.reply, more: page === 2 ? wideDecideOverflow.list : wideOverflow.list.map(listRowText), pin: [], ctx: [], ctxFold: false, ctxOpen: widePaneCtxOpen,
     lanes: rows === null ? null : rows.slice(0, 12).map(r => ({ state: mark(r.sid), name: r.line.label, speed: r.word, task: r.line.lead_display ?? '' })),
     lanesHead: rows === null ? '' : `艦隊 · ${rows.length} 條產線`,
+    ...(page === 5 ? { meter: (b => ({ head: b.head, rows: b.rows.map(x => ({ text: x.text, role: x.warn ? 'action' as const : x.broken ? 'err' as const : 'text' as const })) }))(meteringPaneBlock(meterPack, 0, tr)) } : {}),
     hist: wideHist, events: null, summaries,
   }
 }
@@ -2003,6 +2016,8 @@ async function frameKeyBody($: EngineInterface, k: KeyAction): Promise<void> {
           if (at >= 0 && at < c.options.length) await update($, V74_NAV, () => ({ ...nav, picks: { ...nav.picks, [c.id]: at } }))
         }
       }
+    } else if ((k.kind === 'move' || k.kind === 'scroll') && scrollBody($, k.by * (k.kind === 'scroll' && k.page ? Math.max(1, bodyWin.room - 1) : 1))) {
+      return // a cut body scrolls (j / k / arrows / PgUp / PgDn); scrollBody asked for the redraw
     } else {
       const v = pageView[id] ?? (id === 'review' ? DEFAULT_REVIEW_VIEW : { focus: 0, expanded: false })
       const last = Math.max(0, focusRows(id, v.expanded) - 1)
@@ -2462,7 +2477,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
         const pageNo = Math.max(1, (V74_PAGES as readonly string[]).indexOf(panePage) + 1)
         const fleetOthers = pageNo === 7 ? await readOthers($, bandNow) : null
         const status = wideStatusText({ verdict: '進行中', running: fleetCounts?.running ?? null, failed: oneRowInput.line.failed, stalled: fleetCounts?.stuck ?? null, pending: pendCount, act: durableAwaiting.length, tps: lastStep?.tps ?? null, spark: sparkBars, labels: { fleet: '艦隊', pending: '待決', act: '動手' } })
-        let list: string[] = []
+        let list: WideListRow[] = []
         let reply: string[] = remText !== null ? [remText] : []
         let stepTitle = ''
         let hints = ''
@@ -2551,7 +2566,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
                 seatUsage: [],
                 stale: liveStale,
                 missing: consoleSnap === null && snap === null,
-                meterLines: meteringRows(meterPack, bandNow, t).map(r => r.map(s => s.text).join('')),
+                meterLines: meteringWideRows(meterPack, bandNow, t).map(r => (r.warn ? { text: r.text, role: 'action' as const } : r.text)),
               })
             case 6:
               return wideHygiene({ residue: snap?.detail.residue ?? null, loadSource: snap?.detail.load_source ?? null, focus: pageView.hygiene?.focus ?? 0, stale: liveStale })
@@ -2891,8 +2906,14 @@ export function registerLive(on: Parameters<Register>[0]): void {
     }
     // r8-3: the border word follows the keyboard. It only re-renders when the value really flips, and one tick later (two microtasks, as ringToTab does), never inside the focus event:
     // a render there remounts the tab Buttons and the host's focus lands on a card Button, which wrote the cursor back (r8-1 gate, step 22).
+    const keysHeldBefore = v74KeysHeld // false: this focus event is the one that takes the keyboard (ctrl+x Tab)
     if (v74Open) { const was = v74KeysHeld; v74KeysHeld = v74KeysHeldNext(was, { kind: 'focus', named, origin: (raw as { origin?: unknown }).origin }); if (was !== v74KeysHeld) void renderLater($) }
-    const step = decideLocal.textMode || bandLegacy || !v74Open ? null : v74TabStep(panePage, named, (raw as { origin?: unknown }).origin)
+    const step = decideLocal.textMode || bandLegacy || !v74Open ? null : v74TabStep(panePage, named, (raw as { origin?: unknown }).origin, bodyCut(panePage))
+    if (step !== null && panePage !== 'decide' && panePage !== 'todo') { // a cut body (spend, now, ...): an arrow walks the ring along the strip and scrolls the body; the ring stays on this page's tab
+      if (keysHeldBefore) scrollBody($, step.by) // the focus event that takes the keyboard (ctrl+x Tab) lands on some tab: that is the grab, not an arrow; every later arrow scrolls
+      void ringToTab($, panePage)
+      return {}
+    }
     if (step !== null) {
       if (panePage === 'decide') {
         scrollPendingPane($, step.by)
@@ -2917,6 +2938,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       scrollPendingPane($, ev.by)
       return {}
     }
+    if (v74Open && !bandLegacy && !decideLocal.textMode && typeof ev.by === 'number' && scrollBody($, ev.by)) return {}
     const arrow = v74HostScroll(ev, panePage, v74Open, bandLegacy, decideLocal.textMode)
     if (arrow !== null) { void frameKey($, arrow); return {} }
     return next(e)
@@ -2928,6 +2950,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       scrollPendingPane($, e.by)
       return {}
     }
+    if (v74Open && !bandLegacy && !decideLocal.textMode && typeof e.by === 'number' && scrollBody($, e.by)) return {} // a cut page body scrolls (arrows, wheel, PgUp / PgDn)
     const arrow = v74HostScroll(e, panePage, v74Open, bandLegacy, decideLocal.textMode)
     if (arrow !== null) { void frameKey($, arrow); return {} }
     const model = shellOn && shellMenu === 'd' ? bandModel('decide') : barTab === null ? undefined : bandScroll[barTab]
@@ -2947,6 +2970,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
   // All live and console tabs share the bottom window; scroll keys move its
   // offset. A host without a frame still receives the event through next(e).
   on('ui.scroll', { component: 'Pane', requestId: PANE_ID }, ($, e, next) => {
+    if (typeof e.by === 'number' && scrollBody($, e.by)) return {}
     return scrollHook(decideScroll, e, next, () => { void $.ui.invalidate('ui.render') })
   })
 }
@@ -2980,7 +3004,7 @@ async function paneTree($: EngineInterface, e: { props: any; surface: string }, 
     folded, boxRows !== null ? null : e.props.scroll ?? null,
     { state: decideState, batch: decideBatch, now: decideNow, inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } },
     decideScroll, fleet, null,
-    legacy ? null : { pages: [...PAGES, ...EXTRA_PAGES], pageId: panePage, ...(!legacy ? { pendingScroll } : {}), onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, meter: meterPack, others: fleet?.others ?? null, nowMs: frameNow, rows: boxRows ?? frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), ...(boxMaxRows === null ? {} : { maxRows: boxMaxRows }), bodyColumns: decideCols, ...(boxRows === null ? {} : { v74Box: true as const }), ...(askRows !== undefined && askRows.length > 0 ? { askRows } : {}), view: pageView, ...(bandWide && boxRows === null ? { wide: { model: widePaneModel(), onKey: (k: string) => { void paneKey($, k) }, onPage: (n: number) => { void panePagePress($, V74_PAGES[n - 1] as PageId) } } } : {}), decide: { ...decideState, ...decideLocal, layoutMode: decideLayout }, v74, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { void v74Keylog($, { handler: 'input', component: 'Input', element: 'v74-note', len: [...v].length, page: panePage, cursor: decideLocal.cursor, focusOwner: 'v74-note', noteOpen: true }); decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(pageNeedsSteps(panePage) ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}), ...(panePage === 'room' ? { room: parseRoom((await readRoomText($)) ?? '') } : {}) },
+    legacy ? null : { pages: [...PAGES, ...EXTRA_PAGES], pageId: panePage, ...(!legacy ? { pendingScroll } : {}), onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, meter: meterPack, others: fleet?.others ?? null, nowMs: frameNow, rows: boxRows ?? frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), ...((pageScroll[panePage] ?? 0) > 0 ? { scroll: pageScroll[panePage] } : {}), onScroll: (to: number) => { pageScroll[panePage] = to; void $.ui.invalidate('ui.render') }, onWindow: (page: string, w: { from: number; max: number; room: number }) => { bodyWin = { page, ...w } }, ...(boxMaxRows === null ? {} : { maxRows: boxMaxRows }), bodyColumns: decideCols, ...(boxRows === null ? {} : { v74Box: true as const }), ...(askRows !== undefined && askRows.length > 0 ? { askRows } : {}), view: pageView, ...(bandWide && boxRows === null ? { wide: { model: widePaneModel(), onKey: (k: string) => { void paneKey($, k) }, onPage: (n: number) => { void panePagePress($, V74_PAGES[n - 1] as PageId) } } } : {}), decide: { ...decideState, ...decideLocal, layoutMode: decideLayout }, v74, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { void v74Keylog($, { handler: 'input', component: 'Input', element: 'v74-note', len: [...v].length, page: panePage, cursor: decideLocal.cursor, focusOwner: 'v74-note', noteOpen: true }); decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(pageNeedsSteps(panePage) ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}), ...(panePage === 'room' ? { room: parseRoom((await readRoomText($)) ?? '') } : {}) },
   )
   if (boxRows === null) await probePane($, e as never, tree)
   return tree

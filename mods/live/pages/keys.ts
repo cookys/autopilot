@@ -40,6 +40,7 @@ export function routeKey(key: string, st: KeyState): KeyAction {
   const target = /^[1-9]$/.test(key) ? pageForDigit(key) : key === PET_KEY ? 'pet' : undefined
   if (target !== undefined) return target === st.page ? { kind: 'none' } : { kind: 'page', to: target }
   if (/^[0-9]$/.test(key)) return { kind: 'none' }
+  if (key === 'PageUp' || key === 'PageDown') return { kind: 'scroll', by: key === 'PageUp' ? -1 : 1, page: true } // a cut body scrolls one screen (frameKey ignores it on a page that is not cut)
   if (key === 'j' || key === 'ArrowDown') return { kind: 'move', by: 1 }
   if (key === 'k' || key === 'ArrowUp') return { kind: 'move', by: -1 }
   if (key === 'z') return { kind: 'fold' }

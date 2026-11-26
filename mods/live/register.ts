@@ -86,6 +86,8 @@ import type { PaneModel } from './wide/pane'
 import { wideNow } from './wide/now'
 import { wideDispatch } from './wide/dispatch'
 import { wideReview } from './wide/review'
+import { METER_MAX_BYTES, METER_PACK_DIR, meteringRows, parseMeterPack } from './pages/metering'
+import type { MeterPack } from './pages/metering'
 import { wideSpend } from './wide/spend'
 import { wideHygiene } from './wide/hygiene'
 import { wideFleet } from './wide/fleet'
@@ -350,6 +352,7 @@ export function liveTick($: EngineInterface): Promise<void> {
 async function fleetTick($: EngineInterface): Promise<void> {
   const nowMs = await $.clock.now()
   await consoleTick($).catch(() => undefined) // the console mode and its snapshot (below); the tick is the only place either is read
+  await readMeterPack($).catch(() => { meterPack = null })
   // NOT gated by the console mode: the framed pages (現況 · 待決 · 艦隊 · 額度 · 花費 ...) are drawn in every session and read the seat quota row and the console snapshot,
   // so the polls run whether the pane is open or not and whatever .claude/console.json says (pane-poll.test.ts holds this)
   void seatQuota.refresh(argv => $.process.run([...argv], { timeoutMs: SEATS_TIMEOUT_MS }), nowMs).then(ran => { if (ran) void $.ui.invalidate('ui.render') }, () => undefined) // the 現況 page's seat quota row: 60 s cache inside the feed, never awaited by a render
@@ -413,6 +416,7 @@ let decideLastId: string | null = null // the card answered last from the shell 
 let consoleOn = false
 let consoleTab: ConsoleTab = 'command'
 let consoleSnap: ConsoleSnapshot | null = null
+let meterPack: MeterPack | null = null
 let consoleCwd: string | null = null // the cwd the mode was last read for; a different cwd (a new session in another repo) reads it again at the next tick
 let consoleReadMs = -Infinity
 let consoleIngestFrom: string | null = null
@@ -511,6 +515,30 @@ const jobDates = new Map<string, string>()
 // earliest bound progress receipt per root: receipts only accumulate, so a found start never moves earlier
 const receiptStarts = new Map<string, number>()
 
+async function readMeterPack($: EngineInterface): Promise<void> {
+  try {
+    const raw = await $.env.get('AUTOPILOT_R5_FEEDBACK_DIR').catch(() => undefined)
+    const over = typeof raw === 'string' ? raw.trim() : ''
+    const dir = (over !== '' ? over : METER_PACK_DIR).replace(/\/$/, '')
+    const entries = await $.fs.list(dir)
+    const files = entries.filter(e => e.kind === 'file' && e.name.endsWith('.json'))
+    files.sort((a, b) => {
+      const am = typeof (a as { mtimeMs?: number }).mtimeMs === 'number' ? (a as { mtimeMs: number }).mtimeMs : 0
+      const bm = typeof (b as { mtimeMs?: number }).mtimeMs === 'number' ? (b as { mtimeMs: number }).mtimeMs : 0
+      if (am !== bm) return am - bm
+      return a.name < b.name ? -1 : a.name > b.name ? 1 : 0
+    })
+    const best = files[files.length - 1]
+    if (best === undefined) { meterPack = null; return }
+    const path = dir + '/' + best.name
+    const st = await $.fs.stat(path)
+    if (st.kind !== 'file' || st.isLink || !(st.size <= METER_MAX_BYTES)) { meterPack = null; return }
+    const text = await readText($, path)
+    meterPack = text === null ? null : parseMeterPack(text)
+  } catch (_e) {
+    meterPack = null
+  }
+}
 async function readText($: EngineInterface, path: string): Promise<string | null> {
   try {
     const v = await $.fs.read(path)
@@ -2523,6 +2551,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
                 seatUsage: [],
                 stale: liveStale,
                 missing: consoleSnap === null && snap === null,
+                meterLines: meteringRows(meterPack, bandNow, t).map(r => r.map(s => s.text).join('')),
               })
             case 6:
               return wideHygiene({ residue: snap?.detail.residue ?? null, loadSource: snap?.detail.load_source ?? null, focus: pageView.hygiene?.focus ?? 0, stale: liveStale })
@@ -2951,7 +2980,7 @@ async function paneTree($: EngineInterface, e: { props: any; surface: string }, 
     folded, boxRows !== null ? null : e.props.scroll ?? null,
     { state: decideState, batch: decideBatch, now: decideNow, inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } },
     decideScroll, fleet, null,
-    legacy ? null : { pages: [...PAGES, ...EXTRA_PAGES], pageId: panePage, ...(!legacy ? { pendingScroll } : {}), onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, others: fleet?.others ?? null, nowMs: frameNow, rows: boxRows ?? frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), ...(boxMaxRows === null ? {} : { maxRows: boxMaxRows }), bodyColumns: decideCols, ...(boxRows === null ? {} : { v74Box: true as const }), ...(askRows !== undefined && askRows.length > 0 ? { askRows } : {}), view: pageView, ...(bandWide && boxRows === null ? { wide: { model: widePaneModel(), onKey: (k: string) => { void paneKey($, k) }, onPage: (n: number) => { void panePagePress($, V74_PAGES[n - 1] as PageId) } } } : {}), decide: { ...decideState, ...decideLocal, layoutMode: decideLayout }, v74, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { void v74Keylog($, { handler: 'input', component: 'Input', element: 'v74-note', len: [...v].length, page: panePage, cursor: decideLocal.cursor, focusOwner: 'v74-note', noteOpen: true }); decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(pageNeedsSteps(panePage) ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}), ...(panePage === 'room' ? { room: parseRoom((await readRoomText($)) ?? '') } : {}) },
+    legacy ? null : { pages: [...PAGES, ...EXTRA_PAGES], pageId: panePage, ...(!legacy ? { pendingScroll } : {}), onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, meter: meterPack, others: fleet?.others ?? null, nowMs: frameNow, rows: boxRows ?? frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), ...(boxMaxRows === null ? {} : { maxRows: boxMaxRows }), bodyColumns: decideCols, ...(boxRows === null ? {} : { v74Box: true as const }), ...(askRows !== undefined && askRows.length > 0 ? { askRows } : {}), view: pageView, ...(bandWide && boxRows === null ? { wide: { model: widePaneModel(), onKey: (k: string) => { void paneKey($, k) }, onPage: (n: number) => { void panePagePress($, V74_PAGES[n - 1] as PageId) } } } : {}), decide: { ...decideState, ...decideLocal, layoutMode: decideLayout }, v74, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { void v74Keylog($, { handler: 'input', component: 'Input', element: 'v74-note', len: [...v].length, page: panePage, cursor: decideLocal.cursor, focusOwner: 'v74-note', noteOpen: true }); decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(pageNeedsSteps(panePage) ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}), ...(panePage === 'room' ? { room: parseRoom((await readRoomText($)) ?? '') } : {}) },
   )
   if (boxRows === null) await probePane($, e as never, tree)
   return tree

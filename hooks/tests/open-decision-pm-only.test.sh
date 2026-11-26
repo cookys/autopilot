@@ -3,7 +3,7 @@ set -eu
 ROOT=$(git rev-parse --show-toplevel)
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
-export AUTOPILOT_LIVE_DIR="$T/live" HOME="$T/home" AUTOPILOT_CARD_NOTIFY=off AUTOPILOT_FLEET_BIN="$T/fleet" FLEET_LOG="$T/send" FLEET_SEAT=lane/host/member
+export AUTOPILOT_LIVE_DIR="$T/live" HOME="$T/home" AUTOPILOT_CARD_NOTIFY=off AUTOPILOT_FLEET_BIN="$T/fleet" FLEET_LOG="$T/send" FLEET_ADDRESS=lane/host/member
 mkdir -p "$HOME" "$T/repo"
 git -C "$T/repo" init -q
 cat > "$T/fleet" <<'FLEET'
@@ -20,7 +20,7 @@ test "$(node "$ROOT/scripts/open-decision.js" list --cwd "$T/repo" --json 2>/dev
 node "$ROOT/scripts/open-decision.js" open --cwd "$T/repo" --category goal --executor lane/host/member --kind step --question 'Do the step' --json > "$T/step" 2> "$T/err"
 node -e 'const x=JSON.parse(require("fs").readFileSync(process.argv[1])); if(!x.forwarded_to_pm) process.exit(1)' "$T/step"
 grep -q 'kind: step' "$FLEET_LOG"
-export FLEET_SEAT=cookys/aimax395/pm--claude
+export FLEET_ADDRESS=cookys/aimax395/pm--claude
 rm "$FLEET_LOG"
 open pm-question > "$T/out" 2> "$T/err"
 test ! -e "$FLEET_LOG"
@@ -28,11 +28,11 @@ mv "$T/repo" "$T/repo-pm"
 mkdir "$T/repo"
 git -C "$T/repo" init -q
 export AUTOPILOT_LIVE_DIR="$T/live2"
-export FLEET_FAIL_WHO=1
+unset FLEET_ADDRESS
+rm -f "$FLEET_LOG"
 open unknown-question > "$T/out" 2> "$T/err" || test "$?" = 5
-grep -qi warn "$T/err"
-unset FLEET_FAIL_WHO
-export FLEET_SEAT=lane/host/member FLEET_FAIL_SEND=1
+test ! -e "$FLEET_LOG"
+export FLEET_ADDRESS=lane/host/member FLEET_FAIL_SEND=1
 set +e
 open fail-question > "$T/out" 2> "$T/err"
 rc=$?

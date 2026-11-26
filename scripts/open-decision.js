@@ -1293,10 +1293,14 @@ function main(argv) {
   if (ex['from-request'] !== undefined && !/^r-[0-9a-f]{8}$/.test(String(ex['from-request']))) return usage('--from-request needs an id r- plus 8 hex');
   const fromRequestAddr = ex['from-request'] !== undefined ? fleetWhoami() : null;
   // Lane seats send the request to PM; only PM opens an operator card.
-  const opener = fleetWhoami();
+  // The seat is the session's own fleet address (hooks/lib/ask-guard.js resolveSeat: FLEET_ADDRESS / AUTOPILOT_FLEET_ADDRESS, else
+  // `fleet whoami --session`); no seat = the operator's own session or a host without fleet: open as before.
+  const askGuard = require('../hooks/lib/ask-guard.js');
+  const opener = askGuard.seatAddressOf(process.env);
   const pmSeat = process.env.AUTOPILOT_PM_SEAT || 'cookys/aimax395/pm--claude';
-  if (!opener) process.stderr.write('open-decision: warning: fleet whoami unavailable; opening as before\n');
-  if (opener && opener !== pmSeat) {
+  let pmConsole = false;
+  try { pmConsole = require('../hooks/_shared/pm-console.js').isPmConsole(ex.cwd || process.cwd()); } catch (_e) { pmConsole = false; }
+  if (opener && askGuard.memberOf(opener) !== 'pm--claude' && !pmConsole) {
     const message = ['[操作員決定]', `question: ${questionText}`, `background: ${backgroundText || ''}`,
       `options: ${options ? options.map((o) => `${o.label}::${o.description}`).join(' | ') : ''}`,
       `recommendation: ${args.recommendation || ''}`, `why: ${args.why || ''}`, `category: ${ex.category}`,
@@ -1721,10 +1725,10 @@ function fleetWhoami(timeoutMs = 5000) {
   try {
     const j = JSON.parse(raw);
     const addr = j && (j.address || j.addr || j.identity || j.me);
-    return typeof addr === 'string' && require('./lib/fleet-decision.js').isAddress(addr.trim()) ? addr.trim() : null;
+    if (typeof addr === 'string' && addr.trim()) return addr.trim();
   } catch (_e) { /* plain text */ }
   const first = raw.split(/\r?\n/)[0].trim();
-  return require('./lib/fleet-decision.js').isAddress(first) ? first : null;
+  return first || null;
 }
 
 function sendFleet(to, text, timeoutMs = SEND_TIMEOUT_MS) {

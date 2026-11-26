@@ -1458,6 +1458,22 @@
       "type": "number"
     },
     {
+      "name": "subagent_budget.lane_window_minutes",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": 360,
+      "readers": [
+        "hooks/subagent-budget.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_SUBAGENT_BUDGET_LANE_WINDOW_MINUTES"
+      ],
+      "summary": "Minutes of subagent start time included in lane dispatch and turn totals. 0 counts every transcript. A subagent with no start timestamp is omitted while the window is on.",
+      "type": "number"
+    },
+    {
       "name": "subagent_budget.concurrent_advise_max",
       "kind": "config_key",
       "audience": "user",
@@ -6193,6 +6209,21 @@
         "subagent_budget.runaway_multiple"
       ],
       "summary": "Environment override of subagent_budget.runaway_multiple."
+    },
+    {
+      "name": "AUTOPILOT_SUBAGENT_BUDGET_LANE_WINDOW_MINUTES",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/subagent-budget.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "subagent_budget.lane_window_minutes"
+      ],
+      "summary": "Environment override of subagent_budget.lane_window_minutes."
     },
     {
       "name": "AUTOPILOT_SUBAGENT_BUDGET_LANE_DISPATCH_MAX",

@@ -30,9 +30,10 @@
  * RUNAWAY CEILING (warn mode): a ceiling hit whose actual count is >= runaway_multiple (default 3, 0 = off) times its limit
  * is denied even in warn mode, a `runaway_block` row goes to the decision ledger, and NO owner card is opened (the operator
  * answers such cards with "you decide", so they only interrupt). `Budget-Ack:` still passes it. Remind mode is opt-in and
- * unchanged: any ceiling denies and opens one owner card. Lane totals use every
- * transcript whatever its age; only the hour total filters, by turn timestamp (now-3600000 < ts; a later ts counts; a
- * missing ts counts toward lane totals only).
+ * unchanged: any ceiling denies and opens one owner card. Lane totals count a subagent only when its start
+ * timestamp (earliest timestamp in the transcript) is inside lane_window_minutes (default 360; 0 counts every
+ * transcript, the old behaviour). A subagent with no timestamp is omitted while the window is on. The hour total
+ * still filters on its own, by turn timestamp (now-3600000 < ts; a later ts counts; a missing ts is not an hour turn).
  *
  * ACK: `Budget-Ack: <reason>` (>= 8 chars) in the first 10 lines passes a would-be deny and appends a decision-ledger row.
  * The first deny per (session, lane-or-root) opens one owner panel card (pointer file dedup); later denies open none.
@@ -41,7 +42,7 @@
  * TICKET CEILING (hard, per Fleet-Task): the brief's `Fleet-Task: <26-char ULID>` line (scripts/lib/fleet-task-ref.js
  * findTaskId) names the ticket. Spend = the sum over this session's EARLIER subagent dispatches (the subagents dir this
  * hook reads) whose own first user message carries the same Fleet-Task, estimated exactly like the lane USD (costOf per
- * assistant turn, all turns, no hour window — like the lane totals). Budget: a `Claude-Budget: <usd>` line in THIS
+ * assistant turn, all turns, no hour window and no lane window). Budget: a `Claude-Budget: <usd>` line in THIS
  * brief, else subagent_budget.per_ticket_usd (default 5). spend >= budget denies the Agent call with a
  * Traditional-Chinese reason (the ticket's Claude budget is used up, spent/budget; report progress on the ticket;
  * dispatch cheap non-Claude engines) — regardless of mode (warn/remind both deny), no owner card, no ledger row, and
@@ -53,7 +54,8 @@
  * fail-open (main entry catches, exit 0, no stdout).
  *
  * MODES (default warn): ~/.autopilot/config.json {"subagent_budget": {"mode": "remind"|"warn"|"off", "lane_dispatch_max", "lane_turns_max",
- * "root_turns_per_hour_max", "runaway_multiple", "concurrent_advise_max"}} or the matching environment variables registered in scripts/lib/config-keys.json.
+ * "root_turns_per_hour_max", "runaway_multiple", "lane_window_minutes", "concurrent_advise_max"}} or the matching environment variables registered in scripts/lib/config-keys.json.
+ * lane_window_minutes (default 360, env AUTOPILOT_SUBAGENT_BUDGET_LANE_WINDOW_MINUTES, 0 = count every transcript) is how far back a subagent start counts toward lane dispatches and lane turns.
  * concurrent_advise_max (default 3, env AUTOPILOT_SUBAGENT_BUDGET_CONCURRENT_ADVISE_MAX, 0 off) appends one advisory
  * sentence after an allow. It never denies. AUTOPILOT_AGENT_ACTIVITY=off skips it. A thrown reader fails open.
  * Clock: AUTOPILOT_SUBAGENT_BUDGET_NOW_MS, honoured only with AUTOPILOT_TEST_ALLOW_SUBAGENT_BUDGET_CLOCK=1 (tests). FAIL-OPEN: no transcript_path, an unreadable or corrupt transcript, or any
@@ -66,7 +68,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const HOUR_MS = 3600000;
-const DEFAULTS = { mode: 'warn', lane_dispatch_max: 4, lane_turns_max: 300, root_turns_per_hour_max: 400, runaway_multiple: 3, concurrent_advise_max: 3, per_ticket_usd: 5 };
+const DEFAULTS = { mode: 'warn', lane_dispatch_max: 4, lane_turns_max: 300, root_turns_per_hour_max: 400, runaway_multiple: 3, lane_window_minutes: 360, concurrent_advise_max: 3, per_ticket_usd: 5 };
 const { LANE_RE, headerDenialSuffix } = require('./lib/brief-header-template.js');
 const { findTaskId } = require('../scripts/lib/fleet-task-ref.js');
 const { gateHint } = require('./lib/gate-hint.js');
@@ -74,8 +76,8 @@ const REVIEWER_RE = /^Role:[ \t]*reviewer[ \t]*$/;
 const ACK_RE = /^Budget-Ack:[ \t]*(.*)$/;
 const CLAUDE_BUDGET_RE = /^Claude-Budget:[ \t]*(.+)$/;
 const ACK_MIN_REASON = 8;
-// v3: entries gained `ticket` (the brief's Fleet-Task id); v2 caches have no field => cold re-parse.
-const CACHE_SCHEMA = 'autopilot.subagent-budget-cache/3';
+// v4: entries gained `startMs` (earliest transcript timestamp) for the lane window; older caches cold-parse.
+const CACHE_SCHEMA = 'autopilot.subagent-budget-cache/4';
 const MAX_ANCESTOR_DEPTH = 8;
 // BL-0209 / panel card d-53cf611a (decided): a nested (spawnDepth >= 2) transcript occupies no lane DISPATCH slot
 // (its turns always count). tally()'s fourth parameter overrides this for tests.
@@ -134,6 +136,9 @@ function loadConfig() {
   const runEnv = nonNegInt(process.env.AUTOPILOT_SUBAGENT_BUDGET_RUNAWAY_MULTIPLE);
   const runFile = nonNegInt(file.runaway_multiple);
   cfg.runaway_multiple = runEnv !== null ? runEnv : (runFile !== null ? runFile : DEFAULTS.runaway_multiple);
+  const winEnv = nonNegInt(process.env.AUTOPILOT_SUBAGENT_BUDGET_LANE_WINDOW_MINUTES);
+  const winFile = nonNegInt(file.lane_window_minutes);
+  cfg.lane_window_minutes = winEnv !== null ? winEnv : (winFile !== null ? winFile : DEFAULTS.lane_window_minutes);
   const adviseEnv = nonNegInt(process.env.AUTOPILOT_SUBAGENT_BUDGET_CONCURRENT_ADVISE_MAX);
   const adviseFile = nonNegInt(file.concurrent_advise_max);
   cfg.concurrent_advise_max = adviseEnv !== null ? adviseEnv : (adviseFile !== null ? adviseFile : DEFAULTS.concurrent_advise_max);
@@ -320,9 +325,18 @@ function parseTranscript(file, metaFile) {
   for (const turn of turns) {
     t.push(Number.isFinite(turn.ts) ? turn.ts : null, costOf(turn));
   }
+  let startMs = null;
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    let rec;
+    try { rec = JSON.parse(line); } catch { continue; }
+    if (!rec || rec.timestamp === undefined || rec.timestamp === null) continue;
+    const ts = typeof rec.timestamp === 'number' ? rec.timestamp : Date.parse(rec.timestamp);
+    if (Number.isFinite(ts) && (startMs === null || ts < startMs)) startMs = ts;
+  }
   let ticket = null;
   try { ticket = findTaskId(head); } catch { ticket = null; }
-  return { briefLane, descLane, parent, depth, reviewer: isReviewer(head), ticket, n: turns.length, t };
+  return { briefLane, descLane, parent, depth, reviewer: isReviewer(head), ticket, n: turns.length, t, startMs };
 }
 
 function cacheFile(sessionId) {
@@ -526,14 +540,17 @@ function withLanes(entries) {
 
 // ---- counting ------------------------------------------------------------------------------------------------------
 
-function tally(entries, lane, now, countNested = COUNT_NESTED_DISPATCHES, ticket = null) {
+function tally(entries, lane, now, countNested = COUNT_NESTED_DISPATCHES, ticket = null, windowMinutes = DEFAULTS.lane_window_minutes) {
   const floor = now - HOUR_MS;
+  const windowOn = windowMinutes > 0;
+  const laneFloor = windowOn ? now - windowMinutes * 60 * 1000 : null;
   const lanes = new Map();
   let hourTurns = 0;
   let hourUsd = 0;
   let ticketUsd = 0;
   for (const e of Object.values(entries)) {
-    if (e.lane) {
+    const inLaneWindow = !windowOn || (typeof e.startMs === 'number' && e.startMs > laneFloor);
+    if (e.lane && inLaneWindow) {
       const l = lanes.get(e.lane) || { dispatches: 0, turns: 0 };
       if (!e.reviewer && (countNested || !(e.depth >= 2))) l.dispatches += 1;
       l.turns += e.n;
@@ -711,7 +728,7 @@ function run(payload) {
   // lane-less (root total only), so a missing Lane: is never billed to, or carded under, a description lane.
   if (!lane && !needLane) lane = laneFromDescription(input.description);
   const reviewer = isReviewer(brief);
-  const c = tally(entries, lane, now, COUNT_NESTED_DISPATCHES, ticket);
+  const c = tally(entries, lane, now, COUNT_NESTED_DISPATCHES, ticket, cfg.lane_window_minutes);
 
   // Per-ticket Claude budget ceiling (hard deny regardless of mode, no owner card, no Budget-Ack bypass; fail-open on error).
   let ticketAdvisory = '';

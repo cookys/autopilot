@@ -97,16 +97,16 @@ mk s4d "$(root_spread 399 60000 | node -e 'const a=JSON.parse(require("fs").read
 expect_deny s4d 'Engine: sonnet\nLane: fresh\ngo' "" "window: 3599999 ms old is counted"
 mk s4e "$(root_spread 399 60000 | node -e 'const a=JSON.parse(require("fs").readFileSync(0,"utf8"));a.push({id:"fut",brief:["Lane: fut"],turns:1,ageMs:-5000});console.log(JSON.stringify(a))')"
 expect_deny s4e 'Engine: sonnet\nLane: fresh\ngo' "" "window: a future ts counts"
-# missing ts counts toward lane totals but not the hour
+# missing ts counts toward the hour never; with the default lane window it also skips lane totals
 mk s4f "$(root_spread 400 0 '{"noTs":true}')"
 expect_allow s4f 'Engine: sonnet\nLane: fresh\ngo' "" "no ts: not in the hour"
 mk s4g '[{"id":"n1","brief":["Lane: nots"],"turns":300,"noTs":true}]'
-expect_deny s4g 'Engine: sonnet\nLane: nots\ngo' "" "no ts: counts toward lane totals"
-# lane totals ignore age; only the hour total filters
+expect_allow s4g 'Engine: sonnet\nLane: nots\ngo' "" "no ts: not counted in lane totals while the window is on"
+# default lane window (360 min) drops starts older than 6 hours; only the hour total uses the 60 min filter
 mk s5a "$(same_lane 4 old '{"ageMs":172800000,"mtimeAgeMs":172800000}')"
-expect_deny s5a 'Engine: sonnet\nLane: old\ngo' "" "old dispatches still count toward the lane"
+expect_allow s5a 'Engine: sonnet\nLane: old\ngo' "" "dispatches older than the lane window do not count"
 mk s5b '[{"id":"o1","brief":["Lane: old2"],"turns":300,"ageMs":172800000,"mtimeAgeMs":172800000}]'
-expect_deny s5b 'Engine: sonnet\nLane: old2\ngo' "" "old lane turns still count"
+expect_allow s5b 'Engine: sonnet\nLane: old2\ngo' "" "lane turns older than the lane window do not count"
 mk s5c "$(root_spread 400 172800000 '{"mtimeAgeMs":172800000}')"
 expect_allow s5c 'Engine: sonnet\nLane: fresh\ngo' "" "old turns do not count toward the hour"
 
@@ -580,6 +580,25 @@ assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "remind opt-in: 1x
 assert_eq "$((c0 + 1))" "$(cards)" "remind opt-in: opens one owner card"
 # off stays silent
 AUTOPILOT_SUBAGENT_BUDGET_MODE=off fire w3 'Engine: sonnet\nLane: wl3\ngo'; expect_silent "off mode with a runaway count"
+
+# ---- lane window: lane totals count only starts inside lane_window_minutes (default 360). RED before the window. -----
+# 13 dispatches of one lane, starts spread from just outside 6h back to 3 days: none inside the default window.
+mk lwAllow "$(node -e 'const a=[];for(let i=0;i<13;i++){const age=21600001+Math.floor(i*(259200000-21600001)/12);a.push({id:"o"+i,brief:["Lane: lold"],turns:1,ageMs:age});}console.log(JSON.stringify(a))')"
+fire lwAllow 'Engine: sonnet\nLane: lold\ngo'
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision"' "lane window: 13 dispatches older than 6h are not denied"
+# 12 starts inside the last 6 hours still trip runaway (3 x lane_dispatch_max 4)
+mk lwBlock "$(same_lane 12 lnew '{"ageMs":60000}')"
+fire lwBlock 'Engine: sonnet\nLane: lnew\ngo'
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "lane window: 12 dispatches inside 6h are denied"
+assert_contains "$__RUN_STDOUT" "runaway" "lane window: inside-window deny is runaway"
+assert_contains "$__RUN_STDOUT" "lane_dispatch_max 12 is 3.0x its limit 4" "lane window: runaway names 12/4"
+# lane_window_minutes 0 counts every transcript again, including ones older than 6 hours
+printf '{"subagent_budget":{"lane_window_minutes":0}}' >"$AUTOPILOT_CONFIG_FILE"
+mk lwAll "$(same_lane 13 lold2 '{"ageMs":259200000}')"
+fire lwAll 'Engine: sonnet\nLane: lold2\ngo'
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "lane_window_minutes 0: all-time count denies 13 old dispatches"
+assert_contains "$__RUN_STDOUT" "runaway" "lane_window_minutes 0: the deny is runaway"
+printf '{}\n' >"$AUTOPILOT_CONFIG_FILE"
 
 # ---- Per-ticket Claude budget ceiling --------------------------------------------------------------------------------
 TICKET_UNDER="01M7ZKZ8D4511JJ451P71J73R1"

@@ -1094,5 +1094,8 @@
   "trace.dispatch_lines_head": "全艦隊產線 · {source}",
   "trace.dispatch_lines_thr": ">{limit} 分過舊",
   "trace.dispatch_lines_total": "共 {n} 條",
-  "trace.dispatch_lines_missing": "全艦隊產線 · 無來源（>{limit} 分過舊）"
+  "trace.dispatch_lines_missing": "全艦隊產線 · 無來源（>{limit} 分過舊）",
+  "addr.owner": "負責人",
+  "addr.no_owner": "未設負責人",
+  "addr.registry_down": "專案名冊讀不到"
 }

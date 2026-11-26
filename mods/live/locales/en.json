@@ -1094,5 +1094,8 @@
   "trace.dispatch_lines_head": "Fleet lines · {source}",
   "trace.dispatch_lines_thr": ">{limit}m stale",
   "trace.dispatch_lines_total": "{n} lines",
-  "trace.dispatch_lines_missing": "Fleet lines: no source (>{limit}m stale)"
+  "trace.dispatch_lines_missing": "Fleet lines: no source (>{limit}m stale)",
+  "addr.owner": "owner",
+  "addr.no_owner": "no owner set",
+  "addr.registry_down": "project registry unavailable"
 }

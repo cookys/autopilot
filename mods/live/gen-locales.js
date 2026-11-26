@@ -17,7 +17,7 @@ const fs = require('fs');
 const path = require('path');
 
 const dir = __dirname;
-const SOURCES = ['model.ts', 'tabs.ts', 'ui.ts', 'pane.tsx', 'band.tsx', 'band-onerow.ts', 'speedview.ts', 'register.ts', 'i18n.ts', 'shell.ts', 'consoletabs.ts', 'commandtab.ts', 'consolepages.ts', 'askpm.ts', 'pettab.ts', 'pages/frame.ts', 'pages/index.ts', 'pages/rows.ts', 'pages/quota-pick.ts', 'pages/quota.ts', 'pages/now.ts', 'pages/fleet.ts', 'pages/decide.ts', 'pages/review.ts', 'pages/dispatch.ts', 'pages/spend.ts', 'pages/metering.ts', 'pages/hygiene.ts', 'pages/help.ts', 'pages/room.ts'];
+const SOURCES = ['model.ts', 'tabs.ts', 'ui.ts', 'pane.tsx', 'band.tsx', 'band-onerow.ts', 'speedview.ts', 'register.ts', 'addrcomplete.ts', 'i18n.ts', 'shell.ts', 'consoletabs.ts', 'commandtab.ts', 'consolepages.ts', 'askpm.ts', 'pettab.ts', 'pages/frame.ts', 'pages/index.ts', 'pages/rows.ts', 'pages/quota-pick.ts', 'pages/quota.ts', 'pages/now.ts', 'pages/fleet.ts', 'pages/decide.ts', 'pages/review.ts', 'pages/dispatch.ts', 'pages/spend.ts', 'pages/metering.ts', 'pages/hygiene.ts', 'pages/help.ts', 'pages/room.ts'];
 // ids the code builds from a prefix (`t('tab.' + id)`, `'stage.' + node`, ...): an en id under one of these is considered used
 const DYNAMIC_PREFIXES = ['ui.state.', 'tab.', 'frame.src_', 'console.tab.', 'console.command.src.', 'stage.', 'legend.', 'residue.why.', 'verdict.', 'spend.mode_', 'reason.permission', 'reason.question'];
 const KEY_COLUMN_CELLS = 12;

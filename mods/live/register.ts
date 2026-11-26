@@ -67,6 +67,7 @@ import { consoleFleetCounts } from './pages/rows'
 import { KEEP_STEPS, petTag, serverToolMs, STEPS_SHAPE, stepRate, validSteps } from './speed'
 import type { Step } from './speed'
 import { COL_GAP, SPEED_ROWS, speedLabelParts, speedView } from './speedview'
+import { addrSuggestions, makeAddrFeed } from './addrcomplete'
 import { FLEET_SUMMARY_V, fleetSummary, fleetView, makeFleetFeed, othersView, utf8Bytes } from './fleet'
 import type { FleetSummary, FleetTask, FleetView } from './fleet'
 import type { BandPageId, BarTabId, ScrollView } from './tabs'
@@ -151,6 +152,7 @@ let panePage: PageId = 'now'
 // the Fleet tab's feed (fleet.ts): `fleet tasks --tree --json`, kicked on every tick and when the Fleet tab is drawn. The TTL inside the feed keeps the runs 30 s apart.
 // Never awaited by a render.
 const fleetFeed = makeFleetFeed()
+const addrFeed = makeAddrFeed() // B73: the prompt box's @@ / p# completion rows, answered from this cache
 const pmFeed = makePmFeed()
 const decideFeed = makeDecideFeed()
 const asksFeed = makeAsksFeed()
@@ -290,8 +292,10 @@ async function v74CtxOf($: EngineInterface, withStore = false): Promise<V74Ctx> 
 // by the state the Fleet tab draws for it, so the band reader and the tab never disagree.
 const FLEET = atom({ plugin: 'autopilot', key: 'fleet' } as const, { v: FLEET_SUMMARY_V, fetchedMs: null, error: null, capped: 0, totals: { needYou: 0, failed: 0, stuck: 0, running: 0, waiting: 0 }, lanes: [], topStuck: null } as FleetSummary)
 const fleetState = (task: FleetTask): string => stateOf('fleetTask', { state: task.state, stuck: task.stuck !== null, stale: task.stale }).id
+// the one place the mod reaches `$.process` (the allowlist test counts it): fleet CLI reads, 5 s each
+const cliRunner = ($: EngineInterface) => (argv: readonly string[]) => $.process.run(argv, { timeoutMs: 5000 })
 function kickFleet($: EngineInterface, nowMs: number): void {
-  void fleetFeed.refresh(argv => $.process.run(argv, { timeoutMs: 5000 }), nowMs).then(async ran => {
+  void fleetFeed.refresh(cliRunner($), nowMs).then(async ran => {
     if (!ran) return
     await update($, FLEET, () => fleetSummary(fleetView(fleetFeed, nowMs), fleetState))
     void $.ui.invalidate('ui.render')
@@ -2134,6 +2138,18 @@ export function registerLive(on: Parameters<Register>[0]): void {
     await openPane($)
     return {}
   })
+  // B73: `@@<q>` completes a fleet seat's full address, `p#<q>` a project's owner address. Answers from the cache only; a stale cache starts one background refresh.
+  on('prompt.autocomplete', { token: /^(@@|p#)/ }, async ($, e, next) => {
+    const base = await next(e)
+    try {
+      const nowMs = await $.clock.now()
+      const rows = addrSuggestions(e.token, addrFeed, nowMs, () => { void addrFeed.refresh(cliRunner($), nowMs).catch(() => {}) }, await resolveT($))
+      return rows === null ? base : { suggestions: [...base.suggestions, ...rows] }
+    } catch (_e) {
+      return base // completion must never break typing
+    }
+  })
+
   // /clear ends the session but no session.start follows and the timer survives it (S7): only a real exit stops it.
   on('session.end', async ($, e, next) => {
     if (e.reason !== 'clear' && timer !== undefined) {

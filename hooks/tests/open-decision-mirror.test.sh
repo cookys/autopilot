@@ -70,5 +70,12 @@ export HIPPO_SPY_LOG="$TEST_TMP/hippo-spy.log"
 FILES_ID="$(HIPPO_BIN="$TEST_TMP/hippo-spy" node -e 'const x=require(process.argv[1]).openDecision({cwd:process.argv[2],question:"Files question?"}); console.log(x.id)' "$PLUGIN/scripts/open-decision.js" "$FILES_REPO")"
 HIPPO_BIN="$TEST_TMP/hippo-spy" node "$PLUGIN/scripts/open-decision.js" close --cwd "$FILES_REPO" --id "$FILES_ID" --answer 'Files answer' >/dev/null
 assert_eq "$([ -e "$HIPPO_SPY_LOG" ] && echo called || echo untouched)" untouched 'files state makes no store call'
+# A seat whose git user.name carries a host name: without HIPPO_ACTOR the mirror must still pass the leak guard.
+printf 'patterns = [{ id = "local-test", regex = "hostxyz" }]\n' > "$HIPPO_CONFIG_DIR/leak-guard.toml"
+LEAK_REPO="$(hs_mkrepo leak store)"
+git -C "$LEAK_REPO" config user.name 'cookys hostxyz'
+env -u HIPPO_ACTOR node -e 'require(process.argv[1]).openDecision({cwd:process.argv[2],question:"Leak question?",executor:"test/test/test"})' "$PLUGIN/scripts/open-decision.js" "$LEAK_REPO" >/dev/null 2>"$TEST_TMP/leak.err"
+assert_eq "$(command grep -c 'mirror failed' "$TEST_TMP/leak.err")" 0 'host-named seat mirrors without a leak refusal'
+assert_eq "$(command grep -ho '"actor":"[^"]*"' "$LEAK_REPO"/.hippo/ops/*.jsonl | sort -u | command grep -c 'seat/open-decision')" 1 'mirror ops carry the role actor'
 hs_exit_check
 finalize_test

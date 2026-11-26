@@ -7,4 +7,6 @@ export type WidePageOut = {
   replyKeep?: number
   summary: string | null
   hist: { title: string; rows: string[] } | null
+  pin?: string[] // fixed warning rows of the pane (source missing / stale)
+  ctx?: string[] // the pane's context rows
 }

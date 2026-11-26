@@ -1744,7 +1744,7 @@ function widePaneModel(): PaneModel {
   if (cards !== null) summaries[1] = `${cards.length} 張要你選`
   const hygSum = wideHygiene({ residue: snapshot?.detail.residue ?? null, loadSource: snapshot?.detail.load_source ?? null, focus: pageView.hygiene?.focus ?? 0, stale: snapshot?.state === 'stale' }).summary
   if (hygSum !== null) summaries[5] = hygSum
-  if (counts !== null) summaries[6] = `執行 ${counts.running} · 失敗 ${counts.failed} · ${GLYPHS.state.waiting} ${counts.stuck}`
+  if (counts !== null) summaries[6] = `執行 ${counts.running} · 失敗 ${counts.failed} · 卡住 ${counts.stuck}`
   const todoSum = wideTodo({ todo: V74_TODO, cursor: decideLocal.cursor, picks: decideLocal.opt ? {} : {}, notes: {} }).summary
   if (todoSum !== null) summaries[7] = todoSum
   summaries[8] = wideHelp(pageView.help?.focus ?? 0).summary

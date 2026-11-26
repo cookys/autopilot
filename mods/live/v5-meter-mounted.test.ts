@@ -92,7 +92,7 @@ test('v5 spend page: the docked pane draws the metering block in place of the fl
   expect(all).not.toContain('艦隊 ·')
   const colour = (needle: string) => pieces(tree).find(([t]) => t.includes(needle))?.[1]
   expect(colour('4124gs  覆蓋')).toBe('remember')
-  expect(colour('c4140   覆蓋')).toBeUndefined()
+  expect(colour('c4140   覆蓋')).toBe('inactive')
 })
 
 test('v5 spend page: a missing pack draws the broken row in the pane and the band, never a count', async ($, on) => {

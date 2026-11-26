@@ -35,7 +35,7 @@ const SYNC_COMMENT_MAX_BYTES = 3500;
 
 function usage() {
   process.stderr.write(
-    'Usage: node scripts/plan-to-tasks.js --receipt <freeze-receipt.json> [--repo <dir>] [--parent <id>] [--sync | --coverage]\n'
+    'Usage: node scripts/plan-to-tasks.js --receipt <freeze-receipt.json> [--repo <dir>] [--parent <id>] [--sync | --coverage] [--bind <phase>=<task id>]...\n'
   );
 }
 
@@ -45,6 +45,7 @@ function parseArgs(argv) {
   let parentId = null;
   let sync = false;
   let coverage = false;
+  const binds = new Map();
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '-h' || arg === '--help') {
@@ -55,6 +56,15 @@ function parseArgs(argv) {
       sync = true;
     } else if (arg === '--coverage') {
       coverage = true;
+    } else if (arg === '--bind' || arg.startsWith('--bind=')) {
+      const v = arg === '--bind' ? argv[++i] : arg.slice('--bind='.length);
+      const m = /^([^=\s]+)=([0-9A-HJKMNP-TV-Z]{26})$/.exec(v || '');
+      if (!m) {
+        process.stderr.write('plan-to-tasks: --bind needs <phase>=<26-char task id>\n');
+        process.exit(2);
+      }
+      if (!binds.has(m[1])) binds.set(m[1], new Set());
+      binds.get(m[1]).add(m[2]);
     } else if (arg === '--receipt') {
       if (i + 1 >= argv.length) {
         usage();
@@ -95,7 +105,7 @@ function parseArgs(argv) {
     usage();
     process.exit(2);
   }
-  return { receiptPath, repoDir, parentId, sync, coverage };
+  return { receiptPath, repoDir, parentId, sync, coverage, binds };
 }
 
 function parsePhasesTable(markdown) {
@@ -237,7 +247,7 @@ function parseCreatedTaskId(raw) {
 }
 
 function main() {
-  const { receiptPath, repoDir, parentId: cliParentId, sync, coverage } = parseArgs(process.argv.slice(2));
+  const { receiptPath, repoDir, parentId: cliParentId, sync, coverage, binds } = parseArgs(process.argv.slice(2));
 
   let receipt;
   try {
@@ -303,10 +313,17 @@ function main() {
       for (const task of existingTasks) {
         // a cancelled duplicate must not claim a phase (same-title tasks were mis-attached)
         if (['cancelled', 'canceled'].includes(String(task.status || task.state || '').toLowerCase())) continue;
+        const tid = String(task.task_id || task.id);
+        // --bind <phase>=<task id>: explicit binding for tasks dispatched without a Plan/Phase line; skips the parent filter
+        const bound = [...binds].filter(([, ids]) => ids.has(tid)).map(([p]) => p);
+        for (const phaseId of bound) {
+          if (!frozenIds.has(phaseId)) throw new Error(`--bind names unknown phase "${phaseId}"`);
+          phaseToTasks.get(phaseId).push(task);
+        }
         if (parentId && String(task.parent_task_id || task.parent_id || '') !== parentId) continue;
         const matchedIds = extractPhaseMarkers(task, receipt.path, receipt.commit);
         for (const phaseId of matchedIds) {
-          if (phaseToTasks.has(phaseId)) {
+          if (phaseToTasks.has(phaseId) && !bound.includes(phaseId)) {
             phaseToTasks.get(phaseId).push(task);
           }
         }

@@ -4,6 +4,8 @@ import { WIDE_TABS, WIDE_TAB_HINT, wideBand, wideStatusText } from './band'
 import { wideHelp } from './help'
 
 test('P4b wideHelp: key table includes e, Tab, g and no banned glyphs', () => {
+  expect(wideHelp(0).reply).toEqual(['◉ 進行中  ✓ 完成／已選  ✗ 失敗  ⊘ 讀不到  ~ 過時  ⏶ 用快取', '▸ 目前這一筆  ✧ 建議  ▴ 要先動手  ↑ 已送出', '底列左邊是狀態，右邊是分頁；黃色數字是待決。'])
+  expect(wideHelp(1).stepTitle).toBe('按鍵')
   for (const focus of [0, 1, 2]) {
     const out = wideHelp(focus)
     const joined = [...out.list, ...out.reply].join('\n')

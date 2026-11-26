@@ -3,7 +3,7 @@ import { GLYPHS } from '../../tux/glyphs'
 import type { WidePageOut } from './types'
 
 const FOLDED = GLYPHS.structure.folded
-const SECTIONS = ['狀態圖示', '按鍵表', '符號'] as const
+const SECTIONS = ['狀態圖示', '按鍵', '符號'] as const
 
 export type WideHelpOpts = { label?: string; names?: string[]; narrative?: string[]; detail?: string[] } // the design's own words (P5a); absent = the built-in table
 
@@ -16,9 +16,9 @@ export function wideHelp(focus: number, opts: WideHelpOpts = {}): WidePageOut {
   let reply: string[]
   if (idx === 0) {
     reply = [
-      `${s.running} 進行中  ${s.done} 完成／已選  ${s.failed} 失敗  ${s.stalled} 讀不到  ${s.findings} 過時  ${s.need_you} 要你動手`,
-      `${FOLDED} 目前這一筆  ${g.recommend} 建議  ${g.answer} 已送出  ${s.waiting} 等人`,
-      '底列左邊是狀態，右邊是分頁；數字鍵直接切頁。',
+      `${s.running} 進行中  ${s.done} 完成／已選  ${s.failed} 失敗  ${s.stalled} 讀不到  ${s.stale} 過時  ${s.need_you} 用快取`,
+      `${FOLDED} 目前這一筆  ${g.recommend} 建議  ${g.foldUp} 要先動手  ${g.up} 已送出`,
+      '底列左邊是狀態，右邊是分頁；黃色數字是待決。',
     ]
   } else if (idx === 1) {
     reply = [
@@ -47,7 +47,7 @@ export function wideHelp(focus: number, opts: WideHelpOpts = {}): WidePageOut {
     list,
     reply: opts.narrative ?? reply,
     hints: 'j/k 換段 · Esc 關閉',
-    summary: '狀態圖示與按鍵表',
+    summary: '狀態圖示與按鍵',
     hist: null,
     ctx: opts.detail ?? [],
   }

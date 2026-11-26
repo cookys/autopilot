@@ -55,7 +55,7 @@ test('P4a wideNow normal state: 17x110 band and 42x93 pane, no 卡住', () => {
 })
 
 test('P4a wideNow missing sources: summary is null, stepTitle reflects missing', () => {
-  const out = wideNow({
+  const input = {
     pending: null,
     act: null,
     residue: null,
@@ -76,7 +76,11 @@ test('P4a wideNow missing sources: summary is null, stepTitle reflects missing',
     stale: false,
     missingPm: true,
     missingConsole: true,
-  })
+  }
+  const out = wideNow(input)
   expect(out.stepTitle).toBe('缺源（pm 和 console 都讀不到）')
   expect(out.summary).toBeNull()
+  expect(out.reply).toEqual(['pm 和 console 都讀不到。', '產線的失敗和停住的看不到；要看每個 agent 請到 7 艦隊。'])
+  expect(wideNow({ ...input, pending: 2, laneBusy: 5, laneIdle: 4 }).reply).toEqual(['pm 和 console 都讀不到，艦隊只剩 fleetSummary 的 lane 忙閒。', '產線的失敗和停住的看不到；要看每個 agent 請到 7 艦隊。'])
+  expect(wideNow({ ...input, missingPm: false, missingConsole: false, stale: true }).stepTitle).toBe('~ 過時')
 })

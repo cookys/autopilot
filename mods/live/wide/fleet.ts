@@ -15,6 +15,8 @@ export type WideFleetInput = {
   t: T
   focus: number
   stale?: boolean
+  runsMissing?: boolean
+  cards?: { local: number; remote: number } | null
   counts?: ReturnType<typeof consoleFleetCounts> | null // from the caller's full console snapshot (consoleFleetCounts needs more than the lines)
   // the design's states beyond the plain rows (P5a); all optional
   label?: string // the state label of the title
@@ -35,11 +37,13 @@ export function wideFleet(inp: WideFleetInput): WidePageOut {
   const agentLines = agents.lines.slice(2).map(segs => segs.map(s => s.text).join('').trim())
   const rows = lines !== null ? fleetRowsOf(lines, t) : null
 
-  if (rows === null && steps.length === 0) {
+  const runsMissing = inp.runsMissing ?? steps.length === 0
+  const missing = [runsMissing ? 'runs' : null, rows === null ? '摘要' : null].filter((x): x is string => x !== null)
+  if (runsMissing && rows === null) {
     return {
-      stepTitle: '缺源',
-      list: ['讀不到艦隊與速度資料'],
-      reply: ['無法讀取 fleet lines 與 agent tok/s。'],
+      stepTitle: inp.label ?? '缺源（runs 和摘要）',
+      list: ['執行中', '  runs 讀不到', ...(inp.cards != null ? [`待決卡：本機 ${inp.cards.local} · 他機 ${inp.cards.remote}`] : [])],
+      reply: ['runs 和產線摘要讀不到，看不到 agent 在做什麼。', ...(inp.cards != null ? ['待決卡照常。'] : [])],
       hints: 'Esc 關閉',
       summary: null,
       hist: null,
@@ -74,7 +78,7 @@ export function wideFleet(inp: WideFleetInput): WidePageOut {
 
   if (list.length === 0) {
     return {
-      stepTitle: '沒有 agent',
+      stepTitle: inp.label ?? (missing.length ? `缺源（${missing.join(' 和 ')}）` : '沒有 agent'),
       list: ['目前沒有執行中的 agent'],
       reply: ['沒有活躍的產線或 agent。'],
       hints: 'Esc 關閉',
@@ -88,7 +92,7 @@ export function wideFleet(inp: WideFleetInput): WidePageOut {
   const summary = counts !== null ? `執行 ${counts.running} · 失敗 ${counts.failed} · 卡住 ${counts.stuck}` : null
 
   return {
-    stepTitle: stale ? '過時' : '正常',
+    stepTitle: inp.label ?? (missing.length ? `缺源（${missing.join(' 和 ')}）` : stale ? '過時' : '正常'),
     list,
     reply: cur,
     hints: 'j/k 換筆 · o 展開 · Esc 關閉',

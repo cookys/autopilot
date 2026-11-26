@@ -90,7 +90,7 @@ export function wideReview(i: WideReviewInput): WideReviewOutput {
     reply.push(cur.detail ?? `${cur.label}：${cur.engine} ${cur.verdict}。`)
     if (cur.note) reply.push(cur.note)
   } else {
-    reply.push(i.missing ? '讀不到審查來源。' : '目前沒有進行中的審查。')
+    reply.push(i.missing ? '讀不到審查來源。' : i.qcOwed === 0 ? '今天還沒有審查紀錄，QC 也沒有欠審。' : i.qcOwed === null ? '今天還沒有審查紀錄，QC 讀不到。' : '今天還沒有審查紀錄。')
   }
 
   const ctx: string[] = []
@@ -105,7 +105,7 @@ export function wideReview(i: WideReviewInput): WideReviewOutput {
     stepTitle,
     list,
     reply,
-    hints: 'j/k 換筆 · o 展開 · Esc 關閉',
+    hints: i.missing && cur === null && log.length === 0 ? 'Esc 關閉' : 'j/k 換筆 · o 展開 · Esc 關閉',
     pin: i.warnings ?? [],
     ctx,
     hist: i.recentReviews.length > 0 ? { title: '今天的審查紀錄', rows: i.recentReviews } : null,

@@ -40,5 +40,6 @@ test('P4b wideTodo: renders todo cards in 110x17 band', () => {
 test('P4b wideTodo: null todo returns 缺源（還沒接線）', () => {
   const out = wideTodo({ todo: null, cursor: 0, picks: {}, notes: {} })
   expect(out.stepTitle).toBe('缺源（還沒接線）')
+  expect(out.reply).toEqual(['待辦的資料還沒接上，這頁目前一定是空的。'])
   expect(out.summary).toBeNull()
 })

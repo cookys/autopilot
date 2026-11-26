@@ -45,6 +45,12 @@ test('P4a wideDispatch normal state: 17x110 band and 42x93 pane', () => {
 
 test('P4a wideDispatch missing state: summary is null', () => {
   const out = wideDispatch({ items: [], cursor: 0, recentRounds: [], stale: false, missing: true })
+  expect(out.hints).toBe('Esc 關閉')
   expect(out.stepTitle).toBe('缺源')
   expect(out.summary).toBeNull()
+})
+
+test('empty dispatch describes no running work', () => {
+  const out = wideDispatch({ items: [], cursor: 0, recentRounds: [], stale: false, missing: false })
+  expect(out.reply).toEqual(['目前沒有在跑的派工。'])
 })

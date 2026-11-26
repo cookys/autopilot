@@ -5,7 +5,7 @@ import type { PaneRole, WidePane } from './pane'
 
 type El = (props: Record<string, unknown>) => unknown
 // the band's role names map to palette roles; plain text keeps the host's default colour
-const COLOR: Record<WideRole, string | undefined> = { frame: PALETTE.idle, fold: PALETTE.needs_human, current: PALETTE.attention, text: undefined }
+export const COLOR: Record<WideRole, string | undefined> = { frame: PALETTE.idle, fold: PALETTE.needs_human, current: PALETTE.action, text: undefined }
 
 function hotkeys(el: { Box: El; Text: El; Button?: El }, onKey: (key: string) => void, epoch: number, surface: string) {
   const { Box, Text, Button } = el

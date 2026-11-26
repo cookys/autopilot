@@ -37,7 +37,7 @@ export type WideDecideOverflow = { steps: string[]; list: string[] }
 export type WideDecideOut = { stepTitle: string; list: string[]; reply: string[]; hints: string; overflow: WideDecideOverflow }
 
 const G = GLYPHS
-const MARK_ACT = G.state.need_you // the card waits on your own step
+const MARK_ACT = G.structure.foldUp // the card waits on your own step
 const MARK_DONE = G.state.done
 const MARK_REC = G.structure.recommend // recommended option
 const MARK_WARN = G.state.findings // warning
@@ -69,7 +69,10 @@ export const WIDE_DECIDE_TEXT = {
   previewTitle: '送出預覽',
   previewHead: (n: number, nos: number[]) => `送出預覽 · ${n} 張（${nos.join('、')}）· 確認後不能改`,
   sourceTitle: '缺源',
-  sourceHead: (reason: string) => `${G.state.stalled} decision list 讀不到（${reason}）`,
+  sourceHead: (reason: string) => {
+    const code = reason.match(/(?:rc=|結束碼\s*)(\d+)/)?.[1]
+    return `${G.state.stalled} decision list 讀不到${code === undefined ? '' : `（fleet decision list 結束碼 ${code}）`}`
+  },
   sourceBody: '卡片內容看不到，不能作答。已選的答案留在本機，恢復後會回來。',
   sourceRetry: (s: number) => `${s} 秒後自動重試。`,
   emptyTitle: '沒有卡',
@@ -191,7 +194,7 @@ export function wideDecide(m: WideDecideInput): WideDecideOut {
   const summary = pickedN > 0 && cards.length <= BAND_BODY_ROWS ? T.summary(unsent, T.pickedCount(pickedN)) : acting > 0 ? T.summary(unsent - acting, T.actCount(acting)) : T.summary(unsent, '')
   const cardRows = cards.map((c, i) => {
     const p = pickOf(c)
-    const mark = isSent(c) || p !== undefined ? MARK_DONE : c.awaiting !== undefined ? MARK_ACT : '·'
+    const mark = isSent(c) ? G.structure.up : p !== undefined ? MARK_DONE : c.awaiting !== undefined ? MARK_ACT : '·'
     return `${i === at ? MARK_CUR : ' '} ${mark}${i + 1} ${c.title}${p !== undefined ? '：' + letterOf(c, p) : ''}${isSent(c) ? ' ' + T.sentMark : ''}`
   })
   let list = [summary, ...cardRows]

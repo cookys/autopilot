@@ -28,9 +28,10 @@ export function WidePaneTree(el: { Box: El; Text: El; Button?: El }, pane: WideP
   return (
     <Box key="wide-pane" flexDirection="column" flexShrink={0}>
       {pane.segs.map((row, y) => {
-        const line = <Box key={'wide-pane-' + y} flexShrink={0}>{row.map((s, i) => <Text key={'s' + i} {...(PANE_COLOR[s.role] === undefined ? {} : { color: PANE_COLOR[s.role] })} wrap="truncate">{s.text}</Text>)}</Box>
+        const texts = row.map((s, i) => <Text key={'s' + i} {...(PANE_COLOR[s.role] === undefined ? {} : { color: PANE_COLOR[s.role] })} wrap="truncate">{s.text}</Text>)
         const page = click.get(y)
-        return page === undefined || Button === undefined ? line : <Button key={'wide-pane-go-' + y} plain onPress={() => onPage(page)}>{line}</Button>
+        // the host refuses a Button that holds a Box ("holds strings and Text, not <Box>"): the row Box holds the Button, the Button holds the Texts
+        return <Box key={'wide-pane-' + y} flexShrink={0}>{page === undefined || Button === undefined ? texts : <Button key={'wide-pane-go-' + y} plain onPress={() => onPage(page)}>{texts}</Button>}</Box>
       })}
     </Box>
   )

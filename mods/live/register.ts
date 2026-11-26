@@ -1730,6 +1730,8 @@ const framePageId = (): string => panePage
 let v74Open = false
 // console v5: the wide band (wide/geometry.ts) is on for the last band draw; the pane then docks 94 columns wide and Tab cycles the pages. Set only in the v7.4 band draw.
 let bandWide = false
+// the host Pane was opened for the wide layout: closed again when the band leaves wide (the narrow frame has no host Pane)
+let wideHostOpen = false
 export let wideDecideOverflow: WideDecideOverflow = { steps: [], list: [] } // rows the wide 待決 page could not fit: P2's pane draws them (steps after the question, the list's tail)
 // console v5 wide pane (wide/pane.ts): what the band's last draw could not fit (band.ts overflow) and whether `e` has opened the context; the pane draws them
 let wideOverflow: { list: string[]; reply: string[] } = { list: [], reply: [] }
@@ -1763,13 +1765,17 @@ function widePaneModel(): PaneModel {
 // (v74Open) and the first draw opens the host Pane when it turns out to be the old layout.
 let bandLegacy: boolean | null = null
 const openHostPane = ($: EngineInterface): Promise<unknown> => $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: true, closeOnEscape: true, ...(bandWide ? { columns: PANE_COLS } : {}) } as never)
+// console v5: the wide layout draws its right column in the host Pane (94 columns), so an operator open in the wide band opens the host Pane too;
+// the narrow v7.4 frame keeps its page inside the band and never opens one.
 async function openPane($: EngineInterface): Promise<void> {
-  if (bandLegacy === true) await openHostPane($)
+  if (bandLegacy !== true && bandWide) wideHostOpen = true
+  if (bandLegacy === true || bandWide) await openHostPane($)
   else $.ui.invalidate('ui.render')
 }
 async function closePane($: EngineInterface): Promise<void> {
-  if (bandLegacy === true) { try { await $.ui.close({ id: PANE_ID }) } catch (_e) { /* already closed */ } }
-  else $.ui.invalidate('ui.render')
+  if (bandLegacy === true || bandWide || wideHostOpen) { try { await $.ui.close({ id: PANE_ID }) } catch (_e) { /* already closed */ } }
+  wideHostOpen = false
+  if (bandLegacy !== true) $.ui.invalidate('ui.render')
 }
 // K1: module level (a re-render must not reset the in-flight flag): one open / close at a time
 type FlightState = { since: number | null }
@@ -1823,6 +1829,7 @@ function markPaneOpen(): void {
   panePlacement = null
 }
 function markPaneClosed(): void {
+  wideHostOpen = false // the width switch stops adding the Pane's columns once it is gone
   v74KeysHeld = false
   v74Open = false
   bandExpand = { ...bandExpand, expanded: false }
@@ -2042,6 +2049,8 @@ export async function startLive($: EngineInterface): Promise<void> {
   paneTab = 'now'
   panePage = 'now'
   bandLegacy = null
+  bandWide = false // a new session measures its own size; a carried-over true would skip the wide host-Pane open
+  wideHostOpen = false
   bandExpand = initialBandExpand('now')
   decideLayout = null
   decideMaxRows = 24
@@ -2354,7 +2363,15 @@ export function registerLive(on: Parameters<Register>[0]): void {
     // v7.4: single-row fixed-column band (2026-11-23-band-layout v4) + framed page within maxRows.
     // console v5 is opt-in while the 209-column suites still pin the v7.4 frame: AUTOPILOT_LIVE_V5=1 and the size switch (wide/geometry.ts) both have to hold
     const v5On = v74 && (await $.env.get('AUTOPILOT_LIVE_V5').catch(() => undefined)) === '1'
-    bandWide = v5On && wideNext(bandWide, columns, rows)
+    const wasWide = bandWide
+    // the switch reads the terminal's width, not the band's: once the host Pane docks (94 columns) both the band's bodyColumns and its viewport
+    // drop to the main column (209x49: 115), and switching on those would close the Pane, widen the band again and reopen it on every draw
+    // (seen in a 209x49 tmux run: 236 opens). While the wide layout holds the Pane open, the terminal is that column plus the Pane.
+    const termCols = ((e as { viewport?: { columns?: number } }).viewport?.columns ?? columns) + (wideHostOpen ? PANE_COLS : 0)
+    bandWide = v5On && wideNext(bandWide, termCols, rows)
+    // an open the operator asked for (v74Open) follows the layout: entering wide opens the host Pane, leaving it closes it again
+    if (bandWide && !wasWide && v74Open) { wideHostOpen = true; void openHostPane($).catch(() => undefined) } // the host takes only focused opens; the operator asked for this one (v74Open)
+    if (!bandWide && wasWide && wideHostOpen) { wideHostOpen = false; void Promise.resolve($.ui.close({ id: PANE_ID })).catch(() => undefined) }
     if (v74) {
       decideMaxRows = rows
       decideCols = paneWidth(columns)

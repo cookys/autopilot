@@ -41,12 +41,14 @@ const longCards = [
   },
 ]
 
-async function host($, on, opts: { cols?: number; rows?: number; store?: Map<string, unknown>; cards?: typeof longCards } = {}) {
+async function host($, on, opts: { cols?: number; rows?: number; store?: Map<string, unknown>; cards?: typeof longCards; opens?: unknown[]; closes?: unknown[] } = {}) {
   const cols = opts.cols ?? 209
   const rows = opts.rows ?? 50
   const maxRows = Math.min(rows - 16, 34)
   const store = opts.store ?? new Map<string, unknown>()
   const cards = opts.cards ?? longCards
+  const opens = opts.opens ?? []
+  const closes = opts.closes ?? []
   const root = '/fixture/v5-mounted'
   const now = Date.parse('2026-11-01T00:00:00Z')
   const clock = mock.clock(on, { now })
@@ -68,9 +70,9 @@ async function host($, on, opts: { cols?: number; rows?: number; store?: Map<str
   on('ui.invalidate', () => ({ value: undefined }))
   on('ui.toast', () => ({ value: undefined }))
   on('ui.focus', () => ({ value: undefined }))
-  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.open', (_, e) => { opens.push(e); return { value: { isPlaced: true } } })
   on('ui.panes', () => ({ value: [] }))
-  on('ui.close', () => ({ value: undefined }))
+  on('ui.close', (_, e) => { closes.push(e); return { value: undefined } })
   on('process.run', (_, e) => ({
     value: {
       exitCode: e.argv.includes('decision') ? 0 : 1,
@@ -98,15 +100,15 @@ async function host($, on, opts: { cols?: number; rows?: number; store?: Map<str
   await $.command.run({ command: 'live-pane', args: '' })
 
   let band
-  const draw = async () => {
+  const draw = async (bodyCols = cols, vpCols = cols) => {
     if (band) await band.unmount()
     band = await $.ui.mount({
       plugin: 'autopilot',
       surface: 'terminal',
       component: 'AbovePrompt',
       requestId: 'above-prompt',
-      props: { bodyColumns: cols, maxRows },
-      viewport: { columns: cols, rows, isFullscreen: true },
+      props: { bodyColumns: bodyCols, maxRows },
+      viewport: { columns: vpCols, rows, isFullscreen: true },
     })
     return await band.drawn()
   }
@@ -129,4 +131,45 @@ test('v5 mounted: 209x49 with AUTOPILOT_LIVE_V5=1 draws the wide band; every pag
   const first = text(await h.draw())
   expect(first).toContain('現況')
   expect(first).toContain('Tab 換頁')
+})
+
+// the wide layout's right column is the host Pane: an operator open (/live-pane, here before the first draw) must open it at 94 columns;
+// the narrow v7.4 frame keeps its page in the band and opens no host Pane
+test('v5 mounted: /live-pane in the wide band opens the host Pane', async ($, on) => {
+  const opens: any[] = []
+  await host($, on, { cols: 209, rows: 49, opens })
+  // the host's ui.open event type has no columns field (register passes it through `as never`), so only the open itself is observable here
+  expect(opens.some(o => o.id === 'autopilot-live')).toBe(true)
+})
+
+test('v5 mounted: 160x40 (narrow) with AUTOPILOT_LIVE_V5=1 opens no host Pane', async ($, on) => {
+  const opens: any[] = []
+  await host($, on, { cols: 160, rows: 40, opens })
+  expect(opens.length).toBe(0)
+})
+
+// once the host Pane docks, the band's bodyColumns drop to the band's own width (115 of 209): the switch reads the terminal width, so the band stays wide and the Pane stays open
+test('v5 mounted: the band stays wide after the Pane docks (bodyColumns and viewport 115 of a 209-column terminal): no close, no reopen', async ($, on) => {
+  const opens: any[] = []
+  const closes: any[] = []
+  const h = await host($, on, { cols: 209, rows: 49, opens, closes })
+  const before = opens.length
+  // the real host (2.1.332, 209x49 tmux) gives the band viewport.columns 115 and the Pane bodyColumns 93 once the Pane docks
+  const docked = text(await h.draw(115, 115))
+  await h.draw(115, 115)
+  expect(docked).toContain('Tab 換頁')
+  expect(closes.length).toBe(0)
+  expect(opens.length).toBe(before)
+})
+
+// the host refuses a Button that holds a Box ("JSX element <Button> holds strings and Text, not <Box>", 209x49 tmux, CC 2.1.332) and skips the
+// whole Pane render; the test host does not check it, so the docked wide Pane is walked here. Sizes are the real host's once docked.
+test('v5 mounted: the docked wide Pane draws and no Button in it holds a Box', async ($, on) => {
+  await host($, on, { cols: 209, rows: 49 })
+  const pane = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'Pane', requestId: 'autopilot-live', props: { title: 'Autopilot', isFocused: true, bodyColumns: 93, placement: 'dock', scroll: { offset: 0, bodyRows: 42 }, view: { agentId: undefined } }, viewport: { columns: 115, rows: 49, isFullscreen: true } })
+  const tree = await pane.drawn()
+  expect(text(tree)).toContain('其他頁')
+  const bad = walk(tree).filter(n => n.type === 'Button' && walk(n.children).some(c => c.type === 'Box'))
+  expect(bad.length).toBe(0)
+  await pane.unmount()
 })

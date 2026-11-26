@@ -8,6 +8,7 @@
 //
 // Glyph usage: ▸ (GLYPHS.structure.folded) is reserved for folded sections/disclosures; active card cursor uses ‣ (U+2023, EAW=N, width=1).
 import type { ConsoleCard } from '../console'
+import { questionAfterTitle } from '../cardtitle'
 import { DECIDE_UNDO_MS, NO_DECIDE, TRACE_STALE_MIN, TRACE_STALE_MS, decideDialog, decideFillText, decideLine, decidePick, displayWidth, isStepCard, liveAgeMs, recommendedIndex, truncateToWidth } from '../model'
 import type { DecideState, DurableAwaiting, LiveDecision, Seg } from '../model'
 import { GLYPHS } from '../../tux/glyphs.ts'
@@ -26,6 +27,9 @@ import type { DecideCard } from '../v74/contract'
 
 export { DECIDE_COL_SEP_W, DECIDE_COMPACT_MAX_ROWS, DECIDE_DUAL_MIN_COLS, DECIDE_HYSTERESIS, DECIDE_MIN_COL_W, decideColumnWidths, decideLayoutMode }
 export type { DecideLayoutMode }
+
+// the question segment after a drawn title; none when the question is the title (see questionAfterTitle)
+const tailSegs = (c: { title: string; question: string }): Seg[] => { const t = questionAfterTitle(c.title, c.question); return t === '' ? [] : [seg(t)] }
 
 // ---- view state and the key reducer ----
 // DecideState (model.ts) carries picks, notes, sent and hold (the 10 s undo window, by card id); the rest is this page's own: which card shows in full, whether the others are folded, the note mode and its buffer, the focused option beyond a)–e)
@@ -644,8 +648,8 @@ function v74Card(c: DecideCard, i: number, selected: boolean, nav: DecideNav, ct
   // The selected head is not a Button. A focused Button consumes Down/Up and re-fires onPress
   // with its own card:N, so the cursor event writes the index the ▸ already has.
   const head = box
-    ? [seg(mark + '  ' + String(i + 1) + '. ', selected ? {} : { press: 'card:' + i }), title, seg('：' + c.question), ...ageTail]
-    : [seg(mark + '  ' + String(i + 1) + '. '), title, seg('：' + c.question), ...ageTail]
+    ? [seg(mark + '  ' + String(i + 1) + '. ', selected ? {} : { press: 'card:' + i }), title, ...tailSegs(c), ...ageTail]
+    : [seg(mark + '  ' + String(i + 1) + '. '), title, ...tailSegs(c), ...ageTail]
   out.push(box ? head : truncateSegs(head, cols))
   const bg = c.background
   // J1: the real Pane draws cards through this path (not boxOpen): the open card's background is shown in full (one row per line, wrapped on the label's hanging indent, never cut), the frame scrolls it; the other cards keep one cut row
@@ -702,7 +706,7 @@ function boxSummary(c: DecideCard, i: number, nav: DecideNav, ctx: PageCtx): Row
     ? t('v74.d.sum_pick', { k: pickDigit(c, picked), label: c.options[picked].label })
     : recIx >= 0 ? t('v74.d.sum_rec', { label: c.options[recIx].label }) : ''
   const lead = '   ' + String(i + 1) + '. '
-  const q = c.title + '：' + c.question
+  const q = c.title + questionAfterTitle(c.title, c.question)
   const tailText = tail === '' ? '' : '  ' + DOT + ' ' + tail
   const room = ctx.size.cols - displayWidth(lead) - displayWidth(tailText)
   return [seg(lead, { press: 'card:' + i }), seg(displayWidth(q) <= room ? q : truncateToWidth(q, Math.max(4, room))), ...(tailText === '' ? [] : [dimSeg(tailText)])]
@@ -726,7 +730,7 @@ function boxOpen(c: DecideCard, i: number, nav: DecideNav, ctx: PageCtx, fit: Fi
   const picked = nav.picks[c.id]
   const held = nav.hold?.[c.id] !== undefined
   const sent = nav.sent[c.id] !== undefined && nav.fixing?.[c.id] === undefined
-  const heading = wrapRow([seg(CURSOR_MARK + '  ' + String(i + 1) + '. '), seg(c.title, { color: PALETTE.here, here: true }), seg('：' + c.question)], ctx.pendingScroll === undefined ? ctx.size.cols : width, 5)
+  const heading = wrapRow([seg(CURSOR_MARK + '  ' + String(i + 1) + '. '), seg(c.title, { color: PALETTE.here, here: true }), ...tailSegs(c)], ctx.pendingScroll === undefined ? ctx.size.cols : width, 5)
   const out: Row[] = [...(ctx.pendingScroll === undefined ? heading.slice(0, 1) : heading), ...gap]
   if (c.background) out.push(...labelledBox(t('v74.d.bg'), c.background, width), ...gap)
   c.options.forEach((o, k) => {
@@ -846,7 +850,7 @@ function renderBoxC(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
     const keys = pickKeys(c.options)
     const countText = t('v74.d.c_count', { k: cursor + 1, n: cards.length }) + ageSuffix + (omitted ? ' ' + DOT + ' ' + t('v74.d.c_desc_omitted') : '')
     const out: Row[] = [[dimSeg(countText)]]
-    out.push(...wrapRow([seg(CURSOR_MARK + '  '), seg(c.title, { color: PALETTE.here, here: true }), seg('：' + c.question)], cols, 3))
+    out.push(...wrapRow([seg(CURSOR_MARK + '  '), seg(c.title, { color: PALETTE.here, here: true }), ...tailSegs(c)], cols, 3))
     if (showBg && c.background) {
       const bgRaw = c.background
       const bgLines = bgRaw.split('\n')
@@ -895,7 +899,7 @@ function renderBoxC(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
       seg(CURSOR_MARK + ' '),
       dimSeg(`(${cursor + 1}/${cards.length}) `),
       seg(c.title, { color: PALETTE.here, here: true }),
-      seg('：' + c.question),
+      ...tailSegs(c),
     ], cols)
     const optKeys = pickKeys(c.options)
     const optSegsOf = (o: DecideCard['options'][number], k: number): Seg[] => {
@@ -978,7 +982,7 @@ function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
     const innerW = Math.max(10, detailW - 2)
     const keys = pickKeys(c.options)
     const out: Row[] = []
-    out.push(...wrapRow([seg(c.title, { color: PALETTE.here, here: true }), seg('：' + c.question)], innerW, 2))
+    out.push(...wrapRow([seg(c.title, { color: PALETTE.here, here: true }), ...tailSegs(c)], innerW, 2))
     if (c.background) { out.push(...labelledBox(t('v74.d.bg'), c.background, innerW)); out.push([seg('')]) }
     c.options.forEach((o, k) => {
       if (k > 0) out.push([seg('')])

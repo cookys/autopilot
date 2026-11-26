@@ -28,3 +28,14 @@ export const cardSentenceOf = (d: { title?: string | null; question?: string | n
   const cut = mark !== null && /^[。！？.!?;；]/.test(mark[0]) ? q.slice(0, at + mark[0].length).trim() : q.slice(0, at).trim()
   return cut === '' ? q : cut
 }
+
+// What follows the drawn title on a decision card's head row. A fleet card's title is often the first characters of its question, so the plain
+// `<title>：<question>` drew the title twice. Equal -> ''; question starts with the title -> the rest of it (leading space dropped, no `：`);
+// otherwise `：<question>` as before. Pure; the callers draw the title segment themselves.
+export const questionAfterTitle = (title: string, question: string): string => {
+  const t = title.trim()
+  const q = question.trim()
+  if (t !== '' && q === t) return ''
+  if (t !== '' && q.startsWith(t)) return q.slice(t.length).replace(/^\s+/, '')
+  return '：' + question
+}

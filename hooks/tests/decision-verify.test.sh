@@ -316,4 +316,15 @@ assert_contains "$(ctx)" "$CN -> option \"B\"" "7 old files of closed cards do n
 reset probe_error; assert_contains "$(ctx)" "probe failed" "landing, probe error: said, nothing acted on"; reset ok
 # no courier: landing files are not read at all
 rm -f "$STUB/calls"; NOC="$(AUTOPILOT_FLEET_BIN="$TEST_TMP/no-such-fleet" ctx)"; assert_not_contains "$NOC" "Console answers waiting" "no courier: landing files ignored"
+# A card another host opened (present only in the PM's read-only card mirror): no local claim exists, so the answer is
+# neither acted on nor reported as a broken line: it stays pending, owner named (fleet 01M8AVWCYJ: card-forward is not in develop yet).
+MIR="$TEST_TMP/mirror"; mkdir -p "$MIR"
+node -e 'const [f]=process.argv.slice(1);require("fs").writeFileSync(f,JSON.stringify({schema:"autopilot.fleet-card-mirror/1",synced_at:new Date().toISOString(),last_error:null,cursor:null,truncated:false,cards:{"d-90286e15":{card_id:"d-90286e15",question:"准許 llm-playground--claude-2 派工嗎",state:"open",opened_at:"2026-11-26T01:00:00Z",member:"llm-playground--claude-2",courier:"cc",namespace:"cookys/4124gs",session:"s",message_id:"m"}},closed:{},rejects:[]}))' "$MIR/fleet-card-mirror.json"
+reset ok
+AUTOPILOT_CARD_MIRROR_DIR="$MIR" hook "$(printf '[待決回覆]\nd-90286e15｜准許 llm-playground--claude-2 派 … → 准\n')"
+assert_contains "$HOUT" "待 owner 端 claim" "foreign mirrored card: pending, waits for the owner's claim"
+assert_contains "$HOUT" "llm-playground--claude-2" "foreign mirrored card: owner named"
+assert_not_contains "$HOUT" "invalid answer line" "foreign mirrored card: not reported as a broken line"
+assert_eq "$(count 'decision claim')" 0 "foreign mirrored card: no local claim attempted"
+
 finalize_test

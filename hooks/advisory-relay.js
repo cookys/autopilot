@@ -94,6 +94,7 @@ function closeDecideReply(payload) {
   try { const m = require('../scripts/lib/fleet-decision.js'); probeState = m.probe(); if (probeState === 'supported') fd = m; } catch (_e) { probeState = 'probe_error'; }
   const toSend = []; // parked answers, sent in order after every card is verified and parked
   const unverified = [];
+  const foreign = []; // cards another host opened (PM mirror only): the local courier cannot claim them, so the answer waits for the owner's claim
   const notFound = [];
   const delivery = new Map(); // id -> the verified answer of a card that has an executor: the program delivers it (PM 01M6ZXJYTQ), nothing closes it directly
   // A card with an executor never closes unless its answer was delivered: when the answer cannot be delivered it is parked in pending_dispatch with dispatch_error = reason.
@@ -122,6 +123,11 @@ function closeDecideReply(payload) {
         const parsed = dl.parseDecideLine(`${line}｜placeholder`);
         let card = null;
         try { for (const f of files) { card = readEntries(f, { all: true }).find((x) => x.id === id); if (card) break; } } catch (_e) { card = null; }
+        if (!card) {
+          let mirrored = null;
+          try { const m = require('../scripts/fleet-card-mirror.js').readMirror(); mirrored = m && m.cards[id]; } catch (_e) { mirrored = null; }
+          if (mirrored) { foreign.push(`${id} (owner ${mirrored.namespace}/${mirrored.courier}/${mirrored.member})`); continue; }
+        }
         const prefix = card && `${dl.wire(dl.excerptOf(card.question))} → `;
         const answer = parsed && prefix && parsed.body.startsWith(prefix) ? parsed.body.slice(prefix.length).trim() : '';
         const option = card && Array.isArray(card.options) && card.options.find((o) => dl.wire(o.label) === answer);
@@ -223,6 +229,11 @@ function closeDecideReply(payload) {
       ? `no decision scope file exists for cwd ${payload.cwd || process.cwd()} (not inside a git repo, or no card was ever opened in this project)`
       : `${files.length} scope file(s) of this project were searched`;
     const note = `[待決回覆] no open card ${notFound.join(', ')} in this session's project: ${where}. Nothing was closed; the card may belong to another project or already be closed. Tell the owner.`;
+    process.stderr.write(`advisory-relay: ${note}\n`);
+    sysMsg = sysMsg ? `${sysMsg}\n${note}` : note;
+  }
+  if (foreign.length > 0) {
+    const note = `[待決回覆] 待 owner 端 claim: ${foreign.join(', ')}; these cards were opened on another host, so this host cannot claim them (fleet card-forward is not live yet). Nothing was closed and the answers were not acted on. Tell the owner.`;
     process.stderr.write(`advisory-relay: ${note}\n`);
     sysMsg = sysMsg ? `${sysMsg}\n${note}` : note;
   }

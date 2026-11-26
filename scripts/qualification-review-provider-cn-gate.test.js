@@ -13,7 +13,7 @@ function run(env, content) {
     input: `${JSON.stringify({ role: 'reviewer', payload: { format: 'case_content', content } })}\n`,
     encoding: 'utf8',
     timeout: 30000,
-    env: { PATH: process.env.PATH, HOME: process.env.HOME, QRP_TRANSPORT: 'http', QRP_PROMPT_MODE: 'reviewer', QRP_PROVIDER: 'zhipu', QRP_MODEL: 'glm-5.4', QRP_AUTH_TOKEN: 'x', ...env },
+    env: { PATH: process.env.PATH, HOME: process.env.HOME, QRP_TRANSPORT: 'http', QRP_PROMPT_MODE: 'reviewer', QRP_PROVIDER: 'zhipu', QRP_MODEL: 'glm-5.4', QRP_AUTH_TOKEN: 'x', AUTOPILOT_ACCOUNTS_DIR: path.join(require('os').tmpdir(), 'qrp-cn-gate-no-accounts'), ...env },
   });
 }
 const REMOTE = { QRP_BASE_URL: 'https://open.bigmodel.cn/api/anthropic' };

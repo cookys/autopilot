@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0523 -->
+<!-- next-id: BL-0525 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -2654,10 +2654,26 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-11-25
 - **Origin**: self
-- **Problem**: GLM-5.3 與 GLM-5.4 的 reviewer 科（思考關、T1 主機宣告、/v1/messages）都是 degraded、evaluation_passed=false：known-bad 敏感度漏抓（artifact oracle 拒 known-bad-01、02、07、17、20）、輸出不是 {verdict,findings} 格式、witness call 超出 case domain、defect-reversal mutation control 失敗。
+- **Problem**: GLM-5.3／5.4 reviewer 科（思考關、T1 主機宣告、/v1/messages）都是 degraded、evaluation_passed=false：known-bad 漏抓（oracle 拒 01、02、07、17、20）、輸出非 {verdict,findings} 格式、witness call 超出 case domain、mutation control 失敗。
 - **Impact**: GLM 不能當 reviewer 席；verification_author 科已過，只用於白名單 T0／T1 內容，不受影響。
-- **Trigger**: GLM 出新版本（5.5 以上）或雲端開放思考開的協定時重考，用 /home/team/.tmp/glm-qual 的 cell 腳本與 QRP_CN_WORK_TIER=T1 宣告（題庫 leak-scan 0 命中）
+- **Trigger**: GLM 出新版本（5.5 以上）或雲端開放思考開的協定時重考，用 ~/.tmp/glm-qual 的 cell 腳本與 QRP_CN_WORK_TIER=T1 宣告（題庫 leak-scan 0 命中）
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: PM 裁定 01M89NZGZZ（單 01M83BNDZB）；第 5 輪結果見單留言
 - **Pointer**: docs/plans/evidence/2026-11-25-glm-qualify-r5/README.md
+
+### dispatch-review 判決 JSON 沒記審的是哪個版本
+- **Id**: BL-0524
+- **Status**: open
+- **Since**: 2026-11-26
+- **Origin**: peer
+- **Reporter**: cookys/twgs-revival-twgs-dev/twgameproject--claude
+- **Report**: 01M8B5X08Z3VJ54SA8M536R0XG
+- **Reply**: none
+- **Problem**: dispatch-review.sh 判決 JSON 沒有 reviewed_sha／range，判決檔無法單獨證明審的是哪一版。建議加 reviewed_sha，可加 range 與 diff sha16；輸出讀者集合封閉（review-result schema），要一起改。
+- **Impact**: 消費端做舉證時只能另外在附錄補寫基準 sha。
+- **Trigger**: 下次改 dispatch-review 輸出欄位，或消費端要靠判決檔舉證時
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: PM 裁定 01M8B5SZ 記 BL；對方 BL-0096（develop 9e28791ce）
+- **Pointer**: none

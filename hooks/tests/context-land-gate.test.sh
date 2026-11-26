@@ -2,11 +2,6 @@
 # context-land-gate — T2/T3 land checklist (hooks/context-budget.js) plus the Stop gate (hooks/context-land-gate.js).
 # (a) T2 fired, no handoff -> Stop blocked   (b) handoff after the fire -> allowed, read-line printed once
 # (c) blocked twice -> third stop allowed + audit line   (d) T3 repeats the flow after a T2 handoff
-# (d2) explicit t3 via env fires below 70% and below the 1M default
-reset; use_context 410000
-AUTOPILOT_CONTEXT_BUDGET_T3=400000 fire >/dev/null; err="$(cat "$TMP/fire.err")"
-has "$err" 'Context budget T3' && ok "(d2) AUTOPILOT_CONTEXT_BUDGET_T3 sets the T3 threshold" || bad "(d2) no T3: $err"
-
 # (e) subagent never blocked   (f) mode off never blocks   (g) no fire -> no block
 # HOME, XDG_RUNTIME_DIR, live dir and state dir are scratch dirs; nothing live is read or written.
 set -u
@@ -62,6 +57,12 @@ write_handoff() {  # mtime 60 s in the future so it is newer than any fire recor
 }
 reset() { rm -rf "$TMP/state" "$LIVE/handoff"; }
 has() { case "$1" in *"$2"*) return 0 ;; *) return 1 ;; esac; }
+
+# (d2) explicit t3 via env fires below 70% and below the 1M default
+reset; use_context 410000
+AUTOPILOT_CONTEXT_BUDGET_T3=400000 fire >/dev/null; err="$(cat "$TMP/fire.err")"
+has "$err" 'Context budget T3' && ok "(d2) AUTOPILOT_CONTEXT_BUDGET_T3 sets the T3 threshold" || bad "(d2) no T3: $err"
+
 
 # --- T2 wording: the land checklist, not "keep working ... backup"
 reset; use_context 160000
@@ -212,6 +213,17 @@ h2="$(FLEET_ADDRESS="cookys/testhost/pm--claude" stop)"
 h3="$(FLEET_ADDRESS="cookys/testhost/pm--claude" stop)"
 rm -f "$TMP/home/.autopilot/config.json"
 has "$h1" '"decision":"block"' && has "$h2" '"decision":"block"' && has "$h3" '"decision":"block"' && ok "(k2) PM seat with explicit t2_hard_block:true blocks 3+ times" || bad "(k2) expected 3 blocks: [$h1] [$h2] [$h3]"
+
+# PM missing handoff: writer succeeds, fails closed to old message, and leaves non-PM unchanged.
+reset; use_context 160000; fire >/dev/null
+out="$(FLEET_BIN="$FAKE_FLEET" FAKE_FLEET_LOG="$FLEET_LOG" FLEET_ADDRESS="cookys/testhost/pm--claude" stop)"
+[ -f "$HANDOFF" ] && has "$out" 'auto-clear' && [ -z "$(FLEET_BIN="$FAKE_FLEET" FAKE_FLEET_LOG="$FLEET_LOG" FLEET_ADDRESS="cookys/testhost/pm--claude" stop)" ] && ok "(l1) PM writer writes and blocks once" || bad "(l1) PM writer: $out"
+reset; use_context 160000; fire >/dev/null
+out="$(FLEET_BIN="$FAKE_FLEET" FAKE_FLEET_LOG="$FLEET_LOG" FAKE_FLEET_EXIT=1 FLEET_ADDRESS="cookys/testhost/pm--claude" stop)"
+has "$out" '/handoff' && [ ! -f "$HANDOFF" ] && ok "(l2) writer failure keeps old block" || bad "(l2) $out"
+reset; use_context 160000; fire >/dev/null
+out="$(FLEET_BIN="$FAKE_FLEET" FAKE_FLEET_LOG="$FLEET_LOG" FLEET_ADDRESS="cookys/testhost/ops--claude" stop)"
+has "$out" '/handoff' && [ ! -f "$HANDOFF" ] && ok "(l3) non-PM keeps old block" || bad "(l3) $out"
 
 printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ] && { echo "PASS [context-land-gate]"; exit 0; }

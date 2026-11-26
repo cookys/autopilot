@@ -5,7 +5,8 @@
  * hooks/context-budget.js records the first T2 / T3 land-checklist fire per tier in the per-session
  * state file (`landFire.<tier> = {at, blocks, done}`). This hook compares that fire time with the mtime
  * of the session's handoff file and:
- *   - handoff older than the fire (or missing): blocks the stop, reason = run /handoff. At most 2 blocks
+ *   - handoff older than the fire (or missing): PM first attempts a scripted snapshot; otherwise blocks
+ *     the stop, reason = run /handoff. At most 2 blocks
  *     per tier fire; the 3rd stop is allowed and one audit line is appended to the state (`landAudit`).
  *   - handoff written after the fire: the first Stop after it blocks once more:
  *     - PM seat (`pm--claude`) or unresolvable fleet seat: tells the model to relay one copyable line to the
@@ -144,6 +145,17 @@ function main() {
       }
       block(operatorMsg + operatorHint);
       return;
+    }
+
+    if (resolveFleetSeat(payload) === 'pm') {
+      const result = spawnSync(process.execPath, [path.join(__dirname, '../scripts/pm-handoff-write.js'), '--sid', sid],
+        { encoding: 'utf8', timeout: 30000 });
+      if (!result.error && result.status === 0 && String(result.stdout || '').trim()) {
+        for (const t of pending) fires[t].done = true;
+        fs.writeFileSync(stateFile, JSON.stringify(st));
+        block(`handoff 已由腳本寫好（${result.stdout.trim()}），auto-clear 會接手；不必再轉告操作員。`);
+        return;
+      }
     }
 
     const top = pending[0];

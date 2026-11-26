@@ -1,0 +1,22 @@
+---
+id: 01M8AWC9CHF3XB7DB0DN861JTN
+kind: handoff-note
+created: 2026-11-26T02:53:57.009Z
+---
+## 目標
+M6 P3（autopilot 流狀態寫入 hippo store）全片補齊並通過 hippo 側驗收；後續把生產端事件接上 fleet pm resume，並完成 hard research 兩家獨立派工。
+
+## 現況
+live dfc52e330。已落地：S1a/b/c（handoff key/area/origin tag、m6-cutline、parity 測試、skill 路由、檢視＋archived close）、S2 decision ledger mirror、S3 plan upsert＋切線日負向測試、S4 open-decision 卡 mirror、#23 PM receipt、event-emit 對齊 fleet 契約、quota 週期探針修復、home-read-guard 修正、P1 三條（round-table、xs-direct、two-strike）。cursor 引擎真單完成（backlog 三筆登記）；opencode 端點 UnknownError、qoder 被 CN 閘擋（環境問題已回 hangar）。磁碟已清出 580G free。本 handoff 是 M6 P3 上線後第一筆寫入 live store 的 handoff-note。
+
+## 下一步
+- 等 hippo 跑寫入後 m6-reimport 對帳（寫入前基準 dfc52e330：backlog 166、adr 2）。
+- PM 工單：01M81M4RY harness fleet-usage 盤點（明天 12:00Z）、01M81K91F research fan-out 實作、01M81KXR26 CJK ansi2html 共用工具。
+- cursor2/opencode2 引擎結果回 hangar 01M81KS9M；母單 01M7VXJJ 引擎健康表。
+- 待登 backlog：claude-spawn-sites 既有紅；manifest 缺 fleet_task_id／tokens 欄。
+
+## 驗證方式
+m6-parity：在 autopilot repo 跑 `timeout 280 nice -n 10 bash hooks/tests/m6-parity.test.sh`；切線日負向：`AUTOPILOT_M6_CUTLINE=2026-11-22 timeout 280 nice -n 10 bash hooks/tests/m6-cutline.test.sh`；回滾：live checkout detach 到 tag pre-m6-p3（3d62487e3）。
+
+## Read-order
+先讀本席 handoff 目錄下同 session id 的交接檔（完整版），再讀 fleet 單 01M7PTTKK1FZ271ECARD54NZAP 的最新一則。

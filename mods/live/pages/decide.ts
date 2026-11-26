@@ -32,7 +32,7 @@ export type { DecideLayoutMode }
 export type DecideNav = DecideState & { cursor: number; folded: boolean; textMode: boolean; textBuf: string; opt: number | null; detailOffset?: number; armed?: boolean; snap?: string; stale?: boolean; style?: 'D' | 'C'; bgOpen?: boolean; layoutMode?: DecideLayoutMode | null; compactExpanded?: boolean }
 export const NO_NAV: DecideNav = { ...NO_DECIDE, cursor: 0, folded: false, textMode: false, textBuf: '', opt: null }
 export type DecideCtx = PageCtx & { decide?: DecideNav }
-export type DecideEffect = { kind: 'send'; id: string; line: string } | { kind: 'undo'; id: string } | { kind: 'fill'; text: string } | null
+export type DecideEffect = { kind: 'send'; id: string; line: string } | { kind: 'undo'; id: string } | { kind: 'fill'; text: string } | { kind: 'copy_url'; url: string } | null
 
 const LETTERS = 'abcde'
 const MAX_OPTS = 5
@@ -144,6 +144,10 @@ export function decideReduce(nav: DecideNav, key: KeyAction, ctx: PageCtx, nowMs
     if (nav.armed !== true || key.kind === 'submit') return same({ armed: true, snap: sig, stale: false })
     if (nav.snap !== sig) return same({ armed: true, stale: true }) // the picks, notes or a card changed under the preview: y is refused until `s` previews again
     return { nav: { ...nav, cursor, armed: false, snap: undefined, stale: false, hold: { ...(nav.hold ?? {}), ...Object.fromEntries(ready.map(r => [r.id, nowMs])) } }, effect: { kind: 'send', id: ready[0].id, line: ready[0].line } }
+  }
+  if (key.kind === 'copy_url') { // wide band `g`: the first URL in the card's background or question; no URL, no effect
+    const url = d === null ? null : /https?:\/\/\S+/.exec(`${d.background ?? ''}\n${d.question}`)?.[0] ?? null
+    return url === null ? same({}) : { nav: { ...nav, cursor }, effect: { kind: 'copy_url', url } }
   }
   switch (key.kind) {
     case 'text': {

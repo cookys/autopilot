@@ -79,6 +79,8 @@ import { focusAnchorKey, Pane, noteInputKey, resetNoteInputs } from './pane'
 import { routeKey } from './pages/keys'
 import { PANE_COLS, wideNext } from './wide/geometry'
 import { WIDE_TABS, wideBand, wideStatusText } from './wide/band'
+import { wideCrossNote, wideDecide } from './wide/decide'
+import type { WideCard, WideDecideInput, WideDecideOverflow } from './wide/decide'
 import { WideBandTree } from './wide/tree'
 import type { PaneModel } from './wide/pane'
 import type { KeyAction } from './pages/keys'
@@ -90,7 +92,7 @@ import { SEATS_TIMEOUT_MS, seatQuota, v74PmCounts } from './pages/now'
 import { PAGES, EXTRA_PAGES } from './pages/index'
 import { ASKS_LIST_TAIL, cutTitle, makeAsksFeed, makeDecideFeed, makePmFeed, mergeDecideCards } from './v74/feeds'
 import { askBandRows } from './askband'
-import { offerTodo, pickIndex, PICK_KEYS, V74_PAGES } from './v74/contract'
+import { offerTodo, pickIndex, pickKeys, PICK_KEYS, V74_PAGES } from './v74/contract'
 import type { CardNav, DecideCard, PmStatus, TodoCard, V74Ctx } from './v74/contract'
 import { v74Keylog } from './v74/keylog'
 import { frameHeight } from './pages/frame'
@@ -1719,6 +1721,7 @@ const framePageId = (): string => panePage
 let v74Open = false
 // console v5: the wide band (wide/geometry.ts) is on for the last band draw; the pane then docks 94 columns wide and Tab cycles the pages. Set only in the v7.4 band draw.
 let bandWide = false
+export let wideDecideOverflow: WideDecideOverflow = { steps: [], list: [] } // rows the wide 待決 page could not fit: P2's pane draws them (steps after the question, the list's tail)
 // console v5 wide pane (wide/pane.ts): what the band's last draw could not fit (band.ts overflow) and whether `e` has opened the context; the pane draws them
 let wideOverflow: { list: string[]; reply: string[] } = { list: [], reply: [] }
 let widePaneCtxOpen = false
@@ -1733,7 +1736,7 @@ function widePaneModel(): PaneModel {
   if (cards !== null) summaries[1] = `${cards.length} 張要你選`
   if (counts !== null) summaries[6] = `執行 ${counts.running} · 失敗 ${counts.failed} · ${GLYPHS.state.waiting} ${counts.stuck}`
   return {
-    page, tabs: WIDE_TABS, moved: wideOverflow.reply, more: wideOverflow.list, pin: [], ctx: [], ctxFold: false, ctxOpen: widePaneCtxOpen,
+    page, tabs: WIDE_TABS, moved: page === 2 ? wideDecideOverflow.steps : wideOverflow.reply, more: page === 2 ? wideDecideOverflow.list : wideOverflow.list, pin: [], ctx: [], ctxFold: false, ctxOpen: widePaneCtxOpen,
     lanes: rows === null ? null : rows.slice(0, 12).map(r => ({ state: mark(r.sid), name: r.line.label, speed: r.word, task: r.line.lead_display ?? '' })),
     lanesHead: rows === null ? '' : `艦隊 · ${rows.length} 條產線`,
     hist: null, events: null, summaries,
@@ -1933,6 +1936,7 @@ async function frameKeyBody($: EngineInterface, k: KeyAction): Promise<void> {
       else if (r.effect?.kind === 'send') await holdDecide($) // the hold and the claim stay decideundo's: the reducer's own hold is not written
       else if (r.effect?.kind === 'undo') await undoDecide($, r.effect.id)
       else if (r.effect?.kind === 'fill') await fillPrompt($, r.effect.text)
+      else if (r.effect?.kind === 'copy_url') $.ui.toast(r.effect.url) // no clipboard call exists in the mod host: the URL is shown for the operator to take
       if (!r.nav.textMode) noteArmed = false
     } else if (id === 'todo') {
       const nav = await read($, V74_NAV)
@@ -2394,11 +2398,38 @@ export function registerLive(on: Parameters<Register>[0]): void {
       if (bandWide) {
         // console v5 wide band (P1 skeleton): the page's own rows go in the list / reply columns as they are; P3/P4 re-skin them, P2 moves the overflow to the pane
         const pageNo = Math.max(1, (V74_PAGES as readonly string[]).indexOf(panePage) + 1)
-        const list = pageNo === 2 && decideCards !== null ? decideCards.map((c, i) => (c === curCard ? GLYPHS.structure.folded + ' ' : '  ') + String(i + 1) + ' ' + cardSentenceOf(c)) : []
-        const reply = pageNo === 2 && curCard !== null ? [curCard.question, ...curCard.options.map((o, i) => PICK_KEYS[i] + ': ' + o.label)] : remText !== null ? [remText] : []
-        const status = wideStatusText({ verdict: '進行中', running: fleetCounts?.running ?? null, failed: oneRowInput.line.failed, stalled: fleetCounts?.stuck ?? null, pending: pendCount, act: null, tps: lastStep?.tps ?? null, spark: sparkBars, labels: { fleet: '艦隊', pending: '待決', act: '動手' } })
+        const status = wideStatusText({ verdict: '進行中', running: fleetCounts?.running ?? null, failed: oneRowInput.line.failed, stalled: fleetCounts?.stuck ?? null, pending: pendCount, act: durableAwaiting.length, tps: lastStep?.tps ?? null, spark: sparkBars, labels: { fleet: '艦隊', pending: '待決', act: '動手' } })
+        let list: string[] = []
+        let reply: string[] = remText !== null ? [remText] : []
+        let stepTitle = ''
+        let hints = ''
+        const cursorAt = decideCards === null ? 0 : Math.max(0, Math.min(decideCards.length - 1, decideLocal.cursor))
+        const wideCards: WideCard[] = [
+          ...(decideCards ?? []).map(c => ({ id: c.id, title: cardSentenceOf(c), question: c.question, background: c.background, options: c.options })),
+          // answered cards that wait on the operator's own step: listed and counted (the cursor only walks the open cards, decideReduce is unchanged)
+          ...durableAwaiting.map(a => ({ id: a.id, title: cardSentenceOf(a), question: a.question, background: null, options: [], awaiting: { steps: a.operator_steps } })),
+        ]
+        const wideIn: WideDecideInput = {
+          cards: wideCards, cursor: cursorAt, picks: decideState.picks, notes: decideState.notes, sent: decideState.sent,
+          textMode: decideLocal.textMode, textBuf: decideLocal.textBuf, armed: decideLocal.armed === true,
+          notice: decideLocal.stale === true && decideLocal.armed === true ? { kind: 'changed' } : null,
+          source: decideCards === null && decideFeed.error() !== null ? { reason: decideFeed.error() ?? '', retrySec: 30 } : null,
+        }
+        if (pageNo === 2) {
+          const d = wideDecide(wideIn)
+          list = d.list; reply = d.reply; stepTitle = d.stepTitle; hints = d.hints
+          wideDecideOverflow = d.overflow
+        } else {
+          wideDecideOverflow = { steps: [], list: [] }
+          // C1-C3: another page is shown while a card is open; the band keeps one line about it
+          if (curCard !== null) {
+            const pk = decideState.picks[curCard.id]
+            const cross = wideCrossNote(WIDE_TABS[pageNo - 1] ?? '', { n: cursorAt + 1, pick: pk === undefined ? null : pickKeys(curCard.options)[pk] || null, note: (decideState.notes[curCard.id] ?? '').trim() !== '' })
+            if (cross !== null) { reply = cross.reply; stepTitle = cross.stepTitle }
+          }
+        }
         await logBandGeometry($, rows, columns, 17)
-        const wide = wideBand({ page: pageNo, tabs: WIDE_TABS, stepTitle: '', list, reply, status, hints: '' })
+        const wide = wideBand({ page: pageNo, tabs: WIDE_TABS, stepTitle, list, reply, status, hints })
         wideOverflow = wide.overflow
         return WideBandTree(el, wide)
       }

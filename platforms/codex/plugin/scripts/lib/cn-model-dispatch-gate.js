@@ -4,6 +4,8 @@
 // Restricted operators may receive only a redacted, scan-clean brief from a fresh
 // empty sandbox outside every git work tree. Local endpoint names must resolve locally.
 const fs = require('node:fs');
+const crypto = require('node:crypto');
+const { StringDecoder } = require('node:string_decoder');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { familyOfEngine } = require('./stage-write');
@@ -103,6 +105,132 @@ function scanBrief(files) {
     else process.env.AUTOPILOT_LEAK_GUARD_HOSTS = hostInventory;
   }
 }
+function parseBrief(text, extensions = new Set()) {
+  if (Buffer.byteLength(text) > 40 * 1024) return false;
+  const lines = text.split(/\r?\n/), names = ['Task', 'Inputs', 'Output', 'Limits'];
+  if (lines[0] !== 'Brief-Class: clean-sandbox') return false;
+  const sections = Object.fromEntries(names.map((n) => [n, []]));
+  let state = -1, fence = '', blockLines = 0, totalLines = 0, indent = 0;
+  const finishIndent = () => { if (indent >= 20) { totalLines += indent; if (indent > 40) return false; } indent = 0; return true; };
+  for (const line of lines.slice(1)) {
+    const header = /^(Brief-Class|Task|Inputs|Output|Limits):(?:\s*(.*))?$/.exec(line);
+    if (header && !fence) {
+      if (!finishIndent() || header[1] !== names[state + 1]) return false;
+      state++; sections[names[state]].push(header[2] || ''); continue;
+    }
+    if (state < 0) { if (line.trim()) return false; continue; }
+    sections[names[state]].push(line);
+    const trimmed = line.trimStart();
+    const mark = /^(\`{3,}|~{3,})/.exec(trimmed);
+    if (fence) { if (mark && mark[1][0] === fence && mark[1].length >= 3) { fence = ''; if (blockLines > 40) return false; totalLines += blockLines; blockLines = 0; } else blockLines++; continue; }
+    if (mark) { if (!finishIndent()) return false; fence = mark[1][0]; continue; }
+    if (/^(?: {4}|\t)/.test(line) && line.trim()) indent++; else if (!finishIndent()) return false;
+  }
+  if (!finishIndent()) return false;
+  if (fence) { if (blockLines > 40) return false; totalLines += blockLines; }
+  if (state !== 3 || totalLines > 80) return false;
+  for (const [name, limit] of [['Task', 6144], ['Inputs', 24576], ['Output', 2048], ['Limits', 2048]]) {
+    const content = sections[name].join('\n');
+    if (!content.trim() || Buffer.byteLength(content) > limit) return false;
+    for (let token of content.split(/\s+/)) {
+      token = token.replace(/^[`*_[({<"']+|[`*_)\]}>"',;!?]+$/g, '');
+      if (/^(?:\.\.?\/|~\/|\/)/.test(token) || /[^\s:]+:\d+(?::\d+)?$/.test(token)) return false;
+      if (token.includes('/') && extensions.has(path.extname(token).toLowerCase())) return false;
+    }
+  }
+  return true;
+}
+const SHINGLE_VERSION = 'cn-shingle-v1';
+const GIT_ENV_KEYS = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR', 'GIT_OBJECT_DIRECTORY'];
+function git(root, args) {
+  const env = { ...process.env }; for (const k of GIT_ENV_KEYS) delete env[k];
+  const r = spawnSync('git', ['-C', root, ...args], { env, encoding: 'buffer', maxBuffer: 128 * 1024 * 1024 });
+  if (r.status !== 0 || r.error) throw Error('git');
+  return r.stdout;
+}
+function sourceInfo(source) {
+  const root = fs.realpathSync(source);
+  if (fs.realpathSync(String(git(root, ['rev-parse', '--show-toplevel'])).trim()) !== root) throw Error('root');
+  const tracked = String(git(root, ['ls-files', '-z'])).split('\0').filter(Boolean);
+  if (!tracked.length) throw Error('empty');
+  const untracked = String(git(root, ['ls-files', '--others', '--exclude-standard', '-z'])).split('\0').filter(Boolean);
+  return { root, names: [...new Set([...tracked, ...untracked])].sort(), extensions: new Set(tracked.map(x => path.extname(x).toLowerCase()).filter(Boolean)) };
+}
+function words(text) {
+  return text.normalize('NFKC').toLowerCase().match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]|[\p{L}\p{N}_]+/gu) || [];
+}
+function hashWindow(w) { return crypto.createHash('sha256').update(w.join('\0')).digest('hex').slice(0, 16); }
+function windows(text) { const w = words(text), result = []; for (let i = 0; i + 8 <= w.length; i++) result.push(hashWindow(w.slice(i, i + 8))); return result; }
+function shingleIndex(info, env) {
+  const runtime = fs.realpathSync(env.XDG_RUNTIME_DIR || '');
+  if (fs.statfsSync(runtime).type !== 0x01021994) throw Error('tmpfs');
+  fs.accessSync(runtime, fs.constants.W_OK);
+  const base = path.join(runtime, 'autopilot'), dir = path.join(base, 'cn-shingle');
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); fs.chmodSync(base, 0o700); fs.chmodSync(dir, 0o700);
+  if (fs.statfsSync(fs.realpathSync(dir)).type !== 0x01021994) throw Error('tmpfs');
+  const entries = [], signatures = [];
+  for (const name of info.names) {
+    const file = path.join(info.root, name); let st;
+    try { st = fs.lstatSync(file); } catch (e) { if (e.code === 'ENOENT') continue; throw e; }
+    if (st.isSymbolicLink() || !st.isFile()) continue;
+    const fd = fs.openSync(file, 'r'), digest = crypto.createHash('sha256'), buf = Buffer.allocUnsafe(65536);
+    let n, first = true, binary = false, size = 0;
+    try { while ((n = fs.readSync(fd, buf, 0, buf.length, null))) { const b = buf.subarray(0, n); if (first) binary = b.subarray(0, 8192).includes(0); first = false; size += n; digest.update(b); } } finally { fs.closeSync(fd); }
+    if (binary) continue;
+    entries.push({ name, file }); signatures.push(`${name}:${size}:${digest.digest('hex')}`);
+  }
+  if (!entries.length) throw Error('empty');
+  const key = crypto.createHash('sha256').update(JSON.stringify([SHINGLE_VERSION, info.root, signatures])).digest('hex');
+  const cache = path.join(dir, `${key}.bin`);
+  function decode(buf) {
+    if (buf.length < 44 || buf.subarray(0, 8).toString() !== 'CNSHNG01') throw Error('magic');
+    const len = buf.readUInt32BE(8); if (len !== buf.length - 44) throw Error('length');
+    const payload = buf.subarray(12, 12 + len); if (!crypto.createHash('sha256').update(payload).digest().equals(buf.subarray(12 + len))) throw Error('checksum');
+    return JSON.parse(payload.toString());
+  }
+  try { const cached = decode(fs.readFileSync(cache)); fs.chmodSync(cache, 0o600); return cached; } catch { /* invalid or absent cache: rebuild */ }
+  const index = Object.create(null);
+  for (let id = 0; id < entries.length; id++) {
+    const fd = fs.openSync(entries[id].file, 'r'), decoder = new StringDecoder('utf8'), buf = Buffer.allocUnsafe(65536);
+    let pending = '', line = 1, window = [], n;
+    const consume = (text, final = false) => {
+      let combined = pending + text, cut = combined.length;
+      if (!final) { const match = /[\p{L}\p{N}_\p{M}]+$/u.exec(combined); if (match) cut = match.index; }
+      pending = combined.slice(cut); combined = combined.slice(0, cut);
+      const re = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]|[\p{L}\p{N}_]+|\n/gu;
+      for (const match of combined.normalize('NFKC').toLowerCase().matchAll(re)) {
+        if (match[0] === '\n') { line++; continue; }
+        window.push([match[0], line]); if (window.length > 8) window.shift();
+        if (window.length === 8) { const h = hashWindow(window.map(x => x[0])); (index[h] ||= Object.create(null))[id] ||= window[0][1]; }
+      }
+    };
+    try { while ((n = fs.readSync(fd, buf, 0, buf.length, null))) consume(decoder.write(buf.subarray(0, n))); consume(decoder.end(), true); } finally { fs.closeSync(fd); }
+  }
+  if (!Object.values(index).some(rows => Object.keys(rows).length < 20)) throw Error('no windows');
+  const result = { entries: entries.map(x => x.name), index }, payload = Buffer.from(JSON.stringify(result)), header = Buffer.alloc(12);
+  header.write('CNSHNG01'); header.writeUInt32BE(payload.length, 8);
+  const tmp = path.join(dir, `.${key}.${process.pid}.${crypto.randomBytes(6).toString('hex')}`);
+  try { fs.writeFileSync(tmp, Buffer.concat([header, payload, crypto.createHash('sha256').update(payload).digest()]), { mode: 0o600, flag: 'wx' }); fs.renameSync(tmp, cache); } finally { try { fs.unlinkSync(tmp); } catch {} }
+  for (const name of fs.readdirSync(dir)) { const file = path.join(dir, name); try { if (fs.statSync(file).mtimeMs < Date.now() - 86400000) fs.unlinkSync(file); } catch {} }
+  return result;
+}
+function shingleHits(text, data, env) {
+  const ws = windows(text), hits = [], runs = new Map();
+  for (const h of ws) {
+    const rows = data.index[h] || {}, next = new Map();
+    for (const [id, line] of Object.entries(rows)) next.set(id, (runs.get(id) || 0) + 1);
+    if (Object.keys(rows).length < 20 || [...next.values()].some(x => x >= 4)) {
+      if (Object.keys(rows).length) hits.push({ rows, h });
+    }
+    runs.clear(); for (const [k, v] of next) runs.set(k, v);
+  }
+  if (hits.length) {
+    const log = path.join(fs.realpathSync(env.XDG_RUNTIME_DIR), 'autopilot', 'cn-gate.log');
+    const rows = hits.flatMap(x => Object.entries(x.rows).map(([id, line]) => `${data.entries[id]}:${line}`));
+    const fd = fs.openSync(log, 'a', 0o600); try { fs.fchmodSync(fd, 0o600); fs.writeFileSync(fd, `${rows.join('\n')}\n`); } finally { fs.closeSync(fd); }
+  }
+  return hits.length;
+}
 function check(opts = {}) {
   const { runner = '', model = '', cwd = process.cwd(), files = [], env = process.env } = opts;
   let { endpoint = '' } = opts;
@@ -137,6 +265,13 @@ function check(opts = {}) {
   if (!(tier === 'T0' || (tier === 'T1' && family !== 'minimax'))) return block('restricted_operator_not_public_source');
   if (!freshSandbox(cwd, files)) return block('restricted_operator_private_workdir');
   if (!scanBrief(files)) return block('restricted_operator_brief_scan');
+  const sources = opts.sourceRepos || (opts.sourceRepo !== undefined ? [opts.sourceRepo] : []);
+  if (sources.length !== 1 || !sources[0]) return block('restricted_operator_shingle_source_missing');
+  let info; try { info = sourceInfo(sources[0]); } catch { return block('restricted_operator_shingle_source_missing'); }
+  let text; try { text = files.map(file => fs.readFileSync(file, 'utf8')).join('\n'); } catch { return block('restricted_operator_brief_template'); }
+  if (!parseBrief(text, info.extensions)) return block('restricted_operator_brief_template');
+  let hits; try { hits = shingleHits(text, shingleIndex(info, env), env); } catch { return block('restricted_operator_shingle_unavailable'); }
+  if (hits) { const result = block('restricted_operator_brief_shingle'); result.line += ` hits=${hits}`; return result; }
   return { allowed: true, family };
 }
 function rungParts(rung) {
@@ -146,9 +281,9 @@ function rungParts(rung) {
 }
 function filterLadder(rungs, ctx = {}) { const kept = []; const barred = []; for (const rung of rungs) { const p = rungParts(rung); const c = check({ ...ctx, ...p, endpoint: p.endpoint || ctx.endpoint }); if (c.allowed) kept.push(rung); else barred.push({ rung, family: c.family, line: c.line, cls: c.cls }); } return { kept, barred }; }
 function main(argv) {
-  const cmd = argv[0], o = { files: [] }, rest = [];
+  const cmd = argv[0], o = { files: [], sourceRepos: [] }, rest = [];
   for (let i = 1; i < argv.length; i++) { const a = argv[i]; if (a === '--') { rest.push(...argv.slice(i + 1)); break; }
-    if (['--runner', '--model', '--endpoint', '--cwd', '--prompt-file'].includes(a)) { const k = a.slice(2); const v = argv[++i]; if (k === 'prompt-file') o.files.push(v); else o[k] = v; }
+    if (['--runner', '--model', '--endpoint', '--cwd', '--prompt-file', '--source-repo'].includes(a)) { const k = a.slice(2); const v = argv[++i]; if (k === 'prompt-file') o.files.push(v); else if (k === 'source-repo') o.sourceRepos.push(v); else o[k] = v; }
     else { process.stderr.write(`cn-model-dispatch-gate: unknown arg ${a}\n`); return 64; }
   }
   if (cmd === 'check') { const c = check(o); if (!c.allowed) { process.stderr.write(`${c.line}\n`); return 2; } return 0; }

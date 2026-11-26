@@ -1,5 +1,9 @@
 'use strict';
 
+// Live probe of the grok CLI: one short prompt, record ok/unavailable.
+// A fresh record is reused for 15 minutes instead of probing again.
+// AUTOPILOT_GROK_PROBE=off disables running the probe.
+
 const fs = require('fs');
 const os = require('os');
 const path = require('path');

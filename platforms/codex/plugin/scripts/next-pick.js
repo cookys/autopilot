@@ -192,6 +192,25 @@ function sha256(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
 }
 
+const DEFAULT_ID_RE = /^BL-\d{4,}$/u;
+
+// The id format is the backlog's repo's choice: `- id_pattern: <regex>` under `## Id Pattern` in the nearest
+// `.claude/backlog-config.md` above the backlog file. No config, or an unusable pattern, keeps the BL-NNNN default.
+function idPatternFor(backlogPath) {
+  let dir = path.dirname(path.resolve(backlogPath));
+  for (;;) {
+    const cfg = path.join(dir, '.claude', 'backlog-config.md');
+    if (fs.existsSync(cfg)) {
+      const m = fs.readFileSync(cfg, 'utf8').match(/^[ \t]*-[ \t]*id_pattern:[ \t]*(\S+)[ \t]*$/mu);
+      if (!m) return DEFAULT_ID_RE;
+      try { return new RegExp(m[1], 'u'); } catch { return DEFAULT_ID_RE; }
+    }
+    const up = path.dirname(dir);
+    if (up === dir) return DEFAULT_ID_RE;
+    dir = up;
+  }
+}
+
 function parseBacklog(opts) {
   let raw;
   try {
@@ -200,6 +219,7 @@ function parseBacklog(opts) {
     usage(`--backlog unreadable: ${opts.backlog}`);
   }
   const todayMs = parseUtcDay(opts.today !== undefined ? opts.today : new Date().toISOString().slice(0, 10));
+  const idRe = idPatternFor(opts.backlog);
   const rows = [];
   const sections = raw.split(/^### /mu).slice(1);
   for (const section of sections) {
@@ -224,7 +244,7 @@ function parseBacklog(opts) {
     const statusMatch = section.match(/^- \*\*Status\*\*:[ \t]*([^\n]*)/mu);
     const statusRaw = statusMatch && statusMatch[1].trim() ? statusMatch[1].trim() : null;
     rows.push({
-      id: /^BL-\d{4,}$/u.test(idText) ? idText : null,
+      id: idRe.test(idText) ? idText : null,
       status: statusRaw ? statusRaw.split(/\s+/u)[0] : null,
       status_raw: statusRaw,
       title,

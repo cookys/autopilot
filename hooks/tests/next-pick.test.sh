@@ -433,4 +433,33 @@ assert_eq "$(printf '%s' "$ID_OUT" | row_field 'Row with no id line' id)" "null"
 assert_eq "$(printf '%s' "$ID_OUT" | row_field 'Row shipped with detail' status)" "shipped" "status is the first token"
 assert_eq "$(printf '%s' "$ID_OUT" | row_field 'Row shipped with detail' status_raw)" "shipped v1.2 2026-01-01" "status_raw keeps the full value"
 
+# ── id_pattern from the backlog repo's .claude/backlog-config.md ──
+IDP_REPO="$TEST_TMP/idp-repo"
+mkdir -p "$IDP_REPO/doc" "$IDP_REPO/.claude"
+cat > "$IDP_REPO/.claude/backlog-config.md" <<'MD'
+## Id Pattern
+- id_pattern: ^B[0-9]+$
+MD
+cat > "$IDP_REPO/doc/BACKLOG.md" <<'MD'
+### Row with B id
+- **Id**: B64
+- **Status**: open
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: t
+
+### Row with BL id under a B pattern
+- **Id**: BL-0042
+- **Status**: open
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: t
+MD
+IDP_OUT="$(node "$SCRIPT" parse --backlog "$IDP_REPO/doc/BACKLOG.md")"
+assert_eq "$(printf '%s' "$IDP_OUT" | row_field 'Row with B id' id)" "B64" "id_pattern from backlog-config.md is honoured"
+assert_eq "$(printf '%s' "$IDP_OUT" | row_field 'Row with BL id under a B pattern' id)" "null" "an id outside the configured pattern is null"
+printf '%s\n' '## Id Pattern' '- id_pattern: ([' > "$IDP_REPO/.claude/backlog-config.md"
+IDP_BAD="$(node "$SCRIPT" parse --backlog "$IDP_REPO/doc/BACKLOG.md")"
+assert_eq "$(printf '%s' "$IDP_BAD" | row_field 'Row with BL id under a B pattern' id)" "BL-0042" "unusable pattern falls back to BL-NNNN"
+
 finalize_test

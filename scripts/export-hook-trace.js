@@ -12,6 +12,14 @@ function bytesOf(v) {
   return Buffer.byteLength(typeof v === 'string' ? v : JSON.stringify(v));
 }
 
+// One content-free row per submitted prompt, the denominator of --check-targets. Tool results, meta and sidechain entries are not prompts.
+function promptRow(entry) {
+  if (!entry || entry.type !== 'user' || entry.isMeta || entry.isSidechain || entry.isCompactSummary) return null;
+  const c = entry.message && entry.message.content;
+  if (!(typeof c === 'string' || (Array.isArray(c) && !c.some((b) => b && b.type === 'tool_result')))) return null;
+  return { ts: entry.timestamp, kind: 'prompt', event: 'Prompt', hook: 'Prompt', context_bytes: 0, stdout_bytes: 0, exit: null };
+}
+
 function rowOf(entry) {
   const a = entry && entry.attachment;
   if (!a || !HOOK_KINDS.has(a.type)) return null;
@@ -33,7 +41,7 @@ function exportTrace(text, { from, to } = {}) {
     if (!line) continue;
     let entry;
     try { entry = JSON.parse(line); } catch (_e) { continue; }
-    const row = rowOf(entry);
+    const row = rowOf(entry) || promptRow(entry);
     if (!row || !row.ts) continue;
     if (from && row.ts < from) continue;
     if (to && row.ts > to) continue;

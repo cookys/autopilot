@@ -86,3 +86,26 @@ test('targets selection picks top 2 hooks from UserPromptSubmit and PreToolUse',
   assert.equal(parsed.targets[1].baseline_bytes, 33255);
   assert.equal(parsed.targets[1].threshold_50pct, 16627);
 });
+
+test('--check-targets compares per-prompt averages and is red without enough prompts', () => {
+  const { checkTargets } = require('../measure-seat-injection');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 's10-p5-'));
+  try {
+    const base = path.join(dir, 'baseline.json');
+    const trace = path.join(dir, 'trace.jsonl');
+    const run = (prompts, hookBytes, baselinePrompts) => {
+      fs.writeFileSync(base, JSON.stringify({ baseline_prompts: baselinePrompts, targets: [{ hook: 'UserPromptSubmit', baseline_bytes: 1000 }] }));
+      const rows = Array.from({ length: prompts }, () => ({ kind: 'prompt', event: 'Prompt', hook: 'Prompt' }));
+      rows.push({ event: 'UserPromptSubmit', hook: 'UserPromptSubmit', context_bytes: hookBytes });
+      fs.writeFileSync(trace, rows.map((r) => JSON.stringify(r)).join('\n'));
+      return checkTargets(base, trace);
+    };
+    // baseline 100 B/prompt, limit 50 B/prompt
+    assert.equal(run(100, 5000, 10).ok, true, 'a long window with a total above the baseline total still passes');
+    assert.equal(run(50, 2600, 10).ok, false, '52 B/prompt is over');
+    assert.match(run(49, 0, 10).violations[0], /insufficient sample/);
+    assert.match(run(50, 0, undefined).violations[0], /baseline_prompts missing/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -161,11 +161,13 @@ function parseTrace(jsonlPath) {
   const byEvent = {};
   const byHook = {};
   const targetCandidates = {};
+  let prompts = 0;
 
   for (const line of raw.split(/\r?\n/)) {
     const trimmed = line.trim();
     if (!trimmed) continue;
     const row = JSON.parse(trimmed);
+    if (row.kind === 'prompt') { prompts += 1; continue; }
     const bytes = (Number(row.context_bytes) || 0) + (Number(row.stdout_bytes) || 0);
     const ev = row.event || 'unknown';
     const hk = row.hook || ev;
@@ -190,7 +192,7 @@ function parseTrace(jsonlPath) {
         threshold_50pct: Math.floor(baselineBytes * 0.5),
       }));
 
-  return { by_event: byEvent, by_hook: byHook, targets };
+  return { by_event: byEvent, by_hook: byHook, targets, prompts };
 }
 
 function checkBaseline(rootDir, baselinePath) {
@@ -259,19 +261,29 @@ function checkBudget(rootDir, maxDescTotal, maxDescEach) {
   return { ok: violations.length === 0, violations, current, head_total_bytes: headTotal };
 }
 
+const MIN_PROMPTS = 50;
+
+// Per-prompt average, not totals (PM ruling 01M8B7T6VD): totals follow how long the window was. Too few prompts, or a
+// baseline without its prompt count, is red — never a pass by absence of data.
 function checkTargets(baselinePath, tracePath) {
   const baseline = JSON.parse(fs.readFileSync(baselinePath, 'utf8'));
   const trace = parseTrace(tracePath);
+  const prompts = trace.prompts;
   const violations = [];
 
+  if (!(baseline.baseline_prompts > 0)) violations.push('baseline_prompts missing: export the baseline window with export-hook-trace.js and record its prompt count');
+  if (prompts < MIN_PROMPTS) violations.push(`insufficient sample: ${prompts} prompts < ${MIN_PROMPTS}`);
+  if (violations.length) return { ok: false, violations, prompts };
+
   for (const target of baseline.targets || []) {
-    const actual = trace.by_hook[target.hook] || 0;
-    if (actual > target.threshold_50pct) {
-      violations.push(`${target.hook}: ${actual} > threshold ${target.threshold_50pct}`);
+    const actual = (trace.by_hook[target.hook] || 0) / prompts;
+    const limit = (target.baseline_bytes / baseline.baseline_prompts) * 0.5;
+    if (actual > limit) {
+      violations.push(`${target.hook}: ${actual.toFixed(1)} B/prompt > threshold ${limit.toFixed(1)}`);
     }
   }
 
-  return { ok: violations.length === 0, violations };
+  return { ok: violations.length === 0, violations, prompts };
 }
 
 function compareResults(aPath, bPath) {

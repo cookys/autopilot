@@ -21,4 +21,14 @@ assert.strictEqual(all[1].stdout_bytes, 5);
 assert.ok(!JSON.stringify(all).includes('secret'), 'no message text in rows');
 assert.strictEqual(exportTrace(text, { from: '2026-11-26T02:00:00Z' }).length, 1, 'from filter');
 assert.strictEqual(exportTrace(text, { to: '2026-11-26T02:00:00Z' }).length, 4, 'to filter');
+const inj = [
+  L({ uuid: 'h1', timestamp: '2026-11-26T04:00:00Z', type: 'user', message: { content: 'human' } }),
+  L({ uuid: 'a1', parentUuid: 'h1', timestamp: '2026-11-26T04:00:01Z', type: 'attachment', attachment: { type: 'hook_additional_context', hookEvent: 'UserPromptSubmit', hookName: 'UserPromptSubmit:x', content: 'abc' } }),
+  L({ uuid: 'c1', timestamp: '2026-11-26T04:05:00Z', type: 'user', isMeta: true, origin: { kind: 'channel' }, message: { content: 'cron tick' } }),
+  L({ uuid: 'a2', parentUuid: 'c1', timestamp: '2026-11-26T04:05:01Z', type: 'attachment', attachment: { type: 'hook_additional_context', hookEvent: 'UserPromptSubmit', hookName: 'UserPromptSubmit:x', content: 'abc' } }),
+  L({ uuid: 'a3', parentUuid: 'c1', timestamp: '2026-11-26T04:05:02Z', type: 'attachment', attachment: { type: 'hook_success', hookEvent: 'UserPromptSubmit', hookName: 'UserPromptSubmit:y', stdout: '', exitCode: 0 } }),
+  L({ uuid: 'c2', timestamp: '2026-11-26T04:10:00Z', type: 'user', isMeta: true, message: { content: 'channel without UPS' } }),
+].join('\n');
+const ir = exportTrace(inj).filter((r) => r.kind === 'prompt');
+assert.deepStrictEqual(ir.map((r) => r.source), ['human', 'injected'], 'one human, one injected (UPS fired twice on the same cron turn counts once); meta without UPS not counted');
 console.log('PASS export-hook-trace');

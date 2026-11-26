@@ -17,7 +17,7 @@ function promptRow(entry) {
   if (!entry || entry.type !== 'user' || entry.isMeta || entry.isSidechain || entry.isCompactSummary) return null;
   const c = entry.message && entry.message.content;
   if (!(typeof c === 'string' || (Array.isArray(c) && !c.some((b) => b && b.type === 'tool_result')))) return null;
-  return { ts: entry.timestamp, kind: 'prompt', event: 'Prompt', hook: 'Prompt', context_bytes: 0, stdout_bytes: 0, exit: null };
+  return { ts: entry.timestamp, kind: 'prompt', source: 'human', event: 'Prompt', hook: 'Prompt', context_bytes: 0, stdout_bytes: 0, exit: null };
 }
 
 function rowOf(entry) {
@@ -35,17 +35,32 @@ function rowOf(entry) {
   };
 }
 
+// A cron / channel / task-notification turn is not a human prompt, but when the harness ran UserPromptSubmit for it the
+// seat paid the same per-prompt injection. It counts as its own source ('injected'), once per parent entry that fired UPS.
+function injectedRow(entry, parent) {
+  const a = entry && entry.attachment;
+  if (!a || a.hookEvent !== 'UserPromptSubmit' || !parent || parent.type !== 'user' || promptRow(parent)) return null;
+  return { ts: parent.timestamp, kind: 'prompt', source: 'injected', event: 'Prompt', hook: 'Prompt', context_bytes: 0, stdout_bytes: 0, exit: null };
+}
+
 function exportTrace(text, { from, to } = {}) {
   const rows = [];
+  const byUuid = new Map();
+  const counted = new Set();
   for (const line of text.split('\n')) {
     if (!line) continue;
     let entry;
     try { entry = JSON.parse(line); } catch (_e) { continue; }
-    const row = rowOf(entry) || promptRow(entry);
-    if (!row || !row.ts) continue;
-    if (from && row.ts < from) continue;
-    if (to && row.ts > to) continue;
-    rows.push(row);
+    if (entry && entry.uuid) byUuid.set(entry.uuid, entry);
+    const parent = entry && byUuid.get(entry.parentUuid);
+    const inj = parent && !counted.has(parent.uuid) ? injectedRow(entry, parent) : null;
+    if (inj) counted.add(parent.uuid);
+    for (const row of [inj, rowOf(entry) || promptRow(entry)]) {
+      if (!row || !row.ts) continue;
+      if (from && row.ts < from) continue;
+      if (to && row.ts > to) continue;
+      rows.push(row);
+    }
   }
   return rows;
 }

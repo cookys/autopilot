@@ -162,12 +162,13 @@ function parseTrace(jsonlPath) {
   const byHook = {};
   const targetCandidates = {};
   let prompts = 0;
+  let injectedPrompts = 0;
 
   for (const line of raw.split(/\r?\n/)) {
     const trimmed = line.trim();
     if (!trimmed) continue;
     const row = JSON.parse(trimmed);
-    if (row.kind === 'prompt') { prompts += 1; continue; }
+    if (row.kind === 'prompt') { prompts += 1; if (row.source === 'injected') injectedPrompts += 1; continue; }
     const bytes = (Number(row.context_bytes) || 0) + (Number(row.stdout_bytes) || 0);
     const ev = row.event || 'unknown';
     const hk = row.hook || ev;
@@ -192,7 +193,7 @@ function parseTrace(jsonlPath) {
         threshold_50pct: Math.floor(baselineBytes * 0.5),
       }));
 
-  return { by_event: byEvent, by_hook: byHook, targets, prompts };
+  return { by_event: byEvent, by_hook: byHook, targets, prompts, human_prompts: prompts - injectedPrompts, injected_prompts: injectedPrompts };
 }
 
 function checkBaseline(rootDir, baselinePath) {
@@ -272,7 +273,7 @@ function checkTargets(baselinePath, tracePath) {
   const violations = [];
 
   if (!(baseline.baseline_prompts > 0)) violations.push('baseline_prompts missing: export the baseline window with export-hook-trace.js and record its prompt count');
-  if (prompts < MIN_PROMPTS) violations.push(`insufficient sample: ${prompts} prompts < ${MIN_PROMPTS}`);
+  if (prompts < MIN_PROMPTS) violations.push(`insufficient sample: ${prompts} prompts (${trace.human_prompts} human + ${trace.injected_prompts} injected) < ${MIN_PROMPTS}`);
   if (violations.length) return { ok: false, violations, prompts };
 
   for (const target of baseline.targets || []) {
@@ -283,7 +284,7 @@ function checkTargets(baselinePath, tracePath) {
     }
   }
 
-  return { ok: violations.length === 0, violations, prompts };
+  return { ok: violations.length === 0, violations, prompts, human_prompts: trace.human_prompts, injected_prompts: trace.injected_prompts };
 }
 
 function compareResults(aPath, bPath) {

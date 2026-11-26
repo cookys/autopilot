@@ -111,3 +111,17 @@ test('v7.4 boxed spend page: grab, j, Down moves two rows in all', async ($, on)
   await arrowDown($)
   expect(text(await h.draw())).toMatch(/↑ 還有 2 列/)
 })
+
+test('v7.4 light contrast: spend frame hint and section headings', async ($, on) => {
+  const h = await host($, on, PACK)
+  await h.key('5')
+  await $.ui.focus({ component: 'AbovePrompt', requestId: 'above-prompt', element: 'tab:hygiene', origin: { kind: 'person' } })
+  const nodes = walk(await h.draw())
+  const bottom = nodes.find(n => n.props?.key === 'v74-bottom')
+  const hint = walk(bottom).find(n => n.type === 'Text' && text(n).includes('鍵盤在 pane'))
+  expect(hint?.props?.color, 'hint uses inactive ink').toBe('inactive')
+  // a fold heading `▾ title ──`: the glyph and the title are text (inactive, >= 4.5:1 on light), only the rule stays structure
+  const heads = nodes.filter(n => n.type === 'Text' && /^\s*▾ \S/.test(text(n)))
+  expect(heads.length).toBeGreaterThan(0)
+  for (const head of heads) expect(head.props?.color, 'fold heading ' + text(head) + ' uses inactive ink').toBe('inactive')
+})

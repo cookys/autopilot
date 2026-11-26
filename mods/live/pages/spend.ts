@@ -35,7 +35,7 @@ export function resetIn(ms: number | null, nowMs: number, t: PageCtx['t']): stri
   return t('v74.f.rs_m', { n: min })
 }
 
-const openRule = (title: string): Row => [{ text: GLYPHS.structure.open + ' ' + title + ' ' + GLYPHS.structure.rule.repeat(2), color: PALETTE.structure }]
+const openRule = (title: string): Row => [{ text: GLYPHS.structure.open + ' ' + title + ' ', color: PALETTE.idle }, { text: GLYPHS.structure.rule.repeat(2), color: PALETTE.structure }]
 
 function meterRow(label: string, pct: number | null, reset: string, stale: boolean, t: PageCtx['t']): Row {
   const cells = 10

@@ -137,7 +137,8 @@ function loadSourceIsClean(ls: LoadSourceView): boolean {
 
 const openRule = (title: string, wide: boolean): Row => {
   const head = GLYPHS.structure.open + ' ' + title + ' '
-  return [{ text: head + (wide ? GLYPHS.structure.rule.repeat(Math.max(2, 54 - displayWidth(head))) : ''), color: PALETTE.structure }]
+  const fill = wide ? GLYPHS.structure.rule.repeat(Math.max(2, 54 - displayWidth(head))) : ''
+  return [{ text: head, color: PALETTE.idle }, ...(fill === '' ? [] : [{ text: fill, color: PALETTE.structure }])]
 }
 
 // the plugin-source block's rows: one full sentence (clean: `forge-stats 從 develop 主 clone 載入`), the issues appended; a missing or broken source is red

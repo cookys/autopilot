@@ -93,7 +93,7 @@ export function meteringPaneBlock(pack: MeterPack | null, nowMs: number, t: T): 
   return { head: t('page.spend.meter_title'), rows: rows.slice(1).map(r => ({ text: r.map(s => s.text).join(''), warn: r.some(s => s.color === METER_WARN_COLOR), broken: false })) }
 }
 
-const openRule = (title: string): Row => [{ text: GLYPHS.structure.open + ' ' + title + ' ' + GLYPHS.structure.rule.repeat(2), color: PALETTE.structure }]
+const openRule = (title: string): Row => [{ text: GLYPHS.structure.open + ' ' + title + ' ', color: PALETTE.idle }, { text: GLYPHS.structure.rule.repeat(2), color: PALETTE.structure }]
 
 export function meteringRows(pack: MeterPack | null, _nowMs: number, t: T): Row[] {
   if (pack === null) return [brokenRow(' ' + GLYPHS.state.failed + ' ' + t('page.spend.meter_missing'))]

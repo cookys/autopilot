@@ -74,7 +74,7 @@ function engineOrEmpty(r: LivePaneRow): string {
 const RULE = GLYPHS.structure.rule
 function sectionRule(label: string, cols: number): Row {
   const head = GLYPHS.structure.open + ' ' + label + ' '
-  return [{ text: head + RULE.repeat(Math.max(2, cols - displayWidth(head) - 2)), color: PALETTE.structure }]
+  return [{ text: head, color: PALETTE.idle }, { text: RULE.repeat(Math.max(2, cols - displayWidth(head) - 2)), color: PALETTE.structure }]
 }
 
 type ClassifiedRun = { row: LivePaneRow; sid: StateId }

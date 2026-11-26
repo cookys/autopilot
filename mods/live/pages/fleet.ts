@@ -46,7 +46,8 @@ export function rowsOf(lines: ConsoleLine[], t: T = makeT('zh-TW')): FleetRow[] 
 const openRule = (title: string, right: string | null, wide: boolean): Row => {
   const head = GLYPHS.structure.open + ' ' + title + ' '
   const tail = right === null ? '' : '· ' + right + ' '
-  return [{ text: head + tail + (wide ? GLYPHS.structure.rule.repeat(Math.max(2, 54 - displayWidth(head + tail))) : ''), color: PALETTE.structure }]
+  const fill = wide ? GLYPHS.structure.rule.repeat(Math.max(2, 54 - displayWidth(head + tail))) : ''
+  return [{ text: head + tail, color: PALETTE.idle }, ...(fill === '' ? [] : [{ text: fill, color: PALETTE.structure }])]
 }
 const miss = (text: string): Row => brokenRow(' ' + GLYPHS.state.failed + ' ' + text)
 const missRows = (text: string, cols: number): Row[] => wrapPlain(' ' + GLYPHS.state.failed + ' ' + text, Math.max(8, cols), Math.max(8, cols)).map(l => brokenRow(l))

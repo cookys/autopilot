@@ -5,6 +5,8 @@ import type { TodoCard } from '../v74/contract'
 import { GLYPHS } from '../../tux/glyphs'
 import { displayWidth } from '../model'
 import type { WidePageOut } from './types'
+import { BAND_REPLY_COLS } from './geometry'
+import { wrapText } from './wrap'
 
 export type WideTodoInput = {
   todo: TodoCard[] | null
@@ -22,25 +24,11 @@ export type WideTodoInput = {
   warnings?: string[] // fixed warning rows (source missing / stale)
 }
 
-const REPLY_COLS = 73 // the band's reply column
-
-// break a row at the column width; the continuation rows are indented by `hang`
-function wrapRow(text: string, hang: number): string[] {
-  const out: string[] = []
-  let cur = ''
-  let w = 0
-  for (const ch of text) {
-    const cw = displayWidth(ch)
-    if (w + cw > REPLY_COLS) {
-      out.push(cur)
-      cur = ' '.repeat(hang)
-      w = hang
-    }
-    cur += ch
-    w += cw
-  }
-  out.push(cur)
-  return out
+// Keep option continuations aligned beneath their detail text.
+function wrapRow(text: string, head: string): string[] {
+  const lines = wrapText(text, BAND_REPLY_COLS - displayWidth(head))
+  if (lines.length === 0) return [head.trimEnd()]
+  return lines.map((line, i) => (i === 0 ? head : ' '.repeat(displayWidth(head))) + line)
 }
 
 const FOLDED = GLYPHS.structure.folded
@@ -85,12 +73,12 @@ export function wideTodo(inp: WideTodoInput): WidePageOut {
   const pad = Math.max(...opts.map(o => displayWidth(o.label)))
   const recW = displayWidth(`${GLYPHS.structure.recommend} 建議`)
   const reply: string[] = [
-    ...wrapRow(`${FOLDED} ${cur.question}`, 0),
+    ...wrapRow(`${FOLDED} ${cur.question}`, ''),
     ...opts.flatMap((o, i) => {
       const rec = o.recommended ? `${GLYPHS.structure.recommend} 建議` : ' '.repeat(recW)
       const mark = picked === i ? `${GLYPHS.state.done} ` : '  '
       const head = `  ${mark}${PICK_KEYS[i]}: ${o.label}${' '.repeat(pad - displayWidth(o.label))}  ${rec}  `
-      return wrapRow(head + o.detail, displayWidth(head))
+      return wrapRow(o.detail ?? '', head)
     }),
     ...(inp.movedNote !== undefined ? [`附註（移來時寫的）：${inp.movedNote}`] : []),
     ...(note !== '' ? [`附註：${note}`] : []),

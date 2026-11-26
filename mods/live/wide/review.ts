@@ -1,5 +1,6 @@
 // mods/live/wide/review.ts — console v5 wide page 4 審查 (P4a): pure projection from existing review / qc / decisions data.
 import { GLYPHS } from '../../tux/glyphs'
+import { wrapReply } from './wrap'
 
 export type WideReviewItem = {
   label: string
@@ -84,7 +85,7 @@ export function wideReview(i: WideReviewInput): WideReviewOutput {
   const cur = i.items[Math.max(0, Math.min(i.items.length - 1, i.cursor))] ?? null
   const reply: string[] = []
   if (i.narrative !== undefined) {
-    reply.push(...i.narrative)
+    reply.push(...i.narrative.flatMap(wrapReply))
   } else if (cur !== null) {
     reply.push(cur.detail ?? `${cur.label}：${cur.engine} ${cur.verdict}。`)
     if (cur.note) reply.push(cur.note)

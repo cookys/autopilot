@@ -76,17 +76,17 @@ const MODELS: Record<string, WideDecideInput> = {
 }
 
 const wideOf = (rows: string[], out: { stepTitle: string; list: string[]; reply: string[]; hints: string }, page = 2): WideModel => ({
-  page, tabs: WIDE_TABS, stepTitle: out.stepTitle, list: out.list, reply: out.reply, status: norm(cols(rows[14], 2, 113).trimEnd()), hints: out.hints,
+  page, tabs: WIDE_TABS, stepTitle: out.stepTitle, list: out.list, reply: out.reply, status: norm(cols(rows[14], 2, 108).trimEnd()), hints: out.hints,
 })
 
 for (const step of DECIDE_STEPS) {
   if (step.id === 'C2') continue
-  test(`P3 wide 待決 ${step.id} (${step.title}): the 17 band rows equal the design (glyph table swaps only), each 115 columns`, () => {
+  test(`P3 wide 待決 ${step.id} (${step.title}): the 17 band rows equal the design (glyph table swaps only), each 110 columns`, () => {
     const out = wideDecide(MODELS[step.id])
     const band = wideBand(wideOf(step.rows, out))
     const want = step.rows.map(norm)
     expect(band.rows.length).toBe(17)
-    for (const r of band.rows) expect(displayWidth(r)).toBe(115)
+    for (const r of band.rows) expect(displayWidth(r)).toBe(110)
     // 2-L3 is 2-L2 scrolled to the end; the wide band has no scroll, so only its title differs
     const skip = step.id === '2-L3' ? 1 : 0
     expect(band.rows.slice(skip)).toEqual(want.slice(skip))
@@ -105,8 +105,8 @@ for (const step of DECIDE_STEPS) {
 test('P3 wide 待決 C2 (open card, looking at 艦隊): the note in the reply column, the fleet list untouched', () => {
   const step = DECIDE_STEPS.find(s => s.id === 'C2')!
   const note = wideCrossNote('艦隊', { n: 2, pick: 'b', note: true })!
-  const list = step.rows.slice(1, 13).map(r => norm(cols(r, 2, 38).trimEnd()))
-  const band = wideBand({ page: 7, tabs: WIDE_TABS, stepTitle: note.stepTitle, list, reply: note.reply, status: norm(cols(step.rows[14], 2, 113).trimEnd()), hints: 'j/k 換筆 · o 展開 · Esc 關閉' })
+  const list = step.rows.slice(1, 13).map(r => norm(cols(r, 2, 36).trimEnd()))
+  const band = wideBand({ page: 7, tabs: WIDE_TABS, stepTitle: note.stepTitle, list, reply: note.reply, status: norm(cols(step.rows[14], 2, 108).trimEnd()), hints: 'j/k 換筆 · o 展開 · Esc 關閉' })
   expect(band.rows).toEqual(step.rows.map(norm))
   expect(wideCrossNote('艦隊', { n: 2, pick: null, note: false })).toBe(null)
 })

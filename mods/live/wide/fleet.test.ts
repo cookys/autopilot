@@ -31,7 +31,7 @@ test('P4b wideFleet: integrates speedview agentsColumn tok/s and console lines',
     hints: out.hints,
   })
   expect(band.rows.length).toBe(17)
-  for (const r of band.rows) expect(displayWidth(r)).toBe(115)
+  for (const r of band.rows) expect(displayWidth(r)).toBe(110)
   expect(band.rows[14].includes('卡住')).toBe(false)
   expect(band.rows[16].includes(WIDE_TAB_HINT)).toBe(true)
 })

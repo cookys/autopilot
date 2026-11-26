@@ -13,6 +13,7 @@ import { SEATS_RED_AFTER_MS, ageUnit, seatQuota } from './now'
 import { ROLE_WARNING, isUnknownPool, normalizedPools, poolKey, poolLabel, rankPools } from './quota-pick'
 import type { QuotaPool } from './quota-pick'
 import { shortVerdict } from './quota'
+import { meteringRows } from './metering'
 import { brokenRow, staleBadge, tokLabel } from './rows'
 import type { Row } from './rows'
 
@@ -214,6 +215,7 @@ export function renderSpend(ctx: PageCtx, _view: SpendViewOpts = DEFAULT_VIEW): 
     body.push(brokenRow(' ' + GLYPHS.state.failed + ' ' + t(qFeed.failed ? 'page.now.q_failed_none' : 'page.now.q_none')))
   }
   body.push([{ text: '' }], ...(ctx.poolEta === undefined ? poolRows(ctx) : poolEtaRows(ctx.poolEta, nowMs, t)), [{ text: '' }])
+  body.push(...meteringRows(ctx.meter ?? null, nowMs, t))
 
   body.push(openRule(t('v74.f.sec_today')))
   const sp = live?.detail.spend ?? null

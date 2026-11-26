@@ -33,6 +33,7 @@ export type WideSpendInput = {
   narrative?: string[] // the source's own words for the reply column; absent = built from the figures
   detail?: string[] // the context rows the source gives; absent = built from the figures
   warnings?: string[] // fixed warning rows (source missing / stale)
+  meterLines?: string[] // metering coverage rows, after the pool block; absent on older callers
 }
 
 export type WideSpendOutput = {
@@ -120,6 +121,8 @@ export function wideSpend(i: WideSpendInput): WideSpendOutput {
     if (i.pct7d !== null) ctx.push(`7d 已用 ${i.pct7d}%${i.reset7d ? `，${i.reset7d} 後重置` : ''}。`)
     if (i.todayTokens !== null) ctx.push(`今日 ${i.todayTokens} tokens${i.trend24h ? `；${i.trend24h}` : ''}。`)
   }
+
+  if (i.meterLines !== undefined) list.push(...i.meterLines)
 
   return {
     stepTitle,

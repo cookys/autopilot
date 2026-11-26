@@ -21,6 +21,7 @@ import { V74_KEY } from '../v74/contract'
 import { WRAP_HANG, brokenRow, decisionCount, poolsNeedLook, sourceMissing, staleBadge, unknownPoolCount, wrapRow } from './rows'
 import type { Row } from './rows'
 import type { Step } from '../speed'
+import type { MeterPack } from './metering'
 import type { PoolEta } from './spend'
 import type { V74Ctx } from '../v74/contract'
 import type { ScrollModel } from '../scrollmath'
@@ -28,7 +29,7 @@ import type { ScrollModel } from '../scrollmath'
 export type PendingScroll = { list: ScrollModel; detail: ScrollModel; cursor: string }
 
 export type { Row } from './rows'
-export interface PageCtx { pendingScroll?: PendingScroll; poolEta?: PoolEta | null; room?: readonly { seq: number; from: string; kind: string; text: string }[]; live: LiveSnapshot | null; console: ConsoleSnapshot | null; size: { cols: number; rows: number }; bodyColumns?: number; maxRows?: number; t: T; nowMs: number; shortBody?: boolean; steps?: readonly Step[]; pet?: unknown; v74?: V74Ctx; box?: true; decide?: { cursor?: number; picks?: Record<string, number>; notes?: Record<string, string>; textMode?: boolean; snap?: string; stale?: boolean; armed?: boolean; bgOpen?: boolean; style?: 'D' | 'C'; layoutMode?: DecideLayoutMode | null; compactExpanded?: boolean } } // box: drawn inside the v7.4 band frame (not the host Pane)
+export interface PageCtx { pendingScroll?: PendingScroll; poolEta?: PoolEta | null; meter?: MeterPack | null; room?: readonly { seq: number; from: string; kind: string; text: string }[]; live: LiveSnapshot | null; console: ConsoleSnapshot | null; size: { cols: number; rows: number }; bodyColumns?: number; maxRows?: number; t: T; nowMs: number; shortBody?: boolean; steps?: readonly Step[]; pet?: unknown; v74?: V74Ctx; box?: true; decide?: { cursor?: number; picks?: Record<string, number>; notes?: Record<string, string>; textMode?: boolean; snap?: string; stale?: boolean; armed?: boolean; bgOpen?: boolean; style?: 'D' | 'C'; layoutMode?: DecideLayoutMode | null; compactExpanded?: boolean } } // box: drawn inside the v7.4 band frame (not the host Pane)
 export type PageId = 'now' | 'decide' | 'fleet' | 'quota' | 'dispatch' | 'review' | 'spend' | 'hygiene' | 'pet' | 'room' | 'forge' | 'help' | 'todo'
 // `framed` (optional, additive): true once the page is filled in; pane.tsx draws a framed page through frameRows and an unframed shell the old way, so S0 changes nothing on screen
 export interface Page { id: PageId; key: string; title: string; framed?: true; render(ctx: PageCtx): { body: Row[]; actions: Row[]; overflow?: true } }

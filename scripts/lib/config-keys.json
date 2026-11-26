@@ -111,6 +111,18 @@
       "summary": "Mode of the fleet quota-wait guard hook: block (default) refuses a quota-wait command, anything else lets it through."
     },
     {
+      "name": "AUTOPILOT_R5_FEEDBACK_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "mods/live/register.ts"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
       "name": "context_budget.t2_pct_by_seat",
       "kind": "config_key",
       "audience": "user",

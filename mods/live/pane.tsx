@@ -12,7 +12,7 @@ import type { DecideState, LiveSnapshot, PaneLine, PaneTab, Seg } from './model'
 import { dispatchLines, fleetTabLines, headerLines, hygieneTabLines, legendLines, nowLines, reviewTabLines, spendTabLines, stripOf, treeRowCount, withOverflowHint } from './tabs'
 import type { FleetView, OthersView } from './fleet'
 import type { ScrollView } from './tabs'
-import { dimProps, drawSeg, heldBorder, onBandLine } from './ui'
+import { dimProps, drawSeg, heldBorder, onBandLine, PALETTE } from './ui'
 import type { Strip } from '../tux/strip.ts'
 import { consoleStrip } from './consoletabs'
 import { commandView } from './commandtab'
@@ -402,7 +402,7 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
   const scrollKeys = Button === undefined || typing || bodyWin.max <= 0 || !SCROLL_PAGES.has(page.id) || frame.onScroll === undefined ? [] : [['j', 1], ['k', -1]].filter(([l]) => !used.has(l as string)).map(([l, by]) => (
     <Box key={'bsk' + l} width={0} height={0} overflow="hidden"><Button key={'ps:' + l + ep} plain hotkey={l as string} onPress={() => frame.onScroll?.(Math.min(bodyWin.max, Math.max(0, bodyWin.from + (by as number))))}>{l as string}</Button></Box>
   ))
-  const bottom = <Box key="v74-bottom" height={1} width={fullCols} overflow="hidden"><Text {...bc}>{GLYPHS.structure.frameBL + rule + '  ' + fit.hint + '  ' + rule.repeat(padN) + '  '}</Text>{tabs}<Text {...bc}>{'  ' + rule + GLYPHS.structure.frameBR}</Text>{hidden}{letters}{expandKey}{scrollKeys}</Box>
+  const bottom = <Box key="v74-bottom" height={1} width={fullCols} overflow="hidden"><Text {...bc}>{GLYPHS.structure.frameBL + rule + '  '}</Text><Text color={PALETTE.idle}>{fit.hint}</Text><Text {...bc}>{'  ' + rule.repeat(padN) + '  '}</Text>{tabs}<Text {...bc}>{'  ' + rule + GLYPHS.structure.frameBR}</Text>{hidden}{letters}{expandKey}{scrollKeys}</Box>
   return <Box {...(epoch > 0 ? { key: 'v74:' + epoch } : {})} flexDirection="column">{top}{inner}{bottom}</Box>
 }
 

@@ -105,7 +105,7 @@ function qcWord(ctx: PageCtx, q: QcView): string {
 
 function sectionRule(label: string, cols: number): Row {
   const head = GLYPHS.structure.open + ' ' + label + ' '
-  return [seg(head + RULE.repeat(Math.max(2, cols - displayWidth(head) - 2)), { color: PALETTE.structure })]
+  return [seg(head, { color: PALETTE.idle }), seg(RULE.repeat(Math.max(2, cols - displayWidth(head) - 2)), { color: PALETTE.structure })]
 }
 
 function ageDuration(t: PageCtx['t'], ms: number): string {

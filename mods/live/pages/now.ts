@@ -661,7 +661,7 @@ const rowText = (r: Row): string => r.map(s => s.text).join('')
 const v74OpenRule = (title: string, wide: boolean): Row => {
   const head = GLYPHS.structure.open + ' ' + title + ' '
   const fill = wide ? GLYPHS.structure.rule.repeat(Math.max(2, 54 - displayWidth(head))) : ''
-  return [{ text: head + fill, color: PALETTE.structure }]
+  return [{ text: head, color: PALETTE.idle }, ...(fill === '' ? [] : [{ text: fill, color: PALETTE.structure }])]
 }
 
 export const v74PmCounts = (pm: PmStatus): { total: number; fail: number; idle: number; ok: number; unknown: number } => {

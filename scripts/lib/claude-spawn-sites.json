@@ -452,6 +452,39 @@
       "file": "scripts/lib/event-attribution.js",
       "status": "out_of_scope",
       "reason": "false positive: the hit is the CLAUDE_FAMILY runner-name list used to label the pool; the module requires only fs, path and ./account-alias and starts no process"
+    },
+    {
+      "file": "scripts/eval-skill-triggers.js",
+      "status": "wired",
+      "group": "S7",
+      "covered_by": [
+        "scripts/tests/eval-skill-triggers.test.js"
+      ]
+    },
+    {
+      "file": "scripts/dispatch-consult.sh",
+      "status": "out_of_scope",
+      "reason": "names the runner label \"claude\" for the event emitter; it starts no claude process of its own (consult seats go through the wired rails)"
+    },
+    {
+      "file": "scripts/dispatch-panel.js",
+      "status": "out_of_scope",
+      "reason": "names the runner label \"claude\" as a default for the event emitter; it starts no claude process of its own"
+    },
+    {
+      "file": "scripts/dispatch-plan-review.js",
+      "status": "out_of_scope",
+      "reason": "names the runner label \"claude\" as a default for the event emitter; seats run through the wired rails"
+    },
+    {
+      "file": "scripts/lib/agent-event-emit.js",
+      "status": "out_of_scope",
+      "reason": "runner label default \"claude\" for emitted events; it only writes event records"
+    },
+    {
+      "file": "scripts/lib/agent-event-emit.sh",
+      "status": "out_of_scope",
+      "reason": "runner label default \"claude\" for emitted events; it only writes event records"
     }
   ],
   "reviewed_non_spawns": [

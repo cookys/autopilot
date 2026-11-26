@@ -33,8 +33,7 @@
       "AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_PRUNE_PAUSE": "test-only gate for the review-ledger prune pause between validation and delete. Exactly 1 enables the ready/release files; not a user knob",
       "AUTOPILOT_REVIEW_LEDGER_ARCHIVE_PRUNE_READY_FILE": "test-only path the prune pause writes when it is waiting. Honoured only with AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_PRUNE_PAUSE=1",
       "AUTOPILOT_REVIEW_LEDGER_ARCHIVE_PRUNE_RELEASE_FILE": "test-only path the prune pause waits for before deleting. Honoured only with AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_PRUNE_PAUSE=1",
-      "AUTOPILOT_TEST_NOW": "test-only ISO date for review-ledger rotate and status. Honoured only with AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_NOW=1",
-      "AUTOPILOT_COST_FUSE_DIR": "retired with hooks/cost-fuse.js (now a fail-open no-op stub); no reader since the fuse moved to scripts/lib/brain-spend.js and hooks/dispatch-model-guard.js"
+      "AUTOPILOT_TEST_NOW": "test-only ISO date for review-ledger rotate and status. Honoured only with AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_NOW=1"
     },
     "config": {
       "cost_usd": "field of a cost ledger row in cost-digest.js, not an operator config key",
@@ -108,7 +107,8 @@
       ],
       "doc": "docs/guide/settings-reference.md",
       "group": "Hook switches",
-      "relates": []
+      "relates": [],
+      "summary": "Mode of the fleet quota-wait guard hook: block (default) refuses a quota-wait command, anything else lets it through."
     },
     {
       "name": "context_budget.t2_pct_by_seat",
@@ -9254,6 +9254,123 @@
       ],
       "doc": null,
       "relates": []
+    },
+    {
+      "name": "AUTOPILOT_ALLOW_SCRATCH_CARD",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/open-decision.js"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "1 lets open-decision publish a card from a repo whose git dir is under a scratch/temp path (tests); otherwise refused."
+    },
+    {
+      "name": "AUTOPILOT_CN_WORK_TIER",
+      "kind": "env",
+      "audience": "internal",
+      "class": "experiment_flag",
+      "default": null,
+      "readers": [
+        "scripts/lib/cn-model-dispatch-gate.js"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "Declared work tier (T0/T1/T2) the cn-model dispatch gate reads when the caller passes none; undeclared counts as T2."
+    },
+    {
+      "name": "AUTOPILOT_FLEET_QUOTA_JSON_FILE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/quota-wait-check.js"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "Path of a JSON file that mocks `fleet seats --quota --json`."
+    },
+    {
+      "name": "AUTOPILOT_FLEET_TASKS_JSON_FILE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/quota-wait-sweep.js"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "Path of a JSON file that mocks `fleet tasks --json`."
+    },
+    {
+      "name": "AUTOPILOT_GROK_PROBE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "experiment_flag",
+      "default": null,
+      "readers": [
+        "scripts/lib/grok-live-probe.js"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "off disables the grok live probe."
+    },
+    {
+      "name": "AUTOPILOT_GROK_PROBE_BIN",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/lib/grok-live-probe.js"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "Binary the grok live probe runs instead of the default."
+    },
+    {
+      "name": "AUTOPILOT_GROK_PROBE_FILE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/lib/grok-live-probe.js"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "File the grok live probe reads its result from instead of running the binary."
+    },
+    {
+      "name": "AUTOPILOT_OPEN_FLEET_TASKS_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/quota-wait-sweep.js"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "Directory of the open-fleet-tasks listing the quota-wait sweep reads."
+    },
+    {
+      "name": "AUTOPILOT_ROLEKIT_A9_EXEMPT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "experiment_flag",
+      "default": null,
+      "readers": [
+        "scripts/lib/role-kit.js"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "1 exempts a frozen pilot role from the A9 check."
     }
   ]
 }

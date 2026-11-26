@@ -3,6 +3,13 @@
   "version": 1,
   "entries": [
     {
+      "pattern": "grok-live-probe-*",
+      "kind": "scratch",
+      "owner": "scripts/lib/grok-live-probe.js",
+      "retention_days": 1,
+      "reason": "Empty cwd for one grok availability probe; removed in a finally block."
+    },
+    {
       "pattern": "autopilot-target-precommit-*",
       "kind": "worktree",
       "owner": "scripts/dispatch-hetero.sh",

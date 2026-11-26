@@ -68,6 +68,8 @@ process.env.AUTOPILOT_CURSOR_BROKER_SOCK = MISSING_CURSOR_SOCKET;
 process.env.AUTOPILOT_KIMI_BROKER_SOCK = MISSING_KIMI_SOCKET;
 process.env.AUTOPILOT_CURSOR_BROKER_AUDIT = MISSING_CURSOR_AUDIT;
 process.env.AUTOPILOT_KIMI_BROKER_AUDIT = MISSING_KIMI_AUDIT;
+// Unit tests never start a real grok. A test that wants the live probe sets the flag itself.
+process.env.AUTOPILOT_GROK_PROBE = 'off';
 const allEndpointsReady = () => true;
 // Operator-based cloud eligibility is exercised through endpoint fixtures.
 // Keep fixture routing independent of removed dispatch-gate metadata.
@@ -97,6 +99,7 @@ function selectEngine(options = {}) {
   if (env.AUTOPILOT_TEST_CN_GATE_OFF === undefined) env.AUTOPILOT_TEST_CN_GATE_OFF = '1';
   if (env.AUTOPILOT_CURSOR_BROKER_SOCK === undefined) env.AUTOPILOT_CURSOR_BROKER_SOCK = MISSING_CURSOR_SOCKET;
   if (env.AUTOPILOT_KIMI_BROKER_SOCK === undefined) env.AUTOPILOT_KIMI_BROKER_SOCK = MISSING_KIMI_SOCKET;
+  if (env.AUTOPILOT_GROK_PROBE === undefined) env.AUTOPILOT_GROK_PROBE = 'off';
   env.AUTOPILOT_LIVE_DIR = options.env?.AUTOPILOT_LIVE_DIR || testLiveDir;
   if (!options.env || !Object.prototype.hasOwnProperty.call(options.env, 'AUTOPILOT_CURSOR_BROKER_AUDIT')) {
     env.AUTOPILOT_CURSOR_BROKER_AUDIT = MISSING_CURSOR_AUDIT;
@@ -172,6 +175,7 @@ function cli(args, envExtra = {}) {
   env.AUTOPILOT_KIMI_BROKER_AUDIT = MISSING_KIMI_AUDIT;
   env.AUTOPILOT_CURSOR_BROKER_SOCK = MISSING_CURSOR_SOCKET;
   env.AUTOPILOT_KIMI_BROKER_SOCK = MISSING_KIMI_SOCKET;
+  if (env.AUTOPILOT_GROK_PROBE === undefined) env.AUTOPILOT_GROK_PROBE = 'off';
   env.AUTOPILOT_TEST_CN_GATE_OFF = '1';
   env.AUTOPILOT_ENDPOINTS_ENV = '/nonexistent';
   env.AUTOPILOT_ENDPOINT_GLM_URL = 'https://glm.example.invalid/v1';
@@ -2968,6 +2972,92 @@ test('WARN_ahead demotion: only eligible candidate is WARN_ahead -> still picked
   const agyCand = res.candidates.find((c) => c.engine === 'agy');
   assert.equal(agyCand.basis, 'pace');
   assert.equal(agyCand.demoted, 'ahead');
+});
+
+function grokOnlyOptions(extraEnv) {
+  return {
+    pace: priorityPace([]),
+    pools: { 'grok-cli': { key: 'grok', runner: 'grok', model: 'grok-4.7' } },
+    roles: {
+      implementer: ['grok'],
+      role_models: { implementer: { grok: 'grok-4.7' } },
+      PACE_CEILING_PCT: 85,
+    },
+    role: 'implementer',
+    checkEndpoint: allEndpointsReady,
+    env: extraEnv,
+  };
+}
+
+function writeFakeGrok(dir, script) {
+  const bin = path.join(dir, 'fake-grok');
+  fs.writeFileSync(bin, script, { mode: 0o755 });
+  return bin;
+}
+
+test('unknown grok reading + probe passes -> grok is the selected engine', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'grok-probe-pass-'));
+  try {
+    const bin = writeFakeGrok(dir, '#!/bin/sh\necho PONG\n');
+    const probeFile = path.join(dir, 'grok.json');
+    const res = selectEngine(grokOnlyOptions({
+      AUTOPILOT_GROK_PROBE: 'on',
+      AUTOPILOT_GROK_PROBE_BIN: bin,
+      AUTOPILOT_GROK_PROBE_FILE: probeFile,
+      HOME: dir,
+    }));
+    assert.equal(res.engine, 'grok');
+    assert.equal(res.pool, 'grok-cli');
+    const grokCand = res.candidates.find((c) => c.engine === 'grok');
+    assert.equal(grokCand.reason, undefined);
+    assert.equal(grokCand.pool, 'grok-cli');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('unknown grok reading + probe fails -> grok stays unknown and is not selected', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'grok-probe-fail-'));
+  try {
+    const bin = writeFakeGrok(dir, '#!/bin/sh\nexit 1\n');
+    const res = selectEngine(grokOnlyOptions({
+      AUTOPILOT_GROK_PROBE: 'on',
+      AUTOPILOT_GROK_PROBE_BIN: bin,
+      AUTOPILOT_GROK_PROBE_FILE: path.join(dir, 'grok.json'),
+      HOME: dir,
+    }));
+    assert.equal(res.engine, null);
+    const grokCand = res.candidates.find((c) => c.engine === 'grok');
+    assert.equal(grokCand.reason, 'unknown');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('fresh failed grok probe cache -> fake bin is not run again', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'grok-probe-cache-'));
+  try {
+    const stamp = path.join(dir, 'ran');
+    const bin = writeFakeGrok(dir, `#!/bin/sh\necho ran >> ${JSON.stringify(stamp)}\necho PONG\n`);
+    const probeFile = path.join(dir, 'grok.json');
+    fs.writeFileSync(probeFile, JSON.stringify({
+      ok: false,
+      model: 'grok-4.7',
+      at: new Date().toISOString(),
+    }));
+    const res = selectEngine(grokOnlyOptions({
+      AUTOPILOT_GROK_PROBE: 'on',
+      AUTOPILOT_GROK_PROBE_BIN: bin,
+      AUTOPILOT_GROK_PROBE_FILE: probeFile,
+      HOME: dir,
+    }));
+    assert.equal(fs.existsSync(stamp), false);
+    assert.equal(res.engine, null);
+    const grokCand = res.candidates.find((c) => c.engine === 'grok');
+    assert.equal(grokCand.reason, 'unknown');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('WARN_ahead demotion: missing pace file -> unchanged pace_unknown pick', () => {

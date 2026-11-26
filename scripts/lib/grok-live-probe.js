@@ -61,8 +61,8 @@ function grokProbeState({ env = process.env, now = Date.now(), model } = {}) {
   const bin = (typeof env.AUTOPILOT_GROK_PROBE_BIN === 'string' && env.AUTOPILOT_GROK_PROBE_BIN !== '')
     ? env.AUTOPILOT_GROK_PROBE_BIN
     : 'grok';
-  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'grok-live-probe-'));
   let ok = false;
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'grok-live-probe-'));
   try {
     const result = spawnSync(bin, ['-m', String(model), '-p', PROMPT], {
       cwd,

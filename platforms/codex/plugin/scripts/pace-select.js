@@ -764,6 +764,25 @@ function selectEngine({
       bestByKey.set(entry.key, { key: entry.key, entry, low: false,
         reading: { pool: 'cursor', slack: null, used_pct: null, expected_pct: null, score: -Infinity, status: 'observed_available' } });
     }
+    // No usable grok pace row: one live probe (cached 15 min) can admit the seat the way a cursor observation does.
+    if (
+      role === 'implementer'
+      && entry.key === 'grok'
+      && !bestByKey.has(entry.key)
+      && !overCeiling.has(entry.key)
+      && !excluded.has(entry.key)
+      && !blockedKeys.has(entry.key)
+    ) {
+      const grokState = require('./lib/grok-live-probe').grokProbeState({
+        env: resolvedEnv,
+        now: selectClock,
+        model: entry.model,
+      });
+      if (grokState === 'available') {
+        bestByKey.set(entry.key, { key: entry.key, entry, low: false,
+          reading: { pool: poolName, slack: null, used_pct: null, expected_pct: null, score: -Infinity, status: 'observed_available' } });
+      }
+    }
     if (
       BEHIND_PACE_KEYS.has(entry.key)
       && !bestByKey.has(entry.key)

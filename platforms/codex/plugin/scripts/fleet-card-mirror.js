@@ -275,4 +275,4 @@ function main(argv) {
 }
 
 if (require.main === module) process.exitCode = main(process.argv.slice(2));
-module.exports = { main, ingest, view, fold, readTodo, STALE_MS, SCHEMA };
+module.exports = { main, ingest, view, fold, readTodo, readMirror, STALE_MS, SCHEMA };

@@ -1,6 +1,7 @@
 // mods/live/wide/hygiene.ts — console v5 wide 6 殘留 page. Pure: snapshot.detail.residue + load_source -> WideBand fields & pane summary.
 import type { LoadSourceView, ResidueView } from '../model'
 import { GLYPHS } from '../../tux/glyphs'
+import { wrapReply } from './wrap'
 import type { WidePageOut } from './types'
 
 export type WideHygieneInput = {
@@ -103,7 +104,7 @@ export function wideHygiene(inp: WideHygieneInput): WidePageOut {
   return {
     stepTitle,
     list,
-    reply: inp.narrative ?? (cur ? cur.detail : ['目前沒有需要處理的殘留項目。']),
+    reply: (inp.narrative ?? (cur ? cur.detail : ['目前沒有需要處理的殘留項目。'])).flatMap(wrapReply),
     hints: 'j/k 換筆 · o 展開 · Esc 關閉',
     summary,
     ...extra,

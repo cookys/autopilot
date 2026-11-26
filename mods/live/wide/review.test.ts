@@ -5,7 +5,7 @@ import { WIDE_TABS, WIDE_TAB_HINT, wideBand, wideStatusText } from './band'
 import { PANE_ROWS, widePane } from './pane'
 import { wideReview } from './review'
 
-test('P4a wideReview normal state: 17x115 band and 42x94 pane', () => {
+test('P4a wideReview normal state: 17x110 band and 42x93 pane', () => {
   const out = wideReview({
     items: [
       { label: 'codeforge 7d1c', engine: 'codex', verdict: 'PASS', range: 'develop..7d1c（12 檔）', rounds: ['第 1 輪 3 blocking，全部修完。', '第 2 輪 0 blocking、2 note。'] },
@@ -23,7 +23,7 @@ test('P4a wideReview normal state: 17x115 band and 42x94 pane', () => {
   const status = wideStatusText({ verdict: '進行中', running: 8, failed: 2, stalled: 2, pending: 3, act: 1, tps: 41, spark: '▆▆▄▃▆', labels: { fleet: '艦隊', pending: '待決', act: '動手' } })
   const band = wideBand({ page: 4, tabs: WIDE_TABS, stepTitle: out.stepTitle, list: out.list, reply: out.reply, status, hints: out.hints })
   expect(band.rows.length).toBe(17)
-  for (const r of band.rows) expect(displayWidth(r)).toBe(115)
+  for (const r of band.rows) expect(displayWidth(r)).toBe(110)
   expect(band.rows[16].includes(WIDE_TAB_HINT)).toBe(true)
 
   const pane = widePane({
@@ -42,7 +42,7 @@ test('P4a wideReview normal state: 17x115 band and 42x94 pane', () => {
     summaries: [null, null, null, out.summary, null, null, null, null, null],
   })
   expect(pane.rows.length).toBe(PANE_ROWS)
-  for (const r of pane.rows) expect(displayWidth(r)).toBe(94)
+  for (const r of pane.rows) expect(displayWidth(r)).toBe(93)
   expect(out.summary).toBe('欠審 1 · 我替你決定的事 4')
 })
 

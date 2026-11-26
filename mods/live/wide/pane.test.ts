@@ -1,4 +1,4 @@
-// console v5 P2: the wide pane (wide/pane.ts) against the design's steps 1-N, 2-N, 7-N and 4-L (fixtures/pane-*.testkit.ts, copied from the design's screen.txt rows 0-41, columns 115-208).
+// console v5 P2: the wide pane (wide/pane.ts) against the design's steps 1-N, 2-N, 7-N and 4-L (fixtures/pane-*.testkit.ts, copied from the design's screen.txt rows 0-41, columns 116-208).
 import { test, expect } from 'claude-code/testing'
 import { displayWidth } from '../../tux/width'
 import { WIDE_TABS, fitList, fitReply, wideBand } from './band'
@@ -14,10 +14,10 @@ const FIXTURES = [PANE_1_N, PANE_2_N, PANE_7_N, PANE_4_L]
 const isOthersTitle = (r: string): boolean => r.includes('其他頁')
 
 for (const f of FIXTURES) {
-  test(`P2 wide pane ${f.id}: 42 rows, every row 94 columns, equal to the design`, () => {
+  test(`P2 wide pane ${f.id}: 42 rows, every row 93 columns, equal to the design`, () => {
     const out = widePane(modelOf(f))
     expect(out.rows.length).toBe(PANE_ROWS)
-    for (const r of out.rows) expect(displayWidth(r)).toBe(94)
+    for (const r of out.rows) expect(displayWidth(r)).toBe(93)
     expect(out.rows).toEqual(f.rows)
   })
 
@@ -66,10 +66,10 @@ test('P2 wide pane: the upper half never passes 30 rows, a cuttable block needs 
   expect(paneUpper(none).length).toBe(28) // 30 - 28 - 2 = 0 rows: not placed
 })
 
-test('P2 wide pane: a CJK line is cut by display width with an ellipsis, the row stays 94 wide', () => {
+test('P2 wide pane: a CJK line is cut by display width with an ellipsis, the row stays 93 wide', () => {
   const m: PaneModel = { ...modelOf(PANE_1_N), pin: ['很長'.repeat(60), 'x'.repeat(200)] }
   const out = widePane(m)
-  for (const r of out.rows) expect(displayWidth(r)).toBe(94)
+  for (const r of out.rows) expect(displayWidth(r)).toBe(93)
   expect(out.rows[1].includes('…')).toBe(true)
   expect(out.rows[2].includes('…')).toBe(true)
 })
@@ -114,11 +114,16 @@ test('P2 band hand-off: reply steps between the question and the options move to
   expect(tail.overflow).toEqual(['r11', 'r12', 'r13', 'r14'])
 })
 
-test('P2 band hand-off: wideBand returns the overflow it cut and still draws 17 rows of 115', () => {
+test('P2 band hand-off: wideBand returns the overflow it cut and still draws 17 rows of 110', () => {
   const list = Array.from({ length: 20 }, (_, i) => `列 ${i}`)
   const band = wideBand({ page: 1, tabs: WIDE_TABS, stepTitle: '', list, reply: ['問題', '步驟 1', '步驟 2', 'a: 選項'], status: '', hints: '', replyKeep: 3 })
   expect(band.rows.length).toBe(17)
-  for (const r of band.rows) expect(displayWidth(r)).toBe(115)
+  for (const r of band.rows) expect(displayWidth(r)).toBe(110)
   expect(band.overflow.list.length).toBe(9)
   expect(band.overflow.reply).toEqual([])
+})
+
+test('wide pane: every drawn row is 93 display columns', () => {
+  const out = widePane(modelOf(PANE_1_N))
+  expect(out.rows.map(displayWidth)).toEqual(Array(PANE_ROWS).fill(93))
 })

@@ -25,7 +25,7 @@ test('P4b wideHelp: key table includes e, Tab, g and no banned glyphs', () => {
       hints: out.hints,
     })
     expect(band.rows.length).toBe(17)
-    for (const r of band.rows) expect(displayWidth(r)).toBe(115)
+    for (const r of band.rows) expect(displayWidth(r)).toBe(110)
     expect(band.rows[16].includes(WIDE_TAB_HINT)).toBe(true)
   }
 })

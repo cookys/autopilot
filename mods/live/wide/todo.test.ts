@@ -3,7 +3,7 @@ import { displayWidth } from '../../tux/width'
 import { WIDE_TABS, WIDE_TAB_HINT, wideBand, wideStatusText } from './band'
 import { wideTodo } from './todo'
 
-test('P4b wideTodo: renders todo cards in 115x17 band', () => {
+test('P4b wideTodo: renders todo cards in 110x17 band', () => {
   const out = wideTodo({
     todo: [
       {
@@ -33,7 +33,7 @@ test('P4b wideTodo: renders todo cards in 115x17 band', () => {
     hints: out.hints,
   })
   expect(band.rows.length).toBe(17)
-  for (const r of band.rows) expect(displayWidth(r)).toBe(115)
+  for (const r of band.rows) expect(displayWidth(r)).toBe(110)
   expect(band.rows[16].includes(WIDE_TAB_HINT)).toBe(true)
 })
 

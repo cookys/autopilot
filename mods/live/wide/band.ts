@@ -1,5 +1,5 @@
-// mods/live/wide/band.ts - console v5 wide band (P1 skeleton): 17 rows x 115 columns, drawn from a plain model. Pure, no host calls.
-// Rows (design gen_wide_all.py compose()): 1 top frame (left `<n> <page> · list`, right step title, `[-]` fold at the right), 2-13 two columns split at column 38
+// mods/live/wide/band.ts - console v5 wide band (P1 skeleton): 17 rows x 110 columns, drawn from a plain model. Pure, no host calls.
+// Rows (design gen_wide_all.py compose()): 1 top frame (left `<n> <page> · list`, right step title, `[-]` fold at the right), 2-13 two columns split at column 36
 // (list left, reply right), 14 divider, 15 global status, 16 nine page tabs, 17 bottom frame carrying the page's key hints and always ending `Tab 換頁`.
 // The list and reply rows are whatever the page already has (P3/P4 re-skin them); over 12 rows the rest is handed to the pane (`overflow`, drawn by pane.ts) and a row says where it went.
 import { GLYPHS } from '../../tux/glyphs'
@@ -103,7 +103,7 @@ export function wideBand(m: WideModel): WideBand {
   const last = BAND_COLS - 1 // 114
   const left = clipTo(`${m.page} ${m.tabs[m.page - 1] ?? ''} · 清單`, BAND_LIST_COLS - 6)
   const leftTitle = ` ${left} `
-  const rightRoom = last - 5 - (BAND_LIST_COLS + 2) - 2 // between the title start (col 40) and the fold button's left edge
+  const rightRoom = last - 5 - (BAND_LIST_COLS + 2) - 2 // between the title start (col 38) and the fold button's left edge
   const rightTitle = ` ${clipTo(m.stepTitle, rightRoom)} `
   // top: ╭─ <title> ───┬─ <step> ───[-]──╮
   push([
@@ -114,12 +114,12 @@ export function wideBand(m: WideModel): WideBand {
   const { shown: list, overflow: listOver } = fitList(m.list)
   const { shown: reply, overflow: replyOver } = fitReply(m.reply, m.replyKeep)
   for (let i = 0; i < BAND_BODY_ROWS; i++) {
-    const a = padTo(clipTo(list[i] ?? '', BAND_LIST_COLS - 2), BAND_LIST_COLS - 2) // columns 2-37
-    const b = padTo(clipTo(reply[i] ?? '', BAND_REPLY_COLS), BAND_REPLY_COLS + 1) // columns 40-113 (113 stays blank)
+    const a = padTo(clipTo(list[i] ?? '', BAND_LIST_COLS - 2), BAND_LIST_COLS - 2) // columns 2-35
+    const b = padTo(clipTo(reply[i] ?? '', BAND_REPLY_COLS), BAND_REPLY_COLS + 1) // columns 38-108 (108 stays blank)
     push([[F.v + ' ', 'frame'], [a, 'text'], [F.v, 'frame'], [' ' + b, 'text'], [F.v, 'frame']])
   }
   push([[F.right + fill(BAND_LIST_COLS - 1) + F.up + fill(last - BAND_LIST_COLS - 1) + F.left, 'frame']])
-  const inner = BAND_COLS - 4 // text columns 2-112; column 113 is blank
+  const inner = BAND_COLS - 4 // text columns 2-107; column 108 is blank
   const status = m.status.split(STUCK_WORD).join(GLYPHS.state.waiting)
   push([[F.v + ' ', 'frame'], [padTo(clipTo(status, inner), inner), 'text'], [' ' + F.v, 'frame']])
   // tabs: `1 現況  2 待決 ...`, the current page in warning

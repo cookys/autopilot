@@ -30,7 +30,7 @@ for (const step of PAGE_STEPS) {
   if (step.id === 'C2') continue // the cross-page note of an open 待決 card: covered in decide.test.ts
   const body = (): void => {
     const c = composeStep(step.id)
-    const status = norm(cols(step.band[14], 2, 113).trimEnd())
+    const status = norm(cols(step.band[14], 2, 108).trimEnd())
     const band = wideBand({ page: c.page, tabs: WIDE_TABS, stepTitle: c.out.stepTitle, list: c.out.list, reply: c.out.reply, status, hints: c.out.hints, replyKeep: c.out.replyKeep })
     const pane = widePane({ ...c.pane, page: c.page, tabs: WIDE_TABS, moved: band.overflow.reply, more: band.overflow.list })
     const wantBand = step.band.map(norm)

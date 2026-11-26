@@ -4,7 +4,7 @@ import { WIDE_TABS, WIDE_TAB_HINT, wideBand, wideStatusText } from './band'
 import { widePane } from './pane'
 import { wideHygiene } from './hygiene'
 
-test('P4b wideHygiene: normal residue & loadSource produce 115x17 band and 94x42 pane', () => {
+test('P4b wideHygiene: normal residue & loadSource produce 110x17 band and 93x42 pane', () => {
   const out = wideHygiene({
     residue: {
       needs_human_count: 1,
@@ -29,7 +29,7 @@ test('P4b wideHygiene: normal residue & loadSource produce 115x17 band and 94x42
     hints: out.hints,
   })
   expect(band.rows.length).toBe(17)
-  for (const r of band.rows) expect(displayWidth(r)).toBe(115)
+  for (const r of band.rows) expect(displayWidth(r)).toBe(110)
   expect(band.rows[14].includes('卡住')).toBe(false)
   expect(band.rows[16].includes(WIDE_TAB_HINT)).toBe(true)
 
@@ -49,7 +49,7 @@ test('P4b wideHygiene: normal residue & loadSource produce 115x17 band and 94x42
     summaries: [null, null, null, null, null, out.summary, null, null, null],
   })
   expect(pane.rows.length).toBe(42)
-  for (const r of pane.rows) expect(displayWidth(r)).toBe(94)
+  for (const r of pane.rows) expect(displayWidth(r)).toBe(93)
 })
 
 test('P4b wideHygiene: missing sources return null summary and 缺源', () => {

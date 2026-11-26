@@ -1,13 +1,14 @@
 // mods/live/wide/decide.ts - console v5 P3: the 待決 page in the wide band (design gen_wide_all.py compose(), 2-* steps and C1-C3). Pure, no host calls.
 // The page's state machine (pages/decide.ts decideReduce) is untouched: this only turns its state (cards, cursor, picks, notes, sent, note mode, preview) into the band's rows.
-//   list column  (38 cols): summary row, one row per card, `▸` on the focused card; over 12 rows the last row says the rest is in the pane (`清單（續）`)
-//   reply column (73 cols): notice lines, the question, steps, the options, the note / hint row; over 12 rows the steps after the question move to the pane
+//   list column  (36 cols): summary row, one row per card, `▸` on the focused card; over 12 rows the last row says the rest is in the pane (`清單（續）`)
+//   reply column (70 cols): notice lines, the question, steps, the options, the note / hint row; over 12 rows the steps after the question move to the pane
 // What does not fit comes back as `overflow` (steps: rows between the question and the options; list: card rows past the list column) for the pane (P2) to draw; nothing here draws a pane.
 // Glyphs: the design's action mark, recommend star, warning sign, text bar and running dot are East Asian ambiguous or emoji-prone (banned in this repo); the glyph table's own are used instead.
 import { GLYPHS } from '../../tux/glyphs'
 import { displayWidth } from '../../tux/width'
 import { pickKeys } from '../v74/contract'
 import { clipTo } from './band'
+import { wrapReply } from './wrap'
 import { BAND_BODY_ROWS, BAND_REPLY_COLS } from './geometry'
 
 export type WideOpt = { label: string; detail: string; recommended: boolean }
@@ -206,7 +207,7 @@ export function wideDecide(m: WideDecideInput): WideDecideOut {
   const hasSteps = cur.awaiting !== undefined && cur.awaiting.steps.length > 0
   const hintsOf = (): string => (m.notice?.kind === 'changed' ? HINT.changed : sentAny ? HINT.sentSome(at + 1) : hasSteps ? HINT.awaiting : HINT.normal)
   const questionRow = MARK_CUR + ' ' + oneLine(cur.question)
-  const noteRow = curNote === null ? [] : [`  m ${T.noteLabel}：${oneLine(curNote)}`]
+  const noteRow = curNote === null ? [] : wrapReply(`  m ${T.noteLabel}：${oneLine(curNote)}`)
 
   if (m.textMode) {
     const body = wrapTo((m.textBuf) + TEXT_CURSOR, BAND_REPLY_COLS - 2).map(r => '  ' + r)

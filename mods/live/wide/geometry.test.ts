@@ -19,7 +19,7 @@ test('P1 wide switch: hysteresis, 197 stays wide, 196 leaves; too few rows alway
 })
 
 test('P1 geometry constants match the design', () => {
-  expect([BAND_ROWS, BAND_LIST_COLS, BAND_REPLY_COLS, BAND_COLS]).toEqual([17, 38, 73, 115])
+  expect([BAND_ROWS, BAND_LIST_COLS, BAND_REPLY_COLS, BAND_COLS]).toEqual([17, 36, 70, 110])
 })
 
 const st = (page: string, wide: boolean) => ({ page, paneFocus: true, focusedButton: false, textMode: false, wide })

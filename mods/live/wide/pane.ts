@@ -1,16 +1,16 @@
-// mods/live/wide/pane.ts - console v5 wide pane (P2): the docked pane at 94 columns x 42 rows, drawn from a plain model. Pure, no host calls.
+// mods/live/wide/pane.ts - console v5 wide pane (P2): the docked pane at 93 columns x 42 rows, drawn from a plain model. Pure, no host calls.
 // Design: gen_wide_all.py compose() "right pane". Rows: 0 top frame (`<n> <page> · detail`), 1-30 the read-only upper half (PANE_TOP_N), 31 blank,
-// 32 `其他頁`, 33-40 one summary row per other page (pressable, digit keys), 41 bottom frame (key hints). Text starts at column 2, 90 wide.
+// 32 `其他頁`, 33-40 one summary row per other page (pressable, digit keys), 41 bottom frame (key hints). Text starts at column 2, 89 wide.
 // The upper half is filled in order: moved steps, list continuation, pin, the context (one folded row, `e` opens it), the fleet lanes, the page's history, the local events.
 // A cuttable block (history, events) takes the rows that are left; it is placed when at least PANE_MIN_CUT row fits (design fill(): `room < 1`; P5a golden 1-L / 4-M / 9-L show a one-row history).
 import { GLYPHS } from '../../tux/glyphs'
 import { displayWidth } from '../../tux/width'
 import { clipTo, F } from './band'
-import { PANE_COLS } from './geometry'
+import { PANE_BODY_COLS } from './geometry'
 
 export const PANE_ROWS = 42 // the host's height at 209x49: from the top down to the prompt area
 export const PANE_TOP_N = 30 // rows 1-30 are the read-only half; row 31 stays blank
-export const PANE_INNER = PANE_COLS - 4 // 90: text columns 2-91
+export const PANE_INNER = PANE_BODY_COLS - 4 // 89: text columns 2-90
 export const PANE_MIN_CUT = 1 // a cuttable block is placed only when at least this many of its rows fit (the design's fill() code; its docstring says 3, its screens show 1)
 export const PANE_OTHERS_ROW = 32 // `其他頁`; the eight summaries follow on rows 33-40
 
@@ -45,7 +45,7 @@ const LANE_MARK: Record<PaneLane['state'], [string, PaneRole]> = { running: [GLY
 
 const laneRow = (l: PaneLane): Row => {
   const [mark, role] = LANE_MARK[l.state]
-  if (l.ev !== undefined) { // 90 columns: name 14 · speed 18 · latest 32 · next step
+  if (l.ev !== undefined) { // 89 columns: name 14 · speed 18 · latest 32 · next step
     return [['  ', 'text'], [mark, role], [' ' + padTo(l.name, 13), 'dim'], [padTo(l.speed, 18), 'dim'], [padTo(l.ev, 32), 'dim'], [GLYPHS.structure.answer + ' ' + (l.next ?? ''), 'text']]
   }
   return [['  ', 'text'], [mark, role], [' ' + padTo(l.name, 13), 'dim'], [padTo(l.speed, 20), 'dim'], [l.task, 'dim']]
@@ -97,7 +97,7 @@ export function widePane(m: PaneModel): WidePane {
     rows.push(parts.map(p => p[0]).join(''))
     segs.push(parts.filter(p => w(p[0]) > 0).map(p => ({ text: p[0], role: p[1] })))
   }
-  const inner = (parts: Row): void => { // `│ ` + 90 columns + ` │`
+  const inner = (parts: Row): void => { // `│ ` + 89 columns + ` │`
     const cut: Row = []
     let used = 0
     for (const [t, role] of parts) {
@@ -110,7 +110,7 @@ export function widePane(m: PaneModel): WidePane {
     push([[F.v + ' ', 'frame'], ...cut, [' '.repeat(PANE_INNER - used) + ' ' + F.v, 'frame']])
   }
   const title = ` ${m.page} ${m.tabs[m.page - 1] ?? ''} · 詳情 `
-  push([[F.tl + F.h, 'frame'], [title, 'text'], [fill(PANE_COLS - 3 - w(title)) + F.tr, 'frame']])
+  push([[F.tl + F.h, 'frame'], [title, 'text'], [fill(PANE_BODY_COLS - 3 - w(title)) + F.tr, 'frame']])
   const upper = paneUpper(m)
   for (let y = 0; y < PANE_OTHERS_ROW - 1; y++) inner(upper[y] ?? [])
   inner([['其他頁', 'dim']])
@@ -123,7 +123,7 @@ export function widePane(m: PaneModel): WidePane {
     y++
   })
   const foot = ` ${PANE_KEY_HINT} `
-  push([[F.bl + F.h, 'frame'], [foot, 'text'], [fill(PANE_COLS - 3 - w(foot)) + F.br, 'frame']])
+  push([[F.bl + F.h, 'frame'], [foot, 'text'], [fill(PANE_BODY_COLS - 3 - w(foot)) + F.br, 'frame']])
   if (rows.length !== PANE_ROWS) throw new Error('wide pane: ' + rows.length + ' rows')
   return { rows, segs, clicks }
 }

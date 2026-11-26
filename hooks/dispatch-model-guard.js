@@ -834,7 +834,6 @@ try {
     process.stdout.write(`${JSON.stringify({
       hookSpecificOutput: {
         hookEventName: 'PreToolUse',
-        permissionDecision: 'allow',
         updatedInput: { ...toolInput, model: 'sonnet' },
         additionalContext: msg,
       },

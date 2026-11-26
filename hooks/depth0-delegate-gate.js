@@ -440,7 +440,7 @@ function classify(tool, input) {
       process.stdout.write(`${JSON.stringify({
         hookSpecificOutput: {
           hookEventName: 'PreToolUse',
-          ...(rewrittenInput ? { permissionDecision: 'allow', updatedInput: rewrittenInput } : {}),
+          ...(rewrittenInput ? { updatedInput: rewrittenInput } : {}),
           additionalContext: advisory,
         },
       })}\n`);

@@ -61,7 +61,7 @@ assert_eq "" "$__RUN_STDOUT" "case5-silent"
 PAYLOAD='{"tool_name":"Agent","tool_input":{},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case6-exit"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"allow"' "case6-allow (missing model defaults to the worker level, never a dialog)"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision"' "case6-allow (missing model defaults to the worker level, never a dialog)"
 assert_contains "$__RUN_STDOUT" '"updatedInput"' "case6-updatedInput present"
 assert_contains "$__RUN_STDOUT" '"model":"sonnet"' "case6-updatedInput sets model sonnet"
 assert_contains "$__RUN_STDERR" "預設 worker 等級 sonnet" "case6-advisory line"
@@ -102,7 +102,7 @@ node -e '
 const o = JSON.parse(require("fs").readFileSync(0, "utf8"));
 const h = o.hookSpecificOutput;
 const ui = h.updatedInput;
-if (h.permissionDecision !== "allow") process.exit(2);
+if (h.permissionDecision !== undefined) process.exit(2);
 if (ui.model !== "sonnet") process.exit(3);
 if (ui.subagent_type !== "general-purpose") process.exit(4);
 if (ui.description !== "check the tests") process.exit(5);
@@ -118,7 +118,7 @@ printf '%s\n' "- mode: warn" > "$TEST_TMP/config6c.md"
 export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config6c.md"
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case6c-exit"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"allow"' "case6c-warn mode still defaults to sonnet"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision"' "case6c-warn mode still defaults to sonnet"
 assert_contains "$__RUN_STDOUT" '"model":"sonnet"' "case6c-updatedInput sonnet"
 assert_contains "$__RUN_STDOUT" '"additionalContext"' "case6c-advisory on stdout"
 assert_contains "$__RUN_STDERR" "預設 worker 等級 sonnet" "case6c-stderr line"
@@ -453,7 +453,7 @@ assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "costline-engi
 PAYLOAD='{"tool_name":"Agent","tool_input":{"prompt":"Engine: opus\nRole: worker\nLane: alpha\nDo the hard judgment."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "costline-absent-deny-exit"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"allow"' "costline-absent-deny allows with sonnet default"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision"' "costline-absent-deny allows with sonnet default"
 assert_contains "$__RUN_STDOUT" '"model":"sonnet"' "costline-absent-deny sets model sonnet"
 assert_not_contains "$__RUN_STDOUT" "require_cost_line" "costline-absent-deny is not a cost deny"
 
@@ -461,13 +461,13 @@ assert_not_contains "$__RUN_STDOUT" "require_cost_line" "costline-absent-deny is
 PAYLOAD='{"tool_name":"Agent","tool_input":{"prompt":"Engine: sonnet\nRole: worker\nLane: alpha\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "costline-absent-sonnet-exit"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"allow"' "costline-absent-sonnet allows with sonnet default"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision"' "costline-absent-sonnet allows with sonnet default"
 assert_contains "$__RUN_STDOUT" '"model":"sonnet"' "costline-absent-sonnet sets model sonnet"
 assert_not_contains "$__RUN_STDOUT" "require_cost_line" "costline-absent-sonnet is not a cost deny"
 printf '%s\n' "- on_missing_model: ask" > "$TEST_TMP/config-cost-ask-sonnet.md"
 export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config-cost-ask-sonnet.md"
 run_hook dispatch-model-guard.js "$PAYLOAD"
-assert_contains "$__RUN_STDOUT" '"permissionDecision":"allow"' "costline-absent-sonnet-ask allows with sonnet default"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision"' "costline-absent-sonnet-ask allows with sonnet default"
 assert_contains "$__RUN_STDOUT" '"model":"sonnet"' "costline-absent-sonnet-ask sets model sonnet"
 assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"ask"' "costline-absent-sonnet-ask never asks"
 assert_not_contains "$__RUN_STDOUT" "require_cost_line" "costline-absent-sonnet-ask is not a cost deny"

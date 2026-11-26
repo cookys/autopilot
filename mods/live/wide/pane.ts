@@ -2,7 +2,7 @@
 // Design: gen_wide_all.py compose() "right pane". Rows: 0 top frame (`<n> <page> · detail`), 1-30 the read-only upper half (PANE_TOP_N), 31 blank,
 // 32 `其他頁`, 33-40 one summary row per other page (pressable, digit keys), 41 bottom frame (key hints). Text starts at column 2, 90 wide.
 // The upper half is filled in order: moved steps, list continuation, pin, the context (one folded row, `e` opens it), the fleet lanes, the page's history, the local events.
-// A cuttable block (history, events) takes the rows that are left; it is placed only when PANE_MIN_CUT rows fit.
+// A cuttable block (history, events) takes the rows that are left; it is placed when at least PANE_MIN_CUT row fits (design fill(): `room < 1`; P5a golden 1-L / 4-M / 9-L show a one-row history).
 import { GLYPHS } from '../../tux/glyphs'
 import { displayWidth } from '../../tux/width'
 import { clipTo, F } from './band'
@@ -11,7 +11,7 @@ import { PANE_COLS } from './geometry'
 export const PANE_ROWS = 42 // the host's height at 209x49: from the top down to the prompt area
 export const PANE_TOP_N = 30 // rows 1-30 are the read-only half; row 31 stays blank
 export const PANE_INNER = PANE_COLS - 4 // 90: text columns 2-91
-export const PANE_MIN_CUT = 3 // a cuttable block is placed only when at least this many of its rows fit
+export const PANE_MIN_CUT = 1 // a cuttable block is placed only when at least this many of its rows fit (the design's fill() code; its docstring says 3, its screens show 1)
 export const PANE_OTHERS_ROW = 32 // `其他頁`; the eight summaries follow on rows 33-40
 
 export type PaneRole = 'frame' | 'text' | 'dim' | 'key' | 'ok' | 'err' | 'warn'

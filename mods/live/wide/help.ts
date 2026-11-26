@@ -5,11 +5,13 @@ import type { WidePageOut } from './types'
 const FOLDED = GLYPHS.structure.folded
 const SECTIONS = ['狀態圖示', '按鍵表', '符號'] as const
 
-export function wideHelp(focus: number): WidePageOut {
+export type WideHelpOpts = { label?: string; names?: string[]; narrative?: string[]; detail?: string[] } // the design's own words (P5a); absent = the built-in table
+
+export function wideHelp(focus: number, opts: WideHelpOpts = {}): WidePageOut {
   const idx = Math.max(0, Math.min(SECTIONS.length - 1, focus))
   const s = GLYPHS.state
   const g = GLYPHS.structure
-  const list = ['說明', ...SECTIONS.map((name, i) => `${i === idx ? FOLDED : ' '} ${name}`)]
+  const list = ['說明', ...(opts.names ?? SECTIONS).map((name, i) => `${i === idx ? FOLDED : ' '} ${name}`)]
 
   let reply: string[]
   if (idx === 0) {
@@ -41,11 +43,12 @@ export function wideHelp(focus: number): WidePageOut {
   }
 
   return {
-    stepTitle: SECTIONS[idx],
+    stepTitle: opts.label ?? SECTIONS[idx],
     list,
-    reply,
+    reply: opts.narrative ?? reply,
     hints: 'j/k 換段 · Esc 關閉',
     summary: '狀態圖示與按鍵表',
     hist: null,
+    ctx: opts.detail ?? [],
   }
 }

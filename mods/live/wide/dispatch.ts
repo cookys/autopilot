@@ -22,6 +22,14 @@ export type WideDispatchInput = {
   recentRounds: string[]
   stale: boolean
   missing: boolean
+  // design states beyond the plain rows (P5a); all optional
+  label?: string // the state label of the title when it is not 正常 / 過時 / 缺源 / 沒有派工
+  staleNote?: string // after the 執行中 heading, e.g. `（15 分鐘前）`
+  laneBusy?: number | null // the fleetSummary fallback when the run list is unreadable
+  laneIdle?: number | null
+  narrative?: string[] // the run's own words for the reply column when no item is focused or the item has no summary
+  detail?: string[] // the context rows the source gives; absent = built from the focused item
+  warnings?: string[] // fixed warning rows (source missing / stale)
 }
 
 export type WideDispatchOutput = {
@@ -49,36 +57,39 @@ export function wideDispatch(i: WideDispatchInput): WideDispatchOutput {
   const failed = i.items.filter(x => x.state === 'failed')
   const done = i.items.filter(x => x.state === 'done')
 
-  const stepTitle = i.missing
+  const stepTitle = i.label ?? (i.missing
     ? '缺源'
     : i.stale
       ? '過時'
       : i.items.length === 0
         ? '沒有派工'
-        : '正常'
+        : '正常')
 
   const list: string[] = []
-  if (i.items.length === 0) {
-    list.push(i.missing ? '讀不到派工資料。' : '目前沒有派工輪次。')
+  if (i.missing && i.laneBusy != null && i.laneIdle != null) {
+    list.push('派工', '  派工清單讀不到', '摘要（fleetSummary）', `  lane ${i.laneBusy + i.laneIdle}：忙 ${i.laneBusy} · 閒 ${i.laneIdle}`)
   } else {
     let idx = 0
-    const pushGroup = (title: string, group: WideDispatchItem[]) => {
-      if (group.length === 0) return
-      list.push(`${title} ${group.length} 輪`)
+    const pushGroup = (title: string, group: WideDispatchItem[], always: boolean) => {
+      if (group.length === 0 && !always) return
+      list.push(`${title} ${group.length} 輪${group === running ? (i.staleNote ?? '') : ''}`)
       for (const item of group) {
         const mark = idx === i.cursor ? GLYPHS.structure.folded : ' '
         list.push(`${mark} ${item.label} · ${item.engine} · ${item.dur}`)
         idx++
       }
     }
-    pushGroup('執行中', running)
-    pushGroup('失敗', failed)
-    pushGroup('完成', done)
+    pushGroup('執行中', running, true)
+    if (i.items.length === 0) list.push(`  ${i.missing ? '讀不到派工資料' : '目前沒有派工'}`)
+    pushGroup('失敗', failed, false)
+    pushGroup('完成', done, false)
   }
 
   const cur = i.items[Math.max(0, Math.min(i.items.length - 1, i.cursor))] ?? null
   const reply: string[] = []
-  if (cur !== null) {
+  if (i.narrative !== undefined) {
+    reply.push(...i.narrative)
+  } else if (cur !== null) {
     if (cur.summary) reply.push(cur.summary)
     else reply.push(`${cur.label} · ${cur.engine} · ${cur.dur}`)
     if (cur.nextStep) reply.push(cur.nextStep)
@@ -86,12 +97,14 @@ export function wideDispatch(i: WideDispatchInput): WideDispatchOutput {
     reply.push(i.missing ? '讀不到派工來源。' : '目前沒有進行中的派工。')
   }
 
-  const pin: string[] = []
-  if (cur !== null) {
-    if (cur.runId) pin.push(`run ${cur.runId} · ${cur.engine}`)
-    if (cur.startedAt || cur.branch) pin.push(`${cur.startedAt ? `${cur.startedAt} 開始；` : ''}${cur.branch ? `分支 ${cur.branch}` : ''}`)
-    if (cur.commits !== undefined) pin.push(`已 commit ${cur.commits} 次${cur.lastCommitAt ? `；最後一次 ${cur.lastCommitAt}` : ''}`)
-    if (cur.fleetTask) pin.push(`Fleet-Task ${cur.fleetTask}`)
+  const ctx: string[] = []
+  if (i.detail !== undefined) {
+    ctx.push(...i.detail)
+  } else if (cur !== null) {
+    if (cur.runId) ctx.push(`run ${cur.runId} · ${cur.engine}`)
+    if (cur.startedAt || cur.branch) ctx.push(`${cur.startedAt ? `${cur.startedAt} 開始；` : ''}${cur.branch ? `分支 ${cur.branch}` : ''}`)
+    if (cur.commits !== undefined) ctx.push(`已 commit ${cur.commits} 次${cur.lastCommitAt ? `；最後一次 ${cur.lastCommitAt}` : ''}`)
+    if (cur.fleetTask) ctx.push(`Fleet-Task ${cur.fleetTask}`)
   }
 
   return {
@@ -99,8 +112,8 @@ export function wideDispatch(i: WideDispatchInput): WideDispatchOutput {
     list,
     reply,
     hints: 'j/k 換筆 · o 展開 · Esc 關閉',
-    pin,
-    ctx: [],
+    pin: i.warnings ?? [],
+    ctx,
     hist: i.recentRounds.length > 0 ? { title: '今天結束的輪次', rows: i.recentRounds } : null,
     events: null,
     summary: wideDispatchSummary(i),

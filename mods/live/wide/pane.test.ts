@@ -52,7 +52,7 @@ for (const f of FIXTURES) {
   })
 }
 
-test('P2 wide pane: the upper half never passes 30 rows, a cuttable block needs 3 rows or it is left out', () => {
+test('P2 wide pane: the upper half never passes 30 rows, a cuttable block needs 1 row or it is left out', () => {
   const m = modelOf(PANE_1_N)
   expect(paneUpper(m).length).toBeLessThanOrEqual(PANE_TOP_N)
   const tight: PaneModel = { ...m, pin: Array.from({ length: 24 }, (_, i) => `行 ${i}`), lanes: null, events: m.events }
@@ -61,7 +61,9 @@ test('P2 wide pane: the upper half never passes 30 rows, a cuttable block needs 
   expect(up.some(r => r.startsWith('今天結束的事 · 最近 4 筆'))).toBe(true)
   expect(up.some(r => r.startsWith('本機事件'))).toBe(false)
   const tighter: PaneModel = { ...tight, pin: Array.from({ length: 27 }, (_, i) => `行 ${i}`) }
-  expect(paneUpper(tighter).length).toBe(27) // 30 - 27 - 2 = 1 row: below 3, the history is not placed
+  expect(paneUpper(tighter).length).toBe(30) // 30 - 27 - 2 = 1 row left: the history is placed with its one row (design 1-L)
+  const none: PaneModel = { ...tight, pin: Array.from({ length: 28 }, (_, i) => `行 ${i}`) }
+  expect(paneUpper(none).length).toBe(28) // 30 - 28 - 2 = 0 rows: not placed
 })
 
 test('P2 wide pane: a CJK line is cut by display width with an ellipsis, the row stays 94 wide', () => {

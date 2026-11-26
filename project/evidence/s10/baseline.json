@@ -10,8 +10,10 @@
     },
     {
       "hook": "UserPromptSubmit",
-      "baseline_bytes": 33255,
-      "threshold_50pct": 16627
+      "baseline_bytes": 33062,
+      "threshold_50pct": 16531
     }
-  ]
+  ],
+  "baseline_prompts": 47,
+  "baseline_window": "2026-11-25T12:33Z..2026-11-25T17:15Z, PM seat, exported by export-hook-trace.js d94ff1465, content-free"
 }

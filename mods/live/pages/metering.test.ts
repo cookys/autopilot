@@ -53,11 +53,11 @@ test('host names share one displayWidth prefix, including a CJK name and a no-da
     主機: { expected: 10, got: 8, missing: 2, retention_days: 7, no_data: false },
     甲: { expected: 10, got: 0, missing: 10, retention_days: 3, no_data: true },
   }, { lines: ['kept'] })), NOW, t)
-  const hostRows = rows.filter(r => /覆蓋|無資料/.test(text(r)))
+  const hostRows = rows.filter(r => /覆蓋 \d|無資料/.test(text(r)))
   expect(hostRows.map(text)).toContain(' 甲    無資料')
   const prefixes = hostRows.map(r => {
     const s = text(r)
-    return displayWidth(s.slice(0, s.search(/覆蓋|無資料/)))
+    return displayWidth(s.slice(0, s.search(/覆蓋 \d|無資料/)))
   })
   expect(new Set(prefixes).size).toBe(1)
   expect(prefixes[0]).toBe(displayWidth(' 主機  '))

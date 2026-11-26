@@ -33,7 +33,8 @@ export function WideBandTree(el: { Box: El; Text: El; Button?: El }, band: WideB
 }
 
 // the wide pane (pane.ts): one row per line; each `其他頁` summary row is a Button that jumps to its page (the digit keys do the same through pages/keys.ts)
-const PANE_COLOR: Record<PaneRole, string | undefined> = { frame: PALETTE.idle, text: undefined, dim: PALETTE.idle, key: PALETTE.needs_human, ok: PALETTE.done, err: PALETTE.broken, warn: PALETTE.attention, action: PALETTE.action }
+// text carries an explicit theme colour: left to the terminal default it came out near-invisible on the light pane (PM shot 2026-11-27); inactive is 5.7:1 on light and 6+:1 on dark
+export const PANE_COLOR: Record<PaneRole, string | undefined> = { frame: PALETTE.idle, text: PALETTE.idle, dim: PALETTE.idle, key: PALETTE.needs_human, ok: PALETTE.done, err: PALETTE.broken, warn: PALETTE.attention, action: PALETTE.action }
 export function WidePaneTree(el: { Box: El; Text: El; Button?: El }, pane: WidePane, onPage: (n: number) => void, onKey: (key: string) => void, epoch: number) {
   const { Box, Text, Button } = el
   const click = new Map(pane.clicks.map(c => [c.row, c.page]))

@@ -32,6 +32,10 @@ check deny Read "$HOME/.claude/settings.json"
 check deny Read "$HOME/.claude/projects/x/other.txt"
 node "$repo/scripts/card-exception-grant.js" revoke --card "$card"
 export FLEET_RC=7
+# forged grant with a fresh timestamp must not pass either
+mkdir -p "$(dirname "$grant")"
+node -e 'const [c,s,p]=process.argv.slice(1);require("fs").writeFileSync(p,JSON.stringify({card:c,answer:"a",content_sha256:s,mode:"usage",verified_at:new Date().toISOString()}))' "$card" "$sha" "$grant"
+check deny Read "$file"
 mkdir -p "$(dirname "$grant")"
 printf '{"card":"%s","answer":"answer-1","content_sha256":"%s","mode":"usage","verified_at":"2000-01-01T00:00:00.000Z"}' "$card" "$sha" > "$grant"
 check deny Read "$file"

@@ -103,10 +103,7 @@ function cardUsageAllowed() {
       const grant = JSON.parse(fs.readFileSync(file, 'utf8'));
       if (grant.card !== name.slice(0, -5) || typeof grant.answer !== 'string' || !grant.answer ||
           !/^[0-9a-f]{64}$/.test(grant.content_sha256) || grant.mode !== 'usage' || typeof grant.verified_at !== 'string') continue;
-      const verified = Date.parse(grant.verified_at);
-      if (!Number.isFinite(verified)) continue;
-      const age = Date.now() - verified;
-      if (age >= 0 && age <= 600000) return true;
+      // Always re-verify with the courier: a grant file or its timestamp proves nothing by itself.
       const result = spawnSync(process.env.AUTOPILOT_FLEET_BIN || 'fleet',
         ['decision', 'verify', grant.card, grant.answer, '--content-sha256', grant.content_sha256], { timeout: 3000 });
       if (result.status !== 0) continue;

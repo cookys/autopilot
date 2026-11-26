@@ -80,6 +80,7 @@ import { routeKey } from './pages/keys'
 import { PANE_COLS, wideNext } from './wide/geometry'
 import { WIDE_TABS, wideBand, wideStatusText } from './wide/band'
 import { WideBandTree } from './wide/tree'
+import type { PaneModel } from './wide/pane'
 import type { KeyAction } from './pages/keys'
 import { decideReduce, NO_NAV, v74Pool } from './pages/decide'
 import type { DecideNav } from './pages/decide'
@@ -1718,6 +1719,26 @@ const framePageId = (): string => panePage
 let v74Open = false
 // console v5: the wide band (wide/geometry.ts) is on for the last band draw; the pane then docks 94 columns wide and Tab cycles the pages. Set only in the v7.4 band draw.
 let bandWide = false
+// console v5 wide pane (wide/pane.ts): what the band's last draw could not fit (band.ts overflow) and whether `e` has opened the context; the pane draws them
+let wideOverflow: { list: string[]; reply: string[] } = { list: [], reply: [] }
+let widePaneCtxOpen = false
+function widePaneModel(): PaneModel {
+  const page = Math.max(1, (V74_PAGES as readonly string[]).indexOf(panePage) + 1)
+  const mark = (sid: string): 'running' | 'failed' | 'waiting' => (sid === 'failed' ? 'failed' : sid === 'running' ? 'running' : 'waiting')
+  const rows = consoleSnap?.lines != null ? fleetRowsOf(consoleSnap.lines) : null
+  const counts = consoleSnap !== null ? consoleFleetCounts(consoleSnap, tr) : null
+  const cards = mergedDecide()
+  const none = (n: number): (string | null)[] => Array.from({ length: n }, () => null) // no source for a page's summary yet: the pane says 無
+  const summaries = none(9)
+  if (cards !== null) summaries[1] = `${cards.length} 張要你選`
+  if (counts !== null) summaries[6] = `執行 ${counts.running} · 失敗 ${counts.failed} · ${GLYPHS.state.waiting} ${counts.stuck}`
+  return {
+    page, tabs: WIDE_TABS, moved: wideOverflow.reply, more: wideOverflow.list, pin: [], ctx: [], ctxFold: false, ctxOpen: widePaneCtxOpen,
+    lanes: rows === null ? null : rows.slice(0, 12).map(r => ({ state: mark(r.sid), name: r.line.label, speed: r.word, task: r.line.lead_display ?? '' })),
+    lanesHead: rows === null ? '' : `艦隊 · ${rows.length} 條產線`,
+    hist: null, events: null, summaries,
+  }
+}
 // `bandLegacy` is null until the first AbovePrompt draw of this session: the mode is not known yet, so an open asked before it (`/live-pane` at startup) is only recorded
 // (v74Open) and the first draw opens the host Pane when it turns out to be the old layout.
 let bandLegacy: boolean | null = null
@@ -1852,6 +1873,7 @@ async function frameKeyBody($: EngineInterface, k: KeyAction): Promise<void> {
   v74KeysHeld = v74KeysHeldNext(v74KeysHeld, { kind: 'key', key: k.kind })
   try {
     if (k.kind === 'page') { await panePagePress($, k.to as PageId); return }
+    if (k.kind === 'toggle_ctx') { widePaneCtxOpen = !widePaneCtxOpen; void $.ui.invalidate('ui.render'); return }
     if (k.kind === 'toggle_expand') {
       const synced = bandExpand.expanded === v74Open ? bandExpand : { ...bandExpand, expanded: v74Open }
       bandExpand = toggleBandExpand(synced)
@@ -2376,7 +2398,9 @@ export function registerLive(on: Parameters<Register>[0]): void {
         const reply = pageNo === 2 && curCard !== null ? [curCard.question, ...curCard.options.map((o, i) => PICK_KEYS[i] + ': ' + o.label)] : remText !== null ? [remText] : []
         const status = wideStatusText({ verdict: '進行中', running: fleetCounts?.running ?? null, failed: oneRowInput.line.failed, stalled: fleetCounts?.stuck ?? null, pending: pendCount, act: null, tps: lastStep?.tps ?? null, spark: sparkBars, labels: { fleet: '艦隊', pending: '待決', act: '動手' } })
         await logBandGeometry($, rows, columns, 17)
-        return WideBandTree(el, wideBand({ page: pageNo, tabs: WIDE_TABS, stepTitle: '', list, reply, status, hints: '' }))
+        const wide = wideBand({ page: pageNo, tabs: WIDE_TABS, stepTitle: '', list, reply, status, hints: '' })
+        wideOverflow = wide.overflow
+        return WideBandTree(el, wide)
       }
       const onOneRowSegment = (id: BandSegmentId) => {
         const target = bandSlotPage(id, false)
@@ -2768,7 +2792,7 @@ async function paneTree($: EngineInterface, e: { props: any; surface: string }, 
     folded, boxRows !== null ? null : e.props.scroll ?? null,
     { state: decideState, batch: decideBatch, now: decideNow, inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } },
     decideScroll, fleet, null,
-    legacy ? null : { pages: [...PAGES, ...EXTRA_PAGES], pageId: panePage, ...(!legacy ? { pendingScroll } : {}), onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, others: fleet?.others ?? null, nowMs: frameNow, rows: boxRows ?? frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), ...(boxMaxRows === null ? {} : { maxRows: boxMaxRows }), bodyColumns: decideCols, ...(boxRows === null ? {} : { v74Box: true as const }), ...(askRows !== undefined && askRows.length > 0 ? { askRows } : {}), view: pageView, decide: { ...decideState, ...decideLocal, layoutMode: decideLayout }, v74, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { void v74Keylog($, { handler: 'input', component: 'Input', element: 'v74-note', len: [...v].length, page: panePage, cursor: decideLocal.cursor, focusOwner: 'v74-note', noteOpen: true }); decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(pageNeedsSteps(panePage) ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}), ...(panePage === 'room' ? { room: parseRoom((await readRoomText($)) ?? '') } : {}) },
+    legacy ? null : { pages: [...PAGES, ...EXTRA_PAGES], pageId: panePage, ...(!legacy ? { pendingScroll } : {}), onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, others: fleet?.others ?? null, nowMs: frameNow, rows: boxRows ?? frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), ...(boxMaxRows === null ? {} : { maxRows: boxMaxRows }), bodyColumns: decideCols, ...(boxRows === null ? {} : { v74Box: true as const }), ...(askRows !== undefined && askRows.length > 0 ? { askRows } : {}), view: pageView, ...(bandWide && boxRows === null ? { wide: { model: widePaneModel(), onPage: (n: number) => { void panePagePress($, V74_PAGES[n - 1] as PageId) } } } : {}), decide: { ...decideState, ...decideLocal, layoutMode: decideLayout }, v74, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { void v74Keylog($, { handler: 'input', component: 'Input', element: 'v74-note', len: [...v].length, page: panePage, cursor: decideLocal.cursor, focusOwner: 'v74-note', noteOpen: true }); decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(pageNeedsSteps(panePage) ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}), ...(panePage === 'room' ? { room: parseRoom((await readRoomText($)) ?? '') } : {}) },
   )
   if (boxRows === null) await probePane($, e as never, tree)
   return tree

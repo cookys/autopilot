@@ -33,6 +33,9 @@ import type { Page, PageCtx, PageId, Row } from './pages/frame'
 import type { ScrollModel } from './scroll'
 import type { Step } from './speed'
 import { PET_KEY, V74_KEY } from './v74/contract'
+import { widePane } from './wide/pane'
+import type { PaneModel } from './wide/pane'
+import { WidePaneTree } from './wide/tree'
 import type { V74Ctx } from './v74/contract'
 
 export type { PaneTab } from './model'
@@ -158,7 +161,7 @@ export type PageView = { focus: number; expanded: boolean; folded?: boolean }
 // view: focus index + expanded flag per page id (fleet, quota, spend); decide: the 待決 page's nav; onPress gets a Seg `press` that is not a tab switch (fleet:see:, fleet:fold, fill:...); onKey gets a page-local key (the host has no raw key hook: the keys are hidden hotkey Buttons); epoch rotates Button keys after a dock <-> inline move (B56)
 // the screen-order rank of every Button the framed page drew (`card:N`, `p:row:col`): the ring's step direction is read from it (register.ts, ui.focus)
 export const paneRank = new Map<string, number>()
-export type FramePane = { pendingScroll?: PageCtx['pendingScroll']; poolEta?: PoolEta | null; room?: readonly { seq: number; from: string; kind: string; text: string }[]; pages: readonly Page[]; pageId?: PageId; onPage?: (id: PageId) => void; console: ConsoleSnapshot | null; nowMs: number; rows: number; maxRows?: number; bodyColumns?: number; scroll?: number; view?: Record<string, PageView>; decide?: DecideNav; v74?: V74Ctx; v74Box?: true; askRows?: readonly Row[]; onPress?: (id: string) => void; onKey?: (k: KeyAction) => void; onText?: (v: string) => void; epoch?: number; steps?: readonly Step[]; pet?: unknown; others?: OthersView | null }
+export type FramePane = { wide?: { model: PaneModel; onPage: (n: number) => void }; pendingScroll?: PageCtx['pendingScroll']; poolEta?: PoolEta | null; room?: readonly { seq: number; from: string; kind: string; text: string }[]; pages: readonly Page[]; pageId?: PageId; onPage?: (id: PageId) => void; console: ConsoleSnapshot | null; nowMs: number; rows: number; maxRows?: number; bodyColumns?: number; scroll?: number; view?: Record<string, PageView>; decide?: DecideNav; v74?: V74Ctx; v74Box?: true; askRows?: readonly Row[]; onPress?: (id: string) => void; onKey?: (k: KeyAction) => void; onText?: (v: string) => void; epoch?: number; steps?: readonly Step[]; pet?: unknown; others?: OthersView | null }
 const COMMON_KEYS: Record<string, KeyAction> = { z: { kind: 'fold' } } // the host takes a digit or a lowercase letter as a hotkey: Space is z here. j / k (next / previous card) are carried by the `[j] [k]` hint Buttons of the 待決 action row
 const CARD_KEYS: Record<string, KeyAction> = { a: { kind: 'pick', index: 0 }, b: { kind: 'pick', index: 1 }, c: { kind: 'pick', index: 2 } }
 const DECIDE_KEYS: Record<string, KeyAction> = { ...CARD_KEYS, d: { kind: 'pick', index: 3 }, e: { kind: 'expand' }, v: { kind: 'style' }, j: { kind: 'move', by: 1 }, k: { kind: 'move', by: -1 }, m: { kind: 'note' }, n: { kind: 'move', by: 1 }, p: { kind: 'move', by: -1 }, u: { kind: 'undo' }, h: { kind: 'prev' }, l: { kind: 'next' }, f: { kind: 'fill' }, s: { kind: 'submit' } }
@@ -457,6 +460,7 @@ export function Pane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El 
     const own = snap === null ? null : { parts: [{ title: null, lines: headerLines(snap, ctx) }, { title: t('console.self.now'), lines: nowLines(snap, ctx) }, { title: t('console.self.dispatch'), lines: dispatchLines(snap, ctx) }, { title: t('console.self.review'), lines: reviewTabLines(snap, ctx) }], draw: line }
     return consolePane(el, con, t, cols, fleet, own)
   }
+  if (frame?.wide !== undefined) return WidePaneTree(el, widePane(frame.wide.model), frame.wide.onPage) // console v5: the 94-column docked pane (wide/pane.ts); every other width keeps the frame below
   const framed = framedPage(frame, tab)
   if (frame !== null && framed !== undefined) return framedView(el, framed, frame, snap, onTab, t, cols)
   const strip = tabStrip(el, tab, onTab, snap, t, cols, epoch)

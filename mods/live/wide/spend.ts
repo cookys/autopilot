@@ -1,5 +1,6 @@
 // mods/live/wide/spend.ts — console v5 wide page 5 花費 (P4a): pure projection from existing quota / spend / speed data.
 import { GLYPHS } from '../../tux/glyphs'
+import type { WideListRow } from './band'
 
 export type WideSpendPool = {
   label: string
@@ -33,12 +34,12 @@ export type WideSpendInput = {
   narrative?: string[] // the source's own words for the reply column; absent = built from the figures
   detail?: string[] // the context rows the source gives; absent = built from the figures
   warnings?: string[] // fixed warning rows (source missing / stale)
-  meterLines?: string[] // metering coverage rows, after the pool block; absent on older callers
+  meterLines?: WideListRow[] // metering coverage rows (pages/metering.ts meteringWideRows), after the pool block; a row over 10% carries the `action` role; absent on older callers
 }
 
 export type WideSpendOutput = {
   stepTitle: string
-  list: string[]
+  list: WideListRow[]
   reply: string[]
   hints: string
   pin: string[]
@@ -64,7 +65,7 @@ export function wideSpend(i: WideSpendInput): WideSpendOutput {
         ? '還沒有用量'
         : '正常')
 
-  const list: string[] = []
+  const list: WideListRow[] = []
   const age = i.staleAge !== undefined ? ` ${GLYPHS.state.need_you} ${i.staleAge}` : ''
   const poolsText = i.pools.length > 0 ? `  ${i.pools.map(p => `${p.label} ${pct(p.pct)}`).join(' · ')}` : null
   if (i.poolRows !== undefined) {

@@ -14,7 +14,7 @@ export const PANE_INNER = PANE_BODY_COLS - 4 // 89: text columns 2-90
 export const PANE_MIN_CUT = 1 // a cuttable block is placed only when at least this many of its rows fit (the design's fill() code; its docstring says 3, its screens show 1)
 export const PANE_OTHERS_ROW = 32 // `其他頁`; the eight summaries follow on rows 33-40
 
-export type PaneRole = 'frame' | 'text' | 'dim' | 'key' | 'ok' | 'err' | 'warn'
+export type PaneRole = 'frame' | 'text' | 'dim' | 'key' | 'ok' | 'err' | 'warn' | 'action' // action = PALETTE.action (remember); `warn` is attention yellow, which fails light-256 contrast
 export type PaneSeg = { text: string; role: PaneRole }
 export type PaneLane = { state: 'running' | 'failed' | 'waiting'; name: string; speed: string; task: string; ev?: string; next?: string } // ev + next: the 7 艦隊 form
 export type PaneModel = {
@@ -28,6 +28,7 @@ export type PaneModel = {
   ctxOpen: boolean // `e` has opened it
   lanes: PaneLane[] | null // null = no source: the block is left out
   lanesHead: string
+  meter?: { head: string; rows: { text: string; role: PaneRole }[] } | null // page 5: the 計量覆蓋 block, drawn in place of the lanes (which are then left out)
   hist: { title: string; rows: string[] } | null // the page's own history of finished things
   events: string[] | null // local events, newest first
   summaries: (string | null)[] // nine entries by page; null = no data, drawn `無`; the current page's is never drawn
@@ -75,7 +76,8 @@ export function paneUpper(m: PaneModel): Row[] {
   const fixed = top.slice(0, PANE_TOP_N)
   top.length = 0
   top.push(...fixed)
-  if (m.lanes !== null) add(m.lanesHead, m.lanes.map(laneRow), false)
+  if (m.meter != null) add(m.meter.head, m.meter.rows.map((r): Row => [[r.text, r.role]]), false)
+  else if (m.lanes !== null) add(m.lanesHead, m.lanes.map(laneRow), false)
   if (m.hist !== null) {
     const rows = plain(m.hist.rows.map(x => '  ' + x), 'dim')
     const room = PANE_TOP_N - top.length - (top.length > 0 ? 2 : 1)

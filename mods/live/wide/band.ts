@@ -6,20 +6,22 @@ import { GLYPHS } from '../../tux/glyphs'
 import { displayWidth } from '../../tux/width'
 import { BAND_BODY_ROWS, BAND_COLS, BAND_LIST_COLS, BAND_REPLY_COLS, BAND_ROWS } from './geometry'
 
-export type WideRole = 'frame' | 'text' | 'fold' | 'current' // what a piece is; tree.tsx maps each to a PALETTE role
+export type WideRole = 'frame' | 'text' | 'fold' | 'current' | 'action' // what a piece is; tree.tsx maps each to a PALETTE role
+export type WideListRow = string | { text: string; role: WideRole } // a list row: plain text, or text drawn in a role (the 計量覆蓋 row over 10% is `action`)
+export const listRowText = (r: WideListRow): string => (typeof r === 'string' ? r : r.text)
 export type WideSpan = { col: number; width: number; role: WideRole }
 export type WideModel = {
   page: number // 1..9, the current page
   tabs: string[] // the nine page names
   stepTitle: string
-  list: string[] // list-column rows, already text
+  list: WideListRow[] // list-column rows, already text
   reply: string[] // reply-column rows, already text
   status: string // the global status text
   hints: string // the page's key hints; `Tab 換頁` is appended when missing
   replyKeep?: number // reply index where the options start: rows 1..keep-1 (the steps) go to the pane first; unset = the tail goes
 }
 export type WideSeg = { text: string; role: WideRole }
-export type WideBand = { rows: string[]; roles: WideSpan[][]; segs: WideSeg[][]; overflow: { list: string[]; reply: string[] } } // segs: each row cut into same-role pieces, for the drawing
+export type WideBand = { rows: string[]; roles: WideSpan[][]; segs: WideSeg[][]; overflow: { list: WideListRow[]; reply: string[] } } // segs: each row cut into same-role pieces, for the drawing
 
 export const WIDE_TABS = ['現況', '待決', '派工', '審查', '花費', '殘留', '艦隊', '待辦', '說明'] // the nine pages, keys 1..9 (P3 moves the words into the locale tables)
 export const WIDE_TAB_HINT = 'Tab 換頁'
@@ -54,7 +56,7 @@ export const listMore = (n: number): string => `另 ${n} 列在右邊「清單�
 export const REPLY_MOVED = '步驟在右邊，不用捲'
 
 // the list column: 12 rows; more than that: 11 rows, then a row that says how many went to the pane (`清單（續）`)
-export function fitList(rows: string[], n: number = BAND_BODY_ROWS): { shown: string[]; overflow: string[] } {
+export function fitList(rows: WideListRow[], n: number = BAND_BODY_ROWS): { shown: WideListRow[]; overflow: WideListRow[] } {
   if (rows.length <= n) return { shown: rows, overflow: [] }
   return { shown: [...rows.slice(0, n - 1), listMore(rows.length - (n - 1))], overflow: rows.slice(n - 1) }
 }
@@ -114,9 +116,12 @@ export function wideBand(m: WideModel): WideBand {
   const { shown: list, overflow: listOver } = fitList(m.list)
   const { shown: reply, overflow: replyOver } = fitReply(m.reply, m.replyKeep)
   for (let i = 0; i < BAND_BODY_ROWS; i++) {
-    const a = padTo(clipTo(list[i] ?? '', BAND_LIST_COLS - 2), BAND_LIST_COLS - 2) // columns 2-35
+    const item = list[i] ?? ''
+    const a = padTo(clipTo(listRowText(item), BAND_LIST_COLS - 2), BAND_LIST_COLS - 2) // columns 2-35
+    const aRole: WideRole = typeof item === 'string' ? 'text' : item.role
+    const aText = a.trimEnd() // only the words take the role, the padding stays plain
     const b = padTo(clipTo(reply[i] ?? '', BAND_REPLY_COLS), BAND_REPLY_COLS + 1) // columns 38-108 (108 stays blank)
-    push([[F.v + ' ', 'frame'], [a, 'text'], [F.v, 'frame'], [' ' + b, 'text'], [F.v, 'frame']])
+    push([[F.v + ' ', 'frame'], [aText, aRole], [a.slice(aText.length), 'text'], [F.v, 'frame'], [' ' + b, 'text'], [F.v, 'frame']])
   }
   push([[F.right + fill(BAND_LIST_COLS - 1) + F.up + fill(last - BAND_LIST_COLS - 1) + F.left, 'frame']])
   const inner = BAND_COLS - 4 // text columns 2-107; column 108 is blank

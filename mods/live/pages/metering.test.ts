@@ -5,7 +5,10 @@ import { displayWidth } from '../model'
 import { PALETTE } from '../../tux/palette.ts'
 import { wideSpend } from '../wide/spend'
 import { renderSpend } from './spend'
-import { METER_WARN_COLOR, meteringRows, parseMeterPack } from './metering'
+import { METER_WARN_COLOR, METER_WIDE_COLS, meteringPaneBlock, meteringRows, meteringWideRows, parseMeterPack } from './metering'
+import { BAND_LIST_COLS } from '../wide/geometry'
+import { wideBand } from '../wide/band'
+import { paneUpper, PANE_INNER } from '../wide/pane'
 import type { MeterPack } from './metering'
 
 const t = makeT('zh-TW')
@@ -105,4 +108,61 @@ test('meter warn colour stays >= 4.5:1 on light and dark; attention yellow does 
   expect(contrast([187, 187, 0], [255, 255, 255])).toBeLessThan(4.5)
   for (const bg of [[255, 255, 255], [245, 245, 245]]) expect(contrast([0, 0, 255], bg)).toBeGreaterThanOrEqual(4.5)
   for (const bg of [[0, 0, 0], [30, 30, 30]]) expect(contrast([180, 180, 255], bg)).toBeGreaterThanOrEqual(4.5)
+})
+
+const SAMPLE = pack({
+  '4124gs': { expected: 137, got: 88, missing: 49, retention_days: 7, no_data: false },
+  c4140: { expected: 81, got: 86, missing: 5, retention_days: 4, no_data: false },
+  xl270d: { expected: 137, got: 125, missing: 12, retention_days: 7, no_data: false },
+}, { lines: [] })
+
+test('wide band rows: every row of the sample pack and of 8-character hosts with 3-digit counts fits the list column, with no ellipsis', () => {
+  expect(METER_WIDE_COLS).toBe(BAND_LIST_COLS - 2)
+  const big = pack({
+    abcdefgh: { expected: 999, got: 998, missing: 100, retention_days: 14, no_data: false },
+    hostname8: { expected: 100, got: 100, missing: 0, retention_days: 7, no_data: false },
+    短: { expected: 10, got: 0, missing: 10, retention_days: 3, no_data: true },
+  }, { lines: [] })
+  for (const raw of [SAMPLE, big, pack({ h: { expected: 1, got: 1, missing: 0, retention_days: 1, no_data: false } }, { lines: ['x'] })]) {
+    for (const row of meteringWideRows(parseMeterPack(raw), NOW, t)) {
+      expect(displayWidth(row.text), row.text).toBeLessThanOrEqual(METER_WIDE_COLS)
+      expect(row.text).not.toContain('…')
+    }
+  }
+  expect(meteringWideRows(null, NOW, t).map(r => displayWidth(r.text)).every(n => n <= METER_WIDE_COLS)).toBe(true)
+  expect(meteringWideRows(parseMeterPack(SAMPLE), NOW, t).map(r => r.text)).toEqual([
+    '▾ 計量覆蓋', '4124gs 88/137 缺 49 · 留 7 日', 'c4140  86/81 缺 5 · 留 4 日', 'xl270d 125/137 缺 12 · 留 7 日', '證據：尚無生產者（約 11-30）',
+  ])
+})
+
+test('wide band rows: only the row over 10% is warn, and the band draws it in the action role while the others stay plain', () => {
+  const rows = meteringWideRows(parseMeterPack(SAMPLE), NOW, t)
+  expect(rows.filter(r => r.warn).map(r => r.text)).toEqual(['4124gs 88/137 缺 49 · 留 7 日'])
+  const band = wideBand({ page: 5, tabs: ['現況', '待決', '派工', '審查', '花費', '殘留', '艦隊', '待辦', '說明'], stepTitle: '正常', list: rows.map(r => (r.warn ? { text: r.text, role: 'action' as const } : r.text)), reply: [], status: '', hints: '' })
+  const drawn = band.segs.flat()
+  expect(drawn.filter(sg => sg.role === 'action').map(sg => sg.text)).toEqual(['4124gs 88/137 缺 49 · 留 7 日'])
+  expect(band.rows.join('\n')).not.toContain('…')
+  expect(band.rows.every(r => displayWidth(r) === 110)).toBe(true)
+})
+
+test('wide pane block: the three long-form host rows and the evidence row, the over-10% row in the action role, the lanes left out; other pages keep their lanes', () => {
+  const block = meteringPaneBlock(parseMeterPack(SAMPLE), NOW, t)
+  expect(block.head).toBe('計量覆蓋')
+  expect(block.rows.map(r => r.text)).toEqual([' 4124gs  覆蓋 88/137（缺 49）· 保留 7 日', ' c4140   覆蓋 86/81（缺 5）· 保留 4 日', ' xl270d  覆蓋 125/137（缺 12）· 保留 7 日', ' 證據：尚無生產者（約 11-30）'])
+  expect(block.rows.map(r => r.warn)).toEqual([true, false, false, false])
+  const lanes = [{ state: 'running' as const, name: 'lane-a', speed: '1 tok/s', task: 'x' }]
+  const base = { page: 5, tabs: ['現況', '待決', '派工', '審查', '花費', '殘留', '艦隊', '待辦', '說明'], moved: [], more: [], pin: [], ctx: [], ctxFold: false, ctxOpen: false, lanes, lanesHead: '艦隊 · 1 條產線', hist: null, events: null, summaries: Array.from({ length: 9 }, () => null) }
+  const withMeter = paneUpper({ ...base, meter: { head: block.head, rows: block.rows.map(r => ({ text: r.text, role: r.warn ? 'action' as const : 'text' as const })) } })
+  const text5 = withMeter.map(r => r.map(p => p[0]).join(''))
+  expect(text5).toContain('計量覆蓋')
+  expect(text5.filter(x => /覆蓋 \d/.test(x))).toHaveLength(3)
+  expect(text5.join('\n')).not.toContain('艦隊 ·')
+  expect(withMeter.flat().filter(p => p[1] === 'action').map(p => p[0])).toEqual([' 4124gs  覆蓋 88/137（缺 49）· 保留 7 日'])
+  expect(withMeter.every(r => displayWidth(r.map(p => p[0]).join('')) <= PANE_INNER)).toBe(true)
+  const other = paneUpper({ ...base, page: 7 }).map(r => r.map(p => p[0]).join(''))
+  expect(other.join('\n')).toContain('艦隊 · 1 條產線')
+  expect(other.join('\n')).not.toContain('計量覆蓋')
+  const broken = meteringPaneBlock(null, NOW, t)
+  expect(broken.rows).toHaveLength(1)
+  expect(broken.rows[0].text).not.toMatch(/\d/)
 })

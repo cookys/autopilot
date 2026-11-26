@@ -94,9 +94,10 @@ test('frame: scroll moves the window, and an offset past the end is clamped (sti
   const rows = frameRows(withBody(PAGES[0], 100, 0), ctxOf({ cols: 80, rows: 24 }), { pages: PAGES, scroll: 9999 })
   expect(rows.length).toBe(24) // an overflowing body fills the surface
   const body = rows.slice(1, 1 + 20) // 24 - head - border - strip - the one empty-state row
-  expect(text(body[19])).toBe('body 99') // clamped to the end: the window shows the last rows and no hint
-  expect(text(body[0])).toBe('body 80')
-  expect(frameRows(withBody(PAGES[0], 100, 0), ctxOf({ cols: 80, rows: 24 }), { pages: PAGES, scroll: 10 }).slice(1, 21).map(text)[19]).toBe('↓ 還有 71 列')
+  expect(text(body[19])).toBe('body 99') // clamped to the end: the window shows the last rows, the `↑ 還有 N 列` row and no `↓` row
+  expect(text(body[0])).toBe('↑ 還有 81 列')
+  expect(text(body[1])).toBe('body 81')
+  expect(frameRows(withBody(PAGES[0], 100, 0), ctxOf({ cols: 80, rows: 24 }), { pages: PAGES, scroll: 10 }).slice(1, 21).map(text)[19]).toBe('↓ 還有 72 列') // one row of the window is the up-hint row
 })
 
 test('frame: more actions than the area holds throws (a programming error), at both A sizes', () => {

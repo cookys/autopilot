@@ -1292,6 +1292,20 @@ function main(argv) {
   if (aliasErr) return usage(aliasErr);
   if (ex['from-request'] !== undefined && !/^r-[0-9a-f]{8}$/.test(String(ex['from-request']))) return usage('--from-request needs an id r- plus 8 hex');
   const fromRequestAddr = ex['from-request'] !== undefined ? fleetWhoami() : null;
+  // Lane seats send the request to PM; only PM opens an operator card.
+  const opener = fleetWhoami();
+  const pmSeat = process.env.AUTOPILOT_PM_SEAT || 'cookys/aimax395/pm--claude';
+  if (!opener) process.stderr.write('open-decision: warning: fleet whoami unavailable; opening as before\n');
+  if (opener && opener !== pmSeat) {
+    const message = ['[操作員決定]', `question: ${questionText}`, `background: ${backgroundText || ''}`,
+      `options: ${options ? options.map((o) => `${o.label}::${o.description}`).join(' | ') : ''}`,
+      `recommendation: ${args.recommendation || ''}`, `why: ${args.why || ''}`, `category: ${ex.category}`,
+      `executor: ${ex.executor || ''}`, `not-authorized: ${args['not-authorized'] || ''}`, `kind: ${args.kind || 'decide'}`].join('\n');
+    const sent = sendFleet(pmSeat, message);
+    if (!sent.ok) { process.stderr.write(`open-decision: forwarding to PM failed: ${sent.error}\n`); return 8; }
+    process.stdout.write(`${JSON.stringify({ forwarded_to_pm: true, message_id: sent.message_id, hint: 'set your fleet task to waiting_on_operator <message_id>' })}\n`);
+    return 0;
+  }
   let routed = null;
     const naId = notAuthorizedBoundaryId(args['not-authorized']);
     if (operatorSteps.length === 0 && OPERATOR_STEP_HINT_IDS.has(naId)) {
@@ -1707,10 +1721,10 @@ function fleetWhoami(timeoutMs = 5000) {
   try {
     const j = JSON.parse(raw);
     const addr = j && (j.address || j.addr || j.identity || j.me);
-    if (typeof addr === 'string' && addr.trim()) return addr.trim();
+    return typeof addr === 'string' && require('./lib/fleet-decision.js').isAddress(addr.trim()) ? addr.trim() : null;
   } catch (_e) { /* plain text */ }
   const first = raw.split(/\r?\n/)[0].trim();
-  return first || null;
+  return require('./lib/fleet-decision.js').isAddress(first) ? first : null;
 }
 
 function sendFleet(to, text, timeoutMs = SEND_TIMEOUT_MS) {

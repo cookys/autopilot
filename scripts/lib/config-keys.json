@@ -7000,6 +7000,17 @@
       "summary": "Set to \"0\" to stop sessions from starting the live runs watcher."
     },
     {
+      "name": "AUTOPILOT_PM_SEAT",
+      "kind": "env",
+      "audience": "user",
+      "group": "ui",
+      "default": "cookys/aimax395/pm--claude",
+      "readers": ["scripts/open-decision.js", "scripts/list-lane-cards.js"],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Fleet address of the PM seat receiving lane decision requests."
+    },
+    {
       "name": "AUTOPILOT_CARD_NOTIFY",
       "kind": "env",
       "audience": "user",

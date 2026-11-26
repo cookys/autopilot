@@ -1,7 +1,7 @@
 // mods/live/wide/band.ts - console v5 wide band (P1 skeleton): 17 rows x 115 columns, drawn from a plain model. Pure, no host calls.
 // Rows (design gen_wide_all.py compose()): 1 top frame (left `<n> <page> · list`, right step title, `[-]` fold at the right), 2-13 two columns split at column 38
 // (list left, reply right), 14 divider, 15 global status, 16 nine page tabs, 17 bottom frame carrying the page's key hints and always ending `Tab 換頁`.
-// The list and reply rows are whatever the page already has (P3/P4 re-skin them); over 12 rows the last one reads `…` (P2 moves the rest to the pane).
+// The list and reply rows are whatever the page already has (P3/P4 re-skin them); over 12 rows the rest is handed to the pane (`overflow`, drawn by pane.ts) and a row says where it went.
 import { GLYPHS } from '../../tux/glyphs'
 import { displayWidth } from '../../tux/width'
 import { BAND_BODY_ROWS, BAND_COLS, BAND_LIST_COLS, BAND_REPLY_COLS, BAND_ROWS } from './geometry'
@@ -16,16 +16,17 @@ export type WideModel = {
   reply: string[] // reply-column rows, already text
   status: string // the global status text
   hints: string // the page's key hints; `Tab 換頁` is appended when missing
+  replyKeep?: number // reply index where the options start: rows 1..keep-1 (the steps) go to the pane first; unset = the tail goes
 }
 export type WideSeg = { text: string; role: WideRole }
-export type WideBand = { rows: string[]; roles: WideSpan[][]; segs: WideSeg[][] } // segs: each row cut into same-role pieces, for the drawing
+export type WideBand = { rows: string[]; roles: WideSpan[][]; segs: WideSeg[][]; overflow: { list: string[]; reply: string[] } } // segs: each row cut into same-role pieces, for the drawing
 
 export const WIDE_TABS = ['現況', '待決', '派工', '審查', '花費', '殘留', '艦隊', '待辦', '說明'] // the nine pages, keys 1..9 (P3 moves the words into the locale tables)
 export const WIDE_TAB_HINT = 'Tab 換頁'
 const STUCK_WORD = '卡住' // never drawn in the band (operator R7): a stalled line is the `⋯` mark
 const ELLIPSIS = '…'
 // the frame glyphs as code points: the glyph lint (L2) keeps drawing characters out of mod sources except tux/glyphs.ts
-const F = { h: '\u2500', v: '\u2502', tl: '\u256D', tr: '\u256E', bl: '\u2570', br: '\u256F', down: '\u252C', up: '\u2534', right: '\u251C', left: '\u2524' }
+export const F = { h: '\u2500', v: '\u2502', tl: '\u256D', tr: '\u256E', bl: '\u2570', br: '\u256F', down: '\u252C', up: '\u2534', right: '\u251C', left: '\u2524' }
 const FOLD = '[-]'
 
 type Seg = [string, WideRole]
@@ -47,6 +48,30 @@ const fill = (n: number): string => F.h.repeat(Math.max(0, n))
 // at most `n` rows; more than that: the first n-1 and a last row `…`
 export function limitRows(rows: string[], n: number): string[] {
   return rows.length <= n ? rows : [...rows.slice(0, n - 1), ELLIPSIS]
+}
+
+export const listMore = (n: number): string => `另 ${n} 列在右邊「清單（續）」`
+export const REPLY_MOVED = '步驟在右邊，不用捲'
+
+// the list column: 12 rows; more than that: 11 rows, then a row that says how many went to the pane (`清單（續）`)
+export function fitList(rows: string[], n: number = BAND_BODY_ROWS): { shown: string[]; overflow: string[] } {
+  if (rows.length <= n) return { shown: rows, overflow: [] }
+  return { shown: [...rows.slice(0, n - 1), listMore(rows.length - (n - 1))], overflow: rows.slice(n - 1) }
+}
+// the reply column: the steps between the question and the options go to the pane (`keep` = where the options start); still too long: the tail goes
+export function fitReply(rows: string[], keep: number | undefined, n: number = BAND_BODY_ROWS): { shown: string[]; overflow: string[] } {
+  if (rows.length <= n) return { shown: rows, overflow: [] }
+  let shown = rows
+  let overflow: string[] = []
+  if (keep !== undefined && keep > 1 && keep <= rows.length) {
+    overflow = rows.slice(1, keep)
+    shown = [rows[0], REPLY_MOVED, ...rows.slice(keep)]
+  }
+  if (shown.length > n) {
+    overflow = [...overflow, ...shown.slice(n - 1)]
+    shown = [...shown.slice(0, n - 1), REPLY_MOVED]
+  }
+  return { shown, overflow }
 }
 
 export function wideStatusText(s: { verdict: string; running: number | null; failed: number | null; stalled: number | null; pending: number | null; act: number | null; tps: number | null; spark: string | null; labels: { fleet: string; pending: string; act: string } }): string {
@@ -86,8 +111,8 @@ export function wideBand(m: WideModel): WideBand {
     [F.down + F.h, 'frame'], [rightTitle, 'text'], [fill(last - 5 - (BAND_LIST_COLS + 2) - w(rightTitle)), 'frame'],
     [FOLD, 'fold'], [F.h + F.h + F.tr, 'frame'],
   ])
-  const list = limitRows(m.list, BAND_BODY_ROWS)
-  const reply = limitRows(m.reply, BAND_BODY_ROWS)
+  const { shown: list, overflow: listOver } = fitList(m.list)
+  const { shown: reply, overflow: replyOver } = fitReply(m.reply, m.replyKeep)
   for (let i = 0; i < BAND_BODY_ROWS; i++) {
     const a = padTo(clipTo(list[i] ?? '', BAND_LIST_COLS - 2), BAND_LIST_COLS - 2) // columns 2-37
     const b = padTo(clipTo(reply[i] ?? '', BAND_REPLY_COLS), BAND_REPLY_COLS + 1) // columns 40-113 (113 stays blank)
@@ -116,5 +141,5 @@ export function wideBand(m: WideModel): WideBand {
   const foot = ` ${shown} `
   push([[F.bl + F.h, 'frame'], [foot, 'text'], [fill(BAND_COLS - 3 - w(foot)) + F.br, 'frame']])
   if (rows.length !== BAND_ROWS) throw new Error('wide band: ' + rows.length + ' rows')
-  return { rows, roles, segs }
+  return { rows, roles, segs, overflow: { list: listOver, reply: replyOver } }
 }

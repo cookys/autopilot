@@ -69,13 +69,14 @@ test('P1 wide band: the current page tab is the warning role, the rest plain', (
   expect(tabs.filter(s => s.role === 'current').map(s => s.text)).toEqual(['2 待決'])
 })
 
-test('P1 wide band: more than 12 rows end with an ellipsis row; a long line is cut to its column', () => {
+test('P1 wide band: more than 12 rows hand the rest to the pane (a pointer row says how many); a long line is cut to its column', () => {
   const many = Array.from({ length: 20 }, (_, i) => `列 ${i}`)
   const out = wideBand({ ...modelOf(STEP_1_N.rows), list: many, reply: ['很長'.repeat(60)] })
   expect(out.rows.length).toBe(17)
   for (const r of out.rows) expect(displayWidth(r)).toBe(115)
-  expect(cols(out.rows[12], 2, 38).trim()).toBe('…')
+  expect(cols(out.rows[12], 2, 38).trim()).toBe('另 9 列在右邊「清單（續）」')
   expect(cols(out.rows[11], 2, 38).trim()).toBe('列 10')
+  expect(out.overflow.list).toEqual(many.slice(11))
   expect(cols(out.rows[1], 40, 113).trimEnd().endsWith('…')).toBe(true)
 })
 

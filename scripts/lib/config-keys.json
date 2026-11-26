@@ -50,6 +50,19 @@
   },
   "entries": [
     {
+      "name": "AUTOPILOT_LIVE_V5",
+      "kind": "env",
+      "audience": "internal",
+      "class": "experiment_flag",
+      "default": null,
+      "readers": [
+        "mods/live/register.ts"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "console v5 wide band (mods/live/wide); 1 turns it on at >= 200 columns, default off while the 209-column suites pin the v7.4 frame."
+    },
+    {
       "name": "AUTOPILOT_PM_RESUME_STOP",
       "kind": "env",
       "audience": "internal",

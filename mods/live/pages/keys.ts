@@ -1,9 +1,9 @@
 // mods/live/pages/keys.ts — the pane's ONE key table (plan r2 §3.2, v7.4 B): digits, Esc, Enter and the 待決 note mode are decided here and nowhere else; register.ts calls routeKey.
 // Pure. The state is host facts: which page shows, whether the pane (not the prompt box) holds the keyboard, whether a Button has focus, whether the note mode is on.
 // 'pass' hands the key back to Claude Code (Esc interrupts the turn there); 'button' means the host's focused Button takes this Enter and the pane does nothing else with it.
-import { PET_KEY, PICK_KEYS, V74_KEY } from '../v74/contract'
+import { PET_KEY, PICK_KEYS, V74_KEY, V74_PAGES } from '../v74/contract'
 
-export type KeyState = { page: string; paneFocus: boolean; focusedButton: boolean; textMode: boolean; armed?: boolean; bgOpen?: boolean; compactExpanded?: boolean }
+export type KeyState = { page: string; paneFocus: boolean; focusedButton: boolean; textMode: boolean; armed?: boolean; bgOpen?: boolean; compactExpanded?: boolean; wide?: boolean }
 export type KeyAction =
   | { kind: 'page'; to: string } | { kind: 'close' } | { kind: 'pass' } | { kind: 'button' } | { kind: 'submit' } | { kind: 'confirm' } | { kind: 'disarm' }
   | { kind: 'pick'; index: number } | { kind: 'text'; ch: string } | { kind: 'text_save' } | { kind: 'text_cancel' }
@@ -25,6 +25,7 @@ export function routeKey(key: string, st: KeyState): KeyAction {
   if (!st.paneFocus) return { kind: 'pass' }
   if (st.textMode) return key === 'Enter' ? { kind: 'text_save' } : key === 'Escape' ? { kind: 'text_cancel' } : { kind: 'text', ch: key }
   if (key === 'Escape') return st.page === 'decide' && (st.bgOpen === true || st.compactExpanded === true) ? { kind: 'expand' } : st.armed === true && st.page === 'decide' ? { kind: 'disarm' } : { kind: 'close' }
+  if (key === 'Tab' && st.wide === true) { const at = (V74_PAGES as readonly string[]).indexOf(st.page); return { kind: 'page', to: V74_PAGES[(at + 1) % V74_PAGES.length] } } // console v5 wide band: Tab cycles 1 -> 9 -> 1
   if (key === 'w') return { kind: 'toggle_expand' }
   if (key === 'Enter') return st.focusedButton ? { kind: 'button' } : { kind: 'fold' }
   if (st.page === 'decide') {

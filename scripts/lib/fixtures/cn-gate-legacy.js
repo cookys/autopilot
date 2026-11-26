@@ -6,11 +6,11 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { familyOfEngine } = require('./stage-write');
-const { redactText, defaultRules } = require('./ar-redact-rules');
-const personal = require('./personal-data-patterns');
-const outbound = require('./outbound-secret-scan');
-const { configPath } = require('./config-path');
+const { familyOfEngine } = require('../stage-write');
+const { redactText, defaultRules } = require('../ar-redact-rules');
+const personal = require('../personal-data-patterns');
+const outbound = require('../outbound-secret-scan');
+const { configPath } = require('../config-path');
 
 const TASK = '01M7E2A1';
 const CARD = 'd-1dfcf757';

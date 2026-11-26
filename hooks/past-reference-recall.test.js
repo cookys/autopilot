@@ -370,3 +370,18 @@ test('payload caps for S10 P5: 3 hits of at most 120 chars', () => {
   assert.equal(mod.MAX_HITS, 3);
   assert.equal(mod.MAX_HIT_CHARS, 120);
 });
+
+test('same session never gets the same hit twice; another session still does (S10 P5)', () => {
+  const dir = tmp();
+  const records = path.join(dir, 'records');
+  fs.mkdirSync(records);
+  fs.writeFileSync(path.join(records, 'reply.md'), FIX_CARD_REPLY + '\n');
+  const mod = load();
+  const call = (sid) => mod.recall(
+    { prompt: '之前 d-47602dd8', session_id: sid },
+    { env: { AUTOPILOT_RECALL_RECORDS_DIR: records }, liveBase: dir },
+  );
+  assert.match(call('s1').context, /d-47602dd8 開著/);
+  assert.equal(call('s1').context, null, 'second injection in the same session is suppressed');
+  assert.match(call('s2').context, /d-47602dd8 開著/);
+});

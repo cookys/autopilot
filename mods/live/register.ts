@@ -90,6 +90,7 @@ import { wideSpend } from './wide/spend'
 import { wideHygiene } from './wide/hygiene'
 import { wideFleet } from './wide/fleet'
 import { wideTodo } from './wide/todo'
+import { ctxPctOf, untilText } from './wide/data'
 import { wideHelp } from './wide/help'
 import type { KeyAction } from './pages/keys'
 import { decideReduce, NO_NAV, v74Pool } from './pages/decide'
@@ -1733,6 +1734,9 @@ export let wideDecideOverflow: WideDecideOverflow = { steps: [], list: [] } // r
 // console v5 wide pane (wide/pane.ts): what the band's last draw could not fit (band.ts overflow) and whether `e` has opened the context; the pane draws them
 let wideOverflow: { list: string[]; reply: string[] } = { list: [], reply: [] }
 let widePaneCtxOpen = false
+let wideSummaries: (string | null)[] = Array.from({ length: 9 }, () => null) // the last wide band draw's per-page summaries (P5b)
+let wideHist: { title: string; rows: string[] } | null = null // the shown page's history block from the last wide band draw
+const quotaOf = (kind: string): QuotaWindow | undefined => quota.find(w => w.kind === kind)
 function widePaneModel(): PaneModel {
   const page = Math.max(1, (V74_PAGES as readonly string[]).indexOf(panePage) + 1)
   const mark = (sid: string): 'running' | 'failed' | 'waiting' => (sid === 'failed' ? 'failed' : sid === 'running' ? 'running' : 'waiting')
@@ -1740,7 +1744,7 @@ function widePaneModel(): PaneModel {
   const counts = consoleSnap !== null ? consoleFleetCounts(consoleSnap, tr) : null
   const cards = mergedDecide()
   const none = (n: number): (string | null)[] => Array.from({ length: n }, () => null) // no source for a page's summary yet: the pane says 無
-  const summaries = none(9)
+  const summaries = wideSummaries.slice(0, 9).concat(none(Math.max(0, 9 - wideSummaries.length)))
   if (cards !== null) summaries[1] = `${cards.length} 張要你選`
   const hygSum = wideHygiene({ residue: snapshot?.detail.residue ?? null, loadSource: snapshot?.detail.load_source ?? null, focus: pageView.hygiene?.focus ?? 0, stale: snapshot?.state === 'stale' }).summary
   if (hygSum !== null) summaries[5] = hygSum
@@ -1752,7 +1756,7 @@ function widePaneModel(): PaneModel {
     page, tabs: WIDE_TABS, moved: page === 2 ? wideDecideOverflow.steps : wideOverflow.reply, more: page === 2 ? wideDecideOverflow.list : wideOverflow.list, pin: [], ctx: [], ctxFold: false, ctxOpen: widePaneCtxOpen,
     lanes: rows === null ? null : rows.slice(0, 12).map(r => ({ state: mark(r.sid), name: r.line.label, speed: r.word, task: r.line.lead_display ?? '' })),
     lanesHead: rows === null ? '' : `艦隊 · ${rows.length} 條產線`,
-    hist: null, events: null, summaries,
+    hist: wideHist, events: null, summaries,
   }
 }
 // `bandLegacy` is null until the first AbovePrompt draw of this session: the mode is not known yet, so an open asked before it (`/live-pane` at startup) is only recorded
@@ -2428,8 +2432,8 @@ export function registerLive(on: Parameters<Register>[0]): void {
           notice: decideLocal.stale === true && decideLocal.armed === true ? { kind: 'changed' } : null,
           source: decideCards === null && decideFeed.error() !== null ? { reason: decideFeed.error() ?? '', retrySec: 30 } : null,
         }
-        const widePage = (() => {
-          switch (pageNo) {
+        const pageOut = (n: number) => {
+          switch (n) {
             case 1:
               return wideNow({
                 pending: pendCount,
@@ -2439,7 +2443,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
                 running: fleetCounts?.running ?? null,
                 failed: oneRowInput.line.failed,
                 stalled: fleetCounts?.stuck ?? null,
-                ctxPct: null,
+                ctxPct: ctxPctOf(snap?.metrics?.ctx ?? null),
                 sessionTokens: null,
                 qcOwed: qcState === null ? null : qcState.state === 'owed' ? 1 : 0,
                 proxyDecided: null,
@@ -2485,13 +2489,13 @@ export function registerLive(on: Parameters<Register>[0]): void {
               })
             case 5:
               return wideSpend({
-                pct5h: null,
-                reset5h: null,
+                pct5h: quotaOf('five_hour')?.pct ?? null,
+                reset5h: untilText(quotaOf('five_hour')?.resetsAtMs ?? null, bandNow),
                 eta5h: null,
                 hitBeforeReset: null,
                 ratePerHour: null,
-                pct7d: null,
-                reset7d: null,
+                pct7d: quotaOf('seven_day')?.pct ?? null,
+                reset7d: untilText(quotaOf('seven_day')?.resetsAtMs ?? null, bandNow),
                 pools: [],
                 todayTokens: null,
                 tps: lastStep?.tps ?? null,
@@ -2510,7 +2514,11 @@ export function registerLive(on: Parameters<Register>[0]): void {
             default:
               return null
           }
-        })()
+        }
+        const widePage = pageOut(pageNo)
+        // the pane's 其他頁 rows: every page's own one-line summary from the same inputs (待決 is counted by widePaneModel), and this page's history block
+        wideSummaries = Array.from({ length: 9 }, (_, i) => (i === 1 ? null : pageOut(i + 1)?.summary ?? null))
+        wideHist = widePage?.hist ?? null
         if (pageNo === 2) {
           const d = wideDecide(wideIn)
           list = d.list; reply = d.reply; stepTitle = d.stepTitle; hints = d.hints

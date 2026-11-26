@@ -2014,10 +2014,9 @@
       "relates": [
         "AUTOPILOT_FLEET_BIN",
         "AUTOPILOT_CAPACITY_AR_GATE_FILE",
-        "AUTOPILOT_PM_LEDGER_DIR",
-        "AUTOPILOT_INITIATIVES_CMD"
+        "AUTOPILOT_PM_LEDGER_DIR"
       ],
-      "note": "Set to off to drop the Fleet State block (operator initiatives, open fleet tasks from tasks --mine --json in a 3500-char reserved part with full list written under the live dir, fleet tasks --stuck, capped --tree fallback only when the open-tasks part did not render, PM ledger tail, capacity ar-gate lines) from the post-compaction handoff. Default on."
+      "note": "Set to off to drop the Fleet State block (open fleet tasks from tasks --mine --json in a 3500-char reserved part with full list written under the live dir, fleet tasks --stuck, capped --tree fallback only when the open-tasks part did not render, PM ledger tail, capacity ar-gate lines) from the post-compaction handoff. Default on."
     },
     {
       "name": "AUTOPILOT_CAPACITY_AR_GATE_FILE",
@@ -2034,21 +2033,6 @@
         "AUTOPILOT_FLEET_ADDRESS"
       ],
       "note": "Path of capacity's ar-gate file (default ~/projects/capacity/out/ar-gate.v1.json, schema capacity.ar-gate/1). Read by the post-compaction handoff: this lane's rows of the five difference fields; a file older than 26 h reads stale."
-    },
-    {
-      "name": "AUTOPILOT_INITIATIVES_CMD",
-      "kind": "env",
-      "audience": "internal",
-      "class": "path_seam",
-      "default": null,
-      "readers": [
-        "scripts/lib/compaction-handoff.js"
-      ],
-      "doc": null,
-      "relates": [
-        "AUTOPILOT_CHECKPOINT_FLEET"
-      ],
-      "note": "Executable for the operator-initiatives part of the post-compaction Fleet State block (no args, no shell, stdin closed, 5000 ms timeout bounded by the handoff deadline). Default path ~/projects/pm/scripts/initiatives.sh when unset; if the pm checkout is absent the part is omitted, and if that checkout exists but the script is absent the part is one line `!! initiatives 狀態未知（script missing）`. Set but missing, timeout, a non-zero exit, or unparsable stdout (a NUL, or a spawn that ends with no status) yields one line `!! initiatives 狀態未知（<reason>）` and never an empty part. Stdout is one initiative per line, seven TAB-separated fields: `RED|GREEN`, title, `task_id|-`, state, last_progress RFC3339 or `-`, evidence_due RFC3339 or `-`, reasons. Reasons are a comma list of `no_task,waiting,blocked,stale_24h,evidence_overdue`, or `-` for GREEN. Any other line counts as `malformed: N` (shown only when N > 0). Every RED row is rendered in full (each field escaped and clipped at 150 characters, times via Taipei) and is never cut or shrunk by capScale; GREEN rows collapse to `green: N`. AUTOPILOT_CHECKPOINT_FLEET=off drops the part with the rest of the block."
     },
     {
       "name": "AUTOPILOT_FLEET_ADDRESS",
@@ -7018,7 +7002,10 @@
       "audience": "user",
       "group": "ui",
       "default": "cookys/aimax395/pm--claude",
-      "readers": ["scripts/open-decision.js", "scripts/list-lane-cards.js"],
+      "readers": [
+        "scripts/open-decision.js",
+        "scripts/list-lane-cards.js"
+      ],
       "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Fleet address of the PM seat receiving lane decision requests."

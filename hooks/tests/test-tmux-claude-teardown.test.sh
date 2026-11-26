@@ -155,7 +155,7 @@ mkdir -p "$FX/scripts" "$FX/packs" "$FX/docs/plans/evidence/2026-10-04-mods-p1c/
 printf '%s\n' 'tmux -L modscrollfix -f /dev/null new-session -d -s s -- claude --plugin-dir /tmp/plug' > "$FX/scripts/bad.sh"
 printf '%s\n' "$ban -f claude" 'ap_arm_tmux_claude_teardown modscrollfix' 'ap_record_claude_pid "$pid"' \
   'tmux -L modscrollfix new-session -d -s s sleep 1' > "$FX/scripts/pattern.sh"
-printf '%s\n' 'ap_arm_tmux_claude_teardown modscrollfix' 'ap_record_claude_pid "$pid"' \
+printf '%s\n' 'export HOME="$TMP/iso-home"' 'ap_arm_tmux_claude_teardown modscrollfix' 'ap_record_claude_pid "$pid"' \
   'tmux -L modscrollfix -f /dev/null new-session -d -s s -- claude --plugin-dir /tmp/plug' > "$FX/scripts/good.sh"
 mkdir -p "$FX/scripts/packs"
 printf '%s\n' 'tmux -L hidden new-session -d -s s sleep 1' > "$FX/scripts/packs/skipped.sh"
@@ -167,6 +167,8 @@ bad_rc=$?
 assert_exit_code "$bad_rc" 1 "broken fixture: checker exits 1"
 assert_contains "$(cat "$TEST_TMP/bad.err")" "missing_arm scripts/bad.sh" "broken fixture: missing_arm"
 assert_contains "$(cat "$TEST_TMP/bad.err")" "missing_claude_pid scripts/bad.sh" "broken fixture: missing_claude_pid"
+assert_contains "$(cat "$TEST_TMP/bad.err")" "claude_real_home scripts/bad.sh" "claude on the real HOME is refused (negative control)"
+assert_not_contains "$(cat "$TEST_TMP/bad.err")" "claude_real_home scripts/good.sh" "isolated-HOME fixture is not claude_real_home"
 assert_contains "$(cat "$TEST_TMP/bad.err")" "pkill_by_pattern scripts/pattern.sh" "pattern-kill fixture is refused"
 assert_contains "$(cat "$TEST_TMP/bad.err")" "runbook_missing_phrase docs/plans/evidence/2026-10-04-mods-p1c/gate/DRIVER.md ap_arm_tmux_claude_teardown" "runbook without the arm call is refused"
 assert_contains "$bad_out" '"scanned":4' "packs/ and the comment-only file are not starters; four sh files scanned"

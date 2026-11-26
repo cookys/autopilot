@@ -5,6 +5,9 @@
  *
  *   node scripts/check-test-tmux-claude-teardown.js [--root DIR]
  *
+ * A starter file that also runs `claude` on a code line must give it an isolated HOME or config dir
+ * (a code line assigning HOME= or CLAUDE_CONFIG_DIR=), else finding claude_real_home: a preview or
+ * test that drives claude on the real HOME writes its synthetic cards into the live panel (11-25).
  * A shell file that starts a private tmux server (a code line with `tmux`, `-L <socket>` and
  * `new-session`) must call ap_arm_tmux_claude_teardown on a code line. If a code line also starts
  * `claude`, it must call ap_record_claude_pid. `pkill` on a code line of such a file is a finding.
@@ -31,6 +34,8 @@ const RUNBOOKS = [
 const RUNBOOK_PHRASES = ['ap_arm_tmux_claude_teardown', 'ap_record_claude_pid', 'pkill'];
 const STARTER = /\btmux\b.*(?:-L(?:\s+\S+|\S+)).*\bnew-session\b|\btmux\b.*\bnew-session\b.*-L(?:\s+\S+|\S+)/;
 const CLAUDE_CMD = /(^|[^A-Za-z0-9_.-])claude([^A-Za-z0-9_.-]|$)/;
+
+const ISOLATED_HOME = /(^|[\s;'"])(?:export\s+)?(?:HOME|CLAUDE_CONFIG_DIR)=/;
 
 function codeLines(text) {
   return text.split('\n').filter((line) => {
@@ -74,6 +79,9 @@ function inspect(root, opts = {}) {
     }
     if (lines.some((l) => CLAUDE_CMD.test(l)) && !lines.some((l) => l.includes('ap_record_claude_pid'))) {
       findings.push({ code: 'missing_claude_pid', file: rel });
+    }
+    if (lines.some((l) => CLAUDE_CMD.test(l)) && !lines.some((l) => ISOLATED_HOME.test(l))) {
+      findings.push({ code: 'claude_real_home', file: rel });
     }
     if (lines.some((l) => /\bpkill\b/.test(l))) {
       findings.push({ code: 'pkill_by_pattern', file: rel });

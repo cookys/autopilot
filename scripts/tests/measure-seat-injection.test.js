@@ -105,6 +105,14 @@ test('--check-targets compares per-prompt averages and is red without enough pro
     assert.equal(run(50, 2600, 10).ok, false, '52 B/prompt is over');
     assert.match(run(49, 0, 10).violations[0], /insufficient sample/);
     assert.match(run(50, 0, undefined).violations[0], /baseline_prompts missing/);
+    // injected (cron) turns that fired UPS count in the denominator and are reported apart from human prompts
+    fs.writeFileSync(base, JSON.stringify({ baseline_prompts: 10, targets: [{ hook: 'UserPromptSubmit', baseline_bytes: 1000 }] }));
+    const mixed = [...Array.from({ length: 5 }, () => ({ kind: 'prompt', source: 'human' })), ...Array.from({ length: 45 }, () => ({ kind: 'prompt', source: 'injected' }))];
+    fs.writeFileSync(trace, mixed.map((r) => JSON.stringify(r)).join('\n'));
+    const r = checkTargets(base, trace);
+    assert.equal(r.ok, true);
+    assert.equal(r.human_prompts, 5);
+    assert.equal(r.injected_prompts, 45);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

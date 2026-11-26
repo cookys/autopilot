@@ -274,7 +274,7 @@ function checkTargets(baselinePath, tracePath) {
 
   if (!(baseline.baseline_prompts > 0)) violations.push('baseline_prompts missing: export the baseline window with export-hook-trace.js and record its prompt count');
   if (prompts < MIN_PROMPTS) violations.push(`insufficient sample: ${prompts} prompts (${trace.human_prompts} human + ${trace.injected_prompts} injected) < ${MIN_PROMPTS}`);
-  if (violations.length) return { ok: false, violations, prompts };
+  if (violations.length) return { ok: false, violations, prompts, human_prompts: trace.human_prompts, injected_prompts: trace.injected_prompts };
 
   for (const target of baseline.targets || []) {
     const actual = (trace.by_hook[target.hook] || 0) / prompts;

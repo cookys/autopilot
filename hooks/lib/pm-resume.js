@@ -8,6 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { whoamiSession, bin } = require('../../scripts/lib/fleet-task.js');
+const { modelNotePath } = require('../../scripts/lib/compaction-handoff.js');
 const { userRuntimeBase, ensurePrivateDir } = require('../../scripts/lib/runtime-paths.js');
 
 const SOURCES = new Set(['startup', 'resume', 'clear', 'compact']);
@@ -141,6 +142,26 @@ function buildResumeBlock(payload, { env = process.env, runner } = {}) {
   }
   const ids = [...new Set(out.match(ID_RE) || [])];
   writeMarker(sid, { at: Date.now(), source, ok: true, seat: seat.member, role: seat.role, ids }, env);
+  if (source === 'clear' && seat.role === 'pm') {
+    const dir = path.dirname(modelNotePath('x', { env }));
+    let file, handoff = '';
+    try {
+      file = fs.readdirSync(dir).filter(name => name.endsWith('.md'))
+        .map(name => ({ name, mtime: fs.statSync(path.join(dir, name)).mtimeMs }))
+        .sort((a, b) => b.mtime - a.mtime)[0]?.name;
+      if (file) handoff = fs.readFileSync(path.join(dir, file), 'utf8');
+    } catch { file = null; }
+    const warnings = [];
+    // Fleet will later provide --check --json; use the text line until then.
+    const unlanded = out.split(/\r?\n/).find(line => line.startsWith('UNLANDED')) || '';
+    if (!unlanded.startsWith('UNLANDED 無')) warnings.push(`⚠ UNLANDED 不是「無」：${unlanded.slice(0, 160)}`);
+    const tokenRe = /(?<![0-9A-Za-z])[0-9A-HJKMNP-TV-Z]{26}(?![0-9A-Za-z])/g;
+    const resumeIds = new Set(out.match(tokenRe) || []);
+    const missing = [...new Set(handoff.match(tokenRe) || [])].filter(id => !resumeIds.has(id));
+    if (missing.length) warnings.push(`⚠ handoff 提到但 resume 沒有的單號：${missing.join(' ')}`);
+    const note = file ? `<handoff path="${path.join(dir, file)}">\n${handoff.length > 8000 ? handoff.slice(0, 8000) + '\n[...cut]' : handoff}\n</handoff>` : `handoff 找不到：${dir} 下沒有 .md（resume 照常提供）`;
+    return `\n\n${HEAD}\n${warnings.length ? warnings.join('\n') + '\n' : ''}<fleet-pm-resume seat="${seat.member}" role="${seat.role}">\n${out}\n</fleet-pm-resume>\n${note}`;
+  }
   return `\n\n${HEAD}\n<fleet-pm-resume seat="${seat.member}" role="${seat.role}">\n${source === 'compact' ? digestResume(out, { maxChars: 3000 }).replace('<member>', seat.member).replace('<role>', seat.role) : capResumeSections(out, { softCapChars: 3000, maxRowChars: 400 })}\n</fleet-pm-resume>`;
 }
 

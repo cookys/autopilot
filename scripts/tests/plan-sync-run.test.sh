@@ -62,5 +62,25 @@ echo "dirty" >> "$R/plans/p.md"
 "$SCRIPT" --plan plans/p.md --repo "$R" --verdict READY >/dev/null 2>&1; check "uncommitted plan edit: exit 2" '[ "$?" = 2 ]'
 check "refusals wrote no audit line" '[ "$(wc -l < "$PLAN_SYNC_AUDIT")" = "$n" ]'
 
+# 5. --bind / --bind-file: old tasks without a Plan/Phase line bind by task id (negative control: unbound they leave gaps)
+git -C "$R" checkout -q -- plans/p.md
+node -e 'require("fs").writeFileSync(process.argv[1],JSON.stringify([{task_id:"01M8BRKSWB8GGBFWMGJ4M9PZ6B",title:"old task, no phase line"},{task_id:"01M8BRKSWB8GGBFWMGJ4M9PZ6C",title:"old two"}]))' "$STATE"
+out="$("$SCRIPT" --plan plans/p.md --repo "$R" --verdict READY 2>&1)"
+check "unbound old tasks: gaps stay 2" 'echo "$out" | grep -q "before=2 after=2"'
+out="$("$SCRIPT" --plan plans/p.md --repo "$R" --verdict READY --bind P1=01M8BRKSWB8GGBFWMGJ4M9PZ6B --bind P2=01M8BRKSWB8GGBFWMGJ4M9PZ6C 2>&1)"; rc=$?
+check "--bind: gaps 0, exit 0" '[ "$rc" = 0 ] && echo "$out" | grep -q "before=0 after=0"'
+printf 'P1=01M8BRKSWB8GGBFWMGJ4M9PZ6B # first\nP2=01M8BRKSWB8GGBFWMGJ4M9PZ6C\n' > "$T/binds.txt"
+out="$("$SCRIPT" --plan plans/p.md --repo "$R" --verdict READY --bind-file "$T/binds.txt" 2>&1)"; rc=$?
+check "--bind-file: gaps 0, exit 0" '[ "$rc" = 0 ]'
+"$SCRIPT" --plan plans/p.md --repo "$R" --verdict READY --bind P1=short >/dev/null 2>&1
+check "bad bind id: no gaps claimed (exit non-zero)" '[ "$?" != 0 ]'
+"$SCRIPT" --plan plans/p.md --repo "$R" --verdict READY --bind P9=01M8BRKSWB8GGBFWMGJ4M9PZ6B >/dev/null 2>&1
+check "bind to unknown phase: exit non-zero" '[ "$?" != 0 ]'
+
+# 6. default audit path is under XDG_STATE_HOME, never /tmp
+unset PLAN_SYNC_AUDIT; export XDG_STATE_HOME="$T/state"
+"$SCRIPT" --plan plans/p.md --repo "$R" --verdict READY >/dev/null 2>&1
+check "default audit under XDG_STATE_HOME" '[ -s "$T/state/autopilot/plan-sync-audit.jsonl" ]'
+
 echo "pass=$PASS fail=$FAIL"
 [ "$FAIL" = 0 ]

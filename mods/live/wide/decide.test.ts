@@ -149,3 +149,12 @@ test('P3 wide 待決: g copies the current card URL - the key routes only in the
   const none = decideReduce({ ...NO_NAV }, { kind: 'copy_url' }, { v74: { decide: [{ id: 'd2', title: 't', question: 'q', background: null, options: [] }] }, size: { cols: 209, rows: 49 }, t: (k: string) => k } as never, 0)
   expect(none.effect).toBe(null)
 })
+
+test('armed preview: a question that starts with its title draws the title once', () => {
+  const title = '丙線：測試綠了，合併到 develop'
+  const dup: WideCard = { id: 'dup', title, question: title + ' 嗎？', background: null, options: [opt('好', '', true), opt(C, cc)] }
+  const out = wideDecide({ ...base, cards: [dup], cursor: 0, picks: { dup: 0 }, armed: true })
+  const row = out.reply.find(r => r.includes(title)) as string
+  expect(row.split(title).length - 1).toBe(1)
+  expect(row).toContain(title + '嗎？')
+})

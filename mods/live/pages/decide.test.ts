@@ -635,3 +635,15 @@ test('ambiguous-width glyphs: narrowAmbiguous leaves no Ambiguous character, kee
   expect(AMBIGUOUS_CARD_RE.test(out)).toBe(false)
   expect(out).toBe('區塊:2.Omni 8步…唇形對 3.PDD 1. 20. 21. 50. * → ○ * “x” 中文 ok')
 })
+
+test('v74 boxed decide: a question that starts with its title draws the title once', () => {
+  const title = '丙線：測試綠了，合併到 develop'
+  const cards = [{ id: 'd-dup01', title, question: title + ' 嗎？', background: null, options: [{ label: '好', detail: '', recommended: true }, { label: '不', detail: '', recommended: false }] }]
+  const out = frameRows(decidePage, {
+    live: live(), console: con([], []), size: { cols: 120, rows: 20 }, t, nowMs,
+    box: true, decide: nav({ cursor: 0 }),
+    v74: { decide: cards, nav: { cursor: 0, picks: {}, notes: {}, noteMode: false } },
+  } as never, { topAnchor: true }).map(text).join('\n')
+  expect(out.split(title).length - 1).toBe(1)
+  expect(out).toContain(title + '嗎？')
+})

@@ -7,6 +7,7 @@
 import { GLYPHS } from '../../tux/glyphs'
 import { displayWidth } from '../../tux/width'
 import { pickKeys } from '../v74/contract'
+import { questionAfterTitle } from '../cardtitle'
 import { clipTo } from './band'
 import { wrapReply } from './wrap'
 import { BAND_BODY_ROWS, BAND_REPLY_COLS } from './geometry'
@@ -222,7 +223,7 @@ export function wideDecide(m: WideDecideInput): WideDecideOut {
     for (const { c, i } of ready) {
       const p = pickOf(c) as number
       const o = c.options[p]
-      rows.push(`${i + 1} ${c.title}：${oneLine(c.question)}`, `   ${ARROW} ${letterOf(c, p)} ${o.label}${o.detail !== '' ? '：' + o.detail : ''}`)
+      rows.push(`${i + 1} ${c.title}${questionAfterTitle(c.title, oneLine(c.question))}`, `   ${ARROW} ${letterOf(c, p)} ${o.label}${o.detail !== '' ? '：' + o.detail : ''}`)
       if ((m.notes[c.id] ?? '').trim() !== '') rows.push(`   ${T.noteLabel}：${oneLine(m.notes[c.id])}`)
     }
     if (rows.length > BAND_BODY_ROWS) {

@@ -8,14 +8,18 @@ const { check } = require('./lib/cn-model-dispatch-gate');
 
 function fixture(fn) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cn-gate-'));
-  try { return fn(root); } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  const rt = fs.mkdtempSync('/dev/shm/cn-gate-test-'); RT = rt;
+  try { return fn(root); } finally { fs.rmSync(root, { recursive: true, force: true }); fs.rmSync(rt, { recursive: true, force: true }); }
 }
+let RT;
 function repo(dir) {
   fs.mkdirSync(dir, { recursive: true });
   require('node:child_process').execFileSync('git', ['init', '-q'], { cwd: dir });
   fs.writeFileSync(path.join(dir, 'tracked.txt'), 'private checkout fixture\n');
 }
-function brief(dir, contents = 'Implement a small standalone utility.\n') {
+const TEMPLATE = 'Brief-Class: clean-sandbox\nTask: Implement a small standalone utility.\nInputs: None.\nOutput: One file.\nLimits: None.\n';
+function srcRepo(root) { const d = path.join(root, 'srcrepo'); repo(d); require('node:child_process').execFileSync('git', ['add', 'tracked.txt'], { cwd: d }); fs.writeFileSync(path.join(d, 'tracked.txt'), 'const peculiar = alpha beta gamma delta epsilon zeta eta theta iota kappa lambda;\n'); require('node:child_process').execFileSync('git', ['add', 'tracked.txt'], { cwd: d }); return { sourceRepo: d, rt: RT }; }
+function brief(dir, contents = TEMPLATE) {
   const file = path.join(dir, 'brief.md'); fs.writeFileSync(file, contents); return file;
 }
 function endpointEnv(name, url) { return { [`AUTOPILOT_ENDPOINT_${name.toUpperCase()}_URL`]: url, [`AUTOPILOT_ENDPOINT_${name.toUpperCase()}_TOKEN`]: 'fixture-token' }; }
@@ -28,12 +32,14 @@ test('(a) local qwen with cwd inside a private git checkout is allowed', () => f
 }));
 test('(b) Kimi in a fresh sandbox containing only the brief is allowed', () => fixture((root) => {
   const cwd = path.join(root, 'sandbox'); fs.mkdirSync(cwd); const prompt = brief(cwd);
-  const got = check({ runner: 'kimi', model: 'kimi', endpoint: 'kimi', cwd, files: [prompt], env: { ...endpointEnv('kimi', 'https://api.moonshot.cn/v1'), AUTOPILOT_CN_WORK_TIER: 'T0' } });
+  const x = srcRepo(root);
+  const got = check({ sourceRepo: x.sourceRepo, runner: 'kimi', model: 'kimi', endpoint: 'kimi', cwd, files: [prompt], env: { XDG_RUNTIME_DIR: x.rt, ...endpointEnv('kimi', 'https://api.moonshot.cn/v1'), AUTOPILOT_CN_WORK_TIER: 'T0' } });
   assert.equal(got.allowed, true);
 }));
 test('(b2) Kimi broker endpoint name is allowed without a resolvable URL', () => fixture((root) => {
   const cwd = path.join(root, 'sandbox'); fs.mkdirSync(cwd); const prompt = brief(cwd);
-  const got = check({ runner: 'kimi', model: 'kimi-code/kimi-for-coding', endpoint: 'kimi', cwd, files: [prompt], env: { AUTOPILOT_CN_WORK_TIER: 'T0' } });
+  const x = srcRepo(root);
+  const got = check({ sourceRepo: x.sourceRepo, runner: 'kimi', model: 'kimi-code/kimi-for-coding', endpoint: 'kimi', cwd, files: [prompt], env: { XDG_RUNTIME_DIR: x.rt, AUTOPILOT_CN_WORK_TIER: 'T0' } });
   assert.equal(got.allowed, true);
 }));
 test('(c) Kimi in a git checkout is refused as private workdir', () => fixture((root) => {
@@ -96,7 +102,8 @@ test('(l) restricted operator without declared work tier is barred as restricted
 }));
 test('(m) restricted operator with T0, clean sandbox, and clean brief is allowed', () => fixture((root) => {
   const cwd = path.join(root, 'sandbox'); fs.mkdirSync(cwd); const prompt = brief(cwd);
-  const got = check({ runner: 'kimi', model: 'kimi', endpoint: 'kimi', cwd, files: [prompt], opts: { tier: 'T0' }, tier: 'T0', env: { ...endpointEnv('kimi', 'https://api.moonshot.cn/v1'), AUTOPILOT_CN_WORK_TIER: 'T0' } });
+  const x = srcRepo(root);
+  const got = check({ sourceRepo: x.sourceRepo, runner: 'kimi', model: 'kimi', endpoint: 'kimi', cwd, files: [prompt], opts: { tier: 'T0' }, tier: 'T0', env: { XDG_RUNTIME_DIR: x.rt, ...endpointEnv('kimi', 'https://api.moonshot.cn/v1'), AUTOPILOT_CN_WORK_TIER: 'T0' } });
   assert.equal(got.allowed, true);
 }));
 test('(n) restricted operator minimax with T1 is barred', () => fixture((root) => {
@@ -106,6 +113,7 @@ test('(n) restricted operator minimax with T1 is barred', () => fixture((root) =
 }));
 test('(o) restricted operator kimi with T1 is allowed', () => fixture((root) => {
   const cwd = path.join(root, 'sandbox'); fs.mkdirSync(cwd); const prompt = brief(cwd);
-  const got = check({ runner: 'kimi', model: 'kimi', endpoint: 'kimi', cwd, files: [prompt], tier: 'T1', env: { ...endpointEnv('kimi', 'https://api.moonshot.cn/v1'), AUTOPILOT_CN_WORK_TIER: 'T1' } });
+  const x = srcRepo(root);
+  const got = check({ sourceRepo: x.sourceRepo, runner: 'kimi', model: 'kimi', endpoint: 'kimi', cwd, files: [prompt], tier: 'T1', env: { XDG_RUNTIME_DIR: x.rt, ...endpointEnv('kimi', 'https://api.moonshot.cn/v1'), AUTOPILOT_CN_WORK_TIER: 'T1' } });
   assert.equal(got.allowed, true);
 }));

@@ -4,6 +4,8 @@
 // Restricted operators may receive only a redacted, scan-clean brief from a fresh
 // empty sandbox outside every git work tree. Local endpoint names must resolve locally.
 const fs = require('node:fs');
+const crypto = require('node:crypto');
+const { StringDecoder } = require('node:string_decoder');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { familyOfEngine } = require('./stage-write');
@@ -103,6 +105,182 @@ function scanBrief(files) {
     else process.env.AUTOPILOT_LEAK_GUARD_HOSTS = hostInventory;
   }
 }
+function parseBrief(text, extensions = new Set()) {
+  if (Buffer.byteLength(text) > 40 * 1024) return false;
+  const lines = text.split(/\r?\n/), names = ['Task', 'Inputs', 'Output', 'Limits'];
+  if (lines[0] !== 'Brief-Class: clean-sandbox') return false;
+  const sections = Object.fromEntries(names.map((n) => [n, []]));
+  let state = -1, fence = '', blockLines = 0, totalLines = 0, indent = 0;
+  const finishIndent = () => { if (indent >= 20) { totalLines += indent; if (indent > 40) return false; } indent = 0; return true; };
+  for (const line of lines.slice(1)) {
+    const header = /^(Brief-Class|Task|Inputs|Output|Limits):(?:\s*(.*))?$/.exec(line);
+    if (header && !fence) {
+      if (!finishIndent() || header[1] !== names[state + 1]) return false;
+      state++; sections[names[state]].push(header[2] || ''); continue;
+    }
+    if (state < 0) { if (line.trim()) return false; continue; }
+    sections[names[state]].push(line);
+    const trimmed = line.trimStart();
+    const mark = /^(\`{3,}|~{3,})/.exec(trimmed);
+    if (fence) { if (mark && mark[1][0] === fence && mark[1].length >= 3) { fence = ''; if (blockLines > 40) return false; totalLines += blockLines; blockLines = 0; } else blockLines++; continue; }
+    if (mark) { if (!finishIndent()) return false; fence = mark[1][0]; continue; }
+    if (/^(?: {4}|\t)/.test(line) && line.trim()) indent++; else if (!finishIndent()) return false;
+  }
+  if (!finishIndent()) return false;
+  if (fence) { if (blockLines > 40) return false; totalLines += blockLines; }
+  if (state !== 3 || totalLines > 80) return false;
+  for (const [name, limit] of [['Task', 6144], ['Inputs', 24576], ['Output', 2048], ['Limits', 2048]]) {
+    const content = sections[name].join('\n');
+    if (!content.trim() || Buffer.byteLength(content) > limit) return false;
+    for (let token of content.split(/\s+/)) {
+      token = token.replace(/^[`*_[({<"']+|[`*_)\]}>"',;!?]+$/g, '');
+      if (/^(?:\.\.?\/|~\/|\/)/.test(token) || /[^\s:]+:\d+(?::\d+)?$/.test(token)) return false;
+      if (token.includes('/') && extensions.has(path.extname(token).toLowerCase())) return false;
+    }
+  }
+  return true;
+}
+const SHINGLE_VERSION = 'cn-shingle-v2';
+const GIT_ENV_KEYS = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR', 'GIT_OBJECT_DIRECTORY'];
+function git(root, args) {
+  const env = { ...process.env }; for (const k of GIT_ENV_KEYS) delete env[k];
+  const r = spawnSync('git', ['-C', root, ...args], { env, encoding: 'buffer', maxBuffer: 128 * 1024 * 1024 });
+  if (r.status !== 0 || r.error) throw Error('git');
+  return r.stdout;
+}
+function sourceInfo(source) {
+  const root = fs.realpathSync(source);
+  if (fs.realpathSync(String(git(root, ['rev-parse', '--show-toplevel'])).trim()) !== root) throw Error('root');
+  const tracked = String(git(root, ['ls-files', '-z'])).split('\0').filter(Boolean);
+  if (!tracked.length) throw Error('empty');
+  const untracked = String(git(root, ['ls-files', '--others', '--exclude-standard', '-z'])).split('\0').filter(Boolean);
+  return { root, names: [...new Set([...tracked, ...untracked])].sort(), extensions: new Set(tracked.map(x => path.extname(x).toLowerCase()).filter(Boolean)) };
+}
+function words(text) {
+  return text.normalize('NFKC').toLowerCase().match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]|[\p{L}\p{N}_]+/gu) || [];
+}
+function hashWindow(w) { return crypto.createHash('sha256').update(w.join('\0')).digest('hex').slice(0, 16); }
+function windows(text) { const w = words(text), result = []; for (let i = 0; i + 8 <= w.length; i++) result.push(hashWindow(w.slice(i, i + 8))); return result; }
+function shingleIndex(info, env) {
+  const runtime = fs.realpathSync(env.XDG_RUNTIME_DIR || '');
+  if (fs.statfsSync(runtime).type !== 0x01021994) throw Error('tmpfs');
+  fs.accessSync(runtime, fs.constants.W_OK);
+  const base = path.join(runtime, 'autopilot'), dir = path.join(base, 'cn-shingle');
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); fs.chmodSync(base, 0o700); fs.chmodSync(dir, 0o700);
+  if (fs.statfsSync(fs.realpathSync(dir)).type !== 0x01021994) throw Error('tmpfs');
+  const entries = [], signatures = [];
+  for (const name of info.names) {
+    const file = path.join(info.root, name); let st;
+    try { st = fs.lstatSync(file); } catch (e) { if (e.code === 'ENOENT') continue; throw e; }
+    if (st.isSymbolicLink() || !st.isFile()) continue;
+    const fd = fs.openSync(file, 'r'), digest = crypto.createHash('sha256'), buf = Buffer.allocUnsafe(65536);
+    let n, first = true, binary = false, size = 0;
+    try { while ((n = fs.readSync(fd, buf, 0, buf.length, null))) { const b = buf.subarray(0, n); if (first) binary = b.subarray(0, 8192).includes(0); first = false; size += n; digest.update(b); } } finally { fs.closeSync(fd); }
+    if (binary) continue;
+    entries.push({ name, file }); signatures.push(`${name}:${size}:${digest.digest('hex')}`);
+  }
+  if (!entries.length) throw Error('empty');
+  const key = crypto.createHash('sha256').update(JSON.stringify([SHINGLE_VERSION, info.root, signatures])).digest('hex');
+  const cache = path.join(dir, `${key}.bin`);
+  function decode(buf) {
+    if (buf.length < 52 || buf.subarray(0, 8).toString() !== 'CNSHNG02') throw Error('magic');
+    const len = buf.readUInt32BE(8); if (len !== buf.length - 44) throw Error('length');
+    const payload = buf.subarray(12, 12 + len); if (!crypto.createHash('sha256').update(payload).digest().equals(buf.subarray(12 + len))) throw Error('checksum');
+    const namesLen = payload.readUInt32LE(0), count = payload.readUInt32LE(4);
+    const offset = 8 + namesLen;
+    if (offset > payload.length || count * 16 !== payload.length - offset) throw Error('layout');
+    const names = JSON.parse(payload.subarray(8, offset).toString());
+    if (!Array.isArray(names) || names.length !== entries.length || names.some((name, i) => name !== entries[i].name)) throw Error('entries');
+    const rows = new Uint32Array(count * 4);
+    for (let i = 0; i < rows.length; i++) rows[i] = payload.readUInt32LE(offset + i * 4);
+    return { entries: names, rows };
+  }
+  try { const cached = decode(fs.readFileSync(cache)); fs.chmodSync(cache, 0o600); return cached; } catch { /* invalid or absent cache: rebuild */ }
+  const chunks = [], chunkSize = 65536; let chunk, count = 0;
+  for (let id = 0; id < entries.length; id++) {
+    const fd = fs.openSync(entries[id].file, 'r'), decoder = new StringDecoder('utf8'), buf = Buffer.allocUnsafe(65536);
+    let pending = '', line = 1, window = [], n;
+    const consume = (text, final = false) => {
+      let combined = pending + text, cut = combined.length;
+      if (!final) { const match = /[\p{L}\p{N}_\p{M}]+$/u.exec(combined); if (match) cut = match.index; }
+      pending = combined.slice(cut); combined = combined.slice(0, cut);
+      const re = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]|[\p{L}\p{N}_]+|\n/gu;
+      for (const match of combined.normalize('NFKC').toLowerCase().matchAll(re)) {
+        if (match[0] === '\n') { line++; continue; }
+        window.push([match[0], line]); if (window.length > 8) window.shift();
+        if (window.length === 8) {
+          const h = hashWindow(window.map(x => x[0]));
+          if (count % chunkSize === 0) { chunk = new Uint32Array(chunkSize * 4); chunks.push(chunk); }
+          const pos = (count++ % chunkSize) * 4;
+          chunk[pos] = parseInt(h.slice(0, 8), 16); chunk[pos + 1] = parseInt(h.slice(8), 16);
+          chunk[pos + 2] = id; chunk[pos + 3] = window[0][1];
+        }
+      }
+    };
+    try { while ((n = fs.readSync(fd, buf, 0, buf.length, null))) consume(decoder.write(buf.subarray(0, n))); consume(decoder.end(), true); } finally { fs.closeSync(fd); }
+  }
+  let rows = new Uint32Array(count * 4), at = 0;
+  for (const c of chunks) { const part = c.subarray(0, Math.min(c.length, rows.length - at)); rows.set(part, at); at += part.length; }
+  chunks.length = 0;
+  // Sort rows in place by hash, file and line; the first duplicate is the earliest line.
+  const compare = (pos, hi, lo, id, line) => rows[pos] - hi || rows[pos + 1] - lo || rows[pos + 2] - id || rows[pos + 3] - line;
+  const swap = (a, b) => { for (let j = 0; j < 4; j++) { const v = rows[a + j]; rows[a + j] = rows[b + j]; rows[b + j] = v; } };
+  const stack = count ? [0, count - 1] : [];
+  while (stack.length) {
+    const end = stack.pop(), start = stack.pop(), pivot = ((start + end) >>> 1) * 4;
+    const hi = rows[pivot], lo = rows[pivot + 1], id = rows[pivot + 2], line = rows[pivot + 3];
+    let left = start, i = start, right = end;
+    while (i <= right) {
+      const cmp = compare(i * 4, hi, lo, id, line);
+      if (cmp < 0) swap(left++ * 4, i++ * 4);
+      else if (cmp > 0) swap(i * 4, right-- * 4);
+      else i++;
+    }
+    if (start < left - 1) stack.push(start, left - 1);
+    if (right + 1 < end) stack.push(right + 1, end);
+  }
+  let kept = 0, distinct = 0, hasRare = false;
+  let prevHi, prevLo, prevId;
+  for (let i = 0; i < rows.length; i += 4) {
+    const hi = rows[i], lo = rows[i + 1], id = rows[i + 2], line = rows[i + 3];
+    if (i === 0 || hi !== prevHi || lo !== prevLo) {
+      if (distinct && distinct < 20) hasRare = true;
+      distinct = 0;
+    } else if (id === prevId) continue;
+    prevHi = hi; prevLo = lo; prevId = id;
+    distinct++; rows[kept++] = hi; rows[kept++] = lo; rows[kept++] = id; rows[kept++] = line;
+  }
+  if (distinct && distinct < 20) hasRare = true;
+  if (!hasRare) throw Error('no windows');
+  rows = rows.subarray(0, kept);
+  const result = { entries: entries.map(x => x.name), rows }, names = Buffer.from(JSON.stringify(result.entries));
+  const payload = Buffer.allocUnsafe(8 + names.length + rows.byteLength), header = Buffer.alloc(12);
+  payload.writeUInt32LE(names.length, 0); payload.writeUInt32LE(kept / 4, 4); names.copy(payload, 8);
+  for (let i = 0; i < kept; i++) payload.writeUInt32LE(rows[i], 8 + names.length + i * 4);
+  header.write('CNSHNG02'); header.writeUInt32BE(payload.length, 8);
+  const tmp = path.join(dir, `.${key}.${process.pid}.${crypto.randomBytes(6).toString('hex')}`);
+  try { const fd = fs.openSync(tmp, 'wx', 0o600); try { fs.writeFileSync(fd, header); fs.writeFileSync(fd, payload); fs.writeFileSync(fd, crypto.createHash('sha256').update(payload).digest()); } finally { fs.closeSync(fd); } fs.renameSync(tmp, cache); } finally { try { fs.unlinkSync(tmp); } catch {} }
+  for (const name of fs.readdirSync(dir)) { const file = path.join(dir, name); try { if (fs.statSync(file).mtimeMs < Date.now() - 86400000) fs.unlinkSync(file); } catch {} }
+  return result;
+}
+function shingleHits(text, data, env) {
+  const ws = windows(text), hits = [], runs = new Map(), rows = data.rows, count = rows.length / 4;
+  for (const h of ws) {
+    const hi = parseInt(h.slice(0, 8), 16), lo = parseInt(h.slice(8), 16), next = new Map();
+    let left = 0, right = count;
+    while (left < right) { const mid = Math.floor((left + right) / 2), pos = mid * 4; if (rows[pos] < hi || (rows[pos] === hi && rows[pos + 1] < lo)) left = mid + 1; else right = mid; }
+    const start = left;
+    while (left < count && rows[left * 4] === hi && rows[left * 4 + 1] === lo) { const id = rows[left * 4 + 2]; next.set(id, (runs.get(id) || 0) + 1); left++; }
+    if (left > start && (left - start < 20 || [...next.values()].some(x => x >= 4))) hits.push([start, left]);
+    runs.clear(); for (const [k, v] of next) runs.set(k, v);
+  }
+  if (hits.length) {
+    const log = path.join(fs.realpathSync(env.XDG_RUNTIME_DIR), 'autopilot', 'cn-gate.log');
+    const lines = []; for (const [start, end] of hits) for (let i = start; i < end; i++) lines.push(`${data.entries[rows[i * 4 + 2]]}:${rows[i * 4 + 3]}`);
+    const fd = fs.openSync(log, 'a', 0o600); try { fs.fchmodSync(fd, 0o600); fs.writeFileSync(fd, `${lines.join('\n')}\n`); } finally { fs.closeSync(fd); }
+  }
+  return hits.length;
+}
 function check(opts = {}) {
   const { runner = '', model = '', cwd = process.cwd(), files = [], env = process.env } = opts;
   let { endpoint = '' } = opts;
@@ -137,6 +315,13 @@ function check(opts = {}) {
   if (!(tier === 'T0' || (tier === 'T1' && family !== 'minimax'))) return block('restricted_operator_not_public_source');
   if (!freshSandbox(cwd, files)) return block('restricted_operator_private_workdir');
   if (!scanBrief(files)) return block('restricted_operator_brief_scan');
+  const sources = opts.sourceRepos || (opts.sourceRepo !== undefined ? [opts.sourceRepo] : []);
+  if (sources.length !== 1 || !sources[0]) return block('restricted_operator_shingle_source_missing');
+  let info; try { info = sourceInfo(sources[0]); } catch { return block('restricted_operator_shingle_source_missing'); }
+  let text; try { text = files.map(file => fs.readFileSync(file, 'utf8')).join('\n'); } catch { return block('restricted_operator_brief_template'); }
+  if (!parseBrief(text, info.extensions)) return block('restricted_operator_brief_template');
+  let hits; try { hits = shingleHits(text, shingleIndex(info, env), env); } catch { return block('restricted_operator_shingle_unavailable'); }
+  if (hits) { const result = block('restricted_operator_brief_shingle'); result.line += ` hits=${hits}`; return result; }
   return { allowed: true, family };
 }
 function rungParts(rung) {
@@ -146,9 +331,9 @@ function rungParts(rung) {
 }
 function filterLadder(rungs, ctx = {}) { const kept = []; const barred = []; for (const rung of rungs) { const p = rungParts(rung); const c = check({ ...ctx, ...p, endpoint: p.endpoint || ctx.endpoint }); if (c.allowed) kept.push(rung); else barred.push({ rung, family: c.family, line: c.line, cls: c.cls }); } return { kept, barred }; }
 function main(argv) {
-  const cmd = argv[0], o = { files: [] }, rest = [];
+  const cmd = argv[0], o = { files: [], sourceRepos: [] }, rest = [];
   for (let i = 1; i < argv.length; i++) { const a = argv[i]; if (a === '--') { rest.push(...argv.slice(i + 1)); break; }
-    if (['--runner', '--model', '--endpoint', '--cwd', '--prompt-file'].includes(a)) { const k = a.slice(2); const v = argv[++i]; if (k === 'prompt-file') o.files.push(v); else o[k] = v; }
+    if (['--runner', '--model', '--endpoint', '--cwd', '--prompt-file', '--source-repo'].includes(a)) { const k = a.slice(2); const v = argv[++i]; if (k === 'prompt-file') o.files.push(v); else if (k === 'source-repo') o.sourceRepos.push(v); else o[k] = v; }
     else { process.stderr.write(`cn-model-dispatch-gate: unknown arg ${a}\n`); return 64; }
   }
   if (cmd === 'check') { const c = check(o); if (!c.allowed) { process.stderr.write(`${c.line}\n`); return 2; } return 0; }

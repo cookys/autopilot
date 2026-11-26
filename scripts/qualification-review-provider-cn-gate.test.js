@@ -41,13 +41,16 @@ check(/cn_model_dispatch_barred/.test(mmT1.stderr), `negative control: MiniMax w
 // The passing case is checked on the gate directly so the test never calls out to the network.
 const fs = require('fs'); const os = require('os');
 const gate = require('./lib/cn-model-dispatch-gate');
-const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'qrp-cn-test-'));
+let rt, srcDir; const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'qrp-cn-test-'));
 try {
-  const f = path.join(sandbox, 'case.txt'); fs.writeFileSync(f, CLEAN);
-  const base = { runner: 'qrp-http', model: 'glm-5.4', endpoint: REMOTE.QRP_BASE_URL, cwd: sandbox, files: [f] };
+  const TPL = 'Brief-Class: clean-sandbox\nTask: Review a small diff.\nInputs: None.\nOutput: Verdict.\nLimits: None.\n';
+  srcDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qrp-cn-src-')); const srcRepo = srcDir; require('child_process').execFileSync('git', ['init', '-q'], { cwd: srcRepo }); fs.writeFileSync(path.join(srcRepo, 'a.txt'), 'const peculiar = alpha beta gamma delta epsilon zeta eta theta iota kappa lambda;\n'); require('child_process').execFileSync('git', ['add', 'a.txt'], { cwd: srcRepo });
+  rt = fs.mkdtempSync('/dev/shm/cn-gate-test-');
+  const f = path.join(sandbox, 'case.txt'); fs.writeFileSync(f, TPL);
+  const base = { runner: 'qrp-http', model: 'glm-5.4', endpoint: REMOTE.QRP_BASE_URL, cwd: sandbox, files: [f], sourceRepo: srcRepo, env: { XDG_RUNTIME_DIR: rt } };
   check(gate.check({ ...base, tier: 'T1' }).allowed === true, 'T1 declared by the host passes the gate for a clean payload');
   check(gate.check({ ...base, tier: '' }).allowed === false, 'negative control: an empty tier does not pass');
-} finally { fs.rmSync(sandbox, { recursive: true, force: true }); }
+} finally { fs.rmSync(sandbox, { recursive: true, force: true }); if (rt) fs.rmSync(rt, { recursive: true, force: true }); if (srcDir) fs.rmSync(srcDir, { recursive: true, force: true }); }
 // api.z.ai is Zhipu's international host: it must be classified as the restricted zhipu operator, not "unknown endpoint".
 const zai = run({ QRP_BASE_URL: 'https://api.z.ai/api/anthropic', QRP_CN_WORK_TIER: 'T1' }, DIRTY);
 check(/cn_model_dispatch_barred zhipu restricted_operator_brief_scan/.test(zai.stderr), `api.z.ai is a restricted zhipu endpoint and a dirty payload is scanned there (got: ${zai.stderr.slice(0, 160)})`);

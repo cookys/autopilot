@@ -2432,6 +2432,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
           notice: decideLocal.stale === true && decideLocal.armed === true ? { kind: 'changed' } : null,
           source: decideCards === null && decideFeed.error() !== null ? { reason: decideFeed.error() ?? '', retrySec: 30 } : null,
         }
+        const reviewCode = snap?.review?.code ?? null // LiveSnapshot.review is null when no review ran: every page is projected each draw (P5b), so this must not throw
         const pageOut = (n: number) => {
           switch (n) {
             case 1:
@@ -2473,10 +2474,10 @@ export function registerLive(on: Parameters<Register>[0]): void {
               })
             case 4:
               return wideReview({
-                items: snap?.review.code ? [{
-                  label: snap.review.code.branch ?? snap.review.code.head?.slice(0, 8) ?? '—',
-                  engine: snap.review.code.seats[0]?.family ?? snap.review.code.seats[0]?.id ?? '—',
-                  verdict: snap.review.code.seats[0]?.verdict ?? snap.review.code.seats[0]?.status ?? '—',
+                items: reviewCode ? [{
+                  label: reviewCode.branch ?? reviewCode.head?.slice(0, 8) ?? '—',
+                  engine: reviewCode.seats[0]?.family ?? reviewCode.seats[0]?.id ?? '—',
+                  verdict: reviewCode.seats[0]?.verdict ?? reviewCode.seats[0]?.status ?? '—',
                 }] : [],
                 cursor: 0,
                 qcOwed: qcState === null ? null : qcState.state === 'owed' ? 1 : 0,

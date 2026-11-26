@@ -8,4 +8,5 @@ test('current tab uses the accessible remember theme key', () => {
 test('wide pane text never falls back to the terminal default colour (light pane was unreadable)', () => {
   for (const role of Object.keys(PANE_COLOR) as (keyof typeof PANE_COLOR)[]) expect(PANE_COLOR[role]).toBeDefined()
   expect(PANE_COLOR.text).toBe('inactive')
+  expect(PANE_COLOR.key).toBe('inactive') // merged measured 4.24:1 on light 256-colour; PM ruling A 2026-11-27
 })

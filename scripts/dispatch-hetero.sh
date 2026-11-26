@@ -2654,7 +2654,7 @@ process.stdout.write([policy, re, rf, rr, ep].map(clean).join("|"));
   IFS='|' read -r policy engine effort runner target_endpoint <<< "$parsed"
   [ "$policy" = "cloud-fallback" ] || return 1
   # Restricted-operator rungs that fail the current brief/sandbox check are dropped before fallback selection.
-  if [ -n "$engine" ] && ! node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner "$runner" --model "$engine" ${target_endpoint:+--endpoint "$target_endpoint"} --cwd "$(pwd)" --prompt-file "${VISION_PROMPT_FILE:-$PROMPT_FILE}" >/dev/null 2>&1; then
+  if [ -n "$engine" ] && ! node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner "$runner" --model "$engine" ${target_endpoint:+--endpoint "$target_endpoint"} --cwd "$(pwd)" ${SOURCE_REPO:+--source-repo "$SOURCE_REPO"} --prompt-file "${VISION_PROMPT_FILE:-$PROMPT_FILE}" >/dev/null 2>&1; then
     engine=""; effort=""; runner=""; target_endpoint=""
   fi
   case "$(printf '%s' "${runner:-}" | tr '[:upper:]' '[:lower:]')" in
@@ -2677,7 +2677,7 @@ const plan = sf.implementerFallbackPlan({
   failedEndpoint: process.argv[4],
 });
 const gate = require(process.argv[6]);
-const eligible = plan.chain.filter((r) => gate.check({ runner: r.runner, model: r.model, endpoint: r.endpoint, cwd: process.cwd(), files: [process.argv[5]] }).allowed);
+const eligible = plan.chain.filter((r) => gate.check({ runner: r.runner, model: r.model, endpoint: r.endpoint, cwd: process.cwd(), files: [process.argv[5]], sourceRepo: process.env.SOURCE_REPO || undefined }).allowed);
 if (!eligible.length) process.exit(1);
 const ep = require(process.argv[7]);
 const pre = ep.preflight({ candidates: eligible, fallbackOnAllSkipped: true, preferBurnMore: true, localFirst: true });
@@ -3108,6 +3108,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --branch) BRANCH="${2:-}"; shift 2 ;;
     --prompt-file) PROMPT_FILE="${2:-}"; shift 2 ;;
+    --source-repo)  SOURCE_REPO="${2:-}"; export SOURCE_REPO; shift 2 ;;
     --scratch) SCRATCH=1; shift ;;
     --scaffold-tier) SCAFFOLD_TIER_ARG="${2:-}"; shift 2 ;;
     --no-campaign) NO_CAMPAIGN=1; shift ;;
@@ -3709,7 +3710,7 @@ if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_S
       if [ "$SHED_ROUTE_TARGET" = "minimax" ] && ! bash "$SELF_DIR/resolve-endpoint.sh" minimax >/dev/null 2>&1; then
         _shed_reason="resolve_endpoint_failed"
       else
-        _shed_gate_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner "$_shed_runner" --model "$_shed_model" --endpoint "$_shed_endpoint" --cwd "$(pwd)" --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" && _shed_gate_rc=0 || _shed_gate_rc=$?
+        _shed_gate_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner "$_shed_runner" --model "$_shed_model" --endpoint "$_shed_endpoint" --cwd "$(pwd)" ${SOURCE_REPO:+--source-repo "$SOURCE_REPO"} --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" && _shed_gate_rc=0 || _shed_gate_rc=$?
         if [ "$_shed_gate_rc" -ne 0 ]; then _shed_reason="${_shed_gate_msg:-cn_model_dispatch_gate_rc_${_shed_gate_rc}}"; fi
       fi
       if [ -z "$_shed_reason" ]; then
@@ -3756,7 +3757,7 @@ if [ "$RUNNER_SUPPLIED" -eq 0 ] && [ "$MODEL_SUPPLIED" -eq 0 ] && [ "$ENDPOINT_S
     LOCAL_SLOTS_JSON="$(printf '%s\n' "$_slot_parsed" | sed -n '3p')"
     LOCAL_LEASE_HEARTBEAT_FILE="${TMPDIR:-/tmp}/autopilot-local-lease-heartbeats-$$"
     : > "$LOCAL_LEASE_HEARTBEAT_FILE"
-    _gate_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner cc-shim --model "$_slot_family" --endpoint "$ENDPOINT" --cwd "$(pwd)" --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" && _gate_rc=0 || _gate_rc=$?
+    _gate_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner cc-shim --model "$_slot_family" --endpoint "$ENDPOINT" --cwd "$(pwd)" ${SOURCE_REPO:+--source-repo "$SOURCE_REPO"} --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" && _gate_rc=0 || _gate_rc=$?
     if [ "$_gate_rc" -eq 0 ]; then
       LOCAL_LEASE_HEARTBEAT_SLEEP_FILE="${TMPDIR:-/tmp}/autopilot-local-lease-heartbeat-sleep-$$"
       local_lease_heartbeat_loop >/dev/null 2>&1 & LOCAL_LEASE_HEARTBEAT_PID=$!
@@ -3934,7 +3935,7 @@ else
   die_precondition "${_pm_msg:-Fleet-Task precondition failed}"
 fi
 unset _pm_repo _pm_out_err _pm_resolved _pm_msg
-_tfg_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner "$RUNNER" --model "$MODEL" --endpoint "${ENDPOINT:-$RUNNER}" --cwd "$_gate_cwd" --prompt-file "$_gate_prompt" 2>&1 >/dev/null)" \
+_tfg_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner "$RUNNER" --model "$MODEL" --endpoint "${ENDPOINT:-$RUNNER}" --cwd "$_gate_cwd" ${SOURCE_REPO:+--source-repo "$SOURCE_REPO"} --prompt-file "$_gate_prompt" 2>&1 >/dev/null)" \
   || die_precondition "${_tfg_msg:-cn_model_dispatch_barred unknown restricted_operator_unknown_endpoint (01M7E2A1, d-1dfcf757)}"
 unset _tfg_msg
 # Warn-only: a brief that names a ../ path points outside the worktree. Never blocks, never
@@ -5061,7 +5062,7 @@ if [ "${SCRATCH:-0}" -eq 1 ]; then
   cp -- "$PROMPT_FILE" "$SCRATCH_FINAL_PROMPT" || die_precondition "--scratch could not copy the final assembled prompt"
   chmod 600 "$SCRATCH_FINAL_PROMPT" || die_precondition "--scratch could not secure the final assembled prompt"
   rm -f -- "$SCRATCH_WORK_DIR/brief.md"
-  _tfg_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner "$RUNNER" --model "$MODEL" --endpoint "${ENDPOINT:-$RUNNER}" --cwd "$SCRATCH_WORK_DIR" --prompt-file "$SCRATCH_FINAL_PROMPT" 2>&1 >/dev/null)" \
+  _tfg_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner "$RUNNER" --model "$MODEL" --endpoint "${ENDPOINT:-$RUNNER}" --cwd "$SCRATCH_WORK_DIR" ${SOURCE_REPO:+--source-repo "$SOURCE_REPO"} --prompt-file "$SCRATCH_FINAL_PROMPT" 2>&1 >/dev/null)" \
     || die_precondition "${_tfg_msg:-cn_model_dispatch_barred final_prompt_scan_failed (01M7E2A1, d-1dfcf757)}"
   rm -f -- "$SCRATCH_FINAL_PROMPT"
   SCRATCH_FINAL_PROMPT=""

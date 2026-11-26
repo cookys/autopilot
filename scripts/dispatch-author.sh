@@ -206,6 +206,7 @@ while [[ $# -gt 0 ]]; do
     --runner)      RUNNER="${2:-}"; RUNNER_SUPPLIED=1; shift 2 ;;
     --model)       MODEL="${2:-}"; MODEL_SUPPLIED=1; shift 2 ;;
     --prompt-file)  PROMPT_FILE="${2:-}"; shift 2 ;;
+    --source-repo)  SOURCE_REPO="${2:-}"; export SOURCE_REPO; shift 2 ;;
     --effort)      EFFORT="${2:-}"; EFFORT_SUPPLIED=1; EFFORT_EXPLICIT=1; shift 2 ;;
     --timeout)     TIMEOUT="${2:-}"; TIMEOUT_SUPPLIED=1; shift 2 ;;
     --hard-timeout) { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--hard-timeout requires a duration" >&2; exit 2; }; HARD_TIMEOUT="$2"; HARD_TIMEOUT_SUPPLIED=1; shift 2 ;;
@@ -1164,7 +1165,7 @@ else
 fi
 unset _pm_repo _pm_out_err _pm_resolved _pm_msg
 # d-1dfcf757 / 01M7E2A1: operator-based cloud gate checks endpoint, workdir and brief before spawn.
-_tfg_msg="$(node "$_AUTHOR_SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner "$RUNNER" --model "$MODEL" --endpoint "${ENDPOINT:-$RUNNER}" --cwd "$(pwd)" --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" \
+_tfg_msg="$(node "$_AUTHOR_SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner "$RUNNER" --model "$MODEL" --endpoint "${ENDPOINT:-$RUNNER}" --cwd "$(pwd)" ${SOURCE_REPO:+--source-repo "$SOURCE_REPO"} --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" \
   || die_precondition "${_tfg_msg:-cn_model_dispatch_barred unknown restricted_operator_unknown_endpoint (01M7E2A1, d-1dfcf757)}"
 unset _tfg_msg
 case "$EFFORT" in default|low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be default|low|medium|high|xhigh|max" ;; esac

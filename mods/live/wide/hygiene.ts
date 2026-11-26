@@ -32,8 +32,8 @@ export function wideHygiene(inp: WideHygieneInput): WidePageOut {
   if (residue === null && loadSource === null) {
     return {
       stepTitle: '缺源',
-      list: ['讀不到殘留資料'],
-      reply: ['無法讀取 residue 與 load_source。'],
+      list: ['要你處理', '  殘留讀不到'],
+      reply: ['殘留掃描讀不到，不知道有沒有要你處理的。'],
       hints: 'Esc 關閉',
       summary: null,
       hist: null,
@@ -104,7 +104,7 @@ export function wideHygiene(inp: WideHygieneInput): WidePageOut {
   return {
     stepTitle,
     list,
-    reply: (inp.narrative ?? (cur ? cur.detail : ['目前沒有需要處理的殘留項目。'])).flatMap(wrapReply),
+    reply: (inp.narrative ?? (residue === null ? ['殘留掃描讀不到，不知道有沒有要你處理的。', '外掛載入另有資料，照常。'] : cur ? cur.detail : ['目前沒有需要處理的殘留項目。'])).flatMap(wrapReply),
     hints: 'j/k 換筆 · o 展開 · Esc 關閉',
     summary,
     ...extra,

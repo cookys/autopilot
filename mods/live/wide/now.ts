@@ -59,7 +59,7 @@ export function wideNow(i: WideNowInput): WideNowOutput {
     : i.missingPm
       ? '缺源（pm 讀不到）'
       : i.stale
-        ? '過時'
+        ? `${GLYPHS.state.stale} 過時`
         : '正常')
 
   const fleetFocus = i.focus === 'fleet'
@@ -94,14 +94,15 @@ export function wideNow(i: WideNowInput): WideNowOutput {
   const reply: string[] = []
   if (i.narrative !== undefined) {
     reply.push(...i.narrative)
+  } else if (i.missingPm && i.missingConsole) {
+    reply.push(i.laneBusy != null && i.laneIdle != null ? 'pm 和 console 都讀不到，艦隊只剩 fleetSummary 的 lane 忙閒。' : 'pm 和 console 都讀不到。')
+    reply.push('產線的失敗和停住的看不到；要看每個 agent 請到 7 艦隊。')
   } else if (i.pending !== null && i.pending > 0) {
     reply.push(`待決 ${i.pending} 張要你選${i.act !== null && i.act > 0 ? `，另有 ${i.act} 張要先動手做完再選` : ''}。`)
     if (i.oldestPendingQuestion !== null) {
       reply.push(`${i.oldestPendingAge !== null ? `最舊的一張開了 ${i.oldestPendingAge}：` : ''}${i.oldestPendingQuestion}`)
     }
     reply.push('按 2 到待決頁作答；按 o 展開這一段的清單。')
-  } else if (i.missingPm && i.missingConsole) {
-    reply.push('pm 與 console 都讀不到資料。')
   } else {
     reply.push('目前沒有待決事項。')
   }

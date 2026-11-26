@@ -56,4 +56,12 @@ test('P4b wideHygiene: missing sources return null summary and 缺源', () => {
   const out = wideHygiene({ residue: null, loadSource: null, focus: 0 })
   expect(out.stepTitle).toBe('缺源')
   expect(out.summary).toBeNull()
+  expect(out.list).toEqual(['要你處理', '  殘留讀不到'])
+  expect(out.reply).toEqual(['殘留掃描讀不到，不知道有沒有要你處理的。'])
+})
+
+test('missing residue retains readable plugin data', () => {
+  const out = wideHygiene({ residue: null, loadSource: { source: 'dev', marketplace_path: null, flags: [] }, focus: 0 })
+  expect(out.list).toEqual(['要你處理', '  殘留讀不到', '外掛載入 0', '  來源：dev'])
+  expect(out.reply).toEqual(['殘留掃描讀不到，不知道有沒有要你處理的。', '外掛載入另有資料，照常。'])
 })

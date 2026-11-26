@@ -10,7 +10,7 @@ import { DECIDE_STEPS } from './fixtures/decide-steps.testkit'
 import { routeKey } from '../pages/keys'
 import { decideReduce, NO_NAV } from '../pages/decide'
 
-const SWAP: [string, string][] = [['▲', '⏶'], ['★', '✧'], ['⚠', '△'], ['▏', '_'], ['●', '◉']]
+const SWAP: [string, string][] = [['▲', '▴'], ['★', '✧'], ['⚠', '△'], ['▏', '_'], ['●', '◉']]
 const norm = (s: string): string => SWAP.reduce((a, [x, y]) => a.split(x).join(y), s)
 const cols = (s: string, from: number, to: number): string => {
   let out = ''
@@ -37,6 +37,11 @@ const c4steps: WideCard = { ...c4, options: c4opts, awaiting: { label: 'staging'
 const four = [c1, c2, c3, c4]
 const NOTE4 = 'staging 走過一圈，8 個都對；第 5、7 兩個值和 11-24 的對照一致'
 const base: WideDecideInput = { cards: four, cursor: 0, picks: {}, notes: {}, sent: {}, textMode: false, textBuf: '', armed: false, notice: null, source: null }
+
+test('unreadable decision list shows the exit code without stderr', () => {
+  const out = wideDecide({ ...base, source: { reason: 'fleet: hub unreachable（rc=1）', retrySec: 30 } })
+  expect(out.reply[0]).toBe('⊘ decision list 讀不到（fleet decision list 結束碼 1）')
+})
 
 // 14 cards for 2-M: the first four picked with their recommendation, the fifth is the open one
 const many: WideCard[] = (() => {

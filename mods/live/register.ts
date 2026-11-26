@@ -2432,6 +2432,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       if (bandWide) {
         // console v5 wide band: page 2 is wide/decide.ts (P3), the others wide/<page>.ts (P4)
         const pageNo = Math.max(1, (V74_PAGES as readonly string[]).indexOf(panePage) + 1)
+        const fleetOthers = pageNo === 7 ? await readOthers($, bandNow) : null
         const status = wideStatusText({ verdict: '進行中', running: fleetCounts?.running ?? null, failed: oneRowInput.line.failed, stalled: fleetCounts?.stuck ?? null, pending: pendCount, act: durableAwaiting.length, tps: lastStep?.tps ?? null, spark: sparkBars, labels: { fleet: '艦隊', pending: '待決', act: '動手' } })
         let list: string[] = []
         let reply: string[] = remText !== null ? [remText] : []
@@ -2474,6 +2475,8 @@ export function registerLive(on: Parameters<Register>[0]): void {
                 stale: liveStale,
                 missingPm: pmNow === null,
                 missingConsole: consoleSnap === null,
+                laneBusy: pmNow === null && consoleSnap === null && fleetNow.fetchedMs !== null ? fleetNow.lanes.filter(l => l.running > 0).length : null,
+                laneIdle: pmNow === null && consoleSnap === null && fleetNow.fetchedMs !== null ? fleetNow.lanes.filter(l => l.running === 0).length : null,
               })
             case 3:
               return wideDispatch({
@@ -2523,8 +2526,10 @@ export function registerLive(on: Parameters<Register>[0]): void {
               })
             case 6:
               return wideHygiene({ residue: snap?.detail.residue ?? null, loadSource: snap?.detail.load_source ?? null, focus: pageView.hygiene?.focus ?? 0, stale: liveStale })
-            case 7:
-              return wideFleet({ lines: consoleSnap?.lines ?? null, counts: consoleSnap !== null ? consoleFleetCounts(consoleSnap, t) : null, steps, nowMs: bandNow, t, focus: pageView.fleet?.focus ?? 0, stale: lineStaleFlag })
+            case 7: {
+              const cards = decideCards !== null && fleetOthers !== null && fleetOthers.present && fleetOthers.unreadable === null ? { local: decideCards.length, remote: fleetOthers.cards.length } : null
+              return wideFleet({ lines: consoleSnap?.lines ?? null, counts: consoleSnap !== null ? consoleFleetCounts(consoleSnap, t) : null, steps, nowMs: bandNow, t, focus: pageView.fleet?.focus ?? 0, stale: lineStaleFlag, runsMissing: snap === null, cards })
+            }
             case 8:
               return wideTodo({ todo: V74_TODO, cursor: decideLocal.cursor, picks: {}, notes: {}, stale: liveStale })
             case 9:

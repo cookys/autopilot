@@ -94,7 +94,7 @@ export function wideDispatch(i: WideDispatchInput): WideDispatchOutput {
     else reply.push(`${cur.label} · ${cur.engine} · ${cur.dur}`)
     if (cur.nextStep) reply.push(cur.nextStep)
   } else {
-    reply.push(i.missing ? '讀不到派工來源。' : '目前沒有進行中的派工。')
+    reply.push(i.missing ? '讀不到派工來源。' : '目前沒有在跑的派工。')
   }
 
   const ctx: string[] = []
@@ -111,7 +111,7 @@ export function wideDispatch(i: WideDispatchInput): WideDispatchOutput {
     stepTitle,
     list,
     reply,
-    hints: 'j/k 換筆 · o 展開 · Esc 關閉',
+    hints: i.missing && cur === null ? 'Esc 關閉' : 'j/k 換筆 · o 展開 · Esc 關閉',
     pin: i.warnings ?? [],
     ctx,
     hist: i.recentRounds.length > 0 ? { title: '今天結束的輪次', rows: i.recentRounds } : null,

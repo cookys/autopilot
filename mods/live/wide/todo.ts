@@ -40,7 +40,7 @@ export function wideTodo(inp: WideTodoInput): WidePageOut {
     return {
       stepTitle: inp.label ?? '缺源（還沒接線）',
       list: ['待辦', '  待辦還沒接線'],
-      reply: inp.missingNote ?? ['待辦資料來源尚未接線（fleet todo）。'],
+      reply: inp.missingNote ?? ['待辦的資料還沒接上，這頁目前一定是空的。'],
       hints: 'Esc 關閉',
       summary: null,
       hist: null,

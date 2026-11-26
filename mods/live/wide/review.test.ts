@@ -50,4 +50,12 @@ test('P4a wideReview missing state: summary is null', () => {
   const out = wideReview({ items: [], cursor: 0, qcOwed: null, qcTarget: null, decidedCount: null, decidedSummary: null, recentReviews: [], stale: false, missing: true })
   expect(out.stepTitle).toBe('缺源')
   expect(out.summary).toBeNull()
+  expect(out.hints).toBe('Esc 關閉')
+})
+
+test('empty review reports known QC and decisions', () => {
+  const out = wideReview({ items: [], cursor: 0, qcOwed: 0, qcTarget: null, decidedCount: 0, decidedSummary: null, recentReviews: [], stale: false, missing: false })
+  expect(out.reply).toEqual(['今天還沒有審查紀錄，QC 也沒有欠審。'])
+  expect(out.list).toContain('  沒有欠審')
+  expect(out.list).toContain('我替你決定的事 0')
 })

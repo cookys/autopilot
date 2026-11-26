@@ -38,6 +38,19 @@ test('P4b wideFleet: integrates speedview agentsColumn tok/s and console lines',
 
 test('P4b wideFleet: missing sources return 缺源', () => {
   const out = wideFleet({ lines: null, steps: [], nowMs: 2000, t, focus: 0 })
-  expect(out.stepTitle).toBe('缺源')
+  expect(out.stepTitle).toBe('缺源（runs 和摘要）')
+  expect(out.list).toEqual(['執行中', '  runs 讀不到'])
+  expect(out.reply).toEqual(['runs 和產線摘要讀不到，看不到 agent 在做什麼。'])
   expect(out.summary).toBeNull()
+})
+
+test('missing fleet sources retain readable card counts', () => {
+  const out = wideFleet({ lines: null, steps: [], nowMs: 2000, t, focus: 0, runsMissing: true, cards: { local: 2, remote: 3 } })
+  expect(out.list).toContain('待決卡：本機 2 · 他機 3')
+  expect(out.reply).toEqual(['runs 和產線摘要讀不到，看不到 agent 在做什麼。', '待決卡照常。'])
+})
+
+test('fleet title names only the missing source', () => {
+  expect(wideFleet({ lines: null, steps: [], nowMs: 2000, t, focus: 0, runsMissing: false }).stepTitle).toBe('缺源（摘要）')
+  expect(wideFleet({ lines: [], steps: [], nowMs: 2000, t, focus: 0, runsMissing: true }).stepTitle).toBe('缺源（runs）')
 })

@@ -588,6 +588,12 @@ function mirrorFailed(kind, branch, repo, error) {
   } catch (_error) { /* the log is a side channel; stderr already carries the detail */ }
 }
 
+// hippo's default actor is local/<git user.name>, which carries the host name on some seats and trips the leak guard.
+// The mirror writes as a role; an explicit HIPPO_ACTOR still wins.
+function useRoleActor() {
+  if (!process.env.HIPPO_ACTOR) process.env.HIPPO_ACTOR = 'seat/open-decision';
+}
+
 function mirrorCard(cwd, entry) {
   let branch = 'setup';
   let repo = cwd;
@@ -606,6 +612,7 @@ function mirrorCard(cwd, entry) {
     if (answer) plan.steps.push({ op: 'edit', id: 'root', body: `${entry.question}\n\nAnswer: ${answer}` });
     if (isClosedEntry(entry)) plan.steps.push({ op: 'close', id: 'root', status: entry.closed_via === 'withdrawn' || entry.closed_via === 'panel_dismiss' ? 'cancelled' : 'done' });
     branch = 'execute';
+    useRoleActor();
     const result = hippo.execute(repo, plan, { log: () => {} });
     if (!result.ok) throw new Error(`store write failed: ${JSON.stringify(result.error || result.reason || result).slice(0, 300)}`);
   } catch (error) {
@@ -631,6 +638,7 @@ function mirrorRuling(cwd, entry, answer) {
     const plan = { key, steps: [{ op: 'create', ref: 'root', kind: 'decision', key,
       argv: ['--title', ruling.split(/\r?\n/)[0], '--status', 'open', '--tag', 'source:pm-ruling'], body }] };
     branch = 'execute';
+    useRoleActor();
     const result = hippo.execute(repo, plan, { log: () => {} });
     if (!result.ok) throw new Error(`store write failed: ${JSON.stringify(result.error || result.reason || result).slice(0, 300)}`);
   } catch (error) {

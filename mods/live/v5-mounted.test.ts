@@ -123,7 +123,7 @@ async function host($, on, opts: { cols?: number; rows?: number; store?: Map<str
   }
 
   await draw()
-  return { draw, key }
+  return { draw, key, clock }
 }
 
 test('v5 mounted: 209x49 with AUTOPILOT_LIVE_V5=1 draws the wide band; every page is projected in that draw (no snapshot review, no throw)', async ($, on) => {
@@ -131,6 +131,13 @@ test('v5 mounted: 209x49 with AUTOPILOT_LIVE_V5=1 draws the wide band; every pag
   const first = text(await h.draw())
   expect(first).toContain('現況')
   expect(first).toContain('Tab 換頁')
+})
+
+test('v5 mounted: wide band hotkeys switch pages and provide one focus anchor', async ($, on) => {
+  const h = await host($, on, { cols: 209, rows: 49 })
+  expect(walk(await h.draw()).filter(n => n.type === 'Button' && n.props?.autoFocus).length).toBe(1)
+  expect(text(await h.key('3'))).toContain('3 派工')
+  expect(text(await h.key('2'))).toContain('2 待決')
 })
 
 // the wide layout's right column is the host Pane: an operator open (/live-pane, here before the first draw) must open it at 94 columns;
@@ -171,5 +178,18 @@ test('v5 mounted: the docked wide Pane draws and no Button in it holds a Box', a
   expect(text(tree)).toContain('其他頁')
   const bad = walk(tree).filter(n => n.type === 'Button' && walk(n.children).some(c => c.type === 'Box'))
   expect(bad.length).toBe(0)
+  await pane.unmount()
+})
+
+test('v5 mounted: docked wide Pane hotkeys switch the band page', async ($, on) => {
+  const h = await host($, on, { cols: 209, rows: 49 })
+  const pane = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'Pane', requestId: 'autopilot-live', props: { title: 'Autopilot', isFocused: true, bodyColumns: 93, placement: 'dock', scroll: { offset: 0, bodyRows: 42 }, view: { agentId: undefined } }, viewport: { columns: 115, rows: 49, isFullscreen: true } })
+  const buttons = walk(await pane.drawn()).filter(n => n.type === 'Button')
+  for (const digit of '123456789') expect(buttons.some(n => n.props?.hotkey === digit)).toBe(true)
+  expect(buttons.filter(n => n.props?.autoFocus).length).toBe(1)
+  const four = buttons.find(n => n.props?.hotkey === '4')
+  await pane.press({ key: four.props.key })
+  await h.clock.advance(50)
+  expect(text(await h.draw(115, 115))).toContain('4 審查')
   await pane.unmount()
 })

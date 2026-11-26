@@ -4,7 +4,7 @@
 /**
  * open-decision.js — the "open owner questions" file of a watcher scope (mods P1W W2a-m; contract autopilot.decision/2).
  *
- *   node scripts/open-decision.js open  --category <c> --question <q> [--background <why>] [--option <label>[::<description>]]... | --free-text
+ *   node scripts/open-decision.js open  --category <c> --question <q> [--background <why>] [--waiting-task <id>]... [--option <label>[::<description>]]... | --free-text
  *                                       [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>]
  *                                       [--doa-role <role>] [--doa-tier <tier>] [--target <deploy target>] [--source <who/where>]
  *                                       [--title <short card title, <= 20 characters>] [--kind <decide|go|remind|step|look>] [--premise-source <file>] [--premise-inferred] [--attach <path-or-URL>]...
@@ -224,7 +224,7 @@ function notAuthorizedBoundaryId(raw) {
 
 function usage(message) {
   if (message) process.stderr.write(`open-decision: ${message}\n`);
-  process.stderr.write('usage: open-decision.js open --category <money|identity|presence|goal|public-release|unbackable-loss|authority> --question <q> [--background <why>] [--option <label>[::<description>]]... | --free-text [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>] [--irreversible] [--from-request <r-id>] [--doa-role <role>] [--doa-tier <tier>] [--target <deploy target>] [--source <who/where>] [--kind <decide|go|remind|step|look>] [--due <ISO time | +N(m|h|d|w)>] [--premise-source <file>] [--premise-inferred] [--attach <path-or-URL>]... [--root-run-id <id>]\n'
+  process.stderr.write('usage: open-decision.js open --category <money|identity|presence|goal|public-release|unbackable-loss|authority> --question <q> [--background <why>] [--waiting-task <id>]... [--option <label>[::<description>]]... | --free-text [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>] [--irreversible] [--from-request <r-id>] [--doa-role <role>] [--doa-tier <tier>] [--target <deploy target>] [--source <who/where>] [--kind <decide|go|remind|step|look>] [--due <ISO time | +N(m|h|d|w)>] [--premise-source <file>] [--premise-inferred] [--attach <path-or-URL>]... [--root-run-id <id>]\n'
     + '       --category values: money（錢） identity（身分：操作員本人的登入、憑證、金鑰、scope） presence（到場） goal（改目標） public-release（對外） unbackable-loss（無備份的損失） authority（改授權）\n'
     + '       決定卡（沒有 --kind，或 --kind decide；go/remind/step/look 不在此限）：--question 恰好一個問號（？或?）；--title 本身要是問題（含？或?，或以嗎結尾，仍 <= 20）；--recommendation 必填、以某個 --option 標籤開頭、不可以？或?結尾（--free-text 只在有建議時拒絕問號結尾）。--premise-source <檔> 的內容若含 inferred 或推算（不分大小寫），或帶了 --premise-inferred，則 --question 或 --background 也必須含推算或 inferred。這兩支旗標只用於 open。\n'
     + '       open-decision.js open --category <c> --kind step --question <step text> --executor <address> [--repeat-of <id>] [--background <why>] [--blocks <what stalls>] [--attach <path-or-URL>]... [--source <who/where>] [--root-run-id <id>]\n'
@@ -233,8 +233,8 @@ function usage(message) {
 }
 
 function parse(argv) {
-  const out = { _: [], option: [] };
-  const valued = new Set(['question', 'background', 'option', 'recommendation', 'why', 'blocks', 'not-authorized', 'doa-role', 'doa-tier', 'source', 'id', 'root-run-id', 'cwd', 'answer-id', 'text-file']);
+  const out = { _: [], option: [], 'waiting-task': [] };
+  const valued = new Set(['question', 'background', 'option', 'waiting-task', 'recommendation', 'why', 'blocks', 'not-authorized', 'doa-role', 'doa-tier', 'source', 'id', 'root-run-id', 'cwd', 'answer-id', 'text-file']);
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (!a.startsWith('--')) { out._.push(a); continue; }
@@ -242,7 +242,7 @@ function parse(argv) {
     if (valued.has(name)) {
       if (i + 1 >= argv.length) return { error: `--${name} needs a value` };
       const v = argv[i + 1]; i += 1;
-      if (name === 'option') out.option.push(v); else out[name] = v;
+      if (name === 'option' || name === 'waiting-task') out[name].push(v); else out[name] = v;
     } else if (name === 'json' || name === 'free-text') out[name] = true;
     else return { error: `unknown argument: ${a}` };
   }
@@ -1236,6 +1236,7 @@ function main(argv) {
   }
 
   // open
+  if (args['waiting-task'].some((id) => !/^[0-9A-HJKMNP-TV-Z]{26}$/.test(id))) return usage('--waiting-task needs a 26-character uppercase Crockford base32 task id');
   if (typeof args.question !== 'string' || !args.question.trim()) return usage('open needs a non-empty --question');
   if (ex['repeat-of'] !== undefined && !SAFE_ID.test(ex['repeat-of'])) return usage('--repeat-of needs a card id');
   let repeat = null;
@@ -1251,7 +1252,8 @@ function main(argv) {
     }
   }
   const questionText = repeat === null ? args.question : withRepeatSuffix(args.question, repeat.repeat_n);
-  const backgroundText = repeat === null ? args.background : [repeatContext(repeat.entry, repeat), text(args.background)].filter(Boolean).join('\n');
+  const originalBackground = repeat === null ? args.background : [repeatContext(repeat.entry, repeat), text(args.background)].filter(Boolean).join('\n');
+  const backgroundText = args['waiting-task'].length ? [originalBackground, ...args['waiting-task'].map((id) => `waiting task: ${id}`)].filter(Boolean).join('\n') : originalBackground;
   if (args.kind !== undefined && !KINDS.includes(args.kind)) { process.stderr.write(`open-decision: refused: --kind must be one of ${KINDS.join(' | ')} (got "${args.kind}"); nothing written\n`); return 7; }
   if (!CATEGORIES.includes(args.extra.category)) { process.stderr.write(`open-decision: ${CATEGORY_REFUSAL}（收到 ${args.extra.category === undefined ? '沒有 --category' : `"${args.extra.category}"`}；沒有寫入任何東西）\n`); return 7; }
   if (ex['operator-step-none'] !== undefined && !ex['operator-step-none'].trim()) return usage('--operator-step-none 需要非空白理由');
@@ -1367,6 +1369,11 @@ function main(argv) {
     process.stderr.write(`open-decision: note: card ${r.id} written to the UNBOUND scope (${sess.why || 'no root'}); scope_key=${r.scope_key} file=${r.file}; every panel of this project lists unbound cards too, and --root-run-id <id> would bind it to one session root\n`);
   }
   if (r.status === 'ok') {
+    for (const id of args['waiting-task']) {
+      const progress = spawnSync(fleetBin(), ['task', 'progress', id, 'waiting', '--waiting-on', `card:${r.id}`], { encoding: 'utf8' });
+      const reason = progress.error ? progress.error.message : (progress.stderr || '').trim() || `exit code ${progress.status}`;
+      process.stderr.write(`open-decision: waiting task ${id}: ${progress.status === 0 ? 'ok' : reason}\n`);
+    }
     notifyPm('open', { card_id: r.id, question: args.question, state: 'open', ...(ex.title !== undefined ? { title: ex.title } : {}) });
     process.stdout.write(args.json ? `${JSON.stringify({ ok: true, id: r.id, file: r.file, scope_key: r.scope_key })}\n` : `${r.id}\n`);
     if (routed && routed.allow) process.stderr.write(`open-decision: 把卡片編號 ${r.id} 送給 PM。\n`);

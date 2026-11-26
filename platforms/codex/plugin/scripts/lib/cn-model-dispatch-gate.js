@@ -140,7 +140,7 @@ function parseBrief(text, extensions = new Set()) {
   }
   return true;
 }
-const SHINGLE_VERSION = 'cn-shingle-v1';
+const SHINGLE_VERSION = 'cn-shingle-v2';
 const GIT_ENV_KEYS = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR', 'GIT_OBJECT_DIRECTORY'];
 function git(root, args) {
   const env = { ...process.env }; for (const k of GIT_ENV_KEYS) delete env[k];
@@ -183,13 +183,20 @@ function shingleIndex(info, env) {
   const key = crypto.createHash('sha256').update(JSON.stringify([SHINGLE_VERSION, info.root, signatures])).digest('hex');
   const cache = path.join(dir, `${key}.bin`);
   function decode(buf) {
-    if (buf.length < 44 || buf.subarray(0, 8).toString() !== 'CNSHNG01') throw Error('magic');
+    if (buf.length < 52 || buf.subarray(0, 8).toString() !== 'CNSHNG02') throw Error('magic');
     const len = buf.readUInt32BE(8); if (len !== buf.length - 44) throw Error('length');
     const payload = buf.subarray(12, 12 + len); if (!crypto.createHash('sha256').update(payload).digest().equals(buf.subarray(12 + len))) throw Error('checksum');
-    return JSON.parse(payload.toString());
+    const namesLen = payload.readUInt32LE(0), count = payload.readUInt32LE(4);
+    const offset = 8 + namesLen;
+    if (offset > payload.length || count * 16 !== payload.length - offset) throw Error('layout');
+    const names = JSON.parse(payload.subarray(8, offset).toString());
+    if (!Array.isArray(names) || names.length !== entries.length || names.some((name, i) => name !== entries[i].name)) throw Error('entries');
+    const rows = new Uint32Array(count * 4);
+    for (let i = 0; i < rows.length; i++) rows[i] = payload.readUInt32LE(offset + i * 4);
+    return { entries: names, rows };
   }
   try { const cached = decode(fs.readFileSync(cache)); fs.chmodSync(cache, 0o600); return cached; } catch { /* invalid or absent cache: rebuild */ }
-  const index = Object.create(null);
+  const chunks = [], chunkSize = 65536; let chunk, count = 0;
   for (let id = 0; id < entries.length; id++) {
     const fd = fs.openSync(entries[id].file, 'r'), decoder = new StringDecoder('utf8'), buf = Buffer.allocUnsafe(65536);
     let pending = '', line = 1, window = [], n;
@@ -201,33 +208,76 @@ function shingleIndex(info, env) {
       for (const match of combined.normalize('NFKC').toLowerCase().matchAll(re)) {
         if (match[0] === '\n') { line++; continue; }
         window.push([match[0], line]); if (window.length > 8) window.shift();
-        if (window.length === 8) { const h = hashWindow(window.map(x => x[0])); (index[h] ||= Object.create(null))[id] ||= window[0][1]; }
+        if (window.length === 8) {
+          const h = hashWindow(window.map(x => x[0]));
+          if (count % chunkSize === 0) { chunk = new Uint32Array(chunkSize * 4); chunks.push(chunk); }
+          const pos = (count++ % chunkSize) * 4;
+          chunk[pos] = parseInt(h.slice(0, 8), 16); chunk[pos + 1] = parseInt(h.slice(8), 16);
+          chunk[pos + 2] = id; chunk[pos + 3] = window[0][1];
+        }
       }
     };
     try { while ((n = fs.readSync(fd, buf, 0, buf.length, null))) consume(decoder.write(buf.subarray(0, n))); consume(decoder.end(), true); } finally { fs.closeSync(fd); }
   }
-  if (!Object.values(index).some(rows => Object.keys(rows).length < 20)) throw Error('no windows');
-  const result = { entries: entries.map(x => x.name), index }, payload = Buffer.from(JSON.stringify(result)), header = Buffer.alloc(12);
-  header.write('CNSHNG01'); header.writeUInt32BE(payload.length, 8);
+  let rows = new Uint32Array(count * 4), at = 0;
+  for (const c of chunks) { const part = c.subarray(0, Math.min(c.length, rows.length - at)); rows.set(part, at); at += part.length; }
+  chunks.length = 0;
+  // Sort rows in place by hash, file and line; the first duplicate is the earliest line.
+  const compare = (pos, hi, lo, id, line) => rows[pos] - hi || rows[pos + 1] - lo || rows[pos + 2] - id || rows[pos + 3] - line;
+  const swap = (a, b) => { for (let j = 0; j < 4; j++) { const v = rows[a + j]; rows[a + j] = rows[b + j]; rows[b + j] = v; } };
+  const stack = count ? [0, count - 1] : [];
+  while (stack.length) {
+    const end = stack.pop(), start = stack.pop(), pivot = ((start + end) >>> 1) * 4;
+    const hi = rows[pivot], lo = rows[pivot + 1], id = rows[pivot + 2], line = rows[pivot + 3];
+    let left = start, i = start, right = end;
+    while (i <= right) {
+      const cmp = compare(i * 4, hi, lo, id, line);
+      if (cmp < 0) swap(left++ * 4, i++ * 4);
+      else if (cmp > 0) swap(i * 4, right-- * 4);
+      else i++;
+    }
+    if (start < left - 1) stack.push(start, left - 1);
+    if (right + 1 < end) stack.push(right + 1, end);
+  }
+  let kept = 0, distinct = 0, hasRare = false;
+  let prevHi, prevLo, prevId;
+  for (let i = 0; i < rows.length; i += 4) {
+    const hi = rows[i], lo = rows[i + 1], id = rows[i + 2], line = rows[i + 3];
+    if (i === 0 || hi !== prevHi || lo !== prevLo) {
+      if (distinct && distinct < 20) hasRare = true;
+      distinct = 0;
+    } else if (id === prevId) continue;
+    prevHi = hi; prevLo = lo; prevId = id;
+    distinct++; rows[kept++] = hi; rows[kept++] = lo; rows[kept++] = id; rows[kept++] = line;
+  }
+  if (distinct && distinct < 20) hasRare = true;
+  if (!hasRare) throw Error('no windows');
+  rows = rows.subarray(0, kept);
+  const result = { entries: entries.map(x => x.name), rows }, names = Buffer.from(JSON.stringify(result.entries));
+  const payload = Buffer.allocUnsafe(8 + names.length + rows.byteLength), header = Buffer.alloc(12);
+  payload.writeUInt32LE(names.length, 0); payload.writeUInt32LE(kept / 4, 4); names.copy(payload, 8);
+  for (let i = 0; i < kept; i++) payload.writeUInt32LE(rows[i], 8 + names.length + i * 4);
+  header.write('CNSHNG02'); header.writeUInt32BE(payload.length, 8);
   const tmp = path.join(dir, `.${key}.${process.pid}.${crypto.randomBytes(6).toString('hex')}`);
-  try { fs.writeFileSync(tmp, Buffer.concat([header, payload, crypto.createHash('sha256').update(payload).digest()]), { mode: 0o600, flag: 'wx' }); fs.renameSync(tmp, cache); } finally { try { fs.unlinkSync(tmp); } catch {} }
+  try { const fd = fs.openSync(tmp, 'wx', 0o600); try { fs.writeFileSync(fd, header); fs.writeFileSync(fd, payload); fs.writeFileSync(fd, crypto.createHash('sha256').update(payload).digest()); } finally { fs.closeSync(fd); } fs.renameSync(tmp, cache); } finally { try { fs.unlinkSync(tmp); } catch {} }
   for (const name of fs.readdirSync(dir)) { const file = path.join(dir, name); try { if (fs.statSync(file).mtimeMs < Date.now() - 86400000) fs.unlinkSync(file); } catch {} }
   return result;
 }
 function shingleHits(text, data, env) {
-  const ws = windows(text), hits = [], runs = new Map();
+  const ws = windows(text), hits = [], runs = new Map(), rows = data.rows, count = rows.length / 4;
   for (const h of ws) {
-    const rows = data.index[h] || {}, next = new Map();
-    for (const [id, line] of Object.entries(rows)) next.set(id, (runs.get(id) || 0) + 1);
-    if (Object.keys(rows).length < 20 || [...next.values()].some(x => x >= 4)) {
-      if (Object.keys(rows).length) hits.push({ rows, h });
-    }
+    const hi = parseInt(h.slice(0, 8), 16), lo = parseInt(h.slice(8), 16), next = new Map();
+    let left = 0, right = count;
+    while (left < right) { const mid = Math.floor((left + right) / 2), pos = mid * 4; if (rows[pos] < hi || (rows[pos] === hi && rows[pos + 1] < lo)) left = mid + 1; else right = mid; }
+    const start = left;
+    while (left < count && rows[left * 4] === hi && rows[left * 4 + 1] === lo) { const id = rows[left * 4 + 2]; next.set(id, (runs.get(id) || 0) + 1); left++; }
+    if (left > start && (left - start < 20 || [...next.values()].some(x => x >= 4))) hits.push([start, left]);
     runs.clear(); for (const [k, v] of next) runs.set(k, v);
   }
   if (hits.length) {
     const log = path.join(fs.realpathSync(env.XDG_RUNTIME_DIR), 'autopilot', 'cn-gate.log');
-    const rows = hits.flatMap(x => Object.entries(x.rows).map(([id, line]) => `${data.entries[id]}:${line}`));
-    const fd = fs.openSync(log, 'a', 0o600); try { fs.fchmodSync(fd, 0o600); fs.writeFileSync(fd, `${rows.join('\n')}\n`); } finally { fs.closeSync(fd); }
+    const lines = []; for (const [start, end] of hits) for (let i = start; i < end; i++) lines.push(`${data.entries[rows[i * 4 + 2]]}:${rows[i * 4 + 3]}`);
+    const fd = fs.openSync(log, 'a', 0o600); try { fs.fchmodSync(fd, 0o600); fs.writeFileSync(fd, `${lines.join('\n')}\n`); } finally { fs.closeSync(fd); }
   }
   return hits.length;
 }

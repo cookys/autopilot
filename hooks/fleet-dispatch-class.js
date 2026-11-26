@@ -9,7 +9,7 @@
  *   2. Explicit invalid `class` -> deny with a zh-TW reason listing the valid values.
  *   3. Missing `class` -> parse `Role:` in the first 15 lines of `tool_input.task`
  *      (case-insensitive key, trimmed value) and map via ROLE_CLASS_MAP; on match,
- *      allow with `updatedInput` preserving all original `tool_input` fields plus `class`.
+ *      updatedInput (no permissionDecision) preserving all original `tool_input` fields plus `class`.
  *   4. Missing or unmapped `Role:` -> deny with a one-line zh-TW reason explaining
  *      how to fix it (add `Role:` or pass `class` explicitly).
  *
@@ -95,7 +95,7 @@ function preToolAllowUpdated(toolInput, mappedClass) {
   return {
     hookSpecificOutput: {
       hookEventName: 'PreToolUse',
-      permissionDecision: 'allow',
+      // updatedInput only: no permissionDecision, so the normal permission flow still decides (a hook must not answer the user's prompt).
       updatedInput: {
         ...toolInput,
         class: mappedClass,

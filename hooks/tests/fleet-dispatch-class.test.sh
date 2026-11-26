@@ -43,7 +43,7 @@ Please handle this work item."
     const h = parsed && parsed.hookSpecificOutput;
     if (!h) process.exit(2);
     if (h.hookEventName !== "PreToolUse") process.exit(3);
-    if (h.permissionDecision !== "allow") process.exit(4);
+    if (h.permissionDecision !== undefined) process.exit(4);
     const u = h.updatedInput;
     if (!u || typeof u !== "object") process.exit(5);
     if (u.class !== wantClass) process.exit(6);

@@ -9,7 +9,7 @@ export type KeyAction =
   | { kind: 'pick'; index: number } | { kind: 'text'; ch: string } | { kind: 'text_save' } | { kind: 'text_cancel' }
   | { kind: 'note' } | { kind: 'undo' } | { kind: 'prev' } | { kind: 'next' } | { kind: 'fill' }
   | { kind: 'move'; by: 1 | -1 } | { kind: 'cursor'; at: number } | { kind: 'fold' } | { kind: 'open' } | { kind: 'none' }
-  | { kind: 'scroll'; by: 1 | -1; page: boolean } | { kind: 'style' } | { kind: 'expand' } | { kind: 'toggle_expand' } | { kind: 'toggle_ctx' }
+  | { kind: 'scroll'; by: 1 | -1; page: boolean } | { kind: 'style' } | { kind: 'expand' } | { kind: 'toggle_expand' } | { kind: 'toggle_ctx' } | { kind: 'copy_url' }
 
 const pageForDigit = (key: string): string | undefined => {
   if (key === PET_KEY) return 'pet'
@@ -57,6 +57,7 @@ export function routeKey(key: string, st: KeyState): KeyAction {
     if (key === 'h') return { kind: 'prev' }
     if (key === 'l') return { kind: 'next' }
     if (key === 'f') return { kind: 'fill' }
+    if (key === 'g' && st.wide === true) return { kind: 'copy_url' } // console v5 wide band: g hands out the open card's URL
   }
   return { kind: 'none' }
 }

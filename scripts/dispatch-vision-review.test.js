@@ -175,3 +175,24 @@ test('a 3xx is not followed', async () => {
     assert.equal(`${r.stdout}${r.stderr}${fs.readFileSync(out, 'utf8')}`.includes(TOKEN), false);
   } finally { server.close(); }
 });
+
+test('a 429 keeps the gateway reason, token masked', async () => {
+  const { server, port } = await listen((_req, res) => {
+    res.writeHead(429, { 'content-type': 'application/json' });
+    res.end(`{"error":"rate limited for ${TOKEN}"}`);
+  });
+  const repo = gitRepo('thinksmart-vis-');
+  const img = path.join(repo, 'a.png');
+  const out = path.join(repo, 'result.json');
+  fs.writeFileSync(img, PNG);
+  try {
+    const r = await run(repo, {
+      AUTOPILOT_ENDPOINT_GLM_LOCAL_URL: `http://127.0.0.1:${port}`,
+      AUTOPILOT_ENDPOINT_GLM_LOCAL_TOKEN: TOKEN,
+    }, ['--image', img, '--prompt-file', img, '--out', out]);
+    assert.equal(r.status, 1, r.stderr);
+    const got = JSON.parse(fs.readFileSync(out, 'utf8'));
+    assert.match(got.error, /rate limited for \*\*\*/);
+    assert.equal(got.error.includes(TOKEN), false);
+  } finally { server.close(); }
+});

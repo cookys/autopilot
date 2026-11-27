@@ -200,7 +200,9 @@ async function main() {
     process.exit(1);
   }
   if (status < 200 || status >= 300) {
-    writeOut(args.outFile, { ok: false, model: '', text: '', usage: null, status, ...base });
+    // The gateway's reason for a 400/429, bounded and with the token masked.
+    const error = String(result.body || result.error || '').split(token).join('***').slice(0, 2000);
+    writeOut(args.outFile, { ok: false, model: '', text: '', usage: null, status, error, ...base });
     process.stdout.write(`vision-review fail status=${status} images=${imageMeta.length}\n`);
     process.exit(1);
   }

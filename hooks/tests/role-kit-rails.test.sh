@@ -21,7 +21,7 @@ export AUTOPILOT_ACCOUNTS_DIR="$TEST_TMP/no-accounts"
 export TMPDIR="$TEST_TMP/tmp"; mkdir -p "$TMPDIR"
 export AUTOPILOT_DISPATCH_RUNS_DIR="$TEST_TMP/runs"; mkdir -p "$AUTOPILOT_DISPATCH_RUNS_DIR"
 export AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 AUTOPILOT_DISPATCH_ROLE=implementer
-unset AUTOPILOT_SESSION_ID CLAUDE_CODE_SESSION_ID AUTOPILOT_CONFIG_FILE
+unset AUTOPILOT_SESSION_ID CLAUDE_CODE_SESSION_ID AUTOPILOT_CONFIG_FILE AUTOPILOT_TOKEN_SEAT
 node "$REPO_ROOT/scripts/run-approval.js" confirm-claude-native >/dev/null 2>&1
 
 # ---- stub claude: argv -> $ARGV_NUL (one file per call, appended count in $CALLS), then the rail-specific answer
@@ -43,6 +43,8 @@ case "${KIT_INNER:-}" in
 esac
 EOF
 chmod +x "$BIN/claude"
+# the account-layer cases run with a fixture HOME, where the real fleet CLI cannot see the task: a stub answers "open"
+printf '#!/usr/bin/env bash\necho "{\\"status\\":\\"open\\"}"\n' > "$BIN/fleet"; chmod +x "$BIN/fleet"
 export KIT_ARGV_NUL="$ARGV_NUL" KIT_CALLS="$CALLS" KIT_STUB_VERDICT="$STUB_VERDICT"
 export PATH="$BIN:$PATH"
 
@@ -264,7 +266,7 @@ acct_run() { # <kind> [args...] ; shim logs one JSON line per spawn with the arg
   local kind="$1"; shift
   : > "$FX_LOG"
   local -a envv=(HOME="$FX_HOME" PATH="$FX_BIN:$PATH" TMPDIR="$FX_TMP" XDG_RUNTIME_DIR="$FX_RUN" AUTOPILOT_ACCOUNTS_DIR="$FX_ACC"
-    AUTOPILOT_LIVE_DIR="$FX_LIVE" AUTOPILOT_STATE_DIR="$FX_STATE" AUTOPILOT_CONFIG="$FX_CFG")
+    AUTOPILOT_LIVE_DIR="$FX_LIVE" AUTOPILOT_STATE_DIR="$FX_STATE" AUTOPILOT_CONFIG="$FX_CFG" FLEET_BIN="$BIN/fleet")
   case "$kind" in
     review) OUT="$(env "${envv[@]}" "$REVIEW" --runner claude-native --model haiku --diff-file "$DIFF" --bin "$FX_BIN/claude" --timeout 30s --context-window off "$@" 2>&1 < /dev/null)" ;;
     author) OUT="$(env "${envv[@]}" "$AUTHOR" --runner claude-native --model haiku --prompt-file "$AUTHOR_PROMPT" --bin "$FX_BIN/claude" --timeout 30s --context-window off "$@" 2>&1 < /dev/null)" ;;

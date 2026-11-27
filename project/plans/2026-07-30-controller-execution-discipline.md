@@ -1,6 +1,5 @@
 # Controller Execution Discipline
 
-> 稽核（2026-11-21，PM 01M7XQRV）：已完成。已實作並歸檔，計畫檔頭狀態過時，建議改標 shipped/歸檔。證據：archive 2026/07/2026-07-30-controller-execution-discipline README；9a8566dee。
 ## Background
 
 The repair-lineage project closed the campaign-local branch, worktree, provider-session, and

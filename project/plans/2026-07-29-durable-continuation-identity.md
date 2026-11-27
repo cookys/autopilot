@@ -1,6 +1,5 @@
 # Durable Continuation Identity
 
-> 稽核（2026-11-21，PM 01M7XQRV）：已完成。已實作並歸檔，計畫檔頭狀態過時，建議改標 shipped/歸檔。證據：archive 2026/07/2026-07-29-runtime-convergence-mvp README；059f2df2c。
 ## Deliverable contract
 
 Implement only the rotation-aware active campaign view and compaction-safe continuation identity

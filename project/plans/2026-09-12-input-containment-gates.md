@@ -1,7 +1,6 @@
 # Plan — Containment is asserted against the right object, and the question depends on the method
 
-> Status: shipped（已出貨）。依 2026-11-21 稽核（PM 01M7XQRV）與下一行稽核證據更正；原狀態：**R0 — DRAFT** (depth-0, 2026-09-12) · Deliverable node: `p23-input-containment-gates` ·
-> 稽核（2026-11-21，PM 01M7XQRV）：已完成。已實作，計畫檔頭狀態過時（建議改標已出貨或歸檔）。證據：5d08c03a5 merge(p23)；bd5e3ad84 v2.36.29 PASS；6409ba8c0。
+> Status: **R0 — DRAFT** (depth-0, 2026-09-12) · Deliverable node: `p23-input-containment-gates` ·
 > Depends on: `p1-integration-receipt-sha-ledger` ·
 > Shared context: [`2026-09-12-integration-ledger-and-marker-gates.md`](2026-09-12-integration-ledger-and-marker-gates.md)
 

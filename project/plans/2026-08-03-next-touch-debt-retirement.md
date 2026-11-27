@@ -1,5 +1,5 @@
 ---
-Status: shipped（已出貨）。依 2026-11-21 稽核（PM 01M7XQRV）與下一行稽核證據更正；原狀態：implemented
+status: implemented
 date: 2026-08-03
 size: L
 entry_level: l5
@@ -8,7 +8,6 @@ project: next-touch-debt-retirement
 
 # Next-touch debt retirement
 
-> 稽核（2026-11-21，PM 01M7XQRV）：已完成。已實作並歸檔，計畫檔頭狀態過時，建議改標 shipped/歸檔。證據：d5aabb595；archive 2026/08/2026-08-03-next-touch-debt-retirement README。
 ## Background
 
 The audit found 12 known gaps hidden behind invalid “next touch” deferrals; the owner admitted them

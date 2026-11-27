@@ -68,7 +68,7 @@ run_author() {
 }
 sha_of() { sha256sum "$1" | cut -d' ' -f1; }
 EXPECT_HEAD() { printf -- '---\nname: rk-kit\ndescription: "role kit agent (no behaviour of its own)"\ntools: [%s]\n---\n' "$1"; }
-norm() { sed -E 's/autopilot-kimi-cwd-[A-Za-z0-9]+/autopilot-kimi-cwd-X/g; s/tmp\.[A-Za-z0-9]+/tmp.X/g; /^(OLDPWD|SHLVL|_|RANDOM|EPOCHREALTIME|SECONDS|INVOCATION_ID)=/d' "$1"; }
+norm() { sed -E 's/autopilot-kimi-cwd-[A-Za-z0-9]+/autopilot-kimi-cwd-X/g; s/tmp\.[A-Za-z0-9]+/tmp.X/g; /^(OLDPWD|SHLVL|_|RANDOM|EPOCHREALTIME|SECONDS|INVOCATION_ID|AUTOPILOT_AUTHOR_(HARD|IDLE|SAMPLE)_S)=/d' "$1"; }
 
 # argv_norm <argv.json> : the dispatcher wraps the prompt with a random nonce; normalise it (hex runs) and keep the rest verbatim
 argv_norm() { node -e 'const s=require("fs").readFileSync(process.argv[1],"utf8");process.stdout.write(s.replace(/NONCE=[0-9a-f]+/g,"NONCE=H").replace(/[0-9a-f]{32}/g,"H"))' "$1"; }

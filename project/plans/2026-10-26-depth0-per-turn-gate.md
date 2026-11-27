@@ -1,7 +1,6 @@
 # Plan - depth-0 decides the per-turn gate (worker-bound switch, generic verifier, hand coverage)
 
-> Status: not-pursued（不做）。依 2026-11-21 稽核（PM 01M7XQRV）與下一行稽核證據更正；原狀態：frozen (depth-0 terminal ruling after generation 2; P0 waits for the owner to approve the paid probe). Owner direction 2026-10-26 (card d-32849d39, A: default off): depth-0, not a user setting, decides per task. Follow-up to `docs/plans/2026-10-24-per-turn-gate-phase2.md` (hook `hooks/per-turn-gate.js`, verdict `docs/plans/evidence/2026-10-25-per-turn-gate-p2-4/VERDICT.md`). `logical_plan_id`: `depth0-per-turn-gate-2026-10-26`. Plan only: no code, hook, skill or config change. Version stays 3.0.0 (owner hold).
-> 稽核（2026-11-21，PM 01M7XQRV）：不做。每回合閘整條線已裁示不做；板頭另有 d-32849d39「A: default off」、d-7d8444a3 預設待裁，追蹤列已移除。證據：966e3f62e（PM 2026-11-05 移除 14 條 not doing 列）；docs/plans/evidence/2026-10-25-per-turn-gate-p2-4/VERDICT.md。
+> Status: frozen (depth-0 terminal ruling after generation 2; P0 waits for the owner to approve the paid probe). Owner direction 2026-10-26 (card d-32849d39, A: default off): depth-0, not a user setting, decides per task. Follow-up to `docs/plans/2026-10-24-per-turn-gate-phase2.md` (hook `hooks/per-turn-gate.js`, verdict `docs/plans/evidence/2026-10-25-per-turn-gate-p2-4/VERDICT.md`). `logical_plan_id`: `depth0-per-turn-gate-2026-10-26`. Plan only: no code, hook, skill or config change. Version stays 3.0.0 (owner hold).
 
 ## 0. Context / thesis
 

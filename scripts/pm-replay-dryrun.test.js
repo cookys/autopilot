@@ -39,7 +39,7 @@ const crypto = require('node:crypto');
   assert.equal(first.report.non_dry_run.rejected, true);
   assert.match(first.report.non_dry_run.reason, /empty_whitelist/);
   assert.ok(['eliminate', 'inconclusive'].includes(first.report.verdict));
-  assert.equal(first.report.negative_controls.probes.length, 5);
+  assert.equal(first.report.negative_controls.probes.length, 7);
   if (first.report.negative_controls.skipped) console.log(`SKIP negative controls: ${first.report.negative_controls.reason}`);
   else assert.ok(first.report.negative_controls.probes.every(p => p.blocked));
   console.log('PASS report, empty pool rejection, and probe status');

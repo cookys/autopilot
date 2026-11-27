@@ -610,8 +610,28 @@ test('awaiting block: it folds to its heading when it would hide an option of th
     const ctx = { live: null, console: null, size: { cols, rows }, t, nowMs, box: true, maxRows, v74: { decide: cards, awaiting: aw, pm: null, todo: null, nav: { cursor: 0, picks: {}, notes: {}, noteMode: false } } } as never
     const framed = frameRows(decidePage, ctx, { pages: PAGES, topAnchor: true })
     const where = cols + 'x' + rows + ' (maxRows ' + maxRows + ', ' + aw.length + ' awaiting)'
-    for (const label of ['可以合併', '先不要', '另外再議']) expect(flat(framed), where + ': option ' + label).toContain(label)
+    // 01M8FHB4YG: a block that holds the first card whole is kept and the card box gives way to its compact list (Enter expands); only a block that cannot hold one card folds
+    const stepsWhole = steps.every(x => flat(framed).includes(x.replace(/\s+/g, '')))
+    if (!(aw.length > 0 && stepsWhole)) for (const label of ['可以合併', '先不要', '另外再議']) expect(flat(framed), where + ': option ' + label).toContain(label)
     expect(framed.every(r => r.reduce((w, s) => w + displayWidth(s.text), 0) <= cols), where + ': no row wider than the pane').toBe(true)
+    expect(framed.length, where + ': the frame keeps its height').toBe(rows)
+  }
+})
+
+// Regression 01M8FHB4YG: at the host's docked 120x40 allocation (13 body rows) with the two-column list, the block folded to its heading
+// (the box above wanted its options shown) and the first awaiting card's steps were cut. The first card shows every step whenever the
+// block can hold it; the card box gives way to its compact list. 200x50 and 120x40 full-height stay complete.
+test('awaiting block: docked two-column list, 120x40 host box (13 rows), 17 rows, 200x50: the first awaiting card shows its last step', () => {
+  const cards = Array.from({ length: 5 }, (_, i) => ({ id: 'd-dk' + i, title: '合併 plan ' + i, question: '要不要合併？', background: null, options: [{ label: '合併', detail: '', recommended: true }, { label: '再審一輪', detail: '', recommended: false }] }))
+  const steps = ['到機櫃把評測機第二槽的電源線插到備用插座（插座在機櫃背面左下角，標示 UPS-2 的那一排），插好後等前面板燈號由閃爍變成常亮，大約需要三十秒', '在操作台跑一次讀回指令', '回到這張卡按完成']
+  const aw = [{ id: 'd-aw01', title: '評測機第二槽插電', question: '插電？', operator_steps: steps }, { id: 'd-aw02', title: '換線', question: '換？', operator_steps: ['換線'] }]
+  const flat = (rows: { text: string }[][]) => rows.map(r => r.map(s => s.text).join('')).join('\n').replace(/[\s│]+/g, '')
+  for (const [cols, rows] of [[120, 13], [120, 17], [120, 40], [200, 50]] as const) {
+    const ctx = { live: null, console: null, size: { cols, rows }, t, nowMs, box: true, maxRows: rows, v74: { decide: cards, awaiting: aw, pm: null, todo: null, nav: { cursor: 0, picks: {}, notes: {}, noteMode: false } } } as never
+    const framed = frameRows(decidePage, ctx, { pages: PAGES, topAnchor: true })
+    const text = flat(framed)
+    const where = cols + 'x' + rows
+    for (const s of steps) expect(text, where + ': step whole: ' + s.slice(0, 12)).toContain(s.replace(/\s+/g, ''))
     expect(framed.length, where + ': the frame keeps its height').toBe(rows)
   }
 })

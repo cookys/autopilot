@@ -296,11 +296,9 @@ function emitDeny(reason) {
   })}\n`);
 }
 
-// The rewrite is applied through updatedInput, so the model never needs to copy it back: show only a short head of
-// each side (S10 P5: the full command twice was the largest repeated PreToolUse:Bash advisory).
-function rewriteNote(prev, next) {
-  const clip = (t) => { const one = String(t).replace(/\s+/g, ' ').trim(); return one.length > 60 ? `${one.slice(0, 60)}…(${one.length} 字元)` : one; };
-  return `已自動改寫：${clip(prev)} → ${clip(next)}`;
+// The rewritten command is supplied through updatedInput.
+function rewriteNote() {
+  return '已自動改寫指令';
 }
 
 function classify(tool, input) {

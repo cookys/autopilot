@@ -6,6 +6,15 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { modelNotePath } = require('./lib/compaction-handoff.js');
 const { bin } = require('./lib/fleet-task.js');
+// The text arrives already redacted by the courier; no answer or an old fleet binary means none.
+function lastOperator() {
+  const r = spawnSync(bin(), ['pm', 'resume', '--seat', 'pm--claude', '--role', 'pm', '--check', '--json'], { encoding: 'utf8', timeout: 2500 });
+  try {
+    const text = JSON.parse(r.stdout).last_operator.text;
+    return typeof text === 'string' ? text.slice(-2000) : '';
+  } catch { return ''; }
+}
+
 try {
   const args = process.argv.slice(2);
   const opts = {};
@@ -14,7 +23,7 @@ try {
     opts[args[i]] = args[i + 1];
   }
   if (!opts['--sid']) throw new Error('--sid required');
-  const operator = opts['--operator-file'] ? fs.readFileSync(opts['--operator-file'], 'utf8').slice(-2000) : '（無）';
+  let operator = opts['--operator-file'] ? fs.readFileSync(opts['--operator-file'], 'utf8').slice(-2000) : '';
   let resume;
   if (opts['--resume-file']) resume = fs.readFileSync(opts['--resume-file'], 'utf8');
   else {
@@ -22,6 +31,9 @@ try {
     if (r.error || r.status !== 0) throw new Error('fleet pm resume failed');
     resume = r.stdout;
   }
+  // --resume-file is the offline form: it never calls fleet.
+  if (!operator && !opts['--resume-file']) operator = lastOperator();
+  operator = operator || '（無）';
   const ids = new Set();
   const rows = [];
   for (const row of resume.split(/\r?\n/)) {

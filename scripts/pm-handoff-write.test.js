@@ -29,3 +29,13 @@ test('uses fake fleet and default model note path', () => {
     assert.equal(r.status, 0, r.stderr); assert.equal(r.stdout.trim(), path.join(dir, 'session.md')); assert.ok(fs.readFileSync(r.stdout.trim(), 'utf8').includes(id));
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+test('the operator section carries last_operator from fleet pm resume --check', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-lastop-'));
+  try {
+    const fleet = path.join(dir, 'fleet');
+    fs.writeFileSync(fleet, `#!/bin/sh\ncase "$*" in\n  *--check*) printf '%s' '{"last_operator":{"id":"x","at_ms":1,"text":"go with plan C"}}'; exit 1;;\n  *) printf '%s\\n' 'IN_FLIGHT ${id} task';;\nesac\n`, { mode: 0o755 });
+    const r = spawnSync(process.execPath, [script, '--sid', 'session'], { encoding: 'utf8', env: { ...process.env, FLEET_BIN: fleet, AUTOPILOT_MODEL_HANDOFF_DIR: dir } });
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(fs.readFileSync(r.stdout.trim(), 'utf8').includes('## 操作員最近說的話\ngo with plan C'));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

@@ -1,0 +1,40 @@
+{
+  "by_event": {
+    "UserPromptSubmit": 17467,
+    "Stop": 28396,
+    "PostToolUse": 62291,
+    "SessionStart": 237492,
+    "PreToolUse": 26633
+  },
+  "by_hook": {
+    "UserPromptSubmit": 17467,
+    "Stop": 28396,
+    "PostToolUse:Bash": 62291,
+    "SessionStart:compact": 120007,
+    "SessionStart": 117485,
+    "PreToolUse:Bash": 17636,
+    "PostToolUse:mcp__fleet__dispatch": 0,
+    "PreToolUse:Read": 1155,
+    "PostToolUse:mcp__fleet__reply": 0,
+    "PreToolUse:Agent": 7842,
+    "PostToolUse:ToolSearch": 0,
+    "PostToolUse:mcp__fleet__send": 0,
+    "PostToolUse:mcp__fleet__fetch": 0,
+    "PostToolUse:mcp__fleet__task_accept": 0
+  },
+  "targets": [
+    {
+      "hook": "PreToolUse:Bash",
+      "baseline_bytes": 17636,
+      "threshold_50pct": 8818
+    },
+    {
+      "hook": "UserPromptSubmit",
+      "baseline_bytes": 17467,
+      "threshold_50pct": 8733
+    }
+  ],
+  "prompts": 73,
+  "human_prompts": 24,
+  "injected_prompts": 49
+}

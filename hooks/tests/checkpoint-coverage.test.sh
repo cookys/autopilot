@@ -35,7 +35,7 @@ assert_file_exists "$AUTOPILOT_LIVE_DIR/checkpoint-coverage/orph.json" "record f
 # decision cards opened after the compaction (real open-decision in a temp repo)
 CWDR="$TEST_TMP/covrepo"; mkdir -p "$CWDR"
 ( cd "$CWDR" && git init -q -b main && git config user.email t@t && git config user.name t && echo a > a && git add a && git commit -q -m c )
-opencard() { HOME="$HOOK_HOME" node "$REPO_ROOT/scripts/open-decision.js" open --category presence --kind step --executor ns/cc/exec--claude --question "$1" --source t --cwd "$CWDR" --json 2>/dev/null < /dev/null | node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(0,"utf8")).id)'; }
+opencard() { HOME="$HOOK_HOME" node "$REPO_ROOT/scripts/open-decision.js" open --category presence --kind step --executor ns/cc/exec--claude --operator-step-none "test fixture card" --question "$1" --source t --cwd "$CWDR" --json 2>/dev/null < /dev/null | node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(0,"utf8")).id)'; }
 CARD1="$(opencard "orphan card")"; CARD2="$(opencard "covered card")"
 write_rec "the checkpoint named $COVT and $CARD2 only"
 

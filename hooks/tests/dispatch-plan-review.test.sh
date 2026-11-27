@@ -2,6 +2,7 @@
 export AUTOPILOT_KIMI_LOCAL_ALLOW=1  # Test-only: this suite uses fake Kimi binaries.
 # Durable heterogeneous plan-review session controller: P1-P4 contract.
 export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: seam suites with Chinese-family fixture seats
+export AUTOPILOT_FLEET_TASK=01M8F07CXPHRPDVC4JMFJDB8GM  # plan-review dispatches require a Fleet-Task id; fixture value
 . "$(dirname "$0")/lib.sh"
 
 SCRIPT="$REPO_ROOT/scripts/dispatch-plan-review.js"
@@ -1544,6 +1545,9 @@ const fs = require('fs');
 const m = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
 m.seats[0].runner = 'grok';
 m.seats[0].model = 'grok-fixture';
+// The family follows the runner now, so architect is xai; move operations off xai to keep the vote distinct.
+m.seats[0].family = 'xai';
+Object.assign(m.seats[1], { runner: 'claude-native', model: 'claude-fixture', family: 'anthropic', excluded_families: [], fallbacks: [] });
 fs.writeFileSync(process.argv[2], `${JSON.stringify(m, null, 2)}\n`);
 NODE
 VBP_PROD_SEQ="$(node -e '
@@ -2351,7 +2355,7 @@ printf '#!/usr/bin/env bash\nprintf '\''{"status":"done"}\\n'\''\n' > "$PR_FLEET
 printf '#!/usr/bin/env bash\nprintf '\''{"error":"not_found"}\\n'\'' ; exit 1\n' > "$PR_FLEET_NF"
 chmod +x "$PR_FLEET_OPEN" "$PR_FLEET_DONE" "$PR_FLEET_NF"
 
-PR_OUT="$(FLEET_BIN="$PR_FLEET_OPEN" node "$SCRIPT" --repo-root "$PR_PM_REPO" --plan-file "$PR_PM_REPO/plan.md" --rubric-file "$PR_PM_REPO/rubric.md" --ticket "pm-miss-1" --session-id "pm-s1" --generation 1 --manifest-file "$CODEX_SHA_MANIFEST" --state-dir "$PR_PM_DIR/state1" --allow-unregistered 2>&1)"; PR_RC=$?
+PR_OUT="$(env -u AUTOPILOT_FLEET_TASK FLEET_BIN="$PR_FLEET_OPEN" node "$SCRIPT" --repo-root "$PR_PM_REPO" --plan-file "$PR_PM_REPO/plan.md" --rubric-file "$PR_PM_REPO/rubric.md" --ticket "pm-miss-1" --session-id "pm-s1" --generation 1 --manifest-file "$CODEX_SHA_MANIFEST" --state-dir "$PR_PM_DIR/state1" --allow-unregistered 2>&1)"; PR_RC=$?
 assert_exit_code "$PR_RC" "2" "plan-review PM missing Fleet-Task exits 2"
 assert_contains "$PR_OUT" "Fleet-Task" "plan-review PM missing names Fleet-Task"
 

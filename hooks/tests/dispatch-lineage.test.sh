@@ -79,7 +79,7 @@ json_field() { # file key  → prints value via node (numbers unquoted, strings 
 run_hetero() { # runid extra-env...  (DETACH off unless overridden)
   local runid="$1"; shift
   ( cd "$SBX" && env "$@" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" DISPATCH_DETACH=0 DISPATCH_QUIET=1 \
-      "$HETERO" --no-verify-tip --branch "feat/$runid" --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --run-id "$runid" >/dev/null 2>&1 )
+      "$HETERO" --no-verify-tip --branch "feat/$runid" --prompt-file "$PROMPT" --runner agy --pin-reason "test stub engine" --agy-bin "$STUB_OK" --run-id "$runid" >/dev/null 2>&1 )
 }
 
 run_hetero root1

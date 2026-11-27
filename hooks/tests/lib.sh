@@ -188,6 +188,9 @@ export AUTOPILOT_MANAGED_SETTINGS_FILE="$TEST_TMP/.no-managed-settings.json"
 # An inherited CLAUDE_CONFIG_DIR (the operator's real one) must never reach a suite: each suite uses only
 # the directory it sets itself, so a native path with no fake credentials fails closed instead of reading it.
 unset CLAUDE_CONFIG_DIR
+# Same for the seat guard: a suite run from inside a token-seat session would otherwise make every claude-native
+# dispatch refuse (AUTOPILOT_TOKEN_SEAT=1 without a token). A suite that tests the guard sets it itself.
+unset AUTOPILOT_TOKEN_SEAT
 seed_fake_claude_credentials() {
   mkdir -p "$1" && printf '{"claudeAiOauth":{"accessToken":"fake-test-token"}}\n' > "$1/.credentials.json"
 }

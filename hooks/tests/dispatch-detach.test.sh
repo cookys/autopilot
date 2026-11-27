@@ -85,7 +85,7 @@ mk_slow_stub "$STUB_SLOW" 5
 _prev_pwd="$PWD"
 cd "$SBX"
 DISPATCH_HEARTBEAT_SECS=1 bash "$SCRIPT" \
-  --no-verify-tip --branch feat/kill --prompt-file "$PROMPT" --agy-bin "$STUB_SLOW" \
+  --no-verify-tip --branch feat/kill --prompt-file "$PROMPT" --runner agy --pin-reason "test stub engine" --agy-bin "$STUB_SLOW" \
   --ledger "$LEDGER_A" --run-id rk --stage implement \
   >"$TEST_TMP/kill-wrapper.out" 2>"$TEST_TMP/kill-wrapper.err" &
 WRAPPER_PID=$!
@@ -190,7 +190,7 @@ mkdir -p "$TEST_TMP/pack-term"
 (
   cd "$SBX"
   TMPDIR="$TEST_TMP/pack-term" DISPATCH_HEARTBEAT_SECS=1 \
-    bash "$SCRIPT" --no-verify-tip --branch feat/pack-term --prompt-file "$PROMPT" --agy-bin "$STUB_PACK_TERM" \
+    bash "$SCRIPT" --no-verify-tip --branch feat/pack-term --prompt-file "$PROMPT" --runner agy --pin-reason "test stub engine" --agy-bin "$STUB_PACK_TERM" \
       --skill-mode prompt --skill autopilot:dev-flow --ledger "$LEDGER_PACK" --run-id pg --stage implement > "$TEST_TMP/pack-term.out" 2> "$TEST_TMP/pack-term.err"
 ) &
 WRAPPER_G_PID=$!
@@ -224,7 +224,7 @@ STUB_QUICK="$TEST_TMP/agy-quick"
 mk_slow_stub "$STUB_QUICK" 1
 
 OUT_C="$(cd "$SBX" && DISPATCH_HEARTBEAT_SECS=1 bash "$SCRIPT" \
-  --no-verify-tip --branch feat/normal --prompt-file "$PROMPT" --agy-bin "$STUB_QUICK" \
+  --no-verify-tip --branch feat/normal --prompt-file "$PROMPT" --runner agy --pin-reason "test stub engine" --agy-bin "$STUB_QUICK" \
   --ledger "$LEDGER_C" --run-id rc --stage implement 2>/dev/null)"; EXIT_C=$?
 [ "$EXIT_C" -eq 0 ] || printf 'dispatch-detach diagnostic (transparent normal): %s\n' "$OUT_C" >&2
 reap_wt "$OUT_C"
@@ -263,7 +263,7 @@ make_agy_stub_versioned "$STUB_CONCURRENT"
 (
   cd "$SBX"
   AUTOPILOT_DISPATCH_RUNS_DIR="$MANIFEST_H" bash "$SCRIPT" \
-    --no-verify-tip --branch feat/concurrent --prompt-file "$PROMPT" --agy-bin "$STUB_CONCURRENT" \
+    --no-verify-tip --branch feat/concurrent --prompt-file "$PROMPT" --runner agy --pin-reason "test stub engine" --agy-bin "$STUB_CONCURRENT" \
     --ledger "$LEDGER_H" --run-id same-tuple --stage implement \
     > "$TEST_TMP/h/first.out" 2> "$TEST_TMP/h/first.err"
 ) &
@@ -274,7 +274,7 @@ fi
 (
   cd "$SBX"
   AUTOPILOT_DISPATCH_RUNS_DIR="$MANIFEST_H" bash "$SCRIPT" \
-    --no-verify-tip --branch feat/concurrent-second --prompt-file "$PROMPT" --agy-bin "$STUB_CONCURRENT" \
+    --no-verify-tip --branch feat/concurrent-second --prompt-file "$PROMPT" --runner agy --pin-reason "test stub engine" --agy-bin "$STUB_CONCURRENT" \
     --ledger "$LEDGER_H" --run-id same-tuple --stage implement
 ) > "$TEST_TMP/h/second.out" 2> "$TEST_TMP/h/second.err"
 SECOND_H_RC=$?
@@ -335,7 +335,7 @@ make_agy_stub_versioned "$STUB_CONCURRENT_H2"
   cd "$SBX"
   PATH="$FAKEBIN_H2:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$MANIFEST_H2" bash "$SCRIPT" \
     --no-verify-tip --branch feat/concurrent-no-setsid --prompt-file "$PROMPT" \
-    --agy-bin "$STUB_CONCURRENT_H2" \
+    --runner agy --pin-reason "test stub engine" --agy-bin "$STUB_CONCURRENT_H2" \
     --ledger "$LEDGER_H2" --run-id same-tuple-no-setsid --stage implement \
     > "$TEST_TMP/h2/first.out" 2> "$TEST_TMP/h2/first.err"
 ) &
@@ -354,7 +354,7 @@ assert_eq "1" "$H2_WORKTREES_DURING" \
   cd "$SBX"
   PATH="$FAKEBIN_H2:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$MANIFEST_H2" bash "$SCRIPT" \
     --no-verify-tip --branch feat/concurrent-no-setsid-second --prompt-file "$PROMPT" \
-    --agy-bin "$STUB_CONCURRENT_H2" \
+    --runner agy --pin-reason "test stub engine" --agy-bin "$STUB_CONCURRENT_H2" \
     --ledger "$LEDGER_H2" --run-id same-tuple-no-setsid --stage implement
 ) > "$TEST_TMP/h2/second.out" 2> "$TEST_TMP/h2/second.err"
 SECOND_H2_RC=$?
@@ -414,7 +414,7 @@ make_agy_stub_versioned "$STUB_NEVER_I"
   cd "$SBX"
   PATH="$FAKEBIN_I:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$MANIFEST_I" \
     bash "$SCRIPT" --no-verify-tip --branch feat/handoff-fail --prompt-file "$PROMPT" \
-    --agy-bin "$STUB_NEVER_I" --ledger "$LEDGER_I" \
+    --runner agy --pin-reason "test stub engine" --agy-bin "$STUB_NEVER_I" --ledger "$LEDGER_I" \
     --run-id handoff-fail --stage implement \
     > "$TEST_TMP/i/parent.out" 2> "$TEST_TMP/i/parent.err"
 ) &
@@ -490,6 +490,7 @@ normalize() { # strip run-volatile fields (commit sha / worktree / agent_log / b
     -e 's#"agent_log": "[^"]*"#"agent_log": "LOG"#' \
     -e 's#"branch": "[^"]*"#"branch": "BR"#' \
     -e 's#"run_id": "[^"]*"#"run_id": "RID"#' \
+    -e 's#"evidence_pack": "[^"]*"#"evidence_pack": "EP"#' \
     -e 's#"wall_secs": [0-9]+#"wall_secs": W#'
 }
 
@@ -497,10 +498,10 @@ normalize() { # strip run-volatile fields (commit sha / worktree / agent_log / b
 LEDGER_B="$TEST_TMP/b/ledger.jsonl"
 mkdir -p "$TEST_TMP/b"
 bash "$LEDGER_SH" init --ledger "$LEDGER_B" >/dev/null
-OUT_BASE="$(cd "$SBX" && bash "$SCRIPT" --no-verify-tip --branch feat/inline-base --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>/dev/null)"; EXIT_BASE=$?
+OUT_BASE="$(cd "$SBX" && bash "$SCRIPT" --no-verify-tip --branch feat/inline-base --prompt-file "$PROMPT" --runner agy --pin-reason "test stub engine" --agy-bin "$STUB_OK" 2>/dev/null)"; EXIT_BASE=$?
 
 # DISPATCH_DETACH=0 WITH ledger coords → must take the SAME inline path (detach fully bypassed).
-OUT_OFF="$(cd "$SBX" && DISPATCH_DETACH=0 bash "$SCRIPT" --no-verify-tip --branch feat/inline-off --prompt-file "$PROMPT" --agy-bin "$STUB_OK" \
+OUT_OFF="$(cd "$SBX" && DISPATCH_DETACH=0 bash "$SCRIPT" --no-verify-tip --branch feat/inline-off --prompt-file "$PROMPT" --runner agy --pin-reason "test stub engine" --agy-bin "$STUB_OK" \
   --ledger "$LEDGER_B" --run-id rb --stage implement 2>/dev/null)"; EXIT_OFF=$?
 
 assert_eq "$EXIT_BASE" "$EXIT_OFF" "DISPATCH_DETACH=0: exit code matches the legacy inline path"
@@ -516,7 +517,7 @@ assert_file_absent "${LEDGER_B}.results/rb.implement.result.json" "DISPATCH_DETA
 # =========================================================================================
 # (d) detach engages ONLY with ledger coords: default detach-on but NO coords → inline
 # =========================================================================================
-OUT_NC="$(cd "$SBX" && bash "$SCRIPT" --no-verify-tip --branch feat/nocoords --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>/dev/null)"; EXIT_NC=$?
+OUT_NC="$(cd "$SBX" && bash "$SCRIPT" --no-verify-tip --branch feat/nocoords --prompt-file "$PROMPT" --runner agy --pin-reason "test stub engine" --agy-bin "$STUB_OK" 2>/dev/null)"; EXIT_NC=$?
 assert_eq "0" "$EXIT_NC" "no ledger coords: inline committed exit 0"
 assert_contains "$OUT_NC" '"worktree": null' "no ledger coords: inline path (worktree removed)"
 

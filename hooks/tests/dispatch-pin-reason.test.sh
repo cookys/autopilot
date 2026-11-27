@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 . "$(dirname "$0")/lib.sh"
 install_cli_sentinels
-unset AUTOPILOT_FLEET_TASK AUTOPILOT_UPSTREAM_TASK_ID AUTOPILOT_LEVEL
+unset AUTOPILOT_UPSTREAM_TASK_ID AUTOPILOT_LEVEL; export AUTOPILOT_FLEET_TASK=01M8F07CXPHRPDVC4JMFJDB8GM
 export AUTOPILOT_DISPATCH_USAGE=off AUTOPILOT_ENDPOINT_PREPROBE=off DISPATCH_DETACH=0 DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0
 export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session" ENGINE_CAPABILITY_DIR="$TEST_TMP/cap" AUTOPILOT_DISPATCH_RUNS_DIR="$TEST_TMP/runs"
 export AUTOPILOT_PACE_FILE="$REPO_ROOT/scripts/fixtures/pace-select/scarce-codex.json" AUTOPILOT_QUALIFIED_FILE="$TEST_TMP/missing"
@@ -16,11 +16,15 @@ printf 'fixture\n' > fixture.txt
 exit 0
 STUB
 chmod +x "$TEST_TMP/codex"
+# the pool may route to grok (scarce-codex pace fixture); give it an explicit stub so PATH's sentinel is never hit
+printf '#!/usr/bin/env bash\ncase " $* " in *PONG*) echo PONG; exit 0 ;; esac\nprintf "fixture\\n" > fixture.txt\nexit 0\n' > "$TEST_TMP/grok-stub"; chmod +x "$TEST_TMP/grok-stub"
+# pace-select's live grok probe must hit the stub and a sandbox cache, never PATH's grok or the real $HOME probe record
+export AUTOPILOT_GROK_PROBE_BIN="$TEST_TMP/grok-stub" AUTOPILOT_GROK_PROBE_FILE="$TEST_TMP/grok-probe.json"
 SCRIPT="$REPO_ROOT/scripts/dispatch-hetero.sh"
 warning='dispatch-hetero: warning: --runner/--model hard pin without --pin-reason (the pool should choose; say why you pinned)'
 run_case() {
   local name="$1"; shift
-  (cd "$TEST_TMP/repo" && "$SCRIPT" --no-verify-tip --context-window off --codex-bin "$TEST_TMP/codex" --run-id "$name" --branch "feat/$name" --prompt-file "$TEST_TMP/prompt" "$@") >"$TEST_TMP/$name.out" 2>"$TEST_TMP/$name.err"
+  (cd "$TEST_TMP/repo" && "$SCRIPT" --no-verify-tip --context-window off --codex-bin "$TEST_TMP/codex" --grok-bin "$TEST_TMP/grok-stub" --run-id "$name" --branch "feat/$name" --prompt-file "$TEST_TMP/prompt" "$@") >"$TEST_TMP/$name.out" 2>"$TEST_TMP/$name.err"
   CASE_RC=$?
   [ "$CASE_RC" -eq 0 ] || [ "$name" = invalid ] || cat "$TEST_TMP/$name.out" "$TEST_TMP/$name.err" >&2
 }

@@ -280,7 +280,7 @@ EOF
 chmod +x "$STUB_OK"
 make_agy_stub_versioned "$STUB_OK"
 
-OUT="$(cd "$SBX" && "$HETERO" --no-verify-tip --branch t/obs-e2e --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>/dev/null)"; RC=$?
+OUT="$(cd "$SBX" && "$HETERO" --no-verify-tip --branch t/obs-e2e --prompt-file "$PROMPT" --runner agy --pin-reason "test stub engine" --agy-bin "$STUB_OK" 2>/dev/null)"; RC=$?
 assert_eq "$RC" "0" "e2e: committed exit 0"
 assert_contains "$OUT" '"status": "committed"' "e2e: committed status"
 assert_contains "$OUT" '"run_id": "hetero-' "e2e: final JSON carries generated run_id"
@@ -311,7 +311,7 @@ chmod +x "$STUB_SLOW"
 make_agy_stub_versioned "$STUB_SLOW"
 
 MIDOUT_FILE="$TEST_TMP/mid.json"
-( cd "$SBX" && "$HETERO" --no-verify-tip --branch t/obs-mid --prompt-file "$PROMPT" --agy-bin "$STUB_SLOW" > "$MIDOUT_FILE" 2>/dev/null ) &
+( cd "$SBX" && "$HETERO" --no-verify-tip --branch t/obs-mid --prompt-file "$PROMPT" --runner agy --pin-reason "test stub engine" --agy-bin "$STUB_SLOW" > "$MIDOUT_FILE" 2>/dev/null ) &
 DISPATCH_PID=$!
 # Poll for a mid-run observation (manifest present AND alive:true) rather than
 # assuming a fixed offset into the stub's sleep window (load can consume the
@@ -365,9 +365,9 @@ fi
 
 # ---------- 8. AUTOPILOT_DISPATCH_MANIFEST=0 escape hatch ----------
 RUNS_DIR2="$TEST_TMP/runs2"; mkdir -p "$RUNS_DIR2"
-OUT="$(cd "$SBX" && AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS_DIR2" AUTOPILOT_DISPATCH_MANIFEST=0 "$HETERO" --no-verify-tip --branch t/obs-off --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>/dev/null)"
+OUT="$(cd "$SBX" && AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS_DIR2" AUTOPILOT_DISPATCH_MANIFEST=0 "$HETERO" --no-verify-tip --branch t/obs-off --prompt-file "$PROMPT" --runner agy --pin-reason "test stub engine" --agy-bin "$STUB_OK" 2>/dev/null)"
 assert_contains "$OUT" '"status": "committed"' "manifest-off: dispatch unaffected"
-assert_eq "$(ls "$RUNS_DIR2" 2>/dev/null | wc -l | tr -d ' ')" "0" "manifest-off: no manifest written"
+assert_eq "$(find "$RUNS_DIR2" -name "*.manifest.json" 2>/dev/null | wc -l | tr -d ' ')" "0" "manifest-off: no manifest written"
 git -C "$SBX" branch -D t/obs-off >/dev/null 2>&1
 
 # unknown is null, never 0: opencode / pi-rpc steps that omit a key leave that key null in the usage line

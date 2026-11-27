@@ -1,4 +1,7 @@
 #!/bin/sh
+if [ -f "$(git rev-parse --show-toplevel)/scripts/knowledge-review.js" ] && [ -d "$HOME/.autopilot/knowledge-candidates" ] && command -v node >/dev/null 2>&1; then
+  node "$(git rev-parse --show-toplevel)/scripts/knowledge-review.js" scan-staged || exit 1
+fi
 # hippo-guard v1
 # Installed by hippo. hippo is looked up on PATH, then at $HOME/.local/bin/hippo (the installer's link;
 # agent sessions started from tmux often lack ~/.local/bin on PATH). Without either the check is skipped with a warning.

@@ -69,7 +69,18 @@ export STUB_DIR="$STUB" AUTOPILOT_FLEET_BIN="$STUB/fleet"
 calls() { cat "$STUB/calls" 2>/dev/null; }
 reset() { rm -f "$STUB/calls" "$STUB/answers"; printf '%s' "${1:-ok}" > "$STUB/mode"; }
 Q="Should the panel claim before it sends?"
-open_card() { node "$OD" open --category goal --executor ns/cc/exec--claude --cwd "$R" --root-run-id root-t --title '要改嗎' --question "$Q" --option "Alpha::a" --option "Beta::b" --recommendation Alpha --not-authorized irreversible 2>/dev/null | head -1; }
+# the suite re-opens one question many times; the duplicate gate refuses while an earlier card with it exists. Retry, declaring the card it
+# names not-a-duplicate (open card) or superseding it (answered card).
+open_card() {
+  local a=(--category goal --executor ns/cc/exec--claude --cwd "$R" --root-run-id root-t --title '要改嗎' --question "$Q" --option "Alpha::a" --option "Beta::b" --recommendation Alpha --not-authorized irreversible) out id i
+  for i in 1 2 3 4 5 6 7 8; do
+    out="$(node "$OD" open "${a[@]}" 2>"$TEST_TMP/oc.err" | head -1)"; [ -n "$out" ] && break
+    id="$(grep -o '已有[已答卡]* d-[0-9a-f]*' "$TEST_TMP/oc.err" | head -1 | grep -o 'd-[0-9a-f]*')"; [ -n "$id" ] || break
+    if grep -q '已有已答卡' "$TEST_TMP/oc.err"; then a+=(--supersede "$id" --supersede-reason "test fixture reopens one question")
+    else a+=(--not-duplicate-of "$id"); grep -q -- '--not-duplicate-reason' <<<"${a[*]}" || a+=(--not-duplicate-reason "test fixture reopens one question"); fi
+  done
+  printf '%s\n' "$out"
+}
 is_open() { node "$OD" show --cwd "$R" 2>/dev/null | grep -q "$1"; }
 hook() { HOUT="$(node -e 'process.stdout.write(JSON.stringify({session_id:"vf",cwd:process.argv[1],prompt:process.argv[2]}))' "$R" "$1" | node "$HOOK" 2>"$TEST_TMP/herr")"; HRC=$?; }
 jf() { node -e 'const j=JSON.parse(process.argv[1]);const v=j[process.argv[2]];console.log(v===null?"null":v)' "$1" "$2"; }

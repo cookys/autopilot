@@ -25,7 +25,7 @@ od; assert_eq "$RC" 7 "missing --category: exit 7"; assert_contains "$ERR" "這�
 node "$OD" open --kind step --cwd "$R" --question "do x" >/dev/null 2>"$TEST_TMP/err"; assert_eq "$?" 7 "--kind step without --category: exit 7"
 # each of the seven opens and is stored, and show prints it
 for c in money identity presence goal public-release unbackable-loss authority; do
-  od --category "$c"; assert_eq "$RC" 0 "--category $c: exit 0"; assert_eq "$(field "$OUT" category)" "$c" "--category $c: category stored"
+  extra=(); case "$c" in identity|presence) extra=(--operator-step-none "test fixture: the category check, no operator act");; esac; od --category "$c" "${extra[@]}"; assert_eq "$RC" 0 "--category $c: exit 0"; assert_eq "$(field "$OUT" category)" "$c" "--category $c: category stored"
   assert_contains "$(node "$OD" show --cwd "$R" --id "$OUT")" "category: $c" "--category $c: show prints it"
 done
 # usage text (printed on bad args) lists all seven values, each with its Chinese label
@@ -89,11 +89,11 @@ shape --free-text --title '要改嗎' --question '理由是什麼？' --recommen
 assert_eq "$RC" 2 "free-text recommendation that is a question: exit 2"; assert_contains "$ERR" "問句" "free-text recommendation: question-mark rule"
 shape --free-text --title '要改嗎' --question '理由是什麼？'
 assert_eq "$RC" 0 "free-text decide card with no recommendation: exit 0"
-MUT="$TEST_TMP/shape-mut"; rm -rf "$MUT"; mkdir -p "$MUT/scripts"; ln -s "$REPO_ROOT/src" "$MUT/src"
+MUT="$TEST_TMP/shape-mut"; rm -rf "$MUT"; mkdir -p "$MUT/scripts"; ln -s "$REPO_ROOT/src" "$MUT/src"; ln -s "$REPO_ROOT/hooks" "$MUT/hooks"
 for f in "$REPO_ROOT/scripts"/*; do ln -s "$f" "$MUT/scripts/$(basename "$f")"; done
 rm "$MUT/scripts/open-decision.js"
 sed_mutant "$OD" "$MUT/scripts/open-decision.js" '/DECIDE_CARD_SHAPE/d' || fail "premise mutant did not apply"
-OUT="$(node "$MUT/scripts/open-decision.js" open --category identity --executor ns/cc/exec--claude --cwd "$R" --root-run-id root-t --not-authorized irreversible --title "$TITLE2180" --question "$Q2180" --background "$BG2180" --option "$OA2180" --option "$OB2180" --recommendation "$REC2180" --premise-source "$TEST_TMP/premise-inferred.txt" 2>"$TEST_TMP/err")"; RC=$?
+OUT="$(node "$MUT/scripts/open-decision.js" open --category identity --operator-step-none "test fixture: mutant probe" --executor ns/cc/exec--claude --cwd "$R" --root-run-id root-t --not-authorized irreversible --title "$TITLE2180" --question "$Q2180" --background "$BG2180" --option "$OA2180" --option "$OB2180" --recommendation "$REC2180" --premise-source "$TEST_TMP/premise-inferred.txt" 2>"$TEST_TMP/err")"; RC=$?
 assert_eq "$RC" 0 "mutant (decide-card shape check removed): the inferred 2180 card opens, so the refusal above would be red"
 assert_contains "$OUT" "d-" "mutant: inferred card id printed"
 finalize_test

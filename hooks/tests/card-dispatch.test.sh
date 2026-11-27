@@ -85,7 +85,19 @@ mkcard() {
     done
     rec=(--recommendation "$lab")
   fi
-  node "$OD" open --category goal --executor "$EXEC" --cwd "$R" --root-run-id root-t --title '要改嗎' --question "$q" "${args[@]}" "${rec[@]}" --not-authorized irreversible 2>/dev/null | head -1
+  # the scenarios deliberately reuse one question; the duplicate gate refuses a re-open while an earlier card with it exists:
+  # declare the earlier cards not-a-duplicate, and supersede an answered one when the gate names it
+  local nd=() c sup=() out old
+  if [ -s "$TEST_TMP/mkcards" ]; then while read -r c; do nd+=(--not-duplicate-of "$c"); done < "$TEST_TMP/mkcards"; nd+=(--not-duplicate-reason "test fixture reuses one question"); fi
+  out="$(node "$OD" open --category goal --executor "$EXEC" --cwd "$R" --root-run-id root-t --title '要改嗎' --question "$q" "${args[@]}" "${rec[@]}" "${nd[@]}" --not-authorized irreversible 2>"$TEST_TMP/mke" | head -1)"
+  if [ -z "$out" ]; then
+    old="$(grep -o '已有已答卡 d-[0-9a-f]*' "$TEST_TMP/mke" | head -1 | grep -o 'd-[0-9a-f]*')"
+    if [ -n "$old" ]; then
+      out="$(node "$OD" open --category goal --executor "$EXEC" --cwd "$R" --root-run-id root-t --title '要改嗎' --question "$q" "${args[@]}" "${rec[@]}" "${nd[@]}" --supersede "$old" --supersede-reason "test fixture reuses one question" --not-authorized irreversible 2>"$TEST_TMP/mke" | head -1)"
+    fi
+  fi
+  [ -n "$out" ] && echo "$out" >> "$TEST_TMP/mkcards"
+  printf '%s\n' "$out"
 }
 sendfield() { node -e 'const l=require("fs").readFileSync(process.argv[1],"utf8").split("\n").filter(Boolean);const o=JSON.parse(l[Number(process.argv[2])]);const x=o[process.argv[3]];process.stdout.write(x===null?"<null>":String(x))' "$STUB/sends.jsonl" "$1" "$2"; }
 

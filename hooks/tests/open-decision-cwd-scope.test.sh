@@ -50,13 +50,13 @@ write_marker "$MARK" 3600 "$IDENT"
 # open_at <process-cwd> [extra args...]: sets OUT RC ERR. No --cwd unless the caller passes it.
 open_at() {
   local dir="$1"; shift
-  OUT="$(cd "$dir" && AUTOPILOT_SESSION_ID="$SID" node "$OD" open --category goal --executor ns/cc/exec--claude --title '要改嗎' --question "Where does the card go?" --option "A::a" --option "B::b" --recommendation A --not-authorized irreversible "$@" 2>"$ERRF")"
+  OUT="$(cd "$dir" && AUTOPILOT_SESSION_ID="$SID" node "$OD" open --category goal --executor ns/cc/exec--claude --title '要改嗎' --question "Where does card ${RANDOM}${RANDOM} go?" --option "A::a" --option "B::b" --recommendation A --not-authorized irreversible "$@" 2>"$ERRF")"
   RC=$?
   ERR="$(cat "$ERRF")"
 }
 open_nosess() {
   local dir="$1"; shift
-  OUT="$(cd "$dir" && env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u CLAUDE_SESSION_ID -u CODEX_THREAD_ID node "$OD" open --category goal --executor ns/cc/exec--claude --title '要改嗎' --question "Where does the card go?" --option "A::a" --option "B::b" --recommendation A --not-authorized irreversible "$@" 2>"$ERRF")"
+  OUT="$(cd "$dir" && env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u CLAUDE_SESSION_ID -u CODEX_THREAD_ID node "$OD" open --category goal --executor ns/cc/exec--claude --title '要改嗎' --question "Where does card ${RANDOM}${RANDOM} go?" --option "A::a" --option "B::b" --recommendation A --not-authorized irreversible "$@" 2>"$ERRF")"
   RC=$?
   ERR="$(cat "$ERRF")"
 }
@@ -128,7 +128,7 @@ assert_contains "$ERR" "$MARK" "repo_root only: names the marker repo"
 MUT="$TEST_TMP/mut"
 rm -rf "$MUT"
 mkdir -p "$MUT/scripts"
-ln -s "$REPO_ROOT/src" "$MUT/src"
+ln -s "$REPO_ROOT/src" "$MUT/src"; ln -s "$REPO_ROOT/hooks" "$MUT/hooks"
 for f in "$REPO_ROOT"/scripts/*; do
   [ "$(basename "$f")" = open-decision.js ] && continue
   ln -s "$f" "$MUT/scripts/$(basename "$f")"

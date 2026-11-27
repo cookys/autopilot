@@ -15,6 +15,13 @@ const { findDuplicateCards } = require('./open-decision.js');
 
 const EXEC = 'ns/courier/member';
 
+// identity/presence cards need concrete operator steps (open-decision refuses otherwise); these tests are about executors and duplicates, so declare none
+function withStep(args) {
+  const c = args.indexOf('--category');
+  const needs = args[0] === 'open' && c >= 0 && ['identity', 'presence'].includes(args[c + 1]) && !args.some((a) => a.startsWith('--operator-step'));
+  return needs ? [...args, '--operator-step-none', 'test fixture: not about operator steps'] : args;
+}
+
 function scratch(role = 'solo') {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'od-home-'));
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'od-repo-'));
@@ -39,11 +46,11 @@ function scratch(role = 'solo') {
     repo,
     env,
     run(args) {
-      return spawnSync(process.execPath, [OD, ...args], { env, encoding: 'utf8' });
+      return spawnSync(process.execPath, [OD, ...withStep(args)], { env, encoding: 'utf8' });
     },
     runAsync(args) {
       return new Promise((resolve, reject) => {
-        const child = spawn(process.execPath, [OD, ...args], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+        const child = spawn(process.execPath, [OD, ...withStep(args)], { env, stdio: ['ignore', 'pipe', 'pipe'] });
         let stdout = '';
         let stderr = '';
         child.stdout.setEncoding('utf8').on('data', (chunk) => { stdout += chunk; });

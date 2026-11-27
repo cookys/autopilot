@@ -2088,6 +2088,7 @@ async function framePress($: EngineInterface, id: string): Promise<void> {
 // the live mod's session start. A function of its own because Claude Code refuses a second matcher-less `session.start` hook in one plugin: the composed module
 // (mods/register.ts) registers the one hook and calls this and the viewer's start; the live mod's own tests use `register` below, which hooks it alone.
 export async function startLive($: EngineInterface): Promise<void> {
+  await readTerminalColour($)
   try {
     await $.command.register({ name: 'live-pane', description: 'Open the Autopilot side pane (it is never opened on its own)' })
   } catch (_e) {
@@ -3107,10 +3108,16 @@ function hostScrollHome($: EngineInterface, scroll: { offset: number } | undefin
   if (scroll !== undefined && scroll.offset > 0) void $.ui.scroll({ in: PANE_ID, to: 'start' }).catch(() => undefined)
 }
 
+// COLORTERM/TERM, read once by startLive (the real session.start hook lives in mods/register.ts; the one below is unused by the entry)
+export async function readTerminalColour($: any): Promise<void> {
+  const colorterm = await $.env.get('COLORTERM').catch(() => undefined)
+  const term = await $.env.get('TERM').catch(() => undefined)
+  setTruecolor(isTruecolorValue(colorterm, term))
+}
+
 export const register: Register = on => {
   registerLive(on)
   on('session.start', async ($, e, next) => {
-    setTruecolor(isTruecolorValue(await $.env.get('COLORTERM'), await $.env.get('TERM')))
     await startLive($)
     return next(e)
   })

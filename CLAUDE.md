@@ -49,7 +49,7 @@ For Claude Code sessions working **on** the autopilot plugin itself. Other agent
 
 See the [project overview](docs/dev/_archive/entry-docs/claude-md-detail.md#what-this-repo-is).
 
-32 skills, 3 methodology agents, 67 hooks (47 default-on, 20 opt-in).
+32 skills, 3 methodology agents, 70 hooks (50 default-on, 20 opt-in).
 
 ## Scripts (prefer over LLM judgment)
 

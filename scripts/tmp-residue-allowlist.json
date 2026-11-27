@@ -18,11 +18,6 @@
       "reason": "Comparison rejects a shared temp-root path; it allocates nothing."
     },
     {
-      "file": "hooks/dispatch-model-guard.js",
-      "match": "base.startsWith('/tmp/')",
-      "reason": "Comparison rejects a shared temp-root path; it allocates nothing."
-    },
-    {
       "file": "scripts/bg-quiet.sh",
       "match": "WATCH_ERR_FILE=\"$(mktemp)\"",
       "reason": "Bare mktemp captures watch stderr and is explicitly removed immediately after reading it."
@@ -352,6 +347,196 @@
       "file": "scripts/open-decision.js",
       "match": "const SCRATCH_ROOTS = [",
       "reason": "Read-only path prefix test (is the repo under a scratch root, so the card store skips it); nothing is allocated or written under these prefixes."
+    },
+    {
+      "file": "scripts/probes/p1.sh",
+      "match": "TMPDIR_PROBE=\"$(mktemp -d)\"",
+      "reason": "Probe fixture directory removed by the following EXIT trap."
+    },
+    {
+      "file": "scripts/probes/p1.sh",
+      "match": "trap 'rm -rf \"$TMPDIR_PROBE\"' EXIT",
+      "reason": "Probe fixture inside a temporary directory removed by its EXIT trap."
+    },
+    {
+      "file": "scripts/probes/p1.sh",
+      "match": "export HOME=\"$TMPDIR_PROBE/home\"",
+      "reason": "Probe fixture inside a temporary directory removed by its EXIT trap."
+    },
+    {
+      "file": "scripts/probes/p1.sh",
+      "match": "cat > \"$TMPDIR_PROBE/valid.md\" <<'EOF'",
+      "reason": "Probe fixture inside a temporary directory removed by its EXIT trap."
+    },
+    {
+      "file": "scripts/probes/p1.sh",
+      "match": "node \"$LINT\" \"$TMPDIR_PROBE/valid.md\" >/dev/null",
+      "reason": "Probe fixture inside a temporary directory removed by its EXIT trap."
+    },
+    {
+      "file": "scripts/probes/p1.sh",
+      "match": "cat > \"$TMPDIR_PROBE/bad.md\" <<'EOF'",
+      "reason": "Probe fixture inside a temporary directory removed by its EXIT trap."
+    },
+    {
+      "file": "scripts/probes/p1.sh",
+      "match": "err=\"$(node \"$LINT\" \"$TMPDIR_PROBE/bad.md\" 2>&1 >/dev/null)\"",
+      "reason": "Probe fixture inside a temporary directory removed by its EXIT trap."
+    },
+    {
+      "file": "scripts/probes/p2.sh",
+      "match": "TMPDIR_PROBE=\"$(mktemp -d)\"",
+      "reason": "Probe fixture directory removed by the following EXIT trap."
+    },
+    {
+      "file": "scripts/probes/p2.sh",
+      "match": "trap 'rm -rf \"$TMPDIR_PROBE\"' EXIT",
+      "reason": "Probe fixture inside a temporary directory removed by its EXIT trap."
+    },
+    {
+      "file": "scripts/probes/p2.sh",
+      "match": "export HOME=\"$TMPDIR_PROBE/home\"",
+      "reason": "Probe fixture inside a temporary directory removed by its EXIT trap."
+    },
+    {
+      "file": "scripts/probes/p2.sh",
+      "match": "TEST_REPO=\"$TMPDIR_PROBE/repo\"",
+      "reason": "Probe fixture inside a temporary directory removed by its EXIT trap."
+    },
+    {
+      "file": "scripts/probes/p2.sh",
+      "match": "RECEIPT=\"$TMPDIR_PROBE/p2.freeze-receipt.json\"",
+      "reason": "Probe fixture inside a temporary directory removed by its EXIT trap."
+    },
+    {
+      "file": "scripts/probes/p2.sh",
+      "match": "FLEET_LOG=\"$TMPDIR_PROBE/fleet.log\"",
+      "reason": "Probe fixture inside a temporary directory removed by its EXIT trap."
+    },
+    {
+      "file": "scripts/probes/p2.sh",
+      "match": "FLEET_STATE=\"$TMPDIR_PROBE/fleet-tasks.json\"",
+      "reason": "Probe fixture inside a temporary directory removed by its EXIT trap."
+    },
+    {
+      "file": "scripts/probes/p2.sh",
+      "match": "STUB_FLEET=\"$TMPDIR_PROBE/fleet-stub.sh\"",
+      "reason": "Probe fixture inside a temporary directory removed by its EXIT trap."
+    },
+    {
+      "file": "scripts/probes/p2.sh",
+      "match": "BAD_RECEIPT=\"$TMPDIR_PROBE/p2-bad.freeze-receipt.json\"",
+      "reason": "Probe fixture inside a temporary directory removed by its EXIT trap."
+    },
+    {
+      "file": "scripts/probes/p3.sh",
+      "match": "TMPDIR_PROBE=\"$(mktemp -d)\"",
+      "reason": "Probe fixture directory removed by the following EXIT trap."
+    },
+    {
+      "file": "scripts/probes/p3.sh",
+      "match": "trap 'rm -rf \"$TMPDIR_PROBE\"' EXIT",
+      "reason": "Probe fixture inside a temporary directory removed by its EXIT trap."
+    },
+    {
+      "file": "scripts/probes/p3.sh",
+      "match": "export HOME=\"$TMPDIR_PROBE/home\"",
+      "reason": "Probe fixture inside a temporary directory removed by its EXIT trap."
+    },
+    {
+      "file": "scripts/probes/p3.sh",
+      "match": "TEST_REPO=\"$TMPDIR_PROBE/repo\"",
+      "reason": "Probe fixture inside a temporary directory removed by its EXIT trap."
+    },
+    {
+      "file": "scripts/probes/p3.sh",
+      "match": "RECEIPT=\"$TMPDIR_PROBE/p3.freeze-receipt.json\"",
+      "reason": "Probe fixture inside a temporary directory removed by its EXIT trap."
+    },
+    {
+      "file": "scripts/probes/p3.sh",
+      "match": "FLEET_LOG=\"$TMPDIR_PROBE/fleet.log\"",
+      "reason": "Probe fixture inside a temporary directory removed by its EXIT trap."
+    },
+    {
+      "file": "scripts/probes/p3.sh",
+      "match": "FLEET_STATE=\"$TMPDIR_PROBE/fleet-tasks.json\"",
+      "reason": "Probe fixture inside a temporary directory removed by its EXIT trap."
+    },
+    {
+      "file": "scripts/probes/p3.sh",
+      "match": "STUB_FLEET=\"$TMPDIR_PROBE/fleet-stub.sh\"",
+      "reason": "Probe fixture inside a temporary directory removed by its EXIT trap."
+    },
+    {
+      "file": "scripts/probes/p3.sh",
+      "match": "BAD_RECEIPT=\"$TMPDIR_PROBE/p3-bad.freeze-receipt.json\"",
+      "reason": "Probe fixture inside a temporary directory removed by its EXIT trap."
+    },
+    {
+      "file": "scripts/probes/p4.sh",
+      "match": "TMPDIR_PROBE=\"$(mktemp -d)\"",
+      "reason": "Probe fixture directory removed by the following EXIT trap."
+    },
+    {
+      "file": "scripts/probes/p4.sh",
+      "match": "trap 'rm -rf \"$TMPDIR_PROBE\"' EXIT",
+      "reason": "Probe fixture inside a temporary directory removed by its EXIT trap."
+    },
+    {
+      "file": "scripts/probes/p4.sh",
+      "match": "export HOME=\"$TMPDIR_PROBE/home\"",
+      "reason": "Probe fixture inside a temporary directory removed by its EXIT trap."
+    },
+    {
+      "file": "scripts/probes/p4.sh",
+      "match": "STUB_FLEET=\"$TMPDIR_PROBE/fleet-stub.sh\"",
+      "reason": "Probe fixture inside a temporary directory removed by its EXIT trap."
+    },
+    {
+      "file": "hooks/claude-home-read-guard.js",
+      "match": "const dir = path.join",
+      "reason": "Read-only lookup of card exception state; allocates nothing."
+    },
+    {
+      "file": "scripts/card-exception-grant.js",
+      "match": "const dir = path.join",
+      "reason": "Selects the parent of card exception state; this line allocates nothing."
+    },
+    {
+      "file": "scripts/dispatch-from-scratch.sh",
+      "match": "TMP_ROOT=",
+      "reason": "Selects the scratch parent; this assignment allocates nothing."
+    },
+    {
+      "file": "scripts/hetero-panel.sh",
+      "match": "BASE_TMP=",
+      "reason": "Selects the scratch parent; this assignment allocates nothing."
+    },
+    {
+      "file": "scripts/lane-ops.sh",
+      "match": "LOG_DIR=",
+      "reason": "Selects the dispatch log parent; this assignment allocates nothing."
+    },
+    {
+      "file": "scripts/plan-sync-run.sh",
+      "match": "tmp=\"$(mktemp -d)\"",
+      "reason": "Bare temporary directory removed by the EXIT trap on this line."
+    },
+    {
+      "file": "scripts/measure-cn-shingle-build.js",
+      "match": "fs.mkdtempSync('/dev/shm/cn-shingle-measure-')",
+      "reason": "Measurement runtime directory outside the temp root, removed in finally."
+    },
+    {
+      "file": "scripts/dispatch-usage-push.sh",
+      "match": "usage_tmp=$(mktemp",
+      "reason": "Allocates the registered dispatch-usage-push. prefix; EXIT trap unlinks it."
+    },
+    {
+      "file": "scripts/hetero-panel.sh",
+      "match": "TMP_WORK=\"$(mktemp",
+      "reason": "Allocates the registered hetero-panel. prefix; EXIT trap removes it."
     }
   ]
 }

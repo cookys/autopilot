@@ -872,6 +872,55 @@
       "owner": "scripts/dispatch-hetero.sh",
       "retention_days": null,
       "reason": "Inline dispatch evidence with an automatically generated hetero- run ID; retained as evidence and pruned after retention."
+    },
+    {
+      "pattern": "dep-cache-*",
+      "kind": "scratch",
+      "owner": "scripts/build-dep-cache.js",
+      "retention_days": null,
+      "reason": "Per-suite trace directory removed in finally."
+    },
+    {
+      "pattern": "eval-skill-triggers-*",
+      "kind": "scratch",
+      "owner": "scripts/eval-skill-triggers.js",
+      "retention_days": null,
+      "reason": "Evaluation fixture directory removed in finally."
+    },
+    {
+      "pattern": "fleet-tools-regress-*",
+      "kind": "scratch",
+      "owner": "scripts/fleet-tools-regress.js",
+      "retention_days": null,
+      "reason": "Regression fixture directory removed in finally."
+    },
+    {
+      "pattern": "replay-negctrl-*",
+      "kind": "scratch",
+      "owner": "scripts/lib/replay-sandbox.js",
+      "retention_days": null,
+      "reason": "Negative control fixture directory removed in finally."
+    },
+    {
+      "pattern": "cn-shingle-measure-*",
+      "kind": "scratch",
+      "owner": "scripts/measure-cn-shingle-build.js",
+      "retention_days": null,
+      "reason": "Measurement sandbox removed in finally."
+    },
+    {
+      "pattern": "dispatch-usage-push.*",
+      "kind": "scratch",
+      "owner": "scripts/dispatch-usage-push.sh",
+      "retention_days": null,
+      "reason": "Usage upload scratch removed by EXIT trap."
+    },
+    {
+      "pattern": "hetero-panel.*",
+      "kind": "scratch",
+      "owner": "scripts/hetero-panel.sh",
+      "retention_days": null,
+      "reason": "Panel working directory removed by EXIT trap."
     }
   ]
 }

@@ -47,11 +47,32 @@ function messageText(input) {
   return parts.join('\n');
 }
 
+// Header lines are the leading `key: value` lines (task_id:, tag:). The body is the rest.
+function splitHeader(text) {
+  const lines = String(text).split('\n');
+  const header = {};
+  let i = 0;
+  for (; i < lines.length; i++) {
+    const m = /^\s*([a-z_]+):\s*(.*)$/i.exec(lines[i]);
+    if (!m) { if (lines[i].trim() === '') continue; break; }
+    header[m[1].toLowerCase()] = m[2].trim();
+  }
+  return { header, body: lines.slice(i).join('\n') };
+}
+
+const RULING_TAG = /^(ruling|go|裁定|核准|凍結)$/i;
+const RULING_FIRST_LINE = /^\s*(ruling|go|核准|凍結)(?![a-z0-9])/i;
+
+// Only an actual ruling triggers: an explicit `tag:` header decides alone (result/progress/question never
+// trigger); with no tag header the first body line must open with ruling/go/核准/凍結. Mentioning the
+// words inside a report does not trigger.
 function triggered(input, text) {
   const name = input && input.tool_name;
   if (name === 'Bash') return /open-decision\.js\b[\s\S]*\bclose\b/.test(text);
   if (!TOOLS.has(name)) return false;
-  return /ruling/i.test(text) || /\bgo\b/i.test(text) || /凍結|核准/.test(text);
+  const { header, body } = splitHeader(text);
+  if (header.tag !== undefined) return RULING_TAG.test(header.tag);
+  return RULING_FIRST_LINE.test(body);
 }
 
 function parseConstraints(raw) {
@@ -93,9 +114,19 @@ function parseConstraints(raw) {
   return { vocab, entries };
 }
 
+// ASCII keywords match at a word start (so `ui` does not match `guide`); CJK keywords match as substrings.
+function keywordHit(hay, kw) {
+  const k = kw.toLowerCase();
+  if (/^[\x00-\x7f]+$/.test(k)) {
+    const esc = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(?<![a-z0-9])${esc}`).test(hay);
+  }
+  return hay.includes(k);
+}
+
 function scopesIn(text, vocab) {
   const hay = text.toLowerCase();
-  return vocab.filter((row) => row.keywords.some((kw) => hay.includes(kw.toLowerCase()))).map((row) => row.scope);
+  return vocab.filter((row) => row.keywords.some((kw) => keywordHit(hay, kw))).map((row) => row.scope);
 }
 
 function readRefs(message, repo) {
@@ -179,7 +210,7 @@ function evaluate(input) {
   if (fetched.error) {
     return deny(`引用的 path@sha 讀不到：${fetched.error}。請改成這個 repo 裡讀得到的 path@sha。`);
   }
-  const plan = `${message}\n${fetched.text}`;
+  const plan = `${splitHeader(message).body}\n${fetched.text}`;
   const scopes = new Set(scopesIn(plan, parsed.vocab));
   const bin = process.env.PM_ANSWER_LOOKUP_BIN || '';
   const cache = new Map();

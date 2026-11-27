@@ -265,6 +265,39 @@ test('PM seat with PM_CONSTRAINTS_FILE unset or unreadable denies (no silent fai
   assert.strictEqual(r3.stdout, '');
 });
 
+function reply(text) {
+  return { hook_event_name: 'PreToolUse', tool_name: 'mcp__fleet__reply', tool_input: { text } };
+}
+const HC_ENV = (home) => ({ HOME: home, FLEET_ADDRESS: PM, PM_CONSTRAINTS_FILE: FIXTURE, PM_ANSWER_LOOKUP_BIN: lookupStub(home) });
+
+test('tag: result / progress / question never trigger even if the body says ruling, go, vzdump', () => {
+  const home = tmp();
+  for (const tag of ['result', 'progress', 'question']) {
+    const r = run(HOOK_C, reply(`task_id: 01M8EXAMPLE\ntag: ${tag}\n已收到 ruling，go 照做；之前提過 vzdump 和 migration 核准。`), HC_ENV(home));
+    assert.strictEqual(r.stdout, '', `${tag}: ${r.stdout}`);
+  }
+});
+
+test('tag: ruling triggers and vzdump is denied', () => {
+  const home = tmp();
+  const r = run(HOOK_C, reply('task_id: 01M8EXAMPLE\ntag: ruling\n搬遷改用 vzdump 整機備份'), HC_ENV(home));
+  assert.strictEqual(JSON.parse(r.stdout).hookSpecificOutput.permissionDecision, 'deny');
+});
+
+test('untagged text only triggers when the first line opens with ruling/go/核准', () => {
+  const home = tmp();
+  const quiet = run(HOOK_C, reply('回報：昨天那個 go 已經做完，搬遷用 vzdump 的舊案不再用'), HC_ENV(home));
+  assert.strictEqual(quiet.stdout, '');
+  const loud = run(HOOK_C, reply('go 搬遷用 vzdump'), HC_ENV(home));
+  assert.strictEqual(JSON.parse(loud.stdout).hookSpecificOutput.permissionDecision, 'deny');
+});
+
+test('ASCII scope keywords match at word start only (guide does not hit ui)', () => {
+  const home = tmp();
+  const r = run(HOOK_C, reply('tag: ruling\nSee the guide and quick notes'), HC_ENV(home));
+  assert.strictEqual(r.stdout, '', r.stdout);
+});
+
 test('PM-origin answer id denies', () => {
   const home = tmp();
   const r = run(HOOK_C, go('核准 vzdump 搬遷 override:16c69c54:PMSELF'), {

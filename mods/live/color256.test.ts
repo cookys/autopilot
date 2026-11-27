@@ -26,7 +26,9 @@ test('ink: 256 mode swaps claude and inactive for cube colours, every other key 
     expect(ink('claude')).toBe('claude')
     expect(ink('inactive')).toBe('inactive')
   } finally { setTruecolor(true) }
-  expect(isTruecolorValue('truecolor', 'xterm-256color') && isTruecolorValue('24bit', 'xterm') && isTruecolorValue(undefined, undefined)).toBe(true)
+  expect(isTruecolorValue('truecolor', 'xterm') && isTruecolorValue('24bit', 'xterm') && isTruecolorValue(undefined, undefined)).toBe(true)
+  expect(isTruecolorValue('truecolor', 'xterm-256color'), 'truecolor claimed on a *-256color terminal: CC quantizes, so lean to 256').toBe(false)
+  expect(isTruecolorValue('truecolor', 'xterm', '/tmp/tmux-1/default,1,0'), 'under tmux').toBe(false)
   expect(isTruecolorValue(undefined, 'xterm-256color') || isTruecolorValue('', 'screen-256color'), 'a real 256-colour terminal is not truecolor').toBe(false)
 })
 

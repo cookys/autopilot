@@ -3112,7 +3112,8 @@ function hostScrollHome($: EngineInterface, scroll: { offset: number } | undefin
 export async function readTerminalColour($: any): Promise<void> {
   const colorterm = await $.env.get('COLORTERM').catch(() => undefined)
   const term = await $.env.get('TERM').catch(() => undefined)
-  setTruecolor(isTruecolorValue(colorterm, term))
+  const tmux = await $.env.get('TMUX').catch(() => undefined)
+  setTruecolor(isTruecolorValue(colorterm, term, tmux))
 }
 
 export const register: Register = on => {

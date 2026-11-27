@@ -37,7 +37,7 @@ function todoCard(c: TodoCard, i: number, n: number, selected: boolean, notes: R
   const due = dueText(c.dueMs)
   const label = t('v74.d.todo_head', { k: i + 1, n }) + ' ' + (due === null ? t('v74.d.todo_no_due') : t('v74.d.todo_due', { date: due }))
   const head: Row = [dimSeg(GLYPHS.structure.open + ' ' + label + ' ' + GLYPHS.structure.rule.repeat(Math.max(0, ctx.size.cols - displayWidth(label) - 4)))]
-  const title: Row = [seg((selected ? CURSOR_MARK : ' ') + CARD_MARK + ' '), seg(c.title, selected ? { color: PALETTE.here, here: true } : {})]
+  const title: Row = [seg((selected ? CURSOR_MARK : ' ') + CARD_MARK + ' '), seg(c.title, selected ? { here: true } : {})]
   const back: Row = [seg('  '), dimSeg(t('v74.d.todo_back')), seg(' ' + (due === null ? t('v74.d.todo_no_due_note') : due))]
   const note = notes[c.id] ?? ''
   return [head, title, back, [seg('  '), dimSeg(t('v74.d.note')), seg(note === '' ? t('v74.d.note_empty') : note)]].map(r => fit(r, ctx.size.cols))
@@ -58,7 +58,7 @@ function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
   const keys = pickKeys(cur.options) // R6: the drawn `[x]` and the press are the same key that picks
   cur.options.slice(0, PICK_KEYS.length).forEach((o, k) => {
     if (k > 0) opts.push(seg('   '))
-    opts.push(seg('[' + keys[k] + '] ' + truncateToWidth(o.label, Math.max(4, Math.floor(cols / 3) - 6)), { press: 'key:' + keys[k], ...(picked === k ? { color: PALETTE.here } : {}) }))
+    opts.push(seg('[' + keys[k] + '] ' + truncateToWidth(o.label, Math.max(4, Math.floor(cols / 3) - 6)), { press: 'key:' + keys[k], ...(picked === k ? { here: true } : {}) }))
   })
   const actions: Row[] = [[seg(' ' + t('v74.d.todo_for', { k: cursor + 1 }))], opts, [dimSeg(' ' + t('v74.d.todo_move'))]]
   const room = Math.max(1, ctx.size.rows - 1 - (cols < STRIP_SPLIT_COLS ? 2 : 1) - actions.length)

@@ -766,7 +766,9 @@ function pendingBody(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: 
     ...cards.slice(list.offset, list.offset + list.rows).map((c, k) => {
       const at = list.offset + k
       const row = truncateSegs(boxSummary(c, at, nav, { ...ctx, size: { ...ctx.size, cols: width } }).map(s => ({ ...s, text: s.text.replace(/\s/g, ' ') })), width)
-      return at === cursor ? row.map(s => ({ ...s, color: PALETTE.here, text: s === row[0] ? CURSOR_MARK + s.text.slice(1) : s.text })) : row
+      if (at !== cursor) return row
+      const head = row[0]!
+      return [{ ...head, text: CURSOR_MARK, color: PALETTE.here }, { ...head, text: head.text.slice(1) }, ...row.slice(1)]
     }),
   ]
   if (list.hint) queue.push([dimSeg([
@@ -850,7 +852,7 @@ function renderBoxC(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
     const keys = pickKeys(c.options)
     const countText = t('v74.d.c_count', { k: cursor + 1, n: cards.length }) + ageSuffix + (omitted ? ' ' + DOT + ' ' + t('v74.d.c_desc_omitted') : '')
     const out: Row[] = [[dimSeg(countText)]]
-    out.push(...wrapRow([seg(CURSOR_MARK + '  '), seg(c.title, { color: PALETTE.here, here: true }), ...tailSegs(c)], cols, 3))
+    out.push(...wrapRow([seg(CURSOR_MARK + '  '), seg(c.title, { here: true }), ...tailSegs(c)], cols, 3))
     if (showBg && c.background) {
       const bgRaw = c.background
       const bgLines = bgRaw.split('\n')
@@ -898,7 +900,7 @@ function renderBoxC(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
     const qRow = truncateSegs([
       seg(CURSOR_MARK + ' '),
       dimSeg(`(${cursor + 1}/${cards.length}) `),
-      seg(c.title, { color: PALETTE.here, here: true }),
+      seg(c.title, { here: true }),
       ...tailSegs(c),
     ], cols)
     const optKeys = pickKeys(c.options)
@@ -1070,7 +1072,7 @@ function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
     const title = truncateToWidth(item.title, titleRoom)
     const pad = ' '.repeat(Math.max(0, leftW - displayWidth(mark + num + title + suffix)))
     const row: Row = isCur
-      ? [seg(mark + num + title, { color: PALETTE.here, here: true }), seg(pad + suffix, { color: PALETTE.here })]
+      ? [seg(CURSOR_MARK, { color: PALETTE.here }), seg((mark + num + title).slice(CURSOR_MARK.length), { here: true }), dimSeg(pad + suffix)]
       : [seg(mark + num + title, { press: 'card:' + idx }), dimSeg(pad + suffix)]
     return padRowTo(row, leftW)
   }

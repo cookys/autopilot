@@ -165,7 +165,7 @@ export function newestSeq(rows: readonly RoomRow[]): number | null {
 // the last `count` rows, one line each (`from text`, first line of the text), owner rows in `here` like the roundtable pane, system rows in `attention`
 export function roomLines(rows: readonly RoomRow[], inner: number, count: number): Seg[][] {
   return rows.slice(Math.max(0, rows.length - count)).map(r => {
-    const style: Partial<Seg> = r.kind === 'system' ? { color: r.text.includes('send failed') ? PALETTE.broken : PALETTE.attention } : r.from === 'owner' ? { color: PALETTE.here } : {}
+    const style: Partial<Seg> = r.kind === 'system' ? { color: r.text.includes('send failed') ? PALETTE.broken : PALETTE.attention } : r.from === 'owner' ? { here: true } : {}
     return clipSegs([{ text: r.from + ' ', ...style }, { text: r.text }], inner - 1)
   })
 }
@@ -340,7 +340,7 @@ export function cardRows(cards: readonly Card[], cursor: number, inner: number, 
     const usable = inner - 1
     const answer = c.answer === null ? '' : clipSegs([{ text: c.answer }], Math.max(1, Math.min(displayWidth(c.answer), Math.floor(usable / 2))))[0]?.text ?? ''
     const answerW = answer === '' ? 0 : displayWidth(answer) + 1
-    const style = { ...(here ? { color: PALETTE.here } : {}), ...(c.grey === true ? { dim: true } : {}) }
+    const style = { ...(here ? { here: true } : {}), ...(c.grey === true ? { dim: true } : {}) }
     const pieces = wrapPlain(c.name, Math.max(1, usable - 2 - answerW), Math.max(1, usable - 2))
     if (pieces.length === 0) pieces.push('')
     if (n === cursor) { at = all.length; span = Math.max(1, pieces.length) }

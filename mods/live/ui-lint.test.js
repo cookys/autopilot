@@ -310,7 +310,7 @@ test('L8 control: a prose segment painted with a literal key is reported, a role
   assert.equal(L8(planted).length, 1)
   // and the real model.ts (the band) the same way
   const band = read('model.ts')
-  const plantedBand = band.replace("sp(m.stage, { color: PALETTE.here,", "sp(m.stage, { color: 'claude',")
+  const plantedBand = band.replace("sp(m.stage, { tag:", "sp(m.stage, { color: 'claude', tag:")
   assert.notEqual(plantedBand, band, 'the planted band edit applied')
   assert.equal(L8(plantedBand).length, 1)
   // a comment naming a key is documentation, not a colour
@@ -327,7 +327,7 @@ test('L9: the band source (model.ts) is bold only on the needs-you words and the
   assert.match(hit[2], /const base: Seg\[\]/)
 })
 test('L9 control: a second bold in the band source is reported', () => {
-  const planted = read('model.ts').replace("sp(m.stage, { color: PALETTE.here,", "sp(m.stage, { color: PALETTE.here, bold: true,")
+  const planted = read('model.ts').replace("sp(m.stage, { tag:", "sp(m.stage, { bold: true, tag:")
   assert.equal(hits(planted, BOLD_PROP).length, 4)
 })
 

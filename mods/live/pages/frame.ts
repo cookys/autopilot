@@ -10,7 +10,7 @@
 import type { ConsoleSnapshot } from '../console'
 import type { T } from '../i18n'
 import type { LiveSnapshot, Seg } from '../model'
-import { displayWidth, truncateToWidth } from '../model'
+import { bandWords, displayWidth, truncateToWidth } from '../model'
 import { GLYPHS } from '../../tux/glyphs.ts'
 import { PALETTE } from '../../tux/palette.ts'
 import { PAGES } from './index'
@@ -177,7 +177,10 @@ export function stripRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
   const labelOf = (x: { id: string; label: string }, f: Form): string =>
     (f === 'full' ? x.label : x.id === 'pet' || x.id === 'fleet' ? ctx.t('tab.' + x.id + '_short') : first(x.label))
   const entrySeg = (x: { id: string; key: string; label: string }, f: Form): Seg => {
-    return { text: x.key + ' ' + labelOf(x, f), press: 'tab:' + x.key + ':' + x.id }
+    const text = x.key + ' ' + labelOf(x, f)
+    const press = 'tab:' + x.key + ':' + x.id
+    // the current tab is told apart by weight, not colour: `claude` text is ~3.15 on a light theme
+    return x.id === active ? { ...bandWords(text), press, role: 'tab', here: true } : { text, press }
   }
   const entryW = (x: { key: string; label: string; id: string }, f: Form): number =>
     displayWidth(x.key) + 1 + displayWidth(labelOf(x, f)) + HOST_PREFIX

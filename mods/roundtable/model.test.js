@@ -66,13 +66,13 @@ test('scroll window: visibleLines clamps the offset into range', () => {
   assert.deepEqual(m.visibleLines(lines, 99, 2).map(l => l.text), ['3', '4'])
 })
 
-test('owner is PALETTE.here', () => {
-  assert.equal(m.rowRole(row({ from: 'owner', kind: 'say' })), 'here')
+test('owner text uses the default colour (claude is ~3.15 on a light theme)', () => {
+  assert.equal(m.rowRole(row({ from: 'owner', kind: 'say' })), 'text')
   assert.equal(ui.PALETTE.here, 'claude')
 })
 
-test('roles: owner is here, system is attention, a send failure is broken, a seat is text', () => {
-  assert.equal(m.rowRole(row({ from: 'owner', kind: 'say' })), 'here')
+test('roles: owner is text, system is attention, a send failure is broken, a seat is text', () => {
+  assert.equal(m.rowRole(row({ from: 'owner', kind: 'say' })), 'text')
   assert.equal(m.rowRole(row({ from: 'moderator', kind: 'system', text: 'seat added' })), 'attention')
   assert.equal(m.rowRole(row({ from: 'moderator', kind: 'system', text: 'send failed handle=cuda status=1 stderr=nope' })), 'broken')
   assert.equal(m.rowRole(row({ from: 'cuda', kind: 'say', text: 'position' })), 'text')

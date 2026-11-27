@@ -1,5 +1,5 @@
 // mods/roundtable/pane.tsx — the room window. Colours only through PALETTE (mods/live/ui.ts).
-// Owner rows: "you are here" (PALETTE.here, theme key claude) — the same meaning as window A's owner foreground.
+// Owner rows use the default text colour: theme key claude is ~3.15 on a light theme.
 // System rows: attention. Send failures: broken. Seat rows: no colour (default text). Rules: structure.
 // No background, no inverse. The Input label has no trailing colon (the field draws its own).
 // The scrollbar thumb is scrollFrame → thumbOf (mods/live/scrollmath.ts): length visible/total of the track, minimum one cell.

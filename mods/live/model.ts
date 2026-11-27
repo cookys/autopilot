@@ -1331,7 +1331,7 @@ export type SlotId = 'verdict' | 'fleet' | 'position' | 'unit' | 'dispatch' | 'r
 export type SegTag = 'age' | 'kn' | 'fam' | 'bar' | 'stage' | 'live' | 'stalled' | 'chip' | 'wt' | 'walk' | 'dot' | 'reason' | 'round' | 'qc' | 'amt' | 'pct' | 'bar10' | 'bar5' | 'bar3' | 'qx' | 'fleetWord' | 'fleetRun' | 'fleetWait' | 'fleetStuck'
 export type Seg = { text: string; color?: ThemeKey; bold?: boolean; dim?: boolean; tag?: SegTag; slot?: SlotId; role?: SegRole; here?: boolean; fmt?: FmtKind; fact?: FactId; press?: string; href?: string } // slot: set by layoutBand on the band line (the Button it presses); a separator has none
 
-// The collapsed band's needs-you words (reminder, unanswered count): default colour, bold; the yellow stays on the mark before them.
+// Default colour, bold: the collapsed band's needs-you words (reminder, unanswered count) and the current tab name.
 export const bandWords = (text: string): Seg => ({ text, bold: true })
 export type Slot = { id: SlotId; segs: Seg[] }
 
@@ -1572,7 +1572,7 @@ export function slotPosition(m: MarkerView | null, nowMs: number, w: StageWalkVi
   if (head !== '') segs.push(sp(head)) // `size·level·stage`: the `·` is the band's separator (`▸` only ever means folded); the wide band swaps it for the walk
   if (walk === null) { if (head !== '') segs.push(sp('·')) }
   else { if (head !== '') segs.push(sp('·', { tag: 'dot' })); segs.push(sp(' ', { tag: 'walk' }), ...walk, sp(' ', { tag: 'walk' })) }
-  segs.push(sp(m.stage, { color: PALETTE.here, tag: 'stage' }))
+  segs.push(sp(m.stage, { tag: 'stage' }))
   const age = m.stage_set_at_ms === null ? '—' : elapsedFrom(m.stage_set_at_ms, nowMs)
   if (age !== '—') segs.push(ui.gapSeg(ui.CHIP_LEAD, 'age'), ...ui.chipSegs([sp(GT.age, { dim: true, tag: 'age' })], [sp(age, { dim: true, tag: 'age' })]))
   return { id: 'position', segs }

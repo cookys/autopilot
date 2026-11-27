@@ -1,5 +1,5 @@
 ---
-Status: shipped（已出貨）。依 2026-11-21 稽核（PM 01M7XQRV）與下一行稽核證據更正；原狀態：approved
+status: approved
 date: 2026-07-31
 size: L
 entry_level: l6
@@ -8,7 +8,6 @@ project: correctness-gates
 
 # Correctness Gates Sweep
 
-> 稽核（2026-11-21，PM 01M7XQRV）：已完成。已實作並歸檔，計畫檔頭狀態過時，建議改標 shipped/歸檔。證據：archive 2026/07/2026-07-31-correctness-gates README。
 ## Background
 
 Four triggered correctness tickets are small individually but share one release-safety theme and

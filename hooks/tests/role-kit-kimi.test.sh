@@ -15,6 +15,7 @@ export AUTOPILOT_TEST_CN_GATE_OFF=1  # Fake Kimi fixtures carry no dispatch Size
 #  (g) negative controls (PM red case): a rail copy that drops --agent-file, one whose agent file lacks the card, one that drops the
 #      plugin refusal, one whose adapter ignores agentFile -> the same checks that pass on the real tree go red
 . "$(dirname "$0")/lib.sh"
+export AUTOPILOT_DISPATCH_ROLE=implementer
 . "$(dirname "$0")/lib/dispatch-review-fixtures.sh"
 # These are transport fixtures; the dedicated CN/broker suites test the real gate.
 export AUTOPILOT_TEST_CN_GATE_OFF=1 AUTOPILOT_ENDPOINTS_ENV="$TEST_TMP/no-endpoints.env"

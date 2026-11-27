@@ -631,6 +631,7 @@ emit_result() {
   local verification_author_json
   verification_author_json="$(emit_verification_author)"
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && extra_fields="${extra_fields:-}, \"role_kit\": $ROLE_KIT_JSON"
+  [ -z "${ROLE_KIT_SKIPPED_JSON:-}" ] || extra_fields="$extra_fields, \"role_kit\": null, \"role_kit_skipped\": $ROLE_KIT_SKIPPED_JSON"
   local _au_json
   local _pub_runner="${AUTHOR_PUBLIC_RUNNER:-$RUNNER}"
   if [[ "${LOCAL_RUNNER:-0}" -eq 1 ]]; then
@@ -1124,10 +1125,12 @@ fi
 # --role-kit: refused on every runner but claude-native, validated now (before any spawn).
 . "$_AUTHOR_SELF_DIR/lib/role-kit.sh"   # defaults only: no kit leaves ROLE_KIT_TOOLS empty and ROLE_KIT_EXTRA unset-equivalent
 if [ -n "$ROLE_KIT_DIR" ]; then
-  if [ "$RUNNER" = "kimi" ]; then
-    role_kit_load_kimi "$ROLE_KIT_DIR"   # this rail only: dispatch-review / dispatch-hetero still refuse kimi
+  if [ "$RUNNER" != "kimi" ]; then role_kit_refuse_unless_claude_native "$RUNNER"; fi
+  if ! role_kit_role_allowed "${AUTOPILOT_DISPATCH_ROLE:-author}"; then
+    role_kit_skip "${AUTOPILOT_DISPATCH_ROLE:-author}"
+  elif [ "$RUNNER" = "kimi" ]; then
+    role_kit_load_kimi "$ROLE_KIT_DIR"
   else
-    role_kit_refuse_unless_claude_native "$RUNNER"
     role_kit_load "$ROLE_KIT_DIR"
   fi
 fi
@@ -1399,6 +1402,7 @@ write_author_manifest() {
   [ -n "${REPO_IDENTITY_FIELDS:-}" ] || REPO_IDENTITY_FIELDS='"repo_identity": null, "repo_identity_source": null'
   local _rk_ident="$REPO_IDENTITY_FIELDS, \"mount_containment\": \"$(worker_mount_manifest_value)\""
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && _rk_ident="$_rk_ident, \"role_kit\": $ROLE_KIT_JSON"
+  [ -z "${ROLE_KIT_SKIPPED_JSON:-}" ] || _rk_ident="$_rk_ident, \"role_kit\": null, \"role_kit_skipped\": $ROLE_KIT_SKIPPED_JSON"
   [ -n "${PACE_CHOICE_JSON:-}" ] && _rk_ident="$_rk_ident, \"pace_choice\": $PACE_CHOICE_JSON"
   declare -F dispatch_attr_fields >/dev/null 2>&1 && _rk_ident="$_rk_ident$(dispatch_attr_fields "${PROMPT_FILE_ORIG:-$PROMPT_FILE}" "${AUTHOR_PUBLIC_RUNNER:-$RUNNER}" "${ENDPOINT:-}")"
   [[ "${LOCAL_RUNNER:-0}" -eq 1 ]] && _rk_ident="$_rk_ident, \"resolved_runner\": \"cc-shim\", \"endpoint\": \"qwen_local\""

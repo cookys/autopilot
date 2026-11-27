@@ -1408,6 +1408,7 @@ NODE
   [ -z "${EFFORT_SENT:-}" ] || effort_fields=", \"effort\": \"$(_flat_json_escape "$EFFORT_SENT")\""
   local role_kit_fields=""
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_fields=", \"role_kit\": $ROLE_KIT_JSON"
+  [ -z "${ROLE_KIT_SKIPPED_JSON:-}" ] || role_kit_fields="$role_kit_fields, \"role_kit\": null, \"role_kit_skipped\": $ROLE_KIT_SKIPPED_JSON"
   local sandbox_fields=""
   [ "${SANDBOX:-off}" = "bwrap" ] && sandbox_fields=", \"sandbox\": $(sandbox_json), \"sandbox_blocked_writes\": ${SANDBOX_BLOCKED:-0}, \"sandbox_blocked_samples\": ${SANDBOX_BLOCKED_SAMPLES:-[]}"
   [ "${LOCAL_RUNNER:-0}" -eq 1 ] && sandbox_fields="$sandbox_fields, \"resolved_runner\": \"cc-shim\", \"endpoint\": \"$(_flat_json_escape "$ENDPOINT")\""
@@ -2994,6 +2995,7 @@ write_manifest() {
   [ "$PINNED" = false ] || [ "$PIN_REASON_SUPPLIED" -eq 0 ] || pin_json="\"$(_flat_json_escape "$PIN_REASON")\""
   local role_kit_manifest_fields=", \"pinned\": $pinned_json, \"pin_reason\": $pin_json"
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"role_kit\": $ROLE_KIT_JSON"
+  [ -z "${ROLE_KIT_SKIPPED_JSON:-}" ] || role_kit_manifest_fields="$role_kit_manifest_fields, \"role_kit\": null, \"role_kit_skipped\": $ROLE_KIT_SKIPPED_JSON"
   [ "${SANDBOX:-off}" = "bwrap" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"sandbox\": $(sandbox_json)"
   [ "${LOCAL_RUNNER:-0}" -eq 1 ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"resolved_runner\": \"cc-shim\", \"endpoint\": \"$(_flat_json_escape "$ENDPOINT")\""
   [ "${LOCAL_RUNNER:-0}" -eq 1 ] && [ -n "${GATEWAY_TOKEN_SOURCE:-}" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"gateway_token\": \"$(_flat_json_escape "$GATEWAY_TOKEN_SOURCE")\""
@@ -3493,7 +3495,7 @@ set_runner_flags() {
   if [ -n "${ROLE_KIT_DIR:-}" ]; then
     # Refused, never ignored: a kit the runner cannot carry would make the manifest claim a role it did not get.
     role_kit_refuse_unless_claude_native "$([ "$IS_CNATIVE" -eq 1 ] && echo claude-native || echo "$RUNNER")"
-    role_kit_load "$ROLE_KIT_DIR"
+    if role_kit_role_allowed "${PACE_ROLE:-${AUTOPILOT_DISPATCH_ROLE:-implementer}}"; then role_kit_load "$ROLE_KIT_DIR"; else role_kit_skip "${PACE_ROLE:-${AUTOPILOT_DISPATCH_ROLE:-implementer}}"; fi
   fi
   # Only reached if resolution actually completed (no die_precondition fired above,
   # including the cursor auto-guard refusals inside the `auto` arm). See RUNNER_RESOLVED

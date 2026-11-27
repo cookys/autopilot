@@ -665,7 +665,7 @@ unset _tfg_msg _tfg_endpoint
 . "$_REVIEW_SELF_DIR/lib/role-kit.sh"   # defaults only: no kit leaves ROLE_KIT_TOOLS empty and ROLE_KIT_EXTRA unset-equivalent
 if [ -n "$ROLE_KIT_DIR" ]; then
   role_kit_refuse_unless_claude_native "$RUNNER"
-  role_kit_load "$ROLE_KIT_DIR"
+  if role_kit_role_allowed "${AUTOPILOT_DISPATCH_ROLE:-reviewer}"; then role_kit_load "$ROLE_KIT_DIR"; else role_kit_skip "${AUTOPILOT_DISPATCH_ROLE:-reviewer}"; fi
 fi
 # Defense in depth: the JS/resolver copies of the capable-runner set move in 1b-B.
 # This function is the ONLY place the seat-tier table lives in this script.
@@ -1586,6 +1586,7 @@ emit_no_verdict() {
     format_reject_json=""; FORMAT_REJECT=""
   fi
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && nv_json="$nv_json, \"role_kit\": $ROLE_KIT_JSON"
+  [ -z "${ROLE_KIT_SKIPPED_JSON:-}" ] || nv_json="$nv_json, \"role_kit\": null, \"role_kit_skipped\": $ROLE_KIT_SKIPPED_JSON"
   passive_capture "no_verdict"
   salvage_unratified_verdict "${SALVAGE_CAPTURE:-${PARSE_INPUT:-}}" "${BEGIN:-}" "${END:-}"
   local _rv_json
@@ -1816,6 +1817,7 @@ write_review_manifest() {
   [ -n "${REPO_IDENTITY_FIELDS:-}" ] || REPO_IDENTITY_FIELDS='"repo_identity": null, "repo_identity_source": null'
   local _rk_ident="$REPO_IDENTITY_FIELDS"
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && _rk_ident="$_rk_ident, \"role_kit\": $ROLE_KIT_JSON"
+  [ -z "${ROLE_KIT_SKIPPED_JSON:-}" ] || _rk_ident="$_rk_ident, \"role_kit\": null, \"role_kit_skipped\": $ROLE_KIT_SKIPPED_JSON"
   [ -n "${PACE_CHOICE_JSON:-}" ] && _rk_ident="$_rk_ident, \"pace_choice\": $PACE_CHOICE_JSON"
   declare -F dispatch_attr_fields >/dev/null 2>&1 && _rk_ident="$_rk_ident$(dispatch_attr_fields "" "$RUNNER" "${ENDPOINT:-}")"
   # What check-unmerged-ship.js reads: the verdict of THIS run (set only on a reviewed exit), the repo HEAD sha at dispatch time
@@ -3005,7 +3007,7 @@ _rv_json="$(printf '{ "runner": "%s", "model": "%s", "status": "reviewed", "verd
   "$RUNNER" "$(json_escape "$MODEL")" "$VERDICT" "$(json_escape "${FINDINGS:-none}")" \
   "$([ -n "$NO_FINDING_PROOF" ] && printf '"%s"' "$(json_escape "$NO_FINDING_PROOF")" || printf 'null')" \
   "$(json_escape "$RAW_LOG")" "$REVIEW_USAGE_JSON" "$(json_escape "$FRAME_CLOSED_BY")" \
-  "$([ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && printf ', "role_kit": %s' "$ROLE_KIT_JSON")" \
+  "$([ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && printf ', "role_kit": %s' "$ROLE_KIT_JSON"; [ -z "${ROLE_KIT_SKIPPED_JSON:-}" ] || printf ', "role_kit": null, "role_kit_skipped": %s' "$ROLE_KIT_SKIPPED_JSON")" \
   "$(review_probe_suffix)")"
 REVIEW_VERDICT="$VERDICT"   # the exit trap rewrites the manifest with it
 printf '%s\n' "$_rv_json"

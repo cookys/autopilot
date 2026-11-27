@@ -26,6 +26,15 @@ ROLE_KIT_EXTRA=()
 ROLE_KIT_ARGV=()
 ROLE_KIT_JSON=""
 
+role_kit_role_allowed() {
+  case "${1:-}" in implementer|debugger) return 0 ;; *) return 1 ;; esac
+}
+
+role_kit_skip() {
+  ROLE_KIT_SKIPPED_JSON="$(node -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "$1")"
+  printf 'role-kit skipped: role %s not in {implementer,debugger}\n' "$1" >&2
+}
+
 role_kit_refuse_unless_claude_native() {
   [ "${1:-}" = "claude-native" ] || die_precondition "role-kit unsupported for runner ${1:-unknown}"
 }

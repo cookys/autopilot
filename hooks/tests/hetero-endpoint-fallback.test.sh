@@ -475,9 +475,9 @@ printf '# default policy (unset on_engine_unavailable & cloud_fallback_rung)\n- 
 dispatch_case dflt_busy "$SRV_PORT" busy "$CFG_DFLT"
 assert_eq "$(jget "$CASE_JSON" status)" "committed" "(fb-d) busy endpoint with default policy retreats and commits (rc=$CASE_RC stderr=$(printf '%s' "$CASE_ERR" | tail -c 400))"
 assert_eq "$(jget "$CASE_JSON" runner)" "agy" "(fb-d) default retreat chooses first picker runner agy"
-assert_eq "$(jget "$CASE_JSON" model)" "gemini-4-hydrogen-high" "(fb-d) default retreat chooses gemini-4-hydrogen-high"
+assert_eq "$(jget "$CASE_JSON" model)" "gemini-4-hydrogen-low" "(fb-d) default retreat chooses gemini-4-hydrogen-low"
 assert_eq "$(jget "$CASE_JSON" fallback.from)" "mini@cc-shim#gpu1" "(fb-d) fallback.from records original seat"
-assert_eq "$(jget "$CASE_JSON" fallback.to)" "gemini-4-hydrogen-high/high@agy" "(fb-d) fallback.to records picker rung"
+assert_eq "$(jget "$CASE_JSON" fallback.to)" "gemini-4-hydrogen-low/high@agy" "(fb-d) fallback.to records picker rung"
 assert_eq "$(jget "$CASE_JSON" fallback.reason)" "endpoint_busy" "(fb-d) fallback.reason records error class"
 assert_eq "$(jget "$CASE_JSON" fallback.demoted)" "null" "(fb-d) no fallback.demoted without pace file"
 assert_contains "$(cat "$CASE_CAP/cloud-fallbacks.jsonl")" '"fallback":{' "(fb-d) cloud-fallbacks row carries fallback object"
@@ -487,7 +487,7 @@ assert_contains "$(cat "$CASE_CAP/cloud-fallbacks.jsonl")" '"reason":"endpoint_b
 
 dispatch_case dflt_dead "$DEAD_PORT" ok "$CFG_DFLT"
 assert_eq "$(jget "$CASE_JSON" runner)" "agy" "(fb-d2) unreachable endpoint with default policy chooses agy"
-assert_eq "$(jget "$CASE_JSON" model)" "gemini-4-hydrogen-high" "(fb-d2) unreachable endpoint chooses hydrogen"
+assert_eq "$(jget "$CASE_JSON" model)" "gemini-4-hydrogen-low" "(fb-d2) unreachable endpoint chooses hydrogen"
 assert_eq "$(jget "$CASE_JSON" fallback.reason)" "endpoint_unreachable" "(fb-d2) fallback.reason records endpoint_unreachable"
 [ ! -s "$CODEX_ARGV_LOG" ] || fail "(fb-e2) codex must never be invoked on unreachable retreat"
 
@@ -498,8 +498,8 @@ printf -- '- on_engine_unavailable: cloud-fallback\n- cloud_fallback_rung: gpt-5
 dispatch_case fbcodex "$SRV_PORT" busy "$CFG_FB_CODEX"
 assert_eq "$(jget "$CASE_JSON" status)" "committed" "(fb-codex) busy endpoint with explicit codex rung retreats and commits (rc=$CASE_RC stderr=$(printf '%s' "$CASE_ERR" | tail -c 400))"
 assert_eq "$(jget "$CASE_JSON" runner)" "agy" "(fb-codex) explicit codex rung retreats to picker runner agy"
-assert_eq "$(jget "$CASE_JSON" model)" "gemini-4-hydrogen-high" "(fb-codex) explicit codex rung retreats to gemini-4-hydrogen-high"
-assert_eq "$(jget "$CASE_JSON" fell_back.to_rung)" "gemini-4-hydrogen-high/high@agy" "(fb-codex) fell_back.to_rung records picker rung"
+assert_eq "$(jget "$CASE_JSON" model)" "gemini-4-hydrogen-low" "(fb-codex) explicit codex rung retreats to gemini-4-hydrogen-low"
+assert_eq "$(jget "$CASE_JSON" fell_back.to_rung)" "gemini-4-hydrogen-low/high@agy" "(fb-codex) fell_back.to_rung records picker rung"
 [ -s "$AGY_ARGV_LOG" ] || fail "(fb-codex) agy stub was not invoked"
 [ ! -s "$CODEX_ARGV_LOG" ] || fail "(fb-codex) codex stub must never be invoked"
 
@@ -523,7 +523,7 @@ const engine = new AutopilotEngine({
       result: {
         status: 'engine_unavailable',
         runner: calls.length === 1 ? 'cc-shim' : 'agy',
-        model: calls.length === 1 ? 'Qwen3.8-27B-QUASAR-NVFP4' : 'gemini-4-hydrogen-high',
+        model: calls.length === 1 ? 'Qwen3.8-27B-QUASAR-NVFP4' : 'gemini-4-hydrogen-low',
         commit: null,
         base,
         branch: 'feat/default-retreat',
@@ -568,9 +568,9 @@ const d = out.engine_unavailable || {};
 process.stdout.write(`calls=${calls.length} policy=${d.policy || ''} runner2=${flagOf(calls[1], '--runner')} model2=${flagOf(calls[1], '--model')} exhausted=${d.cloud_fallback_exhausted === true}\n`);
 NODE
 ONCE_DFLT="$(ENGINE_CAPABILITY_DIR="$TEST_TMP/cap-once-default" node "$TEST_TMP/once-default.js" "$REPO_ROOT" 2>"$TEST_TMP/once-dflt.err")" || fail "(fb-d) once-default threw: $(cat "$TEST_TMP/once-dflt.err")"
-assert_eq "$ONCE_DFLT" "calls=2 policy=cloud-fallback runner2=agy model2=gemini-4-hydrogen-high exhausted=true" "(fb-d) AutopilotEngine default policy retreats to picker implementer without codex"
+assert_eq "$ONCE_DFLT" "calls=2 policy=cloud-fallback runner2=agy model2=gemini-4-hydrogen-low exhausted=true" "(fb-d) AutopilotEngine default policy retreats to picker implementer without codex"
 ONCE_CODEX_RUNG="$(ENGINE_CAPABILITY_DIR="$TEST_TMP/cap-once-default" node "$TEST_TMP/once-default.js" "$REPO_ROOT" codex-rung 2>"$TEST_TMP/once-codex-rung.err")" || fail "(fb-codex) once-default codex-rung threw: $(cat "$TEST_TMP/once-codex-rung.err")"
-assert_eq "$ONCE_CODEX_RUNG" "calls=2 policy=cloud-fallback runner2=agy model2=gemini-4-hydrogen-high exhausted=true" "(fb-codex) AutopilotEngine ignores explicit codex cloud_fallback_rung and retreats to picker agy"
+assert_eq "$ONCE_CODEX_RUNG" "calls=2 policy=cloud-fallback runner2=agy model2=gemini-4-hydrogen-low exhausted=true" "(fb-codex) AutopilotEngine ignores explicit codex cloud_fallback_rung and retreats to picker agy"
 
 # --- (fb-low) AUTOPILOT_PACE_FILE marking agy low demotes agy behind grok in AutopilotEngine ---
 PACE_AGY_LOW="$TEST_TMP/pace-agy-low.json"

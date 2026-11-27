@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0526 -->
+<!-- next-id: BL-0527 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -2690,3 +2690,16 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: post-merge suite 2026-11-27
 - **Pointer**: project/backlog/known-flaky-2026-11-27.md
+
+### develop 基準點 121 組測試仍紅，dispatch-hetero 一族落後 pin-reason 閘
+- **Id**: BL-0526
+- **Status**: open
+- **Since**: 2026-11-27
+- **Origin**: self
+- **Problem**: 2026-11-27 乾淨環境重跑 128 組紅燈，121 組仍紅；帶單號環境重跑 Fleet-Task／pin-reason／pace 三群 29 支仍全紅，主因測試 fixture 沒帶 --pin-reason，其餘為 pace 預設引擎改動與 detach／watchdog 55 秒無結果；約 80 支無簽名尚未去偽
+- **Impact**: 全套件綠燈不可信，真的新增紅燈會淹沒在 121 支既存紅裡
+- **Trigger**: 任何人要信賴全套件綠燈之前，或下一次 dispatch-hetero 改動
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: project/backlog/base-red-121-2026-11-27.md
+- **Pointer**: project/backlog/base-red-121-2026-11-27.md

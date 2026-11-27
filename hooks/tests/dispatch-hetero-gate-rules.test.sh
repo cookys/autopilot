@@ -63,7 +63,7 @@ if [ -n "${FAKE_INNER:-}" ]; then
   ls "$FAKE_GD" >"$FAKE_BOTH_BEFORE" 2>/dev/null
   ( cd "$FAKE_INNER_REPO" && FAKE_INNER="" FAKE_ARGV="$FAKE_ARGV.inner" FAKE_SID="$FAKE_SID.inner" FAKE_SETTINGS="$FAKE_SETTINGS.inner" \
       FAKE_CALLS="$FAKE_CALLS.inner" FAKE_HOOKOUT="$FAKE_HOOKOUT.inner" FAKE_BOTH_BEFORE=/dev/null \
-      "$FAKE_SCRIPT" --no-verify-tip --runner cc-shim --model m --prompt-file "$FAKE_PROMPT" --context-window off --gate-rules "$FAKE_RULES" --branch feat/inner >/dev/null 2>&1 )
+      "$FAKE_SCRIPT" --no-verify-tip --runner cc-shim --pin-reason "test fixture" --model m --prompt-file "$FAKE_PROMPT" --context-window off --gate-rules "$FAKE_RULES" --branch feat/inner >/dev/null 2>&1 )
   ls "$FAKE_GD" >"$FAKE_BOTH_AFTER" 2>/dev/null
 fi
 printf '{"type":"result","is_error":false,"result":"done"}\n'
@@ -94,7 +94,7 @@ go() {
     FAKE_SETTINGS="$TEST_TMP/fake-settings" FAKE_HOOKOUT="$TEST_TMP/fake-hookout" FAKE_STARTED="$TEST_TMP/fake-started" \
     FAKE_BOTH_BEFORE="$TEST_TMP/fake-both-before" FAKE_BOTH_AFTER="$TEST_TMP/fake-both-after" FAKE_SCRIPT="$script"
   : >"$FAKE_HOOKOUT"; BR="feat/g$RANDOM$RANDOM"
-  OUT="$(cd "$repo" && "$script" --no-verify-tip --runner "$runner" --model claude-sonnet-4-6 --prompt-file "$PROMPT" --context-window off --branch "$BR" "$@" 2>&1)"; RC=$?
+  OUT="$(cd "$repo" && "$script" --no-verify-tip --runner "$runner" --pin-reason "test fixture" --model claude-sonnet-4-6 --prompt-file "$PROMPT" --context-window off --branch "$BR" "$@" 2>&1)"; RC=$?
 }
 sid() { cat "$FAKE_SID" 2>/dev/null; }
 nblocks() { grep -c '"decision":"block"' "$FAKE_HOOKOUT" 2>/dev/null || true; }
@@ -133,7 +133,7 @@ r2() { local script="$1"
   # TERM goes out once the fake worker has actually started (FAKE_STARTED), not after a fixed 2 s: on a loaded
   # host the dispatcher needs longer than that to reach the worker, TERM then lands before the gate is armed,
   # the fake never records a session, and the check fails on an empty state instead of on cleanup.
-  ( cd "$SBX" && exec "$script" --no-verify-tip --runner cc-shim --model m --prompt-file "$PROMPT" --context-window off --branch "feat/term$RANDOM" --gate-rules "$RULES" >/dev/null 2>&1 ) &
+  ( cd "$SBX" && exec "$script" --no-verify-tip --runner cc-shim --pin-reason "test fixture" --model m --prompt-file "$PROMPT" --context-window off --branch "feat/term$RANDOM" --gate-rules "$RULES" >/dev/null 2>&1 ) &
   local dpid=$! waited=0
   while [ ! -e "$FAKE_STARTED" ] && [ "$waited" -lt 600 ] && kill -0 "$dpid" 2>/dev/null; do sleep 0.2; waited=$((waited + 1)); done
   [ -e "$FAKE_STARTED" ] || { echo "r2 TERM: worker never started" >&2; kill -KILL "$dpid" 2>/dev/null; return 1; }

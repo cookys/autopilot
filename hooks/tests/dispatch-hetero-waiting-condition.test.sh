@@ -94,7 +94,7 @@ bash "$RL" init --ledger "$LEDGER" >/dev/null
 bash "$RL" stage-acquire --ledger "$LEDGER" --run-id qrun --stage implement --pid "$$" >/dev/null
 ERR="$TEST_TMP/q.err"
 OUT="$(cd "$SBX" && env DISPATCH_QUIET=1 DISPATCH_DETACH=0 \
-  "$SCRIPT" --no-verify-tip --branch hands/bl0012/q --prompt-file "$PROMPT" --agy-bin "$STUB_QUESTION" --runner agy \
+  "$SCRIPT" --no-verify-tip --branch hands/bl0012/q --prompt-file "$PROMPT" --agy-bin "$STUB_QUESTION" --runner agy --pin-reason "test fixture" \
   --ledger "$LEDGER" --run-id qrun --stage implement 2>"$ERR")"
 EC=$?
 assert_eq "$EC" "1" "question_suspected exits 1"
@@ -111,7 +111,7 @@ LEDGER_OK="$TEST_TMP/ok.jsonl"
 bash "$RL" init --ledger "$LEDGER_OK" >/dev/null
 bash "$RL" stage-acquire --ledger "$LEDGER_OK" --run-id okrun --stage implement --pid "$$" >/dev/null
 OUT="$(cd "$SBX" && env DISPATCH_QUIET=1 DISPATCH_DETACH=0 \
-  "$SCRIPT" --no-verify-tip --branch hands/bl0012/ok --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --runner agy \
+  "$SCRIPT" --no-verify-tip --branch hands/bl0012/ok --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --runner agy --pin-reason "test fixture" \
   --ledger "$LEDGER_OK" --run-id okrun --stage implement 2>/dev/null)"
 EC=$?
 assert_eq "$EC" "0" "committed hand exits 0"
@@ -122,7 +122,7 @@ assert_eq "$ROWS" "0" "committed hand writes no waiting worker_event"
 # --- 3. no ledger: same status and exit, and no event error -------------------
 ERR2="$TEST_TMP/nolegder.err"
 OUT="$(cd "$SBX" && env DISPATCH_QUIET=1 DISPATCH_DETACH=0 \
-  "$SCRIPT" --no-verify-tip --branch hands/bl0012/noleg --prompt-file "$PROMPT" --agy-bin "$STUB_QUESTION" --runner agy \
+  "$SCRIPT" --no-verify-tip --branch hands/bl0012/noleg --prompt-file "$PROMPT" --agy-bin "$STUB_QUESTION" --runner agy --pin-reason "test fixture" \
   2>"$ERR2")"
 EC=$?
 assert_eq "$EC" "1" "ledger-less question_suspected still exits 1"
@@ -146,7 +146,7 @@ LEDGER_ZH="$TEST_TMP/zh.jsonl"
 bash "$RL" init --ledger "$LEDGER_ZH" >/dev/null
 bash "$RL" stage-acquire --ledger "$LEDGER_ZH" --run-id zhrun --stage implement --pid "$$" >/dev/null
 OUT="$(cd "$SBX" && env DISPATCH_QUIET=1 DISPATCH_DETACH=0 AUTOPILOT_GROK_EFFORT_PROBE=0 \
-  "$SCRIPT" --no-verify-tip --runner grok --model grok-4.7 --branch hands/bl0012/zh --prompt-file "$PROMPT" \
+  "$SCRIPT" --no-verify-tip --runner grok --pin-reason "test fixture" --model grok-4.7 --branch hands/bl0012/zh --prompt-file "$PROMPT" \
   --grok-bin "$STUB_ZH" --ledger "$LEDGER_ZH" --run-id zhrun --stage implement 2>/dev/null)"
 EC=$?
 assert_eq "$EC" "1" "chinese question_suspected exits 1"

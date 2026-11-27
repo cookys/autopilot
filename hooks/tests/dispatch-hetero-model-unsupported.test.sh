@@ -48,7 +48,7 @@ EOF
 run_codex() {
   local stub="$1" branch="$2"
   (cd "$SBX" && AUTOPILOT_STRIKE_WRITER=off ENGINE_CAPABILITY_DIR="$ENGINE_CAPABILITY_DIR" \
-    "$SCRIPT" --no-verify-tip --runner codex --model gpt-6-terra \
+    "$SCRIPT" --no-verify-tip --runner codex --pin-reason "test fixture" --model gpt-6-terra \
     --codex-bin "$stub" --branch "$branch" --prompt-file "$PROMPT" --context-window off 2>&1)
 }
 

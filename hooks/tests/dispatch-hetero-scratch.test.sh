@@ -71,8 +71,8 @@ trap cleanup_scratch_fixture EXIT
 run_dispatch() {
   local tag="$1"; shift
   (cd "$TEST_TMP/repo" && PATH="$TEST_TMP/bin:$PATH" TMPDIR=/tmp AUTOPILOT_DISPATCH_RUNS_DIR="$TEST_TMP/runs-$tag" \
-    "$SCRIPT" --no-verify-tip --context-window off --runner cc-shim --endpoint minimax \
-      --model MiniMax-M2.5 --branch "feat/scratch-$tag" \
+    "$SCRIPT" --no-verify-tip --context-window off --runner cc-shim --pin-reason "test fixture" --endpoint minimax \
+      --model MiniMax-M2.5 --pin-reason "test fixture" --branch "feat/scratch-$tag" \
       --prompt-file "$TEST_TMP/$tag.md" "$@" >"$TEST_TMP/$tag.out" 2>"$TEST_TMP/$tag.err")
 }
 
@@ -137,8 +137,8 @@ export STUB_WAIT_DIR="$DETACH_WAIT"
 printf 'Create detached output.\n' > "$TEST_TMP/detached.md"
 (cd "$TEST_TMP/repo" && PATH="$TEST_TMP/bin:$PATH" TMPDIR=/tmp DISPATCH_DETACH=1 \
   AUTOPILOT_DISPATCH_RUNS_DIR="$TEST_TMP/runs-detached" \
-  "$SCRIPT" --no-verify-tip --context-window off --runner cc-shim --endpoint minimax \
-    --model MiniMax-M2.5 --branch feat/scratch-detached --prompt-file "$TEST_TMP/detached.md" --scratch \
+  "$SCRIPT" --no-verify-tip --context-window off --runner cc-shim --pin-reason "test fixture" --endpoint minimax \
+    --model MiniMax-M2.5 --pin-reason "test fixture" --branch feat/scratch-detached --prompt-file "$TEST_TMP/detached.md" --scratch \
     >"$TEST_TMP/detached.out" 2>"$TEST_TMP/detached.err") &
 DETACH_PARENT=$!
 for _ in $(seq 1 300); do [ -f "$DETACH_WAIT/worker-cwd" ] && break; sleep 0.1; done
@@ -160,7 +160,7 @@ for refused in agy grok codex qoderclicn opencode cursor kimi claude-native; do
   scratch_dirs=("$scratch_parent"/dispatch-hetero-scratch-*)
   before_scratch="${#scratch_dirs[@]}"
   (cd "$TEST_TMP/repo" && PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$TEST_TMP/runs-refuse-$refused" \
-    "$SCRIPT" --no-verify-tip --context-window off --runner "$refused" --model "test-$refused" --branch "feat/refuse-$refused" \
+    "$SCRIPT" --no-verify-tip --context-window off --runner "$refused" --pin-reason "test fixture" --model "test-$refused" --branch "feat/refuse-$refused" \
       --prompt-file "$TEST_TMP/refuse-$refused.md" --scratch >"$TEST_TMP/refuse-$refused.out" 2>"$TEST_TMP/refuse-$refused.err")
   RC=$?
   assert_exit_code "$RC" 2 "$refused scratch runner is refused"
@@ -196,7 +196,7 @@ assert_eq "$CALLS_BEFORE_SKILL_PRIVATE" "$(wc -l < "$STUB_CALLS" | tr -d ' ')" "
 
 printf 'Create kimi-produced.txt.\n' > "$TEST_TMP/kimi.md"
 (cd "$TEST_TMP/repo" && PATH="$TEST_TMP/bin:$PATH" TMPDIR=/tmp AUTOPILOT_DISPATCH_RUNS_DIR="$TEST_TMP/runs-kimi-bin" \
-  "$SCRIPT" --no-verify-tip --context-window off --runner kimi --kimi-bin "$TEST_TMP/bin/kimi" --model MiniMax-M2.5 \
+  "$SCRIPT" --no-verify-tip --context-window off --runner kimi --pin-reason "test fixture" --kimi-bin "$TEST_TMP/bin/kimi" --model MiniMax-M2.5 \
     --branch feat/scratch-kimi-bin --prompt-file "$TEST_TMP/kimi.md" --scratch >"$TEST_TMP/kimi.out" 2>"$TEST_TMP/kimi.err")
 RC=$?
 assert_exit_code "$RC" 2 "kimi-bin passes scratch runner gate but existing local stop blocks spawn"

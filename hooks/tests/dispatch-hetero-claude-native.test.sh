@@ -56,7 +56,7 @@ __EOF
 chmod +x "$BIN_DIR/claude"
 export PATH="$BIN_DIR:$PATH"
 
-run() { (cd "$SBX" && "$SCRIPT" --no-verify-tip --runner claude-native --model claude-sonnet-4-6 --effort low --prompt-file "$PROMPT" --context-window off "$@" 2>&1); }
+run() { (cd "$SBX" && "$SCRIPT" --no-verify-tip --runner claude-native --pin-reason "test fixture" --model claude-sonnet-4-6 --effort low --prompt-file "$PROMPT" --context-window off "$@" 2>&1); }
 
 # (a) no confirmation -> refused, stub never ran
 OUT="$(run --branch feat/cn-noconf)"; RC=$?

@@ -50,7 +50,7 @@ run_case() { # case-name + environment assignments in RUN_ENV array
   out="$(cd "$TARGET" && timeout 30 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
     PATH="$BINDIR:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$TEST_TMP/runs-$name" \
     AUTOPILOT_WORKTREE_ROOT="$TEST_TMP/wts-$name" STUB_CONTENT="${CONTENT:-clean edit}" \
-    "$@" "$SCRIPT" --no-verify-tip --runner grok --model cursor-grok-4.6 --grok-bin "$BINDIR/grok" \
+    "$@" "$SCRIPT" --no-verify-tip --runner grok --pin-reason "test fixture" --model cursor-grok-4.6 --grok-bin "$BINDIR/grok" \
     --branch "$branch" --prompt-file "$PROMPT" --timeout 15s 2>"$TEST_TMP/$name.err")" || rc=$?
   OUT="$out"; RC="$rc"; JSON="$(last_json "$OUT")"
   [ -n "$JSON" ] || fail "$name: missing result JSON (rc=$RC) stderr=$(cat "$TEST_TMP/$name.err")"

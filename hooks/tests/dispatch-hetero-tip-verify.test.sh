@@ -158,7 +158,7 @@ run_case() {
   local br="$1"; shift
   local prompt="${CASE_PROMPT:-$PROMPT_PLAIN}"
   EXIT=0
-  OUT="$(cd "$SBX" && "$SCRIPT" --branch "$br" --prompt-file "$prompt" --agy-bin "$STUB" --runner agy "$@" 2>&1)" || EXIT=$?
+  OUT="$(cd "$SBX" && "$SCRIPT" --branch "$br" --prompt-file "$prompt" --agy-bin "$STUB" --runner agy --pin-reason "test fixture" "$@" 2>&1)" || EXIT=$?
   J="$(last_json "$OUT")"
 }
 

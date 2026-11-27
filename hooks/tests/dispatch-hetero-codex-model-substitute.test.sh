@@ -45,7 +45,7 @@ chmod +x "$STUB"
 export STUB_CALLS="$CALLS"
 
 run_codex() {
-  (cd "$SBX" && "$SCRIPT" --no-verify-tip --runner codex --model gpt-6.1-terra \
+  (cd "$SBX" && "$SCRIPT" --no-verify-tip --runner codex --pin-reason "test fixture" --model gpt-6.1-terra \
     --codex-bin "$STUB" --branch "$1" --prompt-file "$PROMPT" --context-window off 2>"$TEST_TMP/stderr.txt")
 }
 

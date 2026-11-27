@@ -91,7 +91,7 @@ run_case() {
   mkdir -p "$runs"
   install_stub "$stub"
   (cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$runs" HETERO_IDLE_MODE="$mode" HETERO_IDLE_MAIN="$SBX" \
-    "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+    "$SCRIPT" --no-verify-tip --runner grok --pin-reason "test fixture" --model grok-4.5 --effort high --grok-bin "$stub" \
     --branch "$branch" --prompt-file "$PROMPT" "$@" 2>&1) || true
 }
 

@@ -134,8 +134,8 @@ run_dispatch() {
         "$REPO_ROOT/scripts/dispatch-hetero.sh" --no-verify-tip \
             --branch "$branch_name" \
             --prompt-file "$TEST_TMP/prompt-$branch_name.txt" \
-            --runner codex \
-            --model gpt-5.3-codex-spark \
+            --runner codex --pin-reason "test fixture" \
+            --model gpt-5.3-codex-spark --pin-reason "test fixture" \
             --codex-bin "$STUB" \
             "$@" 2>&1
     )
@@ -378,7 +378,7 @@ assert_file_absent "$RUN_MARKER_PATH"
 echo "--- R4: Disagreement on --model ---"
 CASE_TMP="$TEST_TMP/case-r4b"
 mkdir -p "$CASE_TMP"
-out=$(run_dispatch "t5b" --strict-contract --contract-file "$VALID_CONTRACT" --model gpt-5.5)
+out=$(run_dispatch "t5b" --strict-contract --contract-file "$VALID_CONTRACT" --model gpt-5.5 --pin-reason "test fixture")
 rc=$?
 assert_eq "$rc" 2
 assert_contains "$out" "precondition_failed"

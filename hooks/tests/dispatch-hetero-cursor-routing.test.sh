@@ -101,7 +101,7 @@ run_guard_case() {
   ( cd "$SBX" && PATH="$POISON_PATH" \
     AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
     "$SCRIPT" --no-verify-tip --branch "t-cursor-guard-$suffix" --prompt-file "$PROMPT" \
-    --runner auto --model "$model" 2>&1 )
+    --runner auto --pin-reason "test fixture" --model "$model" 2>&1 )
 }
 
 FULL_LOG="$TEST_TMP/full-guard-log.txt"
@@ -179,7 +179,7 @@ assert_not_contains "$OUT" '"runner": "agy"' \
 # BEFORE runner resolution — here, a missing --branch — must ALSO emit
 # runner: unresolved. Proves the fix is general, not cursor-special-cased.
 OUT="$(cd "$SBX" && PATH="$POISON_PATH" AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
-  "$SCRIPT" --no-verify-tip --prompt-file "$PROMPT" --runner auto --model gpt-5.3-codex-low 2>&1)"; EXIT=$?
+  "$SCRIPT" --no-verify-tip --prompt-file "$PROMPT" --runner auto --pin-reason "test fixture" --model gpt-5.3-codex-low 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "missing --branch → exit 2"
 assert_contains "$OUT" "--branch is required" "missing --branch precondition message"
 assert_contains "$OUT" '"runner": "unresolved"' \
@@ -222,7 +222,7 @@ fi
 UNRESOLVABLE_CODEX_BIN="codex-definitely-not-installed-9f3c7a1b"
 OUT="$(cd "$SBX" && PATH="$POISON_PATH" AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
   "$SCRIPT" --no-verify-tip --branch t-cursor-guard-non-over-capture --prompt-file "$PROMPT" \
-  --runner auto --model gpt-5.2 --codex-bin "$UNRESOLVABLE_CODEX_BIN" 2>&1)"; EXIT=$?
+  --runner auto --pin-reason "test fixture" --model gpt-5.2 --codex-bin "$UNRESOLVABLE_CODEX_BIN" 2>&1)"; EXIT=$?
 printf '%s\n' "$OUT" >> "$FULL_LOG"
 assert_eq "2" "$EXIT" "auto + gpt-5.2 → exit 2 (codex precondition, not the cursor guard)"
 assert_contains "$OUT" "codex binary not found: $UNRESOLVABLE_CODEX_BIN" \
@@ -272,7 +272,7 @@ fi
 # ---------------------------------------------------------------------------
 OUT="$(cd "$SBX" && PATH="$POISON_PATH" AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
   "$SCRIPT" --no-verify-tip --branch t-cursor-fast-wrong-runner --prompt-file "$PROMPT" \
-  --runner grok --model grok-4.5 --cursor-fast 2>&1)"; EXIT=$?
+  --runner grok --pin-reason "test fixture" --model grok-4.5 --cursor-fast 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "--cursor-fast with --runner grok → exit 2"
 assert_contains "$OUT" "--cursor-fast applies only to --runner cursor" \
   "--cursor-fast + non-cursor runner die_precondition message"
@@ -282,7 +282,7 @@ assert_contains "$OUT" "--cursor-fast applies only to --runner cursor" \
 # ---------------------------------------------------------------------------
 OUT="$(cd "$SBX" && PATH="$POISON_PATH" AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
   "$SCRIPT" --no-verify-tip --branch t-cursor-fast-full-id --prompt-file "$PROMPT" \
-  --runner cursor --model composer-2.5 --cursor-fast 2>&1)"; EXIT=$?
+  --runner cursor --pin-reason "test fixture" --model composer-2.5 --cursor-fast 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "--cursor-fast with a full-id --model → exit 2"
 assert_contains "$OUT" "--cursor-fast is unavailable on the cursor broker" \
   "--cursor-fast + full-id die_precondition message"

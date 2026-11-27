@@ -1,6 +1,6 @@
 'use strict';
 require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
-// G37 W3 (plan section 8) rail test: dispatch-hetero.sh --runner claude-native with an account registry.
+// G37 W3 (plan section 8) rail test: dispatch-hetero.sh --runner claude-native --pin-reason "test fixture" with an account registry.
 // BL-0418: no child of this test may read or write outside the fixture tmp dir. Every spawn gets an
 // explicit fixture cwd and an env whose HOME / state dirs are in the fixture and that carries no
 // GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE (per-call table in the BL-0418 commit). The negative
@@ -112,7 +112,7 @@ function world(opts) {
 }
 
 function dispatch(w, rail, extra) {
-  const r = spawnSync(rail, ['--runner', 'claude-native', '--model', 'claude-sonnet-4-6', '--prompt-file', w.prompt,
+  const r = spawnSync(rail, ['--runner', 'claude-native', '--pin-reason', 'test fixture', '--model', 'claude-sonnet-4-6', '--prompt-file', w.prompt,
     '--context-window', 'off', '--branch', 'feat/g37-' + Math.random().toString(36).slice(2, 8), ...(extra || [])],
   { cwd: w.repo, env: w.env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 120000 });
   return { rc: r.status, out: (r.stdout || '') + (r.stderr || '') };

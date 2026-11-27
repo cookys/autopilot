@@ -35,7 +35,7 @@ want=1
 for a in "\$@"; do
   case "\$a" in --model|--model=*|--runner|--runner=*|--pace-role|--pace-role=*|--contract|--contract=*) want=0 ;; esac
 done
-if [ "\$want" -eq 1 ]; then exec "$REAL_SCRIPT" "\$@" --runner agy; fi
+if [ "\$want" -eq 1 ]; then exec "$REAL_SCRIPT" "\$@" --runner agy --pin-reason "test fixture"; fi
 exec "$REAL_SCRIPT" "\$@"
 WRAP
 chmod +x "$SCRIPT"
@@ -210,7 +210,7 @@ assert_contains "$OUT" "not found" "missing binary error text"
 # worktree, manifest, or runner effects.
 rm -f "$FOREIGN_D2_MARKER"
 OUT="$(cd "$SBX" && AUTOPILOT_PLATFORM_CAPABILITY_RECEIPT="$FOREIGN_D2_RECEIPT" \
-  "$SCRIPT" --no-verify-tip --runner agy --model "Gemini 3.5 Flash (High)" \
+  "$SCRIPT" --no-verify-tip --runner agy --pin-reason "test fixture" --model "Gemini 3.5 Flash (High)" \
   --branch feat/foreign-d2 --prompt-file "$PROMPT" --agy-bin "$STUB_FOREIGN_D2" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "foreign D2 implementer receipt exits as precondition failure"
 assert_contains "$OUT" '"status": "precondition_failed"' "foreign D2 implementer receipt fails closed"
@@ -224,7 +224,7 @@ FOREIGN_D2_WT="$(printf '%s' "$OUT" | grep -o '"worktree": "[^"]*"' | cut -d'"' 
 git -C "$SBX" branch -D feat/foreign-d2 >/dev/null 2>&1 || true
 
 # 3a. bad --runner / --effort → precondition_failed, exit 2 (arg validation, no LLM)
-OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch t1 --prompt-file "$PROMPT" --runner bogus --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch t1 --prompt-file "$PROMPT" --runner bogus --pin-reason "test fixture" --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "bad --runner exit code"
 assert_contains "$OUT" "runner must be one of" "bad --runner error text"
 OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch t1 --prompt-file "$PROMPT" --effort turbo --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
@@ -279,7 +279,7 @@ assert_eq "$(lineage_root_of "$OUT_BOTH")" "lineage-probe-root" \
 OUT="$(cd "$SBX" && PATH=/usr/bin:/bin \
   AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
   "$SCRIPT" --no-verify-tip --branch t1 --prompt-file "$PROMPT" \
-  --runner auto --model gpt-5.3-codex-spark 2>&1)"; EXIT=$?
+  --runner auto --pin-reason "test fixture" --model gpt-5.3-codex-spark 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "auto-detect routes gpt-5.3-codex-spark to codex (not agy)"
 assert_contains "$OUT" "codex binary not found" "codex routing does not fall through to agy"
 
@@ -289,12 +289,12 @@ assert_contains "$OUT" "codex binary not found" "codex routing does not fall thr
 OUT="$(cd "$SBX" && PATH=/usr/bin:/bin AUTOPILOT_TEST_CN_GATE_OFF=1 \
   AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
   "$SCRIPT" --no-verify-tip --branch t1 --prompt-file "$PROMPT" \
-  --runner auto --model Qwen3.8-Max-Preview 2>&1)"; EXIT=$?
+  --runner auto --pin-reason "test fixture" --model Qwen3.8-Max-Preview 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "auto-detect refuses Qwen3.8-Max-Preview (auto never selects qoderclicn)"
 assert_contains "$OUT" "--runner cc-shim --endpoint" "auto-detect Qwen refusal names cc-shim --endpoint"
 
 # 3d. negative: explicit --runner qoderclicn is known; a missing binary is precondition_failed.
-OUT="$(cd "$SBX" && AUTOPILOT_TEST_CN_GATE_OFF=1 "$SCRIPT" --no-verify-tip --branch feat/qoder-missing --prompt-file "$PROMPT" --runner qoderclicn --qoder-bin "$TEST_TMP/no-such-qoderclicn" --model Qwen3.8-Max-Preview 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && AUTOPILOT_TEST_CN_GATE_OFF=1 "$SCRIPT" --no-verify-tip --branch feat/qoder-missing --prompt-file "$PROMPT" --runner qoderclicn --pin-reason "test fixture" --qoder-bin "$TEST_TMP/no-such-qoderclicn" --model Qwen3.8-Max-Preview 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "missing qoderclicn binary exits 2"
 assert_contains "$OUT" '"status": "precondition_failed"' "missing qoderclicn binary -> precondition_failed"
 assert_contains "$OUT" "qoder binary not found" "missing qoderclicn binary names the precondition"
@@ -430,7 +430,7 @@ printf '%s' '{"response":"partial-envelope-marker-7f3a"'
 EOF
 chmod +x "$STUB_BAD_ENVELOPE"
 make_agy_stub_versioned "$STUB_BAD_ENVELOPE"
-OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner agy --model "Gemini 3.5 Flash (High)" \
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner agy --pin-reason "test fixture" --model "Gemini 3.5 Flash (High)" \
   --branch feat/bad-envelope --prompt-file "$PROMPT" --agy-bin "$STUB_BAD_ENVELOPE" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "malformed agy envelope with a clean commit exits 0 (status from artifacts)"
 assert_contains "$OUT" '"status": "committed"' "malformed agy envelope no longer converts a landed commit into failure"
@@ -444,7 +444,7 @@ STUB_BAD_ENVELOPE_NOEDIT="$TEST_TMP/agy-bad-envelope-noedit"
 printf '#!/usr/bin/env bash\nprintf %%s "{\"response\":"\n' > "$STUB_BAD_ENVELOPE_NOEDIT"
 chmod +x "$STUB_BAD_ENVELOPE_NOEDIT"
 make_agy_stub_versioned "$STUB_BAD_ENVELOPE_NOEDIT"
-OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner agy --model "Gemini 3.5 Flash (High)" \
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner agy --pin-reason "test fixture" --model "Gemini 3.5 Flash (High)" \
   --branch feat/bad-envelope-noedit --prompt-file "$PROMPT" --agy-bin "$STUB_BAD_ENVELOPE_NOEDIT" 2>&1)"
 assert_contains "$OUT" '"status": "no_op"' "malformed envelope + no edits → no_op (artifact truth), not failure"
 
@@ -459,7 +459,7 @@ exit 77
 EOF
 chmod +x "$STUB_NONZERO_ENVELOPE"
 make_agy_stub_versioned "$STUB_NONZERO_ENVELOPE"
-OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner agy --model "Gemini 3.5 Flash (High)" \
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner agy --pin-reason "test fixture" --model "Gemini 3.5 Flash (High)" \
   --branch feat/nonzero-envelope --prompt-file "$PROMPT" --agy-bin "$STUB_NONZERO_ENVELOPE" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "nonzero agy exit after valid-looking envelope fails closed"
 assert_contains "$OUT" '"status": "failure"' "nonzero agy exit is never committed success"
@@ -612,7 +612,7 @@ chmod +x "$STUB_GROK_REUSE"
 GROK_ROOT="campaign-v1-grok-reuse"
 OUT="$(cd "$SBX" && env AUTOPILOT_WORKTREE_ROOT_RUN_ID="$GROK_ROOT" \
   GROK_REUSE_CAPTURE="$GROK_REUSE_CAPTURE" "$SCRIPT" --no-verify-tip \
-  --runner grok --model grok-4.5 --grok-bin "$STUB_GROK_REUSE" \
+  --runner grok --pin-reason "test fixture" --model grok-4.5 --grok-bin "$STUB_GROK_REUSE" \
   --branch feat/grok-reuse --prompt-file "$PROMPT" --keep-worktree \
   --retain-owner "$GROK_ROOT" --retain-reason repair-lineage \
   --retain-until "$RETAIN_UNTIL" 2>&1)"; EXIT=$?
@@ -661,7 +661,7 @@ assert_file_exists "$GROK_REUSE_WT/grok-lineage.txt" \
 
 OUT_REPAIR="$(cd "$SBX" && env AUTOPILOT_WORKTREE_ROOT_RUN_ID="$GROK_ROOT" \
   GROK_REUSE_CAPTURE="$GROK_REUSE_CAPTURE" "$SCRIPT" --no-verify-tip \
-  --runner grok --model grok-4.5 --grok-bin "$STUB_GROK_REUSE" \
+  --runner grok --pin-reason "test fixture" --model grok-4.5 --grok-bin "$STUB_GROK_REUSE" \
   --branch feat/grok-reuse --base "$GROK_REUSE_COMMIT" --prompt-file "$PROMPT" \
   --keep-worktree --reuse-worktree "$GROK_REUSE_WT" \
   --expected-worktree-instance "$GROK_REUSE_INSTANCE" \
@@ -690,7 +690,7 @@ repair:$GROK_REUSE_SESSION" "$(cat "$GROK_REUSE_CAPTURE")" \
 GROK_CAPTURE_LINES_BEFORE="$(wc -l < "$GROK_REUSE_CAPTURE" | tr -d ' ')"
 OUT_INSTANCE_MISMATCH="$(cd "$SBX" && env AUTOPILOT_WORKTREE_ROOT_RUN_ID="$GROK_ROOT" \
   GROK_REUSE_CAPTURE="$GROK_REUSE_CAPTURE" "$SCRIPT" --no-verify-tip \
-  --runner grok --model grok-4.5 --grok-bin "$STUB_GROK_REUSE" \
+  --runner grok --pin-reason "test fixture" --model grok-4.5 --grok-bin "$STUB_GROK_REUSE" \
   --branch feat/grok-reuse --base "$(git -C "$GROK_REUSE_WT" rev-parse HEAD)" \
   --prompt-file "$PROMPT" --keep-worktree --reuse-worktree "$GROK_REUSE_WT" \
   --expected-worktree-instance "$(printf '0%.0s' {1..64})" \
@@ -715,7 +715,7 @@ flock -x "$TEST_REUSE_LOCK_FD"
   cd "$SBX"
   env AUTOPILOT_WORKTREE_ROOT_RUN_ID="$GROK_ROOT" \
     GROK_REUSE_CAPTURE="$GROK_REUSE_CAPTURE" "$SCRIPT" --no-verify-tip \
-    --runner grok --model grok-4.5 --grok-bin "$STUB_GROK_REUSE" \
+    --runner grok --pin-reason "test fixture" --model grok-4.5 --grok-bin "$STUB_GROK_REUSE" \
     --branch feat/grok-reuse --base "$LOCKED_BASE" --prompt-file "$PROMPT" \
     --keep-worktree --reuse-worktree "$GROK_REUSE_WT" \
     --expected-worktree-instance "$GROK_REUSE_INSTANCE" \
@@ -743,7 +743,7 @@ touch "$GROK_REUSE_WT/uncommitted-user-data.txt"
 GROK_CAPTURE_LINES_BEFORE="$(wc -l < "$GROK_REUSE_CAPTURE" | tr -d ' ')"
 OUT_DIRTY_REUSE="$(cd "$SBX" && env AUTOPILOT_WORKTREE_ROOT_RUN_ID="$GROK_ROOT" \
   GROK_REUSE_CAPTURE="$GROK_REUSE_CAPTURE" "$SCRIPT" --no-verify-tip \
-  --runner grok --model grok-4.5 --grok-bin "$STUB_GROK_REUSE" \
+  --runner grok --pin-reason "test fixture" --model grok-4.5 --grok-bin "$STUB_GROK_REUSE" \
   --branch feat/grok-reuse --base "$(git -C "$GROK_REUSE_WT" rev-parse HEAD)" \
   --prompt-file "$PROMPT" --keep-worktree --reuse-worktree "$GROK_REUSE_WT" \
   --expected-worktree-instance "$GROK_REUSE_INSTANCE" \
@@ -772,7 +772,7 @@ OUT="$( (
   cd "$SBX"
   CODEX_HOME="$CODEX_CONTROLLER_HOME" CONTROLLER_CODEX_HOME="$CODEX_CONTROLLER_HOME" \
     CODEX_ISOLATION_LOG="$CODEX_ISOLATION_LOG" CODEX_THREAD_ID=controller-thread \
-    PATH="$TEST_TMP:$PATH" "$SCRIPT" --no-verify-tip --branch feat/codex-no-commit --prompt-file "$PROMPT" --runner codex --model gpt-5.3-codex-spark
+    PATH="$TEST_TMP:$PATH" "$SCRIPT" --no-verify-tip --branch feat/codex-no-commit --prompt-file "$PROMPT" --runner codex --pin-reason "test fixture" --model gpt-5.3-codex-spark
 ) 2>&1 )"; EXIT=$?
 assert_eq "0" "$EXIT" "codex wrapper-commit exit code"
 assert_contains "$OUT" '"status": "committed"' "codex wrapper-commit status"
@@ -790,7 +790,7 @@ mkdir -p "$AUTHOR_ONLY_HOME"
 OUT="$( (
   cd "$SBX"
   env HOME="$AUTHOR_ONLY_HOME" GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t PATH="$TEST_TMP:$PATH" \
-    "$SCRIPT" --no-verify-tip --branch feat/codex-author-only --prompt-file "$PROMPT" --runner codex --model gpt-5.3-codex-spark
+    "$SCRIPT" --no-verify-tip --branch feat/codex-author-only --prompt-file "$PROMPT" --runner codex --pin-reason "test fixture" --model gpt-5.3-codex-spark
 ) 2>&1 )"; EXIT=$?
 assert_eq "0" "$EXIT" "codex wrapper-commit with author-only env exit code"
 assert_contains "$OUT" '"status": "committed"' "codex author-only wrapper-commit status"
@@ -809,7 +809,7 @@ esac
 touch should_not_run.txt
 OLDEOF
 chmod +x "$STUB_CODEX_OLD"
-OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/codex-old --prompt-file "$PROMPT" --runner codex --model gpt-5.3-codex-spark --codex-bin "$STUB_CODEX_OLD" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/codex-old --prompt-file "$PROMPT" --runner codex --pin-reason "test fixture" --model gpt-5.3-codex-spark --codex-bin "$STUB_CODEX_OLD" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "stale codex → precondition_failed exit 2 (not question_suspected)"
 assert_contains "$OUT" '"status": "precondition_failed"' "stale codex status precondition_failed"
 assert_contains "$OUT" 'does not support --dangerously-bypass-hook-trust' "stale codex error names the missing flag"
@@ -821,13 +821,13 @@ assert_file_absent "$SBX/should_not_run.txt" "stale codex never actually dispatc
 # worker's post-`cd $WT` exec would miss it.
 OUT="$( (
   cd "$SBX"
-  "$SCRIPT" --no-verify-tip --branch feat/codex-relbin --prompt-file "$PROMPT" --runner codex --model gpt-5.3-codex-spark --codex-bin ../codex
+  "$SCRIPT" --no-verify-tip --branch feat/codex-relbin --prompt-file "$PROMPT" --runner codex --pin-reason "test fixture" --model gpt-5.3-codex-spark --codex-bin ../codex
 ) 2>&1 )"; EXIT=$?
 assert_eq "0" "$EXIT" "relative --codex-bin absolutized → committed exit 0"
 assert_contains "$OUT" '"status": "committed"' "relative --codex-bin wrapper-commit status"
 
 # 5j. unresolvable path-form --codex-bin must fail closed (NOT silently become /<basename>) — R2
-OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/codex-badbin --prompt-file "$PROMPT" --runner codex --model gpt-5.3-codex-spark --codex-bin nonexistent-dir/codex 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/codex-badbin --prompt-file "$PROMPT" --runner codex --pin-reason "test fixture" --model gpt-5.3-codex-spark --codex-bin nonexistent-dir/codex 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "unresolvable --codex-bin dir → precondition exit 2"
 assert_contains "$OUT" 'not resolvable' "unresolvable --codex-bin names the path"
 
@@ -919,7 +919,7 @@ rm -rf "$CAP_TEST_DIR"
 # the agy quota stub is never exercised (the whole point of this case). A non-zero
 # agy exit with no commit + quota_exhausted log → engine_unavailable (exit 1);
 # passive_capture still records the quota event.
-OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner agy --branch feat/quota-fail --prompt-file "$PROMPT" --agy-bin "$STUB_QUOTA_FAIL" --model "gpt-5.5" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner agy --pin-reason "test fixture" --branch feat/quota-fail --prompt-file "$PROMPT" --agy-bin "$STUB_QUOTA_FAIL" --model "gpt-5.5" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "quota failure exit code remains 1"
 assert_contains "$OUT" '"status": "engine_unavailable"' "quota failure status is engine_unavailable"
 assert_contains "$OUT" "engine unavailable (quota_exhausted)" "quota failure error names the classification"
@@ -928,12 +928,12 @@ assert_contains "$OUT" "engine unavailable (quota_exhausted)" "quota failure err
 # runner/model/effort/endpoint tuple (passive capture now binds effort + endpoint:null).
 assert_file_exists "$CAP_TEST_DIR/capability.jsonl" "capability store contains recorded event"
 recorded_status="$(node "$REPO_ROOT/scripts/engine-capability-state.js" current \
-  --runner agy --model "gpt-5.5" --role implementer --effort xhigh --endpoint @none \
+  --runner agy --pin-reason "test fixture" --model "gpt-5.5" --role implementer --effort xhigh --endpoint @none \
   --store "$CAP_TEST_DIR" | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0, 'utf8')).capability.quota.status)")"
 assert_eq "$recorded_status" "exhausted" "recorded quota status is exhausted"
 # Legacy/neighboring lookup without the exact effort must not inherit the observation.
 legacy_status="$(node "$REPO_ROOT/scripts/engine-capability-state.js" current \
-  --runner agy --model "gpt-5.5" --role implementer --store "$CAP_TEST_DIR" \
+  --runner agy --pin-reason "test fixture" --model "gpt-5.5" --role implementer --store "$CAP_TEST_DIR" \
   | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0, 'utf8')).capability.quota.status)")"
 assert_neq "$legacy_status" "exhausted" "legacy incomplete observation does not authorize exact-tuple exhaustion"
 
@@ -947,7 +947,7 @@ exit 1
 EOF
 chmod +x "$STUB_GROK_402"
 make_agy_stub_versioned "$STUB_GROK_402"
-OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner agy --branch feat/grok-402 --prompt-file "$PROMPT" --agy-bin "$STUB_GROK_402" --model "gpt-5.5" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner agy --pin-reason "test fixture" --branch feat/grok-402 --prompt-file "$PROMPT" --agy-bin "$STUB_GROK_402" --model "gpt-5.5" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "grok 402 fixture exit code is 1"
 assert_contains "$OUT" '"status": "engine_unavailable"' "grok 402 fixture status is engine_unavailable"
 assert_contains "$OUT" "engine unavailable (quota_exhausted)" "grok 402 error names quota_exhausted"
@@ -1199,7 +1199,7 @@ assert_contains "$OUT" '"status": "precondition_failed"' "nonexistent skill retu
 CAP_NATIVE_DIR="$TEST_TMP/cap-store-native"
 rm -rf "$CAP_NATIVE_DIR"
 export ENGINE_CAPABILITY_DIR="$CAP_NATIVE_DIR"
-OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/skill-native-fail --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode native --model "gpt-5.5" --runner agy 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/skill-native-fail --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode native --model "gpt-5.5" --runner agy --pin-reason "test fixture" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "unsupported native skill exit code"
 assert_contains "$OUT" '"status": "precondition_failed"' "unsupported native skill returns precondition_failed"
 
@@ -1207,7 +1207,7 @@ assert_contains "$OUT" '"status": "precondition_failed"' "unsupported native ski
 NATIVE_EVENT_JSON='{"schema_version":1,"observed_at":"2026-07-02T00:00:00Z","runner":"agy","model":"gpt-5.5","role":"implementer","runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"evidence":"test"},"skill_transport":{"native":"supported","prompt_pack":"supported"}}}'
 echo "$NATIVE_EVENT_JSON" | node "$REPO_ROOT/scripts/engine-capability-state.js" record --store "$CAP_NATIVE_DIR" >/dev/null
 
-OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/skill-native-pass --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode native --model "gpt-5.5" --runner agy 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/skill-native-pass --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode native --model "gpt-5.5" --runner agy --pin-reason "test fixture" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "supported native skill exit code"
 assert_contains "$OUT" '"skill_mode_effective": "native"' "provenance shows native skill transport"
 
@@ -1216,7 +1216,7 @@ FRESH_DATE="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 FRESH_NATIVE_EVENT_JSON="{\"schema_version\":1,\"observed_at\":\"$FRESH_DATE\",\"runner\":\"agy\",\"model\":\"gpt-5.5\",\"role\":\"implementer\",\"runner_version\":\"v1.0.0\",\"capability\":{\"quota\":{\"status\":\"available\",\"confidence\":\"high\",\"ttl_seconds\":3600,\"evidence\":\"test\"},\"skill_transport\":{\"native\":\"supported\",\"prompt_pack\":\"supported\"}}}"
 echo "$FRESH_NATIVE_EVENT_JSON" | node "$REPO_ROOT/scripts/engine-capability-state.js" record --store "$CAP_NATIVE_DIR" >/dev/null
 
-OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/skill-auto-fresh --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode auto --model "gpt-5.5" --runner agy 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/skill-auto-fresh --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode auto --model "gpt-5.5" --runner agy --pin-reason "test fixture" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "auto fresh exit code"
 assert_contains "$OUT" '"skill_mode_effective": "native"' "auto resolves to native when fresh"
 
@@ -1226,12 +1226,12 @@ STALE_NATIVE_EVENT_JSON="{\"schema_version\":1,\"observed_at\":\"$STALE_DATE\",\
 rm -rf "$CAP_NATIVE_DIR"
 echo "$STALE_NATIVE_EVENT_JSON" | node "$REPO_ROOT/scripts/engine-capability-state.js" record --store "$CAP_NATIVE_DIR" >/dev/null
 
-OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/skill-auto-stale --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode auto --model "gpt-5.5" --runner agy --skill autopilot:dev-flow 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/skill-auto-stale --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode auto --model "gpt-5.5" --runner agy --pin-reason "test fixture" --skill autopilot:dev-flow 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "auto stale exit code"
 assert_contains "$OUT" '"skill_mode_effective": "prompt"' "auto falls back to prompt when native is stale"
 
 # 18. --skill-mode auto resolves to off when native is stale and no skills given
-OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/skill-auto-stale-noskill --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode auto --model "gpt-5.5" --runner agy 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/skill-auto-stale-noskill --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode auto --model "gpt-5.5" --runner agy --pin-reason "test fixture" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "auto stale noskill exit code"
 assert_contains "$OUT" '"skill_mode_effective": "off"' "auto resolves to off when stale and no skills given"
 
@@ -1244,7 +1244,7 @@ F4_STALE="$(node -e 'const d=new Date();d.setDate(d.getDate()-2);console.log(d.t
 F4_FRESH="$(node -e 'console.log(new Date().toISOString())')"
 echo "{\"schema_version\":1,\"observed_at\":\"$F4_STALE\",\"runner\":\"agy\",\"model\":\"gpt-5.5\",\"role\":\"implementer\",\"runner_version\":\"v1.0.0\",\"capability\":{\"quota\":{\"status\":\"unknown\",\"confidence\":\"low\",\"ttl_seconds\":0,\"evidence\":\"t\"},\"skill_transport\":{\"native\":\"supported\",\"prompt_pack\":\"unknown\"}}}" | node "$REPO_ROOT/scripts/engine-capability-state.js" record --store "$CAP_NATIVE_DIR" >/dev/null
 echo "{\"schema_version\":1,\"observed_at\":\"$F4_FRESH\",\"runner\":\"agy\",\"model\":\"gpt-5.5\",\"role\":\"implementer\",\"runner_version\":\"v1.0.0\",\"capability\":{\"quota\":{\"status\":\"available\",\"confidence\":\"high\",\"ttl_seconds\":3600,\"evidence\":\"t\"}}}" | node "$REPO_ROOT/scripts/engine-capability-state.js" record --store "$CAP_NATIVE_DIR" >/dev/null
-OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/skill-auto-f4 --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode auto --model "gpt-5.5" --runner agy --skill autopilot:dev-flow 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/skill-auto-f4 --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode auto --model "gpt-5.5" --runner agy --pin-reason "test fixture" --skill autopilot:dev-flow 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "auto F4 exit code"
 assert_contains "$OUT" '"skill_mode_effective": "prompt"' "auto reads native_observed_at: a fresh quota-only event does not make a stale native signal look fresh"
 
@@ -1311,7 +1311,7 @@ LEDGER_GROK="$TEST_TMP/grok-detached-ledger/ledger.jsonl"
 mkdir -p "$TEST_TMP/grok-detached-ledger"
 bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$LEDGER_GROK" >/dev/null
 OUT="$(cd "$SBX" && env GROK_EFFORT_CAPTURE="$GROK_EFFORT_CAPTURE" DISPATCH_QUIET=1 \
-  "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$STUB_GROK_EFFORT" \
+  "$SCRIPT" --no-verify-tip --runner grok --pin-reason "test fixture" --model grok-4.5 --effort high --grok-bin "$STUB_GROK_EFFORT" \
   --branch feat/grok-detached-effort --prompt-file "$PROMPT" --ledger "$LEDGER_GROK" \
   --run-id grok-detached-effort --stage implement 2>&1)"; EXIT=$?
 [ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (detached Grok): %s\n' "$OUT" >&2
@@ -1819,7 +1819,7 @@ function runDispatch(stub, contractPath, extraEnv = {}) {
   fs.writeFileSync(livePath, `${JSON.stringify(body, null, 2)}\n`);
   const r = spawnSync('bash', [
     script,
-    '--runner', 'agy',
+    '--runner', 'agy', '--pin-reason', 'test fixture',
     '--agy-bin', stub,
     '--branch', `feat/req-${path.basename(stub)}`,
     '--prompt-file', path.join(tmp, 'p.txt'),
@@ -2030,7 +2030,7 @@ function runCampaignPostcheckDispatch() {
   fs.writeFileSync(livePath, fs.readFileSync(engineUnitNoReceiptPath));
   const result = spawnSync('bash', [
     script,
-    '--runner', 'agy',
+    '--runner', 'agy', '--pin-reason', 'test fixture',
     '--agy-bin', stubPostcheckEmptyDiff,
     '--branch', branch,
     '--base', base2,
@@ -2140,7 +2140,7 @@ assert_contains "$REQ_MATRIX_OUT" '"engine_caller_zero_diff_forbidden":true' \
 # now emits both columns (hooks/tests/lib.sh make_agy_stub_versioned), so this case fails if the
 # first-field extraction in lib/agy-model-alias.sh is reverted.
 OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/alias-resolve --prompt-file "$PROMPT" \
-  --agy-bin "$STUB_OK" --model gemini-flash-high --runner agy 2>&1)"; EXIT=$?
+  --agy-bin "$STUB_OK" --model gemini-flash-high --runner agy --pin-reason "test fixture" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "gemini-flash alias dispatch exit code"
 assert_contains "$OUT" '"model": "gemini-3.7-flash-high"' \
   "alias resolves against the two-column agy models inventory"
@@ -2149,7 +2149,7 @@ assert_not_contains "$OUT" '"model": "gemini-flash-high"' \
 
 # --runner agy without --model defaults to the cheap hydrogen tier (never carbon, an expensive seat).
 OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/alias-default --prompt-file "$PROMPT" \
-  --agy-bin "$STUB_OK" --runner agy 2>&1)"; EXIT=$?
+  --agy-bin "$STUB_OK" --runner agy --pin-reason "test fixture" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "default-model dispatch exit code"
 assert_contains "$OUT" '"model": "gemini-4-hydrogen-low"' \
   "the agy default is gemini-4-hydrogen-low"
@@ -2157,7 +2157,7 @@ assert_not_contains "$OUT" 'carbon' "the agy default never names carbon"
 
 # --- runners without their own default (e.g. pi) must be told; codex/grok/agy/opencode default (impl-defaults.test.sh) ---
 OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/nomodel-pi --prompt-file "$PROMPT" \
-  --runner pi 2>&1)"; EXIT=$?
+  --runner pi --pin-reason "test fixture" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "non-agy runner without --model exit code"
 assert_contains "$OUT" '"status": "precondition_failed"' "non-agy default refusal is a precondition"
 assert_contains "$OUT" "--model is required for runner 'pi'" \
@@ -2637,14 +2637,14 @@ make_agy_stub_versioned "$STUB_EFFORT_ARGV"
 
 # RED at base fe225ff5: gemini-flash-medium default effort reached the stub as --effort high
 OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/effort-medium --prompt-file "$PROMPT" \
-  --agy-bin "$STUB_EFFORT_ARGV" --model gemini-flash-medium --runner agy 2>&1)"; EXIT=$?
+  --agy-bin "$STUB_EFFORT_ARGV" --model gemini-flash-medium --runner agy --pin-reason "test fixture" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "hetero gemini-flash-medium default effort exit 0"
 assert_eq "medium" "$(agy_effort_from_argv "$TEST_TMP/hetero-agy.argv")" \
   "hetero alias gemini-flash-medium default effort reaches stub as --effort medium"
 
 # RED at base fe225ff5: gemini-flash-high --effort low reached stub as --effort high with no fold note
 OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/effort-fold --prompt-file "$PROMPT" \
-  --agy-bin "$STUB_EFFORT_ARGV" --model gemini-flash-high --effort low --runner agy 2>&1)"; EXIT=$?
+  --agy-bin "$STUB_EFFORT_ARGV" --model gemini-flash-high --effort low --runner agy --pin-reason "test fixture" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "hetero gemini-flash-high --effort low exit 0"
 assert_eq "high" "$(agy_effort_from_argv "$TEST_TMP/hetero-agy.argv")" \
   "hetero gemini-flash-high --effort low reaches stub as --effort high"
@@ -2654,13 +2654,13 @@ assert_contains "$OUT" "agy effort low (clamped low) folded to high: model id en
 
 # (preservation, green at base)
 OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/effort-high --prompt-file "$PROMPT" \
-  --agy-bin "$STUB_EFFORT_ARGV" --model gemini-flash-high --effort high --runner agy 2>&1)"; EXIT=$?
+  --agy-bin "$STUB_EFFORT_ARGV" --model gemini-flash-high --effort high --runner agy --pin-reason "test fixture" 2>&1)"; EXIT=$?
 assert_eq "high" "$(agy_effort_from_argv "$TEST_TMP/hetero-agy.argv")" \
   "hetero gemini-flash-high --effort high stays --effort high"
 assert_eq "0" "$(count_fold_notes "$OUT")" "hetero zero fold notes when clamp matches suffix"
 
 OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/effort-xhigh --prompt-file "$PROMPT" \
-  --agy-bin "$STUB_EFFORT_ARGV" --model gemini-flash-high --runner agy 2>&1)"; EXIT=$?
+  --agy-bin "$STUB_EFFORT_ARGV" --model gemini-flash-high --runner agy --pin-reason "test fixture" 2>&1)"; EXIT=$?
 assert_eq "high" "$(agy_effort_from_argv "$TEST_TMP/hetero-agy.argv")" \
   "hetero gemini-flash-high default xhigh reaches stub as --effort high"
 assert_eq "0" "$(count_fold_notes "$OUT")" "hetero zero fold notes for default xhigh on -high id"
@@ -2670,7 +2670,7 @@ export AGY_STUB_MODELS="$(printf '%s\n' \
   'gemini-3.7-flash	Gemini 3.7 Flash' \
   'gemini-3.7-flash-high	Gemini 3.7 Flash (High)')"
 OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/effort-bare --prompt-file "$PROMPT" \
-  --agy-bin "$STUB_EFFORT_ARGV" --model gemini-3.7-flash --runner agy 2>&1)"; EXIT=$?
+  --agy-bin "$STUB_EFFORT_ARGV" --model gemini-3.7-flash --runner agy --pin-reason "test fixture" 2>&1)"; EXIT=$?
 unset AGY_STUB_MODELS
 assert_eq "0" "$EXIT" "hetero bare agy id exit 0"
 assert_eq "high" "$(agy_effort_from_argv "$TEST_TMP/hetero-agy.argv")" \
@@ -2689,7 +2689,7 @@ printf '%s\n' "\$@" > "$HETERO_GROK_ARGV"
 printf 'grok argv\n' > grok-argv.txt
 EOF
 chmod +x "$STUB_GROK_ARGV"
-OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$STUB_GROK_ARGV" \
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner grok --pin-reason "test fixture" --model grok-4.5 --effort high --grok-bin "$STUB_GROK_ARGV" \
   --branch feat/grok-argv --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "hetero grok argv capture exit 0"
 assert_eq "$(normalize_argv < "$HETERO_GROK_ARGV")" "$(printf '%s\n' \
@@ -2709,7 +2709,7 @@ printf '%s\n' "\$@" > "$HETERO_CODEX_ARGV"
 printf 'codex argv\n' > codex-argv.txt
 EOF
 chmod +x "$STUB_CODEX_ARGV"
-OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner codex --model gpt-5.3-codex-spark --effort high \
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner codex --pin-reason "test fixture" --model gpt-5.3-codex-spark --effort high \
   --codex-bin "$STUB_CODEX_ARGV" --branch feat/codex-argv --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "hetero codex argv capture exit 0"
 assert_eq "$(normalize_argv < "$HETERO_CODEX_ARGV")" "$(printf '%s\n' \
@@ -2731,7 +2731,7 @@ ln -sf "$STUB_CC_ARGV" "$TEST_TMP/hetero-cc-bin/claude"
 export AUTOPILOT_ENDPOINT_TESTEP_URL="http://127.0.0.1:9/v1"
 export AUTOPILOT_ENDPOINT_TESTEP_TOKEN="t"
 OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-cc-bin:$PATH" \
-  "$SCRIPT" --no-verify-tip --runner cc-shim --model mini --endpoint TESTEP --branch feat/cc-argv --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
+  "$SCRIPT" --no-verify-tip --runner cc-shim --pin-reason "test fixture" --model mini --endpoint TESTEP --branch feat/cc-argv --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "hetero cc-shim argv capture exit 0"
 assert_eq "$(normalize_argv < "$HETERO_CC_ARGV")" "$(printf '%s\n' \
   -p --session-id UUID --model mini --strict-mcp-config --dangerously-skip-permissions --disallowedTools TaskCreate,TaskUpdate,TaskGet,TaskList --output-format json)" \
@@ -2743,7 +2743,7 @@ assert_eq "$(normalize_argv < "$HETERO_CC_ARGV")" "$(printf '%s\n' \
 for _he_eff in low medium high xhigh max; do
   rm -f "$HETERO_CC_ARGV"
   OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-cc-bin:$PATH" \
-    "$SCRIPT" --no-verify-tip --runner cc-shim --model mini --endpoint TESTEP --effort "$_he_eff" --branch "feat/cc-eff-$_he_eff" --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
+    "$SCRIPT" --no-verify-tip --runner cc-shim --pin-reason "test fixture" --model mini --endpoint TESTEP --effort "$_he_eff" --branch "feat/cc-eff-$_he_eff" --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
   assert_eq "0" "$EXIT" "hetero cc-shim --effort $_he_eff exit 0"
   assert_contains "$(tr '\n' ' ' < "$HETERO_CC_ARGV")" "--effort $_he_eff " "hetero cc-shim forwards --effort $_he_eff to claude"
 done
@@ -2756,7 +2756,7 @@ LEDGER_CC="$TEST_TMP/cc-detached-ledger/ledger.jsonl"
 mkdir -p "$TEST_TMP/cc-detached-ledger"
 bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$LEDGER_CC" >/dev/null
 OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-cc-bin:$PATH" DISPATCH_QUIET=1 \
-  "$SCRIPT" --no-verify-tip --runner cc-shim --model mini --endpoint TESTEP --effort low --branch feat/cc-detached-effort \
+  "$SCRIPT" --no-verify-tip --runner cc-shim --pin-reason "test fixture" --model mini --endpoint TESTEP --effort low --branch feat/cc-detached-effort \
   --prompt-file "$PROMPT" --ledger "$LEDGER_CC" --run-id cc-detached-effort --stage implement 2>&1)"; EXIT=$?
 [ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (detached cc-shim): %s\n' "$OUT" >&2
 assert_eq "0" "$EXIT" "detached hetero cc-shim --effort low exit 0"
@@ -2764,12 +2764,12 @@ assert_file_exists "$HETERO_CC_ARGV" "detached hetero cc-shim started claude"
 assert_contains "$(tr '\n' ' ' < "$HETERO_CC_ARGV" 2>/dev/null)" "--effort low " "detached hetero cc-shim forwards --effort low to claude"
 rm -f "$HETERO_CC_ARGV"
 OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-cc-bin:$PATH" \
-  "$SCRIPT" --no-verify-tip --runner cc-shim --model mini --endpoint TESTEP --effort default --branch feat/cc-eff-default --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
+  "$SCRIPT" --no-verify-tip --runner cc-shim --pin-reason "test fixture" --model mini --endpoint TESTEP --effort default --branch feat/cc-eff-default --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "hetero cc-shim --effort default exit 0"
 assert_not_contains "$(cat "$HETERO_CC_ARGV")" "--effort" "hetero cc-shim --effort default sends no --effort"
 rm -f "$HETERO_CC_ARGV"
 OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-cc-bin:$PATH" \
-  "$SCRIPT" --no-verify-tip --runner cc-shim --model mini --endpoint TESTEP --effort ultra --branch feat/cc-eff-bad --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
+  "$SCRIPT" --no-verify-tip --runner cc-shim --pin-reason "test fixture" --model mini --endpoint TESTEP --effort ultra --branch feat/cc-eff-bad --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "hetero cc-shim invalid --effort ultra exits 2"
 assert_contains "$OUT" "precondition_failed" "hetero cc-shim invalid effort is a precondition failure"
 assert_file_absent "$HETERO_CC_ARGV" "hetero cc-shim invalid effort never launched claude"
@@ -2816,7 +2816,7 @@ OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-local-bin:$PATH" \
   AUTOPILOT_DISPATCH_RUNS_DIR="$TEST_TMP/local-runs" \
   AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL=http://127.0.0.1:9 \
   AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token \
-  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --model mini \
+  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --pin-reason "test fixture" --model mini \
   --worktree-parent "$TEST_TMP/local-wts" \
   --branch feat/local-runner --prompt-file "$PROMPT" 2>"$TEST_TMP/local-runner.err")"; EXIT=$?
 [ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (local): %s\n%s\n' "$OUT" "$(cat "$TEST_TMP/local-runner.err" 2>/dev/null)" >&2
@@ -2840,7 +2840,7 @@ OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-local-bin:$PATH" \
   AUTOPILOT_TEST_CN_GATE_OFF=1 AUTOPILOT_ENDPOINT_PREPROBE=off \
   AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL=http://127.0.0.1:9 \
   AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token \
-  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --endpoint other --model mini \
+  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --pin-reason "test fixture" --endpoint other --model mini \
   --branch feat/local-conflict --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "hetero --runner local --endpoint other exits 2"
 assert_contains "$OUT" "precondition_failed" "hetero local endpoint conflict is a precondition failure"
@@ -2852,7 +2852,7 @@ OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-local-bin:$PATH" \
   AUTOPILOT_LANE=fleet-glm \
   AUTOPILOT_ENDPOINT_GLM_LOCAL_URL=http://127.0.0.1:9 \
   AUTOPILOT_ENDPOINT_GLM_LOCAL_TOKEN=fake-test-token \
-  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --endpoint glm_local --model mini \
+  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --pin-reason "test fixture" --endpoint glm_local --model mini \
   --worktree-parent "$TEST_TMP/local-wts" \
   --run-id local-glm --branch feat/local-glm --prompt-file "$PROMPT" 2>"$TEST_TMP/local-glm.err")"; EXIT=$?
 [ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (local glm): %s\n%s\n' "$OUT" "$(cat "$TEST_TMP/local-glm.err" 2>/dev/null)" >&2
@@ -2867,7 +2867,7 @@ OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-local-bin:$PATH" \
   AUTOPILOT_TEST_CN_GATE_OFF=1 AUTOPILOT_ENDPOINT_PREPROBE=off \
   AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL=http://127.0.0.1:9 \
   AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token \
-  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --endpoint glm_cloud --model mini \
+  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --pin-reason "test fixture" --endpoint glm_cloud --model mini \
   --worktree-parent "$TEST_TMP/local-wts" \
   --branch feat/local-glm-cloud --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "hetero --runner local --endpoint glm_cloud exits 2"
@@ -2885,7 +2885,7 @@ OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-local-bin:$PATH" \
   ANTHROPIC_CUSTOM_HEADERS=$'X-Caller-Keep: hidden-value\nX-Second: also-hidden' \
   AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL=http://127.0.0.1:9 \
   AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token \
-  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --model mini \
+  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --pin-reason "test fixture" --model mini \
   --worktree-parent "$TEST_TMP/local-wts" \
   --branch feat/local-headers --prompt-file "$PROMPT" 2>"$TEST_TMP/local-headers.err")"; EXIT=$?
 [ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (local headers): %s\n%s\n' "$OUT" "$(cat "$TEST_TMP/local-headers.err" 2>/dev/null)" >&2
@@ -2902,7 +2902,7 @@ OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-local-bin:$PATH" \
   AUTOPILOT_LANE=$'bad\nlane' \
   AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL=http://127.0.0.1:9 \
   AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token \
-  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --model mini \
+  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --pin-reason "test fixture" --model mini \
   --branch feat/local-lane-lf --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "hetero local AUTOPILOT_LANE with LF exits 2"
 assert_contains "$OUT" "contains a newline" "hetero local LF lane error is one line naming the newline"
@@ -2912,7 +2912,7 @@ OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-local-bin:$PATH" \
   AUTOPILOT_LANE=$'bad\rlane' \
   AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL=http://127.0.0.1:9 \
   AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token \
-  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --model mini \
+  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --pin-reason "test fixture" --model mini \
   --branch feat/local-lane-cr --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "hetero local AUTOPILOT_LANE with CR exits 2"
 assert_contains "$OUT" "contains a newline" "hetero local CR lane error is one line naming the newline"
@@ -2925,7 +2925,7 @@ OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-local-bin:$PATH" \
   AUTOPILOT_LANE='../x' \
   AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL=http://127.0.0.1:9 \
   AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token \
-  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --model mini \
+  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --pin-reason "test fixture" --model mini \
   --worktree-parent "$TEST_TMP/local-wts" \
   --branch feat/local-lane-dotdot --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "hetero local AUTOPILOT_LANE=../x exits 2"
@@ -2940,7 +2940,7 @@ OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-local-bin:$PATH" \
   AUTOPILOT_LANE='a/b' \
   AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL=http://127.0.0.1:9 \
   AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token \
-  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --model mini \
+  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --pin-reason "test fixture" --model mini \
   --worktree-parent "$TEST_TMP/local-wts" \
   --branch feat/local-lane-slash --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "hetero local AUTOPILOT_LANE=a/b exits 2"
@@ -2954,7 +2954,7 @@ OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-local-bin:$PATH" \
   AUTOPILOT_LANE='' \
   AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL=http://127.0.0.1:9 \
   AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token \
-  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --model mini \
+  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --pin-reason "test fixture" --model mini \
   --branch feat/local-lane-empty --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "hetero local empty AUTOPILOT_LANE exits 2"
 if git -C "$SBX" rev-parse --verify feat/local-lane-empty >/dev/null 2>&1; then
@@ -2977,7 +2977,7 @@ OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-local-bin:$PATH" \
   AUTOPILOT_TEST_AUTH_EXPECT_FILE="$GW_EXPECT" \
   AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL=http://127.0.0.1:9 \
   AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token \
-  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --model mini \
+  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --pin-reason "test fixture" --model mini \
   --worktree-parent "$TEST_TMP/local-wts" \
   --run-id local-gw --branch feat/local-gw --prompt-file "$PROMPT" 2>"$TEST_TMP/local-gw.err")"; EXIT=$?
 [ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (local gateway token): %s\n%s\n' "$OUT" "$(cat "$TEST_TMP/local-gw.err" 2>/dev/null)" >&2
@@ -3014,7 +3014,7 @@ OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-local-bin:$PATH" \
   AUTOPILOT_TEST_AUTH_EXPECT_FILE="$EP_EXPECT" \
   AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL=http://127.0.0.1:9 \
   AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token \
-  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --model mini \
+  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner local --pin-reason "test fixture" --model mini \
   --worktree-parent "$TEST_TMP/local-wts" \
   --run-id local-gw-absent --branch feat/local-gw-absent --prompt-file "$PROMPT" 2>"$TEST_TMP/local-gw-absent.err")"; EXIT=$?
 [ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (local gateway absent): %s\n%s\n' "$OUT" "$(cat "$TEST_TMP/local-gw-absent.err" 2>/dev/null)" >&2
@@ -3036,7 +3036,7 @@ OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-local-bin:$PATH" \
   ANTHROPIC_CUSTOM_HEADERS=$'X-Not-For-Child: hidden' \
   AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL=http://127.0.0.1:9 \
   AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN=fake-test-token \
-  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner cc-shim --sandbox bwrap --endpoint qwen_local --model mini \
+  "$REAL_SCRIPT" --no-verify-tip --context-window off --runner cc-shim --pin-reason "test fixture" --sandbox bwrap --endpoint qwen_local --model mini \
   --worktree-parent "$TEST_TMP/local-wts" \
   --run-id local-gw-nonlocal --branch feat/local-gw-nonlocal --prompt-file "$PROMPT" 2>"$TEST_TMP/local-gw-nonlocal.err")"; EXIT=$?
 [ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (nonlocal gateway): %s\n%s\n' "$OUT" "$(cat "$TEST_TMP/local-gw-nonlocal.err" 2>/dev/null)" >&2
@@ -3090,7 +3090,7 @@ assert_eq "ok" "$PACE_MF_CHECK" "manifest records full selector JSON as engine_c
 # (2) Without --pace-role, manifest has no engine_choice field.
 OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$PACE_RUNS_DIR" \
   DISPATCH_QUIET=1 \
-  "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$STUB_GROK_ARGV" \
+  "$SCRIPT" --no-verify-tip --runner grok --pin-reason "test fixture" --model grok-4.5 --effort high --grok-bin "$STUB_GROK_ARGV" \
   --run-id pace-absent --branch feat/pace-absent --prompt-file "$PROMPT" 2>"$TEST_TMP/pace-absent.err")"; EXIT=$?
 assert_eq "0" "$EXIT" "hetero without --pace-role exits 0"
 PACE_ABSENT_CHECK="$(node -e '
@@ -3104,7 +3104,7 @@ assert_eq "absent" "$PACE_ABSENT_CHECK" "manifest omits engine_choice when --pac
 OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$PACE_RUNS_DIR" \
   AUTOPILOT_PACE_FILE="$REPO_ROOT/scripts/fixtures/pace-select/all-unknown.json" \
   DISPATCH_QUIET=1 \
-  "$SCRIPT" --no-verify-tip --pace-role implementer --runner grok --model grok-4.5 --effort high --grok-bin "$STUB_GROK_ARGV" \
+  "$SCRIPT" --no-verify-tip --pace-role implementer --runner grok --pin-reason "test fixture" --model grok-4.5 --effort high --grok-bin "$STUB_GROK_ARGV" \
   --run-id pace-explicit-runner --branch feat/pace-explicit-runner --prompt-file "$PROMPT" 2>"$TEST_TMP/pace-explicit.err")"; EXIT=$?
 assert_eq "0" "$EXIT" "hetero explicit --runner overrides --pace-role"
 PACE_EXPLICIT_CHECK="$(node -e '
@@ -3158,7 +3158,7 @@ chmod +x "$HT_GROK_STUB"
 rm -f "$HT_FLEET_LOG" "$HT_ENV_LOG"
 OUT="$(cd "$SBX" && env -u AUTOPILOT_UPSTREAM_TASK_ID FLEET_BIN="$HT_FLEET_STUB" AUTOPILOT_FLEET_TASK="$HT_TASK_ID" \
   AUTOPILOT_DISPATCH_ROLE="worker-lane" AUTOPILOT_DISPATCH_USAGE=off DISPATCH_QUIET=1 \
-  "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$HT_GROK_STUB" \
+  "$SCRIPT" --no-verify-tip --runner grok --pin-reason "test fixture" --model grok-4.5 --effort high --grok-bin "$HT_GROK_STUB" \
   --run-id ht-prog-1 --branch feat/ht-prog-1 --prompt-file "$PROMPT" 2>"$TEST_TMP/ht-prog-1.err")"; EXIT=$?
 assert_eq "0" "$EXIT" "hetero progress run exits 0"
 HT_ARGV="$(cat "$HT_FLEET_LOG" 2>/dev/null || true)"
@@ -3174,7 +3174,7 @@ assert_eq "$HT_TASK_ID" "$(cat "$HT_ENV_LOG" 2>/dev/null)" "hetero exports AUTOP
 rm -f "$HT_FLEET_LOG"
 OUT="$(cd "$SBX" && env -u AUTOPILOT_FLEET_TASK -u AUTOPILOT_UPSTREAM_TASK_ID FLEET_BIN="$HT_FLEET_STUB" \
   AUTOPILOT_DISPATCH_USAGE=off DISPATCH_QUIET=1 \
-  "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$HT_GROK_STUB" \
+  "$SCRIPT" --no-verify-tip --runner grok --pin-reason "test fixture" --model grok-4.5 --effort high --grok-bin "$HT_GROK_STUB" \
   --run-id ht-prog-none --branch feat/ht-prog-none --prompt-file "$PROMPT" 2>"$TEST_TMP/ht-prog-none.err")"; EXIT=$?
 assert_eq "0" "$EXIT" "hetero no-task run exits 0"
 assert_file_absent "$HT_FLEET_LOG" "hetero no-task writes no progress line"
@@ -3182,7 +3182,7 @@ assert_file_absent "$HT_FLEET_LOG" "hetero no-task writes no progress line"
 # (c) Fail-soft: FLEET_BIN exit 3 does not alter stdout JSON or exit code
 OUT="$(cd "$SBX" && env -u AUTOPILOT_FLEET_TASK FLEET_BIN="$HT_FLEET_EXIT3" AUTOPILOT_UPSTREAM_TASK_ID="$HT_TASK_ID" \
   AUTOPILOT_DISPATCH_USAGE=off DISPATCH_QUIET=1 \
-  "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$HT_GROK_STUB" \
+  "$SCRIPT" --no-verify-tip --runner grok --pin-reason "test fixture" --model grok-4.5 --effort high --grok-bin "$HT_GROK_STUB" \
   --run-id ht-prog-failsoft --branch feat/ht-prog-failsoft --prompt-file "$PROMPT" 2>"$TEST_TMP/ht-prog-fs.err")"; EXIT=$?
 assert_eq "0" "$EXIT" "hetero fail-soft preserves exit 0 when FLEET_BIN exits 3"
 assert_contains "$OUT" '"run_id": "ht-prog-failsoft"' "hetero fail-soft preserves stdout JSON"

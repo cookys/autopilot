@@ -42,7 +42,7 @@ launch() {
   local tag="$1" script="$2"; shift 2
   export FAKE_DIR="$TEST_TMP/$tag"
   mkdir -p "$FAKE_DIR"
-  ( cd "$TEST_TMP/repo" && exec "$script" --no-verify-tip --context-window off --runner grok --grok-bin "$TEST_TMP/bin/grok" --branch "feat/$tag" --worktree-parent "$TEST_TMP/wts" --prompt-file "$TEST_TMP/prompt" --run-id "$tag" "$@" ) >"$FAKE_DIR/out" 2>"$FAKE_DIR/err" &
+  ( cd "$TEST_TMP/repo" && exec "$script" --no-verify-tip --context-window off --runner grok --pin-reason "test fixture" --grok-bin "$TEST_TMP/bin/grok" --branch "feat/$tag" --worktree-parent "$TEST_TMP/wts" --prompt-file "$TEST_TMP/prompt" --run-id "$tag" "$@" ) >"$FAKE_DIR/out" 2>"$FAKE_DIR/err" &
   LAUNCH_PID=$!; STARTED_PIDS+=("$LAUNCH_PID")
   wait_file "$FAKE_DIR/pid" || { cat "$FAKE_DIR/err" >&2; return 1; }
   if ! wait_file "$AUTOPILOT_HETERO_RUNS_DIR/$tag.json"; then

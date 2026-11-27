@@ -45,7 +45,7 @@ assert_contains() { case "$1" in *"$2"*) ;; *) fail "$3 (missing '$2')" ;; esac;
 run_dispatch() {
   local tag="$1"; shift
   local runs="$TEST_TMP/runs-$tag"; mkdir -p "$runs"
-  (cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$runs" "$SCRIPT" --runner grok --model grok-4.7 --grok-bin "$TEST_TMP/bin/grok" \
+  (cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$runs" "$SCRIPT" --runner grok --pin-reason "test fixture" --model grok-4.7 --grok-bin "$TEST_TMP/bin/grok" \
     --no-campaign --no-verify-tip --context-window off --branch "feat/alarm-$tag" --prompt-file "$PROMPT" "$@" </dev/null) \
     >"$TEST_TMP/$tag.out" 2>"$TEST_TMP/$tag.err"
   RUN_RC=$?

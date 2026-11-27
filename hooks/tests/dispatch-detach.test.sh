@@ -50,6 +50,8 @@ RESPONSE="$response" node -e '
 EOF
 chmod +x "$AGY_FIXTURE_HELPER"
 export AGY_FIXTURE_HELPER
+# Not a containment test: pin the worker mount mode so a sudo env_reset wrapper (sudo_private_ns hosts) cannot drop AGY_FIXTURE_HELPER for the stubs.
+export WORKER_MOUNT_FORCE_MODE=no_root
 
 # track worktrees KEEP=1 leaves behind so we can reap them at the end (no /tmp leak)
 LEAKED_WTS=()

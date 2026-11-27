@@ -39,7 +39,7 @@ const { executableText } = require('./bash-wait-rules.js');
 
 // Rail entrypoints that LAUNCH a worker (an explicit list: dispatch-status.js / dispatch-contract.js /
 // dispatch-tree.js are observers and validators, not launchers). Never a *.test.* file.
-const RAIL_NAMES = 'hetero|review|author|author-kimi|consult|discuss|explore|foreman|batch|anthropic-review|local-openai|plan-review|experience-critic|panel|from-scratch|research';
+const RAIL_NAMES = 'hetero|review|author|author-kimi|consult|discuss|explore|foreman|batch|anthropic-review|local-openai|plan-review|experience-critic|panel|from-scratch|research|vision-review';
 // Any path (or none) in front of a listed rail file name counts: `cd scripts && bash dispatch-review.sh &`.
 const RAIL_PATH_RE = new RegExp(`(?:^|/)dispatch-(?:${RAIL_NAMES})\\.(?:sh|js)$`);
 const WAKE_HEADS = new Set(['wait']);

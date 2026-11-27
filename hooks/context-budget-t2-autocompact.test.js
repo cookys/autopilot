@@ -1,6 +1,8 @@
 /**
- * BL-0124, updated: T2 wording is keep-working for every session, whatever the
- * auto-compact window. Run: node --test hooks/context-budget-t2-autocompact.test.js
+ * BL-0124, updated: T2 wording is the land checklist (先落地再繼續) for every session,
+ * whatever the auto-compact window. The old "Keep working" sentence was replaced
+ * because it was ignored (context-budget-lib.js landMessage). Run:
+ * node --test hooks/context-budget-t2-autocompact.test.js
  * Negative control: the old "/clear" / STOP sentence is rejected by the same predicate.
  */
 'use strict';
@@ -19,7 +21,8 @@ function assertKeepWorking(text) {
   assert.doesNotMatch(text, /next session/);
   assert.doesNotMatch(text, /new session/);
   assert.doesNotMatch(text, /wait/);
-  assert.match(text, /[Kk]eep working/);
+  assert.match(text, /先落地再繼續/);
+  assert.doesNotMatch(text, /Directive: STOP/);
 }
 
 test('window set (below, at or above T2): keep working, no STOP, no /clear', () => {

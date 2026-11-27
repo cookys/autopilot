@@ -46,13 +46,16 @@ const post = (over = {}) => ({ session_id: SID, hook_event_name: 'PostToolUse', 
 const adir = (live) => path.join(live, 'agents', SID);
 const readJ = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
 
-test('wiring: hooks.json has ONE SubagentStop group: awaiting-owner.js plus the per-turn-gate gate-file hook (no new hook file)', () => {
+test('wiring: hooks.json has ONE SubagentStop group', () => {
   const g = HOOKS.SubagentStop;
   assert.ok(Array.isArray(g) && g.length === 1, 'one SubagentStop group');
-  // BL-0306 P2 added per-turn-gate.js to the same group (it returns silently without its own gate file).
+  // per-turn-gate.js returns silently without its own gate file (BL-0306 P2).
+  // subagent-fleet-task.js and subagent-budget.js are later default-on members of the same group.
   assert.deepStrictEqual(g[0].hooks.map((h) => h.command), [
     'node ${CLAUDE_PLUGIN_ROOT}/hooks/per-turn-gate.js',
     'node ${CLAUDE_PLUGIN_ROOT}/hooks/awaiting-owner.js',
+    'node ${CLAUDE_PLUGIN_ROOT}/hooks/subagent-fleet-task.js',
+    'node ${CLAUDE_PLUGIN_ROOT}/hooks/subagent-budget.js',
   ]);
 });
 

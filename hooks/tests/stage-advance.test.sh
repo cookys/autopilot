@@ -312,7 +312,7 @@ has "(e) binaries count 0 lines" '"lines":0' "$OUT"
 # high_risk sampling sees uncommitted work too (real classify via --diff-file, stub resolver)
 RF="$TEST_TMP/r-wt-f"; wt_repo "$RF"
 newsess; sm set --size M --urgent --repo-root "$RF" >/dev/null 2>&1
-adv --to plan --repo-root "$RF"; adv --to implement --repo-root "$RF"; adv --to verify --repo-root "$RF"
+adv --to plan --repo-root "$RF"; adv --to plan-review --repo-root "$RF"; adv --to implement --repo-root "$RF"; adv --to verify --repo-root "$RF"
 for _ in $(seq 1 50); do echo risky >>"$RF/untracked_risk.txt"; done
 for _ in $(seq 1 5); do echo edit >>"$RF/tracked.txt"; done
 : >"$STUB_LOG"
@@ -362,7 +362,7 @@ eq "S->M at qc-gate: reaches finish" '"finish"' "$(jf stage)"
 # M -> L at verify
 R10="$TEST_TMP/r-m1"; mkrepo "$R10"
 newsess; sm set --size M --repo-root "$R10" >/dev/null 2>&1
-adv --to plan --repo-root "$R10"; adv --to implement --repo-root "$R10"; plant "$R10" 1 801 m1
+adv --to plan --repo-root "$R10"; adv --to plan-review --repo-root "$R10"; adv --to implement --repo-root "$R10"; plant "$R10" 1 801 m1
 adv --to verify --repo-root "$R10"; eq "M->L at verify: 801 lines -> 4" "4" "$RC"
 has "M->L at verify: bump_to L" '"bump_to":"L"' "$OUT"
 sm set --size L --repo-root "$R10" >/dev/null 2>&1
@@ -375,7 +375,7 @@ schema_ok "bumped marker"
 # M -> L at qc-gate
 R11="$TEST_TMP/r-m2"; mkrepo "$R11"
 newsess; sm set --size M --repo-root "$R11" >/dev/null 2>&1
-adv --to plan --repo-root "$R11"; adv --to implement --repo-root "$R11"; adv --to verify --repo-root "$R11"
+adv --to plan --repo-root "$R11"; adv --to plan-review --repo-root "$R11"; adv --to implement --repo-root "$R11"; adv --to verify --repo-root "$R11"
 adv --to code-review --repo-root "$R11"
 plant "$R11" 21 1 m2
 adv --to qc-gate --repo-root "$R11"; eq "M->L at qc-gate: 21 files -> 4" "4" "$RC"
@@ -813,8 +813,8 @@ No inputs declared here.
 EOF
 newsess; sm set --size M --repo-root "$RI" >/dev/null 2>&1
 adv --to plan --repo-root "$RI"; eq "inputs-none: enter plan (rc)" "0" "$RC"
-adv --to implement --unit phase:1/1:impl --repo-root "$RI"; eq "inputs-none: leaving plan without ## Inputs advances (rc)" "0" "$RC"
-eq "inputs-none: stage is implement" '"implement"' "$(jf stage)"
+adv --to plan-review --repo-root "$RI"; eq "inputs-none: leaving plan without ## Inputs advances (rc)" "0" "$RC"
+eq "inputs-none: stage is plan-review" '"plan-review"' "$(jf stage)"
 
 # Plan with unlanded input -> leaving plan exits 5 naming the failing id, marker unchanged
 cat >"$RI/docs/plans/2026-11-13-d8b.md" <<EOF
@@ -830,7 +830,7 @@ newsess; sm set --size M --repo-root "$RI" >/dev/null 2>&1
 adv --to plan --repo-root "$RI"; eq "inputs-bad: enter plan (rc)" "0" "$RC"
 adv --to plan --repo-root "$RI"; eq "inputs-bad: staying on plan does not block (rc)" "0" "$RC"
 PLAN_SUM="$(cksum <"$MARKER")"
-adv --to implement --unit phase:1/1:impl --repo-root "$RI"; eq "inputs-bad: leaving plan with unlanded input exits 5" "5" "$RC"
+adv --to plan-review --repo-root "$RI"; eq "inputs-bad: leaving plan with unlanded input exits 5" "5" "$RC"
 has "inputs-bad: stderr names failing id" "inp-unlanded" "$ERR"
 has "inputs-bad: stdout names failing id" "inp-unlanded" "$OUT"
 eq "inputs-bad: stage unchanged" '"plan"' "$(jf stage)"
@@ -838,8 +838,8 @@ eq "inputs-bad: marker bytes untouched" "$PLAN_SUM" "$(cksum <"$MARKER")"
 
 # Land the input onto target branch (develop) -> leaving plan advances
 git -C "$RI" update-ref refs/heads/develop "$UNLANDED_SHA"
-adv --to implement --unit phase:1/1:impl --repo-root "$RI"; eq "inputs-good: leaving plan after input lands advances (rc)" "0" "$RC"
-eq "inputs-good: stage is implement" '"implement"' "$(jf stage)"
+adv --to plan-review --repo-root "$RI"; eq "inputs-good: leaving plan after input lands advances (rc)" "0" "$RC"
+eq "inputs-good: stage is plan-review" '"plan-review"' "$(jf stage)"
 
 # Config inputs_target override (.claude/dev-flow-config.md): blocks when absent from configured target, advances when landed
 git -C "$RI" branch release HEAD~0

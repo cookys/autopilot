@@ -70,7 +70,7 @@ rm_suites
 mk_suite fake-slow.test.sh 'sleep 3; exit 0'
 ITMP="$TEST_TMP/itmp"
 mkdir -p "$ITMP"
-(cd "$SCR" && TMPDIR="$ITMP" AUTOPILOT_TEST_DURATIONS_FILE="$TEST_TMP/dur.tsv" exec bash hooks/tests/run.sh fake-slow --parallel 1 >/dev/null 2>&1) &
+(cd "$SCR" && TMPDIR="$ITMP" AUTOPILOT_TEST_DURATIONS_FILE="$TEST_TMP/dur.tsv" exec bash hooks/tests/run.sh fake-slow --serial >/dev/null 2>&1) &
 RPID=$!
 for _ in $(seq 1 100); do
   compgen -G "$ITMP/hooks-run-skipcap.*" >/dev/null && break

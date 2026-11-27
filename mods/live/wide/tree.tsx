@@ -1,5 +1,7 @@
 // mods/live/wide/tree.tsx - draws a WideBand (band.ts) as host elements: one row per line, one Text per same-role piece.
 import { PALETTE } from '../../tux/palette'
+import { ink } from '../ui'
+import type { ThemeKey } from '../model'
 import type { WideBand, WideRole } from './band'
 import type { PaneRole, WidePane } from './pane'
 
@@ -24,7 +26,7 @@ export function WideBandTree(el: { Box: El; Text: El; Button?: El }, band: WideB
     <Box key="wide-band" flexDirection="column" flexShrink={0}>
       {band.segs.map((row, y) => (
         <Box key={'wide-row-' + y} flexShrink={0}>
-          {row.map((s, i) => <Text key={'s' + i} {...(COLOR[s.role] === undefined ? {} : { color: COLOR[s.role] })} wrap="truncate">{s.text}</Text>)}
+          {row.map((s, i) => <Text key={'s' + i} {...(ink(COLOR[s.role] as ThemeKey | undefined) === undefined ? {} : { color: ink(COLOR[s.role] as ThemeKey | undefined) })} wrap="truncate">{s.text}</Text>)}
         </Box>
       ))}
       {hotkeys(el, onKey, epoch, 'wide-band')}
@@ -35,13 +37,14 @@ export function WideBandTree(el: { Box: El; Text: El; Button?: El }, band: WideB
 // the wide pane (pane.ts): one row per line; each `其他頁` summary row is a Button that jumps to its page (the digit keys do the same through pages/keys.ts)
 // text carries an explicit theme colour: left to the terminal default it came out near-invisible on the light pane (PM shot 2026-11-27); inactive is 5.7:1 on light and 6+:1 on dark
 export const PANE_COLOR: Record<PaneRole, string | undefined> = { frame: PALETTE.idle, text: PALETTE.idle, dim: PALETTE.idle, key: PALETTE.idle, ok: PALETTE.done, err: PALETTE.broken, warn: PALETTE.attention, action: PALETTE.action }
+export const paneColor = (role: PaneRole): string | undefined => ink(PANE_COLOR[role] as ThemeKey | undefined)
 export function WidePaneTree(el: { Box: El; Text: El; Button?: El }, pane: WidePane, onPage: (n: number) => void, onKey: (key: string) => void, epoch: number) {
   const { Box, Text, Button } = el
   const click = new Map(pane.clicks.map(c => [c.row, c.page]))
   return (
     <Box key="wide-pane" flexDirection="column" flexShrink={0}>
       {pane.segs.map((row, y) => {
-        const texts = row.map((s, i) => <Text key={'s' + i} {...(PANE_COLOR[s.role] === undefined ? {} : { color: PANE_COLOR[s.role] })} wrap="truncate">{s.text}</Text>)
+        const texts = row.map((s, i) => <Text key={'s' + i} {...(paneColor(s.role) === undefined ? {} : { color: paneColor(s.role) })} wrap="truncate">{s.text}</Text>)
         const page = click.get(y)
         // the host refuses a Button that holds a Box ("holds strings and Text, not <Box>"): the row Box holds the Button, the Button holds the Texts
         return <Box key={'wide-pane-' + y} flexShrink={0}>{page === undefined || Button === undefined ? texts : <Button key={'wide-pane-go-' + y} plain onPress={() => onPage(page)}>{texts}</Button>}</Box>

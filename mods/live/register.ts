@@ -44,7 +44,7 @@ import type { T } from './i18n'
 import { atom, read, update } from 'claude-code'
 import type { AdvisoryTracker } from './advisories'
 import { GLYPHS } from '../tux/glyphs.ts'
-import { DISMISS_PRESS, drawSeg, forgeBar, forgeFit, LOOK_PRESS, SHOW_PRESS, showTarget, stateOf } from './ui'
+import { DISMISS_PRESS, drawSeg, forgeBar, isTruecolorValue, setTruecolor, forgeFit, LOOK_PRESS, SHOW_PRESS, showTarget, stateOf } from './ui'
 import type { ForgeSegment } from './ui'
 import { cardSentenceOf } from './cardtitle'
 import { NO_BATCH, actionable, answerPlan, answerOf, batchSync, cardKey, draftOf, focusRepair, inputsFor, noteKey, optKey, submitSuccessor } from './decidebatch'
@@ -3110,6 +3110,7 @@ function hostScrollHome($: EngineInterface, scroll: { offset: number } | undefin
 export const register: Register = on => {
   registerLive(on)
   on('session.start', async ($, e, next) => {
+    setTruecolor(isTruecolorValue(await $.env.get('COLORTERM'), await $.env.get('TERM')))
     await startLive($)
     return next(e)
   })

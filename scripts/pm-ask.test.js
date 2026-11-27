@@ -550,3 +550,46 @@ test('an ask made before the first linked reply is 舊紀錄 even when it is und
     s.cleanup();
   }
 });
+
+test('list hides old polluted and voided asks; purge-injected dry-run and --apply work with backup and --drop-prefix', () => {
+  const t = '2026-11-24T10:00:00.000Z';
+  const s = makeStore([]);
+  try {
+    const file = path.join(s.state, 'askpm.jsonl');
+    const rawLines = [
+      JSON.stringify(askRow('a-real0001', '正常的問題', t, 's1')),
+      'not-valid-json-line-kept-verbatim',
+      JSON.stringify(askRow('a-fleet002', '[fleet] from ns/host-a/dev--claude: hi', t, 's1')),
+      JSON.stringify({ schema: SCHEMA, kind: 'reply', at: t, ask_id: 'a-fleet002', text: 'reply to fleet' }),
+      JSON.stringify(askRow('a-void0003', '假裝人類', t, 's1')),
+      JSON.stringify({ schema: SCHEMA, kind: 'void', at: t, ask_id: 'a-void0003' }),
+      JSON.stringify(askRow('a-cron0004', '[S8-S12 5 分鐘追蹤] check status', t, 's1')),
+    ];
+    const original = rawLines.join('\n') + '\n';
+    fs.writeFileSync(file, original, 'utf8');
+
+    const listed = s.run(['list']);
+    assert.equal(listed.status, 0, listed.stderr);
+    assert.ok(listed.stdout.includes('a-real0001'));
+    assert.equal(listed.stdout.includes('a-fleet002'), false);
+    assert.equal(listed.stdout.includes('a-void0003'), false);
+
+    const dry = s.run(['purge-injected', '--drop-prefix', '[S8-S12 5 分鐘追蹤]']);
+    assert.equal(dry.status, 0, dry.stderr);
+    assert.equal(dry.stdout.trim(), 'would remove 5 rows (3 asks) of 7');
+    assert.equal(fs.readFileSync(file, 'utf8'), original);
+
+    const applied = s.run(['purge-injected', '--drop-prefix', '[S8-S12 5 分鐘追蹤]', '--apply']);
+    assert.equal(applied.status, 0, applied.stderr);
+    assert.match(applied.stdout, /removed 5 rows \(3 asks\) of 7/);
+    const bakMatch = applied.stdout.match(/^backup (.+)$/m);
+    assert.ok(bakMatch, 'backup path printed');
+    assert.equal(fs.readFileSync(bakMatch[1], 'utf8'), original);
+    assert.ok(applied.stdout.includes(`cp ${bakMatch[1]} ${file}`));
+
+    const after = fs.readFileSync(file, 'utf8');
+    assert.equal(after, `${rawLines[0]}\n${rawLines[1]}\n`);
+  } finally {
+    s.cleanup();
+  }
+});

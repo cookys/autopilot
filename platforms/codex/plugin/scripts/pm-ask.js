@@ -8,6 +8,7 @@
  *   supersede <old_id> <new_id>       Dispose <old_id> as superseded by newer <new_id>
  *   list [--open] [--answers [--json]]         List asks (<= 30 lines, `id age first-60-chars`, `… N more`)
  *   overdue [--hours 24]              List open asks older than N hours (default 24, <= 30 lines)
+ *   purge-injected [--drop-prefix <text>]... [--apply]  Remove injected/voided asks and paired rows
  *
  * Exit codes: 0 ok, 2 usage/validation error.
  */
@@ -15,7 +16,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const { SCHEMA, append, readRows, isHandoffResume } = require('../hooks/askpm-log');
+const { SCHEMA, append, readRows, isHandoffResume, isInjected, typedText, logFile, stateDir } = require('../hooks/askpm-log');
+const { withWriteLock } = require('./lib/jsonl-store');
 const { groupKey, normalizeQuestion } = require('./lib/ask-group-key');
 const { maskSecrets } = require('./lib/mask-secrets');
 
@@ -79,10 +81,23 @@ function loadState(env) {
   let replyCutoffMs = null;
   for (let i = 0; i < rows.length; i += 1) {
     let r = typeof rows[i].text === 'string' ? { ...rows[i], text: maskSecrets(rows[i].text) } : rows[i];
-    if (r.kind === 'ask' && typeof r.ask_id === 'string' && r.ask_id !== '' && !isHandoffResume(r.text)) {
+    if (r.kind === 'ask' && typeof r.ask_id === 'string' && r.ask_id !== '' && !isHandoffResume(r.text) && !isInjected(r.text)) {
       const entry = { row: r, index: i };
       asks.push(entry);
       askById.set(r.ask_id, entry);
+    } else if (r.kind === 'void') {
+      if (typeof r.ask_id === 'string' && r.ask_id !== '') {
+        for (let j = asks.length - 1; j >= 0; j -= 1) {
+          if (asks[j].row.ask_id === r.ask_id) {
+            asks.splice(j, 1);
+            break;
+          }
+        }
+        askById.delete(r.ask_id);
+      } else if (asks.length > 0) {
+        const removed = asks.pop();
+        if (removed && removed.row && removed.row.ask_id) askById.delete(removed.row.ask_id);
+      }
     } else if ((r.kind === 'reply' || r.kind === 'disposition') && typeof r.ask_id === 'string' && r.ask_id !== '') {
       // hooks/askpm-log.js writes the PM's answer as kind 'reply'; the older writer and hand-made rows use disposition + action 'reply'
       if (r.kind === 'reply') r = { ...r, action: 'reply' };
@@ -357,6 +372,7 @@ function runCommand(argv, env = envFromProcess(), nowMs = Date.now()) {
       '  pm-ask.js supersede <old_id> <new_id>',
       '  pm-ask.js list [--open] [--answers]',
       '  pm-ask.js overdue [--hours 24]',
+      '  pm-ask.js purge-injected [--drop-prefix <text>]... [--apply]',
     ].join('\n');
   }
 
@@ -513,7 +529,135 @@ function runCommand(argv, env = envFromProcess(), nowMs = Date.now()) {
     return overdueOutput(env, hours, nowMs);
   }
 
+  if (cmd === 'purge-injected') {
+    const dropPrefixes = [];
+    let apply = false;
+    for (let i = 0; i < rest.length; i += 1) {
+      const arg = rest[i];
+      if (arg === '--drop-prefix') {
+        if (i + 1 >= rest.length) throw usageError('pm-ask purge-injected: --drop-prefix requires a value');
+        dropPrefixes.push(rest[++i]);
+      } else if (arg.startsWith('--drop-prefix=')) {
+        dropPrefixes.push(arg.slice('--drop-prefix='.length));
+      } else if (arg === '--apply') {
+        apply = true;
+      } else {
+        throw usageError(`pm-ask purge-injected: unknown argument ${arg}`);
+      }
+    }
+    return purgeInjected(env, { dropPrefixes, apply });
+  }
+
   throw usageError(`pm-ask: unknown subcommand ${cmd}`);
+}
+
+function planPurge(raw, dropPrefixes) {
+  const lines = raw.split('\n');
+  const parsed = lines.map((line) => {
+    if (!line) return null;
+    try { return JSON.parse(line); } catch { return null; }
+  });
+  const totalRows = lines.filter((l) => l.length > 0).length;
+
+  const voidedAskLines = new Set();
+  const voidLineToAskLine = new Map();
+  let lastAskLine = -1;
+  for (let i = 0; i < parsed.length; i += 1) {
+    const r = parsed[i];
+    if (!r) continue;
+    if (r.kind === 'ask') {
+      lastAskLine = i;
+    } else if (r.kind === 'void') {
+      if (typeof r.ask_id === 'string' && r.ask_id !== '') {
+        for (let j = i - 1; j >= 0; j -= 1) {
+          if (parsed[j] && parsed[j].kind === 'ask' && parsed[j].ask_id === r.ask_id) {
+            voidedAskLines.add(j);
+            voidLineToAskLine.set(i, j);
+            break;
+          }
+        }
+      } else if (lastAskLine >= 0) {
+        voidedAskLines.add(lastAskLine);
+        voidLineToAskLine.set(i, lastAskLine);
+      }
+    }
+  }
+
+  const removedAskLines = new Set();
+  const removedAskIds = new Set();
+  for (let i = 0; i < parsed.length; i += 1) {
+    const r = parsed[i];
+    if (!r || r.kind !== 'ask') continue;
+    const typed = typedText(r.text);
+    const dropByPrefix = dropPrefixes.some((p) => typed.startsWith(p));
+    if (voidedAskLines.has(i) || isInjected(r.text) || dropByPrefix) {
+      removedAskLines.add(i);
+      if (typeof r.ask_id === 'string' && r.ask_id !== '') {
+        removedAskIds.add(r.ask_id);
+      }
+    }
+  }
+
+  const removedLines = new Set(removedAskLines);
+  let inRemovedAsk = false;
+  for (let i = 0; i < parsed.length; i += 1) {
+    const r = parsed[i];
+    if (!r) continue;
+    if (r.kind === 'ask') {
+      inRemovedAsk = removedAskLines.has(i);
+      continue;
+    }
+    if (r.kind === 'turn') {
+      inRemovedAsk = false;
+      continue;
+    }
+    if (typeof r.ask_id === 'string' && r.ask_id !== '') {
+      if ((r.kind === 'reply' || r.kind === 'disposition' || r.kind === 'void') && removedAskIds.has(r.ask_id)) {
+        removedLines.add(i);
+      }
+    } else if (r.kind === 'void') {
+      const targetAsk = voidLineToAskLine.get(i);
+      if (targetAsk !== undefined && removedAskLines.has(targetAsk)) {
+        removedLines.add(i);
+      }
+    } else if (r.kind === 'reply' && inRemovedAsk) {
+      removedLines.add(i);
+    }
+  }
+
+  return { lines, removedLines, removedAsks: removedAskLines.size, totalRows };
+}
+
+function purgeInjected(env, { dropPrefixes = [], apply = false } = {}) {
+  const file = logFile(env);
+  if (!apply) {
+    let raw;
+    try { raw = fs.readFileSync(file, 'utf8'); } catch { return 'would remove 0 rows (0 asks) of 0'; }
+    const { removedLines, removedAsks, totalRows } = planPurge(raw, dropPrefixes);
+    return `would remove ${removedLines.size} rows (${removedAsks} asks) of ${totalRows}`;
+  }
+  const dir = stateDir(env);
+  return withWriteLock(
+    { storeDir: dir, lockFile: path.join(dir, 'askpm.jsonl.lock'), name: 'askpm' },
+    () => {
+      let raw;
+      try { raw = fs.readFileSync(file, 'utf8'); } catch { return 'removed 0 rows (0 asks) of 0'; }
+      const { lines, removedLines, removedAsks, totalRows } = planPurge(raw, dropPrefixes);
+      const bak = `${file}.bak.${Date.now()}`;
+      fs.copyFileSync(file, bak);
+      const kept = lines.filter((_, idx) => !removedLines.has(idx));
+      let out = kept.join('\n');
+      if (raw.endsWith('\n') && out.length > 0 && !out.endsWith('\n')) out += '\n';
+      const tmp = `${file}.tmp.${process.pid}.${Date.now()}`;
+      fs.writeFileSync(tmp, out, { encoding: 'utf8', mode: fs.statSync(file).mode });
+      fs.renameSync(tmp, file);
+      return [
+        `removed ${removedLines.size} rows (${removedAsks} asks) of ${totalRows}`,
+        `backup ${bak}`,
+        `restore: cp ${bak} ${file}`,
+      ].join('\n');
+    },
+  );
 }
 
 function main() {

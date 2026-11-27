@@ -10,7 +10,7 @@ export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session-mode"
 export AUTOPILOT_ENDPOINT_PREPROBE=off
 export AUTOPILOT_TEST_CN_GATE_OFF=0
 export AUTOPILOT_CN_WORK_TIER=T0
-export AUTOPILOT_ENDPOINT_MINIMAX_URL=https://api.minimax.example/v1
+export AUTOPILOT_ENDPOINT_MINIMAX_URL=https://api.minimax.example
 export AUTOPILOT_ENDPOINT_MINIMAX_TOKEN=fixture-token
 export DISPATCH_DETACH=0 DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0
 mkdir -p "$AUTOPILOT_SESSION_MODE_DIR" "$TEST_TMP/bin" "$TEST_TMP/repo" "$TEST_TMP/runs" "$TEST_TMP/operator-home/.claude"
@@ -20,7 +20,8 @@ git -C "$TEST_TMP/repo" init -q
 git -C "$TEST_TMP/repo" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
 git -C "$TEST_TMP/repo" branch -m develop
 printf 'repo-owned README\n' > "$TEST_TMP/repo/README.md"
-git -C "$TEST_TMP/repo" add README.md
+printf 'private source marker one two three four five six seven eight nine ten\n' > "$TEST_TMP/repo/SOURCE.txt"  # shingle index needs >= 8 words of tracked text
+git -C "$TEST_TMP/repo" add README.md SOURCE.txt
 git -C "$TEST_TMP/repo" -c user.email=t@t -c user.name=t commit -q -m 'base README'
 
 STUB="$TEST_TMP/bin/claude"
@@ -65,18 +66,25 @@ printf 'fixture config marker\n' > "$TEST_TMP/operator-home/.claude/config-marke
 printf 'outside fixture\n' > "$STUB_OUTSIDE"
 mkdir -p "$REPO_ROOT/skills/scratch-fixture"
 printf 'Contact skill-only.private before editing.\n' > "$REPO_ROOT/skills/scratch-fixture/SKILL.md"
-cleanup_scratch_fixture() { rm -f -- "$REPO_ROOT/skills/scratch-fixture/SKILL.md"; rmdir "$REPO_ROOT/skills/scratch-fixture" 2>/dev/null || true; }
+cleanup_scratch_fixture() { rm -rf -- "$XDG_RUNTIME_DIR"; rm -f -- "$REPO_ROOT/skills/scratch-fixture/SKILL.md"; rmdir "$REPO_ROOT/skills/scratch-fixture" 2>/dev/null || true; }
 trap cleanup_scratch_fixture EXIT
+
+# The restricted-operator gate takes only the clean-sandbox brief template and one --source-repo (d-38676fad).
+# The shingle index lives on a tmpfs runtime dir; a bare shell has no XDG_RUNTIME_DIR, so the suite brings its own.
+XDG_RUNTIME_DIR="$(mktemp -d /dev/shm/autopilot-test-scratch-XXXXXX)"; export XDG_RUNTIME_DIR
+# The sandbox HOME hides the real fleet store, so the Fleet-Task open check would say not_found; probe- callers are exempt.
+export AUTOPILOT_DISPATCH_ROLE=probe-dispatch-hetero-scratch
+write_brief() { printf 'Brief-Class: clean-sandbox\nTask: %s\nInputs: None.\nOutput: One file.\nLimits: None.\n' "$2" > "$1"; }
 
 run_dispatch() {
   local tag="$1"; shift
   (cd "$TEST_TMP/repo" && PATH="$TEST_TMP/bin:$PATH" TMPDIR=/tmp AUTOPILOT_DISPATCH_RUNS_DIR="$TEST_TMP/runs-$tag" \
     "$SCRIPT" --no-verify-tip --context-window off --runner cc-shim --pin-reason "test fixture" --endpoint minimax \
-      --model MiniMax-M2.5 --pin-reason "test fixture" --branch "feat/scratch-$tag" \
+      --model MiniMax-M2.5 --branch "feat/scratch-$tag" --source-repo "$TEST_TMP/repo" --scaffold-tier off \
       --prompt-file "$TEST_TMP/$tag.md" "$@" >"$TEST_TMP/$tag.out" 2>"$TEST_TMP/$tag.err")
 }
 
-printf 'Overwrite README and create one file.\n' > "$TEST_TMP/regression.md"
+write_brief "$TEST_TMP/regression.md" 'Overwrite README and create one file.'
 STUB_MODE=regression run_dispatch regression --scratch
 RC=$?
 assert_exit_code "$RC" 0 "scratch README regression dispatch exits successfully"
@@ -90,13 +98,13 @@ assert_eq "worker README" "$(git -C "$TEST_TMP/repo" show "$REGRESSION_COMMIT:RE
 REGRESSION_MANIFEST="$(printf '%s\n' "$TEST_TMP/runs-regression"/*.manifest.json)"
 assert_eq "orphan" "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).scratch.base)' "$REGRESSION_MANIFEST")" "scratch manifest records orphan base"
 
-printf 'Write nothing.\n' > "$TEST_TMP/no-write.md"
+write_brief "$TEST_TMP/no-write.md" 'Write nothing.'
 STUB_MODE=no-write run_dispatch no-write --scratch
 RC=$?
 assert_exit_code "$RC" 1 "empty scratch dispatch keeps its existing no-op exit code"
 assert_contains "$(cat "$TEST_TMP/no-write.out")" '"status": "no_op"' "empty scratch dispatch remains no_op"
 
-printf 'Create produced.txt with one line.\n' > "$TEST_TMP/allowed.md"
+write_brief "$TEST_TMP/allowed.md" 'Create produced.txt with one line.'
 run_dispatch allowed --scratch
 RC=$?
 [ "$RC" -eq 0 ] || { cat "$TEST_TMP/allowed.out" "$TEST_TMP/allowed.err" >&2; }
@@ -134,11 +142,11 @@ assert_file_absent "$TEST_TMP/repo/hardlink-copy.txt" "hardlinked file is not co
 DETACH_WAIT="$TEST_TMP/detach-wait"
 mkdir -p "$DETACH_WAIT"
 export STUB_WAIT_DIR="$DETACH_WAIT"
-printf 'Create detached output.\n' > "$TEST_TMP/detached.md"
+write_brief "$TEST_TMP/detached.md" 'Create detached output.'
 (cd "$TEST_TMP/repo" && PATH="$TEST_TMP/bin:$PATH" TMPDIR=/tmp DISPATCH_DETACH=1 \
   AUTOPILOT_DISPATCH_RUNS_DIR="$TEST_TMP/runs-detached" \
   "$SCRIPT" --no-verify-tip --context-window off --runner cc-shim --pin-reason "test fixture" --endpoint minimax \
-    --model MiniMax-M2.5 --pin-reason "test fixture" --branch feat/scratch-detached --prompt-file "$TEST_TMP/detached.md" --scratch \
+    --model MiniMax-M2.5 --branch feat/scratch-detached --source-repo "$TEST_TMP/repo" --scaffold-tier off --prompt-file "$TEST_TMP/detached.md" --scratch \
     >"$TEST_TMP/detached.out" 2>"$TEST_TMP/detached.err") &
 DETACH_PARENT=$!
 for _ in $(seq 1 300); do [ -f "$DETACH_WAIT/worker-cwd" ] && break; sleep 0.1; done
@@ -185,7 +193,7 @@ assert_exit_code "$RC" 2 "private host brief is refused"
 assert_contains "$(cat "$TEST_TMP/private.out")$(cat "$TEST_TMP/private.err")" \
   "restricted_operator_brief_scan" "private host refusal identifies brief scan"
 
-printf 'Clean public brief.\n' > "$TEST_TMP/skill-private.md"
+write_brief "$TEST_TMP/skill-private.md" 'Clean public brief.'
 CALLS_BEFORE_SKILL_PRIVATE="$(wc -l < "$STUB_CALLS" | tr -d ' ')"
 run_dispatch skill-private --scratch --skill-mode prompt --skill scratch-fixture
 RC=$?
@@ -194,10 +202,10 @@ assert_contains "$(cat "$TEST_TMP/skill-private.out")$(cat "$TEST_TMP/skill-priv
   "restricted_operator_brief_scan" "final assembled skill prompt is scanned"
 assert_eq "$CALLS_BEFORE_SKILL_PRIVATE" "$(wc -l < "$STUB_CALLS" | tr -d ' ')" "skill-only private marker is blocked before Claude starts"
 
-printf 'Create kimi-produced.txt.\n' > "$TEST_TMP/kimi.md"
+write_brief "$TEST_TMP/kimi.md" 'Create kimi-produced.txt.'
 (cd "$TEST_TMP/repo" && PATH="$TEST_TMP/bin:$PATH" TMPDIR=/tmp AUTOPILOT_DISPATCH_RUNS_DIR="$TEST_TMP/runs-kimi-bin" \
   "$SCRIPT" --no-verify-tip --context-window off --runner kimi --pin-reason "test fixture" --kimi-bin "$TEST_TMP/bin/kimi" --model MiniMax-M2.5 \
-    --branch feat/scratch-kimi-bin --prompt-file "$TEST_TMP/kimi.md" --scratch >"$TEST_TMP/kimi.out" 2>"$TEST_TMP/kimi.err")
+    --branch feat/scratch-kimi-bin --source-repo "$TEST_TMP/repo" --scaffold-tier off --prompt-file "$TEST_TMP/kimi.md" --scratch >"$TEST_TMP/kimi.out" 2>"$TEST_TMP/kimi.err")
 RC=$?
 assert_exit_code "$RC" 2 "kimi-bin passes scratch runner gate but existing local stop blocks spawn"
 assert_contains "$(cat "$TEST_TMP/kimi.out")$(cat "$TEST_TMP/kimi.err")" "kimi_local_stopped" "kimi-bin is not refused for ignoring WORKER_CWD"

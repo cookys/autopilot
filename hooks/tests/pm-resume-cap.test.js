@@ -24,7 +24,7 @@ function runTests() {
     ...gapRows,
   ].join('\n');
 
-  const capped = capResumeSections(fixture, { softCapChars: 3000, maxRowChars: 400 });
+  const capped = capResumeSections(fixture, { softCapChars: 1500, maxRowChars: 400 });
 
   for (const row of inFlightRows) {
     assert(capped.includes(row), `Missing IN_FLIGHT row: ${row.slice(0, 30)}`);
@@ -35,17 +35,17 @@ function runTests() {
   assert(/已省略 \d+ 列/.test(capped), 'Expected truncated section to include 已省略 N 列');
   assert(!capped.includes(gapRows[39]), 'Expected overflowing PLAN_GAPS tail to be omitted');
 
-  // Verify non-exempt section stays within softCapChars (3000).
+  // Verify non-exempt section stays within softCapChars (1500).
   const waitingStart = capped.indexOf('PLAN_GAPS (40)');
   assert(waitingStart !== -1, 'Expected PLAN_GAPS header to be present');
   const waitingPortion = capped.slice(waitingStart);
   assert(/PLAN_GAPS 已省略 \d+ 列/.test(capped), 'omission marker must name the section');
-  assert(waitingPortion.length <= 3000, `Other sections exceeded 3000 chars: ${waitingPortion.length}`);
+  assert(waitingPortion.length <= 1500, `Other sections exceeded 1500 chars: ${waitingPortion.length}`);
 
   // 2. Single row > 400 chars in IN_FLIGHT / NEEDS_REPLY is shortened, not dropped.
   const longRow = '01M89VND4KYEMRFWDJEEAED999 ' + 'z'.repeat(500);
   const longFixture = ['IN_FLIGHT (1)', longRow].join('\n');
-  const longCapped = capResumeSections(longFixture, { softCapChars: 3000, maxRowChars: 400 });
+  const longCapped = capResumeSections(longFixture, { softCapChars: 1500, maxRowChars: 400 });
   const resultLines = longCapped.split('\n');
   assert.strictEqual(resultLines.length, 2, 'Long row must not be dropped');
   assert(resultLines[1].length <= 400, `Long row exceeded 400 chars: ${resultLines[1].length}`);
@@ -60,9 +60,11 @@ function runTests() {
     const startupOut = buildResumeBlock({ source: 'startup', session_id: 's1' }, { env, runner });
     assert(startupOut.includes(inFlightRows[19]), 'startup must keep all 20 IN_FLIGHT rows');
     assert(startupOut.includes(needsReplyRows[4]), 'startup must keep all 5 NEEDS_REPLY rows');
+    assert(startupOut.slice(startupOut.indexOf('PLAN_GAPS (40)'), startupOut.indexOf('\n</fleet-pm-resume>')).length <= 1500, 'startup non-exempt section must fit 1500 chars');
     assert(/已省略 \d+ 列/.test(startupOut), 'startup must truncate overflowing other sections');
 
     const compactOut = buildResumeBlock({ source: 'compact', session_id: 's2' }, { env, runner });
+    assert(compactOut.split('>\n')[1].split('\n</fleet-pm-resume>')[0].replace('hangar--claude', '<member>').replace('lead', '<role>').length <= 1500, 'compact digest must fit 1500 chars');
     assert(compactOut.includes('其餘自己查：fleet pm resume --seat hangar--claude --role lead --all'), 'compact must keep digestResume behavior');
   } finally {
     fs.rmSync(tmpHome, { recursive: true, force: true });

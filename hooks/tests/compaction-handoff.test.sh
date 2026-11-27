@@ -4,6 +4,19 @@
 # window - 33000 and records where a compaction really happened. Every check has a negative control.
 # HOME, the live dir, the dispatch-runs dir, the session-mode dir and the calibration file are scratch dirs.
 . "$(dirname "$0")/lib.sh"
+
+REPO_ROOT="$REPO_ROOT" node <<'JS'
+const assert = require('assert');
+const { inboundSection } = require(process.env.REPO_ROOT + '/scripts/lib/compaction-handoff.js');
+const items = Array.from({length: 40}, (_, i) => ({message_id: 'id' + i, from: 'sender', kind: 'chat', first_line: 'x'.repeat(180)}));
+const output = inboundSection(items);
+assert(Buffer.byteLength(output) <= 2048, 'inbound section exceeds 2048 bytes');
+const kept = (output.match(/^- id/gm) || []).length;
+const omitted = Number((output.match(/(\d+) 則已省略/) || [])[1] || 0);
+assert.strictEqual(kept + omitted, items.length, 'all messages counted or reported omitted');
+JS
+assert_exit_code "$?" 0 "inbound section fits 2048 bytes and accounts for messages"
+
 unset AUTOPILOT_SESSION_ID
 
 export AUTOPILOT_MANAGED_SETTINGS_FILE="$TEST_TMP/.no-managed-settings.json"

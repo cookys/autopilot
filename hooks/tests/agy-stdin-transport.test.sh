@@ -109,7 +109,7 @@ run_case anone env "$AUTHOR" --runner agy --model gemini-3.7-flash-high --prompt
 run_case rbig env "$REVIEW" --runner agy --model gemini-3.7-flash-high --diff-file "$BIGDIFF" --bin "$(mk_stub rbig AGY_STUB_CAPTURE=1 AGY_STUB_RESULT=error AGY_STUB_NEEDLE_FILE=$BIGDIFF)"
 run_case rerr env "$REVIEW" --runner agy --model gemini-3.7-flash-high --diff-file "$DIFFSMALL" --bin "$(mk_stub rerr AGY_STUB_RESULT=error AGY_STUB_ERROR_TEXT=zz-review-boom)"
 run_case rnone env "$REVIEW" --runner agy --model gemini-3.7-flash-high --diff-file "$DIFFSMALL" --bin "$(mk_stub rnone AGY_STUB_RESULT=none)"
-run_case hbig env -C "$TEST_TMP/sbx-hbig" "$HETERO" --no-verify-tip --branch t/hbig --prompt-file "$BIG" --agy-bin "$(mk_stub hbig AGY_STUB_CAPTURE=1 AGY_STUB_TAIL=$BIG_BYTES)" --model gemini-3.7-flash-high --runner agy
+run_case hbig env -C "$TEST_TMP/sbx-hbig" "$HETERO" --no-verify-tip --branch t/hbig --prompt-file "$BIG" --agy-bin "$(mk_stub hbig AGY_STUB_CAPTURE=1 AGY_STUB_NEEDLE_FILE=$BIG)" --model gemini-3.7-flash-high --runner agy
 run_case herr env -C "$TEST_TMP/sbx-herr" "$HETERO" --no-verify-tip --branch t/herr --prompt-file "$SMALL" --agy-bin "$(mk_stub herr AGY_STUB_RESULT=error AGY_STUB_ERROR_TEXT=zz-hetero-boom)" --model gemini-3.7-flash-high --runner agy
 run_case hnone env -C "$TEST_TMP/sbx-hnone" "$HETERO" --no-verify-tip --branch t/hnone --prompt-file "$SMALL" --agy-bin "$(mk_stub hnone AGY_STUB_RESULT=none)" --model gemini-3.7-flash-high --runner agy
 run_case loop env -C "$LS" AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$WRAP" node "$LOOP" collect --implementer-engine claude-sonnet-5 \
@@ -168,7 +168,10 @@ check_capture rbig "review" 150000
 assert_contains "$(rail_text rbig)" "needle=found" "review: the >131071-byte diff arrived byte-exact inside the prompt"
 assert_contains "$(rail_text rbig)" "sha256=" "review: stub reported the prompt sha256"
 assert_not_contains "$(rail_text rbig)" "single-argv ceiling" "review: oversized diff is not refused by an argv ceiling"
-check_capture hbig "hetero" "$BIG_BYTES" "$BIG"
+# hetero appends its own trailer after the prompt, so the tail of what agy gets is not the source's tail:
+# assert the whole source file travels inside the prompt instead (needle), byte for byte.
+check_capture hbig "hetero" "$BIG_BYTES"
+assert_contains "$(grep -a -o 'AGY-STUB bytes=[^]]*\] needle=[a-z]*' <<<"$(rail_text hbig)" | head -1)" "needle=found" "hetero: prompt contains the source file byte for byte"
 assert_not_contains "$(cat "$R/loop.out")" "single-argv ceiling" "loop: oversized agy seat is not refused by an argv ceiling"
 check_capture loopseat "loop" 150000
 assert_contains "$(rail_text loopseat)" "needle=found" "loop: the >131071-byte payload arrived byte-exact inside the agy seat prompt"

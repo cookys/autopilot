@@ -321,7 +321,7 @@ assert_contains "$(node -e 'try { require(process.argv[1]).manifestBase(process.
 node "$LAYOUT" manifest-path "$AL/outside.json" p.md --repo-root "$ALR" >/dev/null 2>&1
 assert_eq "2" "$?" "CLI: an outside symlink alias is rc=2"
 # the formal graph-check CLI on a real, green mission: the real sources pass, an outside alias of them does not
-GC="$REPO_ROOT/scripts/mission-execution-graph-check.js"; MS=containment-gates
+GC="$REPO_ROOT/scripts/mission-execution-graph-check.js"; MS=backlog-entry-schema
 MDIR="$(layout_path missions_dir)"   # the real mission files sit wherever the LIVE registry says
 (cd "$REPO_ROOT" && env -u REPO_LAYOUT_REGISTRY node "$GC" --graph $MDIR/mission-$MS-execution-graph.json --governance .claude/owner-kernel-governance.json --sources $MDIR/mission-$MS-sources.json --repo-root . >/dev/null 2>&1)
 assert_eq "0" "$?" "graph-check CLI control: the real sources manifest passes"

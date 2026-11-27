@@ -1,5 +1,5 @@
 ---
-Status: shipped（部分出貨，其餘不做）。依 2026-11-21 稽核（PM 01M7XQRV）與下一行稽核證據更正；原狀態：reviewed_conditional
+status: reviewed_conditional
 date: 2026-08-05
 size: L
 entry_level: l5
@@ -8,7 +8,6 @@ logical_plan_id: codex-native-lifecycle-enforcement-2026-08-05
 
 # Plan — Codex-native lifecycle enforcement
 
-> 稽核（2026-11-21，PM 01M7XQRV）：已完成到 D3，D4 不做。D1–D3 已出貨並歸檔，D4 結論 NO_SHIP（PM 裁 1A）。證據：archive 2026/08/2026-08-05-codex-native-lifecycle-enforcement README；1ae1edac5。
 ## 0. Context / thesis
 
 The 2026-08-05 Codex controller run did not enter the repository's existing dev-flow before

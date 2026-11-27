@@ -10,6 +10,8 @@ export AUTOPILOT_PACE_FILE="$TEST_TMP/pace.json" AUTOPILOT_QUALIFIED_FILE="$TEST
 export AUTOPILOT_CURSOR_WORK_ROOT="$TEST_TMP/shared" AUTOPILOT_CURSOR_BROKER_SOCK="$TEST_SHORT_TMP/broker.sock" AUTOPILOT_CURSOR_BROKER_AUDIT="$TEST_TMP/missing-audit.tsv"
 export AUTOPILOT_CURSOR_GROUP_WRAPPER="$TEST_TMP/group-wrapper" DISPATCH_DETACH=0
 export AUTOPILOT_TMP_LOG_RETENTION_DAYS=0
+# Not a containment test: pin the worker mount mode so a sudo env_reset wrapper (sudo_private_ns hosts) cannot drop the AUTOPILOT_CURSOR_* vars above.
+export WORKER_MOUNT_FORCE_MODE=no_root
 mkdir -p "$HOME" "$AUTOPILOT_CURSOR_WORK_ROOT" "$AUTOPILOT_SESSION_MODE_DIR" "$TEST_TMP/bin" "$TEST_TMP/repo/.claude"
 printf '#!/usr/bin/env bash\n[ "$1" = lanegit ] && [ "$2" = -c ] || exit 99\nprintf "group\\n" >> "$AUTOPILOT_CURSOR_WORK_ROOT/../group-calls"\nexec bash -c "$3"\n' > "$AUTOPILOT_CURSOR_GROUP_WRAPPER"
 # A reverted local rail cannot touch a real CLI or login.

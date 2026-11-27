@@ -520,7 +520,7 @@ test('rule2 denies in warn and block gate modes alike; gate mode off silences it
 for (const cmd of ['git config a =b', 'echo foo ==x', 'curl https://x.test/a?b=1', 'ls /nonexistent-dir-blg/*.zzz', 'grep -r foo --include=*.zzz .']) {
   test(`rule3 rewrites under zsh: ${cmd}`, () => {
     const r = run(cmd, { shell: 'zsh' });
-    assert.strictEqual(r.decision, 'allow');
+    assert.strictEqual(r.decision, ''); // a rewrite never answers the permission prompt
     assert.ok(r.updatedInput && r.updatedInput.command && r.updatedInput.command !== cmd);
     assert.match(r.ctx, /已自動改寫/);
   });
@@ -888,7 +888,7 @@ test('only the first few globs per command are resolved (stay silent past the ca
 
 // Drift guard: every launching rail script in scripts/ is on the guard's explicit list. A new
 // scripts/dispatch-*.sh|js must either be a rail (add it to RAIL_NAMES) or an observer (add it here).
-const OBSERVERS = new Set(['dispatch-status.js', 'dispatch-contract.js', 'dispatch-tree.js', 'dispatch-usage-push.sh', 'dispatch-usage-report.js']);
+const OBSERVERS = new Set(['dispatch-status.js', 'dispatch-contract.js', 'dispatch-tree.js', 'dispatch-usage-push.sh', 'dispatch-usage-report.js', 'dispatch-round-table.js']);
 for (const f of fs.readdirSync(path.join(__dirname, '..', 'scripts'))) {
   if (!/^dispatch-.*\.(sh|js)$/.test(f) || /\.test\./.test(f) || OBSERVERS.has(f)) continue;
   test(`rail on the explicit list: ${f}`, () => {
@@ -1121,9 +1121,9 @@ const BARE_LS_REWRITE_CASES = [
   [`ls ${'a'.repeat(650)}`, `command ls ${'a'.repeat(650)}`],
 ];
 for (const [cmd, expected] of BARE_LS_REWRITE_CASES) {
-  test(`rule4 auto-rewrites and allows: ${JSON.stringify(cmd)}`, () => {
+  test(`rule4 auto-rewrites without a permission decision: ${JSON.stringify(cmd)}`, () => {
     const r = run(cmd, { lsDefault: true });
-    assert.strictEqual(r.decision, 'allow');
+    assert.strictEqual(r.decision, ''); // a rewrite never answers the permission prompt
     assert.strictEqual(r.updatedInput && r.updatedInput.command, expected);
     assert.match(r.ctx, /已自動改寫/);
   });
@@ -1245,7 +1245,7 @@ for (const cmd of BARE_LS_DENY) {
   test(`rule4 auto-rewrites bare ls: ${JSON.stringify(cmd)}`, () => {
     const r = run(cmd, { lsDefault: true });
     assert.strictEqual(r.deny, false);
-    assert.strictEqual(r.decision, 'allow');
+    assert.strictEqual(r.decision, ''); // a rewrite never answers the permission prompt
     assert.ok(r.updatedInput && r.updatedInput.command, `expected updatedInput.command for ${cmd}`);
     assert.notStrictEqual(r.updatedInput.command, cmd);
     assert.match(r.ctx, /已自動改寫/);
@@ -2425,7 +2425,7 @@ test('P2 paste-ready rewrites: every changed rule emits a copyable rewrite that 
   {
     const r = run('echo *.zzq_nonexistent_p2', { shell: 'zsh' });
     assert.strictEqual(r.deny, false);
-    assert.strictEqual(r.decision, 'allow');
+    assert.strictEqual(r.decision, ''); // a rewrite never answers the permission prompt
     assert.ok(r.updatedInput && r.updatedInput.command, `missing updatedInput.command in: ${JSON.stringify(r)}`);
     assert.match(r.ctx, /已自動改寫/);
     const recheck = run(r.updatedInput.command, { shell: 'zsh' });
@@ -2474,19 +2474,19 @@ test('P2 paste-ready rewrites: every changed rule emits a copyable rewrite that 
   }
 });
 
-test('auto-rewrite: bare-ls returns allow with updatedInput.command and additionalContext', () => {
+test('auto-rewrite: bare-ls returns updatedInput.command and additionalContext, no permission decision', () => {
   const r = run('ls -la', { lsDefault: true });
   assert.strictEqual(r.deny, false);
-  assert.strictEqual(r.decision, 'allow');
+  assert.strictEqual(r.decision, ''); // a rewrite never answers the permission prompt
   assert.ok(r.updatedInput, 'expected updatedInput');
   assert.strictEqual(r.updatedInput.command, 'command ls -la');
   assert.strictEqual(r.ctx, '已自動改寫指令');
 });
 
-test('auto-rewrite: unquoted no-match glob under zsh returns allow with updatedInput.command', () => {
+test('auto-rewrite: unquoted no-match glob under zsh returns updatedInput.command, no permission decision', () => {
   const r = run('echo *.nonexistent_ext_xyz', { shell: 'zsh' });
   assert.strictEqual(r.deny, false);
-  assert.strictEqual(r.decision, 'allow');
+  assert.strictEqual(r.decision, ''); // a rewrite never answers the permission prompt
   assert.ok(r.updatedInput, 'expected updatedInput');
   assert.strictEqual(r.updatedInput.command, "echo '*.nonexistent_ext_xyz'");
   assert.strictEqual(r.ctx, '已自動改寫指令');

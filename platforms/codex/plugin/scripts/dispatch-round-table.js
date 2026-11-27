@@ -4,6 +4,7 @@
 // Render dispatch manifests; token counts come only from each manifest's log_path.
 const fs = require('fs');
 const path = require('path');
+const { runsDir } = require('./lib/runtime-paths');
 
 function pinReport(manifests) {
   const groups = new Map();
@@ -63,7 +64,7 @@ function main(args) {
   }
   if (Number.isNaN(since.getTime())) throw new Error('Invalid --since');
   if (task && !/^[0-9A-HJKMNP-TV-Z]{26}$/.test(task)) throw new Error('Invalid --task');
-  const dir = process.env.AUTOPILOT_DISPATCH_RUNS_DIR || `/tmp/autopilot-${process.getuid()}/autopilot-dispatch-runs`;
+  const dir = runsDir();
   let files;
   try { files = fs.readdirSync(dir); } catch (e) { if (e.code === 'ENOENT') files = []; else throw e; }
   const rows = [];

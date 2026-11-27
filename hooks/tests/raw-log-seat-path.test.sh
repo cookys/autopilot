@@ -41,8 +41,15 @@ STUB
 chmod +x "$R/scripts/dispatch-review.sh"
 export AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$R/scripts/dispatch-review.sh"
 export AUTOPILOT_ENDPOINTS_ENV="$TEST_TMP/no-such-endpoints.env"
+# collect requires an open Fleet-Task: a fixed id and a stub fleet, so no run can reach the real one
+FLEET_STUB="$TEST_TMP/fleet-open"
+printf '#!/bin/sh\nprintf \047{"id":"01M7R609WK44HJP629E6C93Q9N","status":"open"}\\n\047\n' > "$FLEET_STUB"
+chmod +x "$FLEET_STUB"
+export FLEET_BIN="$FLEET_STUB" AUTOPILOT_FLEET_BIN="$FLEET_STUB" AUTOPILOT_FLEET_TASK=01M7R609WK44HJP629E6C93Q9N
+unset AUTOPILOT_PARENT_RUN_ID AUTOPILOT_UPSTREAM_TASK_ID
 unset AUTOPILOT_ENDPOINT_GLM_URL AUTOPILOT_ENDPOINT_GLM_TOKEN ANTHROPIC_COMPATIBLE_BASE_URL ANTHROPIC_COMPATIBLE_AUTH_TOKEN
-SEATS="gpt-5.4/low@codex,gpt-5.4/low@codex"
+# two different families: review entries allow one vote per model family
+SEATS="gpt-5.4/low@codex,grok-4.7/low@grok"
 
 collect() { # <script> <ledger> <phase>
   node "$1" collect --implementer-engine claude-sonnet-5 --repo-root "$R" --ledger "$2" --phase "$3" --generation 1 --branch work --phase-base "$BASE" --seats "$SEATS" 2>&1

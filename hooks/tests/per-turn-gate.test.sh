@@ -42,7 +42,7 @@ JS
 # the file, so a pattern that no longer matches (a no-op mutant) fails the build of the mutant loudly.
 mutant() {
   local out="$TEST_TMP/mut-$1.js" cur="$TEST_TMP/mut-$1.cur" nxt="$TEST_TMP/mut-$1.nxt" cmd
-  local abs="s#require('\./_shared#require('$HOOKS_DIR/_shared#; s#require('\.\./#require('$REPO_ROOT/#"
+  local abs="s#require('\./_shared#require('$HOOKS_DIR/_shared#; s#require('\./lib/#require('$HOOKS_DIR/lib/#; s#require('\.\./#require('$REPO_ROOT/#"
   sed -e "$abs" "$REAL_HOOK" >"$cur"
   while IFS= read -r -d '' cmd; do
     sed -e "$cmd" "$cur" >"$nxt"
@@ -61,6 +61,8 @@ mutant() {
     }
     process.stdout.write(out.map((c) => c + "\0").join(""));' "$2")
   mv "$cur" "$out"
+  # a mutant that cannot load would "go red" by crashing, whatever the mutation did
+  if ! node -e 'require(process.argv[1])' "$out" </dev/null >&2; then echo "mutant $1: does not load" >&2; return 1; fi
   echo "$out"
 }
 

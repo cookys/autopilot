@@ -71,15 +71,22 @@ assert_contains "$ING" '"accepted":2' "ingest: the old-format and the titled ope
 V="$(node "$S/fleet-card-mirror.js" view --json < /dev/null)"
 assert_eq "$(node -e 'const v=JSON.parse(process.argv[1]);const c=Object.fromEntries(v.cards.map(x=>[x.card_id,x]));process.stdout.write(String(c[process.argv[2]].title)+"|"+("title" in c[process.argv[3]]))' "$V" "$ID20" "$OLD")" "$T20|false" "mirror: the titled card keeps its title, the old one has none"
 # negative control: the length check removed -> a 21-character title is written
-MUT="$TEST_TMP/mut"; rm -rf "$MUT"; mkdir -p "$MUT"; ln -s "$REPO_ROOT/src" "$MUT/src"; mkdir -p "$MUT/scripts"
-for f in "$S"/*; do ln -s "$f" "$MUT/scripts/$(basename "$f")"; done
-rm "$MUT/scripts/open-decision.js"
+MUT="$TEST_TMP/mut"
+# the copy tree: src/, hooks/ (open-decision.js requires ../hooks/lib and ../hooks/_shared) and every script linked
+mut_tree() {
+  rm -rf "$MUT"; mkdir -p "$MUT/scripts"; ln -s "$REPO_ROOT/src" "$MUT/src"; ln -s "$REPO_ROOT/hooks" "$MUT/hooks"
+  for f in "$S"/*; do ln -s "$f" "$MUT/scripts/$(basename "$f")"; done
+  rm "$MUT/scripts/open-decision.js"
+}
+# layout control: an unmodified copy in this tree still refuses, so a mutant result is due to the mutation alone
+mut_tree; cp "$OD" "$MUT/scripts/open-decision.js"
+od "$MUT/scripts/open-decision.js" --title "$T21"; assert_eq "$RC" 2 "layout control: the unmodified copy refuses 21 characters"
+assert_contains "$ERR" "at most 20 characters" "layout control: refused by the title check, not by a crash"
+mut_tree
 sed_mutant "$S/open-decision.js" "$MUT/scripts/open-decision.js" "s/ || Array.from(ex.title).length > TITLE_MAX//"
 od "$MUT/scripts/open-decision.js" --title "$T21"; assert_eq "$RC" 0 "mutant (length check removed): the 21-character title is accepted, so the refusal check above would be red"
 # negative control: the control-character check removed -> a newline title is written
-rm -rf "$MUT"; mkdir -p "$MUT"; ln -s "$REPO_ROOT/src" "$MUT/src"; mkdir -p "$MUT/scripts"
-for f in "$S"/*; do ln -s "$f" "$MUT/scripts/$(basename "$f")"; done
-rm "$MUT/scripts/open-decision.js"
+mut_tree
 sed_mutant "$S/open-decision.js" "$MUT/scripts/open-decision.js" "s/ || require('.\/lib\/card-notice.js').CONTROL.test(ex.title)//"
 od "$MUT/scripts/open-decision.js" --title $'要改嗎\n'; assert_eq "$RC" 0 "mutant (control check removed): the newline title is accepted, so the refusal check above would be red"
 finalize_test

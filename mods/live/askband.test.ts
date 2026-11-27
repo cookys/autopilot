@@ -96,3 +96,11 @@ test('(h) every item in row 1 and row 2 (wide and narrow) carries its status', (
   expect(rowWidth(narrow[0])).toBeLessThanOrEqual(80)
   expect(rowWidth(narrow[1])).toBeLessThanOrEqual(80)
 })
+
+test('(i) default collapsed band: ask present adds ask row, no ask adds no extra row', () => {
+  expect(askBandRows([], 100, 0).length).toBe(0)
+  const oneAsk = askBandRows([makeAsk(1, { ask: '要你決定嗎' })], 100, 0)
+  expect(oneAsk.length).toBe(1)
+  expect(rowText(oneAsk[0])).toContain('我問：')
+  expect(rowWidth(oneAsk[0])).toBeLessThanOrEqual(100)
+})

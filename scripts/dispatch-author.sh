@@ -1234,6 +1234,13 @@ if [ "$RUNNER" = "kimi" ] && [ "${AUTOPILOT_KIMI_LOCAL_ALLOW:-}" != "1" ]; then
   KIMI_VIA_BROKER=1
   command -v node >/dev/null 2>&1 || die_precondition "node binary not found (required for kimi broker)"
   command -v git >/dev/null 2>&1 || die_precondition "git binary not found (required for kimi broker)"
+  # Refuse before cursor-broker-run.js mkdir's the shared work root. A missing socket must
+  # not touch /srv/kimi-work and must not fall through to the local CLI.
+  _kimi_avail_rc=0
+  node "$_AUTHOR_SELF_DIR/lib/cursor-broker-client.js" available kimi >/dev/null 2>&1 || _kimi_avail_rc=$?
+  if [ "$_kimi_avail_rc" -ne 0 ]; then
+    die_precondition "kimi broker unavailable (local kimi CLI remains stopped)"
+  fi
   KIMI_BROKER_JS="$_AUTHOR_SELF_DIR/lib/cursor-broker-run.js"
   [[ -r "$KIMI_BROKER_JS" ]] || die_precondition "cursor-broker-run.js not found beside dispatch-author.sh"
 elif [ "$RUNNER" = "kimi" ]; then

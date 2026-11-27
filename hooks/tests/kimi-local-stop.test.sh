@@ -53,8 +53,15 @@ function refused(name, command, args, json = false) {
     if (process.env.KIMI_STOP_EVIDENCE_RECORDER && fs.existsSync(recorder)) fs.copyFileSync(recorder, process.env.KIMI_STOP_EVIDENCE_RECORDER);
   }
   assert.notEqual(r.status, 0, `${name} refuses`);
-  assert.match(out, /kimi_local_stopped/u, `${name}: ${out}`);
-  if (json) assert.match(JSON.parse(r.stdout.trim().split('\n').find((line) => line.startsWith('{'))).error, /kimi_local_stopped/u);
+  // dispatch-author's default Kimi seat is the broker (dispatch-author-kimi.test.sh forbids
+  // the local-stop reason on that path). It must still refuse before any local spawn.
+  if (name === 'author') {
+    assert.doesNotMatch(out, /kimi_local_stopped/u, `author: ${out}`);
+    assert.match(out, /kimi broker unavailable/u, `author: ${out}`);
+  } else {
+    assert.match(out, /kimi_local_stopped/u, `${name}: ${out}`);
+  }
+  if (json && name !== 'author') assert.match(JSON.parse(r.stdout.trim().split('\n').find((line) => line.startsWith('{'))).error, /kimi_local_stopped/u);
   assert.equal(fs.existsSync(recorder), false, `${name}: recorder absent`);
   console.log(`PASS ${name}: refusal exit=${r.status}, recorder absent`);
 }

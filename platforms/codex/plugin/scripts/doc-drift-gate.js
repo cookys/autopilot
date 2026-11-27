@@ -48,6 +48,8 @@ const DEFAULT_EXCLUDES = [
   ".venv",
   ".opencode",
   "_bodies",
+  // hippo store: tracked, tool-written body copies whose relative links dangle from .hippo/bodies/; the store owns them.
+  ".hippo",
   CODEX_PLUGIN_DIR,
   // Byte-frozen eval fixtures (digest-pinned byte-copies of live skills; their relative
   // links intentionally dangle from the pack location — rewriting them would break the
@@ -55,6 +57,7 @@ const DEFAULT_EXCLUDES = [
   `${EVALS_DIR}/skill-onoff/packs`,
   // Role-kit pilot fixtures (digest-stamped by evals/rolekit/stamp-rolekit.js): the skill copies under kits/ and placebo/
   // keep their original relative links, which dangle from the eval location; rewriting them would break the stamp.
+  `${EVALS_DIR}/skill-onoff/step7-usage-ab`, // frozen A/B arm copies of live skills; links dangle from the arm dir
   `${EVALS_DIR}/rolekit/kits`,
   `${EVALS_DIR}/rolekit/placebo`,
   // Findings-batch cell fixtures: the READMEs/task.md under here are what the eval agent reads inside its own cell repo,

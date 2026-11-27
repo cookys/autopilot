@@ -167,12 +167,12 @@ cp "$REPO_ROOT/hooks/ask-decision.js" "$MUT2/hooks/ask-decision.js"
 for f in "$REPO_ROOT"/hooks/lib/*.js; do [ "$(basename "$f")" = ask-guard.js ] || ln -s "$f" "$MUT2/hooks/lib/$(basename "$f")"; done
 sed_mutant "$REPO_ROOT/hooks/lib/ask-guard.js" "$MUT2/hooks/lib/ask-guard.js" \
   's#const DEFAULT_ALLOW_MEMBERS = \['"'"'pm--claude'"'"', '"'"'glm-trial\*'"'"'\];#const DEFAULT_ALLOW_MEMBERS = [];#'
-export FLEET_ADDRESS=cookys/c4140/pm--claude
+export FLEET_ADDRESS=cookys/c4140/glm-trial-x  # pm--claude is allowed by hooks/_shared/pm-console.js too, so only the glob proves the list
 set_cfg "$PAST"
 MUT2_OUT="$(HOME="$HOOK_HOME" TMPDIR="$HOOK_TMPDIR" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" \
   node "$MUT2/hooks/ask-decision.js" 2>/dev/null <<< "$(payload "$REPO")")"
 assert_contains "$MUT2_OUT" '"permissionDecision":"deny"' \
-  "control (allow list dropped): pm--claude is denied, so the allow test is red"
+  "control (allow list dropped): glm-trial-x is denied, so the allow test is red"
 
 # --- whoami fallback when FLEET_ADDRESS and AUTOPILOT_FLEET_ADDRESS are unset
 unset FLEET_ADDRESS

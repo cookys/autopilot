@@ -50,9 +50,8 @@ if [ "\${FAKE_FLEET_FAIL:-0}" = "1" ]; then
   echo "fleet error" >&2
   exit 1
 fi
-cat <<'JSON'
-\${FAKE_FLEET_JSON:-[]}
-JSON
+default='[]'
+printf '%s\\n' "\${FAKE_FLEET_JSON:-$default}"
 `,
     { mode: 0o755 }
   );

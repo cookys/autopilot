@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0527 -->
+<!-- next-id: BL-0528 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -2703,3 +2703,17 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: project/backlog/base-red-121-2026-11-27.md
 - **Pointer**: project/backlog/base-red-121-2026-11-27.md
+
+### sudo_private_ns 路徑的 e2e 覆蓋
+- **Id**: BL-0527
+- **Status**: open
+- **Since**: 2026-11-27
+- **Origin**: self
+- **Problem**: 多支套件改用 WORKER_MOUNT_FORCE_MODE=no_root，PM 席不再走 sudo_private_ns 正式路徑，只剩 worker-busy-sudo-wrapper 一支在守。
+- **Impact**: sudo_private_ns 路徑的 env 清除與 commit-quiet 這類回歸，下次改 rail 時可能無測試察覺。
+- **Trigger**: 任何改動 dispatch-hetero 的 run_worker 或 worker-containment 前
+- **Trigger-Type**: ready
+- **Effort**: M
+- **Source**: Fleet-Task 01M88GP63J9GTMXM23MNW5HSRK PM 席提醒
+- **Pointer**: none
+- **Context**: fix cd64de2f1 3fcfdf5cf dbc40854b a18358c2b

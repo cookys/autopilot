@@ -24,8 +24,8 @@ json_get() {
 }
 last_json() { printf '%s\n' "$1" | grep '^{' | tail -n 1; }
 
-install_stub() {
-  cat > "$1" <<'EOF'
+install_stub() { # dest mode main: mode and main are baked in; a sudo containment wrapper's env_reset drops env vars
+  { cat <<'EOF'
 #!/usr/bin/env bash
 if [ "${1:-}" = "--list-models" ]; then
   echo "cursor-grok-4.6-low - Grok 4.6 (low)"
@@ -35,6 +35,9 @@ case " $* " in *" __autopilot_probe__ "*)
   echo "Error: unknown effort level '__autopilot_probe__'" >&2
   exit 1 ;;
 esac
+EOF
+    printf 'HETERO_IDLE_MODE=%q\nHETERO_IDLE_MAIN=%q\n' "${2:-}" "${3:-}"
+    cat <<'EOF'
 mode="${HETERO_IDLE_MODE:-finish}"
 case "$mode" in
   extend)
@@ -81,6 +84,7 @@ case "$mode" in
     ;;
 esac
 EOF
+  } > "$1"
   chmod +x "$1"
 }
 
@@ -89,7 +93,7 @@ run_case() {
   shift 2
   local stub="$TEST_TMP/grok-$mode" runs="$TEST_TMP/runs-$mode"
   mkdir -p "$runs"
-  install_stub "$stub"
+  install_stub "$stub" "$mode" "$SBX"
   (cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$runs" HETERO_IDLE_MODE="$mode" HETERO_IDLE_MAIN="$SBX" \
     "$SCRIPT" --no-verify-tip --runner grok --pin-reason "test fixture" --model grok-4.5 --effort high --grok-bin "$stub" \
     --branch "$branch" --prompt-file "$PROMPT" "$@" 2>&1) || true

@@ -7,6 +7,11 @@ export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests ca
 #   3. default ask stops; a failed fallback stops; no endpoint state survives a dispatch.
 # Every check has a sed_mutant negative control that must go red first.
 . "$(dirname "$0")/lib.sh"
+# 517d70c68: every dispatch needs an open Fleet-Task (the precondition fails first as precondition_failed otherwise).
+# Give the suite one through a stub fleet, never the real fleet.
+CF_FLEET="$TEST_TMP/cf-fleet-open"
+printf '#!/bin/sh\necho "{\\"status\\":\\"open\\"}"\n' > "$CF_FLEET"; chmod +x "$CF_FLEET"
+export FLEET_BIN="$CF_FLEET" AUTOPILOT_FLEET_TASK=01M8F07G74HH0N19TG1BPQPE59
 unset AUTOPILOT_SESSION_ID CLAUDE_CODE_SESSION_ID AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID \
   AUTOPILOT_MISSION_ROOT_RUN_ID AUTOPILOT_PARENT_RUN_ID AUTOPILOT_RECONCILE_RECEIPT \
   AUTOPILOT_WORKTREE_ROOT_RUN_ID AUTOPILOT_DISPATCH_DEPTH REVIEW_LOOP_CONFIG_OVERRIDE 2>/dev/null || true

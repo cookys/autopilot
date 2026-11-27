@@ -143,8 +143,8 @@ console.log('PASS (d) observed Cursor fallback; exhaustion blocks; recheck expir
 NODE
   assert_eq "$?" 0 '(d) pace availability and exhaustion verified'
   run_dispatch d --runner auto
-  assert_eq "$DISPATCH_RC" 0 '(d) auto dispatch selects Cursor'
-  assert_contains "$(cat "$TEST_TMP/d.json")" '"runner": "cursor"' '(d) auto result uses cursor'
+  # PM ruling 2026-11-27: an unpinned auto dispatch picks only among the seats the documented policy lists; Cursor is pin-only.
+  assert_not_contains "$(cat "$TEST_TMP/d.json" 2>/dev/null)" '"runner": "cursor"' '(d) auto dispatch never selects Cursor'
 fi
 if case_enabled e; then
   BEFORE="$(wc -l < "$TEST_TMP/connections" 2>/dev/null || echo 0)"

@@ -173,6 +173,21 @@ unset FORCE_COLOR 2>/dev/null || true
 TEST_NAME="${TEST_NAME:-$(basename "${BASH_SOURCE[1]:-$0}" .test.sh)}"
 __TEST_ORIG_TMPDIR="${TMPDIR:-/tmp}"
 TEST_TMP=$(mktemp -d -t "autopilot-test-${TEST_NAME}-XXXXXX")
+# A suite must never reach the real fleet courier (a card notice / decision answer once went to the PM for real). Every suite gets a
+# sentinel `fleet` first on PATH and no inherited fleet identity; a suite with its own stub sets AUTOPILOT_FLEET_BIN/FLEET_BIN after this line.
+# Any send/dispatch that lands on the sentinel is recorded and fails finalize_test.
+for __v in $(compgen -e | grep '^FLEET_' || true); do unset "$__v"; done; unset __v
+FLEET_SENTINEL_DIR="$TEST_TMP/.fleet-sentinel"; mkdir -p "$FLEET_SENTINEL_DIR"
+cat > "$FLEET_SENTINEL_DIR/fleet" <<'SH'
+#!/usr/bin/env bash
+case "$1" in
+  send|dispatch|reply) printf '%s %s\n' "$1" "$2" >> "$(dirname "$0")/outbound"; printf '{"ok":true,"member":"%s","message_id":"01SENTINEL"}\n' "$2"; exit 0;;
+  --help) printf 'fleet\n\nUSAGE:\n  fleet send x\n'; exit 1;;
+  *) exit 1;;
+esac
+SH
+chmod +x "$FLEET_SENTINEL_DIR/fleet"
+export PATH="$FLEET_SENTINEL_DIR:$PATH"
 # The foreman exam keeps a durable anti-rerun log; a test must never write the real one.
 export AUTOPILOT_FOREMAN_EVIDENCE_DIR="$TEST_TMP/foreman-evidence"
 # G37: a wired claude caller (dispatch-*, probe-*, qc-panel, eval runners ...) goes through the account layer when a
@@ -988,6 +1003,9 @@ install_cli_sentinels() {
 finalize_test() {
   if [ -s "${TEST_TMP:-/nonexistent}/.mutation-miss" ]; then
     fail "mutation anchor missed (recorded by sed_mutate/sed_mutant): $(head -c 300 "$TEST_TMP/.mutation-miss" | tr '\n' ' ')"
+  fi
+  if [ -s "${FLEET_SENTINEL_DIR:-/nonexistent}/outbound" ]; then
+    fail "the real fleet courier would have received: $(head -c 300 "$FLEET_SENTINEL_DIR/outbound" | tr '\n' ' ') (point AUTOPILOT_FLEET_BIN at a stub)"
   fi
   if [ -n "${CLI_SENTINEL_MARKER:-}" ] && [ -e "$CLI_SENTINEL_MARKER" ]; then
     fail "a real runner CLI was invoked (sentinel marker): $(tr '\n' ' ' < "$CLI_SENTINEL_MARKER")"

@@ -10,6 +10,8 @@ for _git_cfg_i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
   unset "GIT_CONFIG_KEY_${_git_cfg_i}" "GIT_CONFIG_VALUE_${_git_cfg_i}"
 done
 unset _git_cfg_i
+# Host git config (global core.hooksPath lab pre-commit scan, signing, templates) must not reach the stub's commits.
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_NOSYSTEM=1
 
 SCRIPT="$REPO_ROOT/scripts/dispatch-hetero.sh"
 export AUTOPILOT_GROK_EFFORT_PROBE=0
@@ -47,12 +49,12 @@ install_stub() {
     cat <<'BODY'
 echo "$$" > "$HETERO_TEST_PIDFILE"
 case "$HETERO_TEST_MODE" in
-  commit_sleep) echo ok > ok.txt; git add ok.txt; git -c user.email=t@t -c user.name=t commit -q -m c; read -t 120 _ <> "$HETERO_TEST_PIDFILE.fifo" ;;
-  commit_busy) echo ok > ok.txt; git add ok.txt; git -c user.email=t@t -c user.name=t commit -q -m c; sleep 12; echo second > second.txt; git add second.txt; git -c user.email=t@t -c user.name=t commit -q -m second ;;
-  commit_chatter) echo ok > ok.txt; git add ok.txt; git -c user.email=t@t -c user.name=t commit -q -m c; while :; do echo tick; sleep 1; done ;;
+  commit_sleep) echo ok > ok.txt; git add ok.txt; git -c core.hooksPath=/dev/null -c commit.gpgsign=false -c user.email=t@t -c user.name=t commit -q -m c; read -t 120 _ <> "$HETERO_TEST_PIDFILE.fifo" ;;
+  commit_busy) echo ok > ok.txt; git add ok.txt; git -c core.hooksPath=/dev/null -c commit.gpgsign=false -c user.email=t@t -c user.name=t commit -q -m c; sleep 12; echo second > second.txt; git add second.txt; git -c core.hooksPath=/dev/null -c commit.gpgsign=false -c user.email=t@t -c user.name=t commit -q -m second ;;
+  commit_chatter) echo ok > ok.txt; git add ok.txt; git -c core.hooksPath=/dev/null -c commit.gpgsign=false -c user.email=t@t -c user.name=t commit -q -m c; while :; do echo tick; sleep 1; done ;;
   dirty_sleep) echo ok > ok.txt; sleep 120 ;;
-  late_commit) trap 'date +%s > "$HETERO_TEST_PIDFILE.term"; exit 0' TERM; read -t 12 _ <> "$HETERO_TEST_PIDFILE.fifo"; echo ok > ok.txt; git add ok.txt; git -c user.email=t@t -c user.name=t commit -q -m c; date +%s > "$HETERO_TEST_PIDFILE.commit"; read -t 120 _ <> "$HETERO_TEST_PIDFILE.fifo" ;;
-  orphan_sleep) git checkout -q --orphan other; git rm -rfq . 2>/dev/null; git -c user.email=t@t -c user.name=t commit -q --allow-empty -m orphan; read -t 120 _ <> "$HETERO_TEST_PIDFILE.fifo" ;;
+  late_commit) trap 'date +%s > "$HETERO_TEST_PIDFILE.term"; exit 0' TERM; read -t 12 _ <> "$HETERO_TEST_PIDFILE.fifo"; echo ok > ok.txt; git add ok.txt; git -c core.hooksPath=/dev/null -c commit.gpgsign=false -c user.email=t@t -c user.name=t commit -q -m c; date +%s > "$HETERO_TEST_PIDFILE.commit"; read -t 120 _ <> "$HETERO_TEST_PIDFILE.fifo" ;;
+  orphan_sleep) git checkout -q --orphan other; git rm -rfq . 2>/dev/null; git -c core.hooksPath=/dev/null -c commit.gpgsign=false -c user.email=t@t -c user.name=t commit -q --allow-empty -m orphan; read -t 120 _ <> "$HETERO_TEST_PIDFILE.fifo" ;;
 esac
 exit 0
 BODY

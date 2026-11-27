@@ -42,8 +42,12 @@ function makeRepo(dir, subjects) {
 }
 
 // projects/pm (the hook cwd, holds `local`) and projects/code (holds old, new).
+const roots = [];
+test.after(() => roots.forEach((r) => fs.rmSync(r, { recursive: true, force: true })));
+
 function sandbox() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-receipt-'));
+  roots.push(root);
   const home = path.join(root, 'home');
   const state = path.join(root, 'state');
   fs.mkdirSync(home);

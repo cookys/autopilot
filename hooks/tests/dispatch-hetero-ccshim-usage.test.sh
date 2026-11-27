@@ -71,7 +71,7 @@ run_case() {
   OUT="$(cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
       CCSHIM_STUB_ENVELOPE="$env_text" PATH="$BINDIR:$PATH" \
       AUTOPILOT_FLEET_GATEWAY_ENDPOINTS="${CCSHIM_ALLOWLIST-}" \
-      "$REPO_ROOT/scripts/dispatch-hetero.sh" --no-verify-tip --runner cc-shim --model MiniMax-M3 \
+      "$REPO_ROOT/scripts/dispatch-hetero.sh" --no-verify-tip --runner cc-shim --pin-reason "test fixture" --model MiniMax-M3 \
       --prompt-file "$PROMPT" --context-window off --branch "$branch" \
       ${ep_args[@]+"${ep_args[@]}"} 2>"$TEST_TMP/stderr")" || RC=$?
 }

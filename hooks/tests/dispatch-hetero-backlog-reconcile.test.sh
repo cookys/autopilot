@@ -87,7 +87,7 @@ run_case() { # repo branch stub
     AUTOPILOT_LIVE_DIR="$LIVE_DIR" \
     AUTOPILOT_DISPATCH_USAGE=off \
     AUTOPILOT_CODEFORGE_COLLECT=off \
-      bash "$HETERO_SH" --no-verify-tip --runner agy \
+      bash "$HETERO_SH" --no-verify-tip --runner agy --pin-reason "test fixture" \
         --branch "$2" --prompt-file "$PROMPT" --agy-bin "$3" < /dev/null
   )
 }

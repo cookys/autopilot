@@ -92,7 +92,7 @@ STUB_A="$TEST_TMP/agy-a"
 make_fail_stub "$STUB_A"
 ERR_A="$TEST_TMP/err-a"
 run_dispatch "$ERR_A" "$SCRIPT" --no-verify-tip --branch feat/guard-a --prompt-file "$PROMPT" \
-  --agy-bin "$STUB_A" --model guard-engine-a --runner agy
+  --agy-bin "$STUB_A" --model guard-engine-a --runner agy --pin-reason "test fixture"
 SC_A="$(strike_count "$DEFAULT_STORE/strikes.jsonl")"
 assert_eq "$SC_A" "0" "a: default store has no new strike"
 assert_contains "$(cat "$ERR_A")" "ENGINE_CAPABILITY_DIR" "a: stderr names ENGINE_CAPABILITY_DIR"
@@ -108,7 +108,7 @@ ISO_B="$TEST_TMP/iso-store"
 mkdir -p "$ISO_B"
 ERR_B="$TEST_TMP/err-b"
 run_dispatch "$ERR_B" env ENGINE_CAPABILITY_DIR="$ISO_B" "$SCRIPT" --no-verify-tip --branch feat/guard-b --prompt-file "$PROMPT" \
-  --agy-bin "$STUB_A" --model guard-engine-b --runner agy
+  --agy-bin "$STUB_A" --model guard-engine-b --runner agy --pin-reason "test fixture"
 assert_eq "$(strike_count "$ISO_B/strikes.jsonl")" "1" "b: strike written to isolated store"
 assert_eq "$(strike_count "$DEFAULT_STORE/strikes.jsonl")" "0" "b: default store untouched"
 assert_eq "$(latest_manifest_field capability_write_suppressed)" "" "b: no suppression field"
@@ -121,7 +121,7 @@ STUB_C="$PATHBIN/agy"
 make_fail_stub "$STUB_C"
 ERR_C="$TEST_TMP/err-c"
 run_dispatch "$ERR_C" env PATH="$PATHBIN:$PATH" "$SCRIPT" --no-verify-tip --branch feat/guard-c --prompt-file "$PROMPT" \
-  --agy-bin "$STUB_C" --model guard-engine-c --runner agy
+  --agy-bin "$STUB_C" --model guard-engine-c --runner agy --pin-reason "test fixture"
 assert_eq "$(strike_count "$DEFAULT_STORE/strikes.jsonl")" "1" "c: same-path override writes a strike"
 assert_eq "$(latest_manifest_field capability_write_suppressed)" "" "c: no suppression field"
 
@@ -130,7 +130,7 @@ reset_stores
 ERR_D="$TEST_TMP/err-d"
 run_dispatch "$ERR_D" env AUTOPILOT_ALLOW_REAL_STORE_WITH_BIN_OVERRIDE=1 "$SCRIPT" --no-verify-tip \
   --branch feat/guard-d --prompt-file "$PROMPT" \
-  --agy-bin "$STUB_A" --model guard-engine-d --runner agy
+  --agy-bin "$STUB_A" --model guard-engine-d --runner agy --pin-reason "test fixture"
 assert_eq "$(strike_count "$DEFAULT_STORE/strikes.jsonl")" "1" "d: release variable writes a strike"
 assert_eq "$(latest_manifest_field capability_write_suppressed)" "" "d: no suppression field"
 
@@ -140,7 +140,7 @@ STUB_E="$TEST_TMP/agy-quota"
 make_quota_stub "$STUB_E"
 ERR_E="$TEST_TMP/err-e"
 run_dispatch "$ERR_E" "$SCRIPT" --no-verify-tip --branch feat/guard-e --prompt-file "$PROMPT" \
-  --agy-bin "$STUB_E" --model gpt-5.5 --runner agy
+  --agy-bin "$STUB_E" --model gpt-5.5 --runner agy --pin-reason "test fixture"
 if [ -f "$DEFAULT_STORE/capability.jsonl" ]; then
   fail "e: passive capture did not write the default store"
 else
@@ -154,7 +154,7 @@ ISO_E="$TEST_TMP/iso-store"
 mkdir -p "$ISO_E"
 ERR_EI="$TEST_TMP/err-ei"
 run_dispatch "$ERR_EI" env ENGINE_CAPABILITY_DIR="$ISO_E" "$SCRIPT" --no-verify-tip --branch feat/guard-ei --prompt-file "$PROMPT" \
-  --agy-bin "$STUB_E" --model gpt-5.5 --runner agy
+  --agy-bin "$STUB_E" --model gpt-5.5 --runner agy --pin-reason "test fixture"
 assert_file_exists "$ISO_E/capability.jsonl" "e-iso: passive capture writes the isolated store"
 assert_eq "$(latest_manifest_field capability_write_suppressed)" "" "e-iso: no suppression field"
 
@@ -167,7 +167,7 @@ STUB_F="$PATHBIN_F/agy"
 make_fail_stub "$STUB_F"
 ERR_F="$TEST_TMP/err-f"
 run_dispatch "$ERR_F" env PATH="$PATHBIN_F:$PATH" "$SCRIPT" --no-verify-tip --branch feat/guard-f --prompt-file "$PROMPT" \
-  --agy-bin agy --model guard-engine-f --runner agy
+  --agy-bin agy --model guard-engine-f --runner agy --pin-reason "test fixture"
 assert_eq "$(strike_count "$DEFAULT_STORE/strikes.jsonl")" "1" "f: bare name matching PATH writes a strike"
 assert_eq "$(latest_manifest_field capability_write_suppressed)" "" "f: no suppression field"
 
@@ -178,7 +178,7 @@ assert_eq "$(latest_manifest_field capability_write_suppressed)" "" "f: no suppr
 reset_stores
 ERR_G="$TEST_TMP/err-g"
 run_dispatch "$ERR_G" env PATH="$PATHBIN_F:$PATH" "$SCRIPT" --no-verify-tip --branch feat/guard-g --prompt-file "$PROMPT" \
-  --agy-bin not-a-real-agy-bin --model guard-engine-g --runner agy
+  --agy-bin not-a-real-agy-bin --model guard-engine-g --runner agy --pin-reason "test fixture"
 assert_eq "$(strike_count "$DEFAULT_STORE/strikes.jsonl")" "0" "g: unresolved bare name writes no strike"
 assert_contains "$(cat "$ERR_G")" "not writing the capability store" "g: unresolved bare name is suppressed"
 

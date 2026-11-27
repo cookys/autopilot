@@ -213,7 +213,7 @@ assert_contains "$(cat "$GATE_LOG")" '--model qwen --endpoint qwen_local' "a: CN
 # (a3) Local runner explicitly rejects effort values unsupported by the gateway.
 RUNS="$TEST_TMP/runs-a3"; mkdir -p "$RUNS"
 OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
-  "$SCRIPT" --no-verify-tip --context-window off --runner local --model qwen --effort high \
+  "$SCRIPT" --no-verify-tip --context-window off --runner local --pin-reason "test fixture" --model qwen --effort high \
   --branch feat/local-a3 --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/a3.err")"
 EXIT=$?
 assert_neq "0" "$EXIT" "a3: explicit local high effort fails precondition"
@@ -230,7 +230,7 @@ assert_contains "$OUT" "low|medium|xhigh" "a3b: error names supported local effo
 assert_contains "$(cat "$LEASE_LOG")" '"method":"DELETE","url":"/v1/local/lease/test-lease-id"' "a3b: acquired lease is released"
 RUNS="$TEST_TMP/runs-a3max"; mkdir -p "$RUNS"
 OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
-  "$SCRIPT" --no-verify-tip --context-window off --runner local --model qwen --effort max \
+  "$SCRIPT" --no-verify-tip --context-window off --runner local --pin-reason "test fixture" --model qwen --effort max \
   --branch feat/local-a3max --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/a3max.err")"
 EXIT=$?
 assert_eq "2" "$EXIT" "a3: explicit local max effort exits precondition"
@@ -268,7 +268,7 @@ assert_not_contains "$(cat "$LEASE_LOG")" '"method":"POST","url":"/v1/local/leas
 PROMPT="$TEST_TMP/prompt-b.txt"
 printf 'edit only this line\n' > "$PROMPT"
 BEFORE="$(sha256sum "$PROMPT" | awk '{print $1}')"
-run_local b --runner local --model qwen
+run_local b --runner local --pin-reason "test fixture" --model qwen
 [ "$EXIT" -eq 0 ] || printf 'local-default diagnostic (b): %s\n%s\n' "$OUT" "$ERR" >&2
 assert_eq "0" "$EXIT" "b: local with no Task-Class exits 0"
 AFTER="$(sha256sum "$PROMPT" | awk '{print $1}')"
@@ -290,7 +290,7 @@ PROMPT="$TEST_TMP/prompt-b2.txt"
   printf 'please add a Task-Class: header\n'
 } > "$PROMPT"
 BEFORE="$(sha256sum "$PROMPT" | awk '{print $1}')"
-run_local b2 --runner local --model qwen
+run_local b2 --runner local --pin-reason "test fixture" --model qwen
 [ "$EXIT" -eq 0 ] || printf 'local-default diagnostic (b2): %s\n%s\n' "$OUT" "$ERR" >&2
 assert_eq "0" "$EXIT" "b2: body mention of Task-Class exits 0"
 AFTER="$(sha256sum "$PROMPT" | awk '{print $1}')"
@@ -305,7 +305,7 @@ XDG_RUNTIME_DIR="$(mktemp -d /tmp/local-default-xdg.XXXXXX)"
 chmod 700 "$XDG_RUNTIME_DIR"
 PROMPT="$TEST_TMP/prompt-c.txt"
 printf 'Fleet-Task: 01ARZ3NDEKTSV4RRFFQ69G5FAV\nTask-Class: simple-script\nedit ok.txt\n' > "$PROMPT"
-run_local c --runner local --model qwen
+run_local c --runner local --pin-reason "test fixture" --model qwen
 [ "$EXIT" -eq 0 ] || printf 'local-default diagnostic (c): %s\n%s\n' "$OUT" "$ERR" >&2
 assert_eq "0" "$EXIT" "c: local with no --worktree-parent exits 0"
 SHA_C="$(git -C "$SBX" rev-parse "feat/local-c")"
@@ -328,7 +328,7 @@ printf 'edit impl-defaults-fixture.txt\n' > "$PROMPT"
 RUNS="$TEST_TMP/runs-d"
 mkdir -p "$RUNS"
 OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
-  "$SCRIPT" --no-verify-tip --context-window off --runner grok --grok-bin "$STUB_GROK" \
+  "$SCRIPT" --no-verify-tip --context-window off --runner grok --pin-reason "test fixture" --grok-bin "$STUB_GROK" \
   --branch feat/local-d --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/d.err")"
 EXIT=$?
 [ "$EXIT" -eq 0 ] || printf 'local-default diagnostic (d): %s\n%s\n' "$OUT" "$(cat "$TEST_TMP/d.err")" >&2
@@ -574,7 +574,7 @@ cat > "$TEST_TMP/bin/codex" <<'EOF'
 printf '%s\n' '{"type":"result","is_error":false,"result":"ok"}'
 EOF
 chmod +x "$TEST_TMP/bin/codex"
-OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$TEST_TMP/runs-k" "$SCRIPT" --no-verify-tip --context-window off --runner codex --codex-bin "$TEST_TMP/bin/codex" --branch feat/local-k --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/k.err")"; EXIT=$?
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$TEST_TMP/runs-k" "$SCRIPT" --no-verify-tip --context-window off --runner codex --pin-reason "test fixture" --codex-bin "$TEST_TMP/bin/codex" --branch feat/local-k --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/k.err")"; EXIT=$?
 assert_neq "$EXIT" "97" "k: explicit codex path is stubbed"
 assert_not_contains "$(cat "$LEASE_LOG")" '"method":"POST","url":"/v1/local/lease"' "k: explicit runner sends no grant"
 
@@ -621,7 +621,7 @@ assert_contains "$(cat "$TEST_TMP/l2.err")" 'local-slot: cn_gate_barred family=q
 # (l3) Explicitly pinned local runs remain blocked by the same CN gate refusal.
 RUNS="$TEST_TMP/runs-l3"; mkdir -p "$RUNS"
 OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
-  "$SCRIPT" --no-verify-tip --context-window off --runner local --model qwen --endpoint qwen_local \
+  "$SCRIPT" --no-verify-tip --context-window off --runner local --pin-reason "test fixture" --model qwen --endpoint qwen_local \
   --branch feat/local-l3 --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/l3.err")"; EXIT=$?
 assert_eq "$EXIT" "2" "l3: pinned local CN-gate refusal remains a precondition error"
 assert_contains "$OUT" '"status": "precondition_failed"' "l3: pinned refusal reports precondition_failed"

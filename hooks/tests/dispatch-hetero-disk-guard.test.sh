@@ -72,7 +72,7 @@ status_line() {
 
 run_dispatch() {
   rm -f "$RAN"
-  (cd "$SBX" && "$SCRIPT" --no-verify-tip --prompt-file "$PROMPT" --agy-bin "$STUB" --runner agy "$@")
+  (cd "$SBX" && "$SCRIPT" --no-verify-tip --prompt-file "$PROMPT" --agy-bin "$STUB" --runner agy --pin-reason "test fixture" "$@")
 }
 
 set_mode shadow

@@ -88,7 +88,7 @@ status_line() {
 
 run_dispatch() {
   rm -f "$RAN"
-  (cd "$SBX" && "$SCRIPT" --no-verify-tip --prompt-file "$PROMPT" --agy-bin "$STUB" --runner agy "$@")
+  (cd "$SBX" && "$SCRIPT" --no-verify-tip --prompt-file "$PROMPT" --agy-bin "$STUB" --runner agy --pin-reason "test fixture" "$@")
 }
 
 # Usage documents the flag beside the campaign contract flags.

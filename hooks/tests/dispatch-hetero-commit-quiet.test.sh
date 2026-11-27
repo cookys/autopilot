@@ -68,7 +68,7 @@ run_case() { # mode extra-args... ; sets OUT ELAPSED PIDF
   local start; start="$(date +%s)"
   OUT="$(cd "$SBX" && timeout 90 env AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
     HETERO_TEST_PIDFILE="$PIDF" HETERO_TEST_MODE="$mode" \
-    "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+    "$SCRIPT" --no-verify-tip --runner grok --pin-reason "test fixture" --model grok-4.5 --effort high --grok-bin "$stub" \
     --branch "feat/cq-$mode-$RANDOM" --prompt-file "$PROMPT" --timeout 60s "$@" 2>&1)" || true
   ELAPSED=$(( $(date +%s) - start ))
 }

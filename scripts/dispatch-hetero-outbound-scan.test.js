@@ -147,7 +147,7 @@ function dispatch(dir, env, promptBody, branch) {
   fs.writeFileSync(prompt, promptBody);
   const res = cp.spawnSync('bash', [
     HETERO,
-    '--runner', 'grok',
+    '--runner', 'grok', '--pin-reason', 'test fixture',
     '--model', 'grok-4.5',
     '--prompt-file', prompt,
     '--branch', branch,

@@ -150,7 +150,7 @@ run_pinned_case() {
 }
 
 # --model alone preserves the chosen model and cannot be rewritten to the shed codex runner.
-PINNED_RESULT="$(run_pinned_case explicit-model --model grok-4.7)"
+PINNED_RESULT="$(run_pinned_case explicit-model --model grok-4.7 --pin-reason "test fixture")"
 PINNED_JSON="$(printf '%s\n' "$PINNED_RESULT" | sed -n '1p')"
 PINNED_MF="$(printf '%s\n' "$PINNED_RESULT" | sed -n '2p')"
 "$REAL_NODE" -e 'const o=JSON.parse(process.argv[1]);if(o.runner!=="grok"||o.model!=="grok-4.7"||o.shed!==null)process.exit(1)' "$PINNED_JSON" || fail 'explicit model pins grok-4.7 and bypasses shed routing'
@@ -172,7 +172,7 @@ assert_eq "" "$(cat "$TEST_TMP/slot-calls")" 'explicit endpoint takes no local s
 
 # Explicit --runner auto is still a caller pin and must not enter shed routing.
 : > "$TEST_TMP/slot-calls"
-PINNED_RESULT="$(run_pinned_case explicit-auto --runner auto)"
+PINNED_RESULT="$(run_pinned_case explicit-auto --runner auto --pin-reason "test fixture")"
 PINNED_JSON="$(printf '%s\n' "$PINNED_RESULT" | sed -n '1p')"
 PINNED_MF="$(printf '%s\n' "$PINNED_RESULT" | sed -n '2p')"
 "$REAL_NODE" -e 'const o=JSON.parse(process.argv[1]);if(o.runner!=="grok"||o.model!=="grok-4.7"||o.shed!==null)process.exit(1)' "$PINNED_JSON" || fail 'explicit auto resolves normally without shed routing'

@@ -59,7 +59,7 @@ mkdir -p "$RUNS"
 CAPTURED_PROMPT="$TEST_TMP/captured-prompt.txt"
 OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
   STUB_PROMPT_CAPTURE="$CAPTURED_PROMPT" STUB_WRITE_NOTES=1 \
-  "$SCRIPT" --runner grok --grok-bin "$STUB_GROK" --no-verify-tip --context-window off \
+  "$SCRIPT" --runner grok --pin-reason "test fixture" --grok-bin "$STUB_GROK" --no-verify-tip --context-window off \
   --branch "feat/ev-pack-stub" --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/err")"
 EXIT=$?
 
@@ -95,7 +95,7 @@ assert_contains "$CAPTURED_CONTENT" "evidence-notes.md" "prompt received by fake
 # Case 2: fake runner writes no notes -> mergeable=false with tests_not_green and risk_missing
 OUT2="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" \
   STUB_WRITE_NOTES=0 \
-  "$SCRIPT" --runner grok --grok-bin "$STUB_GROK" --no-verify-tip --context-window off \
+  "$SCRIPT" --runner grok --pin-reason "test fixture" --grok-bin "$STUB_GROK" --no-verify-tip --context-window off \
   --branch "feat/ev-pack-no-notes" --prompt-file "$PROMPT" </dev/null 2>"$TEST_TMP/err2")"
 EXIT2=$?
 assert_eq "0" "$EXIT2" "dispatch-hetero with no notes exits 0"

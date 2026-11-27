@@ -68,7 +68,7 @@ run_cc() {
   (cd "$SBX" && env PATH="$bindir:$PATH" \
       ANTHROPIC_BASE_URL="http://127.0.0.1:9" ANTHROPIC_AUTH_TOKEN="test-token" \
       AUTOPILOT_STRIKE_WRITER=off ENGINE_CAPABILITY_DIR="$ENGINE_CAPABILITY_DIR" \
-      "$SCRIPT" --no-verify-tip --runner cc-shim --model mini --branch "$branch" \
+      "$SCRIPT" --no-verify-tip --runner cc-shim --pin-reason "test fixture" --model mini --branch "$branch" \
       --prompt-file "$PROMPT" --context-window off 2>&1)
 }
 
@@ -122,7 +122,7 @@ exit 1
 EOF
 chmod +x "$STUB_OC"
 OUT="$(cd "$SBX" && AUTOPILOT_STRIKE_WRITER=off ENGINE_CAPABILITY_DIR="$ENGINE_CAPABILITY_DIR" \
-  "$SCRIPT" --no-verify-tip --runner opencode --model opencode-go/muse-spark-1.3-contributor \
+  "$SCRIPT" --no-verify-tip --runner opencode --pin-reason "test fixture" --model opencode-go/muse-spark-1.3-contributor \
   --branch feat/pe-oc --prompt-file "$PROMPT" --opencode-bin "$STUB_OC" --context-window off 2>&1)"
 JSON="$(last_json "$OUT")"
 assert_provider "$JSON" opencode 529 error.data.statusCode "opencode APIError statusCode 529 is harness_structured"
@@ -137,7 +137,7 @@ exit 1
 EOF
 chmod +x "$STUB_OCT"
 OUT="$(cd "$SBX" && AUTOPILOT_STRIKE_WRITER=off ENGINE_CAPABILITY_DIR="$ENGINE_CAPABILITY_DIR" \
-  "$SCRIPT" --no-verify-tip --runner opencode --model opencode-go/muse-spark-1.3-contributor \
+  "$SCRIPT" --no-verify-tip --runner opencode --pin-reason "test fixture" --model opencode-go/muse-spark-1.3-contributor \
   --branch feat/pe-oct --prompt-file "$PROMPT" --opencode-bin "$STUB_OCT" --context-window off 2>&1)"
 JSON="$(last_json "$OUT")"
 assert_no_provider_key "$JSON" "opencode text event saying 529 has no provider_error"
@@ -152,7 +152,7 @@ EOF
 chmod +x "$STUB_AGY"
 make_agy_stub_versioned "$STUB_AGY"
 OUT="$(cd "$SBX" && AUTOPILOT_STRIKE_WRITER=off ENGINE_CAPABILITY_DIR="$ENGINE_CAPABILITY_DIR" \
-  "$SCRIPT" --no-verify-tip --runner agy --model gemini-3.7-flash --agy-bin "$STUB_AGY" \
+  "$SCRIPT" --no-verify-tip --runner agy --pin-reason "test fixture" --model gemini-3.7-flash --agy-bin "$STUB_AGY" \
   --branch feat/pe-agy --prompt-file "$PROMPT" --context-window off 2>&1)"
 JSON="$(last_json "$OUT")"
 assert_no_provider_key "$JSON" "agy text 529 does not gain provider_error"

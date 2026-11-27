@@ -1101,11 +1101,25 @@ export const barValue = (cells: number): Frag => frag([sg(GLYPHS.chart.meterOn.r
 // the props a drawn Text gets from one segment: pane.tsx / band.tsx spread this, so they carry no colour decision of their own (§6.1)
 // r11: the chosen decision answer (bold, the success colour; the recommended star keeps the attention colour) and the frame border while the pane holds the keyboard. The lint keeps bold and colour keys in this file.
 export const pickedTone = (): Partial<Seg> => ({ color: PALETTE.done, bold: true })
-export const heldBorder = (): { color: ThemeKey | undefined; bold: boolean | undefined; dimColor: boolean | undefined } => drawSeg({ text: '', color: PALETTE.here, bold: true })
-export function drawSeg(s: Seg): { color: ThemeKey | undefined; bold: boolean | undefined; dimColor: boolean | undefined } {
+export const heldBorder = (): { color: string | undefined; bold: boolean | undefined; dimColor: boolean | undefined } => drawSeg({ text: '', color: PALETTE.here, bold: true })
+// 256-colour terminals: CC quantizes theme keys to the xterm cube, and two keys land under the 3:1 non-text bar (claude #d77757 -> 174 #d78787 = 2.73 on light,
+// inactive #626262 = 2.73 on dark). Neither theme is known to the mod, so in 256 mode the pane sends one exact cube colour that clears 3:1 on both:
+// claude -> 131 #af5f5f (4.54 light, 4.4 dark), inactive and dim -> 243 #767676 (4.54 light, 4.4 dark). Truecolor keeps the theme keys (COLORTERM truecolor|24bit, read once at session.start).
+export const CLAUDE_256 = '#af5f5f'
+export const INACTIVE_256 = '#767676'
+// the mod has no `process`: register.ts reads COLORTERM once at session.start through `$.env.get` and hands the answer to setTruecolor
+let truecolor = true // until session.start has read COLORTERM the theme keys stand (tests and any host that never asks)
+export const setTruecolor = (on: boolean): void => { truecolor = on }
+// true = keep the theme keys: COLORTERM says truecolor, or TERM is unset (no terminal to characterise: a test host, a pipe)
+export const isTruecolorValue = (colorterm: string | undefined, term?: string): boolean => /^(truecolor|24bit)$/i.test(colorterm ?? '') || (term ?? '') === ''
+export const is256 = (): boolean => !truecolor
+export const ink = (key: ThemeKey | undefined): string | undefined =>
+  key === undefined || !is256() ? key : key === PALETTE.here ? CLAUDE_256 : key === PALETTE.idle ? INACTIVE_256 : key
+export function drawSeg(s: Seg): { color: string | undefined; bold: boolean | undefined; dimColor: boolean | undefined } {
   // Y6: runtime inputs can escape TypeScript; only the semantic palette reaches Text.
-  const color = s.color !== undefined && Object.values(PALETTE).includes(s.color) ? s.color : undefined
-  return { color, bold: s.bold, dimColor: s.dim }
+  const key = s.color !== undefined && Object.values(PALETTE).includes(s.color) ? s.color : undefined
+  if (s.dim === true && key === undefined && is256()) return { color: INACTIVE_256, bold: s.bold, dimColor: undefined }
+  return { color: ink(key), bold: s.bold, dimColor: s.dim }
 }
 
 // `need`: the tab holds something for the owner, so its name is drawn attention bold (the colour of `⏶ 要你決定`)

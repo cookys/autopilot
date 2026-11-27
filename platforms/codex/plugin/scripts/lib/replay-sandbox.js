@@ -85,6 +85,13 @@ function buildSandboxArgs(opts = {}) {
     '--tmpfs', '/home/sandbox'
   );
 
+  // A node outside the mounted OS dirs (a user-local install) is not visible inside the sandbox, so
+  // the probes die with "execvp node: No such file". Bind just that install root, read-only; never HOME.
+  const nodeRoot = path.dirname(path.dirname(process.execPath));
+  if (!/^\/(usr|bin|lib|lib64)(\/|$)/.test(process.execPath) && nodeRoot !== '/' && nodeRoot.split('/').length > 2) {
+    args.push('--ro-bind', nodeRoot, nodeRoot);
+  }
+
   if (pluginDir) {
     args.push('--ro-bind', path.resolve(pluginDir), '/plugin');
   }

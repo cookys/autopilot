@@ -165,8 +165,16 @@ function evaluate(input) {
   const message = messageText(input);
   if (!triggered(input, message)) return null;
   const file = process.env.PM_CONSTRAINTS_FILE;
-  if (!file) throw new Error('PM_CONSTRAINTS_FILE unset');
-  const parsed = parseConstraints(fs.readFileSync(file, 'utf8'));
+  if (!file) {
+    return deny('PM_CONSTRAINTS_FILE 沒設，無法檢查操作員約束，這次 ruling/go 先擋下。請在 PM 席的 env 設好 PM_CONSTRAINTS_FILE 指向 constraints.md。');
+  }
+  let constraintsText;
+  try {
+    constraintsText = fs.readFileSync(file, 'utf8');
+  } catch (err) {
+    return deny(`PM_CONSTRAINTS_FILE 讀不到（${file}：${err && err.code}），無法檢查操作員約束，這次 ruling/go 先擋下。`);
+  }
+  const parsed = parseConstraints(constraintsText);
   const fetched = readRefs(message, process.env.PM_PLAN_REPO || '');
   if (fetched.error) {
     return deny(`引用的 path@sha 讀不到：${fetched.error}。請改成這個 repo 裡讀得到的 path@sha。`);

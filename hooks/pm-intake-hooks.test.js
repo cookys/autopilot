@@ -254,6 +254,17 @@ test('forbid hit still denies when PM_ANSWER_LOOKUP_BIN is unset (no fail-open)'
   assert.strictEqual(out.hookSpecificOutput.permissionDecision, 'deny');
 });
 
+test('PM seat with PM_CONSTRAINTS_FILE unset or unreadable denies (no silent fail-open)', () => {
+  const home = tmp();
+  const r = run(HOOK_C, go('ruling go: 任何內容'), { HOME: home, FLEET_ADDRESS: PM });
+  assert.strictEqual(JSON.parse(r.stdout).hookSpecificOutput.permissionDecision, 'deny');
+  assert.match(JSON.parse(r.stdout).hookSpecificOutput.permissionDecisionReason, /PM_CONSTRAINTS_FILE 沒設/);
+  const r2 = run(HOOK_C, go('ruling go: 任何內容'), { HOME: home, FLEET_ADDRESS: PM, PM_CONSTRAINTS_FILE: home + '/nope.md' });
+  assert.strictEqual(JSON.parse(r2.stdout).hookSpecificOutput.permissionDecision, 'deny');
+  const r3 = run(HOOK_C, go('ruling go: 任何內容'), { HOME: home, FLEET_ADDRESS: 'cookys/aimax395-team/autopilot--claude' });
+  assert.strictEqual(r3.stdout, '');
+});
+
 test('PM-origin answer id denies', () => {
   const home = tmp();
   const r = run(HOOK_C, go('核准 vzdump 搬遷 override:16c69c54:PMSELF'), {

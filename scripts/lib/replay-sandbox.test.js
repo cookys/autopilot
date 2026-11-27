@@ -45,6 +45,15 @@ test('resolveAllowedEnv strips fleet, git, SSH, token, and CLAUDE_CONFIG_DIR', (
   assert.equal(env.MY_SECRET, undefined);
 });
 
+test('a node install outside /usr is bound read-only so the probes can exec it (never HOME)', () => {
+  const args = buildSandboxArgs({ command: [process.execPath, '-e', '1'] });
+  if (/^\/(usr|bin|lib|lib64)(\/|$)/.test(process.execPath)) return;
+  const root = require('path').dirname(require('path').dirname(process.execPath));
+  const i = args.findIndex((a, k) => a === '--ro-bind' && args[k + 1] === root && args[k + 2] === root);
+  assert.ok(i >= 0, 'node install root must be --ro-bind mounted');
+  assert.ok(!args.includes(process.env.HOME), 'HOME itself must never be mounted');
+});
+
 test('runNegativeControls blocks all 5 probes inside bwrap (or SKIPs if bwrap/userns unavailable)', () => {
   const res = runNegativeControls();
   if (res.skipped) {

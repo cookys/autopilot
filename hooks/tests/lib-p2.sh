@@ -20,7 +20,7 @@ PY
 # Throwaway clone with the pieces the harness and the hook need, one commit holding the preregistration files.
 CLONE="$TEST_TMP/clone"; mkdir -p "$CLONE/hooks" "$CLONE/scripts" "$CLONE/prereg"
 cp -a "$REPO_ROOT/evals" "$CLONE/evals"; rm -rf "$CLONE/evals/orchestration/runs"
-cp "$REPO_ROOT/hooks/per-turn-gate.js" "$CLONE/hooks/"; cp -a "$REPO_ROOT/hooks/_shared" "$CLONE/hooks/_shared"
+cp "$REPO_ROOT/hooks/per-turn-gate.js" "$CLONE/hooks/"; mkdir -p "$CLONE/hooks/lib"; cp "$REPO_ROOT/hooks/lib/gate-hint.js" "$CLONE/hooks/lib/"; cp -a "$REPO_ROOT/hooks/_shared" "$CLONE/hooks/_shared"
 cp -a "$REPO_ROOT/scripts/lib" "$CLONE/scripts/lib"; cp "$REPO_ROOT/scripts/adjudicate-findings.js" "$CLONE/scripts/"
 # G37 W5: the harness (run-orchestration-eval.sh) fails closed (exit 2) without the account CLI next to scripts/lib; the registry location points at an empty dir (no registry = the legacy path)
 . "$(dirname "${BASH_SOURCE[0]}")/lib/account-layer.sh"; cp_account_layer "$CLONE/scripts"; mkdir -p "$TEST_TMP/no-accounts"; export AUTOPILOT_ACCOUNTS_DIR="$TEST_TMP/no-accounts"

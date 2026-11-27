@@ -624,3 +624,88 @@ test('child git repo under PM workspace writes passive ask without ask_id or ses
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('typedText and isInjected filter fleet, pasted_content, and system tags; normal Chinese kept', () => {
+  const pm = { '.claude/console.json': CONSOLE_OK };
+  for (const prompt of [
+    '[fleet] from ns/host-a/dev--claude: done',
+    '<pasted_content id="1">only pasted</pasted_content id="1">',
+    '<pasted_content>unclosed paste',
+    '<previous_occurrence>old</previous_occurrence>',
+  ]) {
+    const r = run({ hook_event_name: 'UserPromptSubmit', session_id: 's', prompt }, {}, pm);
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.lines.length, 1);
+    assert.equal(JSON.parse(r.lines[0]).kind, 'turn', `should not record ask for: ${prompt}`);
+  }
+  const zh = run({ hook_event_name: 'UserPromptSubmit', session_id: 's', prompt: '這題要怎麼解？' }, {}, pm);
+  assert.equal(zh.status, 0, zh.stderr);
+  assert.equal(JSON.parse(zh.lines[0]).kind, 'ask');
+  assert.equal(JSON.parse(zh.lines[0]).text, '這題要怎麼解？');
+});
+
+test('typed words + pasted_content records only typed words and Stop reply still pairs', () => {
+  const s = pmSession();
+  try {
+    const fullPrompt = '請看這段\n<pasted_content id="p1">lots of pasted\nlines</pasted_content id="p1">';
+    const tp = s.transcript([
+      entry('user', fullPrompt),
+      entry('assistant', [{ type: 'text', text: '看完了\n沒問題' }]),
+    ]);
+    const p = s.send({ hook_event_name: 'UserPromptSubmit', prompt: fullPrompt });
+    assert.equal(p.status, 0, p.stderr);
+    const stop = s.send({ hook_event_name: 'Stop', transcript_path: tp });
+    assert.equal(stop.status, 0, stop.stderr);
+    const rows = s.rows();
+    assert.equal(rows.length, 3);
+    assert.equal(rows[0].kind, 'ask');
+    assert.equal(rows[0].text, '請看這段');
+    assert.equal(rows[1].kind, 'reply');
+    assert.equal(rows[1].ask_id, rows[0].ask_id);
+  } finally {
+    s.cleanup();
+  }
+});
+
+test('Stop voids ask when transcript user entry has non-human origin, isMeta, or non-typed promptSource; human+typed keeps it', () => {
+  for (const extra of [
+    { origin: { kind: 'channel' } },
+    { isMeta: true },
+    { promptSource: 'system' },
+  ]) {
+    const s = pmSession();
+    try {
+      const prompt = '看起來像人類但其實不是';
+      const tp = s.transcript([
+        JSON.stringify({ type: 'user', ...extra, message: { role: 'user', content: prompt } }),
+        entry('assistant', [{ type: 'text', text: '不該存這行回覆' }]),
+      ]);
+      s.send({ hook_event_name: 'UserPromptSubmit', prompt });
+      s.send({ hook_event_name: 'Stop', transcript_path: tp });
+      const rows = s.rows();
+      assert.equal(rows.length, 2);
+      assert.equal(rows[0].kind, 'ask');
+      assert.equal(rows[1].kind, 'void');
+      assert.equal(rows[1].ask_id, rows[0].ask_id);
+      assert.equal(rows.filter((r) => r.kind === 'reply').length, 0);
+    } finally {
+      s.cleanup();
+    }
+  }
+
+  const sOk = pmSession();
+  try {
+    const prompt = '真正人類輸入';
+    const tp = sOk.transcript([
+      JSON.stringify({ type: 'user', origin: { kind: 'human' }, promptSource: 'typed', message: { role: 'user', content: prompt } }),
+      entry('assistant', [{ type: 'text', text: '收到' }]),
+    ]);
+    sOk.send({ hook_event_name: 'UserPromptSubmit', prompt });
+    sOk.send({ hook_event_name: 'Stop', transcript_path: tp });
+    const rows = sOk.rows();
+    assert.equal(rows.filter((r) => r.kind === 'void').length, 0);
+    assert.equal(rows.filter((r) => r.kind === 'reply').length, 1);
+  } finally {
+    sOk.cleanup();
+  }
+});

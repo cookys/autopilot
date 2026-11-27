@@ -86,17 +86,29 @@ function isPmSession(input) {
   return hasPmConsole(cwdOf(input));
 }
 
+const SYSTEM_TAG_RE = /^<[A-Za-z][A-Za-z0-9]*[-_]/;
+
+function typedText(prompt) {
+  if (typeof prompt !== 'string') return '';
+  return prompt
+    .replace(/<pasted_content\b[^>]*>[\s\S]*?<\/pasted_content\b[^>]*>/g, '')
+    .replace(/<pasted_content\b[^>]*>[\s\S]*$/g, '')
+    .trim();
+}
+
 function isInjected(prompt) {
   if (typeof prompt !== 'string') return true;
-  const trimmed = prompt.trim();
-  if (trimmed === '') return true;
-  const first = trimmed.split(/\r?\n/, 1)[0].trim();
+  const typed = typedText(prompt);
+  if (typed === '') return true;
+  if (typed.startsWith('[fleet]')) return true;
+  if (SYSTEM_TAG_RE.test(typed)) return true;
+  const first = typed.split(/\r?\n/, 1)[0].trim();
   // [待決回覆·更正] does not start with [待決回覆]: the bracket closes before the dot.
   if (first.startsWith('[待決回覆]') || first.startsWith('[待決回覆·更正]') || first.startsWith('[voice call · unverified]')) return true;
-  if (INJECTED_PREFIXES.some((p) => trimmed.startsWith(p))) return true;
-  if (FLEET_CHANNEL.test(prompt)) return true;
-  if (isHandoffResume(trimmed)) return true;
-  if (trimmed.startsWith('{') && (trimmed.includes('"additionalContext"') || trimmed.includes('"hookSpecificOutput"'))) return true;
+  if (INJECTED_PREFIXES.some((p) => typed.startsWith(p))) return true;
+  if (FLEET_CHANNEL.test(typed)) return true;
+  if (isHandoffResume(typed)) return true;
+  if (typed.startsWith('{') && (typed.includes('"additionalContext"') || typed.includes('"hookSpecificOutput"'))) return true;
   return false;
 }
 
@@ -151,11 +163,11 @@ function readRows(env) {
   return rows;
 }
 
-// Turn-boundary rows (ask/reply/turn). null when the log cannot be read.
+// Turn-boundary rows (ask/reply/turn/void). null when the log cannot be read.
 function relevantRows(env) {
   const all = readRows(env);
   if (all === null) return null;
-  return all.filter((row) => row.kind === 'ask' || row.kind === 'reply' || row.kind === 'turn');
+  return all.filter((row) => row.kind === 'ask' || row.kind === 'reply' || row.kind === 'turn' || row.kind === 'void');
 }
 
 // The open ask is the newest ask that no later reply or turn row has closed.
@@ -197,8 +209,20 @@ function lastAssistantText(transcript) {
   return null;
 }
 
-// Last real user text in the transcript, or null when every user entry is a tool result.
-function lastRealUserText(transcript) {
+function isOperatorEntry(entry) {
+  if (!entry || typeof entry !== 'object') return true;
+  if (entry.isMeta === true) return false;
+  if (entry.origin !== undefined && entry.origin !== null) {
+    if (typeof entry.origin !== 'object' || entry.origin.kind !== 'human') return false;
+  }
+  if (typeof entry.promptSource === 'string' && entry.promptSource !== 'typed' && entry.promptSource !== 'queued') {
+    return false;
+  }
+  return true;
+}
+
+// Last real user entry in the transcript, or null when every user entry is a tool result.
+function lastRealUserEntry(transcript) {
   const lines = transcript.split('\n');
   for (let i = lines.length - 1; i >= 0; i -= 1) {
     if (!lines[i].trim()) continue;
@@ -208,13 +232,20 @@ function lastRealUserText(transcript) {
     if (role !== 'user') continue;
     const content = e && e.message && e.message.content;
     if (onlyToolResult(content)) continue;
-    return textOf(content);
+    return e;
   }
   return null;
 }
 
+// Last real user text in the transcript, or null when every user entry is a tool result.
+function lastRealUserText(transcript) {
+  const e = lastRealUserEntry(transcript);
+  if (!e) return null;
+  return textOf(e.message && e.message.content);
+}
+
 // Unreadable transcript: keep recording. Readable: record only when the last real
-// user text is the open ask after the same clip + CRLF normalisation as the ask row.
+// user text is the open ask after the same typedText + clip + CRLF normalisation as the ask row.
 function transcriptMatchesAsk(input, askText) {
   const tp = input.transcript_path;
   if (typeof tp !== 'string' || tp === '') return true;
@@ -222,7 +253,7 @@ function transcriptMatchesAsk(input, askText) {
   try { raw = fs.readFileSync(tp, 'utf8'); } catch { return true; }
   const user = lastRealUserText(raw);
   if (user === null) return false;
-  return normClip(user) === normClip(askText);
+  return normClip(typedText(user)) === normClip(askText);
 }
 
 function computeAskId(sessionId, at, text) {
@@ -265,7 +296,27 @@ function findReecho(env, text, currentAskId, nowIso) {
       replyByAskId.set(r.ask_id, r);
     }
   }
+  const voided = new Set();
+  let lastAskIdx = -1;
+  for (let i = 0; i < rows.length; i += 1) {
+    const r = rows[i];
+    if (r.kind === 'ask') {
+      lastAskIdx = i;
+    } else if (r.kind === 'void') {
+      if (typeof r.ask_id === 'string' && r.ask_id !== '') {
+        for (let j = i - 1; j >= 0; j -= 1) {
+          if (rows[j].kind === 'ask' && rows[j].ask_id === r.ask_id) {
+            voided.add(j);
+            break;
+          }
+        }
+      } else if (lastAskIdx >= 0) {
+        voided.add(lastAskIdx);
+      }
+    }
+  }
   for (let i = rows.length - 1; i >= 0; i -= 1) {
+    if (voided.has(i)) continue;
     const r = rows[i];
     if (r.kind !== 'ask') continue;
     if (r.ask_id === currentAskId) continue;
@@ -291,7 +342,7 @@ function onPrompt(input, env) {
     append(env, { schema: SCHEMA, kind: 'turn', at, injected: true });
     return { kind: 'turn' };
   }
-  const text = normClip(input.prompt);
+  const text = normClip(typedText(input.prompt));
   if (!isPmConsole(input.cwd)) {
     append(env, { schema: SCHEMA, kind: 'ask', at, text: maskSecrets(text) });
     return { kind: 'ask' };
@@ -391,13 +442,31 @@ function writeDisposition(env, action, meta = {}) {
 
 function onStop(input, env) {
   if (input.agent_id) return;
+  const gate = replyGate(env);
+  if (!gate.closed && gate.askText !== null) {
+    const tp = input.transcript_path;
+    if (typeof tp === 'string' && tp !== '') {
+      let raw = null;
+      try { raw = fs.readFileSync(tp, 'utf8'); } catch { /* unreadable transcript */ }
+      if (raw !== null) {
+        const entry = lastRealUserEntry(raw);
+        if (entry && !isOperatorEntry(entry)) {
+          const entryTyped = typedText(textOf(entry.message && entry.message.content));
+          if (normClip(entryTyped) === normClip(gate.askText)) {
+            const voidAskId = gate.ask && typeof gate.ask.ask_id === 'string' && gate.ask.ask_id !== '' ? gate.ask.ask_id : null;
+            append(env, { schema: SCHEMA, kind: 'void', at: new Date().toISOString(), ask_id: voidAskId });
+            return;
+          }
+        }
+      }
+    }
+  }
   // With askpm-remind on (and PM console gate passing), askpm-remind owns the reply row.
   if (isEnabled('askpm-remind') && isPmConsole(cwdOf(input))) return;
   // stop_hook_active true is the re-entry after another Stop hook blocked. That
   // call is the one that ends the turn, so it still records when the first Stop
   // wrote nothing. It does not record a second row for the same ask. A turn row
   // after the ask means this Stop ends a turn the operator did not start.
-  const gate = replyGate(env);
   if (gate.closed) return;
   if (gate.askText !== null && !transcriptMatchesAsk(input, gate.askText)) return;
   const text = replyBody(input);
@@ -442,6 +511,8 @@ module.exports = {
   isHandoffResume,
   isPmSession,
   isInjected,
+  typedText,
+  isOperatorEntry,
   handle,
   lastAssistantText,
   stateDir,

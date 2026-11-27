@@ -41,11 +41,12 @@ last_json() {
 
 # Stub grok: MODE=commit_sleep (idle, no child process) | commit_busy (a 12s foreground tool child, then a
 # second commit) | commit_chatter | dirty_sleep.
-install_stub() {
-  local dest="$1"
+install_stub() { # dest mode pidfile: mode and pidfile are baked into the stub, not read from the environment the rail hands the worker
+  local dest="$1" bake_mode="${2:-}" bake_pidf="${3:-}"
   {
     echo '#!/usr/bin/env bash'
     sed -n '/^if \[ "\${1:-}" = "--list-models" \]/,/^esac$/p' hooks/tests/dispatch-hetero-wall-timeout.test.sh
+    printf 'HETERO_TEST_MODE=%q\nHETERO_TEST_PIDFILE=%q\n' "$bake_mode" "$bake_pidf"
     cat <<'BODY'
 echo "$$" > "$HETERO_TEST_PIDFILE"
 case "$HETERO_TEST_MODE" in
@@ -66,7 +67,7 @@ run_case() { # mode extra-args... ; sets OUT ELAPSED PIDF
   local mode="$1"; shift
   local stub="$TEST_TMP/stub-$mode" runs="$TEST_TMP/runs-$mode"
   PIDF="$TEST_TMP/$mode.pid"; : > "$PIDF"; mkdir -p "$runs"; rm -f "$PIDF.fifo"; mkfifo "$PIDF.fifo"
-  install_stub "$stub"
+  install_stub "$stub" "$mode" "$PIDF"
   local start; start="$(date +%s)"
   OUT="$(cd "$SBX" && timeout 90 env AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
     HETERO_TEST_PIDFILE="$PIDF" HETERO_TEST_MODE="$mode" \

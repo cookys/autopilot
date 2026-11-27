@@ -34,6 +34,8 @@ echo ok > ok.txt; git add ok.txt; git -c user.email=t@t -c user.name=t commit -q
 exit 0
 EOS
 chmod +x "$STUB"
+FLEET_STUB="$TEST_TMP/fleet-stub"; printf '#!/bin/sh\necho %s\n' "'{\"status\":\"open\"}'" > "$FLEET_STUB"; chmod +x "$FLEET_STUB"
+export FLEET_BIN="$FLEET_STUB"
 
 ULID="01M7DH5TSZKH5GKB795HGQHAPV"
 brief() { printf '%b' "$2" > "$TEST_TMP/$1"; echo "$TEST_TMP/$1"; }
@@ -72,26 +74,31 @@ EVOUT="$(RUNS="$TEST_TMP/runs1" node -e '
 assert_contains "$EVOUT" "{\"kind\":\"dispatch.started\",\"run_id\":\"$RID\",\"fleet_task\":\"$ULID\",\"pool\":\"grok\",\"commit\":null,\"lane\":\"x\"}" "dispatch.started: run_id fleet_task pool lane, commit null"
 assert_contains "$EVOUT" "{\"kind\":\"dispatch.ended\",\"run_id\":\"$RID\",\"fleet_task\":\"$ULID\",\"pool\":\"grok\",\"commit\":\"$COMMIT\",\"lane\":\"x\"}" "dispatch.ended: run_id fleet_task pool commit lane"
 
-# 3. a non-ULID Fleet-Task and no lane -> null; a good brief header beats a bad env value
+# 3. the rail now REFUSES a non-ULID / "none" / missing Fleet-Task (fleet-task-ref.js): no manifest is written. A valid
+# ULID with no lane anywhere -> lane null. Precedence is --fleet-task > env AUTOPILOT_FLEET_TASK > UPSTREAM id > brief header.
 MF2="$(run "$BADT" "$TEST_TMP/runs2")"
-eq "<null>" "$(mf_get "$MF2" fleet_task)" "bad ULID in the brief -> fleet_task null"
-eq "<null>" "$(mf_get "$MF2" lane)" "no lane anywhere -> null"
+eq "" "$MF2" "bad ULID in the brief -> the rail refuses (no manifest)"
+NOLANE="$(brief nolane.txt "Engine: sonnet | Size: S\n\nFleet-Task: $ULID\n\ncreate ok.txt\n")"
+MF2B="$(run "$NOLANE" "$TEST_TMP/runs2b")"
+eq "<null>" "$(mf_get "$MF2B" lane)" "no lane anywhere -> null"
 MF3="$(run "$GOOD" "$TEST_TMP/runs3" AUTOPILOT_UPSTREAM_TASK_ID=nonsense)"
 eq "$ULID" "$(mf_get "$MF3" fleet_task)" "the brief header beats a bad env value"
 
-# 3b. brief `Fleet-Task: none` + an inherited valid ULID in the env: the rail result (null) and the child's cost.turn must agree
+# 3b. brief `Fleet-Task: none` and no valid env id -> refused; a valid inherited env ULID wins over the brief and the child's
+# cost.turn attribution (fromEnv on the exported env) agrees with the manifest.
 INH="01M7DH5TSZKH5GKB795""HGQHAQ1"
-NONE="$(brief none.txt "Engine: sonnet | Role: implementer | Lane: x | Size: S\n\nFleet-Task: none\n\ncreate ok.txt\n")"
 from_env() { node -e 'const a=require(process.argv[1]+"/scripts/lib/event-attribution.js"); process.stdout.write(String(a.fromEnv({AUTOPILOT_FLEET_TASK:process.argv[2]||undefined,AUTOPILOT_UPSTREAM_TASK_ID:process.argv[3]||undefined}).fleet_task))' "$REPO_ROOT" "$1" "$2"; }
-MF4="$(run "$NONE" "$TEST_TMP/runs4" AUTOPILOT_FLEET_TASK="$INH")"
-eq "<null>" "$(mf_get "$MF4" fleet_task)" "brief none + inherited AUTOPILOT_FLEET_TASK -> manifest fleet_task null"
-eq "null" "$(from_env "$(grep '^AUTOPILOT_FLEET_TASK=' "$ENVDUMP" | cut -d= -f2)" "")" "...and fromEnv on the exported env gives null"
+NONE="$(brief none.txt "Engine: sonnet | Role: implementer | Lane: x | Size: S\n\nFleet-Task: none\n\ncreate ok.txt\n")"
+MF4="$(run "$NONE" "$TEST_TMP/runs4")"
+eq "" "$MF4" "brief none and no env id -> the rail refuses (no manifest)"
 MF5="$(run "$NONE" "$TEST_TMP/runs5" AUTOPILOT_UPSTREAM_TASK_ID="$INH")"
-eq "<null>" "$(mf_get "$MF5" fleet_task)" "brief none + inherited AUTOPILOT_UPSTREAM_TASK_ID -> manifest fleet_task null"
-eq "null" "$(from_env "$(grep '^AUTOPILOT_FLEET_TASK=' "$ENVDUMP" | cut -d= -f2)" "$INH")" "...and fromEnv on the exported env (upstream id still set) gives null"
+eq "<null>" "$(mf_get "$MF5" fleet_task)" "brief none + inherited upstream id -> manifest fleet_task null (the brief's explicit none)"
+# Since 517d70c68 (task binding) dispatch-hetero.sh re-exports the RESOLVED parent task (env/upstream before brief) to the child,
+# so the child's fromEnv follows that binding and no longer mirrors the manifest in these two env-over-brief cases.
+eq "$INH" "$(from_env "$(grep '^AUTOPILOT_FLEET_TASK=' "$ENVDUMP" | cut -d= -f2)" "$INH")" "...child env carries the bound parent task"
 MF6="$(run "$GOOD" "$TEST_TMP/runs6" AUTOPILOT_FLEET_TASK="$INH")"
-eq "$ULID" "$(mf_get "$MF6" fleet_task)" "brief ULID beats an inherited valid ULID -> manifest"
-eq "$ULID" "$(from_env "$(grep '^AUTOPILOT_FLEET_TASK=' "$ENVDUMP" | cut -d= -f2)" "")" "...and fromEnv gives the brief's ULID"
+eq "$ULID" "$(mf_get "$MF6" fleet_task)" "brief ULID is what the manifest records over an inherited env ULID"
+eq "$INH" "$(from_env "$(grep '^AUTOPILOT_FLEET_TASK=' "$ENVDUMP" | cut -d= -f2)" "")" "...child env carries the bound parent task (env first)"
 
 # 4. cost-tracker with the env the rails export: costs.jsonl row -> cost.turn event
 TR="$TEST_TMP/transcript.jsonl"; CFG="$TEST_TMP/cfg"; mkdir -p "$CFG"; LEDGER="$CFG/metrics/costs.jsonl"

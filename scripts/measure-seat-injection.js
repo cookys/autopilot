@@ -338,6 +338,11 @@ function main() {
   }
 
   if (opts.mode === 'check-targets') {
+    // no default: the repo's events file has no prompt rows, so falling back to it reads as "0 prompts"
+    if (!opts.tracePath) {
+      console.error('--check-targets needs --trace <file> (export-hook-trace.js output)');
+      process.exit(2);
+    }
     const res = checkTargets(baselinePath, tracePath);
     console.log(JSON.stringify(res, null, 2));
     process.exit(res.ok ? 0 : 1);

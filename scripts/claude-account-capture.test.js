@@ -306,12 +306,17 @@ test('G40-N15: a probe timeout (killed at quota_probe_timeout_secs) does not cha
 // ------------------------------------------------------------------ N66 / N73
 
 test('G40-N66: quota_probe=scheduled is rejected for Claude (starts_window unknown); unset is on-demand', async () => {
+  // The shipped Claude manifest now qualifies (starts_window false, high, evidence, Q5): scheduled is accepted there (3915e3ec7).
   let fx = makeFixture({ aliases: [{ alias: 'a' }], config: { accounts: { quota_probe: 'scheduled' } } });
+  try { assert.strictEqual((await go(fx, ['status'])).code, 0); } finally { fx.cleanup(); }
+  // A manifest that does not qualify (starts_window unknown) still rejects it.
+  fx = makeFixture({ aliases: [{ alias: 'a' }], config: { accounts: { quota_probe: 'scheduled' } } });
   try {
-    const r = await go(fx, ['status']);
+    const unknownCli = cliWithManifest(UNKNOWN)();
+    const r = await goWith(unknownCli, fx, ['status']);
     assert.strictEqual(r.code, 2);
     assert.match(r.err, /config_quota_probe_scheduled_rejected/);
-    const r2 = await go(fx, RUN);
+    const r2 = await goWith(unknownCli, fx, RUN);
     assert.strictEqual(r2.code, 2);
     assert.strictEqual(fx.shim.spawns(), 0);
   } finally { fx.cleanup(); }
@@ -639,7 +644,11 @@ const CONFIRMED = (m) => {
   m.starts_window = false; m.starts_window_evidence = EVD; m.starts_window_confidence = 'high';
   m.capture.find((x) => x.mode === 'tinyprobe').quota_share_per_probe = Q5;
 };
-const UNKNOWN = () => {};
+// The Claude manifest before 3915e3ec7: starts_window unknown, so no periodic probe, only on-demand.
+const UNKNOWN = (m) => {
+  m.starts_window = 'unknown'; delete m.starts_window_confidence; delete m.starts_window_evidence;
+  delete m.capture.find((x) => x.mode === 'tinyprobe').quota_share_per_probe;
+};
 async function goWith(cliFn, fx, args) {
   let out = '';
   let err = '';
@@ -671,7 +680,7 @@ test('G40-BL0375: unset quota_probe on a confirmed-false manifest with Q5 is per
 
 test('G40-N13/BL0375 red: unknown, true, false below high, false+high without Q5, and explicit off or stale never get a periodic spawn, even with demand and a stale alias', async () => {
   const cases = {
-    'unknown (the shipped Claude manifest)': [UNKNOWN, {}],
+    'unknown (starts_window unknown, as the Claude manifest was before 3915e3ec7)': [UNKNOWN, {}],
     'true': [(m) => { m.starts_window = true; m.starts_window_evidence = EVD; m.starts_window_confidence = 'high'; m.capture.find((x) => x.mode === 'tinyprobe').quota_share_per_probe = Q5; }, {}],
     'false + medium': [(m) => { CONFIRMED(m); m.starts_window_confidence = 'medium'; }, {}],
     'false + high, no Q5': [(m) => { CONFIRMED(m); delete m.capture.find((x) => x.mode === 'tinyprobe').quota_share_per_probe; }, {}],
@@ -748,11 +757,11 @@ test('G40-BL0375 negative control: a CLI that drops the fail-closed audit read i
   };
   const real = cliWithManifest(CONFIRMED)();
   for (const setup of [damaged, refused, unreadable]) assert.deepStrictEqual(await dueOf(real, setup), []);
-  const noInvalidCheck = cliWithManifest(CONFIRMED)([['if (res.refused || res.invalid > 0) return new Set();', '']]);
+  const noInvalidCheck = cliWithManifest(CONFIRMED)([['if (res.refused || res.invalid > 0) {', 'if (false) {']]);
   assert.notDeepStrictEqual(await dueOf(noInvalidCheck, damaged), [], 'mutant: damaged log still counts as demand');
-  const noCatch = cliWithManifest(CONFIRMED)([['return probe.demandAliases(res.records, ctx.now());\n  } catch (_) { return new Set(); }', "return probe.demandAliases(res.records, ctx.now());\n  } catch (_) { return new Set(['a']); }"]]);
+  const noCatch = cliWithManifest(CONFIRMED)([["} catch (_) {\n    return mode === 'registry' ? probe.demandAliases([], ctx.now(), { mode, accounts }) : new Set();", "} catch (_) {\n    return new Set(['a']);"]]);
   assert.notDeepStrictEqual(await dueOf(noCatch, unreadable), [], 'mutant: an unreadable log counts everyone as demand');
-  const noPolicy = cliWithManifest(CONFIRMED)([["if (res.refused || res.invalid > 0) return new Set();", "if (res.refused) return new Set(['a']);"]]);
+  const noPolicy = cliWithManifest(CONFIRMED)([["if (res.refused || res.invalid > 0) {", "if (res.refused) { return new Set(['a']); }\n    if (false) {"]]);
   assert.notDeepStrictEqual(await dueOf(noPolicy, refused), [], 'mutant: a refused log counts as demand');
 });
 

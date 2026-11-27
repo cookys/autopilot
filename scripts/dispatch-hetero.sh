@@ -6658,7 +6658,7 @@ Before finishing, write \$AUTOPILOT_EVIDENCE_NOTES with sections \`## Tests\` (l
         exec env -u ANTHROPIC_API_KEY -u ANTHROPIC_CUSTOM_HEADERS HOME="${11:-$HOME}" CLAUDE_CONFIG_DIR="${12:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}}" ${8:+ANTHROPIC_CUSTOM_HEADERS="$8"} ${10:+ENABLE_TOOL_SEARCH=false} claude -p ${4:+--session-id "$4"} --model "$2" \
         --strict-mcp-config --dangerously-skip-permissions --disallowedTools TaskCreate,TaskUpdate,TaskGet,TaskList \
         ${5:+--effort "$5"} ${7:+--settings "$7"} --output-format json < "$3" >"$6"' \
-        _ "${WORKER_CWD:-$WT}" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE" "${GATE_ARGV[0]-}" "$FLEET_TASK_HEADER" "$CCSHIM_ENV_FILE" "$([ "${LOCAL_RUNNER:-0}" -eq 1 ] && printf 1)" "${SCRATCH_HOME:-$HOME}" "${SCRATCH_CONFIG_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}}"
+        _ "${WORKER_CWD:-$WT}" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE" "${GATE_ARGV[0]-}" "$FLEET_TASK_HEADER" "$CCSHIM_ENV_FILE" "$([ "${LOCAL_RUNNER:-0}" -eq 1 ] && printf 1)" "${SCRATCH_HOME:-$HOME}" "${SCRATCH_CONFIG_DIR:-${SANDBOX_TMP:+$SANDBOX_TMP/claude-config}}"
   fi
   # The worker is done (success, failure or timeout): the gate file and the settings file go now.
   if [ -n "${GATE_ARMED_SESSION:-}" ]; then

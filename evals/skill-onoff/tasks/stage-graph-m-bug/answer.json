@@ -6,8 +6,8 @@
   "research": "na",
   "units": 1,
   "cell": "M.bug.normal.na.u1",
-  "horizon_index": 3,
-  "horizon_node": "verify",
+  "horizon_index": 1,
+  "horizon_node": "plan",
   "first_rung": "none",
-  "horizon_justification": "diagnose, plan, implement, verify: the cause spans three small files and needs a read-run-fix loop but fits a 10 minute cell. code-review (rail) is excluded as for m-feature."
+  "horizon_justification": "diagnose and plan are within the cell; plan-review is a rail that needs hetero engines unavailable inside the cell, so the horizon stops at plan (same rule as L)."
 }

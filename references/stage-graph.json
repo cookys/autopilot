@@ -14,7 +14,7 @@
       "bug": { "mode": "prepend" }
     },
     "M": {
-      "base": ["plan", { "unit_loop": ["implement", "verify"] }, "code-review", "qc-gate", "finish"],
+      "base": ["plan", "plan-review", { "unit_loop": ["implement", "verify"] }, "code-review", "qc-gate", "finish"],
       "unit_kind": "phase",
       "bug": { "mode": "prepend" }
     },

@@ -115,7 +115,7 @@ if (mode === 'rotated') {
   walk = c.walk.slice();
 }
 if (mode === 'rung-wrong') rung = ans.first_rung === 'U1' ? 'U0' : 'U1';
-if (mode === 'diverge') { const i = Math.max(1, ans.horizon_index); walk[i] = walk[i] === 'implement' ? 'verify' : 'implement'; }
+if (mode === 'diverge') { const i = ans.horizon_index; walk[i] = walk[i] === 'implement' ? 'verify' : 'implement'; }
 if (mode === 'short') walk = walk.slice(0, ans.horizon_index);
 if (mode === 'long') walk = walk.concat(['code-review', 'qc-gate', 'finish']);
 if (mode === 'bad-size') size = size === 'M' ? 'L' : 'M';

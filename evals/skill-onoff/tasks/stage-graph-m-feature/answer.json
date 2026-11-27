@@ -6,8 +6,8 @@
   "research": "na",
   "units": 1,
   "cell": "M.feat.normal.na.u1",
-  "horizon_index": 2,
-  "horizon_node": "verify",
+  "horizon_index": 0,
+  "horizon_node": "plan",
   "first_rung": "none",
-  "horizon_justification": "plan, implement, verify fit a 10 minute cell (new module, wiring, tests, README). code-review is a hetero rail with no engine inside the cell, so it is NOT frozen as reachable here; it is exercised by the M! brief."
+  "horizon_justification": "plan is within the cell; plan-review is a rail that needs hetero engines unavailable inside the cell, so the horizon stops at plan (same rule as L)."
 }

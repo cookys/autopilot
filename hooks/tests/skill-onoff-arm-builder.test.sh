@@ -35,7 +35,7 @@ cat > "$FX/skills/alpha/SKILL.md" <<'EOF'
 |---|---|---|
 | XS | implement → qc-gate → finish | ≤2 |
 | S | implement → verify → qc-gate → finish | ≤6 |
-| M | plan → implement → verify → code-review → qc-gate → finish | ≤20 |
+| M | plan → plan-review → implement → verify → code-review → qc-gate → finish | ≤20 |
 | L | intent → proposal → plan → plan-review → implement → verify → code-review → qc-gate → finish | any |
 | XL | as L, units are deliverables | any |
 
@@ -162,7 +162,7 @@ grep -q '^| XS | intent → proposal → plan → plan-review → implement → 
 grep -q '^| L | implement → qc-gate → finish | any |$' "$RT" || fail "red L table row not rotated: $(grep '^| L ' "$RT")"
 grep -q '^| S | as L, units are deliverables | ≤6 |$' "$RT" || fail "red S row must take XL's 'as L' cell: $(grep '^| S ' "$RT")"
 grep -q '^| XL | implement → verify → qc-gate → finish | any |$' "$RT" || fail "red XL row"
-grep -q '^| M | plan → implement → verify → code-review → qc-gate → finish | ≤20 |$' "$RT" || fail "M must be unchanged"
+grep -q '^| M | plan → plan-review → implement → verify → code-review → qc-gate → finish | ≤20 |$' "$RT" || fail "M must be unchanged"
 grep -q '^- `XS`: intent → plan → implement → finish$' "$RT" && grep -q '^- `L`: implement → qc-gate → finish$' "$RT" || fail "list lines not rotated"
 [ "$(sha "$PK/beta-sg-red/SKILL.md")" = "$(sha "$PK/beta-sg-change/SKILL.md")" ] || fail "a pack with no size prose must be copied unchanged"
 RG="$PK/fixture-scripts-sg-red"

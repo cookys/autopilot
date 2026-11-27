@@ -25,7 +25,7 @@ JS
 # mutant <name> <sed-expr>: as in per-turn-gate.test.sh, plus the gate-verify path made absolute.
 mutant() {
   local out="$TEST_TMP/mut-$1.js" cur="$TEST_TMP/mut-$1.cur" nxt="$TEST_TMP/mut-$1.nxt" cmd
-  local abs="s#require('\./_shared#require('$HOOKS_DIR/_shared#; s#require('\.\./#require('$REPO_ROOT/#; s#path.resolve(__dirname, '\.\.', 'scripts', 'gate-verify.js')#'$GV'#"
+  local abs="s#require('\./_shared#require('$HOOKS_DIR/_shared#; s#require('\./lib/#require('$HOOKS_DIR/lib/#; s#require('\.\./#require('$REPO_ROOT/#; s#path.resolve(__dirname, '\.\.', 'scripts', 'gate-verify.js')#'$GV'#"
   sed -e "$abs" "$REAL_HOOK" >"$cur"
   while IFS= read -r -d '' cmd; do
     sed -e "$cmd" "$cur" >"$nxt"
@@ -296,7 +296,7 @@ tn4b_shell_path() { # live dir with a quote and a semicolon: the gate path must 
 }
 tn4b_plugin_path() { # the hook copy lives in a directory with a space and a single quote
   local pl="$TEST_TMP/pl ug'x"; rm -rf "$pl"; mkdir -p "$pl/hooks" "$pl/scripts"
-  cp -r "$HOOKS_DIR/_shared" "$pl/hooks/_shared"; cp -r "$REPO_ROOT/scripts/lib" "$pl/scripts/lib"; cp "$GV" "$pl/scripts/gate-verify.js"
+  cp -r "$HOOKS_DIR/_shared" "$pl/hooks/_shared"; cp -r "$HOOKS_DIR/lib" "$pl/hooks/lib"; cp -r "$REPO_ROOT/scripts/lib" "$pl/scripts/lib"; cp "$GV" "$pl/scripts/gate-verify.js"
   cp "$1" "$pl/hooks/per-turn-gate.js"
   fresh tn4bp; arm_case; violate
   stop "$pl/hooks/per-turn-gate.js" false

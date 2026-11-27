@@ -196,19 +196,15 @@ function runFleet(fleetBin, args) {
   return res.stdout || '';
 }
 
-function extractPhaseMarkers(task, planPath, commitSha) {
+function extractPhaseMarkers(task, planPath) {
   const text = String(task.title || task.body || '');
-  const shaPrefix = `Plan: ${planPath}@${commitSha.slice(0, 12)} Phase: `;
-  const plainPrefix = `Plan: ${planPath} Phase: `;
+  // Identity is the plan path; any @<sha> (or none) matches, so tasks filed before a plan commit still count.
+  const prefix = new RegExp(`^Plan: ${planPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:@[0-9a-f]{7,40})? Phase: `);
   const ids = [];
   for (const rawLine of text.split(/\r?\n/)) {
     const line = rawLine.trim();
-    let rest = null;
-    if (line.startsWith(plainPrefix)) {
-      rest = line.slice(plainPrefix.length);
-    } else if (line.startsWith(shaPrefix)) {
-      rest = line.slice(shaPrefix.length);
-    }
+    const match = line.match(prefix);
+    const rest = match ? line.slice(match[0].length) : null;
     if (rest !== null) {
       for (const token of rest.split(',')) {
         const id = token.trim().split(/\s+/)[0];
@@ -321,7 +317,7 @@ function main() {
           phaseToTasks.get(phaseId).push(task);
         }
         if (parentId && String(task.parent_task_id || task.parent_id || '') !== parentId) continue;
-        const matchedIds = extractPhaseMarkers(task, receipt.path, receipt.commit);
+        const matchedIds = extractPhaseMarkers(task, receipt.path);
         for (const phaseId of matchedIds) {
           if (phaseToTasks.has(phaseId) && !bound.includes(phaseId)) {
             phaseToTasks.get(phaseId).push(task);
@@ -433,7 +429,7 @@ function main() {
 
     for (const task of existingTasks) {
       if (parentId && String(task.parent_task_id || task.parent_id || '') !== parentId) continue;
-      const phaseIds = extractPhaseMarkers(task, receipt.path, receipt.commit);
+      const phaseIds = extractPhaseMarkers(task, receipt.path);
       for (const phaseId of phaseIds) {
         if (!frozenIds.has(phaseId)) {
           unknownPhases.push(phaseId);

@@ -130,4 +130,22 @@ describe('plan-to-tasks --coverage', () => {
     assert.equal(out.covered, 3);
     assert.equal(out.total, 3);
   });
+
+  it('counts a task stamped with an older sha, but not one for a different plan path', () => {
+    const run = (planRef) => {
+      fs.writeFileSync(
+        fx.tasksFile,
+        JSON.stringify([{ task_id: '01CHILD1000000000000000000', status: 'done', title: `Plan: ${planRef} Phase: P1, P2, P3` }]),
+        'utf8'
+      );
+      const res = spawnSync(
+        process.execPath,
+        [PLAN_TO_TASKS, '--receipt', fx.receiptPath, '--repo', fx.repoDir, '--coverage'],
+        { encoding: 'utf8', env: { ...process.env, PLAN_TO_TASKS_FLEET_BIN: fx.fakeFleet } }
+      );
+      return JSON.parse(res.stdout);
+    };
+    assert.equal(run(`${fx.planRel}@7598d09d0000`).gaps, 0);
+    assert.equal(run('docs/plans/other.md@7598d09d0000').gaps, 3);
+  });
 });

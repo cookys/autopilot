@@ -388,7 +388,7 @@ Enforcement for fleet work orders sits at fleet's `task_result` re-derivation ra
 2. Plan review (L/XL): `node scripts/dispatch-plan-review.js --repo-root <r> --plan-file <plan> --rubric-file <rubric> --ticket <id> --session-id wo-<id> --generation <n> --manifest-file <m>`; tar `gN.json`, `gN-disp.json`, plan and rubric; `fleet upload <tar> --summary "plan-review <id>"` returns the sha256.
 3. Code review (M+): `node scripts/hetero-review-loop.js collect ...` then `finalize ...`; tar the resulting `review-<phase>/` dir; `fleet upload` it.
 4. Merge per `finish-flow` "Merge" (the `QC-Verdict` trailer in the last paragraph); tar `qc-runs/<head>.json` from the git common dir; `fleet upload` it.
-5. `node scripts/fleet-flow-verify.js ... --receipts <local dir>` (preflight; fix what it refuses), then `task_result` with the `Receipt:` lines and the `Used:` line.
+5. the fleet-flow receipts preflight (planned, not shipped yet; fix what it refuses), then `task_result` with the `Receipt:` lines and the `Used:` line.
 
 `dispatch-author.sh` is a read-only rail (no repo mutation path), so no work-order sequence applies to it; read-only seats and `noncq.js` items do not call `task_result`. Honest limit: a harness that never writes the session marker loses lane-side early refusal, while fleet still refuses at `task_result`.
 

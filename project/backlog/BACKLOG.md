@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0525 -->
+<!-- next-id: BL-0526 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -2677,3 +2677,16 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: PM 裁定 01M8B5SZ 記 BL；對方 BL-0096（develop 9e28791ce）
 - **Pointer**: none
+
+### known-flaky：62 組首跑紅、重跑綠
+- **Id**: BL-0525
+- **Status**: open
+- **Since**: 2026-11-27
+- **Origin**: self
+- **Problem**: 合併後大集合首跑紅、單組重跑綠的 62 組套件；版本與併發兩次不同，尚未分清是負載還是真不穩定。
+- **Impact**: 假紅會蓋掉真正的新紅，合併後套件跑不完也判不了。
+- **Trigger**: next full-suite run
+- **Trigger-Type**: ready
+- **Effort**: M
+- **Source**: post-merge suite 2026-11-27
+- **Pointer**: project/backlog/known-flaky-2026-11-27.md

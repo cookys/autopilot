@@ -340,5 +340,5 @@ function main(argv) {
   if (cmd === 'filter-ladder') { const r = filterLadder(rest, o); if (!r.kept.length && r.barred.length) { process.stderr.write(`${r.barred[0].line}\n`); return 2; } for (const x of r.kept) process.stdout.write(`${x}\n`); return 0; }
   process.stderr.write('usage: cn-model-dispatch-gate.js check|filter-ladder ...\n'); return 64;
 }
-module.exports = { BARRED_FAMILIES, localEndpoints, TASK, CARD, familyOf, check, filterLadder, refusalLine, repoRootOf };
+module.exports = { BARRED_FAMILIES, localEndpoints, TASK, CARD, familyOf, check, filterLadder, refusalLine, repoRootOf, isLocalHost, hostOf };
 if (require.main === module) process.exitCode = main(process.argv.slice(2));

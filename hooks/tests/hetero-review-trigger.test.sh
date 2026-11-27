@@ -2,9 +2,9 @@
 # hooks/tests/hetero-review-trigger.test.sh — asserts description triggers for hetero-review skill.
 #
 # Asserts:
-# 1. Each of the four owner phrases occurs exactly once across the union of all skills/*/SKILL.md descriptions.
-# 2. Each of the four owner phrases occurs exactly once within skills/hetero-review/SKILL.md's description.
-# 3. No skills/*/SKILL.md description other than hetero-review's contains the substring "hetero review".
+# 1. Each of the three owner phrases occurs exactly once across the union of all skills/*/SKILL.md descriptions.
+# 2. Each of the three owner phrases occurs exactly once within skills/hetero-review/SKILL.md's description.
+# 3. No skills/*/SKILL.md description other than hetero-review's contains the substring "hetero engine review".
 # 4. Includes negative controls to ensure failures trip the test.
 
 . "$(dirname "$0")/lib.sh"
@@ -79,8 +79,7 @@ node "$PARSER" "$SKILLS_DIR" > "$JSON_OUT"
 PHRASES=(
   "plan loop review hetero"
   "過 hetero loop review"
-  "hetero review"
-  "engage hetero engine review"
+  "hetero engine review"
 )
 
 count_occurrences() {
@@ -128,8 +127,8 @@ for phrase in "${PHRASES[@]}"; do
   assert_eq "$c_self" "1" "phrase '$phrase' must occur exactly once within hetero-review description"
 done
 
-c_other_hetero_review=$(count_occurrences "$OTHER_DESCS" "hetero review")
-assert_eq "$c_other_hetero_review" "0" "no skill description other than hetero-review should contain 'hetero review'"
+c_other_hetero_review=$(count_occurrences "$OTHER_DESCS" "hetero engine review")
+assert_eq "$c_other_hetero_review" "0" "no skill description other than hetero-review should contain 'hetero engine review'"
 
 # Negative controls: verify that bad descriptions trigger failures
 NEG_TMP="$TEST_TMP/neg-control"
@@ -139,7 +138,7 @@ cat > "$NEG_TMP/skills/other-skill/SKILL.md" <<'OTHER_EOF'
 ---
 name: other-skill
 description: >
-  Some description containing hetero review
+  Some description containing hetero engine review
 ---
 OTHER_EOF
 
@@ -147,7 +146,7 @@ cat > "$NEG_TMP/skills/hetero-review/SKILL.md" <<'HETERO_EOF'
 ---
 name: hetero-review
 description: >
-  plan loop review hetero and 過 hetero loop review and hetero review and engage hetero engine review
+  plan loop review hetero and 過 hetero loop review and hetero engine review
 ---
 HETERO_EOF
 
@@ -158,11 +157,11 @@ node -e "
   delete data['hetero-review'];
   process.stdout.write(Object.values(data).join('\n'));
 " > "$neg_other"
-neg_count=$(count_occurrences "$neg_other" "hetero review")
+neg_count=$(count_occurrences "$neg_other" "hetero engine review")
 if [ "$neg_count" -ne 0 ]; then
   __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
 else
-  fail "negative control: expected other skill containing 'hetero review' to be detected"
+  fail "negative control: expected other skill containing 'hetero engine review' to be detected"
 fi
 
 cat > "$NEG_TMP/skills/hetero-review/SKILL.md" <<'MISSING_EOF'

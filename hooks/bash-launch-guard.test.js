@@ -2480,7 +2480,7 @@ test('auto-rewrite: bare-ls returns allow with updatedInput.command and addition
   assert.strictEqual(r.decision, 'allow');
   assert.ok(r.updatedInput, 'expected updatedInput');
   assert.strictEqual(r.updatedInput.command, 'command ls -la');
-  assert.match(r.ctx, /已自動改寫：ls -la → command ls -la/);
+  assert.strictEqual(r.ctx, '已自動改寫指令（zsh 語法）');
 });
 
 test('auto-rewrite: unquoted no-match glob under zsh returns allow with updatedInput.command', () => {
@@ -2489,15 +2489,14 @@ test('auto-rewrite: unquoted no-match glob under zsh returns allow with updatedI
   assert.strictEqual(r.decision, 'allow');
   assert.ok(r.updatedInput, 'expected updatedInput');
   assert.strictEqual(r.updatedInput.command, "echo '*.nonexistent_ext_xyz'");
-  assert.match(r.ctx, /已自動改寫：echo \*\.nonexistent_ext_xyz → echo '\*\.nonexistent_ext_xyz'/);
+  assert.strictEqual(r.ctx, '已自動改寫指令（zsh 語法）');
 });
 
-// S10 P5: the auto-rewrite note shows a short head of each side, not the whole command twice.
-test('rewrite note is clipped: a long rewritten command adds under 400 bytes of context', () => {
+test('rewrite note stays within 60 bytes for a long rewritten command', () => {
   const longTail = ' && echo ' + 'x'.repeat(900);
-  const cmd = 'git config a =b' + longTail;
+  const cmd = 'echo *.nonexistent_ext_xyz' + longTail;
   const r = run(cmd, { shell: 'zsh' });
   assert.match(r.ctx, /已自動改寫/);
-  assert.ok(Buffer.byteLength(r.ctx) < 400, `ctx is ${Buffer.byteLength(r.ctx)} bytes`);
-  assert.ok(r.updatedInput && r.updatedInput.command.includes('x'.repeat(900)), 'the rewritten command itself is untouched');
+  assert.ok(Buffer.byteLength(r.ctx) <= 60, `ctx is ${Buffer.byteLength(r.ctx)} bytes`);
+  assert.strictEqual(r.updatedInput && r.updatedInput.command, "echo '*.nonexistent_ext_xyz'" + longTail);
 });

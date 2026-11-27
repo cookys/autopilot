@@ -7,6 +7,9 @@ const path = require('node:path');
 const http = require('node:http');
 const { spawn, spawnSync } = require('node:child_process');
 
+// Fixture repos never read the real global git config.
+process.env.GIT_CONFIG_GLOBAL = '/dev/null';
+process.env.GIT_CONFIG_NOSYSTEM = '1';
 const SCRIPT = path.join(__dirname, 'dispatch-vision-review.js');
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d]);
 const TOKEN = 'vision-rail-test-token-do-not-leak';

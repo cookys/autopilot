@@ -10,6 +10,7 @@ const { createRealModelRunner, probeBaseUrlDecision } = require('./lib/replay-mo
 const { runReplay, parseArgs } = require('./pm-replay-run.js');
 
 const SECRET = 'dummy-replay-auth-do-not-use';
+const FAKE_RESPONSE_TEXT = 'fake-ok';
 
 function parse(argv) {
   let log = '';
@@ -48,7 +49,7 @@ async function main() {
       id: 'msg_fake',
       type: 'message',
       role: 'assistant',
-      content: [{ type: 'text', text: 'fake-ok' }],
+      content: [{ type: 'text', text: FAKE_RESPONSE_TEXT }],
       usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 1, cache_creation_input_tokens: 0 },
     });
     res.writeHead(200, { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) });
@@ -144,7 +145,7 @@ async function main() {
   const text = JSON.stringify(report, null, 2);
   if (args.log) fs.writeFileSync(args.log, text);
   console.log(text);
-  const ok = report.output === 'fake-ok'
+  const ok = report.output === FAKE_RESPONSE_TEXT
     && report.httpStatus === 200
     && report.usage.input === 10
     && report.capStatus === 429

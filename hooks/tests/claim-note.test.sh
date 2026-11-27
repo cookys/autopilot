@@ -67,10 +67,11 @@ assert_eq "$(node -e 'console.log(JSON.parse(process.argv[1]).note_dropped_by_co
 # (c) end to end: pane line -> hook -> parkAnswer -> deliveryText; the delivered text carries the exact note, also when the courier dropped it
 for M in old drop ok; do
   reset $M
-  C="$(node "$OD" open --category goal --executor ns/cc/exec--claude --cwd "$R" --root-run-id root-t --title '要改嗎' --question "Should the panel keep the note?" --option "Alpha::a" --option "Beta::b" --recommendation Alpha --not-authorized irreversible 2>/dev/null | head -1)"
+  Q="Should the panel keep the note in mode $M?"   # distinct question per mode: an answered card with the same question refuses a re-open
+  C="$(node "$OD" open --category goal --executor ns/cc/exec--claude --cwd "$R" --root-run-id root-t --title '要改嗎' --question "$Q" --option "Alpha::a" --option "Beta::b" --recommendation Alpha --not-authorized irreversible 2>/dev/null | head -1)"
   CO="$(node "$CLAIM" "$C" --option Alpha --free-text "$NOTE")"
   AID="$(node -e 'console.log(JSON.parse(process.argv[1]).answer_id)' "$CO")"
-  LINE="$(node -e 'const {excerptOf,wire}=require(process.argv[1]+"/scripts/lib/decide-line.js");console.log(process.argv[2]+"｜"+wire(excerptOf("Should the panel keep the note?"))+" → Alpha｜補充："+process.argv[3]+"｜"+process.argv[4])' "$REPO_ROOT" "$C" "$NOTE" "$AID")"
+  LINE="$(node -e 'const {excerptOf,wire}=require(process.argv[1]+"/scripts/lib/decide-line.js");console.log(process.argv[2]+"｜"+wire(excerptOf(process.argv[5]))+" → Alpha｜補充："+process.argv[3]+"｜"+process.argv[4])' "$REPO_ROOT" "$C" "$NOTE" "$AID" "$Q")"
   node -e 'process.stdout.write(JSON.stringify({session_id:"vf",cwd:process.argv[1],prompt:"[待決回覆]\n"+process.argv[2]}))' "$R" "$LINE" | node "$HOOK" >/dev/null 2>&1
   SENT="$(cat "$STUB/sent" 2>/dev/null)"
   assert_contains "$SENT" "$NOTE" "(c) mode $M: the delivered text contains the exact note"

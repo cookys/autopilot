@@ -921,6 +921,41 @@
       "owner": "scripts/hetero-panel.sh",
       "retention_days": null,
       "reason": "Panel working directory removed by EXIT trap."
+    },
+    {
+      "pattern": "acp-usage-probe-*",
+      "kind": "evidence",
+      "owner": "scripts/acp-usage-probe.js",
+      "retention_days": 14,
+      "reason": "Default JSON result path of the probe is the retained deliverable; the working dir of the same prefix is removed in finally."
+    },
+    {
+      "pattern": "hetero-panel-out.*",
+      "kind": "evidence",
+      "owner": "scripts/hetero-panel.sh",
+      "retention_days": 14,
+      "reason": "Panel receipts directory, the retained output of a run when no --out-dir is given."
+    },
+    {
+      "pattern": "autopilot-fleet-seat-*",
+      "kind": "live",
+      "owner": "scripts/lib/agent-event-emit.js",
+      "retention_days": null,
+      "reason": "Per-user cache of the fleet seat address, rewritten in place; one tiny file per user and session."
+    },
+    {
+      "pattern": "replay-runner-*",
+      "kind": "scratch",
+      "owner": "scripts/lib/replay-model-runner.js",
+      "retention_days": 1,
+      "reason": "Host work dir of one sandboxed model call; removed on the normal path, age sweep covers a throw before removal."
+    },
+    {
+      "pattern": "replay-fake-home-*",
+      "kind": "scratch",
+      "owner": "scripts/pm-replay-fake-run.js",
+      "retention_days": 1,
+      "reason": "Fake HOME of one replay self-check; removed on the normal path, age sweep covers an early exit."
     }
   ]
 }

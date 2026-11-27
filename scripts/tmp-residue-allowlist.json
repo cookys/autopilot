@@ -537,6 +537,11 @@
       "file": "scripts/hetero-panel.sh",
       "match": "TMP_WORK=\"$(mktemp",
       "reason": "Allocates the registered hetero-panel. prefix; EXIT trap removes it."
+    },
+    {
+      "file": "scripts/hetero-panel.sh",
+      "match": "OUT_DIR=\"$(mktemp",
+      "reason": "Allocates the registered hetero-panel-out. evidence prefix; the receipts directory is kept on purpose."
     }
   ]
 }

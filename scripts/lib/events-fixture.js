@@ -276,7 +276,8 @@ function goldenEvents(fx) {
 
   const m = fx.manifests;
   const mdata = (x) => {
-    const d = { run_id: x.run_id, role: x.role, runner: x.runner, model: x.model, branch: x.branch, base_sha: x.base_sha };
+    // attribution fields (D12) are always present, null when the manifest predates them
+    const d = { run_id: x.run_id, role: x.role, runner: x.runner, model: x.model, branch: x.branch, base_sha: x.base_sha, fleet_task: null, pool: null, commit: null, lane: null };
     if (x.parent_run_id) d.parent_run_id = x.parent_run_id;
     d.depth = x.depth;
     d.timeout_seconds = x.timeout_seconds;
@@ -287,7 +288,7 @@ function goldenEvents(fx) {
   }
   out.push(ev('dispatch.ended', m.done.run_id, `${m.done.ended_at.slice(0, -1)}.000Z`, 'dispatch_manifest', { root: m.done.root_run_id, run: m.done.run_id }, {
     run_id: m.done.run_id, final_status: 'success', duration_s: m.done.ended_epoch - m.done.started_epoch,
-    role: m.done.role, runner: m.done.runner, model: m.done.model,
+    role: m.done.role, runner: m.done.runner, model: m.done.model, fleet_task: null, pool: null, commit: null, lane: null,
   }));
 
   // cost.turn: sha256(raw line)[0:24] + '#n', n = 1-based ordinal among byte-identical lines from the start of the read.

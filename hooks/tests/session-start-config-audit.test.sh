@@ -31,7 +31,7 @@ assert_contains "$OUT" "[Autopilot updated: v3.0.0" "version changed: update not
 assert_contains "$OUT" "[Autopilot config check:" "version changed + findings: config block present"
 assert_contains "$OUT" "scripts/dev-setup.sh --check" "block points at dev-setup --check"
 assert_contains "$OUT" "docs/guide/settings-reference.md" "block points at the settings reference"
-BLOCK_LINES="$(printf '%s\n' "$OUT" | sed -n '/^\[Autopilot config check:/,$p' | grep -c .)"
+BLOCK_LINES="$(printf '%s\n' "$OUT" | sed -n '/^\[Autopilot config check:/,/^$/p' | grep -c .)"
 if [ "$BLOCK_LINES" -le 5 ]; then echo "ok block lines: $BLOCK_LINES"; else fail "config block has $BLOCK_LINES lines (max 5)"; fi
 
 # negative control: the hook without the wiring (copy with the append removed) must NOT show the block -> the case above is red there

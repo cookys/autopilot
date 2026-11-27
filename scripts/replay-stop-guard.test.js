@@ -15,7 +15,8 @@ test('replay CLI uses final assistant text and prints only file, verdict and cla
   const write = (file, texts) => fs.writeFileSync(path.join(dir, file), texts.map((text) => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text }] } })).join('\n'));
   write('a.jsonl', ['Please run the check.']);
   write('b.jsonl', ["I'll remind you."]);
-  write('c.jsonl', ['Should I continue?', 'Finished; all checks passed.']);
+  // Final text must be Traditional Chinese (language check). An earlier unresolved ask in the same turn now stays blocking unless a short correction restates it with a live card/task, so the earlier text here is a harmless status line.
+  write('c.jsonl', ['處理中，稍後回報。', '已完成，所有檢查都通過。']);
   fs.writeFileSync(path.join(dir, 'ignore.txt'), 'not a transcript');
   const script = path.join(__dirname, 'replay-stop-guard.js');
   const cleanEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')));

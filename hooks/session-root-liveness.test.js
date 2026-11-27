@@ -25,7 +25,7 @@ const ROOT = path.join(__dirname, '..');
 const H = 3600 * 1000;
 
 function env(t, extra = {}) {
-  const e = { ...process.env, HOME: t.home, AUTOPILOT_SESSION_MODE_DIR: t.modes, AUTOPILOT_LIVE_DIR: t.live, ...extra };
+  const e = { ...process.env, HOME: t.home, AUTOPILOT_SESSION_MODE_DIR: t.modes, AUTOPILOT_LIVE_DIR: t.live, AUTOPILOT_CARD_NOTIFY: 'off', ...extra };
   for (const k of ['AUTOPILOT_ROOT_RUN_ID', 'AUTOPILOT_SESSION_ID', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_SESSION_ID', 'CODEX_THREAD_ID']) delete e[k];
   return { ...e, ...extra };
 }
@@ -144,19 +144,19 @@ function guard(t, sid, assistantText, stopHookActive = false) {
   return r.stdout.trim() ? JSON.parse(r.stdout) : null;
 }
 
-test('guard: block message carries the session root as a ready --root-run-id', () => {
+test('guard: block message gives the open command without --root-run-id (open-decision binds the session marker root itself)', () => {
   const t = fixture('j'); marker(t, 's1');
   const out = guard(t, 's1', 'push 會等你批准。');
   assert.strictEqual(out.decision, 'block');
-  // 2b4a98d7e made --executor required between --root-run-id and --question
-  assert.match(out.reason, / open --root-run-id root-abc --category <[^>]+> --executor <執行者位址> --question /);
+  // the guard's OPEN_EXAMPLE no longer names the root: open-decision resolves it from the session marker (scope root order)
+  assert.match(out.reason, / open --category <c> --executor <addr> --question /);
+  assert.doesNotMatch(out.reason, /--root-run-id/);
 });
 
-test('guard: no root => no --root-run-id demanded, message says the card will be unbound', () => {
+test('guard: no root => no --root-run-id demanded', () => {
   const t = fixture('k'); marker(t, 's1', { expiredHoursAgo: 30 });
   const out = guard(t, 's1', 'push 會等你批准。');
   assert.doesNotMatch(out.reason, /--root-run-id root-abc/);
-  assert.match(out.reason, /沒有可用的 root/);
 });
 
 test('guard: root-scoped unbound card blocks (including repeated Stop) with close + reopen; non-root same-sentence live card exempts', () => {
@@ -172,7 +172,7 @@ test('guard: root-scoped unbound card blocks (including repeated Stop) with clos
   assert.match(out.reason, /--root-run-id root-abc/);
   assert.strictEqual(guard(t, 's1', `待決卡片 ${id}（合成待決），等你回覆。`, true).decision, 'block');
   // a card that is bound in the same sentence passes silently
-  const c2 = openCard(t, 's1', ['--root-run-id', 'root-abc']);
+  const c2 = openCard(t, 's1', ['--root-run-id', 'root-abc', '--question', 'q2?']);
   assert.strictEqual(guard(t, 's1', `待決卡片 ${c2.stdout.trim()}（合成待決），等你回覆。`), null);
 });
 

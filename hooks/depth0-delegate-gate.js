@@ -298,7 +298,7 @@ function emitDeny(reason) {
 
 // The rewritten command is supplied through updatedInput.
 function rewriteNote() {
-  return '已自動改寫指令（zsh 語法）';
+  return '已自動改寫指令';
 }
 
 function classify(tool, input) {

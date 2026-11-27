@@ -2480,7 +2480,7 @@ test('auto-rewrite: bare-ls returns allow with updatedInput.command and addition
   assert.strictEqual(r.decision, 'allow');
   assert.ok(r.updatedInput, 'expected updatedInput');
   assert.strictEqual(r.updatedInput.command, 'command ls -la');
-  assert.strictEqual(r.ctx, '已自動改寫指令（zsh 語法）');
+  assert.strictEqual(r.ctx, '已自動改寫指令');
 });
 
 test('auto-rewrite: unquoted no-match glob under zsh returns allow with updatedInput.command', () => {
@@ -2489,7 +2489,7 @@ test('auto-rewrite: unquoted no-match glob under zsh returns allow with updatedI
   assert.strictEqual(r.decision, 'allow');
   assert.ok(r.updatedInput, 'expected updatedInput');
   assert.strictEqual(r.updatedInput.command, "echo '*.nonexistent_ext_xyz'");
-  assert.strictEqual(r.ctx, '已自動改寫指令（zsh 語法）');
+  assert.strictEqual(r.ctx, '已自動改寫指令');
 });
 
 test('rewrite note stays within 60 bytes for a long rewritten command', () => {

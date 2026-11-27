@@ -347,6 +347,11 @@
       "file": "scripts/lib/plan-review-normalize.js",
       "match": "process.env.TMPDIR",
       "reason": "Redaction policy: reads TMPDIR prefix to replace absolute temp paths with <tmp> in persisted plan-review artifacts; allocates nothing."
+    },
+    {
+      "file": "scripts/open-decision.js",
+      "match": "const SCRATCH_ROOTS = [",
+      "reason": "Read-only path prefix test (is the repo under a scratch root, so the card store skips it); nothing is allocated or written under these prefixes."
     }
   ]
 }

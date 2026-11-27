@@ -77,5 +77,17 @@ git -C "$LEAK_REPO" config user.name 'cookys hostxyz'
 env -u HIPPO_ACTOR node -e 'require(process.argv[1]).openDecision({cwd:process.argv[2],question:"Leak question?",executor:"test/test/test"})' "$PLUGIN/scripts/open-decision.js" "$LEAK_REPO" >/dev/null 2>"$TEST_TMP/leak.err"
 assert_eq "$(command grep -c 'mirror failed' "$TEST_TMP/leak.err")" 0 'host-named seat mirrors without a leak refusal'
 assert_eq "$(command grep -ho '"actor":"[^"]*"' "$LEAK_REPO"/.hippo/ops/*.jsonl | sort -u | command grep -c 'seat/open-decision')" 1 'mirror ops carry the role actor'
+# Gate markers: every answered card carries `Card: <id>` (+ `task:<ULID>` per waiting task) on BOTH mirror paths.
+WT=01M883AEHTJWZH95JSY1MSKEFX
+ID3="$(node -e 'const x=require(process.argv[1]).openDecision({cwd:process.argv[2],question:"Marker question?",background:"why\nwaiting task: "+process.argv[3],executor:"test/test/test"}); console.log(x.id)' "$PLUGIN/scripts/open-decision.js" "$R" "$WT")"
+node "$PLUGIN/scripts/open-decision.js" close --cwd "$R" --id "$ID3" --answer 'Marker answer' >/dev/null 2>"$TEST_TMP/marker.err"
+REC3="$("$HIPPO_BIN" --json -C "$R" list --tag "key:card:$ID3" --history | node -e 'let s="";process.stdin.on("data",x=>s+=x).on("end",()=>console.log(JSON.parse(s).data.records[0].id))')"
+BODY3="$("$HIPPO_BIN" --json -C "$R" show "$REC3" | node -e 'let s="";process.stdin.on("data",x=>s+=x).on("end",()=>console.log(JSON.parse(s).data.record.body))')"
+assert_contains "$BODY3" "Card: $ID3" 'answered card record carries the card marker'
+assert_contains "$BODY3" "task:$WT" 'answered card record carries the waiting task marker'
+assert_contains "$RECEIPT_BODY" "Card: $ID" 'ruling receipt carries the card marker'
+BODY1="$("$HIPPO_BIN" --json -C "$R" show "$REC" | node -e 'let s="";process.stdin.on("data",x=>s+=x).on("end",()=>console.log(JSON.parse(s).data.record.body))')"
+assert_contains "$BODY1" "Card: $ID" 'card without a waiting task still carries the card marker'
+assert_eq "$(printf '%s' "$BODY1" | command grep -c 'task:')" 0 'no waiting task, no task marker'
 hs_exit_check
 finalize_test

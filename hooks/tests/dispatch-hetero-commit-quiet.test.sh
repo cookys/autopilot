@@ -82,6 +82,9 @@ run_case() { # mode extra-args... ; sets OUT ELAPSED PIDF
       echo "DIAG grok-on-PATH=$(command -v grok || echo none)"
       echo "DIAG git=$(git --version) user=$(id -un)"
       printf '%s\n' "$OUT" | tail -12 | cut -c1-300 | sed 's/^/DIAG out: /'
+      printf '%s\n' "$OUT" | grep '^{' | tail -n 1 | cut -c1-1500 | sed 's/^/DIAG json: /'
+      local _lg; _lg="$(printf '%s\n' "$OUT" | sed -n 's/.* log=\([^ ]*\).*/\1/p' | head -n 1)"
+      if [ -n "$_lg" ] && [ -f "$_lg" ]; then tail -n 25 "$_lg" | cut -c1-300 | sed 's/^/DIAG runlog: /'; else echo "DIAG runlog: none ($_lg)"; fi
     } >&2
   fi
 }

@@ -68,14 +68,14 @@ function bottomFrame(el: { Box: El; Text: El; Button?: El }, o: FrameOptions & {
       cells.push(Button === undefined || !jumps.has(i) ? glyph : <Button key={'sbj' + i} plain onPress={() => { m.offset = jumpOffset(i, room0, m.max); m.redraw?.() }}>{glyph}</Button>)
     }
   }
-  const newerText = <Text key="newer" color={PALETTE.structure} wrap="truncate">{o.bottom.newer + ' ' + GLYPHS.structure.behind}</Text>
+  const newerText = <Text key="newer" dimColor wrap="truncate">{o.bottom.newer + ' ' + GLYPHS.structure.behind}</Text>
   return (
     <Box key="frame" flexDirection="column">
       <Box key="fixed" flexDirection="column" height={height} overflow="hidden">
         {o.head}
         <Box key="content" flexDirection="row" flexGrow={1} overflow="hidden">
           <Box key="rows" flexDirection="column" flexGrow={1} overflow="hidden">
-            {g.hint ? <Text key="above" color={PALETTE.structure} wrap="truncate">{off > 0 ? o.bottom.above(off) : ' '}</Text> : null}
+            {g.hint ? <Text key="above" dimColor wrap="truncate">{off > 0 ? o.bottom.above(off) : ' '}</Text> : null}
             {g.pad > 0 ? <Box key="pad" height={g.pad} flexShrink={0} /> : null}
             {o.window(off, g.hint ? g.rows : o.total)}
             {g.newer ? (Button === undefined ? newerText : <Button key="newerb" plain onPress={() => { m.offset = m.max; m.redraw?.() }}>{newerText}</Button>) : null}

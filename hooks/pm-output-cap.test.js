@@ -679,3 +679,26 @@ test('head+tail+error truncation preserves trailing "# fail 3", middle FAIL line
     assert.equal(shortRes.stdout, '');
   });
 });
+
+test('PostToolUse Bash: 40 very long lines (30k chars) are byte-capped to <= 6.5k with a pointer', () => {
+  withSandbox(({ home, state, runtime, pmRepo }) => {
+    const full = Array.from({ length: 40 }, (_, i) => `L${i + 1}:${'x'.repeat(740)}`).join('\n') + '\n';
+    const res = runHook(
+      {
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        tool_use_id: 'toolu_long',
+        tool_input: { command: 'cat big.json' },
+        tool_response: bashResponse(full),
+        cwd: pmRepo,
+      },
+      { HOME: home, AUTOPILOT_STATE_DIR: state, XDG_RUNTIME_DIR: runtime },
+    );
+    assert.equal(res.status, 0, res.stderr);
+    const out = JSON.parse(res.stdout).hookSpecificOutput.updatedToolOutput.stdout;
+    const file = path.join(runtime, 'autopilot', 'pm-output', 'toolu_long.txt');
+    assert.ok(out.length <= 6500, `got ${out.length}`);
+    assert.ok(out.includes(`全文：${file}`));
+    assert.equal(fs.readFileSync(file, 'utf8'), full);
+  });
+});

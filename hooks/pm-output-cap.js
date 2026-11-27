@@ -32,6 +32,11 @@ const { configPath } = require('../scripts/lib/config-path.js');
 const DEFAULT_MAX_LINES = 40;
 const LEDGER_SEARCH_MAX_LINES = 30;
 const MAX_ID_LEN = 128;
+// Byte guard: a line cap alone lets 40 long lines (~30k chars) through (S10 P5 trace).
+const MAX_OUTPUT_CHARS = 6000;
+const MAX_LINE_CHARS = 300;
+const KEEP_HEAD_CHARS = 4000;
+const KEEP_TAIL_CHARS = 1500;
 const ERROR_LINE_RE = /error|fail|FAIL|Error|panic|exit code/;
 
 function absPath(v) {
@@ -223,6 +228,15 @@ function truncateLines(lines, cap, filePath) {
   return [...head, marker, ...mid, ...tail].join('\n');
 }
 
+function clipChars(text, filePath) {
+  const clipped = text.split('\n')
+    .map((l) => (l.length > MAX_LINE_CHARS ? `${l.slice(0, MAX_LINE_CHARS)}…` : l))
+    .join('\n');
+  if (clipped.length <= MAX_OUTPUT_CHARS) return clipped;
+  const cut = clipped.length - KEEP_HEAD_CHARS - KEEP_TAIL_CHARS;
+  return `${clipped.slice(0, KEEP_HEAD_CHARS)}\n… ${cut} 字元已截斷，全文：${filePath}\n${clipped.slice(-KEEP_TAIL_CHARS)}`;
+}
+
 function wrapPreToolCommand(command, outFile, cap) {
   const qFile = shellQuote(outFile);
   const headCount = Math.floor(cap / 2);
@@ -273,7 +287,7 @@ function handlePostToolUse(input, env) {
     ? input.tool_input.command
     : '';
   const cap = lineCapFor(toolName, command, env);
-  if (lines.length <= cap) return null;
+  if (lines.length <= cap && fullText.length <= MAX_OUTPUT_CHARS) return null;
 
   const dir = resolveOutputDir(env);
   ensurePrivateOutputDir(dir);
@@ -281,7 +295,10 @@ function handlePostToolUse(input, env) {
   fs.writeFileSync(filePath, fullText, { encoding: 'utf8', mode: 0o600 });
   fs.chmodSync(filePath, 0o600);
 
-  const truncated = truncateLines(lines, cap, filePath);
+  const truncated = clipChars(
+    lines.length > cap ? truncateLines(lines, cap, filePath) : lines.join('\n'),
+    filePath,
+  );
   const field = toolName === 'Bash' ? 'updatedToolOutput' : 'updatedMCPToolOutput';
   return {
     hookSpecificOutput: {

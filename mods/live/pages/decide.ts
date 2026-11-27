@@ -1216,6 +1216,10 @@ function renderV74(ctx0: DecideCtx): { body: Row[]; actions: Row[] } {
     }
     const whole = drawn(aw)
     if (aw.length <= 1) return whole
+    // The operator's own step is the card that waits on a person at a machine: when the block holds the first awaiting card with every step,
+    // it is kept and the card box above gives way to its compact list (Enter expands the focused card); the fold is for a block that cannot hold one whole card.
+    const first = withSteps(v.awaiting)?.[0]
+    if (first !== undefined && aw.length >= 1 + awaitingCardRows(first, ctx).length) return whole
     const folded = drawn(aw.slice(0, 1))
     return optionsShown(folded.body, cards[cursor]) > optionsShown(whole.body, cards[cursor]) ? folded : whole
   }

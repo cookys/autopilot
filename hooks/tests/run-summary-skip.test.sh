@@ -16,7 +16,9 @@ cp "$RUN_SRC" "$SCR/hooks/tests/run.sh"
 cp -r "$REPO_ROOT/hooks/tests/lib" "$SCR/hooks/tests/lib"
 mkdir -p "$SCR/scripts"
 cp -r "$REPO_ROOT/scripts/lib" "$SCR/scripts/lib"
+mkdir -p "$SCR/src"; cp -r "$REPO_ROOT/src/status" "$SCR/src/status"
 git init -q "$SCR"
+git -C "$SCR" add -A
 git -C "$SCR" -c user.email=t@example.invalid -c user.name=t commit -q --allow-empty -m init
 chmod +x "$SCR/hooks/tests/run.sh"
 
@@ -68,7 +70,7 @@ rm_suites
 mk_suite fake-slow.test.sh 'sleep 3; exit 0'
 ITMP="$TEST_TMP/itmp"
 mkdir -p "$ITMP"
-(cd "$SCR" && TMPDIR="$ITMP" AUTOPILOT_TEST_DURATIONS_FILE="$TEST_TMP/dur.tsv" exec bash hooks/tests/run.sh fake-slow >/dev/null 2>&1) &
+(cd "$SCR" && TMPDIR="$ITMP" AUTOPILOT_TEST_DURATIONS_FILE="$TEST_TMP/dur.tsv" exec bash hooks/tests/run.sh fake-slow --parallel 1 >/dev/null 2>&1) &
 RPID=$!
 for _ in $(seq 1 100); do
   compgen -G "$ITMP/hooks-run-skipcap.*" >/dev/null && break

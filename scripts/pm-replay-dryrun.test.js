@@ -49,5 +49,17 @@ const crypto = require('node:crypto');
   assert.equal(cli.status, 0, cli.stderr);
   assert.equal(cli.stdout.trim().split('\n').at(-1), sha(fs.readFileSync(path.join(cliDir, 'report.json'))));
   console.log('PASS CLI report hash');
-  console.log('PASS 5 test cases');
+  // positive control: injected disagreement must show up in the report, per event, and move the verdict
+  const clean = await dryRun(path.join(root, 'pc-clean'), 20261125, {});
+  const injected = await dryRun(path.join(root, 'pc-inj'), 20261125, { mismatches: 3 });
+  const wrong = rows => rows.filter(r => !r.S2.correct).length;
+  assert.equal(wrong(clean.report.per_event), 0, 'clean run has no wrong S2 events');
+  assert.equal(wrong(injected.report.per_event), 3, 'exactly the 3 injected events are wrong');
+  assert.equal(injected.report.per_event.filter(r => !r.baseline.correct).length, 0, 'baseline arm untouched');
+  assert.ok(injected.report.arms.S2.full < clean.report.arms.S2.full, 'S2 agreement must fall');
+  assert.notEqual(injected.report.verdict, 'inconclusive', 'verdict must move once 3/12 diverge');
+  const div = await dryRun(path.join(root, 'pc-div'), 20261125, { divergences: 3 });
+  assert.equal(div.report.per_event.filter(r => r.S2.divergent).length, 3, 'exactly 3 divergent S2 events');
+  console.log('PASS positive control (3/12 injected, per-event report)');
+  console.log('PASS 6 test cases');
 })().catch(e => { console.error(e); process.exitCode = 1; });

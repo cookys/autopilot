@@ -649,7 +649,7 @@ function purgeInjected(env, { dropPrefixes = [], apply = false } = {}) {
       let out = kept.join('\n');
       if (raw.endsWith('\n') && out.length > 0 && !out.endsWith('\n')) out += '\n';
       const tmp = `${file}.tmp.${process.pid}.${Date.now()}`;
-      fs.writeFileSync(tmp, out, 'utf8');
+      fs.writeFileSync(tmp, out, { encoding: 'utf8', mode: fs.statSync(file).mode });
       fs.renameSync(tmp, file);
       return [
         `removed ${removedLines.size} rows (${removedAsks} asks) of ${totalRows}`,

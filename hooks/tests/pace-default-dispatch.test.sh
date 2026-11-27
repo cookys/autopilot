@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Real rails with sentinel PATH: quota selection, caller pins and manifest evidence.
 . "$(dirname "$0")/lib.sh"
+# 517d70c68: every dispatch needs an open Fleet-Task (the precondition fails first as precondition_failed otherwise).
+# Give the suite one through a stub fleet, never the real fleet.
+PD_FLEET="$TEST_TMP/pd-fleet-open"
+printf '#!/bin/sh\necho "{\\"status\\":\\"open\\"}"\n' > "$PD_FLEET"; chmod +x "$PD_FLEET"
+export FLEET_BIN="$PD_FLEET" AUTOPILOT_FLEET_TASK=01M8F07G74HH0N19TG1BPQPE59
 install_cli_sentinels
 # Drop inherited quota/token-seat selectors so the fixture exercises defaults.
 unset AUTOPILOT_TOKEN_SEAT AUTOPILOT_ENDPOINT_GLM_TRANSPORT \

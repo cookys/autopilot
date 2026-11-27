@@ -74,7 +74,16 @@ async function dryRun(out, seed = 20261125, options = {}) {
   const report = { manifest_sha256, negative_controls: { ...controls, probes }, budget: result.budget,
     arms: { baseline: { full: result.scored.baseline.agreement, paired: result.comparison.baseline_paired },
       S2: { full: result.scored.S2.agreement, paired: result.comparison.treatment_paired } },
-    paired_n: result.comparison.paired_n, verdict: result.comparison.verdict, non_dry_run: rejection };
+    paired_n: result.comparison.paired_n, verdict: result.comparison.verdict, non_dry_run: rejection,
+    injected: { divergences: options.divergences || 0, mismatches: options.mismatches || 0 },
+    per_event: manifest.events.map(event => {
+      const row = { id: event.id };
+      for (const arm of manifest.treatments) {
+        const r = result.execution.results.find(x => x.arm === arm && x.eventId === event.id);
+        row[arm] = { divergent: !!r.divergent, correct: JSON.stringify(r.intents) === JSON.stringify(event.valid_answers[0].intents) };
+      }
+      return row;
+    }) };
   const report_sha256 = writeJson(path.join(out, 'report.json'), report);
   return { manifest, report, report_sha256 };
 }
@@ -83,13 +92,16 @@ if (require.main === module) {
   (async () => {
     const args = process.argv.slice(2);
     let out, seed = 20261125;
+    const options = {};
     for (let i = 0; i < args.length; i++) {
       if (args[i] === '--out' && args[i + 1]) out = args[++i];
       else if (args[i] === '--seed' && args[i + 1]) seed = Number(args[++i]);
-      else throw new Error('Usage: node scripts/pm-replay-dryrun.js --out <directory> [--seed N]');
+      else if (args[i] === '--divergences' && args[i + 1]) options.divergences = Number(args[++i]);
+      else if (args[i] === '--mismatches' && args[i + 1]) options.mismatches = Number(args[++i]);
+      else throw new Error('Usage: node scripts/pm-replay-dryrun.js --out <directory> [--seed N] [--divergences N] [--mismatches N]');
     }
     if (!out || !Number.isSafeInteger(seed)) throw new Error('Output directory and integer seed required');
-    const result = await dryRun(out, seed);
+    const result = await dryRun(out, seed, options);
     console.log(result.report_sha256);
   })().catch(error => { console.error(error.message); process.exitCode = 1; });
 }

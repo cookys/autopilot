@@ -69,7 +69,7 @@ async function dryRun(out, seed = 20261125, options = {}) {
     rejection = { rejected: true, reason: error.message };
   }
   const controls = runNegativeControls();
-  const names = ['a_fake_fleet_blocked', 'b_repo_write_blocked', 'c_config_read_blocked', 'd_network_egress_blocked', 'e_hook_subprocess_bypass_blocked'];
+  const names = ['a_fake_fleet_blocked', 'b_repo_write_blocked', 'c_config_read_blocked', 'd_network_egress_blocked', 'e_hook_subprocess_bypass_blocked', 'f_no_egress_except_proxy', 'g_proxy_refuses_non_model_paths'];
   const probes = controls.skipped ? names.map(name => ({ name, blocked: null, skipped: true, reason: controls.reason })) : controls.probes;
   const report = { manifest_sha256, negative_controls: { ...controls, probes }, budget: result.budget,
     arms: { baseline: { full: result.scored.baseline.agreement, paired: result.comparison.baseline_paired },

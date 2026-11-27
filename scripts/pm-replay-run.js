@@ -2,6 +2,7 @@
 'use strict';
 
 const { checkPool } = require('./lib/replay-pool.js');
+const { createRealModelRunner } = require('./lib/replay-model-runner.js');
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -128,10 +129,12 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--selftest') out.selftest = true;
+    else if (a === '--real') out.real = true;
     else if (a === '--manifest') out.manifest = argv[++i];
     else if (a === '--arm') out.arm = argv[++i];
     else if (a === '--dry-run-model') out.dryRunModel = argv[++i];
     else if (a === '--pool') out.poolId = argv[++i];
+    else if (a === '--proxy-socket') out.proxySocket = argv[++i];
   }
   return out;
 }
@@ -155,18 +158,25 @@ async function main() {
     return;
   }
 
+  if (args.real && !args.poolId) {
+    console.error('refusing --real without --pool <id>');
+    process.exit(2);
+  }
   if (!args.manifest) {
-    console.error('Usage: pm-replay-run.js --manifest <file> [--arm <name>] [--dry-run-model <id>] | --selftest');
+    console.error('Usage: pm-replay-run.js --manifest <file> [--arm <name>] [--dry-run-model <id> | --real --pool <id> --proxy-socket <path>] | --selftest');
     process.exit(2);
   }
 
   const manifest = JSON.parse(fs.readFileSync(path.resolve(args.manifest), 'utf8'));
+  const modelRunner = args.real
+    ? createRealModelRunner({ manifest, proxySocket: args.proxySocket })
+    : createMockModelRunner();
   const out = await runReplay({
     manifest,
     arm: args.arm,
     dryRunModel: args.dryRunModel,
     poolId: args.poolId,
-    modelRunner: createMockModelRunner(),
+    modelRunner,
   });
   console.log(JSON.stringify(out, null, 2));
 }

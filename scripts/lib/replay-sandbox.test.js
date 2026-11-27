@@ -54,17 +54,60 @@ test('a node install outside /usr is bound read-only so the probes can exec it (
   assert.ok(!args.includes(process.env.HOME), 'HOME itself must never be mounted');
 });
 
-test('runNegativeControls blocks all 5 probes inside bwrap (or SKIPs if bwrap/userns unavailable)', () => {
+test('runNegativeControls blocks all 7 probes inside bwrap (or SKIPs if bwrap/userns unavailable)', () => {
   const res = runNegativeControls();
   if (res.skipped) {
     console.log(`SKIP: ${res.reason}`);
     process.exit(0);
   }
-  assert.equal(res.probes.length, 5, 'expected 5 negative control probes');
+  assert.equal(res.probes.length, 7, 'expected 7 negative control probes');
   for (const probe of res.probes) {
     assert.equal(probe.blocked, true, `probe ${probe.name} was not blocked: ${probe.evidence}`);
   }
   assert.equal(res.passed, true, 'all negative control probes must pass');
+});
+
+test('f is red when the unshare-net guard is removed, then the real probe is green', () => {
+  const srcPath = require('node:path').join(__dirname, 'replay-sandbox.js');
+  const src = require('node:fs').readFileSync(srcPath, 'utf8');
+  const needle = "args.push('--unshare-net');";
+  const mutated = src.replace(needle, '/* egress guard removed */');
+  assert.notEqual(mutated, src, 'negative control must remove the egress guard');
+  const tmp = require('node:fs').mkdtempSync(require('node:path').join(require('node:os').tmpdir(), 'replay-red-f-'));
+  const file = require('node:path').join(tmp, 'replay-sandbox-red.js');
+  require('node:fs').writeFileSync(file, mutated);
+  const redMod = require(file);
+  const red = redMod.runNegativeControls({ proxyModulePath: require('node:path').join(__dirname, 'replay-api-proxy.js') });
+  if (red.skipped) {
+    console.log(`SKIP red f: ${red.reason}`);
+    return;
+  }
+  const probe = red.probes.find((p) => p.name === 'f_no_egress_except_proxy');
+  assert.equal(probe.blocked, false, `expected red f, evidence=${probe.evidence}`);
+  const green = runNegativeControls();
+  const again = green.probes.find((p) => p.name === 'f_no_egress_except_proxy');
+  assert.equal(again.blocked, true, again.evidence);
+});
+
+test('g is red when the proxy path guard is removed, then the real probe is green', () => {
+  const proxyPath = require('node:path').join(__dirname, 'replay-api-proxy.js');
+  const src = require('node:fs').readFileSync(proxyPath, 'utf8');
+  const needle = 'if (!isModelMessagesPath(req.url))';
+  const mutated = src.replace(needle, 'if (false)');
+  assert.notEqual(mutated, src, 'negative control must remove the path guard');
+  const tmp = require('node:fs').mkdtempSync(require('node:path').join(require('node:os').tmpdir(), 'replay-red-g-'));
+  const file = require('node:path').join(tmp, 'replay-api-proxy-red.js');
+  require('node:fs').writeFileSync(file, mutated);
+  const red = runNegativeControls({ proxyModulePath: file });
+  if (red.skipped) {
+    console.log(`SKIP red g: ${red.reason}`);
+    return;
+  }
+  const probe = red.probes.find((p) => p.name === 'g_proxy_refuses_non_model_paths');
+  assert.equal(probe.blocked, false, `expected red g, evidence=${probe.evidence}`);
+  const green = runNegativeControls();
+  const again = green.probes.find((p) => p.name === 'g_proxy_refuses_non_model_paths');
+  assert.equal(again.blocked, true, again.evidence);
 });
 
 console.log(`\n${passedCount} tests passed.`);

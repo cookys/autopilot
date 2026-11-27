@@ -120,3 +120,11 @@ test('--check-targets compares per-prompt averages and is red without enough pro
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('--check-targets without --trace is a usage error, never a 0-prompt verdict', () => {
+  const script = path.join(__dirname, '..', 'measure-seat-injection.js');
+  assert.throws(
+    () => execFileSync(process.execPath, [script, '--check-targets'], { encoding: 'utf8', stdio: 'pipe' }),
+    (e) => e.status === 2 && /needs --trace/.test(e.stderr) && !/prompts/.test(e.stdout),
+  );
+});

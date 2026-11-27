@@ -68,6 +68,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const HOUR_MS = 3600000;
+const READONLY_AGENT_TYPES = new Set(['probe', 'hands', 'test-runner', 'transcript-digest']);
 const DEFAULTS = { mode: 'warn', lane_dispatch_max: 4, lane_turns_max: 300, root_turns_per_hour_max: 400, runaway_multiple: 3, lane_window_minutes: 360, concurrent_advise_max: 3, per_ticket_usd: 5 };
 const { LANE_RE, headerDenialSuffix } = require('./lib/brief-header-template.js');
 const { findTaskId } = require('../scripts/lib/fleet-task-ref.js');
@@ -664,6 +665,13 @@ function ensureCard(payload, key, hit, c) {
   }
 }
 
+function logWarnOnly(hits) {
+  try {
+    const { record } = require('./_shared/hook-log');
+    for (const h of hits) record({ hook: 'subagent-budget', rule: h.id, decision: 'warn', intercepted: false });
+  } catch { /* fail-open: the log must never change a dispatch decision */ }
+}
+
 function emit(obj) {
   try { fs.writeSync(1, `${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', ...obj } })}\n`); } catch { /* fail-open */ }
 }
@@ -687,7 +695,8 @@ function run(payload) {
   if (cfg.mode === 'off') return;
   const input = payload.tool_input && typeof payload.tool_input === 'object' ? payload.tool_input : {};
   const brief = typeof input.prompt === 'string' ? input.prompt : '';
-  const needLane = isEngineBrief(brief);
+  // Read-only agent types (agents/probe|hands|test-runner|transcript-digest) need no Lane: line.
+  const needLane = isEngineBrief(brief) && !READONLY_AGENT_TYPES.has(String(input.subagent_type || '').replace(/^autopilot:/, ''));
   const noTranscript = typeof payload.session_id !== 'string' || !payload.session_id
     || typeof payload.transcript_path !== 'string' || !payload.transcript_path;
   if (noTranscript) {
@@ -783,6 +792,8 @@ function run(payload) {
       : [];
     if (runaway.length === 0) {
       process.stderr.write(`subagent-budget: ${summary}\n`);
+      // Warn mode blocks nothing here: it is log-only, and the shared hook log says so (per 01M88SBJ98).
+      logWarnOnly(hits);
       emit({ additionalContext: withAdvisory(payload, `subagent-budget (warn mode, not blocking): ${summary}. ${line}`) });
       return;
     }

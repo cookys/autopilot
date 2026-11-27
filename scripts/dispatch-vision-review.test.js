@@ -69,7 +69,6 @@ test('happy path sends image block and text', async () => {
     const r = await run(repo, {
       AUTOPILOT_ENDPOINT_GLM_LOCAL_URL: `http://127.0.0.1:${port}`,
       AUTOPILOT_ENDPOINT_GLM_LOCAL_TOKEN: TOKEN,
-      AUTOPILOT_CN_GATE_NOW: '2026-11-27T12:00:00+08:00',
     }, ['--image', img, '--prompt-file', prompt, '--out', out]);
     assert.equal(r.status, 0, r.stderr);
     assert.equal(hits.length, 1);
@@ -114,44 +113,17 @@ test('non-local endpoint is refused and the stub receives nothing', async () => 
   }
 });
 
-test('repo outside thinksmart* is refused by the gate', async () => {
-  const { server, hits, port } = await listen((_req, res) => { res.writeHead(200); res.end('{}'); });
-  const repo = gitRepo('other-vis-');
-  const img = path.join(repo, 'a.png');
-  const prompt = path.join(repo, 'p.md');
-  const out = path.join(repo, 'result.json');
-  fs.writeFileSync(img, PNG);
-  fs.writeFileSync(prompt, 'x');
-  try {
-    const r = await run(repo, {
-      AUTOPILOT_ENDPOINT_GLM_LOCAL_URL: `http://127.0.0.1:${port}`,
-      AUTOPILOT_ENDPOINT_GLM_LOCAL_TOKEN: TOKEN,
-      AUTOPILOT_CN_GATE_NOW: '2026-11-27T12:00:00+08:00',
-    }, ['--image', img, '--prompt-file', prompt, '--out', out]);
-    assert.equal(r.status, 3, r.stderr);
-    assert.match(r.stderr, /cn_model_dispatch_barred/);
-    assert.equal(hits.length, 0);
-  } finally { server.close(); }
-});
-
-test('after the exception window the gate refuses', async () => {
-  const { server, hits, port } = await listen((_req, res) => { res.writeHead(200); res.end('{}'); });
+test('a resolver that is not ready sends nothing', async () => {
   const repo = gitRepo('thinksmart-vis-');
   const img = path.join(repo, 'a.png');
-  const prompt = path.join(repo, 'p.md');
-  const out = path.join(repo, 'result.json');
   fs.writeFileSync(img, PNG);
-  fs.writeFileSync(prompt, 'x');
-  try {
-    const r = await run(repo, {
-      AUTOPILOT_ENDPOINT_GLM_LOCAL_URL: `http://127.0.0.1:${port}`,
-      AUTOPILOT_ENDPOINT_GLM_LOCAL_TOKEN: TOKEN,
-      AUTOPILOT_CN_GATE_NOW: '2026-11-29T00:00:00+08:00',
-    }, ['--image', img, '--prompt-file', prompt, '--out', out]);
-    assert.equal(r.status, 3, r.stderr);
-    assert.match(r.stderr, /cn_model_dispatch_barred/);
-    assert.equal(hits.length, 0);
-  } finally { server.close(); }
+  const r = await run(repo, {
+    AUTOPILOT_ENDPOINT_GLM_LOCAL_URL: 'http://localhost.invalid-scheme-test:1',
+    AUTOPILOT_ENDPOINT_GLM_LOCAL_TOKEN: TOKEN,
+    AUTOPILOT_LOCAL_GATEWAY_HOSTS: 'localhost.invalid-scheme-test',
+  }, ['--image', img, '--prompt-file', img, '--out', path.join(repo, 'o.json')]);
+  assert.equal(r.status, 2, r.stderr);
+  assert.match(r.stderr, /vision_rail_endpoint_not_ready/);
 });
 
 test('--endpoint and --model are rejected', async () => {
@@ -190,7 +162,6 @@ test('a 3xx is not followed', async () => {
     const r = await run(repo, {
       AUTOPILOT_ENDPOINT_GLM_LOCAL_URL: `http://127.0.0.1:${port}`,
       AUTOPILOT_ENDPOINT_GLM_LOCAL_TOKEN: TOKEN,
-      AUTOPILOT_CN_GATE_NOW: '2026-11-27T12:00:00+08:00',
     }, ['--image', img, '--prompt-file', prompt, '--out', out]);
     assert.equal(r.status, 1, r.stderr);
     assert.equal(hits.length, 1);

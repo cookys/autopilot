@@ -96,6 +96,8 @@ function resolveEndpoint() {
   let parsed = null;
   try { parsed = JSON.parse(String(r.stdout || '').split('\n').find((s) => s.startsWith('{')) || 'null'); } catch { parsed = null; }
   if (!parsed || !parsed.base_url) fail(2, 'vision_rail_endpoint_unresolved');
+  // Locality first, so a non-local host reports as such; the exit code (url_unsafe, not ready) is checked by the caller.
+  parsed.ready_rc = r.status;
   if (!parsed.token_env || parsed.token_present !== true) fail(2, 'vision_rail_endpoint_unresolved');
   return parsed;
 }
@@ -157,6 +159,8 @@ async function main() {
   const resolved = resolveEndpoint();
   const host = gate.hostOf(resolved.base_url);
   if (!host || !gate.isLocalHost(host, process.env)) fail(3, 'vision_rail_non_local_backend');
+
+  if (resolved.ready_rc !== 0) fail(2, 'vision_rail_endpoint_not_ready');
 
   const decision = gate.check({
     runner: RUNNER,

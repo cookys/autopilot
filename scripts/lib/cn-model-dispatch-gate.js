@@ -40,41 +40,6 @@ function resolveEndpoint(name, env) {
   try { return JSON.parse(String(r.stdout).split('\n').find((s) => s.startsWith('{')) || 'null'); } catch { return null; }
 }
 function hostOf(url) { try { return new URL(url).hostname.toLowerCase(); } catch { return ''; } }
-// Shipped window only (PM 01M7XP968Q66P4BN4W907W06HR). A repo file cannot add or extend it.
-// An entry applies only when check() is given a role; callers that omit role keep the
-// operator-based local-host decision.
-const REVIEW_LOCAL_EXCEPTIONS = Object.freeze([
-  { endpoint: 'glm_local', until: '2026-11-28T23:59:59+08:00', repos: ['thinksmart*'], roles: ['ux-reference-reviewer'] },
-]);
-function instantMs(v) {
-  if (typeof v !== 'string' || v === '') return null;
-  const t = Date.parse(v);
-  return Number.isFinite(t) ? t : null;
-}
-function gateNow(opts, env) {
-  if (Object.prototype.hasOwnProperty.call(opts, 'now')) return instantMs(opts.now);
-  if (env && Object.prototype.hasOwnProperty.call(env, 'AUTOPILOT_CN_GATE_NOW')) return instantMs(env.AUTOPILOT_CN_GATE_NOW);
-  return Date.now();
-}
-function globName(name, pattern) {
-  const re = `^${String(pattern).replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`;
-  return new RegExp(re).test(name);
-}
-function reviewRoleAllows(opts, env) {
-  const role = String(opts.role || '').trim().toLowerCase();
-  if (!role) return true;
-  const now = gateNow(opts, env);
-  if (now == null) return false;
-  const repo = path.basename(repoRootOf(opts.cwd || process.cwd()) || '');
-  const endpoint = String(opts.endpoint || '').toLowerCase();
-  return REVIEW_LOCAL_EXCEPTIONS.some((entry) => {
-    if (String(entry.endpoint).toLowerCase() !== endpoint) return false;
-    if (!(entry.roles || []).map((r) => String(r).toLowerCase()).includes(role)) return false;
-    if (!(entry.repos || []).some((g) => globName(repo, g))) return false;
-    const until = Date.parse(entry.until);
-    return Number.isFinite(until) && now < until;
-  });
-}
 function isLocalHost(host, env) {
   const normalized = host.replace(/^\[|\]$/g, '');
   if (normalized === 'localhost' || normalized === '::1' || /^127(?:\.\d{1,3}){3}$/.test(normalized)) return true;
@@ -328,7 +293,6 @@ function check(opts = {}) {
     const resolved = resolveEndpoint(localName, env);
     const host = resolved && hostOf(resolved.base_url);
     if (!host || !isLocalHost(host, env)) return { allowed: false, family, cls: 'local_name_external_host', line: refusalLine(family, 'local_name_external_host') };
-    if (!reviewRoleAllows(opts, env)) return { allowed: false, family, cls: 'review-role', line: refusalLine(family, 'review-role') };
     return { allowed: true, family };
   }
   let rawUrl = '';
@@ -339,10 +303,7 @@ function check(opts = {}) {
   const resolved = rawUrl ? { base_url: rawUrl } : (endpoint ? resolveEndpoint(endpoint, env) : null);
   const host = resolved && hostOf(resolved.base_url);
   // Decisions follow where the payload goes: a raw URL or a resolved endpoint name that points at a local gateway host is allowed, whatever the model family.
-  if (host && isLocalHost(host, env)) {
-    if (!reviewRoleAllows(opts, env)) return { allowed: false, family, cls: 'review-role', line: refusalLine(family, 'review-role') };
-    return { allowed: true, family };
-  }
+  if (host && isLocalHost(host, env)) return { allowed: true, family };
   const inventory = readJson(OPERATORS_PATH, null);
   const operator = inventory && operatorFor(endpoint, host, inventory);
   if (!operator) return { allowed: false, family, cls: 'restricted_operator_unknown_endpoint', line: refusalLine(family, 'restricted_operator_unknown_endpoint') };

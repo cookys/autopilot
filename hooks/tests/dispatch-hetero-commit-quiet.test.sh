@@ -73,6 +73,17 @@ run_case() { # mode extra-args... ; sets OUT ELAPSED PIDF
     "$SCRIPT" --no-verify-tip --runner grok --pin-reason "test fixture" --model grok-4.5 --effort high --grok-bin "$stub" \
     --branch "feat/cq-$mode-$RANDOM" --prompt-file "$PROMPT" --timeout 60s "$@" 2>&1)" || true
   ELAPSED=$(( $(date +%s) - start ))
+  if [ ! -s "$PIDF" ]; then # stub never ran: print what the rail saw so a host difference is visible
+    {
+      echo "DIAG[$mode] stub never wrote pidfile"
+      echo "DIAG stub=$stub executable=$([ -x "$stub" ] && echo yes || echo no)"
+      ls -l "$stub" 2>&1 | sed 's/^/DIAG /'
+      echo "DIAG PATH3=$(echo "$PATH" | cut -d: -f1-3)"
+      echo "DIAG grok-on-PATH=$(command -v grok || echo none)"
+      echo "DIAG git=$(git --version) user=$(id -un)"
+      printf '%s\n' "$OUT" | tail -12 | cut -c1-300 | sed 's/^/DIAG out: /'
+    } >&2
+  fi
 }
 no_child() { local p; p="$(cat "$PIDF" 2>/dev/null)"; [ -n "$p" ] || fail "$1: no pidfile"; ! kill -0 "$p" 2>/dev/null || fail "$1: stub $p still alive"; }
 

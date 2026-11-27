@@ -52,7 +52,9 @@ const MODEL_ROOM_MIN = 1800; // below this much room for the model note the flee
 // BODY_CAP before any other section is sized. When more are unanswered than fit, the newest are kept and the count of
 // older ones is written. Bodies are data: every field is escaped (the restore block is wrapped in a tag).
 const RESERVED_CAP = Math.floor(BODY_CAP * 0.4);
-const INBOUND_BUDGET = 4096;
+// The inbound section is bounded by RESERVED_CAP (the combined inbound + Fleet State allocation); FLEET_FLOOR of it stays for Fleet State.
+const FLEET_FLOOR = 1500;
+const INBOUND_BUDGET = RESERVED_CAP - FLEET_FLOOR;
 const INBOUND_REREAD_PLACEHOLDER = 'compaction 前可能有 fleet 訊息沒讀到：呼叫 `recent` 並設 `unseen_only=true`，或執行 `fleet recent --unseen`（待上線）';
 // A note written within this long ago, or whose size/mtime moves while it is read, may be mid-write (the model writes
 // it with the Write tool; atomicity is not under our control, so the reader guards).
@@ -327,11 +329,11 @@ function escapeText(s) {
 function inboundSection(items, budget = INBOUND_BUDGET) {
   if (!Array.isArray(items) || !items.length) return '';
   const e = (v, n = 80) => escapeText(String(v == null ? '' : v).slice(0, n));
-  const lines = (it) => {
+  const lines = (it, firstMax) => {
     const meta = [`kind=${e(it.kind)}`];
     if (it.disposition) meta.push(`disposition=${e(it.disposition)}`);
     if (it.reply_to) meta.push(`reply_to=${e(it.reply_to)}`);
-    let t = `- ${e(it.message_id)} from=${e(it.from)} ${meta.join(' ')} | ${e(it.first_line, 200)}\n`;
+    let t = `- ${e(it.message_id)} from=${e(it.from)} ${meta.join(' ')}${firstMax > 0 ? ` | ${e(it.first_line, firstMax)}` : ''}\n`;
     if (it.kind === 'dispatch') t += `  fleet task show ${e(it.message_id)}\n`;
     return t;
   };
@@ -339,15 +341,28 @@ function inboundSection(items, budget = INBOUND_BUDGET) {
   const chats = items.filter((it) => !isPatrol(it));
   const wakes = items.filter(isPatrol);
   const wakeLine = wakes.length ? `${wakes.length} patrol wakes (oldest ${e(wakes[0].message_id)}, newest ${e(wakes[wakes.length - 1].message_id)})\n` : '';
-  const render = (kept, omitted) => `## Unanswered Fleet Messages (reserved, never cut)\n這 ${kept.length + wakes.length} 則在壓縮前到達，請重讀：\n`
-    + kept.map(lines).join('') + wakeLine + (omitted ? `${omitted} 則已省略\n` : '') + `${INBOUND_REREAD_PLACEHOLDER}\n\n`;
+  const head = (n) => `## Unanswered Fleet Messages (reserved, never cut)\n這 ${n + wakes.length} 則在壓縮前到達，請重讀：\n`;
+  const tail = (omitted) => wakeLine + (omitted ? `${omitted} 則已省略\n` : '') + `${INBOUND_REREAD_PLACEHOLDER}\n\n`;
+  const render = (kept, omitted, firstMax) => head(kept.length) + kept.map((it) => lines(it, firstMax)).join('') + tail(omitted);
+  const fits = (t) => Buffer.byteLength(t) <= budget;
+  // Over budget, the message text goes first (first_line cut shorter, then dropped); id + from of every message stay.
+  for (const firstMax of [200, 100, 40, 0]) {
+    const t = render(chats, 0, firstMax);
+    if (fits(t)) return t;
+  }
+  // Still over: one line per sender, ids only.
+  const bySender = new Map();
+  for (const it of chats) { const k = e(it.from); if (!bySender.has(k)) bySender.set(k, []); bySender.get(k).push(e(it.message_id)); }
+  const compact = head(chats.length) + [...bySender].map(([from, ids]) => `- from=${from}: ${ids.join(' ')}\n`).join('') + tail(0);
+  if (fits(compact)) return compact;
+  // Last resort (more ids than the budget can hold): the newest that fit, the count of older ones is written.
   let kept = [];
   for (let i = chats.length - 1; i >= 0; i--) {
     const next = [chats[i], ...kept];
-    if (Buffer.byteLength(render(next, chats.length - next.length)) > budget) break;
+    if (!fits(render(next, chats.length - next.length, 0))) break;
     kept = next;
   }
-  return render(kept, chats.length - kept.length);
+  return render(kept, chats.length - kept.length, 0);
 }
 
 // --- fleet task state + PM ledger tail + capacity ar-gate ---------------

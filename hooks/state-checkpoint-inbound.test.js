@@ -56,7 +56,7 @@ test('E2E: handoff note fills the cap, 8 of 8 unanswered messages are still list
   assert.match(file, /Transcript Tail[\s\S]*omitted: the sections above used the handoff size cap/, 'the cap really was full');
   assert.ok(Buffer.byteLength(body(file)) <= BODY_CAP, `body ${Buffer.byteLength(body(file))} > ${BODY_CAP}`);
   assert.ok(Buffer.byteLength(section(file)) <= INBOUND_BUDGET);
-  assert.equal(INBOUND_BUDGET, 4096);
+  assert.ok(INBOUND_BUDGET < BODY_CAP * 0.4, 'inbound budget sits inside RESERVED_CAP (2760), leaving room for Fleet State');
   assert.doesNotMatch(section(file), /@0000/, 'from is listed without the @uuid suffix');
   assert.ok(section(file).includes(`from=${FROM_BARE} `));
 });
@@ -81,14 +81,15 @@ test('a send without reply_to, or a plain Bash call naming the id, does not answ
   assert.equal(lib.extractUnansweredChannels(jsonl(r)).length, 1);
 });
 
-test('30 blocks: the newest that fit are kept, the count of older ones is written', () => {
+test('30 blocks over budget: every id + from stays listed, only the message text is cut', () => {
   const r = []; for (let i = 1; i <= 30; i++) r.push(channel(i, { body: 'FAKE ' + 'long request text '.repeat(10) }));
   const file = runHook(r, { noteBytes: 8000, cwd: path.join(__dirname, '..') });
   const sec = section(file);
-  const kept = listed(sec, Array.from({ length: 30 }, (_, i) => i + 1));
-  assert.ok(kept.length >= 5 && kept.length < 30, `kept ${kept.length}`);
-  assert.deepEqual(kept, Array.from({ length: kept.length }, (_, i) => 30 - kept.length + 1 + i), 'a suffix of the newest');
-  assert.match(sec, new RegExp(`${30 - kept.length} 則已省略`));
+  const all = Array.from({ length: 30 }, (_, i) => i + 1);
+  assert.deepEqual(listed(sec, all), all, 'no unanswered id dropped');
+  assert.ok(sec.includes(`from=${FROM_BARE}`), 'from kept');
+  assert.doesNotMatch(sec, /則已省略/);
+  assert.doesNotMatch(sec, /long request text long request text long request text/, 'the body summary was cut');
   assert.ok(Buffer.byteLength(sec) <= INBOUND_BUDGET);
   assert.ok(Buffer.byteLength(body(file)) <= BODY_CAP);
 });
@@ -122,13 +123,13 @@ test('first line is cut to 200 bytes with an ellipsis', () => {
   assert.equal(out[0].first_line, `${'a'.repeat(200)}…`);
 });
 
-test('12 unanswered messages with 150-char first_line are all listed completely', () => {
+test('12 unanswered messages with 150-char first_line: all ids + from listed, text shortened to fit', () => {
   const line150 = 'm'.repeat(150);
   const r = [];
   for (let i = 1; i <= 12; i++) r.push(channel(i, { body: `${i}:${line150.slice(String(i).length + 1)}` }));
   const sec = section(runHook(r, { noteBytes: 8000, cwd: path.join(__dirname, '..') }));
   assert.deepEqual(listed(sec, Array.from({ length: 12 }, (_, i) => i + 1)), Array.from({ length: 12 }, (_, i) => i + 1));
-  assert.ok(sec.includes(line150.slice(2)));
+  assert.ok(sec.includes(`from=${FROM_BARE}`));
   assert.ok(Buffer.byteLength(sec) <= INBOUND_BUDGET);
 });
 

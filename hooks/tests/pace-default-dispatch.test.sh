@@ -8,7 +8,10 @@ unset AUTOPILOT_TOKEN_SEAT AUTOPILOT_ENDPOINT_GLM_TRANSPORT \
   AUTOPILOT_ENDPOINT_GLM_LOCAL_URL AUTOPILOT_ENDPOINT_GLM_LOCAL_TOKEN
 export AUTOPILOT_ENDPOINTS_ENV=/nonexistent
 export AUTOPILOT_QUALIFIED_FILE="$TEST_TMP/missing-qualified.json"
-export AUTOPILOT_PACE_FILE="$REPO_ROOT/scripts/fixtures/pace-select/quota-default.json"
+fresh_pace_fixture "$REPO_ROOT/scripts/fixtures/pace-select/quota-default.json" "$TEST_TMP/quota-default.fresh.json"
+export AUTOPILOT_PACE_FILE="$TEST_TMP/quota-default.fresh.json"
+# engine-preflight skips codex without a non-empty auth file; give the stub codex a placeholder so the test does not depend on the host's login
+mkdir -p "$TEST_TMP/codex-home"; echo '{}' > "$TEST_TMP/codex-home/auth.json"; export CODEX_HOME="$TEST_TMP/codex-home"
 export AUTOPILOT_DISPATCH_RUNS_DIR="$TEST_TMP/runs"
 export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session"
 export DISPATCH_DETACH=0 AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1
@@ -43,7 +46,7 @@ const fs=require('node:fs'); const s=fs.readFileSync(process.argv[2],'utf8');
 fs.writeFileSync(process.argv[3], s.slice(s.indexOf('# Pace is the default only'), s.indexOf('# Saved before skill-pack')));
 NODE_STRICT
 (
-  STRICT_CONTRACT=1 RUNNER_SUPPLIED=0 MODEL_SUPPLIED=0
+  STRICT_CONTRACT=1 RUNNER_SUPPLIED=0 MODEL_SUPPLIED=0 ENDPOINT_SUPPLIED=0
   RUNNER=grok MODEL=grok-4.7 ENDPOINT='' PACE_ROLE=implementer
   PROMPT_FILE="$TEST_TMP/brief" SELF_DIR="$REPO_ROOT/scripts"
   die_precondition() { echo "$*" >&2; exit 2; }
@@ -113,11 +116,12 @@ assert_eq "$?" 0 'missing pace dispatch exits 0 with the cheap default'
 assert_contains "$(cat "$TEST_TMP/missing.err")" 'pace_unknown' 'missing telemetry fallback is visible'
 assert_contains "$(cat "$TEST_TMP/missing.out")" '"runner": "grok"' 'missing telemetry lands on the grok default'
 assert_contains "$(cat "$TEST_TMP/missing.out")" '"model": "grok-4.7"' 'missing telemetry default model is grok-4.7'
-# The operator rule refuses GLM when the author dispatch works in this private repo.
+# The operator rule refuses GLM when the author dispatch works in this private repo.  Tier T0 is declared so the gate reaches its
+# workdir check (an undeclared tier stops earlier at restricted_operator_not_public_source).
 printf 'Size: S\nScope: docs/example.md\nWrite a public documentation note.\n' > "$TEST_TMP/small-brief"
 export CLAUDE_CONFIG_DIR="$TEST_TMP/claude-fixture"
 seed_fake_claude_credentials "$CLAUDE_CONFIG_DIR"
-AUTOPILOT_ENDPOINT_GLM_URL=https://fixture.invalid/v1 AUTOPILOT_ENDPOINT_GLM_TOKEN=fixture-only \
+AUTOPILOT_CN_WORK_TIER=T0 AUTOPILOT_ENDPOINT_GLM_URL=https://fixture.invalid/v1 AUTOPILOT_ENDPOINT_GLM_TOKEN=fixture-only \
   bash "$REPO_ROOT/scripts/dispatch-author.sh" --runner cc-shim --model glm-5.3 --endpoint glm \
     --prompt-file "$TEST_TMP/small-brief" --bin "$TEST_TMP/bin/grok" --timeout 10s \
     > "$TEST_TMP/author-role.out" 2> "$TEST_TMP/author-role.err"
@@ -204,12 +208,13 @@ result="$(node -e 'const m=require(process.argv[1]); console.log(m.pace_choice?.
 assert_eq "$result" codex 'hetero --runner auto manifest records pace_choice'
 
 # ENDPOINT without MODEL passes --named-endpoint instead of empty/default --named-model, and matches glm over minimax 0%.
-node - "$REPO_ROOT/scripts/fixtures/pace-select/quota-default.json" "$TEST_TMP/glm-over-minimax-zero.json" <<'NODE_GLM'
+node - "$TEST_TMP/quota-default.fresh.json" "$TEST_TMP/glm-over-minimax-zero.json" <<'NODE_GLM'
 const fs=require('node:fs');
 const p=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+const seen=new Date(Date.now()-3600e3).toISOString(), reset=new Date(Date.now()+12*3600e3).toISOString();
 p.rows.push(
-  { pool:'glm', class:'other', used_pct:90, expected_pct:60, stale:false, hours_to_reset:12, reset_at:'2026-11-17T12:00:00.000Z', seen_at:'2026-11-16T23:00:00Z', status:'ok' },
-  { pool:'minimax', class:'other', used_pct:0, expected_pct:60, stale:false, hours_to_reset:12, reset_at:'2026-11-17T12:00:00.000Z', seen_at:'2026-11-16T23:00:00Z', status:'ok' }
+  { pool:'glm', class:'other', used_pct:90, expected_pct:60, stale:false, hours_to_reset:12, reset_at:reset, seen_at:seen, status:'ok' },
+  { pool:'minimax', class:'other', used_pct:0, expected_pct:60, stale:false, hours_to_reset:12, reset_at:reset, seen_at:seen, status:'ok' }
 );
 fs.writeFileSync(process.argv[3], JSON.stringify(p));
 NODE_GLM

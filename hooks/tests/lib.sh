@@ -335,6 +335,22 @@ fs.writeFileSync(target, `${JSON.stringify(value, null, 2)}\n`);
 NODE
 }
 
+# fresh_pace_fixture <src.json> <dst.json>: copy a pace fixture with every ISO timestamp shifted by
+# (now - generated_at), so rows stay fresh (pace-select reads the real clock) while hours_to_reset and
+# the ordering of seen_at/reset_at are preserved. A fixture frozen at a calendar date goes stale on its own.
+fresh_pace_fixture() {
+  node -e '
+    const fs = require("node:fs");
+    const p = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    const d = Date.now() - Date.parse(p.generated_at);
+    const iso = /^\d{4}-\d\d-\d\dT[\d:.]+Z$/;
+    const shift = (v) => Array.isArray(v) ? v.map(shift)
+      : (v && typeof v === "object") ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, shift(x)]))
+      : (typeof v === "string" && iso.test(v)) ? new Date(Date.parse(v) + d).toISOString() : v;
+    fs.writeFileSync(process.argv[2], JSON.stringify(shift(p)));
+  ' "$1" "$2"
+}
+
 # Put the stdin-transport adapter (lib/agy-stdin-adapter.js) in front of a legacy agy stub that
 # reads its prompt from a `-p <prompt>` argv. Use for stubs that do not go through
 # make_agy_stub_versioned (which already does this). Call after the stub body is complete.

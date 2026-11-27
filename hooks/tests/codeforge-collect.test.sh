@@ -6,6 +6,10 @@ export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests ca
 . "$(dirname "$0")/lib.sh"
 
 unset AUTOPILOT_CODEFORGE_COLLECT
+# Ambient host state must not decide these cases: a token-seat session refuses claude-native
+# spawns, and a host disk sitting at the 20% free floor trips the dispatch disk guard.
+unset AUTOPILOT_TOKEN_SEAT
+export AUTOPILOT_DISK_GUARD_MIN_FREE_PCT=1
 # The runner that launches this file may hold a read-only pipe on fd 3. Close it
 # so a child probe measures the dispatch fd, not that pipe.
 exec 3>&-

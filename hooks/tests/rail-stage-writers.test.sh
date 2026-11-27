@@ -161,7 +161,7 @@ run_hrl() { # extra flags... -> HR_OUT HR_RC HR_ERR
   HR_OUT=$(node "$HRL" collect --implementer-engine claude-sonnet-5 --repo-root "$HR" --ledger "$TEST_TMP/ledger$LEDGER_N" --phase p1 --generation 1 --branch work \
     --phase-base "$HR_BASE" --seats "$SEATS" "$@" 2>"$TEST_TMP/hr-err"); HR_RC=$?; HR_ERR=$(cat "$TEST_TMP/hr-err")
 }
-to_verify() { sm set --size M --repo-root "$MR"; adv --to plan; adv --to implement; adv --to verify; }
+to_verify() { sm set --size M --repo-root "$MR"; adv --to plan; adv --to plan-review; adv --to implement; adv --to verify; }
 
 newsess; to_verify
 run_hrl --allow-seat-gap --min-reviewed-seats 2

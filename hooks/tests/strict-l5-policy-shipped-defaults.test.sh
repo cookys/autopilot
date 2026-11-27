@@ -2,16 +2,15 @@
 # BL-0198: the strict /l5 provider policy (src/readiness/provider-bootstrap.js) must name the
 # models the plugin ships as defaults, read from the shipped sources themselves, never from a
 # literal list in this test:
-#   openai  -> scripts/lib/pace-roles.json pools (the codex pool model). Until PM 01M7AHAM it was the
-#              roster's reviewer_fallback_preference, which no longer names an openai engine (the reviewer
-#              retreat is hydrogen -> grok -> GLM -> agyclaude, never codex); the codex pool is where the shipped
-#              openai model now lives.
+#   openai  -> scripts/resolve-review-loop.sh QC_ALL_CALIBRATED (the gpt entry: the QC seat's model). The codex pool in
+#              pace-roles.json is no longer the source: since the cheap-seat defaults change it names the unpinned
+#              implementer seat (gpt-6.1-terra low), not the strict /l5 QC seat (gpt-6.1-sol max).
 #   xai     -> scripts/resolve-review-loop.sh QC_ALL_CALIBRATED (the grok entry)
 #   minimax -> scripts/resolve-review-loop.sh QC_ALL_CALIBRATED (the MiniMax-M3 review seat)
 #   zhipu   -> references/official-qualification-defaults.json (highest-version GLM engine)
 # Mechanism: the embedded check.js takes the policy file as argv[3]. It extracts the six
 # `model:`/`family:` pairs by regex and compares each to the shipped model for that family
-# (openai/zhipu/xai by lookup above; MiniMax by literal match on the entry `MiniMax-M3` in
+# (openai/xai/minimax from QC_ALL_CALIBRATED, zhipu from the defaults file; MiniMax by literal match on the entry `MiniMax-M3` in
 # QC_ALL_CALIBRATED, so MiniMax-M3.1-* never satisfies a review seat).
 # Negative control: the check is re-run on a copy of provider-bootstrap.js with one model
 # reverted to its pre-2026-10-16 name (GLM-5.2, gpt-5.6-sol, grok-4.5); each must report DRIFT.
@@ -29,7 +28,6 @@ const path = require('path');
 const root = process.argv[2];
 const policyFile = process.argv[3];
 const script = fs.readFileSync(path.join(root, 'scripts/resolve-review-loop.sh'), 'utf8');
-const paceRoles = JSON.parse(fs.readFileSync(path.join(root, 'scripts/lib/pace-roles.json'), 'utf8'));
 const defaults = JSON.parse(fs.readFileSync(path.join(root, 'references/official-qualification-defaults.json'), 'utf8'));
 const shell = (name) => {
   const m = script.match(new RegExp(`^${name}="([^"]*)"`, 'm'));
@@ -41,11 +39,8 @@ const versionKey = (m) => (m.match(/\d+(?:\.\d+)*/) || ['0'])[0].split('.').map(
 const cmp = (a, b) => { for (let i = 0; i < Math.max(a.length, b.length); i += 1) { const d = (a[i] || 0) - (b[i] || 0); if (d) return d; } return 0; };
 const zhipu = [...new Set(defaults.defaults.filter((r) => r.administration.family === 'zhipu').map((r) => r.administration.engine))];
 const newestZhipu = zhipu.sort((a, b) => cmp(versionKey(b), versionKey(a)))[0];
-const codexPools = [...new Set(Object.values(paceRoles.pools || {})
-  .filter((p) => p && p.runner === 'codex' && typeof p.model === 'string').map((p) => p.model))];
-if (codexPools.length !== 1) throw new Error(`pace-roles.json codex pools name ${codexPools.length} models, expected exactly 1`);
 const expected = {
-  openai: codexPools[0],
+  openai: calibrated.find((m) => /^gpt-/.test(m)),
   xai: calibrated.find((m) => /^grok-/.test(m)),
   minimax: calibrated.find((m) => /^MiniMax-M3$/.test(m)),
   zhipu: newestZhipu,

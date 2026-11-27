@@ -410,7 +410,7 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/plan-receipt.js",
-            "timeout": 10,
+            "timeout": 25,
             "onFailure": "continue"
           }
         ]

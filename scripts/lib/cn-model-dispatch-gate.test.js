@@ -1,4 +1,5 @@
 'use strict';
+require('./test-git-env'); // fixture repos must not run the account's global git config
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');

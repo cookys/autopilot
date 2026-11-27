@@ -1,4 +1,5 @@
 'use strict';
+require('./lib/test-git-env'); // fixture repos must not run the account's global git config
 // Run: node --test scripts/check-batch-overlap.test.js
 
 const { test, after } = require('node:test');

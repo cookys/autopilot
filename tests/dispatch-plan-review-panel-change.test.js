@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 'use strict';
+require('../scripts/lib/test-git-env'); // fixture repos must not run the account's global git config
 
 const assert = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');

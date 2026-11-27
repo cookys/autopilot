@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 'use strict';
+require('./lib/test-git-env'); // fixture repos must not run the account's global git config
 // The HTTP/CLI adapter sends each case to a model operator, so the Chinese-model gate
 // (01M83DHGJ4) must apply: restricted operator + unscanned/dirty payload is refused,
 // and a payload with an internal marker never reaches the network.

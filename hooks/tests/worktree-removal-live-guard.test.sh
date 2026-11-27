@@ -544,7 +544,7 @@ _prev_pwd="$PWD"
 cd "$R_LG"
 DISPATCH_HEARTBEAT_SECS=1 bash "$REPO_ROOT/scripts/dispatch-hetero.sh" \
   --no-verify-tip --worktree-parent "$TEST_TMP/lg-detach-wts" --branch feat/detach-lock \
-  --prompt-file "$PROMPT_HET" --agy-bin "$AGY_DETACH_SLOW" \
+  --prompt-file "$PROMPT_HET" --agy-bin "$AGY_DETACH_SLOW" --runner agy --pin-reason "test fixture" \
   --ledger "$LEDGER_LG" --run-id rlock --stage implement \
   < /dev/null > "$TEST_TMP/lg-detach.out" 2> "$TEST_TMP/lg-detach.err" &
 DETACH_WRAPPER_PID=$!

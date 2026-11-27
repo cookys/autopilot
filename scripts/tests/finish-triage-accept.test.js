@@ -232,3 +232,11 @@ test('CLI --accept --json works with fake fleet binary', (t) => {
   assert.equal(parsed.rows.merged.ok, true);
   assert.equal(parsed.rows.live.ok, true);
 });
+
+test('the dispatch template line does not shadow the real receipt lines', () => {
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'plan-to-tasks.js'), 'utf8');
+  const line = src.match(/'(Report \(each on its own line[^']*)'/)[1];
+  for (const key of [/^\s*Target:/m, /^\s*Tests:/m, /^\s*Pinned:/m, /^\s*Pin:/m, /^\s*Used:/m]) {
+    assert.equal(key.test(line), false, String(key));
+  }
+});

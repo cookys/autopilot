@@ -454,6 +454,8 @@ function main() {
         `Role: implementer | Size: ${phase.size} | Needs-Look: ${phase.needsLook}`,
         `Title: ${phase.title}`,
         `Acceptance: ${phase.acceptanceCmd}`,
+        // No line may start with a receipt key: finish-triage reads the first line-start match.
+        'Report (each on its own line, or the receipt is incomplete): "Target: host or env" ; "Tests: count" ; "Pinned: host sha16" or "Pin: not-needed reason of 20+ chars"',
       ].join('\n');
 
       const args = ['dispatch', assigneeFor(phase.id), '--size', phase.size];

@@ -11,10 +11,10 @@ const HOOKS = path.join(__dirname, '..');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'hook-log-'));
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
-function run(hook, payload, logFile) {
-  const home = fs.mkdtempSync(path.join(tmp, 'home-'));
+function run(hook, payload, logFile, home = fs.mkdtempSync(path.join(tmp, 'home-'))) {
   const env = { ...process.env, HOME: home, AUTOPILOT_LIVE_DIR: path.join(home, 'live') };
   delete env.AUTOPILOT_SESSION_ID;
+  delete env.XDG_STATE_HOME;
   if (logFile) env.AUTOPILOT_HOOK_LOG = logFile; else delete env.AUTOPILOT_HOOK_LOG;
   return spawnSync('node', [path.join(HOOKS, hook)], { input: JSON.stringify(payload), env, encoding: 'utf8' });
 }
@@ -69,10 +69,42 @@ test('fleet guard exits non-zero when the log path is unwritable (never silent)'
   assert.match(r.stderr, /hook-log: cannot record/);
 });
 
-test('fleet guard without AUTOPILOT_HOOK_LOG behaves as before', () => {
-  const r = run('fleet-send-work-order-guard.js', workOrder, null);
+test('default-on: no env at all appends one line under the sandbox HOME state dir', () => {
+  const home = fs.mkdtempSync(path.join(tmp, 'home-default-'));
+  const file = path.join(home, '.local', 'state', 'autopilot', 'hook-log.jsonl');
+  assert.ok(!fs.existsSync(file));
+  const r = run('fleet-send-work-order-guard.js', workOrder, null, home);
   assert.strictEqual(r.status, 0);
   assert.match(r.stdout, /deny/);
+  assert.strictEqual(lines(file).length, 1);
+  run('fleet-send-work-order-guard.js', fact, null, home);
+  assert.strictEqual(lines(file).length, 2);
+});
+
+test('default path honours XDG_STATE_HOME', () => {
+  const home = fs.mkdtempSync(path.join(tmp, 'home-xdg-'));
+  const xdg = path.join(home, 'xdg');
+  const r = spawnSync('node', [path.join(HOOKS, 'fleet-send-work-order-guard.js')], {
+    input: JSON.stringify(fact), encoding: 'utf8',
+    env: { ...process.env, HOME: home, XDG_STATE_HOME: xdg, AUTOPILOT_HOOK_LOG: '' },
+  });
+  assert.strictEqual(r.status, 0);
+  assert.strictEqual(lines(path.join(xdg, 'autopilot', 'hook-log.jsonl')).length, 1);
+});
+
+test('AUTOPILOT_HOOK_LOG=off writes nothing', () => {
+  const home = fs.mkdtempSync(path.join(tmp, 'home-off-'));
+  const r = run('fleet-send-work-order-guard.js', workOrder, 'off', home);
+  assert.strictEqual(r.status, 0);
+  assert.ok(!fs.existsSync(path.join(home, '.local')));
+});
+
+test('negative control: default path that cannot be created exits non-zero', () => {
+  const home = fs.mkdtempSync(path.join(tmp, 'home-ro-'));
+  fs.writeFileSync(path.join(home, '.local'), 'a file, so .local/state cannot be created');
+  const r = run('fleet-send-work-order-guard.js', workOrder, null, home);
+  assert.notStrictEqual(r.status, 0);
+  assert.match(r.stderr, /hook-log: cannot record/);
 });
 
 test('depth0 gate logs decisions, and fails loudly on unwritable path', () => {

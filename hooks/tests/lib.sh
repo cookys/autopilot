@@ -14,6 +14,9 @@
 #     touch the user's real state). Hooks read os.homedir() → HOME, so we set
 #     HOME to TEST_TMP for hook invocations via run_hook.
 
+# Tests never write the real state dir: the hook decision log is off in sandboxes.
+export AUTOPILOT_HOOK_LOG=off
+
 set -uo pipefail   # NOT -e — we want to handle assertion failures explicitly
 
 # Environment hygiene (see run.sh): git exports GIT_DIR etc. to hooks, and a

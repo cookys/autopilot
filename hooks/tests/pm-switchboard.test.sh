@@ -25,6 +25,10 @@ mkdir -p "$FAKE_BIN"
 FAKE_CLAUDE_LOG="$TEST_TMP/fake-claude-calls.jsonl"
 export FAKE_CLAUDE_LOG
 export FAKE_CLAUDE_MODE="classify"
+# dispatch-author.sh gates on an open Fleet-Task: give it a stub fleet that reports one open task (never the real fleet).
+printf '#!/bin/sh\necho "{\\"status\\":\\"in_progress\\"}"\n' > "$FAKE_BIN/fleet"
+chmod +x "$FAKE_BIN/fleet"
+export FLEET_BIN="$FAKE_BIN/fleet" AUTOPILOT_FLEET_TASK=01M8F07R5MJDHSPHDQNBJCSTN6
 
 cat > "$FAKE_BIN/claude" <<'EOF'
 #!/usr/bin/env node
@@ -1515,7 +1519,7 @@ assert_neq "$MUT_DONE_OUT" "" "negative control: mutating pm-inbox-done flag gua
 
 rm -f "$MUT_DIR/scripts/pm-switchboard.js" "$MUT_DIR/scripts/lib/pm-inbox-adapter.js"
 cp "$SWITCHBOARD_JS" "$MUT_DIR/scripts/pm-switchboard.js"
-sed_mutant "$ADAPTER_JS" "$MUT_DIR/scripts/lib/pm-inbox-adapter.js" "s/, 3, 'FLEET_REPO_UNSET'/, 2, 'FLEET_REPO_UNSET_MUT'/"
+sed_mutant "$ADAPTER_JS" "$TEST_TMP/adapter-mut1.js" "s/^        3,$/        2,/" && sed_mutant "$TEST_TMP/adapter-mut1.js" "$MUT_DIR/scripts/lib/pm-inbox-adapter.js" "s/^        'FLEET_REPO_UNSET'$/        'FLEET_REPO_UNSET_MUT'/"
 MUT_NOFLEET_OUT="$(env -u AUTOPILOT_FLEET_REPO AUTOPILOT_PM_INBOX_ADAPTER=fleet node "$MUT_DIR/scripts/pm-switchboard.js" run --receipt-dir "$TEST_TMP/r-mut-nofleet" --state-file "$TEST_TMP/s-mut-nofleet.json" < /dev/null 2>&1)"; MUT_NOFLEET_RC=$?
 assert_eq "$MUT_NOFLEET_RC" "2" "negative control: reverting FLEET_REPO_UNSET exit code returns 2 instead of 3"
 assert_not_contains "$MUT_NOFLEET_OUT" "waiting_on fleet 01M7R4FA" "negative control: reverting FLEET_REPO_UNSET drops waiting_on message"

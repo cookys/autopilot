@@ -79,7 +79,7 @@ const scalarInputRecord = buildIntentCaptureRecord({
 assert.equal(scalarInputRecord.last_tool_input_summary, 'ScalarTool:string:literal input');
 
 const base = buildBaseContext();
-assert(base.includes('autopilot:dev-flow'));
+assert(base.includes('lifecycle skills')); // base context was trimmed (36bb05ab5) and no longer names a specific skill
 // RED at 792347b09: buildBaseContext() ended at "runs them standalone." and had no open-decision.js path, no "[待決回覆]", no "show tool", and no "Open decision cards" line when two cards were seeded (assertion "three topics" / "card line" failed: includes() was false).
 const { BASE_AUTOPILOT_CONTEXT } = require(path.join(root, 'src/hooks/handlers/session-start'));
 const fs = require('fs');

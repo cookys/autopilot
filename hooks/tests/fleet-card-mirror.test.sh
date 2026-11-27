@@ -57,14 +57,14 @@ R="$TEST_TMP/repo"; mkdir -p "$R"; $GIT -C "$R" init -q; $GIT -C "$R" commit -q 
 reset_calls() { : > "$STUB/calls.log"; rm -f "$STUB/send-fails" "$STUB/recent-fails"; }
 sends() { grep -c '"args":\["send"' "$STUB/calls.log" | tr -d ' '; }
 open_card() { # <OD script> [env prefix via export] -> OUT=id
-  OUT="$(node "$1" open --category goal --executor ns/cc/exec--claude --cwd "$R" --root-run-id root-t --title '要改嗎' --question "${2:-Which way?}" --option "A::a" --option "B::b" --recommendation A --not-authorized irreversible 2>"$TEST_TMP/err" < /dev/null)"; RC=$?
+  OUT="$(node "$1" open --category goal --executor ns/cc/exec--claude --cwd "$R" --root-run-id root-t --title '要改嗎' --question "${2:-Which way? run-$(date +%s%N)-$RANDOM}" --option "A::a" --option "B::b" --recommendation A --not-authorized irreversible 2>"$TEST_TMP/err" < /dev/null)"; RC=$?
 }
 OD="$S/open-decision.js"
 # build a mutant tree: scripts/ with every file symlinked except <rel> (a copy the sed edits), src symlinked
 MUT="$TEST_TMP/mut"
 mk_mut() { # <rel path under scripts/> <sed cmd> -> $MUT/scripts/<rel> mutated
   local rel="$1" cmd="$2" d
-  rm -rf "$MUT"; mkdir -p "$MUT/scripts"; ln -s "$REPO_ROOT/src" "$MUT/src"
+  rm -rf "$MUT"; mkdir -p "$MUT/scripts"; ln -s "$REPO_ROOT/src" "$MUT/src"; ln -s "$REPO_ROOT/hooks" "$MUT/hooks"
   for f in "$S"/*; do ln -s "$f" "$MUT/scripts/$(basename "$f")"; done
   case "$rel" in
     lib/*) rm "$MUT/scripts/lib"; mkdir -p "$MUT/scripts/lib"; for f in "$S"/lib/*; do ln -s "$f" "$MUT/scripts/lib/$(basename "$f")"; done; rm "$MUT/scripts/$rel" ;;
@@ -83,14 +83,14 @@ assert_eq "$(sends)" 1 "open: one fleet send"
 LINE="$(grep '"args":\["send"' "$STUB/calls.log" | head -1)"
 assert_contains "$LINE" '"example/host-a/pm--claude"' "open: sent to the configured target"
 assert_contains "$LINE" '"fyi":"1"' "open: sent as FYI"
-PARSED="$(node -e 'const n=require(process.argv[1]);const l=JSON.parse(require("fs").readFileSync(process.argv[2],"utf8").split("\n")[0]);const r=n.parse(l.args[2]);process.stdout.write(r.ok?r.notice.event+" "+r.notice.card_id+" "+r.notice.state+" "+r.notice.session:"BAD "+r.reason)' "$S/lib/card-notice.js" "$STUB/calls.log")"
+PARSED="$(node -e 'const n=require(process.argv[1]);const l=JSON.parse(require("fs").readFileSync(process.argv[2],"utf8").split("\n").find(x=>x.includes("\"args\":[\"send\"")));const r=n.parse(l.args[2]);process.stdout.write(r.ok?r.notice.event+" "+r.notice.card_id+" "+r.notice.state+" "+r.notice.session:"BAD "+r.reason)' "$S/lib/card-notice.js" "$STUB/calls.log")"
 assert_eq "$PARSED" "open $ID open FAKE-sess-1" "open: the message parses and carries id, state, session"
 # negative control: without the notify call the same scenario sends nothing
 mk_mut open-decision.js "/notifyPm('open', /d" && { reset_calls; open_card "$MUT/scripts/open-decision.js"; assert_eq "$(sends)" 0 "open mutant (notice dropped): nothing sent, so the check above would be red"; }
 
 # ---- 1a. under the suite environment nothing reaches any fleet, stub or real ----
 reset_calls
-( unset AUTOPILOT_FLEET_BIN; export AUTOPILOT_CARD_NOTIFY=off; open_card "$OD"; node "$OD" close --cwd "$R" --root-run-id root-t --id "$OUT" > /dev/null 2>&1 < /dev/null ); assert_eq "$(sends)" 0 "suite default (AUTOPILOT_CARD_NOTIFY=off, bare fleet on PATH): no send on open or close"
+( unset AUTOPILOT_FLEET_BIN; export AUTOPILOT_CARD_NOTIFY=off; open_card "$OD"; node "$OD" close --cwd "$R" --root-run-id root-t --id "$OUT" --withdraw test --by t > /dev/null 2>&1 < /dev/null ); assert_eq "$(sends)" 0 "suite default (AUTOPILOT_CARD_NOTIFY=off, bare fleet on PATH): no send on open or close"
 reset_calls
 ( unset AUTOPILOT_FLEET_BIN AUTOPILOT_CARD_NOTIFY; export NODE_TEST_CONTEXT=child-v8; node -e 'const r=require(process.argv[1]).notify("open",{card_id:"d-00000001",question:"q",state:"open",session:null});process.stdout.write(r.why)' "$S/lib/card-notice.js" > "$TEST_TMP/nt" ); assert_eq "$(cat "$TEST_TMP/nt")" "node test without a stub" "node:test tree without AUTOPILOT_FLEET_BIN: refuses to send"; assert_eq "$(sends)" 0 "node:test tree: no send"
 assert_eq "$(grep -c 'AUTOPILOT_CARD_NOTIFY=off' "$REPO_ROOT/hooks/tests/lib.sh" | tr -d ' ')" 1 "lib.sh exports AUTOPILOT_CARD_NOTIFY=off for every suite"
@@ -109,7 +109,7 @@ mk_mut lib/card-notice.js "s#NOTIFY_TO || ''#NOTIFY_TO || 'example/fallback/pm--
 
 # ---- 2. close sends; mirror clears; 3. replay does not duplicate ----
 reset_calls; open_card "$OD"; ID2="$OUT"
-node "$OD" close --cwd "$R" --root-run-id root-t --id "$ID2" > /dev/null 2>&1 < /dev/null
+node "$OD" close --cwd "$R" --root-run-id root-t --id "$ID2" --withdraw test --by t > /dev/null 2>&1 < /dev/null
 assert_eq "$(sends)" 2 "close: a second send"
 # turn the stub's sent lines into the messages the PM seat would be handed
 mkrecent() { # <from> -> $STUB/recent.json from calls.log
@@ -138,7 +138,7 @@ mk_mut fleet-card-mirror.js "s/return sameSender(owner, from) ? 'duplicate' : 'r
     node "$MUT/scripts/fleet-card-mirror.js" ingest --json < /dev/null > "$TEST_TMP/mutout" 2>&1 ); assert_contains "$(cat "$TEST_TMP/mutout")" '"accepted":1' "dedup mutant: the re-sent open is accepted again, so the duplicate check above would be red"; }
 # now the close
 CLOSE_LINE="$(grep '"args":\["send"' "$STUB/calls.log" | head -1)"
-reset_calls; node "$OD" close --cwd "$R" --root-run-id root-t --id "$ID3" > /dev/null 2>&1 < /dev/null
+reset_calls; node "$OD" close --cwd "$R" --root-run-id root-t --id "$ID3" --withdraw test --by t > /dev/null 2>&1 < /dev/null
 assert_eq "$(sends)" 1 "close: sent"
 mkrecent "$FROM"; sed -i 's/01FAKE000001/01FAKEB00001/' "$STUB/recent.json"
 R4="$(ing)"; assert_contains "$R4" '"accepted":1' "close accepted"

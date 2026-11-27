@@ -96,7 +96,9 @@ LONG_BODY="$(node -e "process.stdout.write('x'.repeat(12050))")"
 HASH=$(write_handoff_state "$REPO_DEFAULT" "$LONG_BODY" "s-long" "$(node -e 'process.stdout.write(new Date().toISOString())')")
 run_hook "$HOOK" "{\"reason\":\"clear\",\"cwd\":\"$REPO_DEFAULT\",\"source\":\"clear\"}"
 CTX=$(extract_context "$__RUN_STDOUT")
-CTX_LEN=${#CTX}
+# The fleet pm resume block is appended after the cap (hooks/session-start.js), so the cap is measured without it.
+CAPPED="${CTX%%$'\n\n[fleet pm resume]'*}"
+CTX_LEN=${#CAPPED}
 if [ "$CTX_LEN" -ge 10000 ]; then
   fail "cap: additionalContext should be < 10000 chars, got $CTX_LEN"
 else

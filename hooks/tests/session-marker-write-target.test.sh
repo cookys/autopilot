@@ -267,6 +267,15 @@ eq "1" "$(grep 'AUTOPILOT_SESSION_ID' "$REPO_ROOT/hooks/tests/lib.sh" | grep -cE
 eq "1" "$(awk '/^scrub_session_env\(\)/{f=1} f&&/unset .*AUTOPILOT_SESSION_ID/{n++} f&&/^}/{f=0} END{print n+0}' "$REPO_ROOT/hooks/tests/lib.sh")" "(i) the lib.sh unset line sits inside the scrub_session_env function body"
 eq "1" "$(grep -c 'AUTOPILOT_SESSION_ID' "$REPO_ROOT/hooks/tests/lib/hook-output-audit.js")" "(i) hook-output-audit.js names AUTOPILOT_SESSION_ID exactly once"
 eq "1" "$(grep 'AUTOPILOT_SESSION_ID' "$REPO_ROOT/hooks/tests/lib/hook-output-audit.js" | grep -cE '^[[:space:]]*delete env\.AUTOPILOT_SESSION_ID;')" "(i) that single hook-output-audit.js line is the env delete itself (a read elsewhere turns this red)"
+# RED before these pins: (i) no unreviewed reader ... got 'hooks/lib/ask-guard.js scripts/pm-switchboard.js scripts/runner-smoke.js scripts/work-order-adopt.js '
+eq "1" "$(grep -c 'AUTOPILOT_SESSION_ID' "$REPO_ROOT/scripts/pm-switchboard.js")" "(i) pm-switchboard.js names AUTOPILOT_SESSION_ID exactly once"
+eq "1" "$(grep 'AUTOPILOT_SESSION_ID' "$REPO_ROOT/scripts/pm-switchboard.js" | grep -cE '^[[:space:]]*delete childEnv\.AUTOPILOT_SESSION_ID;')" "(i) that single pm-switchboard.js line is the child-env delete itself (a read elsewhere turns this red)"
+eq "2" "$(grep -c 'AUTOPILOT_SESSION_ID' "$REPO_ROOT/scripts/runner-smoke.js")" "(i) runner-smoke.js names AUTOPILOT_SESSION_ID exactly twice"
+eq "2" "$(grep 'AUTOPILOT_SESSION_ID' "$REPO_ROOT/scripts/runner-smoke.js" | grep -cE '^[[:space:]]*delete env\.AUTOPILOT_SESSION_ID;')" "(i) both runner-smoke.js sites are env deletes (a read elsewhere turns this red)"
+eq "1" "$(grep -c 'AUTOPILOT_SESSION_ID' "$REPO_ROOT/scripts/work-order-adopt.js")" "(i) work-order-adopt.js names AUTOPILOT_SESSION_ID exactly once"
+eq "1" "$(grep 'AUTOPILOT_SESSION_ID' "$REPO_ROOT/scripts/work-order-adopt.js" | grep -cE '^[[:space:]]*childEnv\.AUTOPILOT_SESSION_ID = target\.id;')" "(i) that single work-order-adopt.js line is the child-env assignment (a read turns this red)"
+eq "1" "$(grep -c 'AUTOPILOT_SESSION_ID' "$REPO_ROOT/hooks/lib/ask-guard.js")" "(i) ask-guard.js names AUTOPILOT_SESSION_ID exactly once"
+eq "1" "$(grep 'AUTOPILOT_SESSION_ID' "$REPO_ROOT/hooks/lib/ask-guard.js" | grep -cE 'sessionId \|\| e\.AUTOPILOT_SESSION_ID \|\| e\.CLAUDE_CODE_SESSION_ID')" "(i) that single ask-guard.js read keeps the chain sessionId, AUTOPILOT_SESSION_ID, CLAUDE_CODE_SESSION_ID"
 # every other reader must treat it as an optional fallback after payload / CLAUDE_CODE_SESSION_ID (or be a scrub)
 unknown="$(cd "$REPO_ROOT" && for f in $readers; do
   case "$f" in
@@ -277,6 +286,9 @@ unknown="$(cd "$REPO_ROOT" && for f in $readers; do
     scripts/benchmark-hook-latency.js) ;;  # scrub: deletes it from the spawned hook env (pinned scrub-only above)
     hooks/tests/lib/hook-output-audit.js) ;;  # scrub: deletes it from the spawned hook env (pinned scrub-only above)
     hooks/tests/lib.sh) ;;  # scrub: scrub_session_env unsets it (pinned scrub-only above)
+    hooks/lib/ask-guard.js) ;;  # optional fallback, after the explicit sessionId and before CLAUDE_CODE_SESSION_ID (pinned above)
+    scripts/pm-switchboard.js|scripts/runner-smoke.js) ;;  # scrub: deletes it from the child env (pinned scrub-only above)
+    scripts/work-order-adopt.js) ;;  # write only: sets it on the adopted child's env (pinned write-only above)
     scripts/scaffold-mission.js) ;;                                             # prose: "never AUTOPILOT_SESSION_ID"
     scripts/open-decision.js|scripts/task-card.js) ;;                           # campaign intake: chain continues to CLAUDE_CODE_SESSION_ID
     hooks/run-approval-gate.js|hooks/foreman-guard.js) ;;    # payload.session_id first, fallback only

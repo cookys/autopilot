@@ -78,6 +78,8 @@ function runGuard(guardScript, payload, { home, cfgPath, envExtra = {} }) {
     AUTOPILOT_CONFIG_FILE: cfgPath,
     ...envExtra,
   };
+  // The suite asserts the missing-Fleet-Task denial: never inherit the caller's task id.
+  if (!('AUTOPILOT_FLEET_TASK' in envExtra)) delete env.AUTOPILOT_FLEET_TASK;
   if (!('AUTOPILOT_HOOK_PM_DISPATCH_PLAN_GUARD' in envExtra)) {
     delete env.AUTOPILOT_HOOK_PM_DISPATCH_PLAN_GUARD;
   }
@@ -370,7 +372,8 @@ test('pm-console fleet address identifies the PM and gates Agent briefs', () => 
     assert.equal(missing.stderr, '');
     assert.equal(probe('', fx.pmRepo).stdout, 'true');
     const payload = { tool_name: 'Agent', cwd: fx.nonProgramRepo, tool_input: { model: 'sonnet', prompt: 'Engine: sonnet\nDo work.' } };
-    for (const [address, denied] of [['x/y/pm--claude', true], ['x/y/autopilot--claude', false]]) {
+    // Since ptt-p4b (8ae92c425) the Fleet-Task gate applies to every seat, not only the PM console.
+    for (const [address, denied] of [['x/y/pm--claude', true], ['x/y/autopilot--claude', true]]) {
       const res = runGuard(path.join(__dirname, 'dispatch-model-guard.js'), payload, { ...fx, envExtra: { FLEET_ADDRESS: address, AUTOPILOT_FLEET_ADDRESS: '', CLAUDE_CODE_SESSION_ID: '', AUTOPILOT_MECHANICAL_REROUTE: 'off' } });
       assert.equal(res.stdout.includes('Fleet-Task:'), denied, address);
     }

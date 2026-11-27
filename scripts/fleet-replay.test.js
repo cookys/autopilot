@@ -493,7 +493,8 @@ test('guard mode: PM chat/dispatch work orders denied vs allowed, non-PM/other k
       message_id: 'g-a2',
       kind: 'chat',
       fyi: true,
-      body: 'FYI 請做參考即可（無 no-task 標記且 fyi=true）',
+      // fyi=true exempts a pure fact only; an imperative ("請做...") under fyi is still a work order.
+      body: 'FYI 參考即可，主線狀態已同步（fyi=true，無指令）',
       seen_at: '2026-11-18T10:05:00Z',
     },
     {

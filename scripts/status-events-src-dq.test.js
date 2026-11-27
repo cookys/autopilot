@@ -326,7 +326,9 @@ test('degrade-qc-no-repo-info: a project with neither root nor identity degrades
 
 const homePath = ['', 'home', 'alice', 'work', 'repo'].join('/');
 const mail = ['alice', 'corp.invalid'].join('@');
-const hosts = JSON.parse(fs.readFileSync(path.join(__dirname, 'lib', 'leak-guard-hosts.json'), 'utf8'));
+const hostsFile = path.join(__dirname, 'lib', 'leak-guard-hosts.example.json'); // the real hosts file is host-local and absent from the repo
+process.env.AUTOPILOT_LEAK_GUARD_HOSTS = hostsFile;
+const hosts = JSON.parse(fs.readFileSync(hostsFile, 'utf8'));
 const strongHost = hosts.strong[0];
 // token shapes the personal-data layer alone does NOT cover (so the token layer is load-bearing)
 const jwt = ['eyJhbGciOiJIUzI1NiJ9', 'eyJzdWIiOiIxMjM0NTY3ODkwIn0', 'c2lnbmF0dXJlLWJ5dGVz'].join('.');

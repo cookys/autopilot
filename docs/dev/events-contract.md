@@ -276,6 +276,10 @@ tempdir) is `<sha>`. Optional fields the source does not hold are omitted.
         "model": "gpt-fx-1",
         "branch": "dispatch/fx-done",
         "base_sha": "576de6de3fd53f2b783385fbee0744fe92051d53",
+        "fleet_task": null,
+        "pool": null,
+        "commit": null,
+        "lane": null,
         "depth": 0,
         "timeout_seconds": 600
       }
@@ -385,6 +389,10 @@ tempdir) is `<sha>`. Optional fields the source does not hold are omitted.
     "model": "gpt-fx-1",
     "branch": "dispatch/fx-done",
     "base_sha": "576de6de3fd53f2b783385fbee0744fe92051d53",
+    "fleet_task": null,
+    "pool": null,
+    "commit": null,
+    "lane": null,
     "depth": 0,
     "timeout_seconds": 600
   }
@@ -409,7 +417,11 @@ tempdir) is `<sha>`. Optional fields the source does not hold are omitted.
     "duration_s": 900,
     "role": "implementer",
     "runner": "codex",
-    "model": "gpt-fx-1"
+    "model": "gpt-fx-1",
+    "fleet_task": null,
+    "pool": null,
+    "commit": null,
+    "lane": null
   }
 }
 ```

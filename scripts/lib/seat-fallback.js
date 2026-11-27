@@ -259,11 +259,7 @@ function reviewerFallbackPlan(opts = {}) {
     if (matchesFailedSeat(rung, opts)) continue;
     if (rung.family !== 'unknown' && forbidden.has(rung.family)) continue;
     const inferred = cnFamilyOf(rung.runner, rung.model, rung.endpoint || '');
-    const barred = BARRED_FAMILIES.includes(inferred) || BARRED_FAMILIES.includes(rung.family);
-    // AUTOPILOT_KIMI_LOCAL_ALLOW=1 is the test seam that re-admits the local Kimi CLI.
-    // Stopped Kimi never reaches here (normalizeRung). Every other barred family stays barred.
-    const localKimi = rung.runner === 'kimi' && process.env.AUTOPILOT_KIMI_LOCAL_ALLOW === '1';
-    if (barred && !localKimi) continue;
+    if (BARRED_FAMILIES.includes(inferred) || BARRED_FAMILIES.includes(rung.family)) continue;
     eligible.push(rung);
   }
   const lowKeys = readLowKeys(opts, roles || {}, poolsDoc);

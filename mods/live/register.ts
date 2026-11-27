@@ -44,7 +44,7 @@ import type { T } from './i18n'
 import { atom, read, update } from 'claude-code'
 import type { AdvisoryTracker } from './advisories'
 import { GLYPHS } from '../tux/glyphs.ts'
-import { DISMISS_PRESS, forgeBar, forgeFit, LOOK_PRESS, SHOW_PRESS, showTarget, stateOf } from './ui'
+import { DISMISS_PRESS, drawSeg, forgeBar, forgeFit, LOOK_PRESS, SHOW_PRESS, showTarget, stateOf } from './ui'
 import type { ForgeSegment } from './ui'
 import { cardSentenceOf } from './cardtitle'
 import { NO_BATCH, actionable, answerPlan, answerOf, batchSync, cardKey, draftOf, focusRepair, inputsFor, noteKey, optKey, submitSuccessor } from './decidebatch'
@@ -3096,7 +3096,7 @@ function buildAskTree(el: Parameters<typeof stackRows>[0], rows: Parameters<type
     children: askRows.map((row, y) => el.Box({
       key: keyPrefix + '-row-' + y,
       flexShrink: 0,
-      children: row.map((s, i) => el.Text({ key: 's' + i, ...(s.color === undefined ? {} : { color: s.color }), wrap: 'truncate', children: s.text })),
+      children: row.map((s, i) => el.Text({ key: 's' + i, ...drawSeg(s), wrap: 'truncate', children: s.text })),
     })),
   })
 }

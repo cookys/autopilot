@@ -1330,6 +1330,9 @@ export type SlotId = 'verdict' | 'fleet' | 'position' | 'unit' | 'dispatch' | 'r
 // tag: which part the width table may drop or shorten (age, k/N, 族, the bar, the stage text). fleet* tags are the one-line band's own drops (layoutBandLine).
 export type SegTag = 'age' | 'kn' | 'fam' | 'bar' | 'stage' | 'live' | 'stalled' | 'chip' | 'wt' | 'walk' | 'dot' | 'reason' | 'round' | 'qc' | 'amt' | 'pct' | 'bar10' | 'bar5' | 'bar3' | 'qx' | 'fleetWord' | 'fleetRun' | 'fleetWait' | 'fleetStuck'
 export type Seg = { text: string; color?: ThemeKey; bold?: boolean; dim?: boolean; tag?: SegTag; slot?: SlotId; role?: SegRole; here?: boolean; fmt?: FmtKind; fact?: FactId; press?: string; href?: string } // slot: set by layoutBand on the band line (the Button it presses); a separator has none
+
+// The collapsed band's needs-you words (reminder, unanswered count): default colour, bold; the yellow stays on the mark before them.
+export const bandWords = (text: string): Seg => ({ text, bold: true })
 export type Slot = { id: SlotId; segs: Seg[] }
 
 // displayWidth / cellWidth live in ui.ts (the design system owns the width rules); displayWidth is re-exported for the band and the tests.

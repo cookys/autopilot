@@ -317,17 +317,18 @@ test('L8 control: a prose segment painted with a literal key is reported, a role
   assert.deepEqual(L8("// the 'warning' key\nconst a = 1"), [])
 })
 
-// L9: bold is a whitelist. The band draws bold in exactly one place (the verdict word); the pane's bold segments live in ui.ts only (the I4 invariant checks what is drawn).
+// L9: bold is a whitelist. The band draws bold in the verdict word and the collapsed band's needs-you words (bandWords, PM ruling 01M85TGX639); the pane's bold segments live in ui.ts only (the I4 invariant checks what is drawn).
 const BOLD_PROP = /\bbold\s*:/
-test('L9: the band source (model.ts) is bold only on the verdict slot (plus the legacy PaneLine bold passthrough); tabs.ts, pane.tsx and band.tsx never set bold (L1)', () => {
+test('L9: the band source (model.ts) is bold only on the needs-you words and the verdict slot (plus the legacy PaneLine bold passthrough); tabs.ts, pane.tsx and band.tsx never set bold (L1)', () => {
   const hit = hits(read('model.ts'), BOLD_PROP)
-  assert.equal(hit.length, 2, JSON.stringify(hit))
-  assert.match(hit[0], /v\.mark \+ ' ' \+ v\.word/)
-  assert.match(hit[1], /const base: Seg\[\]/)
+  assert.equal(hit.length, 3, JSON.stringify(hit))
+  assert.match(hit[0], /const bandWords/)
+  assert.match(hit[1], /v\.mark \+ ' ' \+ v\.word/)
+  assert.match(hit[2], /const base: Seg\[\]/)
 })
 test('L9 control: a second bold in the band source is reported', () => {
   const planted = read('model.ts').replace("sp(m.stage, { color: PALETTE.here,", "sp(m.stage, { color: PALETTE.here, bold: true,")
-  assert.equal(hits(planted, BOLD_PROP).length, 3)
+  assert.equal(hits(planted, BOLD_PROP).length, 4)
 })
 
 test('L2: outside tux/glyphs.ts no mod source file carries a glyph; glyphs come from GLYPHS', () => {

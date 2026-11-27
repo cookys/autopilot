@@ -1,6 +1,6 @@
 // mods/live/band-onerow.ts — single-row band layout (2026-11-23-band-layout v4, Fleet-Task 01M837HGTX).
 // Pure: no JSX, no engine calls, erasable TypeScript syntax with `.ts` imports so `node --test` can load it directly.
-// Colours use PALETTE roles only (no theme-key literals, no bold, no glyph literals outside GLYPHS).
+// Colours use PALETTE roles only (no theme-key literals, bold only on the reminder words, no glyph literals outside GLYPHS).
 //
 // Glyph usage table (disambiguated from fold marker ▸):
 //   ▸ (U+25B8, GLYPHS.structure.folded) — folded section / disclosure toggle ONLY (ui.ts, band.tsx, pages/help.ts)
@@ -11,6 +11,7 @@ import { GLYPHS } from '../tux/glyphs.ts'
 import { PALETTE } from '../tux/palette.ts'
 import type { ThemeKey } from '../tux/palette.ts'
 import { cellWidth, displayWidth } from '../tux/width.ts'
+import { bandWords } from './model.ts'
 import type { Seg } from './model.ts'
 import type { T } from './i18n.ts'
 import type { PageId } from './pages/frame.ts'
@@ -339,6 +340,15 @@ function buildToggle(expanded: boolean, maxCols: number, t: T): { segs: Seg[]; w
   return { segs: [{ text: arrow, color: PALETTE.action }], width: displayWidth(arrow), expanded }
 }
 
+// Yellow stays on the lead mark only; the words are default bold, so they read on every theme
+// (`warning` is ~2.1 on white under light-daltonized).
+function reminderSegs(text: string, color: ThemeKey | undefined): Seg[] {
+  if (color === PALETTE.attention && text.startsWith(REMIND_LEAD)) {
+    return [{ text: REMIND_LEAD, color }, bandWords(text.slice(REMIND_LEAD.length))]
+  }
+  return [{ text, ...(color !== undefined ? { color } : {}) }]
+}
+
 function buildReminderRaw(inp: OneRowInput, t: T): { text: string; idle: boolean; stale: boolean; color?: ThemeKey } {
   const raw = inp.reminder.text?.trim() ?? ''
   const dataNormal = inp.reminder.state === 'normal' && inp.pend.state === 'normal'
@@ -455,7 +465,7 @@ export function layoutOneRowBand(inp: OneRowInput, bodyColumns: number, t: T): O
   const remText = formatRemText(remRaw.text, finalRemW, remRaw.stale)
   const remind: OneRowSegment = {
     id: 'remind',
-    segs: remText === '' ? [] : [{ text: remText, ...(remRaw.color !== undefined ? { color: remRaw.color } : {}) }],
+    segs: remText === '' ? [] : reminderSegs(remText, remRaw.color),
     width: displayWidth(remText),
     clickable: !remRaw.idle && finalRemW > 0,
     page: bandSlotPage('remind', remRaw.idle),

@@ -1,6 +1,6 @@
 import type { AskRow } from './v74/feeds'
 import type { Seg } from './model'
-import { displayWidth, truncateToWidth } from './model'
+import { bandWords, displayWidth, truncateToWidth } from './model'
 import type { Row } from './pages/rows'
 import { PALETTE } from '../tux/palette.ts'
 
@@ -80,7 +80,8 @@ export function askBandRows(rows: AskRow[], cols: number, _nowMs: number): Row[]
 
   const row1: Row = [
     { text: '我問：' },
-    { text: `${unanswered} 未答`, color: PALETTE.attention },
+    ...(unanswered > 0 ? [{ text: '\u2023 ', color: PALETTE.attention }] : []),
+    unanswered > 0 ? bandWords(`${unanswered} 未答`) : { text: `${unanswered} 未答` },
     { text: ` ｜ ${latestTime} ${latest.status} ${latestAsk}` },
   ]
 

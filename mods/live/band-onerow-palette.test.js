@@ -135,7 +135,7 @@ test('palette 2: every band segment across normal/alert/stale/missing/idle maps 
   // Exhaustive matrix of (segment, state, segs, expected ThemeKey set)
   const rows = [
     ['remind', 'normal', segBy(layNormal, 'remind').segs, ['default']],
-    ['remind', 'alert(rec)', segBy(layAlert, 'remind').segs, [P.attention]],
+    ['remind', 'alert(rec)', segBy(layAlert, 'remind').segs, [P.attention, 'default']],
     ['remind', 'stale', segBy(layStale, 'remind').segs, [P.idle]],
     ['remind', 'missing', segBy(layMissing, 'remind').segs, [P.idle]],
     ['remind', 'idle(0 pend)', segBy(layIdle, 'remind').segs, [P.idle]],

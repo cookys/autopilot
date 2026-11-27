@@ -223,27 +223,33 @@ test('lane: wo_size=M plan-first refuses without receipt, refuses dirty --plan, 
     assert.equal(m0.wo_plan, 'plan-first');
     assert.equal(m0.wo_state, 'resolved');
 
-    // Enter plan
-    const rPlan = sb.sa(sid, ['--to', 'plan', '--repo-root', sb.repo]);
-    assert.equal(rPlan.status, 0, rPlan.stderr);
+    // Walk plan -> plan-review
+    for (const node of ['plan', 'plan-review']) {
+      const r = sb.sa(sid, ['--to', node, '--repo-root', sb.repo]);
+      assert.equal(r.status, 0, `advance to ${node}: ${r.stderr}`);
+    }
+    const assertGateRefusal = (r, code) => {
+      assert.equal(r.status, 5, `${r.stdout} ${r.stderr}`);
+      assert.equal(JSON.parse(r.stdout).code, code);
+    };
 
     // No receipt -> --to implement refused
     const rNoReceipt = sb.sa(sid, ['--to', 'implement', '--repo-root', sb.repo]);
-    assert.notEqual(rNoReceipt.status, 0);
+    assertGateRefusal(rNoReceipt, 'PLAN_RECEIPT_REQUIRED');
 
     // Uncommitted plan file -> --plan refused
     const planRel = 'docs/plans/m-plan.md';
     fs.mkdirSync(path.join(sb.repo, 'docs', 'plans'), { recursive: true });
     fs.writeFileSync(path.join(sb.repo, planRel), '# Plan M\n');
     const rUntracked = sb.sa(sid, ['--to', 'implement', '--plan', planRel, '--repo-root', sb.repo]);
-    assert.notEqual(rUntracked.status, 0);
+    assertGateRefusal(rUntracked, 'PLAN_RECEIPT_INVALID');
 
     // Commit then dirty -> --plan refused
     git(sb.repo, ['add', planRel]);
     git(sb.repo, ['commit', '-q', '-m', 'add m-plan']);
     fs.appendFileSync(path.join(sb.repo, planRel), 'dirty edit\n');
     const rDirty = sb.sa(sid, ['--to', 'implement', '--plan', planRel, '--repo-root', sb.repo]);
-    assert.notEqual(rDirty.status, 0);
+    assertGateRefusal(rDirty, 'PLAN_RECEIPT_INVALID');
 
     // Restore clean -> --plan succeeds
     git(sb.repo, ['checkout', '--', planRel]);
@@ -258,7 +264,7 @@ test('lane: wo_size=M plan-first refuses without receipt, refuses dirty --plan, 
     const broken = { ...m1, plan_receipt: { ...m1.plan_receipt, blob_sha: '0'.repeat(40) } };
     fs.writeFileSync(path.join(sb.markerDir, `${sid}.json`), JSON.stringify(broken, null, 2));
     const rBlobGone = sb.sa(sid, ['--to', 'implement', '--repo-root', sb.repo]);
-    assert.notEqual(rBlobGone.status, 0);
+    assertGateRefusal(rBlobGone, 'PLAN_BLOB_MISSING');
   } finally {
     sb.cleanup();
   }
@@ -284,6 +290,7 @@ test('lane: Plan: path@sha derives receipt at set --fleet-task and rejects unres
     assert.equal(m1.plan_receipt.plan_sha256, sha256Hex(fs.readFileSync(path.join(sb.repo, planRel))));
 
     assert.equal(sb.sa(sid1, ['--to', 'plan', '--repo-root', sb.repo]).status, 0);
+    assert.equal(sb.sa(sid1, ['--to', 'plan-review', '--repo-root', sb.repo]).status, 0);
     const rImpl = sb.sa(sid1, ['--to', 'implement', '--repo-root', sb.repo]);
     assert.equal(rImpl.status, 0, rImpl.stderr);
 
@@ -295,7 +302,8 @@ test('lane: Plan: path@sha derives receipt at set --fleet-task and rejects unres
     const m2 = sb.assertSchemaValid(sid2);
     assert.equal(m2.wo_state, 'unresolved');
     assert.equal(sb.sa(sid2, ['--to', 'plan', '--repo-root', sb.repo]).status, 0);
-    assert.notEqual(sb.sa(sid2, ['--to', 'implement', '--repo-root', sb.repo]).status, 0);
+    assert.equal(sb.sa(sid2, ['--to', 'plan-review', '--repo-root', sb.repo]).status, 0);
+    assert.equal(sb.sa(sid2, ['--to', 'implement', '--repo-root', sb.repo]).status, 5);
   } finally {
     sb.cleanup();
   }
@@ -390,6 +398,7 @@ test('lane: fetch outage preserves prior resolved M, outage with nothing resolve
     sb.setTaskFixture('T_OUT_M', 'Size: M\nPlan: plan-first');
     assert.equal(sb.sm(sid1, ['set', '--fleet-task', 'T_OUT_M', '--repo-root', sb.repo]).status, 0);
     assert.equal(sb.sa(sid1, ['--to', 'plan', '--repo-root', sb.repo]).status, 0);
+    assert.equal(sb.sa(sid1, ['--to', 'plan-review', '--repo-root', sb.repo]).status, 0);
 
     const rOutageKeep = sb.sm(sid1, ['set', '--fleet-task', 'T_OUT_M', '--refresh', '--repo-root', sb.repo], {
       FLEET_TEST_OUTAGE: '1',
@@ -398,7 +407,7 @@ test('lane: fetch outage preserves prior resolved M, outage with nothing resolve
     const m1 = sb.assertSchemaValid(sid1);
     assert.equal(m1.wo_state, 'resolved');
     assert.equal(m1.wo_size, 'M');
-    assert.notEqual(sb.sa(sid1, ['--to', 'implement', '--repo-root', sb.repo]).status, 0);
+    assert.equal(sb.sa(sid1, ['--to', 'implement', '--repo-root', sb.repo]).status, 5);
 
     // Case B: outage with nothing resolved -> unresolved + stderr line + refused
     const sid2 = sb.newSession();
@@ -462,6 +471,8 @@ test('lane: same-task init refresh preserves implement stage and plan-first rece
     assert.equal(attached.status, 0, attached.stderr);
     const planned = sb.sa(sid, ['--to', 'plan', '--repo-root', sb.repo]);
     assert.equal(planned.status, 0, planned.stderr);
+    const reviewed = sb.sa(sid, ['--to', 'plan-review', '--repo-root', sb.repo]);
+    assert.equal(reviewed.status, 0, reviewed.stderr);
 
     const planRel = 'docs/plans/refresh.md';
     fs.mkdirSync(path.join(sb.repo, 'docs', 'plans'), { recursive: true });
@@ -588,8 +599,8 @@ test('lane: set --level preserves fleet_task_id, wo_*, plan_receipt and enforces
       assert.equal(rAttach.status, 0, rAttach.stderr);
       const before = sb.assertSchemaValid(sid);
 
-      // M starts at plan; L starts at intent and requires plan-review before implement.
-      const nodes = size === 'M' ? ['plan', 'implement'] : ['intent', 'proposal', 'plan'];
+      // M walks plan -> plan-review -> implement; L starts at intent and requires plan-review before implement.
+      const nodes = size === 'M' ? ['plan', 'plan-review', 'implement'] : ['intent', 'proposal', 'plan'];
       const rEntry = sb.sa(sid, ['--to', nodes[0], '--repo-root', sb.repo]);
       assert.equal(rEntry.status, 0, `--to ${nodes[0]} should pass before set --level: ${rEntry.stdout} ${rEntry.stderr}`);
 

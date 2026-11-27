@@ -50,6 +50,10 @@ export AUTOPILOT_CARD_NOTIFY=off
 # The post-compaction handoff runs `fleet tasks` and reads capacity's AR file unless this is off; no suite may reach the real fleet by accident.
 # A suite that tests the Fleet State block re-exports it as on with a stub AUTOPILOT_FLEET_BIN.
 export AUTOPILOT_CHECKPOINT_FLEET=off
+# fleet-task-ref.js checks a Fleet-Task id with `$FLEET_BIN task show`. On a host with a real fleet that says not_found for a fixture id
+# (or for any id once a suite swaps HOME/XDG_RUNTIME_DIR); with no binary it is "unavailable" and fails open. Suites run hermetic: point it at
+# nothing. A suite that tests the check or the progress lines exports its own stub FLEET_BIN.
+export FLEET_BIN="${FLEET_BIN:-/nonexistent/fleet-not-for-tests}"
 
 # Fake-runner prompt + nonce-frame helpers (generic over AUTOPILOT-REVIEW /
 # AUTOPILOT-AUTHOR). Lifted from hooks/tests/dispatch-review-{a,b,c}.test.sh so consumer
@@ -182,12 +186,22 @@ cat > "$FLEET_SENTINEL_DIR/fleet" <<'SH'
 #!/usr/bin/env bash
 case "$1" in
   send|dispatch|reply) printf '%s %s\n' "$1" "$2" >> "$(dirname "$0")/outbound"; printf '{"ok":true,"member":"%s","message_id":"01SENTINEL"}\n' "$2"; exit 0;;
+  event) cat >/dev/null; exit 0;;
   --help) printf 'fleet\n\nUSAGE:\n  fleet send x\n'; exit 1;;
   *) exit 1;;
 esac
 SH
 chmod +x "$FLEET_SENTINEL_DIR/fleet"
 export PATH="$FLEET_SENTINEL_DIR:$PATH"
+# dispatch-hetero refuses (disk-guard) below 20% free on the worktree filesystem; a suite result must not depend on how full this host disk is.
+# A suite that tests the guard exports its own AUTOPILOT_DISK_GUARD_FAKE_STATFS.
+if [ -z "${AUTOPILOT_DISK_GUARD_FAKE_STATFS:-}" ]; then printf '{"free_pct":50}\n' > "$TEST_TMP/disk-guard-fake-statfs.json"; export AUTOPILOT_DISK_GUARD_FAKE_STATFS="$TEST_TMP/disk-guard-fake-statfs.json"; fi
+# A token-seat host session (AUTOPILOT_TOKEN_SEAT=1) makes every claude-spawning rail refuse without an OAuth token; a suite result must not
+# depend on the host seat. A suite that tests the seat guard sets the variable itself after this line.
+unset AUTOPILOT_TOKEN_SEAT
+# dispatch-hetero's Fleet-Task precondition rejects a run with no task id; a suite result must not depend on whether the host session exported one.
+# The sentinel fleet above answers the open-check as unavailable (fail-open). A suite that tests the gate unsets/overrides this itself.
+export AUTOPILOT_FLEET_TASK=01ARZ3NDEKTSV4RRFFQ69G5FAV
 # The foreman exam keeps a durable anti-rerun log; a test must never write the real one.
 export AUTOPILOT_FOREMAN_EVIDENCE_DIR="$TEST_TMP/foreman-evidence"
 # G37: a wired claude caller (dispatch-*, probe-*, qc-panel, eval runners ...) goes through the account layer when a

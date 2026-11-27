@@ -54,8 +54,8 @@ cleanup_lease_server() {
 trap cleanup_lease_server EXIT
 for _i in 1 2 3 4 5 6 7 8 9 10; do [ -s "$LEASE_PORT_FILE" ] && break; sleep 0.1; done
 LEASE_PORT="$(cat "$LEASE_PORT_FILE")"
-export AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL="http://127.0.0.1:${LEASE_PORT}/v1"
-export AUTOPILOT_ENDPOINT_GLM_LOCAL_URL="http://127.0.0.1:${LEASE_PORT}/v1"
+export AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL="http://127.0.0.1:${LEASE_PORT}"
+export AUTOPILOT_ENDPOINT_GLM_LOCAL_URL="http://127.0.0.1:${LEASE_PORT}"
 export AUTOPILOT_ENDPOINT_GLM_LOCAL_TOKEN=fake-test-token
 mkdir -p "$AUTOPILOT_SESSION_MODE_DIR" "$TEST_TMP/bin"
 unset AUTOPILOT_QUALIFICATION_OVERRIDE AUTOPILOT_DISPATCH_ROLE AUTOPILOT_TASK_CLASS 2>/dev/null || true
@@ -394,7 +394,8 @@ OUT="$(cd "$SBX" && env PATH="$TEST_TMP/bin:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="
 EXIT=$?
 ELAPSED_MS=$((($(date +%s%N) - START_NS) / 1000000))
 assert_eq "0" "$EXIT" "f1: granted lease command substitution succeeds"
-[ "$ELAPSED_MS" -lt 4000 ] && _f1_fast=true || _f1_fast=false
+# The point is returning well before the 18 s lease TTL; a full dispatch round takes ~4 s here.
+[ "$ELAPSED_MS" -lt 8000 ] && _f1_fast=true || _f1_fast=false
 assert_eq "true" "$_f1_fast" "f1: command substitution returns promptly after worker (${ELAPSED_MS}ms)"
 wait "$SLEEP_PID_WATCHER" 2>/dev/null || true
 F1_SLEEP_PID="$(cat "$SLEEP_PID_CAPTURE" 2>/dev/null || true)"

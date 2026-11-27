@@ -140,7 +140,9 @@ assert_manifest_tip() {
     const m = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
     const tip = process.argv[2] === "null" ? null : process.argv[2];
     const src = process.argv[3] === "null" ? null : process.argv[3];
-    const text = fs.readFileSync(process.argv[1], "utf8");
+    // target_precommit legitimately carries its own {status,hook,rc,tail}; the check is that tip_verify never copies a command tail.
+    const { target_precommit: _tp, ...rest } = m;
+    const text = JSON.stringify(rest);
     function die(code, msg) { process.stderr.write(msg + "\n"); process.exit(code); }
     if (!Object.prototype.hasOwnProperty.call(m, "tip_verify")) die(1, "missing tip_verify");
     if (!Object.prototype.hasOwnProperty.call(m, "tip_verify_source")) die(2, "missing tip_verify_source");

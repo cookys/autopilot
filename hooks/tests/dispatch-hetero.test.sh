@@ -11,10 +11,12 @@
 #   (d) timeout/non-zero + none  → QUESTION_SUSPECTED (status question_suspected, exit 1)
 . "$(dirname "$0")/lib.sh"
 install_cli_sentinels
+# pace-select's grok liveness probe would spawn the PATH `grok` (the sentinel above) from a dispatch that pins no pace; keep it off.
+export AUTOPILOT_GROK_PROBE=off
 # Ambient mission harness env must not poison hermetic unit tests.
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
   AUTOPILOT_PARENT_RUN_ID AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID \
-  AUTOPILOT_DISPATCH_DEPTH AUTOPILOT_FLEET_TASK AUTOPILOT_UPSTREAM_TASK_ID 2>/dev/null || true
+  AUTOPILOT_DISPATCH_DEPTH AUTOPILOT_UPSTREAM_TASK_ID 2>/dev/null || true
 # Harness GIT_CONFIG_COUNT protocol.*=never overrides repo-level protocol.file.allow
 # and makes 22b/22m control pushes fail closed (exit 128 / helper never invoked).
 unset GIT_CONFIG_COUNT GIT_ALLOW_PROTOCOL
@@ -558,7 +560,7 @@ OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/partial-lease --prom
   --agy-bin "$STUB_OK" --keep-worktree --retain-owner test-campaign \
   --retain-reason integration-test 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "partial keep lease rejects before runner spend"
-PARTIAL_JSON="$(printf '%s\n' "$OUT" | tail -n 1)"
+PARTIAL_JSON="$(printf '%s\n' "$OUT" | grep '^{' | tail -n 1)"
 assert_eq "null" "$(node -e \
   'process.stdout.write(String(JSON.parse(process.argv[1]).retention_lease))' \
   "$PARTIAL_JSON")" "partial keep lease emits parseable null retention metadata"
@@ -928,12 +930,12 @@ assert_contains "$OUT" "engine unavailable (quota_exhausted)" "quota failure err
 # runner/model/effort/endpoint tuple (passive capture now binds effort + endpoint:null).
 assert_file_exists "$CAP_TEST_DIR/capability.jsonl" "capability store contains recorded event"
 recorded_status="$(node "$REPO_ROOT/scripts/engine-capability-state.js" current \
-  --runner agy --pin-reason "test fixture" --model "gpt-5.5" --role implementer --effort xhigh --endpoint @none \
+  --runner agy --model "gpt-5.5" --role implementer --effort xhigh --endpoint @none \
   --store "$CAP_TEST_DIR" | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0, 'utf8')).capability.quota.status)")"
 assert_eq "$recorded_status" "exhausted" "recorded quota status is exhausted"
 # Legacy/neighboring lookup without the exact effort must not inherit the observation.
 legacy_status="$(node "$REPO_ROOT/scripts/engine-capability-state.js" current \
-  --runner agy --pin-reason "test fixture" --model "gpt-5.5" --role implementer --store "$CAP_TEST_DIR" \
+  --runner agy --model "gpt-5.5" --role implementer --store "$CAP_TEST_DIR" \
   | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0, 'utf8')).capability.quota.status)")"
 assert_neq "$legacy_status" "exhausted" "legacy incomplete observation does not authorize exact-tuple exhaustion"
 
@@ -2235,21 +2237,21 @@ git -C "$BARE" update-ref -d refs/tags/hands-tag; git -C "$SBX" tag -d hands-tag
 git -C "$SBX" worktree remove --force "$T22B_WT" 2>/dev/null || true
 
 # 22c. Main checkout mutated: the stub reaches across to the main checkout and moves a
-#      remote-tracking ref (the shape a push from the worktree leaves behind).
+#      non-remote ref (refs/remotes/** is excluded from the fingerprint on purpose: a concurrent fetch adds it).
 STUB_MAIN="$TEST_TMP/agy-main"
 cat > "$STUB_MAIN" <<'EOF'
 #!/usr/bin/env bash
 echo ok > ok.txt
 git add ok.txt
 git -c user.email=t@t -c user.name=t commit -q -m "hands: reaches main"
-git -C "$MAIN_SBX" update-ref refs/remotes/origin/planted "$(git rev-parse HEAD)"
+git -C "$MAIN_SBX" update-ref refs/autopilot-test/planted "$(git rev-parse HEAD)"
 "$AGY_FIXTURE_HELPER" "self-report: DONE"
 EOF
 chmod +x "$STUB_MAIN"; make_agy_stub_versioned "$STUB_MAIN"
 OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --no-verify-tip --branch t22c --prompt-file "$PROMPT" --agy-bin "$STUB_MAIN" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "22c main checkout mutated: exit 1"
 assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22c: boundary_code main_checkout_mutated"
-git -C "$SBX" update-ref -d refs/remotes/origin/planted 2>/dev/null || true
+git -C "$SBX" update-ref -d refs/autopilot-test/planted 2>/dev/null || true
 
 # 22f. Content gate fires on a DIRTY committed round too (review, 2026-09-13): the stub
 #      commits the symlink AND leaves an uncommitted file. Precedence: unsafe content beats
@@ -2549,14 +2551,14 @@ STUB_BOTH="$TEST_TMP/agy-both"
 cat > "$STUB_BOTH" <<'EOF'
 #!/usr/bin/env bash
 echo ok > ok.txt; ln -s /tmp/elsewhere .venv; git add -A; git -c user.email=t@t -c user.name=t commit -q -m "hands"
-git -C "$MAIN_SBX" update-ref refs/remotes/origin/planted2 "$(git rev-parse HEAD)"
+git -C "$MAIN_SBX" update-ref refs/autopilot-test/planted2 "$(git rev-parse HEAD)"
 "$AGY_FIXTURE_HELPER" "self-report: DONE"
 EOF
 chmod +x "$STUB_BOTH"; make_agy_stub_versioned "$STUB_BOTH"
 OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --no-verify-tip --branch t22o --prompt-file "$PROMPT" --agy-bin "$STUB_BOTH" 2>&1)"; EXIT=$?
 assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22o: main-checkout code takes precedence"
 assert_contains "$OUT" 'ALSO boundary_rejected: unsafe commit content' "22o: …and the content verdict is carried too"
-git -C "$SBX" update-ref -d refs/remotes/origin/planted2 2>/dev/null || true
+git -C "$SBX" update-ref -d refs/autopilot-test/planted2 2>/dev/null || true
 
 # 22p. Installing a hook into the shared .git (round 7): administrative surface, not a file
 #      the walk sees. Must reject.
@@ -2728,7 +2730,7 @@ EOF
 chmod +x "$STUB_CC_ARGV"
 mkdir -p "$TEST_TMP/hetero-cc-bin"
 ln -sf "$STUB_CC_ARGV" "$TEST_TMP/hetero-cc-bin/claude"
-export AUTOPILOT_ENDPOINT_TESTEP_URL="http://127.0.0.1:9/v1"
+export AUTOPILOT_ENDPOINT_TESTEP_URL="http://127.0.0.1:9"
 export AUTOPILOT_ENDPOINT_TESTEP_TOKEN="t"
 OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-cc-bin:$PATH" \
   "$SCRIPT" --no-verify-tip --runner cc-shim --pin-reason "test fixture" --model mini --endpoint TESTEP --branch feat/cc-argv --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
@@ -3172,7 +3174,7 @@ assert_eq "$HT_TASK_ID" "$(cat "$HT_ENV_LOG" 2>/dev/null)" "hetero exports AUTOP
 
 # (b) No task id writes no progress line
 rm -f "$HT_FLEET_LOG"
-OUT="$(cd "$SBX" && env -u AUTOPILOT_FLEET_TASK -u AUTOPILOT_UPSTREAM_TASK_ID FLEET_BIN="$HT_FLEET_STUB" \
+OUT="$(cd "$SBX" && env -u AUTOPILOT_FLEET_TASK -u AUTOPILOT_UPSTREAM_TASK_ID AUTOPILOT_DISPATCH_ROLE=probe-fixture FLEET_BIN="$HT_FLEET_STUB" \
   AUTOPILOT_DISPATCH_USAGE=off DISPATCH_QUIET=1 \
   "$SCRIPT" --no-verify-tip --runner grok --pin-reason "test fixture" --model grok-4.5 --effort high --grok-bin "$HT_GROK_STUB" \
   --run-id ht-prog-none --branch feat/ht-prog-none --prompt-file "$PROMPT" 2>"$TEST_TMP/ht-prog-none.err")"; EXIT=$?

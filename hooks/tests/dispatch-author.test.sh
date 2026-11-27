@@ -1091,7 +1091,7 @@ OUT="$(env -u AUTOPILOT_FLEET_TASK -u AUTOPILOT_UPSTREAM_TASK_ID PATH="$AU_PATH_
 assert_eq "0" "$EXIT" "author PM missing FLEET_BIN fails open (exit 0)"
 
 OUT="$(env -u AUTOPILOT_FLEET_TASK -u AUTOPILOT_UPSTREAM_TASK_ID PATH="$AU_PATH_BIN:$PATH" FLEET_BIN="$AU_FLEET_OPEN" AUTOPILOT_DISPATCH_USAGE=off DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --repo-root "$AU_NON_PM_REPO" 2>&1)"; EXIT=$?
-assert_eq "0" "$EXIT" "author non-PM console without id exits 0"
+assert_eq "2" "$EXIT" "author non-PM console without id exits 2 (the Fleet-Task gate is repo-agnostic since feat/ptt-p4b)"
 
 # Exemptions: --bin stub, engine-qualify role, AUTOPILOT_PARENT_RUN_ID inheritance
 OUT="$(env -u AUTOPILOT_FLEET_TASK -u AUTOPILOT_UPSTREAM_TASK_ID FLEET_BIN="$AU_FLEET_DONE" AUTOPILOT_DISPATCH_USAGE=off DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --repo-root "$AU_PM_REPO" --bin "$STUB_COD" 2>&1)"; EXIT=$?

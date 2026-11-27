@@ -25,9 +25,9 @@ unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID AUTOPI
   AUTOPILOT_FLEET_GATEWAY_ENDPOINTS 2>/dev/null || true
 # S2 round 2: named endpoints the X-Fleet-Task cases dispatch to (TESTEP/qwen_local are the
 # allowlisted gateways; glm is the cloud-looking non-gateway), plus the allowlist setting.
-export AUTOPILOT_ENDPOINT_TESTEP_URL="http://127.0.0.1:9/v1"
+export AUTOPILOT_ENDPOINT_TESTEP_URL="http://127.0.0.1:9"
 export AUTOPILOT_ENDPOINT_TESTEP_TOKEN="t"
-export AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL="http://127.0.0.1:9/v1"
+export AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL="http://127.0.0.1:9"
 export AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN="t"
 export AUTOPILOT_ENDPOINT_GLM_URL="https://api.z.ai/api/anthropic"
 export AUTOPILOT_ENDPOINT_GLM_TOKEN="t"

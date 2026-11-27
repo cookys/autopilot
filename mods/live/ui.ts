@@ -1110,8 +1110,11 @@ export const INACTIVE_256 = '#767676'
 // the mod has no `process`: register.ts reads COLORTERM once at session.start through `$.env.get` and hands the answer to setTruecolor
 let truecolor = true // until session.start has read COLORTERM the theme keys stand (tests and any host that never asks)
 export const setTruecolor = (on: boolean): void => { truecolor = on }
-// true = keep the theme keys: COLORTERM says truecolor, or TERM is unset (no terminal to characterise: a test host, a pipe)
-export const isTruecolorValue = (colorterm: string | undefined, term?: string): boolean => /^(truecolor|24bit)$/i.test(colorterm ?? '') || (term ?? '') === ''
+// true = keep the theme keys: TERM is unset (no terminal to characterise: a test host, a pipe), or COLORTERM says truecolor and nothing hints that CC quantizes anyway.
+// CC drops to 256 colours under tmux and on *-256color terminals that keep COLORTERM=truecolor (codeforge probe 2026-11-28: COLORTERM=truecolor TERM=xterm-256color, theme keys drawn as 174/241).
+// The swap is contrast-safe on both themes, so a wrong 256 guess on a real truecolor terminal costs a slightly different grey, a wrong truecolor guess costs unreadable text: lean to 256.
+export const isTruecolorValue = (colorterm: string | undefined, term?: string, tmux?: string): boolean =>
+  (term ?? '') === '' || (/^(truecolor|24bit)$/i.test(colorterm ?? '') && !/256color/i.test(term ?? '') && (tmux ?? '') === '')
 export const is256 = (): boolean => !truecolor
 export const ink = (key: ThemeKey | undefined): string | undefined =>
   key === undefined || !is256() ? key : key === PALETTE.here ? CLAUDE_256 : key === PALETTE.idle ? INACTIVE_256 : key

@@ -14,7 +14,7 @@ install_cli_sentinels
 # Ambient mission harness env must not poison hermetic unit tests.
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
   AUTOPILOT_PARENT_RUN_ID AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID \
-  AUTOPILOT_DISPATCH_DEPTH AUTOPILOT_FLEET_TASK AUTOPILOT_UPSTREAM_TASK_ID 2>/dev/null || true
+  AUTOPILOT_DISPATCH_DEPTH AUTOPILOT_UPSTREAM_TASK_ID 2>/dev/null || true
 # Harness GIT_CONFIG_COUNT protocol.*=never overrides repo-level protocol.file.allow
 # and makes 22b/22m control pushes fail closed (exit 128 / helper never invoked).
 unset GIT_CONFIG_COUNT GIT_ALLOW_PROTOCOL
@@ -2728,7 +2728,7 @@ EOF
 chmod +x "$STUB_CC_ARGV"
 mkdir -p "$TEST_TMP/hetero-cc-bin"
 ln -sf "$STUB_CC_ARGV" "$TEST_TMP/hetero-cc-bin/claude"
-export AUTOPILOT_ENDPOINT_TESTEP_URL="http://127.0.0.1:9/v1"
+export AUTOPILOT_ENDPOINT_TESTEP_URL="http://127.0.0.1:9"
 export AUTOPILOT_ENDPOINT_TESTEP_TOKEN="t"
 OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-cc-bin:$PATH" \
   "$SCRIPT" --no-verify-tip --runner cc-shim --pin-reason "test fixture" --model mini --endpoint TESTEP --branch feat/cc-argv --prompt-file "$PROMPT" 2>&1)"; EXIT=$?

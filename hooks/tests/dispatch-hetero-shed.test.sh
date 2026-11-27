@@ -170,14 +170,14 @@ assert_contains "$ENDPOINT_OUT" 'precondition_failed' 'endpoint-only invocation 
 assert_eq "" "$(cat "$TEST_TMP/shed-calls")" 'explicit endpoint bypasses shed routing'
 assert_eq "" "$(cat "$TEST_TMP/slot-calls")" 'explicit endpoint takes no local slot or lease'
 
-# Explicit --runner auto is still a caller pin and must not enter shed routing.
+# An explicit runner (not `auto`, which names no seat and lets pace choose) is a caller pin and must not enter shed routing.
 : > "$TEST_TMP/slot-calls"
-PINNED_RESULT="$(run_pinned_case explicit-auto --runner auto)"
+PINNED_RESULT="$(run_pinned_case explicit-runner --runner grok)"
 PINNED_JSON="$(printf '%s\n' "$PINNED_RESULT" | sed -n '1p')"
 PINNED_MF="$(printf '%s\n' "$PINNED_RESULT" | sed -n '2p')"
-"$REAL_NODE" -e 'const o=JSON.parse(process.argv[1]);if(o.runner!=="grok"||o.model!=="grok-4.7"||o.shed!==null)process.exit(1)' "$PINNED_JSON" || fail 'explicit auto resolves normally without shed routing'
-"$REAL_NODE" -e 'const o=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));if(o.runner!=="grok"||o.model!=="grok-4.7"||o.shed!==null)process.exit(1)' "$PINNED_MF" || fail 'explicit auto manifest records normal runner/model'
-assert_eq "" "$(cat "$TEST_TMP/slot-calls")" 'explicit auto takes no local slot or lease'
+"$REAL_NODE" -e 'const o=JSON.parse(process.argv[1]);if(o.runner!=="grok"||o.model!=="grok-4.7"||o.shed!==null)process.exit(1)' "$PINNED_JSON" || fail 'explicit runner resolves normally without shed routing'
+"$REAL_NODE" -e 'const o=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));if(o.runner!=="grok"||o.model!=="grok-4.7"||o.shed!==null)process.exit(1)' "$PINNED_MF" || fail 'explicit runner manifest records normal runner/model'
+assert_eq "" "$(cat "$TEST_TMP/slot-calls")" 'explicit runner takes no local slot or lease'
 
 # When shed selects local but the stub slot response has no free lease, it falls through to codex.
 : > "$TEST_TMP/slot-calls"

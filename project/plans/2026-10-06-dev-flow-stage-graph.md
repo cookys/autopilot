@@ -93,6 +93,8 @@ None of this is recorded mechanically outside `/l5–/l6` campaigns. Claude-only
 
 ## 2.7 The graph (frozen rules; P0 enumerates every cell into the fixture P1 must reproduce)
 
+2026-11-27: M gains plan-review (owner ruling).
+
 **Base sequences (feature entry):**
 - `XS`: implement → qc-gate → finish
 - `S`: implement → verify → qc-gate → finish

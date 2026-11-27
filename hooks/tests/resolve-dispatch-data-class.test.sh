@@ -119,7 +119,7 @@ process.stdout.write([
   p.seat_preference.join(","),
 ].join("|"));
 ' "$POLICY")"
-assert_eq "$SHAPE" "allow|anthropic,openai,google,xai|zhipu,moonshot,minimax,alibaba,deepseek,meituan,qoder|haiku,sonnet,grok-4.7,gemini-4-carbon-high,gemini-4-neon-high,gemini-4-hydrogen-high,gpt-6-astra" "policy allowlist, deny_families, seat preference"
+assert_eq "$SHAPE" "allow|anthropic,openai,google,xai|zhipu,moonshot,minimax,alibaba,deepseek,meituan,qoder|glm-5.3,haiku,sonnet,grok-4.7,gemini-4-carbon-high,gemini-4-neon-high,gemini-4-hydrogen-high,gpt-6-astra" "policy allowlist, deny_families, seat preference"
 
 # ④ Negative control. Dropping qwen from deny_names AND adding alibaba to the
 # allowlist makes qwen3-local allowed, so the exit-3 assertion goes red.

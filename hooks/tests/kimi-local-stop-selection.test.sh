@@ -28,7 +28,7 @@ for (const allow of [false, true]) {
   if (allow) process.env.AUTOPILOT_KIMI_LOCAL_ALLOW = '1';
   else delete process.env.AUTOPILOT_KIMI_LOCAL_ALLOW;
   assert.equal(qualifyingEngines(pace, { kimi }).has('kimi'), allow, 'noncq auto eligibility');
-  assert.equal(fallback.reviewerFallbackChain(fallbackOpts)[0].runner, allow ? 'kimi' : 'grok', 'reviewer fallback');
+  assert.equal(fallback.reviewerFallbackChain(fallbackOpts)[0].runner, 'grok', 'reviewer fallback never offers a CN-operator rung (cn gate), allow or not');
   assert.equal(fallback.implementerFallbackChain(fallbackOpts)[0].runner, allow ? 'kimi' : 'grok', 'implementer fallback');
   const skips = topology.findUnknownRungs(cached, topology.knownRunnerSet(), {});
   assert.equal(skips.length, allow ? 1 : topology.RUNG_LISTS.length, 'cached topology checks each transport');

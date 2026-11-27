@@ -184,7 +184,7 @@ assert_exit_code "$?" "0" "provenance and qualification assertions"
 # The production selector remains repo-bound: no caller-selected authority path
 # or process override is introduced for this fixture.
 MISSION_FIXTURE_REPO="$TEST_TMP/legacy-mission-repo"
-git clone -q --no-local "$REPO_ROOT" "$MISSION_FIXTURE_REPO"
+git clone -q --shared "$REPO_ROOT" "$MISSION_FIXTURE_REPO"
 materialise_graph_named_paths "$MISSION_FIXTURE_REPO"
 
 # Resolve the current graph through the ordinary production admission path

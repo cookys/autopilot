@@ -11,7 +11,7 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"; cleanup_test_tmp' EXIT
 # Empty GIT_ALLOW_PROTOCOL plus protocol.allow=never (this sandbox) blocks the
 # local --no-local clone. Drop that lockdown for this clone only.
-env -u GIT_ALLOW_PROTOCOL GIT_CONFIG_COUNT=0 git clone -q --no-local "$SOURCE_ROOT" "$TMP/hermetic-repo"
+env -u GIT_ALLOW_PROTOCOL GIT_CONFIG_COUNT=0 git clone -q --shared "$SOURCE_ROOT" "$TMP/hermetic-repo"
 git -C "$SOURCE_ROOT" diff --binary HEAD | git -C "$TMP/hermetic-repo" apply
 REPO_ROOT="$TMP/hermetic-repo"
 # D10.27: the sealed active mission graph still names docs/BACKLOG.md as an output; the copy seeds the old name

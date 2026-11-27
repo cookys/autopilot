@@ -5,7 +5,7 @@ export AUTOPILOT_ACCOUNTS_DIR="$TEST_TMP/no-accounts"
 export CLAUDE_CONFIG_DIR="$TEST_TMP/claude-config"; seed_fake_claude_credentials "$CLAUDE_CONFIG_DIR"
 
 SOURCE_ROOT="$REPO_ROOT"
-git clone -q --no-local "$SOURCE_ROOT" "$TEST_TMP/hermetic-repo"
+git clone -q --shared "$SOURCE_ROOT" "$TEST_TMP/hermetic-repo"
 git -C "$SOURCE_ROOT" diff --binary HEAD | git -C "$TEST_TMP/hermetic-repo" apply
 REPO_ROOT="$TEST_TMP/hermetic-repo"
 # D10.27: the sealed active mission graph still names docs/BACKLOG.md as an output; the copy seeds the old name

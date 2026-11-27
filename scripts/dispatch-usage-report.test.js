@@ -75,6 +75,7 @@ test('reportByRole: groups by role, keeps rows with missing model as unknown, co
     usd: 0.25,
     usd_unknown: 1,
     model_unknown: 1,
+    usd_display: '0.25+待量(1)',
   });
   assert.deepEqual(res.by_role.reviewer, {
     runs: 1,
@@ -84,10 +85,24 @@ test('reportByRole: groups by role, keeps rows with missing model as unknown, co
     usd: 0.1,
     usd_unknown: 0,
     model_unknown: 0,
+    usd_display: 0.1,
   });
 
   const out = path.join(dir, 'role-report.json');
   const cli = spawnSync(process.execPath, [path.join(__dirname, 'dispatch-usage-report.js'), '--by-role', '--since', '7d', '--runs-dir', dir, '--out', out, '--json'], { encoding: 'utf8' });
   assert.equal(cli.status, 0, cli.stderr);
   assert.deepEqual(JSON.parse(cli.stdout), JSON.parse(fs.readFileSync(out, 'utf8')));
+});
+
+test('negative control: rows without role/model/usd show 待量, never a figure', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dur-nc-'));
+  const nowMs = Date.now(); const nowSec = Math.floor(nowMs / 1000);
+  const ym = new Date(nowMs).toISOString().slice(0, 7).replace('-', '');
+  fs.writeFileSync(path.join(dir, `dispatch-usage-${ym}.jsonl`), JSON.stringify({ run_id: 'n1', status: 'committed', started_at: nowSec - 10, ended_at: nowSec - 1 }) + '\n');
+  const res = reportByRole(dir, nowMs, 7);
+  assert.equal(res.totals.usd_display, '待量');
+  assert.equal(res.by_role.unknown.usd_display, '待量');
+  assert.equal(res.by_role.unknown.model_unknown, 1);
+  const cli = spawnSync(process.execPath, [path.join(__dirname, 'dispatch-usage-report.js'), '--by-role', '--runs-dir', dir, '--out', path.join(dir, 'o.json')], { encoding: 'utf8' });
+  assert.match(cli.stdout, /unknown: 1 runs, usd 待量/);
 });

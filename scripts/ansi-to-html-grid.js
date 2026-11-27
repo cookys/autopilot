@@ -66,6 +66,8 @@ function gate(inputText, htmlText) {
     const c=ch.codePointAt(0);
     return sum + ((c>=0x4e00&&c<=0x9fff)||(c>=0x3000&&c<=0x303f)||(c>=0x3040&&c<=0x30ff)||(c>=0xff00&&c<=0xff60)||(c>=0xffe0&&c<=0xffe6)||(c>=0xac00&&c<=0xd7a3) ? 2 : 1);
   },0);
+  // Split layouts: a row may end at the inner divider of two frames. That is fine only when the row above has a vertical bar in the same cell.
+  const barAbove=(i,col) => { let at=0; for (const ch of lines[i-1] ?? '') { at+=independentWidth(ch); if (at===col) return /[│┃║├┤┬┴┼╮╯┐┘]/.test(ch); } return false; };
   for (let i=0;i<Math.max(lines.length,rows.length);i++) {
     const line=lines[i] ?? '';
     const actual=independentWidth(line);
@@ -74,7 +76,7 @@ function gate(inputText, htmlText) {
     if (/[│┃║┐┘┤┓┛┫╮╯╗╝]\s*$/.test(line)) {
       const right=independentWidth(line.trimEnd());
       if (borderWidth===undefined) borderWidth=right;
-      else if (right!==borderWidth) { failures.push({check:'width',rc:4,message:`第 ${i+1} 行寬度不符：${right} / ${borderWidth}`}); break; }
+      else if (right!==borderWidth && !barAbove(i,right)) { failures.push({check:'width',rc:4,message:`第 ${i+1} 行寬度不符：${right} / ${borderWidth}`}); break; }
     }
     if (actual!==expected || !rows[i] || i>=lines.length) { failures.push({check:'width',rc:4,message:`第 ${i+1} 行寬度不符：${actual} / ${expected}`}); break; }
   }

@@ -55,3 +55,10 @@ rule-inventory 把兩個 skill 的每一行 prose 當 rule 清點;改動任何�
 
 驗證:`node scripts/check-hook-inventory.js --check` rc=0、`catalog --check` rc=0、`codex-plugin-package` 綠。
 
+### 經 multiplexer 掛的 opt-in hook(2026-11-27 `plan-gap-hint` 試出)
+
+不改 `hooks/hooks.json`,但 stem 要同時進**兩份** event table:`scripts/check-hook-inventory.js` 與
+`src/engine/profile-payload.js` 的 `MULTIPLEXER_EVENT_TABLE`。漏後者會報
+`PROFILE_HOOK_DRIFT`,只在 `codex-plugin-package` 的 guided payload build 才紅。zh-TW README 另有兩處
+散文數字(「N 個 hook」「N 個 runtime 強制 hook」),`check-readme-parity.js` 會抓。
+

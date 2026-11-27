@@ -16,10 +16,10 @@ PLAN_LOOP_BODY="$(cat "$PLAN_LOOP")"
 
 # Positive control: old/new implementation parity remains an audit trigger.
 assert_contains "$AUDIT_BODY" "Compare two existing implementations" "audit description keeps existing-implementation parity"
-assert_contains "$AUDIT_BODY" "feature parity review between old and new systems" "old/new parity remains an audit trigger"
+assert_contains "$AUDIT_BODY" "verify X matches Y" "old/new parity remains an audit trigger"
 
 # Negative controls: future asset-pipeline/architecture plan critique is not audit.
-assert_contains "$AUDIT_BODY" "future/unimplemented plan readiness" "audit metadata excludes future plans"
+assert_contains "$AUDIT_BODY" "Not for: future plan review" "audit metadata excludes future plans"
 assert_contains "$AUDIT_BODY" "routing_precondition_failed" "audit fails before exploration when target is absent"
 assert_contains "$AUDIT_BODY" "current repository as a whole is not a substitute" "repo root cannot masquerade as future target"
 assert_contains "$ROUTING_BODY" "critique this future plan" "routing table names future-plan prompt"

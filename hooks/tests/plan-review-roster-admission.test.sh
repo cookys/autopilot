@@ -374,9 +374,11 @@ JSON
 SEQ_NC="$(node -e '
 const [r] = process.argv.slice(1);
 process.stdout.write(JSON.stringify({ "auto-fb-architect-1": [{ file: r, classification: "success" }] }));' "$READY")"
+# the Fleet-Task precondition asks the fleet whether the task is open; env -i would reach the real one, so stub it
+printf '#!/bin/sh\necho "{\\"status\\":\\"open\\"}"\n' > "$TEST_TMP/fleet-open"; chmod +x "$TEST_TMP/fleet-open"
 run_pr_nocodex() {  # run_pr_nocodex <ticket> <manifest> <topology> <config> [script]
   local ticket="$1" manifest="$2" topo="$3" cfg="$4" script="${5:-$PR}"
-  env -i AUTOPILOT_TEST_CN_GATE_OFF=1 HOME="$NOCODEX/home" PATH="$NOCODEX/bin:/usr/bin:/bin" \
+  env -i AUTOPILOT_TEST_CN_GATE_OFF=1 AUTOPILOT_FLEET_TASK=01M8F07G74HH0N19TG1BPQPE59 FLEET_BIN="$TEST_TMP/fleet-open" HOME="$NOCODEX/home" PATH="$NOCODEX/bin:/usr/bin:/bin" \
     AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS=1 AUTOPILOT_TOPOLOGY_FILE="$topo" \
     REVIEW_LOOP_CONFIG_OVERRIDE="$cfg" AUTOPILOT_PLAN_REVIEW_RESPONSE_SEQUENCE="$SEQ_NC" \
     AUTOPILOT_STRIKE_WRITER=off ENGINE_CAPABILITY_DIR="$TEST_TMP/nocodex-cap" AUTOPILOT_ACCOUNTS_DIR="$TEST_TMP/nocodex-acc" \

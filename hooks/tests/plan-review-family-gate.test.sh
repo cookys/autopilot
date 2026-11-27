@@ -33,7 +33,7 @@ run_plan() {
       --ticket "$ticket" --session-id "$ticket" --generation 1 --allow-unregistered --no-topology-fallbacks \
       --runner claude-native --model claude-fixture-1 --effort high \
       --deep-runner "$drunner" --deep-model "$dmodel" --deep-effort high \
-      --state-dir "$STATE" "$@" 2>"$TEST_TMP/$ticket.err"
+      --state-dir "$STATE" --allow-same-family "$@" 2>"$TEST_TMP/$ticket.err"
 }
 
 # Mode B receipt check on an artifact held in a variable.

@@ -9,8 +9,8 @@ export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests ca
 
 export HOME="$TEST_TMP/home"; mkdir -p "$HOME"
 export CLAUDE_CONFIG_DIR="$TEST_TMP/claude-config"; mkdir -p "$CLAUDE_CONFIG_DIR"
-export AUTOPILOT_LIVE_DIR="$(mktemp -d -p /dev/shm autopilot-test-dul-XXXXXX)"
-trap 'rm -rf "$AUTOPILOT_LIVE_DIR"; cleanup_test_tmp' EXIT
+export AUTOPILOT_STATE_DIR="$(mktemp -d -p /dev/shm autopilot-test-dul-XXXXXX)"
+trap 'rm -rf "$AUTOPILOT_STATE_DIR"; cleanup_test_tmp' EXIT
 export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session-mode"; mkdir -p "$AUTOPILOT_SESSION_MODE_DIR"
 export ENGINE_CAPABILITY_DIR="$TEST_TMP/engine-capability"; mkdir -p "$ENGINE_CAPABILITY_DIR"
 export DISPATCH_QUIET=1
@@ -24,7 +24,7 @@ unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID AUTOPI
   AUTOPILOT_DISPATCH_USAGE CLAUDE_CODE_SESSION_ID AUTOPILOT_SESSION_ID AUTOPILOT_PARENT_SESSION_ID 2>/dev/null || true
 
 eq() { assert_eq "$2" "$1" "$3"; }
-raw_rows() { cat "$AUTOPILOT_LIVE_DIR"/dispatch-usage-*.jsonl 2>/dev/null; }
+raw_rows() { cat "$AUTOPILOT_STATE_DIR"/dispatch-usage-*.jsonl 2>/dev/null; }
 # rows = what the reader sees: the LAST row per run_id (a start row is replaced by the finished row), file order kept.
 rows() {
   raw_rows | node -e '
@@ -51,7 +51,7 @@ check_start() {
   eq "ok" "$out" "$1: start row then finished row, same run_id and account, final wins"
 }
 
-reset_rows() { rm -f "$AUTOPILOT_LIVE_DIR"/dispatch-usage-*.jsonl; }
+reset_rows() { rm -f "$AUTOPILOT_STATE_DIR"/dispatch-usage-*.jsonl; }
 
 GIT="git -c user.email=t@t -c user.name=t -c init.defaultBranch=develop -c commit.gpgsign=false"
 

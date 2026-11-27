@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 // dispatch_usage/1 writer: normalization, null-not-zero, validation, same-run rows, month file, no token in the file,
-// account mapping. Tempdir only (AUTOPILOT_LIVE_DIR / opts.dir); never the real live dir.
+// account mapping. Tempdir only (AUTOPILOT_STATE_DIR / opts.dir); never the real live dir.
 const test = require('node:test');
 const assert = require('assert');
 const fs = require('fs');
@@ -151,7 +151,7 @@ test('CLI: appends one row, exit 0 even when it cannot write, off switch writes 
   fs.mkdirSync(live, { mode: 0o700 });
   const bin = path.join(dir, 'fleet');
   fs.writeFileSync(bin, '#!/bin/sh\nprintf "address: a/b/c\\nnamespace: nsx\\ncourier: cx\\n"\n', { mode: 0o755 });
-  const env = Object.assign({}, process.env, { AUTOPILOT_LIVE_DIR: live, FLEET_BIN: bin, AUTOPILOT_DISPATCH_LANE: 'lane-x', AUTOPILOT_UPSTREAM_TASK_ID: 't-1' });
+  const env = Object.assign({}, process.env, { AUTOPILOT_STATE_DIR: live, FLEET_BIN: bin, AUTOPILOT_DISPATCH_LANE: 'lane-x', AUTOPILOT_UPSTREAM_TASK_ID: 't-1' });
   delete env.AUTOPILOT_DISPATCH_USAGE;
   const cli = path.join(__dirname, 'dispatch-usage.js');
   const run = (args, e) => spawnSync(process.execPath, [cli, 'append', ...args], { env: e || env, encoding: 'utf8' });
@@ -198,7 +198,7 @@ test('runAppend: codex run gets codex-<hash of CODEX_HOME>, not AUTOPILOT_ACCOUN
   fs.writeFileSync(resFile, JSON.stringify({ runner: 'codex', model: 'm', status: 'committed', run_id: 'rc1' }));
   const bin = path.join(dir, 'fleet');
   fs.writeFileSync(bin, '#!/bin/sh\nprintf "address: a/b/c\\nnamespace: nsx\\ncourier: cx\\n"\n', { mode: 0o755 });
-  const env = Object.assign({}, process.env, { AUTOPILOT_LIVE_DIR: live, FLEET_BIN: bin, AUTOPILOT_ACCOUNT: 'work', HOME: dir, CODEX_HOME: path.join(dir, 'codexhome') });
+  const env = Object.assign({}, process.env, { AUTOPILOT_STATE_DIR: live, FLEET_BIN: bin, AUTOPILOT_ACCOUNT: 'work', HOME: dir, CODEX_HOME: path.join(dir, 'codexhome') });
   fs.mkdirSync(path.join(dir, 'codexhome'));
   delete env.AUTOPILOT_DISPATCH_USAGE;
   const cli = path.join(__dirname, 'dispatch-usage.js');
@@ -232,7 +232,7 @@ function startEnv(dir) {
   const cfg = path.join(dir, 'cfg');
   fs.mkdirSync(cfg);
   fs.writeFileSync(path.join(cfg, '.claude.json'), JSON.stringify({ oauthAccount: { organizationUuid: FIX_ORG, emailAddress: FIX_EMAIL } }));
-  const env = Object.assign({}, process.env, { AUTOPILOT_LIVE_DIR: live, FLEET_BIN: '/bin/false', HOME: dir, CLAUDE_CONFIG_DIR: cfg });
+  const env = Object.assign({}, process.env, { AUTOPILOT_STATE_DIR: live, FLEET_BIN: '/bin/false', HOME: dir, CLAUDE_CONFIG_DIR: cfg });
   delete env.AUTOPILOT_DISPATCH_USAGE;
   delete env.AUTOPILOT_ACCOUNT;
   return { live, cfg, env };

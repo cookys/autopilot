@@ -3,8 +3,8 @@
 // scripts/lib/dispatch-usage.js — the dispatch usage ledger writer (schema dispatch_usage/1).
 //
 // A start row is appended when a dispatch starts (status "running", ended_at null, usage null) and one more row
-// per finished dispatch, to <live_dir>/dispatch-usage-YYYYMM.jsonl (live_dir is resolveLiveDir(), the same base
-// claude-account.js uses; YYYYMM is UTC, taken from started_at so every row of a run lands in one file, from ended_at only
+// per finished dispatch, to <state_dir>/dispatch-usage-YYYYMM.jsonl (state_dir is lib/state-dir.js: AUTOPILOT_STATE_DIR, else
+// $XDG_STATE_HOME/autopilot, else ~/.local/state/autopilot; persistent, never tmpfs; YYYYMM is UTC, taken from started_at so every row of a run lands in one file, from ended_at only
 // when started_at is null). Rows of the same run_id are read by the consumer as "last row wins". Fleet only reads this file.
 // account on every row: lib/account-alias.js (claude family acct-<hash>, codex codex-<hash>, endpoint runners
 // local:<courier> or the endpoint name, other runners the runner name).
@@ -31,7 +31,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { resolveLiveDir } = require('./live-state-dir');
+const { stateDir } = require('./state-dir');
 const { claudeAccount, codexAccount } = require('./account-alias');
 
 const SCHEMA = 'dispatch_usage/1';
@@ -248,12 +248,20 @@ function ledgerFileName(epoch) {
 }
 
 // Append one validated row. Never throws; returns { ok: true, file } or { ok: false, error }.
+// Persistent state dir (lib/state-dir.js). An explicit AUTOPILOT_LIVE_DIR without AUTOPILOT_STATE_DIR is an
+// isolation request (tests and probes pin only that one): honour it, never leak into the real state dir.
+function ledgerDir(env) {
+  if (!env.AUTOPILOT_STATE_DIR && env.AUTOPILOT_LIVE_DIR) return env.AUTOPILOT_LIVE_DIR;
+  return stateDir(env);
+}
+
 function appendRow(row, opts) {
   try {
     const bad = validateRow(row);
     if (bad) return { ok: false, error: bad };
     const o = opts || {};
-    const base = o.dir || resolveLiveDir({ env: o.env || process.env, warn: () => {} }).base;
+    const base = o.dir || ledgerDir(o.env || process.env);
+    if (!o.dir) fs.mkdirSync(base, { recursive: true, mode: 0o700 });
     const file = path.join(base, ledgerFileName(row.started_at !== null ? row.started_at : row.ended_at));
     const fd = fs.openSync(file, fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT, 0o600);
     try {

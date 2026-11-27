@@ -1,0 +1,69 @@
+--- a/scripts/ar_gate.py	2026-11-28 03:42:27.761440925 +0800
++++ b/scripts/ar_gate.py	2026-11-28 03:42:27.761626655 +0800
+@@ -27,7 +27,7 @@
+     """courier/member strings of everyone in the fleet directory"""
+     o = S.fleet_json(['peers', '--json'], '{')
+     return {m['courier'] + '/' + m['member'] for m in o['members']}
+-def evaluate(tasks, now_ms, synthesis=None, peers=None, records=None, lookup=None):
++def evaluate(tasks, now_ms, synthesis=None, peers=None, records=None, lookup=None, ops=None):
+     overdue, unacc, unacc_unv = [], [], []
+     for t in tasks:
+         st = t.get('state')
+@@ -48,7 +48,7 @@
+         pr = parse_synthesis(synthesis); rep['decided_no_task'], rep['closed_still_pending'], rep['other_courier_unverifiable'] = decisions(pr, tasks)
+         rep['done_unverified'] = [{'decision': r['id']} for r in pr if r['unverified']]  # listed, not counted as failure
+     if records is not None:
+-        rep['decided_no_task'] = records_decided_no_task(records)
++        rep['decided_no_task'] = records_decided_no_task(records, ops, lookup)
+         rep['closed_still_pending'], rep['cards_unverifiable'] = cards_pending(records, now_ms, lookup or load_cards().get)
+         rep['no_task_marked'] = sum(1 for r in records if r['kind'] == 'decision' and r['created_ms'] >= MARK_START_MS and r['no_task'])  # listed for PM review, not a failure
+     return rep
+@@ -72,10 +72,32 @@
+                     'source': src, 'cards': re.findall(r'\bcard (d-[0-9a-f]{8})', src),
+                     'task_ids': re.findall(r'(?<![-\w])task:([0-9A-Z]{26})', t), 'no_task': bool(re.search(r'no-task:', t))})
+     return out, ''
+-def records_decided_no_task(recs):
++def read_ops(root):
++    """hippo ops (.hippo/ops/<record ULID>.jsonl, the source of truth; records/*.md is a view of them) -> {record id: [card ids]} from the live tags `key:card:<card id>`.
++    A tag op is {"field": "tags/<tag>", "value": true|false}; ops are replayed in file order so a later false removes the tag. Only tags are read, never bodies. None when root is unset or unreadable."""
++    if not root: return None
++    try: names = sorted(n for n in os.listdir(root) if n.endswith('.jsonl'))
++    except OSError: return None
++    out = {}
++    for n in names:
++        tags = {}
++        try: lines = open(os.path.join(root, n)).read().splitlines()
++        except OSError: continue
++        for l in lines:
++            try: op = json.loads(l)
++            except ValueError: continue
++            f = op.get('field') or ''
++            if f.startswith('tags/key:card:'): tags[f[len('tags/key:card:'):]] = op.get('value') is True
++        out[n[:-6]] = sorted(c for c, on in tags.items() if on)
++    return out
++def ops_handled(r, ops, lookup):
++    """a record is tracked by its card when its ops carry key:card:<id> AND that card is closed in the card store (a tag on an open or unknown card is not enough)"""
++    return any((lookup(c) or {}).get('status') == 'closed' for c in (ops or {}).get(r['id'], []))
++def records_decided_no_task(recs, ops=None, lookup=None):
+     """decision records created after the marker rule began that carry neither task:<ULID> nor no-task:"""
+     return [{'decision': r['id']} for r in recs if r['kind'] == 'decision' and r['created_ms'] >= MARK_START_MS and not r['task_ids'] and not r['no_task']
+-            and not r['cards'] and not r['source'].startswith('history-claim')]  # card-sourced: tracked by card id; history-claim: imported history (PM 01M7FD3X)
++            and not r['cards'] and not r['source'].startswith('history-claim')  # card-sourced: tracked by card id; history-claim: imported history (PM 01M7FD3X)
++            and not ops_handled(r, ops, lookup or load_cards().get)]  # ops tag key:card:<id> on a closed card (--ops)
+ CARDS = '/srv/pm-ro/ledger/decisions'
+ def load_cards(root=CARDS):
+     """PM card store mirror (autopilot.decision/2 files) -> {card id: card}; unreadable dir -> {}"""
+@@ -168,11 +190,11 @@
+             if lane is None or x['lane'] == lane: out.append('%s %s %.1f 天(%s)%s' % (label, x['task_id'], x['days'], x['lane'].split('/')[-1], ' [assignee_gone:承辦者已不在 directory,請 requester 結掉或改派]' if x.get('assignee_gone') else ''))
+     return '[AR 閘] ' + ';'.join(out)
+ def main():
+-    ap = argparse.ArgumentParser(); ap.add_argument('--now-ms', type=int); ap.add_argument('--tasks-file'); ap.add_argument('--records', default=RECORDS); ap.add_argument('--cards', default=CARDS); ap.add_argument('--out', default=os.path.join(R, 'out', 'ar-gate.v1.json')); ap.add_argument('--send', action='store_true')
++    ap = argparse.ArgumentParser(); ap.add_argument('--now-ms', type=int); ap.add_argument('--tasks-file'); ap.add_argument('--records', default=RECORDS); ap.add_argument('--cards', default=CARDS); ap.add_argument('--ops'); ap.add_argument('--out', default=os.path.join(R, 'out', 'ar-gate.v1.json')); ap.add_argument('--send', action='store_true')
+     o = ap.parse_args()
+     now = o.now_ms or int(D.datetime.now().timestamp() * 1000)
+     tasks = json.load(open(o.tasks_file)) if o.tasks_file else S.fleet_json(['tasks', '--all', '--json'], '[')
+-    txt, why = read_ledger(now_ms=now); recs, rwhy = read_records(o.records); rep = evaluate(tasks, now, txt, None if o.tasks_file else peers_set(), recs, load_cards(o.cards).get); rep['ledger_status'] = why or 'ok'; rep['lesson_overdue'], rep['lessons_undated'] = read_lessons(now_ms=now); rep['records_status'] = rwhy or 'ok'; rep['schema'] = 'capacity.ar-gate/1'; rep['generated_at_ms'] = now
++    txt, why = read_ledger(now_ms=now); recs, rwhy = read_records(o.records); rep = evaluate(tasks, now, txt, None if o.tasks_file else peers_set(), recs, load_cards(o.cards).get, read_ops(o.ops)); rep['ledger_status'] = why or 'ok'; rep['lesson_overdue'], rep['lessons_undated'] = read_lessons(now_ms=now); rep['records_status'] = rwhy or 'ok'; rep['schema'] = 'capacity.ar-gate/1'; rep['generated_at_ms'] = now
+     tmp = o.out + '.tmp.%d' % os.getpid(); json.dump(rep, open(tmp, 'w'), ensure_ascii=False, indent=1); os.chmod(tmp, 0o644); os.replace(tmp, o.out)
+     bad = sum(len(rep[k]) for k in ('overdue_open', 'unaccepted', 'decided_no_task', 'closed_still_pending', 'lesson_overdue') if isinstance(rep[k], list))
+     print({k: (len(v) if isinstance(v, list) else v) for k, v in rep.items() if k in ('overdue_open', 'unaccepted', 'decided_no_task', 'closed_still_pending', 'lesson_overdue', 'ledger_status')})

@@ -43,13 +43,19 @@ function withTempRepo(fn) {
     ].join('\n'));
     fs.chmodSync(dispatchStub, 0o755);
 
-    return fn({ dir, baseSha, ledgerDir, dispatchStub });
+    // The Fleet-Task precondition asks the live fleet whether the task is still open; a real id goes
+    // stale once its task closes. A stub fleet binary keeps the test off the real fleet.
+    const fleetStub = path.join(dir, 'fleet-stub.sh');
+    fs.writeFileSync(fleetStub, '#!/usr/bin/env bash\necho \'{"status":"open"}\'\n');
+    fs.chmodSync(fleetStub, 0o755);
+
+    return fn({ dir, baseSha, ledgerDir, dispatchStub, fleetStub });
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 }
 
-function runCollect({ dir, baseSha, ledgerDir, dispatchStub, phase, extraArgs = [] }) {
+function runCollect({ dir, baseSha, ledgerDir, dispatchStub, fleetStub, phase, extraArgs = [] }) {
   return spawnSync(
     process.execPath,
     [
@@ -71,6 +77,7 @@ function runCollect({ dir, baseSha, ledgerDir, dispatchStub, phase, extraArgs = 
       env: {
         ...process.env,
         AUTOPILOT_DISPATCH_REVIEW_SCRIPT: dispatchStub,
+        FLEET_BIN: fleetStub,
       },
     },
   );

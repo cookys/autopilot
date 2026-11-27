@@ -6,7 +6,10 @@ unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
   AUTOPILOT_DISPATCH_DEPTH
 export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session"
 export AUTOPILOT_QUALIFIED_FILE="$TEST_TMP/missing-qualified.json"
-export AUTOPILOT_PACE_FILE="$REPO_ROOT/scripts/fixtures/pace-select/quota-default.json"
+fresh_pace_fixture "$REPO_ROOT/scripts/fixtures/pace-select/quota-default.json" "$TEST_TMP/quota-default.fresh.json"
+export AUTOPILOT_PACE_FILE="$TEST_TMP/quota-default.fresh.json"
+# engine-preflight skips codex without a non-empty auth file; a placeholder keeps the test independent of the host login
+mkdir -p "$TEST_TMP/codex-home"; echo '{}' > "$TEST_TMP/codex-home/auth.json"; export CODEX_HOME="$TEST_TMP/codex-home"
 export DISPATCH_DETACH=0 AUTOPILOT_SETTLE_MS=0
 mkdir -p "$AUTOPILOT_SESSION_MODE_DIR"
 
@@ -44,10 +47,10 @@ run_codex() {
   assert_eq 0 "$code" "$label dispatch exit ($OUT)"
 }
 
-# 1. An unpinned Codex call defaults to high, never xhigh.
+# 1. An unpinned Codex call defaults to low, never xhigh.
 run_codex codex-default --runner codex --model gpt-5.3-codex-spark
 ARGV="$(cat "$CODEX_ARGV")"
-assert_contains "$ARGV" 'model_reasoning_effort="high"' 'case 1: default codex effort is high'
+assert_contains "$ARGV" 'model_reasoning_effort="low"' 'case 1: default codex effort is low (impl default, scorecard event 38)'
 assert_not_contains "$ARGV" 'xhigh' 'case 1: default codex effort excludes xhigh'
 
 # 2. An explicit xhigh request wins over the default cap.
@@ -57,6 +60,6 @@ assert_contains "$(cat "$CODEX_ARGV")" 'model_reasoning_effort="xhigh"' 'case 2:
 # 3. Auto with no named model takes Codex from the pace fixture, then caps effort.
 run_codex codex-auto --runner auto
 assert_contains "$OUT" 'pace: chose codex' 'case 3: pace input selects codex'
-assert_contains "$(cat "$CODEX_ARGV")" 'model_reasoning_effort="high"' 'case 3: auto codex effort is high'
+assert_contains "$(cat "$CODEX_ARGV")" 'model_reasoning_effort="low"' 'case 3: auto codex effort is low'
 
 finalize_test

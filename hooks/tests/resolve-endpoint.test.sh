@@ -181,12 +181,14 @@ assert_exit_code "$ec" 1 "generic-compatible private http stays not-ready (opt-i
 # discarded there). Run the REAL rail from a throwaway repo with a PATH that has no `claude`:
 # the --endpoint block runs before the cc-shim binary precondition, so the notice is printed
 # and the run then fails closed uncharged (no engine is ever spawned).
+# the Fleet-Task precondition runs before the --endpoint block: give the env -i rail an open task via a stub fleet
+DHFLEET="$TEST_TMP/fleet-open"; printf '#!/usr/bin/env bash\necho "{\\"status\\":\\"open\\"}"\n' > "$DHFLEET"; chmod +x "$DHFLEET"
 DHREPO="$(mktemp -d)"; git -C "$DHREPO" init -q; git -C "$DHREPO" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
-dherr="$(cd "$DHREPO" && env -i AUTOPILOT_ACCOUNTS_DIR="${AUTOPILOT_ACCOUNTS_DIR:-$TEST_TMP/no-accounts}" PATH=/usr/bin:/bin HOME="$DHREPO" AUTOPILOT_ENDPOINT_Q_URL=http://10.0.0.2:1 AUTOPILOT_ENDPOINT_Q_TOKEN=t AUTOPILOT_ENDPOINT_Q_TRANSPORT=plaintext-private \
+dherr="$(cd "$DHREPO" && env -i AUTOPILOT_ACCOUNTS_DIR="${AUTOPILOT_ACCOUNTS_DIR:-$TEST_TMP/no-accounts}" PATH=/usr/bin:/bin HOME="$DHREPO" AUTOPILOT_FLEET_TASK=01M8F07G74HH0N19TG1BPQPE59 FLEET_BIN="$DHFLEET" AUTOPILOT_ENDPOINT_Q_URL=http://10.0.0.2:1 AUTOPILOT_ENDPOINT_Q_TOKEN=t AUTOPILOT_ENDPOINT_Q_TRANSPORT=plaintext-private \
   bash "$DH" --runner cc-shim --model m --endpoint q --branch x --prompt-file /dev/null --base HEAD --timeout 1s --context-window off 2>&1 >/dev/null || true)"
 assert_contains "$dherr" 'PLAINTEXT to a private-range address' "dispatch-hetero --endpoint prints the plaintext notice on stderr"
 # ...and DISPATCH_QUIET (which silences operational chatter) must NOT silence the disclosure
-dherrq="$(cd "$DHREPO" && env -i AUTOPILOT_ACCOUNTS_DIR="${AUTOPILOT_ACCOUNTS_DIR:-$TEST_TMP/no-accounts}" PATH=/usr/bin:/bin HOME="$DHREPO" DISPATCH_QUIET=1 AUTOPILOT_ENDPOINT_Q_URL=http://10.0.0.2:1 AUTOPILOT_ENDPOINT_Q_TOKEN=t AUTOPILOT_ENDPOINT_Q_TRANSPORT=plaintext-private \
+dherrq="$(cd "$DHREPO" && env -i AUTOPILOT_ACCOUNTS_DIR="${AUTOPILOT_ACCOUNTS_DIR:-$TEST_TMP/no-accounts}" PATH=/usr/bin:/bin HOME="$DHREPO" AUTOPILOT_FLEET_TASK=01M8F07G74HH0N19TG1BPQPE59 FLEET_BIN="$DHFLEET" DISPATCH_QUIET=1 AUTOPILOT_ENDPOINT_Q_URL=http://10.0.0.2:1 AUTOPILOT_ENDPOINT_Q_TOKEN=t AUTOPILOT_ENDPOINT_Q_TRANSPORT=plaintext-private \
   bash "$DH" --runner cc-shim --model m --endpoint q --branch x --prompt-file /dev/null --base HEAD --timeout 1s --context-window off 2>&1 >/dev/null || true)"
 assert_contains "$dherrq" 'PLAINTEXT to a private-range address' "DISPATCH_QUIET does not silence the plaintext notice"
 assert_not_contains "$dherrq" 'may run for MANY minutes' "DISPATCH_QUIET still silences the operational heads-up"

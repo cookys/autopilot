@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
+# suite-timeout-secs: 900
 # hetero-review-loop.test.sh — contract test for scripts/hetero-review-loop.js
 . "$(dirname "$0")/lib.sh"
+# The Fleet-Task precondition asks the fleet: give every collect an open task through a stub, never the real fleet.
+HRL_DEFAULT_FLEET="$TEST_TMP/hrl-default-fleet"
+printf '#!/bin/sh\necho "{\\"status\\":\\"open\\"}"\n' > "$HRL_DEFAULT_FLEET"; chmod +x "$HRL_DEFAULT_FLEET"
+export FLEET_BIN="$HRL_DEFAULT_FLEET" AUTOPILOT_FLEET_TASK=01M8F07G74HH0N19TG1BPQPE59
 
 SCRIPT="$REPO_ROOT/scripts/hetero-review-loop.js"
 
@@ -2455,9 +2460,9 @@ EV_L5="$TEST_TMP/ev_ledger_ft"
 env -u AUTOPILOT_UPSTREAM_TASK_ID AUTOPILOT_FLEET_TASK="$EV_ULID" bash -c 'cd "$1" && shift && "$@"' _ "$PWD" node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$EV_L5" --phase pft1 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" >/dev/null 2>&1
 assert_eq "$(ev_fleet_task "$EV_L5" pft1)" "\"$EV_ULID\"" "events writer 5: collect with AUTOPILOT_FLEET_TASK records fleet_task in the chain entry"
 env -u AUTOPILOT_FLEET_TASK -u AUTOPILOT_UPSTREAM_TASK_ID node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$EV_L5" --phase pft2 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" >/dev/null 2>&1
-assert_eq "$(ev_fleet_task "$EV_L5" pft2)" "null" "events writer 5: collect without a Fleet task records fleet_task null"
+assert_eq "$(ev_fleet_task "$EV_L5" pft2)" "" "events writer 5: collect without a Fleet task is refused by the precondition before any chain entry (was: records null)"
 env AUTOPILOT_FLEET_TASK="not-a-ulid" node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$EV_L5" --phase pft3 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" >/dev/null 2>&1
-assert_eq "$(ev_fleet_task "$EV_L5" pft3)" "null" "events writer 5: a malformed AUTOPILOT_FLEET_TASK records null"
+assert_eq "$(ev_fleet_task "$EV_L5" pft3)" "" "events writer 5: a malformed AUTOPILOT_FLEET_TASK is refused before any chain entry (was: records null)"
 
 # events writer 4: a relative --ledger is recorded as an absolute path
 EV_REL_OUT=$(cd "$TEST_TMP" && node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger ev_rel_ledger --phase pevrel --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" 2>&1); EV_RC=$?
@@ -3011,7 +3016,7 @@ HRL_L="$TEST_TMP/hrl_pm_ledger"; mkdir -p "$HRL_L"
 HRL_SPEC_WITH_ID="$TEST_TMP/hrl_spec_id.md"
 printf 'Spec\nFleet-Task: %s\n' "$HRL_TASK_ID" > "$HRL_SPEC_WITH_ID"
 
-HRL_OUT=$(AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$HRL_PM_REPO/scripts/dispatch-review.sh" FLEET_BIN="$HRL_FLEET_OPEN" node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$HRL_PM_REPO" --ledger "$HRL_L" --phase p_miss --generation 1 --branch work --phase-base "$HRL_BASE" --seats "gpt-5/low@codex" 2>&1); HRL_RC=$?
+HRL_OUT=$(AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$HRL_PM_REPO/scripts/dispatch-review.sh" env -u AUTOPILOT_FLEET_TASK FLEET_BIN="$HRL_FLEET_OPEN" node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$HRL_PM_REPO" --ledger "$HRL_L" --phase p_miss --generation 1 --branch work --phase-base "$HRL_BASE" --seats "gpt-5/low@codex" 2>&1); HRL_RC=$?
 assert_exit_code "$HRL_RC" "2" "hrl collect PM missing id exits 2"
 assert_file_absent "$HRL_L/review-p_miss/g1" "hrl collect PM missing id creates no generation dir"
 

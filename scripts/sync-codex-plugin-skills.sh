@@ -92,6 +92,13 @@ LIFECYCLE_ADAPTER_DEST="skill-adapters/lifecycle.md"
 
 SCRIPT_EXCLUDES=(
   "install-opencode.sh"
+  # Claude-only tools: they read Claude transcripts or the Claude TUI sources (hooks/*-lib.js, mods/tux), none of which the
+  # Codex package carries, so a mirrored copy fails to load. Excluded rather than half-mirrored.
+  "ansi-to-html-grid.js"
+  "pm-auto-handoff.js"
+  "ticket-claude-usage.js"
+  "wasted-turns-report.js"
+  "wasted-turns-classify.js"
   "sync-opencode-plugin.sh"
   # BL-0383: directory entry docs. They steer sessions working IN this repo; the
   # Codex package and a consumer's plugin cache do not need them, and a copy there

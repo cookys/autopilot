@@ -301,9 +301,9 @@ engine_all "$REPO_ROOT" good
 assert_contains "$E_UNREACH" "calls=2" "cloud-fallback: unreachable endpoint death is dispatched twice"
 assert_contains "$E_UNREACH" "status=committed" "cloud-fallback: the fallback result is the run result"
 # PM 01M7AHAM: the roster's codex rung is ignored; the retreat takes the first pace-roles implementer rung.
-assert_contains "$E_UNREACH" "second_runner=agy second_model=gemini-4-hydrogen-high second_endpoint=false" "cloud-fallback: second dispatch goes to the picker rung (never codex) without --endpoint"
+assert_contains "$E_UNREACH" "second_runner=agy second_model=gemini-4-hydrogen-low second_endpoint=false" "cloud-fallback: second dispatch goes to the picker rung (never codex) without --endpoint"
 assert_contains "$E_UNREACH" "log_rows=1" "cloud-fallback: exactly one log row"
-assert_contains "$E_UNREACH" "log=run-cf-1|cc-shim|gpu1|endpoint_unreachable|gemini-4-hydrogen-high/high@agy|committed|string" "cloud-fallback: log row fields"
+assert_contains "$E_UNREACH" "log=run-cf-1|cc-shim|gpu1|endpoint_unreachable|gemini-4-hydrogen-low/high@agy|committed|string" "cloud-fallback: log row fields"
 assert_contains "$E_BUSY" "calls=2" "cloud-fallback: endpoint_busy (429) also retreats"
 assert_contains "$E_BUSY" "|endpoint_busy|" "cloud-fallback: busy is logged as endpoint_busy"
 assert_contains "$E_ASK" "calls=1" "ask: stops after the endpoint death, no second dispatch"
@@ -479,7 +479,7 @@ I_GOOD="$(ident_case "$REPO_ROOT" good)"
 assert_contains "$I_GOOD" "ids=run-id-1|implement>run-id-1-cloudfb|implement-cloudfb" "fallback gets its own run id and stage suffix"
 assert_contains "$I_GOOD" "branches=impl-branch>impl-branch-cloudfb bases=1111111111111111111111111111111111111111>1111111111111111111111111111111111111111" "fallback branch is -cloudfb off the original base"
 assert_contains "$I_GOOD" "result_branch=impl-branch-cloudfb parent=run-id-1" "result carries the branch actually used and the parent run id"
-# The picker rung (gemini-4-hydrogen-high) is google; the panel is google, so the recompute flips to false.
+# The picker rung (gemini-4-hydrogen-low) is google; the panel is google, so the recompute flips to false.
 assert_contains "$I_GOOD" "family=google cross_family_satisfied=false" "fallback roster takes the rung's family and recomputes cross_family_satisfied"
 assert_contains "$I_GOOD" "row=run-id-1|run-id-1-cloudfb|impl-branch-cloudfb" "log row binds the fallback run id to the original"
 T="$(mk_tree mutI1)"
@@ -536,7 +536,7 @@ esac
 touch cloud_fallback_edit.txt
 EOF
 # PM 01M7AHAM: the roster's codex rung is ignored, so the retreat lands on the first pace-roles
-# implementer rung (gemini-4-hydrogen-high@agy). The agy stub edits the worktree like the codex stub.
+# implementer rung (gemini-4-hydrogen-low@agy). The agy stub edits the worktree like the codex stub.
 cat > "$TEST_TMP/real-bin/agy" <<'EOF'
 #!/usr/bin/env bash
 case "${*}" in

@@ -30,11 +30,11 @@ run_plan() {
 
 run_plan cn-panel kimi kimi-code/kimi-for-coding; EXIT=$?
 assert_exit_code "$EXIT" "2" "panel with a Chinese-family seat exits 2"
-assert_contains "$(cat "$TEST_TMP/cn-panel.err")" "cn_model_dispatch_barred moonshot restricted_operator_unknown_endpoint" "stderr names unresolved endpoint refusal"
+assert_contains "$(cat "$TEST_TMP/cn-panel.err")" "cn_model_dispatch_barred moonshot restricted_operator_not_public_source" "stderr names the restricted-operator refusal"
 assert_contains "$(cat "$TEST_TMP/cn-panel.err")" "kimi/kimi-code/kimi-for-coding" "stderr names the seat's runner/model"
 assert_eq "$(cat "$RECORD")" "" "the barred seat's runner was never spawned"
 
-run_plan clean claude-native claude-fixture-2 >/dev/null; EXIT=$?
+run_plan clean grok grok-4.7 >/dev/null; EXIT=$?
 assert_exit_code "$EXIT" "0" "panel without a Chinese-family seat is unchanged"
 assert_eq "$(grep -c cn_model_dispatch_barred "$TEST_TMP/clean.err")" "0" "clean panel prints no gate line"
 

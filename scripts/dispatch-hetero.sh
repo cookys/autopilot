@@ -3121,7 +3121,7 @@ while [ $# -gt 0 ]; do
       [ $# -ge 2 ] || die_precondition "--pin-reason requires 1..200 characters on one line"
       PIN_REASON="$2"; PIN_REASON_SUPPLIED=1; shift 2 ;;
     --model) MODEL="${2:-}"; MODEL_SUPPLIED=1; MODEL_IS_DEFAULT=0; shift 2 ;;
-    --runner) RUNNER="${2:-}"; RUNNER_SUPPLIED=1; shift 2 ;;
+    --runner) RUNNER="${2:-}"; [ "$RUNNER" = "auto" ] || RUNNER_SUPPLIED=1; shift 2 ;;   # `--runner auto` names no seat: the pool chooses (pace), same as no --runner
     --rc-alarm-label) [ $# -ge 2 ] && [ -n "${2:-}" ] || die_precondition "--rc-alarm-label requires a non-empty label"; RC_ALARM_LABEL="$2"; shift 2 ;;
     --rc-alarm-owner) [ $# -ge 2 ] && [ -n "${2:-}" ] || die_precondition "--rc-alarm-owner requires a non-empty address"; RC_ALARM_OWNER="$2"; shift 2 ;;
     --pace-role)

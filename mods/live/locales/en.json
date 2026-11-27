@@ -1050,6 +1050,8 @@
   "page.spend.meter_evidence": "Evidence: no producer yet (about 11-30)",
   "page.spend.meter_missing": "no source: metering pack missing or unreadable",
   "page.spend.meter_row_wide": "{got}/{expected} missing {missing} · keep {days}d",
+  "page.spend.meter_row_wide_short": "{got}/{expected} missing {missing}",
+  "page.spend.meter_data_time": "Data as of {time}",
   "page.spend.meter_missing_wide": "no source: metering pack unreadable",
   "page.spend.sec_speed": "Seat speed (source: turn.step)",
   "page.spend.speed_none": "no model requests yet (no turn.step samples)",

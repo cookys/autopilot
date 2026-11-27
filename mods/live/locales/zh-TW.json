@@ -1050,6 +1050,8 @@
   "page.spend.meter_evidence": "證據：尚無生產者（約 11-30）",
   "page.spend.meter_missing": "無來源：計量覆蓋檔不存在或讀不了",
   "page.spend.meter_row_wide": "{got}/{expected} 缺 {missing} · 留 {days} 日",
+  "page.spend.meter_row_wide_short": "{got}/{expected} 缺 {missing}",
+  "page.spend.meter_data_time": "資料時間 {time}",
   "page.spend.meter_missing_wide": "無來源：計量覆蓋讀不了",
   "page.spend.sec_speed": "本席速度（來源 turn.step）",
   "page.spend.speed_none": "尚未有模型請求（無 turn.step 計時取樣）",

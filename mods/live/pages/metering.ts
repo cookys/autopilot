@@ -62,8 +62,8 @@ export function parseMeterPack(text: string): MeterPack | null {
       evidenceLines = lines.length
     }
   }
-  const generated = root.generated_at
-  return { generated_at: typeof generated === 'string' ? generated : null, hosts, evidenceLines }
+  const generated = typeof root.generated_at === 'string' ? root.generated_at : typeof top.generated_at === 'string' ? top.generated_at : null
+  return { generated_at: generated, hosts, evidenceLines }
 }
 
 const padR = (text: string, w: number): string => text + ' '.repeat(Math.max(0, w - displayWidth(text)))
@@ -72,16 +72,54 @@ const padR = (text: string, w: number): string => text + ' '.repeat(Math.max(0, 
 // the 計量覆蓋 heading above says what the numbers are). The over-10% row carries `warn`; the band draws it in METER_WARN_COLOR.
 export const METER_WIDE_COLS = 34
 export interface MeterWideRow { text: string; warn: boolean }
-const cutTo = (s: string, cols: number): string => { let out = ''; for (const ch of s) { if (displayWidth(out + ch) > cols) break; out += ch } return out }
 const overWarn = (h: MeterHost): boolean => h.expected > 0 && h.missing / h.expected > WARN_AT
+
+const formatTaipeiTime = (iso: string | null): string => {
+  if (!iso) return '—'
+  const ms = Date.parse(iso)
+  if (!Number.isFinite(ms)) return '—'
+  const d = new Date(ms + 8 * 3600_000)
+  const pad2 = (n: number) => String(n).padStart(2, '0')
+  return `${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`
+}
+
+const wrapCols = (s: string, cols: number): string[] => {
+  if (displayWidth(s) <= cols) return [s]
+  const lines: string[] = []
+  let cur = ''
+  for (const word of s.split(' ')) {
+    if (!cur) {
+      if (displayWidth(word) <= cols) { cur = word; continue }
+    } else if (displayWidth(cur + ' ' + word) <= cols) {
+      cur += ' ' + word
+      continue
+    } else {
+      lines.push(cur)
+      cur = ''
+      if (displayWidth(word) <= cols) { cur = word; continue }
+    }
+    for (const ch of word) {
+      if (displayWidth(cur + ch) > cols && cur) { lines.push(cur); cur = ch } else { cur += ch }
+    }
+  }
+  if (cur) lines.push(cur)
+  return lines
+}
 
 export function meteringWideRows(pack: MeterPack | null, _nowMs: number, t: T): MeterWideRow[] {
   if (pack === null) return [{ text: GLYPHS.state.failed + ' ' + t('page.spend.meter_missing_wide'), warn: false }]
   const out: MeterWideRow[] = [{ text: GLYPHS.structure.open + ' ' + t('page.spend.meter_title'), warn: false }]
-  const bodies = pack.hosts.map(h => (h.no_data ? t('page.spend.meter_nodata') : t('page.spend.meter_row_wide', { got: h.got, expected: h.expected, missing: h.missing, days: h.retention_days })))
-  const nameCols = Math.min(Math.max(0, ...pack.hosts.map(h => displayWidth(h.host))), METER_WIDE_COLS - 1 - Math.max(0, ...bodies.map(b => displayWidth(b))))
-  pack.hosts.forEach((h, i) => out.push({ text: padR(cutTo(h.host, Math.max(1, nameCols)), nameCols) + ' ' + bodies[i], warn: !h.no_data && overWarn(h) }))
-  if (pack.evidenceLines === null || pack.evidenceLines === 0) out.push({ text: t('page.spend.meter_evidence'), warn: false })
+  const nameCols = Math.max(0, ...pack.hosts.map(h => displayWidth(h.host)))
+  const fullBodies = pack.hosts.map(h => (h.no_data ? t('page.spend.meter_nodata') : t('page.spend.meter_row_wide', { got: h.got, expected: h.expected, missing: h.missing, days: h.retention_days })))
+  const tooWide = fullBodies.some(b => nameCols + 1 + displayWidth(b) > METER_WIDE_COLS)
+  const bodies = tooWide
+    ? pack.hosts.map(h => (h.no_data ? t('page.spend.meter_nodata') : t('page.spend.meter_row_wide_short', { got: h.got, expected: h.expected, missing: h.missing })))
+    : fullBodies
+  pack.hosts.forEach((h, i) => out.push({ text: padR(h.host, nameCols) + ' ' + bodies[i], warn: !h.no_data && overWarn(h) }))
+  if (pack.evidenceLines === null || pack.evidenceLines === 0) {
+    for (const line of wrapCols(t('page.spend.meter_evidence'), METER_WIDE_COLS)) out.push({ text: line, warn: false })
+  }
+  out.push({ text: t('page.spend.meter_data_time', { time: formatTaipeiTime(pack.generated_at) }), warn: false })
   return out
 }
 
@@ -110,5 +148,6 @@ export function meteringRows(pack: MeterPack | null, _nowMs: number, t: T): Row[
     out.push([{ text: ' ' + name + '  ' + body, ...(warn ? { color: METER_WARN_COLOR } : {}) }])
   }
   if (pack.evidenceLines === null || pack.evidenceLines === 0) out.push([{ text: ' ' + t('page.spend.meter_evidence') }])
+  out.push([{ text: ' ' + t('page.spend.meter_data_time', { time: formatTaipeiTime(pack.generated_at) }) }])
   return out
 }

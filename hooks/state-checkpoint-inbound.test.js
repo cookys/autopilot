@@ -133,12 +133,31 @@ test('12 unanswered messages with 150-char first_line: all ids + from listed, te
   assert.ok(Buffer.byteLength(sec) <= INBOUND_BUDGET);
 });
 
-test('80 unanswered messages: omits older ones with count and fleet recent --unseen within budget', () => {
+const pathOf = (sec) => { const m = sec.match(/(\/\S+\.txt)/); return m ? m[1] : null; };
+
+test('80 unanswered messages: the injection names the count + a file path, the file holds all 80 id + from', () => {
   const r = [];
   for (let i = 1; i <= 80; i++) r.push(channel(i, { body: `msg-${i}-` + 'x'.repeat(140) }));
   const sec = section(runHook(r, { noteBytes: 8000, cwd: path.join(__dirname, '..') }));
-  assert.match(sec, /\d+ 則已省略/);
+  assert.match(sec, /80 則未答/);
   assert.ok(sec.includes('fleet recent --unseen'));
-  assert.match(sec, /- \S+ from=/, 'newest entries are still listed in full, not only the placeholder');
+  const f = pathOf(sec);
+  assert.ok(f && fs.existsSync(f), 'list file exists');
+  const lines = fs.readFileSync(f, 'utf8').trim().split('\n');
+  assert.equal(lines.length, 80);
+  assert.ok(lines.every((l) => l.includes(`from=${FROM_BARE}`)));
+  assert.ok(Buffer.byteLength(sec) <= INBOUND_BUDGET);
+});
+
+test('752 unanswered messages: injection has N + path, the file has every one of the 752 ids', () => {
+  const r = [];
+  for (let i = 1; i <= 752; i++) r.push(channel(i, { body: `m${i}` }));
+  const sec = section(runHook(r, { noteBytes: 8000, cwd: path.join(__dirname, '..') }));
+  assert.match(sec, /752 則未答/);
+  assert.doesNotMatch(sec, /則已省略/);
+  const f = pathOf(sec);
+  assert.ok(f && fs.existsSync(f), 'list file exists');
+  const txt = fs.readFileSync(f, 'utf8');
+  for (let i = 1; i <= 752; i++) assert.ok(txt.includes(`${ID(i)} from=`), `id ${i} in file`);
   assert.ok(Buffer.byteLength(sec) <= INBOUND_BUDGET);
 });

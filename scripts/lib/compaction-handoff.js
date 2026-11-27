@@ -326,7 +326,7 @@ function escapeText(s) {
 
 // items: oldest first, {message_id, from, kind, disposition, reply_to, first_line}. Returns '' for none, else the
 // section text (header, newest items that fit INBOUND_BUDGET in arrival order, omitted count, re-read placeholder).
-function inboundSection(items, budget = INBOUND_BUDGET) {
+function inboundSection(items, budget = INBOUND_BUDGET, writeList = null) {
   if (!Array.isArray(items) || !items.length) return '';
   const e = (v, n = 80) => escapeText(String(v == null ? '' : v).slice(0, n));
   const lines = (it, firstMax) => {
@@ -355,7 +355,15 @@ function inboundSection(items, budget = INBOUND_BUDGET) {
   for (const it of chats) { const k = e(it.from); if (!bySender.has(k)) bySender.set(k, []); bySender.get(k).push(e(it.message_id)); }
   const compact = head(chats.length) + [...bySender].map(([from, ids]) => `- from=${from}: ${ids.join(' ')}\n`).join('') + tail(0);
   if (fits(compact)) return compact;
-  // Last resort (more ids than the budget can hold): the newest that fit, the count of older ones is written.
+  // More ids than the budget can hold: the full id + from list goes to a file in the session state dir; the injection names the count and the path.
+  if (typeof writeList === 'function') {
+    const file = writeList(items.map((it) => `${String(it.message_id == null ? '' : it.message_id)} from=${String(it.from == null ? '' : it.from)} kind=${String(it.kind == null ? '' : it.kind)}`).join('\n') + '\n');
+    if (file) {
+      const t = head(chats.length) + `${items.length} 則未答，完整 id+from 清單在檔案（逐行一則）：${escapeText(file)}\n` + tail(0);
+      if (fits(t)) return t;
+    }
+  }
+  // Last resort (no writable state dir): the newest that fit, the count of older ones is written.
   let kept = [];
   for (let i = chats.length - 1; i >= 0; i--) {
     const next = [chats[i], ...kept];
@@ -513,6 +521,22 @@ function capacityArGatePart(deadlineAt, cap) {
   }
   if (!out.length) out.push('no differences for this lane');
   return renderPart({ title, body: capBlock(out, cap) });
+}
+
+// Full unanswered-message list (id + from) when the injected section cannot hold it; lives beside the open-tasks file in the live state dir.
+function inboundListWriter(sessionId, dirs) {
+  return (text) => {
+    try {
+      const { resolveLiveDir, sanitizeSessionId } = require('./live-state-dir');
+      const base = dirs && dirs.live ? dirs.live : resolveLiveDir({ warn: () => {} }).base;
+      const file = path.join(base, 'unanswered-inbound', `${sanitizeSessionId(sessionId)}.txt`);
+      fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+      const tmp = `${file}.tmp.${process.pid}`;
+      fs.writeFileSync(tmp, text, { mode: 0o600 });
+      fs.renameSync(tmp, file);
+      return file;
+    } catch { return null; }
+  };
 }
 
 function openFleetTasksFile(sessionId, dirs) {
@@ -702,7 +726,7 @@ function buildHandoff(opts = {}) {
   const render = (k) => capLines(raw[k], caps[k]);
   const modelTitle = 'Model Handoff Note';
   const machine = opts.machineState ? `${opts.machineState.replace(/\s+$/, '')}\n\n` : '';
-  const inboundText = inboundSection(opts.inbound);
+  const inboundText = inboundSection(opts.inbound, INBOUND_BUDGET, inboundListWriter(sessionId, dirs));
   const fleetRaw = safe(() => collectFleetState({ cwd: opts.cwd, sessionId, dirs, deadlineAt }));
   let fleetText = typeof fleetRaw === 'string' ? fleetRaw : renderFleetState(fleetRaw, 1);
   if (Buffer.byteLength(inboundText) + Buffer.byteLength(fleetText) > RESERVED_CAP && fleetRaw && typeof fleetRaw === 'object') {

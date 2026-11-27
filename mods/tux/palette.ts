@@ -6,7 +6,7 @@ import type { ThemeKey } from '../live/model.ts'
 
 export type PaletteRole = "attention" | "here" | "broken" | "done" | "running" | "idle" | "structure" | "action" | "stale" | "overdue" | "waiting_on" | "needs_human" | "link"
 export const PALETTE: Record<PaletteRole, ThemeKey> = {
-  attention: "error",
+  attention: "warning",
   here: "claude",
   broken: "error",
   done: "success",

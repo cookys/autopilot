@@ -52,7 +52,7 @@ const MODEL_ROOM_MIN = 1800; // below this much room for the model note the flee
 // BODY_CAP before any other section is sized. When more are unanswered than fit, the newest are kept and the count of
 // older ones is written. Bodies are data: every field is escaped (the restore block is wrapped in a tag).
 const RESERVED_CAP = Math.floor(BODY_CAP * 0.4);
-const INBOUND_BUDGET = 2048;
+const INBOUND_BUDGET = 4096;
 const INBOUND_REREAD_PLACEHOLDER = 'compaction 前可能有 fleet 訊息沒讀到：呼叫 `recent` 並設 `unseen_only=true`，或執行 `fleet recent --unseen`（待上線）';
 // A note written within this long ago, or whose size/mtime moves while it is read, may be mid-write (the model writes
 // it with the Write tool; atomicity is not under our control, so the reader guards).

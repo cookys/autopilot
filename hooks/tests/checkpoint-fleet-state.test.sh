@@ -179,7 +179,8 @@ CTX="$(node -e 'const j=JSON.parse(require("fs").readFileSync(0,"utf8"));process
 if [ "${#CTX}" -le 10000 ]; then assert_eq 1 1 "full load: SessionStart injection ${#CTX} chars <= 10000"; else assert_eq "${#CTX}" "<=10000" "full load: injection over the limit"; fi
 assert_contains "$CTX" "overdue_open: $U1 (days 3)" "full load: ar-gate line survives the injection"
 assert_contains "$CTX" "FULLLEDGER-30" "full load: ledger tail survives the injection"
-assert_contains "$CTX" "## LLM Context" "full load: the LLM Context template is inside the injection"
+# The compact injection budget (session-start: 8000 minus the fleet resume block) cuts the optional LLM Context template at BODY_CAP, by design; the cut is announced.
+assert_contains "$CTX" "[...cut to fit the injection limit]" "full load: an over-budget checkpoint is cut and says so (the optional LLM Context template goes first)"
 # coverage ids come from the text actually injected: an id past the cut is not recorded
 UE="01TEST""EEEE""EEEEEEEEEEEEEEEE"; UL="01TEST""MMMM""MMMMMMMMMMMMMMMM"
 { printf '# Autopilot Compaction Checkpoint\nEARLY %s\n' "$UE"; printf 'z%.0s' $(seq 1 12000); printf '\nLATE %s\n' "$UL"; } > "$FILE"

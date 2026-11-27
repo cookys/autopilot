@@ -546,6 +546,19 @@ function sweepCompactionStates(stateDir, ttlSeconds) {
   } catch { /* ignore */ }
 }
 
+// Drop the "## Transcript Tail" section and a trailing "## LLM Context" section that still holds only the template comment.
+function slimCheckpoint(text) {
+  const tailAt = text.indexOf('## Transcript Tail');
+  const llmAt = text.indexOf('## LLM Context');
+  let out = text;
+  if (llmAt >= 0 && /^## LLM Context[^\n]*\n<!--[\s\S]*-->\s*$/.test(text.slice(llmAt))) out = out.slice(0, llmAt);
+  if (tailAt >= 0 && (llmAt < 0 || tailAt < llmAt)) {
+    const nextAt = out.indexOf('\n## ', tailAt + 1);
+    out = out.slice(0, tailAt) + (nextAt >= 0 ? out.slice(nextAt + 1) : '');
+  }
+  return out.replace(/\s+$/, '');
+}
+
 function run() {
   try {
     const homeDir = os.homedir();
@@ -586,7 +599,12 @@ function run() {
         checkpointMs = stateMtime;
         const fileAge = (Date.now() - stateMtime) / 1000;
         if (fileAge <= ttlSeconds) {
-          const stateContent = fs.readFileSync(stateFile, 'utf8').replace(/\r\n/g, '\n');
+          const fullContent = fs.readFileSync(stateFile, 'utf8').replace(/\r\n/g, '\n');
+          // S10: the Transcript Tail (the compaction summary already carries the conversation) and the unfilled
+          // "LLM Context" template comment are not injected; the whole checkpoint stays on disk, one path away.
+          const fullName = stateName.replace(/\.md$/, '-full.md');
+          const stateContent = slimCheckpoint(fullContent) + `\n[checkpoint trimmed (conversation tail left out); full copy: ${path.join(stateDir, fullName)}]`;
+          try { fs.writeFileSync(path.join(stateDir, fullName), fullContent, { mode: 0o600 }); } catch { /* the pointer is best-effort */ }
           let fleetLine = '';
           try { if (require('../scripts/lib/fleet-decision.js').supportsRecent()) fleetLine = '\n\ncompaction 前後收到的 fleet 訊息可能不在 context：繼續之前先跑 `fleet recent --unseen`（或用 recent 工具）看完。'; } catch { /* no line */ }
           compactionRecovery = {

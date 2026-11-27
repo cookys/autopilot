@@ -183,8 +183,7 @@ function evaluate(input) {
       matched = plan.match(re);
     }
     if (matched) {
-      if (!bin) throw new Error('PM_ANSWER_LOOKUP_BIN unset');
-      if (overrideOk(message, entry.ledger, bin, cache)) continue;
+      if (bin && overrideOk(message, entry.ledger, bin, cache)) continue;
       return deny(`約束 ${entry.id} 的禁止模式 \`${entry.forbid}\` 命中「${matched[0]}」。要放行請在 go 加上這一行：override:${entry.ledger}:<operator answer id>`);
     }
     if (!compliant(message, entry.id)) {

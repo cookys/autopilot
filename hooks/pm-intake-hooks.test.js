@@ -245,6 +245,15 @@ test('valid operator override allows a forbid hit', () => {
   assert.strictEqual(r.stdout, '', r.stdout + r.stderr);
 });
 
+test('forbid hit still denies when PM_ANSWER_LOOKUP_BIN is unset (no fail-open)', () => {
+  const home = tmp();
+  const r = run(HOOK_C, go('核准整機搬遷，用 vzdump 做 whole-VM'), {
+    HOME: home, FLEET_ADDRESS: PM, PM_CONSTRAINTS_FILE: FIXTURE,
+  });
+  const out = JSON.parse(r.stdout);
+  assert.strictEqual(out.hookSpecificOutput.permissionDecision, 'deny');
+});
+
 test('PM-origin answer id denies', () => {
   const home = tmp();
   const r = run(HOOK_C, go('核准 vzdump 搬遷 override:16c69c54:PMSELF'), {

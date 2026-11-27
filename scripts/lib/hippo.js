@@ -359,7 +359,8 @@ function execute(repo, plan, opts = {}) {
     if (step.op === 'create') {
       const found = run(repo, ['list', '--tag', `key:${step.key}`, '--history']);
       if (found.exit !== 0) return fail(i, step, found);
-      const recs = found.data.records.slice().sort((a, b) => String(a.created).localeCompare(String(b.created)));
+      // not_tag: a second record may share this key tag (the pm-ruling receipt carries the card tag); skip those when looking for the owner
+      const recs = found.data.records.filter((r) => !step.not_tag || !(r.tags || []).includes(step.not_tag)).sort((a, b) => String(a.created).localeCompare(String(b.created)));
       if (recs.length) {
         out.ids[step.ref] = recs[0].id;
         out.skipped.push({ index: i, op: 'create', ref: step.ref, id: recs[0].id, reason: 'key exists' });
@@ -419,6 +420,14 @@ function execute(repo, plan, opts = {}) {
       const r = run(repo, ['set', id, step.field, step.value]);
       if (r.exit !== 0) return fail(i, step, r);
       out.created.push({ index: i, op: 'set', id, field: step.field });
+    } else if (step.op === 'tag') {
+      const id = ref(step.id);
+      const s = run(repo, ['show', id]);
+      if (s.exit !== 0) return fail(i, step, s);
+      if ((s.data.record.tags || []).includes(step.tag)) { out.skipped.push({ index: i, op: 'tag', id, reason: 'tag present' }); continue; }
+      const r = run(repo, ['set', id, 'tags', '--add', step.tag]);
+      if (r.exit !== 0) return fail(i, step, r);
+      out.created.push({ index: i, op: 'tag', id, tag: step.tag });
     } else {
       throw new HippoError(`unknown step op: ${step.op}`);
     }

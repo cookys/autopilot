@@ -594,12 +594,19 @@ function useRoleActor() {
   if (!process.env.HIPPO_ACTOR) process.env.HIPPO_ACTOR = 'seat/open-decision';
 }
 
-// The gate (capacity ar_gate.py) tracks a decision record by the card that produced it. hippo front matter is a fixed schema
-// (`set card|source` is refused: unknown-field), so both mirror paths put the same marker lines in the body: `Card: d-xxxxxxxx`
-// and, per waiting task, `task:<26-char id>` (the form the gate already reads). Waiting tasks live in the card background.
-function cardRefLines(entry) {
-  const tasks = [...String(entry.background || '').matchAll(/^waiting task: ([0-9A-HJKMNP-TV-Z]{26})$/gm)].map((m) => m[1]);
-  return [`Card: ${entry.id}`, ...tasks.map((t) => `task:${t}`)].join('\n');
+// The gate (capacity ar_gate.py) tracks a decision record by the ops tag `key:card:<id>`. The card record carries it from the opening
+// step; the ruling receipt (source:pm-ruling, a second record per answered card) gets the same tag in mirrorRuling. hippo front matter
+// is a fixed schema (`set card|source` is refused: unknown-field), so the tag is the canonical card reference and the card record's
+// body no longer repeats it. The body keeps `task:<26-char id>` per waiting task (the form the gate already reads; waiting tasks live
+// in the card background). The receipt keeps a human-readable `Card: <id>` line because it is the record people open to see which
+// card a ruling came from; the gate does not rely on that line.
+function taskRefLines(entry) {
+  return [...String(entry.background || '').matchAll(/^waiting task: ([0-9A-HJKMNP-TV-Z]{26})$/gm)].map((m) => `task:${m[1]}`).join('\n');
+}
+
+function cardTag(id) {
+  const t = /^[a-z0-9:._/-]{1,55}$/.test(id) ? id : crypto.createHash('sha256').update(id).digest('hex').slice(0, 32);
+  return `card:${t}`;
 }
 
 function mirrorCard(cwd, entry) {
@@ -612,12 +619,12 @@ function mirrorCard(cwd, entry) {
     branch = 'detect';
     const detected = hippo.detect(repo);
     if (detected.state !== 'hippo') throw new Error(detected.reason);
-    const token = /^[a-z0-9:._/-]{1,55}$/.test(entry.id) ? entry.id : crypto.createHash('sha256').update(entry.id).digest('hex').slice(0, 32);
-    const key = `card:${token}`;
-    const plan = { key, steps: [{ op: 'create', ref: 'root', kind: 'decision', key,
+    const key = cardTag(entry.id);
+    const plan = { key, steps: [{ op: 'create', ref: 'root', kind: 'decision', key, not_tag: 'source:pm-ruling',
       argv: ['--title', entry.question.split(/\r?\n/)[0], '--status', 'open', '--tag', 'source:open-decision'], body: entry.question }] };
     const answer = entry.answer || entry.last_answer;
-    if (answer) plan.steps.push({ op: 'edit', id: 'root', body: `${entry.question}\n\nAnswer: ${answer}\n\n${cardRefLines(entry)}` });
+    const tasks = taskRefLines(entry);
+    if (answer) plan.steps.push({ op: 'edit', id: 'root', body: `${entry.question}\n\nAnswer: ${answer}${tasks ? `\n\n${tasks}` : ''}` });
     if (isClosedEntry(entry)) plan.steps.push({ op: 'close', id: 'root', status: entry.closed_via === 'withdrawn' || entry.closed_via === 'panel_dismiss' ? 'cancelled' : 'done' });
     branch = 'execute';
     useRoleActor();
@@ -642,9 +649,10 @@ function mirrorRuling(cwd, entry, answer) {
     const token = /^[a-z0-9:._/-]{1,52}$/.test(id) ? id : crypto.createHash('sha256').update(id).digest('hex').slice(0, 32);
     const key = `receipt:${token}`;
     const ruling = answer.answer_free_text || answer.answer || answer.answer_option;
-    const body = `${ruling}\n\nOption: ${answer.answer_option || '(none)'}\n${cardRefLines(entry)}`;
+    const tasks = taskRefLines(entry);
+    const body = `${ruling}\n\nOption: ${answer.answer_option || '(none)'}\nCard: ${entry.id}${tasks ? `\n${tasks}` : ''}`;
     const plan = { key, steps: [{ op: 'create', ref: 'root', kind: 'decision', key,
-      argv: ['--title', ruling.split(/\r?\n/)[0], '--status', 'open', '--tag', 'source:pm-ruling'], body }] };
+      argv: ['--title', ruling.split(/\r?\n/)[0], '--status', 'open', '--tag', 'source:pm-ruling', '--tag', `key:${cardTag(entry.id)}`], body }] };
     branch = 'execute';
     useRoleActor();
     const result = hippo.execute(repo, plan, { log: () => {} });

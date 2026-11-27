@@ -38,6 +38,7 @@ In `hooks/harness-support-evidence.json`, a `fired` row (a probe run saw the eve
 | `past-reference-recall` | UserPromptSubmit<br>未驗證 | — | — | — |
 | `per-turn-gate` | Stop, SubagentStop<br>未驗證 | — | — | — |
 | `pii-read-guard` | PreToolUse<br>未驗證 | — | — | — |
+| `plan-receipt` | PostToolUse<br>未驗證 | — | — | — |
 | `pm-output-cap` | PostToolUse<br>未驗證 | — | — | — |
 | `pm-resume-stop` | Stop<br>未驗證 | — | — | — |
 | `post-compact` | — | PostCompact<br>已打包（未驗證觸發）: PostCompact 2026-08-05 | — | — |

@@ -43,6 +43,7 @@
     { "stem": "past-reference-recall", "class": "invariant_effect" },
     { "stem": "per-turn-gate", "class": "invariant_effect" },
     { "stem": "plan-gap-hint", "class": "invariant_effect" },
+    { "stem": "plan-receipt", "class": "invariant_effect" },
     { "stem": "pm-output-cap", "class": "invariant_effect" },
     { "stem": "reload-watch", "class": "invariant_effect" },
     { "stem": "residue-auto-reap", "class": "host_only" },

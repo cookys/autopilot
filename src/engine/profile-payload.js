@@ -311,7 +311,7 @@ function loadHookClasses(repoRoot = DEFAULT_REPO_ROOT) {
       'config-protection', 'mcp-health', 'dispatch-model-guard', 'orchestrator-edit-gate',
     ],
     PostToolUse: [
-      'context-budget', 'accumulator', 'test-runner', 'design-quality',
+      'context-budget', 'accumulator', 'test-runner', 'design-quality', 'plan-gap-hint',
     ],
     PostToolUseFailure: ['mcp-health'],
     Stop: [

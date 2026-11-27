@@ -16,6 +16,7 @@
   "mcp-health",
   "orchestrator-edit-gate",
   "per-turn-gate",
+  "plan-gap-hint",
   "pm-output-cap",
   "session-summary",
   "test-runner",

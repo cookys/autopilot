@@ -210,6 +210,9 @@ copy_runner_into_fixture() {
   cp "$REPO_ROOT/hooks/tests/lib.sh" "$dest/hooks/tests/lib.sh"
   cp -a "$REPO_ROOT/hooks/tests/lib" "$dest/hooks/tests/lib"
   cp -a "$REPO_ROOT/scripts/lib" "$dest/scripts/lib"
+  # scripts/lib/test-git-env.sh reads REPO_SELECTING from src/status/git-env.js at source time
+  mkdir -p "$dest/src/status"
+  cp "$REPO_ROOT/src/status/git-env.js" "$dest/src/status/git-env.js"
   chmod +x "$dest/hooks/tests/run.sh"
 }
 
@@ -1112,7 +1115,7 @@ EOF
   out=""
   rc=0
   out="$(env -u AUTOPILOT_SESSION_ID -u AUTOPILOT_TEST_SNAPSHOT_ROOT -u AUTOPILOT_TEST_SNAPSHOT \
-    PATH="$noflock_path" TMPDIR="$priv" FIXTURE_MARKER="$marker" \
+    AUTOPILOT_SUITE_ORACLE_LOCK=0 PATH="$noflock_path" TMPDIR="$priv" FIXTURE_MARKER="$marker" \
     bash "$fx/hooks/tests/run.sh" zz-fixture-one </dev/null 2>&1)" || rc=$?
   assert_exit_code "$rc" 0 "P4 no-flock in-place exit 0"
   assert_contains "$out" "test-snapshot: disabled (flock missing)" "P4 no-flock disabled line"
@@ -1144,7 +1147,7 @@ EOF
   out=""
   rc=0
   out="$(env -u AUTOPILOT_SESSION_ID -u AUTOPILOT_TEST_SNAPSHOT_ROOT -u AUTOPILOT_TEST_SNAPSHOT \
-    PATH="$noflock_path" TMPDIR="$priv" \
+    AUTOPILOT_SUITE_ORACLE_LOCK=0 PATH="$noflock_path" TMPDIR="$priv" \
     bash "$fx/hooks/tests/run.sh" zz-fixture-one </dev/null 2>&1)" || rc=$?
   assert_neq "$rc" 0 "P4 no-flock guard fails"
   assert_contains "$out" "test-snapshot: disabled (flock missing)" "P4 no-flock guard disabled line"

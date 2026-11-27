@@ -162,7 +162,7 @@ test('read back: open-decision defaults to this session\'s plain marker root; no
   assert.strictEqual(r.status, 0, r.stderr);
   assert.deepStrictEqual(fs.readdirSync(dir), [`${f.key}.json`]);
   assert.match(r.stdout.trim(), /^d-[0-9a-f]{8}$/, 'open prints the id');
-  od(['close', '--id', r.stdout.trim()]);
+  od(['close', '--id', r.stdout.trim(), '--withdraw', 'test cleanup', '--by', 'spr-test']);
   assert.strictEqual(od(['show']).status, 1, 'closing the last entry leaves nothing open (the closed record stays in the file)');
   assert.deepStrictEqual(fs.readdirSync(dir), [`${f.key}.json`], 'the closed record is kept');
   cli(f, ['set', '--repo-root', f.repo]);

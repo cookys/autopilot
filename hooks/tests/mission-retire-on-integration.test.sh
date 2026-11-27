@@ -16,7 +16,7 @@ FIXTURE="$LIVE_ROOT/hooks/tests/fixtures/mission-terminal-rollover"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/mission-retire-on-integration.XXXXXX")"
 trap 'rm -rf "$SCRATCH"; cleanup_test_tmp' EXIT
 
-if ! git clone --quiet --no-hardlinks -- "$LIVE_ROOT" "$SCRATCH/repo" >/dev/null 2>&1; then
+if ! git clone --quiet --shared -- "$LIVE_ROOT" "$SCRATCH/repo" >/dev/null 2>&1; then
   echo "FAIL: could not clone the repo"; exit 1
 fi
 

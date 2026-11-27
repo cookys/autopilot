@@ -219,10 +219,17 @@ test('readMarker / root: a plain marker is not an orchestrator marker; its root 
 
 // ---------------------------------------------------------------- reader: dispatch-hetero.sh
 
+// the rail checks the Fleet-Task against the courier; a stub keeps the test off the real fleet
+function fleetStub(f) {
+  const p = path.join(f.base, 'fleet-stub');
+  fs.writeFileSync(p, '#!/bin/sh\necho \'{"status":"open"}\'\n', { mode: 0o755 });
+  return p;
+}
+
 function hetero(f, markerDir, extra = [], branch = 'feat/plain') {
   fs.writeFileSync(path.join(f.base, 'prompt.txt'), 'p\n');
   return spawnSync(HETERO, ['--branch', branch, '--prompt-file', path.join(f.base, 'prompt.txt'), '--agy-bin', '/bin/true', ...extra], {
-    cwd: f.repo, encoding: 'utf8', env: { ...f.env, AUTOPILOT_SESSION_ID: '', AUTOPILOT_SESSION_MODE_DIR: markerDir },
+    cwd: f.repo, encoding: 'utf8', env: { ...f.env, AUTOPILOT_SESSION_ID: '', AUTOPILOT_SESSION_MODE_DIR: markerDir, AUTOPILOT_FLEET_TASK: '01M8F07XTZQTASV1TWZYKN9P3D', FLEET_BIN: fleetStub(f) },
   });
 }
 

@@ -108,7 +108,7 @@ insufficient.
 <!-- phases:v1 -->
 | id | size | depends_on | acceptance_cmd | needs_look | title |
 |----|------|------------|----------------|------------|-------|
-| P1 | S    | -          | bash scripts/tests/example.test.sh | no | Example phase |
+| P1 | S    | -          | bash scripts/tests/finish-triage.test.sh | no | Example phase |
 <!-- /phases -->
 ```
 

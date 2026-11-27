@@ -538,7 +538,12 @@ EOF
     IFS= read -r oid || oid=""
     IFS= read -r outil || outil=""
   } <<< "$prof_out"
-  if ! app_out="$(nodeh orgapply "$alias" "$ost" "$oid" "$outil" 2>&1)"; then
+  # stderr is merged (the failure text needs it) but a library warning line (e.g. a non-RAM AUTOPILOT_LIVE_DIR) must not shift
+  # the three stdout lines parsed below: the "x<rc>" tail keeps the trailing newlines and tail -n 3 takes the real lines.
+  app_out="$(nodeh orgapply "$alias" "$ost" "$oid" "$outil" 2>&1; printf 'x%s' "$?")"
+  app_rc="${app_out##*x}"
+  app_out="${app_out%x*}"
+  if [ "$app_rc" != 0 ]; then
     row "❌" "$alias org 核對" "token-meta.json 寫入失敗：$app_out；修法：檢查該別名目錄的權限，或先備份再移走既有的 token-meta.json 後重跑"
     row "❌" "$alias haiku OK 呼叫" "未執行"
     STOPPED="$alias"; break
@@ -548,7 +553,7 @@ EOF
     IFS= read -r orgv || orgv=""
     IFS= read -r olabel || olabel=""
     IFS= read -r outil_show || outil_show=""
-  } <<< "$app_out"
+  } <<< "$(printf '%s' "$app_out" | tail -n 3)"
   [ -n "$olabel" ] || olabel="$alias"
   plan_part=""
   [ -n "$outil_show" ] && plan_part="，7d 用量 $outil_show"

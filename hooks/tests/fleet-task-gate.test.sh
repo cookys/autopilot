@@ -17,6 +17,8 @@ trap cleanup EXIT
 SANDBOX_HOME="$TMP_DIR/home"
 STUB_BIN="$TMP_DIR/bin"
 mkdir -p "$SANDBOX_HOME" "$STUB_BIN"
+# Never let a wired claude caller reach the operator real account registry.
+export AUTOPILOT_ACCOUNTS_DIR="$TMP_DIR/no-accounts"
 
 PASS=0
 FAIL=0

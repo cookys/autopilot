@@ -29,6 +29,7 @@ function initRepo() {
     PATH: process.env.PATH,
     HOME: fs.mkdtempSync(path.join(TMP_ROOT, 'permwatch-home-')),
     TMPDIR: TMP_ROOT,
+    AUTOPILOT_CARD_NOTIFY: 'off',
     GIT_CONFIG_GLOBAL: path.join(__dirname, 'lib', 'test-gitconfig'),
     GIT_CONFIG_NOSYSTEM: '1',
   };

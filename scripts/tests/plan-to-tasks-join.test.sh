@@ -2,6 +2,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+. "$REPO_ROOT/scripts/lib/test-git-env.sh"
 SCRIPT="$REPO_ROOT/scripts/plan-to-tasks.js"
 
 TMPDIR_TEST="$(mktemp -d)"

@@ -460,7 +460,8 @@ function termRun(arm, fork, deaf) {
       gitq(['commit', '-q', '-m', 'base']);
       const prompt = path.join(fx.root, 'prompt.txt');
       fs.writeFileSync(prompt, 'do work\n');
-      Object.assign(env, { AUTOPILOT_CONFIG_FILE: fx.configFile, AUTOPILOT_DISPATCH_RUNS_DIR: path.join(fx.root, 'runs'), GIT_CONFIG_NOSYSTEM: '1' });
+      const fleetStub = path.join(fx.root, 'fleet-stub'); fs.writeFileSync(fleetStub, '#!/bin/sh\necho \'{"status":"open"}\'\n', { mode: 0o755 });
+      Object.assign(env, { AUTOPILOT_FLEET_TASK: '01M8F07XTZQTASV1TWZYKN9P3D', FLEET_BIN: fleetStub, AUTOPILOT_CONFIG_FILE: fx.configFile, AUTOPILOT_DISPATCH_RUNS_DIR: path.join(fx.root, 'runs'), GIT_CONFIG_NOSYSTEM: '1' });
       fs.mkdirSync(env.AUTOPILOT_DISPATCH_RUNS_DIR, { recursive: true });
       spawnSync('node', [path.join(REPO, 'scripts', 'run-approval.js'), 'confirm-claude-native'], { env, stdio: 'ignore' });
       cmd = ['bash', path.join(REPO, 'scripts', 'dispatch-hetero.sh'), '--runner', 'claude-native', '--model', 'claude-sonnet-4-6', '--prompt-file', prompt,
@@ -499,7 +500,10 @@ for (const [arm, label] of TERM_ARMS) {
     assert.ok(r.railExited, 'the rail did not end after TERM');
     assert.deepStrictEqual(r.real, [], `rail rc=${r.rc} left ${JSON.stringify(r.alive.map((x) => ({ pid: x.pid, a: x.argv.slice(0, 3) })))} real=${r.real.length} out=${r.out.slice(0, 400)}`);
   });
-  test(`rail TERM (${label}) negative control: a surviving claude-named process turns the check red`, { timeout: 120000 }, async () => {
+  // dispatch-author.sh runs the claude double under lib/idle-watch.js, which tracks and kills every descendant on TERM, detached ones
+  // included: the rail itself reaps the forked survivor, so this control cannot turn red for that arm (the case above still guards it).
+  const ctlSkip = arm === 'author-ccshim' ? 'idle-watch.js reaps detached descendants on TERM, the survivor control cannot be observed' : false;
+  test(`rail TERM (${label}) negative control: a surviving claude-named process turns the check red`, { timeout: 120000, skip: ctlSkip }, async () => {
     const r = await termRun(arm, true, false);
     assert.ok(r.alive.length > 0, 'the control was not caught: a detached claude survivor was not counted');
   });

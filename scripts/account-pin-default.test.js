@@ -122,6 +122,7 @@ const RAILS = {
     return { rc: r.status, out: (r.stdout || '') + (r.stderr || '') };
   },
   hetero(fx, rail) {
+    const fleetStub = (f) => { const p = path.join(f.root, 'fleet-stub'); fs.writeFileSync(p, '#!/bin/sh\necho \'{"status":"open"}\'\n', { mode: 0o755 }); return p; };
     const git = (cwd, a) => execFileSync('git', ['-c', 'user.email=fixture', '-c', 'user.name=t', ...a], { cwd, stdio: 'ignore' });
     const repo = path.join(fx.root, 'repo');
     fs.mkdirSync(repo);
@@ -132,7 +133,7 @@ const RAILS = {
     const prompt = path.join(fx.root, 'prompt.txt');
     fs.writeFileSync(prompt, 'do work\n');
     const env = Object.assign(railEnv(fx), {
-      AUTOPILOT_CONFIG_FILE: fx.configFile, AUTOPILOT_DISPATCH_RUNS_DIR: path.join(fx.root, 'runs'), GIT_CONFIG_NOSYSTEM: '1',
+      AUTOPILOT_FLEET_TASK: '01M8F07XTZQTASV1TWZYKN9P3D', FLEET_BIN: fleetStub(fx), AUTOPILOT_CONFIG_FILE: fx.configFile, AUTOPILOT_DISPATCH_RUNS_DIR: path.join(fx.root, 'runs'), GIT_CONFIG_NOSYSTEM: '1',
     });
     fs.mkdirSync(env.AUTOPILOT_DISPATCH_RUNS_DIR, { recursive: true });
     spawnSync('node', [path.join(SCRIPTS, 'run-approval.js'), 'confirm-claude-native'], { env, stdio: 'ignore' });

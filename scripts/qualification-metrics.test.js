@@ -724,7 +724,9 @@ test('no other script or hook requires the metrics module (whole-tree scan)', ()
     // The label test only names the CLI path to pin its caller label and never requires the module.
     'hooks/tests/uncalled-script-labels.test.sh',
     // prices uses only DEFAULT_MAX_AGE_S and describeAges for freshness warnings, never admission or ordering of metrics.
-    'scripts/lib/qualification-prices.js']);
+    'scripts/lib/qualification-prices.js',
+    // generated baseline of this suite's own spawn call sites (file:line), data not code.
+    'scripts/check-test-cli-timeout.baseline.json']);
   assert.deepEqual(metricsRequireHits(REPO, own), []);
 });
 

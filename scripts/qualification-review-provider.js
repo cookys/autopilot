@@ -1397,17 +1397,17 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
       );
     }
   }
+  let agyPrep = null;
   if (promptViaAgyStream) {
-    // agy no longer has an argv wall (stdin transport), and prompts over stdinMaxBytes fall back
-    // to a 0600 file pointer; still fail closed above the hard file ceiling (2 MB).
-    const maxFileBytes = agyStream.fileMaxBytes();
-    const promptBytes = Buffer.byteLength(prompt, 'utf8');
-    if (promptBytes > maxFileBytes) {
-      throw new Error(
-        `agy_file_ceiling: this case is ${promptBytes} bytes, over the ${maxFileBytes}-byte `
-        + 'fail-closed agy file ceiling; agy was not run',
-      );
+    // agy no longer has an argv wall (stdin transport): a prompt over stdinMaxBytes travels as a 0600 file pointer
+    // in a private cwd; above the hard file ceiling (2 MB) it fails closed (lib/agy-stream-json.js preparePrompt).
+    const agyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qrp-agy-prompt-'));
+    agyPrep = agyStream.preparePrompt(prompt, { env: process.env, cwd: agyDir });
+    if (!agyPrep.ok) {
+      try { fs.rmSync(agyDir, { recursive: true, force: true }); } catch { /* gone */ }
+      throw new Error(agyPrep.message);
     }
+    agyPrep.dir = agyDir;
   }
   if (kind === 'agy') {
     // NO --effort: every model in agy's roster rejects it (see header note); the
@@ -1793,7 +1793,7 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
   return new Promise((resolve, reject) => {
     const child = spawn(spawnBin, spawnArgs, {
       detached: true, stdio: ['pipe', 'pipe', 'pipe'], env: childEnv,
-      ...(opencodeDir ? { cwd: opencodeDir } : {}),
+      ...(opencodeDir ? { cwd: opencodeDir } : (agyPrep && agyPrep.mode === 'file' ? { cwd: agyPrep.dir } : {})),
     });
     const stdout = [];
     const stderr = [];
@@ -1811,6 +1811,7 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
       for (const stream of [child.stdin, child.stdout, child.stderr]) {
         try { stream.destroy(); } catch { /* already closed */ }
       }
+      if (agyPrep && agyPrep.dir) { try { fs.rmSync(agyPrep.dir, { recursive: true, force: true }); } catch { /* gone */ } }
       if (sidecar) fs.rmSync(path.dirname(sidecar), { recursive: true, force: true });
       if (promptFile) fs.rmSync(path.dirname(promptFile), { recursive: true, force: true });
       if (kimiAgentDir) fs.rmSync(kimiAgentDir, { recursive: true, force: true });
@@ -1973,7 +1974,7 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
     child.stdin.once('error', () => {});
     // agy gets one stream-json line; argv/file-mode kinds already carry the prompt; close stdin immediately so a
     // CLI that waits on it cannot hang the exam until the timeout.
-    child.stdin.end(promptViaAgyStream ? agyStream.encodeUserLine(prompt) : ((promptViaArgv || promptViaFile || useAccount) ? '' : prompt));
+    child.stdin.end(promptViaAgyStream ? agyPrep.line : ((promptViaArgv || promptViaFile || useAccount) ? '' : prompt));
   });
 }
 

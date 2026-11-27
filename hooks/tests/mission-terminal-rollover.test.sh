@@ -76,7 +76,7 @@ SCRATCH_HOME="$(mktemp -d "${TMPDIR:-/tmp}/mission-terminal-rollover-scratch.XXX
 cleanup_scratch() { rm -rf "$SCRATCH_HOME"; cleanup_test_tmp; }
 trap cleanup_scratch EXIT
 
-if ! git clone --quiet --no-hardlinks -- "$LIVE_ROOT" "$SCRATCH_HOME/repo" >/dev/null 2>&1; then
+if ! git clone --quiet --shared -- "$LIVE_ROOT" "$SCRATCH_HOME/repo" >/dev/null 2>&1; then
   skip "could not clone the repo into a scratch dir — rollover has nothing safe to act on"
   vacuous_exit
 fi

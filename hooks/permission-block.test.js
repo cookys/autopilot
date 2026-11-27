@@ -32,7 +32,7 @@ function mkEnv(extra = {}) {
   fs.chmodSync(live, 0o700);
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'pb-repo-'));
   spawnSync('git', ['init', '-q', repo]);
-  const env = { ...process.env, HOME: fs.mkdtempSync(path.join(os.tmpdir(), 'pb-home-')), AUTOPILOT_LIVE_DIR: live, TMUX_PANE: '%7', ...extra };
+  const env = { ...process.env, HOME: fs.mkdtempSync(path.join(os.tmpdir(), 'pb-home-')), AUTOPILOT_LIVE_DIR: live, TMUX_PANE: '%7', AUTOPILOT_CARD_NOTIFY: 'off', ...extra };
   delete env.AUTOPILOT_ROOT_RUN_ID;
   return { live, repo, env };
 }

@@ -1,4 +1,5 @@
 'use strict';
+require('./lib/test-git-env'); // fixture repos must not run the account's global git config
 // A card opened from a scratch/temp repo is refused unless the run is sandboxed (AUTOPILOT_CARD_NOTIFY=off) or explicitly allowed.
 // Why: the courier publishes any repo's ledger to the real hub, and a deleted scratch repo leaves an orphan "Needs you" card (2026-11-25).
 const test = require('node:test');

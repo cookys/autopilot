@@ -127,7 +127,7 @@ function main() {
       `PM 收件匣有 ${stale.length} 則超過 10 分鐘未處理的訊息（第 ${st.inboxDrainBlocks}/${MAX_BLOCKS} 次擋停）：`,
       ...lines,
       '請逐一處理並執行 `node scripts/pm-inbox-done.js <message_id> --ref <id>`（或 `--no-action <reason>`），或綁定到工作單後再結束 turn。',
-    ].join('\n') + gateHint('處理並關閉上述逾期收件匣訊息，再結束 turn');
+    ].join('\n') + gateHint('處理並關閉上述逾期收件匣訊息，再結束 turn', 'hooks/README.md');
     block(reason);
   } finally {
     if (release) { try { release(); } catch { /* ignore */ } }

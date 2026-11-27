@@ -286,7 +286,7 @@ function ruleOf(input, out) {
   if (!o) return input && input.tool_name ? `${String(input.tool_name).replace('mcp__fleet__', '')}-pass` : 'pass';
   if (o.permissionDecision === 'allow') return 'reply-header-autofill';
   const r = o.permissionDecisionReason || '';
-  if (r.startsWith('reply 不能回 courier')) return 'courier-reply';
+  if (r === COURIER_REPLY_REASON) return 'courier-reply';
   if (r.includes('~/.claude')) return 'claude-home-path';
   if (input && input.tool_name === 'mcp__fleet__dispatch') return 'dispatch-plan';
   return input && input.tool_name === 'mcp__fleet__reply' ? 'reply-work-order' : 'send-work-order';

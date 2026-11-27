@@ -120,6 +120,6 @@ An operator answer to a decision card (message kind `decision_answer` or `decisi
 ## Work-order hand-in: `task_result`
 
 When a fleet work-order lane finishes, hand evidence to fleet with `task_result` (fleet MCP) or the equivalent CLI —
-not by pasting long receipts into chat. Preflight with `node scripts/fleet-flow-verify.js ... --receipts <dir>`;
+not by pasting long receipts into chat. Preflight the receipts with the fleet-flow verifier (planned, not shipped yet);
 include `Receipt:` lines and a `Used:` line. Non-Claude harness lanes rely on this re-derivation at the hub (no
 Claude hook parity). Contract: `references/multi-agent-portability.md` (Fleet work-order lanes).

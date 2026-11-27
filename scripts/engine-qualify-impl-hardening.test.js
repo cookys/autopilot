@@ -352,6 +352,7 @@ function liveRail(mode) {
       AUTOPILOT_DISPATCH_RUNS_DIR: railRuns,
       AUTOPILOT_ACCOUNTS_DIR: path.join(tempRoot, 'no-accounts'), // G37: never consult the real registry
       FAKE_GROK_MODE: mode,
+      AUTOPILOT_FLEET_TASK: '01M8F07CXPHRPDVC4JMFJDB8GM', // dispatch-hetero refuses a rail with no Fleet-Task id
       AUTOPILOT_GROK_EFFORT_PROBE: '0',
       AUTOPILOT_STRIKE_WRITER: 'off',
       AUTOPILOT_DISPATCH_MANIFEST: '0',

@@ -86,7 +86,7 @@ EOF
 }
 make_hstub "$TEST_TMP/hetero-claude"
 mkdir -p "$TEST_TMP/hetero-bin"; ln -sf "$TEST_TMP/hetero-claude" "$TEST_TMP/hetero-bin/claude"
-export AUTOPILOT_ENDPOINT_TESTEP_URL="http://127.0.0.1:9/v1"
+export AUTOPILOT_ENDPOINT_TESTEP_URL="http://127.0.0.1:9"
 export AUTOPILOT_ENDPOINT_TESTEP_TOKEN="t"
 REAL_SETSID="$(command -v setsid)"
 # Knobs that force a run_worker branch: a failing systemd-run => HAVE_CGROUP=0; a setsid shim whose --help

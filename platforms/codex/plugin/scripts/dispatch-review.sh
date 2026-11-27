@@ -2680,7 +2680,6 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
 elif [[ "$RUNNER" = "anthropic-compatible" ]]; then
   ANTHROPIC_ARGS=(
     --raw
-    --role reviewer
     --prompt-file "$PROMPT_FILE"
     --model "$MODEL"
     --timeout-ms "$TIMEOUT_MS"

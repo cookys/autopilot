@@ -364,7 +364,10 @@ EOF
     # BL-0226 added one REVOKED withdrawal line to the prompt (the `- To withdraw a finding you raised ... is a
     # duplicate.` bullet). The base script predates it, so drop exactly that line from both sides the same way.
     DROP_WITHDRAW='s/^- To withdraw a finding you raised.*\n//m'
-    assert_eq "$(sed -E "$NORM" "$TEST_TMP/cmp-$CR-base.rec" | perl -0pe "$DROP_EXAMPLES" | perl -0pe "$DROP_WITHDRAW")" "$(sed -E "$NORM" "$TEST_TMP/cmp-$CR-head.rec" | perl -0pe "$DROP_EXAMPLES" | perl -0pe "$DROP_WITHDRAW")" \
+    # The review prompt later gained a class/class_sites paragraph (defect-class sweep; no argv/env change). The
+    # base script predates it, so drop exactly that paragraph from both sides the same way.
+    DROP_CLASS='s/^Scan the whole diff for each defect class.*?invalid review\.\n\n//ms'
+    assert_eq "$(sed -E "$NORM" "$TEST_TMP/cmp-$CR-base.rec" | perl -0pe "$DROP_EXAMPLES" | perl -0pe "$DROP_WITHDRAW" | perl -0pe "$DROP_CLASS")" "$(sed -E "$NORM" "$TEST_TMP/cmp-$CR-head.rec" | perl -0pe "$DROP_EXAMPLES" | perl -0pe "$DROP_WITHDRAW" | perl -0pe "$DROP_CLASS")" \
       "non-blind $CR argv/cwd-shape/env are byte-identical to base ${BASE_SHA:0:8}"
     assert_contains "$(cat "$TEST_TMP/cmp-$CR-head.rec")" 'AUTOPILOT_PARENT_SESSION_ID=' "non-blind $CR head run carries the 3b rule-3 parent id (so the normalisation above drops something real)"
     # The agy recorder only sees the --version probe (the prompt never reaches it), so only kimi carries the line.

@@ -131,7 +131,7 @@ test('wide band rows: every row of the sample pack and of 8-character hosts with
   }
   expect(meteringWideRows(null, NOW, t).map(r => displayWidth(r.text)).every(n => n <= METER_WIDE_COLS)).toBe(true)
   expect(meteringWideRows(parseMeterPack(SAMPLE), NOW, t).map(r => r.text)).toEqual([
-    '▾ 計量覆蓋', '4124gs 88/137 缺 49 · 留 7 日', 'c4140  86/81 缺 5 · 留 4 日', 'xl270d 125/137 缺 12 · 留 7 日', '證據：尚無生產者（約 11-30）',
+    '▾ 計量覆蓋', '4124gs 88/137 缺 49 · 留 7 日', 'c4140  86/81 缺 5 · 留 4 日', 'xl270d 125/137 缺 12 · 留 7 日', '證據：尚無生產者（約 11-30）', '資料時間 11-27 08:15',
   ])
 })
 
@@ -148,8 +148,8 @@ test('wide band rows: only the row over 10% is warn, and the band draws it in th
 test('wide pane block: the three long-form host rows and the evidence row, the over-10% row in the action role, the lanes left out; other pages keep their lanes', () => {
   const block = meteringPaneBlock(parseMeterPack(SAMPLE), NOW, t)
   expect(block.head).toBe('計量覆蓋')
-  expect(block.rows.map(r => r.text)).toEqual([' 4124gs  覆蓋 88/137（缺 49）· 保留 7 日', ' c4140   覆蓋 86/81（缺 5）· 保留 4 日', ' xl270d  覆蓋 125/137（缺 12）· 保留 7 日', ' 證據：尚無生產者（約 11-30）'])
-  expect(block.rows.map(r => r.warn)).toEqual([true, false, false, false])
+  expect(block.rows.map(r => r.text)).toEqual([' 4124gs  覆蓋 88/137（缺 49）· 保留 7 日', ' c4140   覆蓋 86/81（缺 5）· 保留 4 日', ' xl270d  覆蓋 125/137（缺 12）· 保留 7 日', ' 證據：尚無生產者（約 11-30）', ' 資料時間 11-27 08:15'])
+  expect(block.rows.map(r => r.warn)).toEqual([true, false, false, false, false])
   const lanes = [{ state: 'running' as const, name: 'lane-a', speed: '1 tok/s', task: 'x' }]
   const base = { page: 5, tabs: ['現況', '待決', '派工', '審查', '花費', '殘留', '艦隊', '待辦', '說明'], moved: [], more: [], pin: [], ctx: [], ctxFold: false, ctxOpen: false, lanes, lanesHead: '艦隊 · 1 條產線', hist: null, events: null, summaries: Array.from({ length: 9 }, () => null) }
   const withMeter = paneUpper({ ...base, meter: { head: block.head, rows: block.rows.map(r => ({ text: r.text, role: r.warn ? 'action' as const : 'text' as const })) } })
@@ -165,4 +165,42 @@ test('wide pane block: the three long-form host rows and the evidence row, the o
   const broken = meteringPaneBlock(null, NOW, t)
   expect(broken.rows).toHaveLength(1)
   expect(broken.rows[0].text).not.toMatch(/\d/)
+})
+
+test('English wide rows keep full host names, wrap evidence, and all three renderers show Taipei data time', () => {
+  const enT = makeT('en')
+  const raw = pack({
+    '4124gs': { expected: 143, got: 131, missing: 12, retention_days: 7, no_data: false },
+    c4140: { expected: 143, got: 131, missing: 12, retention_days: 4, no_data: false },
+    xl270d: { expected: 143, got: 131, missing: 12, retention_days: 7, no_data: false },
+  }, { lines: [] })
+  const parsed = parseMeterPack(raw)
+  const wide = meteringWideRows(parsed, NOW, enT)
+  for (const row of wide) {
+    expect(displayWidth(row.text), row.text).toBeLessThanOrEqual(METER_WIDE_COLS)
+    expect(row.text).not.toContain('…')
+  }
+  const wideText = wide.map(r => r.text).join('\n')
+  expect(wideText).toContain('4124gs ')
+  expect(wideText).toContain('c4140 ')
+  expect(wideText).toContain('xl270d ')
+  expect(wide.map(r => r.text).join(' ')).toContain('Evidence: no producer yet (about 11-30)')
+  expect(wideText).toContain('Data as of 11-27 08:15')
+
+  const pane = meteringPaneBlock(parsed, NOW, enT)
+  expect(pane.rows.map(r => r.text).join('\n')).toContain('Data as of 11-27 08:15')
+  const narrow = meteringRows(parsed, NOW, enT)
+  expect(narrow.map(text).join('\n')).toContain('Data as of 11-27 08:15')
+
+  const topGen = parseMeterPack(JSON.stringify({
+    generated_at: '2026-11-27T00:15:00Z',
+    evidence_gate: { coverage: { h1: { expected: 1, got: 1, missing: 0, retention_days: 7, no_data: false } } },
+  }))
+  expect(meteringWideRows(topGen, NOW, enT).map(r => r.text)).toContain('Data as of 11-27 08:15')
+
+  const badGen = parseMeterPack(JSON.stringify({
+    generated_at: 'not-a-date',
+    coverage: { h1: { expected: 1, got: 1, missing: 0, retention_days: 7, no_data: false } },
+  }))
+  expect(meteringWideRows(badGen, NOW, enT).map(r => r.text)).toContain('Data as of —')
 })

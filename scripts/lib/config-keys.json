@@ -9083,6 +9083,21 @@
       "note": "Seat role (pm|lead) used by dispatch-model-guard to scope mechanical subagent rerouting."
     },
     {
+      "name": "AUTOPILOT_READONLY_ROLE_GUARD",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": "shadow",
+      "readers": [
+        "hooks/dispatch-model-guard.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_MECHANICAL_REROUTE"
+      ],
+      "summary": "Read-only Role on a general-purpose subagent: off, shadow (default, logs to the hook log) or enforce (denies, naming the read-only type to use)."
+    },
+    {
       "name": "AUTOPILOT_MECHANICAL_REROUTE",
       "kind": "env",
       "audience": "user",

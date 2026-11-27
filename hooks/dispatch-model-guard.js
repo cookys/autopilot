@@ -61,6 +61,7 @@ const {
 } = require('./lib/brief-header-template.js');
 const { BRIEF_HEAD_WINDOW, headLines, findHeadMatch } = require('./lib/brief-head.js');
 const { gateHint } = require('./lib/gate-hint.js');
+const { record: recordHookLog } = require('./_shared/hook-log');
 const { isPmConsole, pmConsoleStatus } = require('./_shared/pm-console.js');
 const { resolvePmGate, findTaskId } = require('../scripts/lib/fleet-task-ref.js');
 const { resolveFleetSeat } = require('./_shared/fleet-seat.js');
@@ -346,7 +347,13 @@ function warnIfPmSeatUndetermined(input) {
   }
 }
 
-const PM_READ_ONLY_SUBAGENT_TYPES = Object.freeze(new Set(['Explore', 'Plan', 'web-fetch', 'claude-code-guide']));
+// Read-only agent types that ship in agents/ (tools: no Edit/Write, no fleet). Exempt from the
+// Fleet-Task gate below; hooks/subagent-budget.js keeps its own copy for the Lane exemption.
+const READONLY_AGENT_TYPES = Object.freeze(['probe', 'hands', 'test-runner', 'transcript-digest']);
+const PM_READ_ONLY_SUBAGENT_TYPES = Object.freeze(new Set([
+  'Explore', 'Plan', 'web-fetch', 'claude-code-guide',
+  ...READONLY_AGENT_TYPES, ...READONLY_AGENT_TYPES.map((t) => `autopilot:${t}`),
+]));
 
 function checkPmFleetTask(input, toolInput, prompt) {
   warnIfPmSeatUndetermined(input);
@@ -385,38 +392,49 @@ const READONLY_ROLES = new Set([
   ...MECHANICAL_READONLY_ROLES,
 ]);
 
-// Shadow-only observation for subagent_type=general-purpose with a read-only Role header.
-// Precedence: mechanicalReroute > readonlyRoleShadow. When mechanicalReroute matches the
-// same dispatch (e.g. Role: stats|logs|inventory on a PM/lead seat), mechanicalReroute
-// takes precedence and governs the actual decision; readonlyRoleShadow only logs what
-// it would do if enabled (without altering allow/deny).
+// Read-only Role on subagent_type=general-purpose: that type carries write and fleet tools, so
+// read-only work should use a read-only type instead. AUTOPILOT_READONLY_ROLE_GUARD=shadow
+// (default; logs only) | enforce (deny, reason names the type to use) | off.
+// Precedence: mechanicalReroute runs first and, when it matches (Role: stats|logs|inventory on a
+// PM/lead seat), governs the decision. Roles that mechanicalReroute owns (MECHANICAL_ROLES) are
+// therefore never denied here, only logged with precedence=mechanical_reroute.
+const READONLY_ROLE_TYPE = Object.freeze({
+  reviewer: 'autopilot:reviewer', auditor: 'autopilot:reviewer',
+  researcher: 'Explore', explorer: 'Explore', reader: 'Explore', scout: 'Explore',
+  analyst: 'autopilot:probe', inspector: 'autopilot:probe',
+  log: 'autopilot:hands', logs: 'autopilot:hands', 'log-reading': 'autopilot:hands',
+  stats: 'autopilot:hands', statistics: 'autopilot:hands', inventory: 'autopilot:hands',
+});
+
 function checkReadonlyRoleShadow(toolInput, prompt) {
+  const modeRaw = String(process.env.AUTOPILOT_READONLY_ROLE_GUARD || 'shadow').trim().toLowerCase();
+  const mode = (modeRaw === 'off' || modeRaw === 'shadow' || modeRaw === 'enforce') ? modeRaw : 'shadow';
+  if (mode === 'off') return;
+  let matchedRole = '';
+  let fields = [];
+  let head = [];
   try {
     const subagentType = String(toolInput.subagent_type || '').trim();
     if (subagentType !== 'general-purpose') return;
 
-    const head = headLines(prompt, 6);
-    const fields = head.flatMap((line) => line.split('|').map((f) => f.trim()));
-    let matchedRole = '';
+    head = headLines(prompt, 6);
+    fields = head.flatMap((line) => line.split('|').map((f) => f.trim()));
     for (const field of fields) {
       const m = field.match(/^Role:\s*([A-Za-z][\w-]*)/i);
       if (m) {
         const candidate = m[1].toLowerCase();
-        if (READONLY_ROLES.has(candidate)) {
-          matchedRole = candidate;
-        }
+        if (READONLY_ROLES.has(candidate)) matchedRole = candidate;
         break;
       }
     }
     if (!matchedRole) return;
 
-    const model = String(toolInput.model || '').trim().toLowerCase();
     const mechanicalConflict = MECHANICAL_ROLES.has(matchedRole);
     const entry = {
       ts: new Date().toISOString(),
       hook: 'dispatch-model-guard',
       subagent_type: subagentType,
-      model,
+      model: String(toolInput.model || '').trim().toLowerCase(),
       role: matchedRole,
       would_action: 'exempt_readonly_role',
       ...(mechanicalConflict ? { precedence: 'mechanical_reroute' } : {}),
@@ -433,6 +451,18 @@ function checkReadonlyRoleShadow(toolInput, prompt) {
   } catch {
     // fail-open on shadow log write errors
   }
+  if (!matchedRole) return;
+  const enforcing = mode === 'enforce' && !MECHANICAL_ROLES.has(matchedRole);
+  recordHookLog({
+    hook: 'dispatch-model-guard', rule: 'readonly-role-general-purpose',
+    decision: enforcing ? 'block' : 'warn', intercepted: enforcing,
+  });
+  if (!enforcing) return;
+  const useType = READONLY_ROLE_TYPE[matchedRole] || 'autopilot:probe';
+  emitDeny(
+    `dispatch-model-guard: Role: ${matchedRole} is read-only work but subagent_type is general-purpose (write + fleet tools). Re-dispatch with subagent_type: ${useType}.`
+    + gateHint(`subagent_type 改成 ${useType}（唯讀型別）；確需寫檔才把 Role 改成 implementer 等寫入角色；暫時關閉設 AUTOPILOT_READONLY_ROLE_GUARD=shadow`, 'hooks/README.md')
+  );
 }
 
 // Never break a normal Agent call: any throw inside the reroute check allows.

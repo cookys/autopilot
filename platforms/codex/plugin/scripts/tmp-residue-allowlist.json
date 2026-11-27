@@ -8,6 +8,11 @@
       "reason": "Hint message names the session scratchpad path; it allocates nothing."
     },
     {
+      "file": "hooks/subagent-budget.js",
+      "match": "const tmpDir = os.tmpdir();",
+      "reason": "Read-only containment check for a brief's prompt-file path; it allocates nothing."
+    },
+    {
       "file": "hooks/_shared/fleet-seat.js",
       "match": "base.startsWith('/tmp/')",
       "reason": "Comparison rejects a shared temp-root path; it allocates nothing."

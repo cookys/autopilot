@@ -6176,7 +6176,8 @@ _arm_worker_watchdog() {
 }
 
 # True (rc 0) when the agent CLI process has any live descendant (a running tool or test).
-# The agent CLI is rp, or rp's sole child when rp is a forking `setsid --wait` wrapper.
+# The agent CLI is rp, or rp's sole child when rp is a forking `setsid --wait` or `sudo` (sudo_private_ns
+# containment) wrapper: those wrappers stay alive above the worker and must not count as its tools.
 # Unknown (ps failure) counts as busy: the fail-closed side never ends a worker early.
 _worker_has_busy_descendant() {
   local rp="$1" out ps_rc=0
@@ -6188,7 +6189,7 @@ _worker_has_busy_descendant() {
       kids[ppid]++; kid[ppid]=pid; name[pid]=comm }
     END {
       r=root
-      while (name[r]=="setsid" && kids[r]==1) r=kid[r]
+      while ((name[r]=="setsid" || name[r]=="sudo") && kids[r]==1) r=kid[r]
       exit (kids[r]>0 ? 0 : 1)
     }'
 }

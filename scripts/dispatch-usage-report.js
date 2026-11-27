@@ -48,6 +48,7 @@ function report(dir, now, days) {
   return out;
 }
 
+const PENDING = '待量';
 const SUCCESS_STATUSES = ['committed', 'no_op', 'reviewed', 'success', 'authored'];
 const USAGE_TOKEN_KEYS = ['input_tokens', 'output_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens', 'reasoning_tokens'];
 
@@ -128,6 +129,10 @@ function reportByRole(dir, now, days) {
       g.usd_unknown++;
     }
   }
+  // usd_display: a figure only when every run carries a measured usd; otherwise 待量 (never a guessed number).
+  const show = (g) => { g.usd_display = g.usd_unknown === 0 && g.runs > 0 ? g.usd : g.usd_unknown === g.runs ? PENDING : `${g.usd}+${PENDING}(${g.usd_unknown})`; };
+  show(out.totals);
+  for (const g of Object.values(out.by_role)) show(g);
   return out;
 }
 
@@ -146,7 +151,8 @@ function main(argv) {
   const targetDir = dir || (byRole ? stateDir(process.env) : manifestDir());
   const data = byRole ? reportByRole(targetDir, Date.now(), days) : report(targetDir, Date.now(), days);
   fs.writeFileSync(dest, JSON.stringify(data, null, 2) + '\n');
-  process.stdout.write(json ? JSON.stringify(data) + '\n' : `dispatch usage: ${data.totals.runs} runs, ${data.skipped} skipped; snapshot ${dest}\n`);
+  const roles = byRole ? Object.entries(data.by_role).map(([r, g]) => `\n  ${r}: ${g.runs} runs, usd ${g.usd_display}`).join('') : '';
+  process.stdout.write(json ? JSON.stringify(data) + '\n' : `dispatch usage: ${data.totals.runs} runs, ${data.skipped} skipped; snapshot ${dest}${roles}\n`);
 }
 if (require.main === module) {
   try { main(process.argv.slice(2)); } catch (e) { process.stderr.write(`dispatch-usage-report: ${e instanceof RangeError ? e.message : e.code || 'I/O error'}\n`); process.exitCode = e instanceof RangeError ? 2 : 1; }

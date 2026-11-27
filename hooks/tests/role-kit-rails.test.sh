@@ -20,7 +20,7 @@ export CLAUDE_CONFIG_DIR="$TEST_TMP/real-claude"; seed_fake_claude_credentials "
 export AUTOPILOT_ACCOUNTS_DIR="$TEST_TMP/no-accounts"
 export TMPDIR="$TEST_TMP/tmp"; mkdir -p "$TMPDIR"
 export AUTOPILOT_DISPATCH_RUNS_DIR="$TEST_TMP/runs"; mkdir -p "$AUTOPILOT_DISPATCH_RUNS_DIR"
-export AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1
+export AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 AUTOPILOT_DISPATCH_ROLE=implementer
 unset AUTOPILOT_SESSION_ID CLAUDE_CODE_SESSION_ID AUTOPILOT_CONFIG_FILE
 node "$REPO_ROOT/scripts/run-approval.js" confirm-claude-native >/dev/null 2>&1
 
@@ -172,6 +172,24 @@ for KIND in review author hetero; do
     assert_contains "$OUT" "role-kit unsupported for runner $R" "(d) $KIND/$R: refused with the runner named"
   done
   KIT_RUNNER=""
+done
+
+# Role eligibility: a debugger attaches; a reviewer skips and records the decision.
+AUTOPILOT_DISPATCH_ROLE=debugger run_rail "$HETERO" hetero --role-kit "$KIT"
+assert_eq "" "$(argv_check "$KIT/role.md" "Read,Grep" "$KIT_REAL/plugin")" "debugger attaches kit"
+AUTOPILOT_DISPATCH_ROLE=reviewer run_rail "$HETERO" hetero --role-kit "$KIT"
+assert_eq "" "$(no_kit_flags)" "reviewer skips kit"
+assert_contains "$OUT" "role-kit skipped: role reviewer not in {implementer,debugger}" "reviewer skip reported"
+RUN_ID="$(printf '%s' "$OUT" | sed -n 's/.*"run_id": "\([^"]*\)".*/\1/p' | tail -1)"
+assert_contains "$(cat "$AUTOPILOT_DISPATCH_RUNS_DIR/$RUN_ID.manifest.json")" '"role_kit": null, "role_kit_skipped": "reviewer"' "reviewer skip recorded"
+
+for KIND in review author; do
+  AUTOPILOT_DISPATCH_ROLE="$([ "$KIND" = review ] && printf reviewer || printf author)" run_rail "$REPO_ROOT/scripts/dispatch-$KIND.sh" "$KIND" --role-kit "$KIT"
+  ROLE="$([ "$KIND" = review ] && printf reviewer || printf author)"
+  assert_eq "" "$(no_kit_flags)" "$KIND skips kit for $ROLE"
+  assert_eq "[]" "$(tools_arg)" "$KIND retains empty tools for $ROLE"
+  assert_contains "$OUT" "role-kit skipped: role $ROLE not in {implementer,debugger}" "$KIND reports skip"
+  assert_contains "$OUT" "\"role_kit\": null, \"role_kit_skipped\": \"$ROLE\"" "$KIND records skip"
 done
 
 # hetero manifest records the kit

@@ -979,6 +979,8 @@ Plan: [`project/plans/2026-11-03-g37-account-switching.md`](../project/plans/202
 
 ## Role kit (`--role-kit <dir>`) — a per-role system prompt, skill set and tool allowlist for a Claude child
 
+Kits attach only for the `implementer` and `debugger` roles. Other roles skip the kit with a stderr notice and record `role_kit: null` and `role_kit_skipped` with the role; unsupported runner refusals still apply.
+
 Direction: [`project/plans/2026-11-05-rolekit-direction.md`](../project/plans/2026-11-05-rolekit-direction.md). Only the `claude-native` arm of `dispatch-hetero.sh` (the worker), `dispatch-review.sh` and `dispatch-author.sh` takes the knob; off unless given. Whether a kit makes a weak model better is the A/B's question, not this knob's.
 
 - **Kit layout.** `<dir>/role.md` (the role card), optional `<dir>/plugin/` (a Claude plugin dir, normally the role's skills), `<dir>/tools` (one line, comma-separated allowlist; the single word `none` means no tools). Kits are read from wherever the caller points; the pilot kits live under `evals/rolekit/`.

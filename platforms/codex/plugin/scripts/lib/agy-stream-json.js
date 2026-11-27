@@ -329,4 +329,3 @@ module.exports = {
   promptTokenGate,
 };
 
-module.exports = { encodeUserLine, parseStream, STREAM_FLAGS, stdinMaxBytes, DEFAULT_STDIN_MAX_BYTES, inputTokenCeiling, DEFAULT_INPUT_TOKEN_CEILING };

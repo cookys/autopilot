@@ -10,6 +10,20 @@
       "reason": "Empty cwd for one grok availability probe; removed in a finally block."
     },
     {
+      "pattern": "qrp-agy-prompt-*",
+      "kind": "scratch",
+      "owner": "scripts/qualification-review-provider.js",
+      "retention_days": 1,
+      "reason": "Private dir holding the agy file-pointer prompt for one review call; removed when the call finishes."
+    },
+    {
+      "pattern": "qrp-cn-*",
+      "kind": "scratch",
+      "owner": "scripts/qualification-review-provider.js",
+      "retention_days": 1,
+      "reason": "Fresh empty sandbox dir for one CN-gate review call; removed when the call finishes."
+    },
+    {
       "pattern": "autopilot-target-precommit-*",
       "kind": "worktree",
       "owner": "scripts/dispatch-hetero.sh",

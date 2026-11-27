@@ -1279,10 +1279,18 @@ function roleOnlyRequest(role, content = 'x') {
   check(!odd.captured.argv.some((a) => a.includes('odd-start') || a.includes('end-odd')), 'agy: argv carries none of the prompt');
 
   // The old 512 KiB argv limit (kimi-only now) no longer applies to agy; the stdin ceiling does, and fails closed.
-  const big = runProvider({ env: agyEnv, request: reviewerRequest('y'.repeat(200_000) + REVIEWER_DIFF), stubOutput: REVIEWER_MODEL_OUTPUT });
-  equal(big.child.status, 1, 'agy: a prompt over the stdin ceiling fails the case');
+  // Over the stdin ceiling the prompt now goes through the file-pointer fallback; with the fallback off it fails closed.
+  const bigReq = reviewerRequest('y'.repeat(200_000) + REVIEWER_DIFF);
+  const viaFile = runProvider({ env: agyEnv, request: bigReq, stubOutput: REVIEWER_MODEL_OUTPUT });
+  equal(viaFile.child.status, 0, viaFile.child.stderr + 'agy: a prompt over the stdin ceiling succeeds through the file fallback');
+  check(!JSON.parse(viaFile.captured.stdin.trim()).message.content.includes('yyyyyyyyyy'), 'agy: the big prompt is not on stdin (pointer only)');
+  const big = runProvider({ env: { ...agyEnv, AUTOPILOT_AGY_FILE_FALLBACK: 'off' }, request: bigReq, stubOutput: REVIEWER_MODEL_OUTPUT });
+  equal(big.child.status, 1, 'agy: a prompt over the stdin ceiling fails the case when the file fallback is off');
   check(/agy_stdin_ceiling/.test(big.child.stderr), 'agy: the refusal names agy_stdin_ceiling');
   check(big.captured === null, 'agy: an over-ceiling prompt never spawns agy');
+  const bigFile = runProvider({ env: { ...agyEnv, AUTOPILOT_AGY_FILE_MAX_BYTES: '100000' }, request: bigReq, stubOutput: REVIEWER_MODEL_OUTPUT });
+  equal(bigFile.child.status, 1, 'agy: a prompt over the file ceiling fails the case');
+  check(/agy_file_ceiling/.test(bigFile.child.stderr), 'agy: the refusal names agy_file_ceiling');
   const raised = runProvider({
     env: { ...agyEnv, AUTOPILOT_AGY_STDIN_MAX_BYTES: '400000' },
     request: reviewerRequest('y'.repeat(200_000) + REVIEWER_DIFF), stubOutput: REVIEWER_MODEL_OUTPUT,
@@ -2476,7 +2484,7 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
   fs.mkdirSync(path.join(kimiTemplate, '.kimi-code'), { recursive: true });
   fs.writeFileSync(path.join(kimiTemplate, '.kimi-code', 'config.toml'), '# stub\n');
   const kimiEnv = (wire, extra = {}) => ({
-    AUTOPILOT_KIMI_LOCAL_ALLOW: '1', QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'kimi', QRP_CLI_BIN: stubKimi,
+    AUTOPILOT_TEST_CN_GATE_OFF: '1', AUTOPILOT_KIMI_LOCAL_ALLOW: '1', QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'kimi', QRP_CLI_BIN: stubKimi,
     QRP_CLI_HOME: kimiTemplate, STUB_KIMI_FIX: KIMI_FIX, STUB_KIMI_WIRE: wire, ...extra,
   });
   // Green: tool-less agent passed, clean wire -> answer accepted.
@@ -2526,7 +2534,7 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
   fs.rmSync(path.join(kimiTemplate, '.kimi-code', 'sessions'), { recursive: true, force: true });
   // Fail closed: no QRP_CLI_HOME -> refuse before spawn.
   const bare = runProvider({
-    env: { AUTOPILOT_KIMI_LOCAL_ALLOW: '1', QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'kimi', QRP_CLI_BIN: stubKimi, STUB_KIMI_FIX: KIMI_FIX },
+    env: { AUTOPILOT_TEST_CN_GATE_OFF: '1', AUTOPILOT_KIMI_LOCAL_ALLOW: '1', QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'kimi', QRP_CLI_BIN: stubKimi, STUB_KIMI_FIX: KIMI_FIX },
     request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT,
   });
   equal(bare.child.status, 1, 'kimi without QRP_CLI_HOME fails the case');
@@ -2936,5 +2944,5 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
 }
 
 fs.rmSync(tempRoot, { recursive: true, force: true });
-if (assertions !== 796) throw new Error(`qualification-review-provider: expected exactly 796 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 800) throw new Error(`qualification-review-provider: expected exactly 800 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

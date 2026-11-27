@@ -2,7 +2,6 @@
 // draws the 「我問」 strip with per-item status when ask rows exist, and draws nothing when there are none.
 import { test, expect, mock } from 'claude-code/testing'
 
-const walk = n => !n || typeof n !== 'object' ? [] : Array.isArray(n) ? n.flatMap(walk) : [n, ...walk(n.children)]
 const text = n => typeof n === 'string' ? n : Array.isArray(n) ? n.map(text).join('') : n?.props?.width === 0 || n?.props?.height === 0 ? '' : text(n?.children ?? [])
 
 const ASKS_JSON = JSON.stringify([
@@ -33,8 +32,7 @@ async function host($, on, asksJson: string | null) {
   on('ui.panes', () => ({ value: [] }))
   on('ui.close', () => ({ value: undefined }))
   on('process.run', (_, e) => {
-    const cmd = Array.isArray(e.command) ? e.command.join(' ') : String(e.command ?? '')
-    if (asksJson !== null && cmd.includes('asks')) {
+    if (asksJson !== null && e.argv.some(a => a.endsWith('pm-ask.js'))) {
       return { value: { exitCode: 0, stdout: asksJson, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
     }
     return { value: { exitCode: 1, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
@@ -61,12 +59,12 @@ test('v5 wide band: draws 「我問」 strip with per-item status at 209x49 when
   expect(all).toContain('1 未答')
   expect(all).toContain('未答 需要確認部署嗎？')
   expect(all).toContain('已答')
-  expect(walk(tree).some(n => n.type === 'Box' && n.key === 'wide-band')).toBe(true)
+  expect(all).toContain('現況')
 })
 
 test('v5 wide band: draws no 「我問」 strip when there are no ask rows', async ($, on) => {
   const tree = await host($, on, null)
   const all = text(tree)
   expect(all).not.toContain('我問：')
-  expect(walk(tree).some(n => n.type === 'Box' && n.key === 'wide-band')).toBe(true)
+  expect(all).toContain('現況')
 })

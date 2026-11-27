@@ -2620,7 +2620,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
         const wide = wideBand({ page: pageNo, tabs: WIDE_TABS, stepTitle, list, reply, status, hints, ...(widePage?.replyKeep !== undefined ? { replyKeep: widePage.replyKeep } : {}) })
         wideOverflow = wide.overflow
         const wideTree = WideBandTree(el, wide, (k) => { void paneKey($, k) }, panePlacementEpoch)
-        const askRows = askBandRows(asksFeed.rows(), columns, bandNow)
+        const askRows = askBandRows(asksFeed.rows() ?? [], columns, bandNow)
         if (askRows.length === 0) return wideTree
         const askTree = el.Box({
           key: 'wide-ask-band',

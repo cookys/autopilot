@@ -129,13 +129,17 @@ test('wiring: PostToolUse(Bash) spawns no awaiting-owner process; audit-log is t
   const cmds = entries('PostToolUse', 'Bash');
   assert.ok(!cmds.some((c) => c.includes('/hooks/awaiting-owner.js')), 'awaiting-owner must not be a PostToolUse process');
   assert.ok(cmds.some((c) => hostsStem(c, 'audit-log')), 'host hook stays wired on PostToolUse .* (directly or inside the post-tool-chain argv)');
-  // 5 = the former 7 minus the 2 that post-tool-chain folds in (intent-capture + audit-log + log-error share one process; plan docs/plans/2026-10-23-guard-port.md, depth-0 ruling (a))
-  assert.strictEqual(cmds.length, 5, `5 default-on PostToolUse processes (was 7 before the chain, 8 with awaiting-owner): ${cmds.join(' | ')}`);
+  // 8 = the former 5 (chain folds intent-capture + audit-log + log-error into one process) plus
+  // secret-output-redact, pm-output-cap and work-order-adopt, each its own default-on process.
+  assert.strictEqual(cmds.length, 8, `8 default-on PostToolUse processes: ${cmds.join(' | ')}`);
 });
 
 test('wiring: UserPromptSubmit spawns advisory-relay (timeout 70), past-reference-recall and scheduled-wakeup-guard (timeout 5, fail-open); autostart + awaiting-owner stay hosted', () => {
   const ups = entries('UserPromptSubmit', null);
-  assert.deepStrictEqual(ups.map((c) => path.basename(c.split(' ')[1])), ['advisory-relay.js', 'past-reference-recall.js', 'scheduled-wakeup-guard.js']);
+  assert.deepStrictEqual(ups.map((c) => path.basename(c.split(' ')[1])), [
+    'advisory-relay.js', 'past-reference-recall.js', 'scheduled-wakeup-guard.js',
+    'bg-quiet-sweep.js', 'pm-intake-a.js', 'session-mode-refresh.js',
+  ]);
   const g = HOOKS.UserPromptSubmit.find((x) => x.hooks.some((h) => h.command.includes('/hooks/advisory-relay.js')));
   const relay = g.hooks.find((h) => h.command.includes('/hooks/advisory-relay.js'));
   const recall = g.hooks.find((h) => h.command.includes('/hooks/past-reference-recall.js'));

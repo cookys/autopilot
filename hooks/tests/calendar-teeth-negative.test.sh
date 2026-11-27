@@ -527,8 +527,9 @@ ESC_NOMIG="$TESTDIR/esc-without-migration.js"
 awk '/^\/\/ strip-expiry: one-time migration/{skip=1} /^function main\(\)/{skip=0} !skip' "$ESC" > "$ESC_NOMIG"
 CE_NOLEGACY="$TESTDIR/ce-without-legacy-line.js"
 grep -v -E "value\.expires_at !== undefined|capability evidence has no expires_at" "$ROOT/src/engine/capability-evidence.js" > "$CE_NOLEGACY"
-# isLegacyExpiryRow in engine-scorecard.js is the reader's legacy detector: also a named exception
-grep -v -E "isLegacyExpiryRow|row\.expires !== undefined|row\.evidence\.expires_at !== undefined|a scorecard row has no expires field" "$ESC_NOMIG" > "$ESC_NOMIG.2"
+# isLegacyExpiryRow in engine-scorecard.js is the reader's legacy detector: also a named exception.
+# FIELD_OUTCOME_FORBIDDEN_FIELDS names `expires` only to refuse it on a field outcome.
+grep -v -E "isLegacyExpiryRow|row\.expires !== undefined|row\.evidence\.expires_at !== undefined|a scorecard row has no expires field|FIELD_OUTCOME_FORBIDDEN_FIELDS" "$ESC_NOMIG" > "$ESC_NOMIG.2"
 for pair in "$ESC_NOMIG.2" "$CE_NOLEGACY" "$RST" "$ROOT/scripts/lib/qualification-record-v2.js" "$ROOT/scripts/build-qualification-defaults.js" "$ROOT/scripts/adopt-qualification-defaults.js" "$ROOT/scripts/engine-qualify.js"; do
   h=$(scan_tokens "$pair")
   [ -n "$h" ] && SCAN_HITS="$SCAN_HITS

@@ -25,7 +25,12 @@ const ROOT = path.join(__dirname, '..');
 const H = 3600 * 1000;
 
 function env(t, extra = {}) {
-  const e = { ...process.env, HOME: t.home, AUTOPILOT_SESSION_MODE_DIR: t.modes, AUTOPILOT_LIVE_DIR: t.live, ...extra };
+  // Temp repos sit under scratch; open-decision refuses to publish those cards unless the
+  // suite opts in (same override as scripts/open-decision-scratch-guard.test.js).
+  const e = {
+    ...process.env, HOME: t.home, AUTOPILOT_SESSION_MODE_DIR: t.modes, AUTOPILOT_LIVE_DIR: t.live,
+    AUTOPILOT_ALLOW_SCRATCH_CARD: '1', AUTOPILOT_CARD_NOTIFY: 'off', ...extra,
+  };
   for (const k of ['AUTOPILOT_ROOT_RUN_ID', 'AUTOPILOT_SESSION_ID', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_SESSION_ID', 'CODEX_THREAD_ID']) delete e[k];
   return { ...e, ...extra };
 }

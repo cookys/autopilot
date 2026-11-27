@@ -6198,6 +6198,8 @@ _worker_has_busy_descendant() {
 # grown, all continuously for COMMIT_QUIET_SECS (clock starts when all hold), TERM the worker group (KILL after a short grace).
 # A running tool or test (a descendant) resets the clock: quiet output alone is not done.
 # Sleeps in 0.2s steps so a worker that exits (or is timed out) returns at once.
+# Opt-in diagnostics (AUTOPILOT_HETERO_CQ_DIAG=1): one line per supervision tick into "$LOG.cqdiag".
+_cq_diag() { [ "${AUTOPILOT_HETERO_CQ_DIAG:-0}" = 1 ] && [ -n "${LOG:-}" ] && printf '%s %s\n' "$SECONDS" "$*" >> "$LOG.cqdiag" 2>/dev/null; return 0; }
 _supervise_commit_quiet() {
   local rp="$1" poll="${HETERO_COMMIT_QUIET_POLL:-10}"
   local quiet="$COMMIT_QUIET_SECS" size last_size=-1 since=-1 head n
@@ -6210,10 +6212,11 @@ _supervise_commit_quiet() {
     # Every tick re-checks ALL eligibility conditions; any failure restarts the clock, which
     # only runs from the first tick where everything holds (never from earlier quiet).
     size="$(stat -c %s "$LOG" 2>/dev/null || echo 0)"
-    if [ "$size" != "$last_size" ]; then last_size="$size"; since=-1; continue; fi
-    if _worker_has_busy_descendant "$rp"; then since=-1; continue; fi
-    wt_gitfile_check || { since=-1; continue; }
+    if [ "$size" != "$last_size" ]; then _cq_diag "log grew $last_size->$size"; last_size="$size"; since=-1; continue; fi
+    if _worker_has_busy_descendant "$rp"; then _cq_diag "busy descendant; tree: $(ps -e -o pid=,ppid=,stat=,comm= 2>/dev/null | awk -v r="$rp" '{k[$1]=$2; l[$1]=$0} END{for(p in k){a=p; d=0; while(a!=""&&a!=1&&d<8){if(a==r){print l[p]; break}; a=k[a]; d++}}}' | tr '\n' ';')"; since=-1; continue; fi
+    wt_gitfile_check || { _cq_diag "wt_gitfile_check failed"; since=-1; continue; }
     head="$(_wt_git rev-parse --verify HEAD 2>/dev/null || true)"
+    _cq_diag "head=${head:-none} diff_base=${DIFF_BASE_SHA:-} base=${BASE_SHA:-} rp=$rp sid=$(ps -o sid= -p "$rp" 2>/dev/null | tr -d ' ') pgid=$(ps -o pgid= -p "$rp" 2>/dev/null | tr -d ' ') dirty=$(_wt_git status --porcelain --ignore-submodules=dirty 2>/dev/null | wc -l)"
     if [ -z "$head" ] || [ "$head" = "$DIFF_BASE_SHA" ] \
        || { [ "${SCRATCH:-0}" -ne 1 ] && ! _wt_git merge-base --is-ancestor "$BASE_SHA" "$head" 2>/dev/null; } \
        || [ -n "$(_wt_git status --porcelain --ignore-submodules=dirty 2>/dev/null)" ]; then since=-1; continue; fi
@@ -8563,7 +8566,7 @@ dispatch_detached_run() {
     declare -f token_seat_guard 2>/dev/null || true
     # detached_main releases the local lease and runs the fixture-literal advisory; both must cross the setsid boundary.
     declare -f release_local_lease local_lease_json run_fixture_literal_advisory 2>/dev/null || true
-    declare -f agy_print_timeout agy_assert_disposable_home die_precondition fell_back_json_suffix hetero_log_fallback child_session_env_setup repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_worker_alive _watchdog_signal_worker _hetero_resolve_watch_limits _watchdog_sleep_sample _watchdog_progress_sample _watchdog_fire _arm_worker_watchdog _worker_has_busy_descendant _supervise_commit_quiet _hetero_registry_start _hetero_registry_end _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts capture_structured_provider_error _prefer_structured_classified_error passive_capture \
+    declare -f agy_print_timeout agy_assert_disposable_home die_precondition fell_back_json_suffix hetero_log_fallback child_session_env_setup repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_worker_alive _watchdog_signal_worker _hetero_resolve_watch_limits _watchdog_sleep_sample _watchdog_progress_sample _watchdog_fire _arm_worker_watchdog _worker_has_busy_descendant _cq_diag _supervise_commit_quiet _hetero_registry_start _hetero_registry_end _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts capture_structured_provider_error _prefer_structured_classified_error passive_capture \
       _is_engine_unavailable _hetero_runner_token _capability_write_note _capability_write_suppress_now seat_strike_capture classify_outcome _emit_question_waiting_event heartbeat_loop detached_main seal_runner_prompt_bytes write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks resolve_tip_verify_commands run_tip_verify _fp_unverifiable main_checkout_fingerprint main_checkout_parts_digest main_checkout_describe_delta main_checkout_wt_symlink_leaks check_main_checkout_boundary run_hands_content_gate run_hands_backlog_gate run_hands_backlog_reconcile_gate \
       capture_scratch_files _cont_terminal_on_exit _cont_finalize_or_die local_lease_json release_local_lease run_fixture_literal_advisory \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \

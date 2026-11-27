@@ -11,12 +11,12 @@ F="$TEST_TMP/f"; mkfifo "$F"
 # sudo -> worker body that only waits (no tool): not busy
 "$TEST_TMP/sudo" -c "\"$TEST_TMP/workerbody\" -c 'read -t 25 _ <> \"$F\"; :'; :" & SP=$!
 sleep 1
-_worker_has_busy_descendant "$SP" && fail "sudo wrapper plus idle worker body counted as busy"
+_worker_has_busy_descendant "$SP"; assert_eq "$?" 1 "sudo wrapper plus idle worker body is not busy"
 
 # sudo -> worker body -> running tool: busy
 "$TEST_TMP/sudo" -c "\"$TEST_TMP/workerbody\" -c 'sleep 25; :'; :" & SP2=$!
 sleep 1
-_worker_has_busy_descendant "$SP2" || fail "tool under the worker body not counted as busy"
+_worker_has_busy_descendant "$SP2"; assert_eq "$?" 0 "tool under the worker body is busy"
 
 pkill -P "$SP" 2>/dev/null; pkill -P "$SP2" 2>/dev/null
 kill "$SP" "$SP2" 2>/dev/null

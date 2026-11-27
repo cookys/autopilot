@@ -3608,6 +3608,18 @@
       "relates": []
     },
     {
+      "name": "AUTOPILOT_HETERO_CQ_DIAG",
+      "kind": "env",
+      "audience": "internal",
+      "class": "probe_toggle",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-hetero.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
       "name": "AUTOPILOT_GROK_EFFORT_SH",
       "kind": "env",
       "audience": "internal",

@@ -44,3 +44,4 @@ FULL="$HOOK_HOME/.autopilot/compaction-state-$SID-full.md"
 assert_file_exists "$FULL" "full copy kept for on-demand reading"
 assert_eq "$(wc -c < "$FULL")" "$FULLBYTES" "full copy is the whole checkpoint"
 assert_eq "$([ -e "$STATE" ] && echo yes || echo no)" "no" "original consumed once"
+finalize_test

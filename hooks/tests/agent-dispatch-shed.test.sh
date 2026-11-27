@@ -169,4 +169,53 @@ assert_not_contains "$NEG_SHED_OUT" 'dispatch-hetero' "shed-10: negative-control
 invoke_hook "$(build_agent_payload "$SHED_PROMPT_1")"
 assert_contains "$OUT" 'dispatch-hetero.sh --runner minimax' "shed-10: GREEN on real hook"
 
+# 11. RT(1): non-Claude chair + subagent without model -> inherit (never haiku); Claude chair keeps the haiku row
+resolve_model() { # $1 chair family
+  AUTOPILOT_CHAIR_FAMILY="$1" node -e '
+    const { resolveSubagentModel } = require(process.argv[1]);
+    process.stdout.write(String(resolveSubagentModel({ prompt: process.argv[2] })));
+  ' "$HOOK_PATH" "$SHED_PROMPT_1" 2>/dev/null
+}
+assert_eq "$(resolve_model local)" "inherit" "rt-1: local chair, no model -> inherit"
+assert_eq "$(resolve_model glm-5)" "inherit" "rt-1: non-Claude chair, no model -> inherit"
+assert_eq "$(resolve_model claude)" "haiku" "rt-1: Claude chair keeps the haiku row"
+
+# 11b. RT(1) end-to-end through the hook entry: non-Claude chair, no model -> updatedInput.model=inherit
+write_burn_more "$BM_FILE" "$STALE_AT" "[]"
+e2e_model() { # $1 chair, $2 model arg to build_agent_payload (omit = none)
+  local o
+  o="$(AUTOPILOT_CHAIR_FAMILY="$1" HOME="$SHED_TMP/home" AUTOPILOT_BURN_MORE="$BM_FILE" node "$HOOK_PATH" <<< "$(build_agent_payload "$SHED_PROMPT_1" Task ${2:+"$2"})")"
+  node -e 'const r=process.argv[1]; if(!r){process.stdout.write("none");process.exit(0)} const h=JSON.parse(r).hookSpecificOutput; process.stdout.write(h.updatedInput?String(h.updatedInput.model):"deny")' "$o"
+}
+assert_eq "$(e2e_model local)" "inherit" "rt-1 e2e: local chair, no model -> hook pins inherit"
+assert_eq "$(e2e_model claude)" "none" "rt-1 e2e: Claude chair untouched"
+assert_eq "$(e2e_model local haiku)" "none" "rt-1 e2e: explicit model never rewritten"
+
+# 12. RT(2): pool tight -> agy, codex first, grok removed
+write_burn_more_targets() { # $1 targets json, $2 undispatchable json
+  write_burn_more "$BM_FILE" "$FRESH_AT" "${2:-[]}"
+  sed -i "s/\"targets_in_order\": \[[^]]*\]/\"targets_in_order\": $1/" "$BM_FILE"
+}
+tight_hook() { OUT="$(HOME="$SHED_TMP/home" AUTOPILOT_BURN_MORE="$BM_FILE" AUTOPILOT_POOL_TIGHT=1 node "$HOOK_PATH" <<< "$(build_agent_payload "$SHED_PROMPT_1")")"; }
+write_burn_more_targets '["grok","codex","agy"]'
+tight_hook
+assert_deny_with_target "$OUT" "agy" "rt-2: tight pool picks agy first, not grok"
+write_burn_more_targets '["grok","codex","agy"]' '["agy"]'
+tight_hook
+assert_deny_with_target "$OUT" "codex" "rt-2: agy undispatchable -> codex"
+write_burn_more_targets '["grok"]'
+tight_hook
+assert_eq "$OUT" "" "rt-2: grok-only list under a tight pool never reassigns to grok"
+write_burn_more_targets '["grok","codex"]'
+invoke_hook "$(build_agent_payload "$SHED_PROMPT_1")"
+assert_deny_with_target "$OUT" "grok" "rt-2: pool not tight keeps the signal order (grok allowed)"
+
+# 13. RT(3): transcript-type work from a non-Claude chair is blocked
+TRANSCRIPT_PROMPT=$'Engine: sonnet\nWork-Class: transcript\nRole: implementer\nSize: M\nSummarize the session transcript.'
+OUT="$(AUTOPILOT_CHAIR_FAMILY=local HOME="$SHED_TMP/home" AUTOPILOT_BURN_MORE="$BM_FILE" node "$HOOK_PATH" <<< "$(build_agent_payload "$TRANSCRIPT_PROMPT")")"
+assert_contains "$OUT" '"permissionDecision":"deny"' "rt-3: non-Claude chair + transcript work denied"
+assert_contains "$OUT" 'transcript' "rt-3: reason names transcript"
+OUT="$(AUTOPILOT_CHAIR_FAMILY=claude HOME="$SHED_TMP/home" AUTOPILOT_BURN_MORE="$BM_FILE" node "$HOOK_PATH" <<< "$(build_agent_payload "$TRANSCRIPT_PROMPT")")"
+assert_eq "$OUT" "" "rt-3: Claude chair + transcript work passes"
+
 finalize_test

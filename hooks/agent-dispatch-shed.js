@@ -28,6 +28,43 @@ const { applyShedRouting } = require('./fleet-dispatch-class.js');
 
 const SHED_HIT_LINE_RE = /^Shed: hit engine=(\S+) run_id=(\S+) signal_at=(\S+)\s*$/m;
 
+// RT chair-source axis. AUTOPILOT_CHAIR_FAMILY names the chair's model family;
+// unset or `claude` is a Claude chair, anything else (local, a non-Claude model) is not.
+function chairIsClaude(env = process.env) {
+  const fam = String(env.AUTOPILOT_CHAIR_FAMILY || 'claude').trim().toLowerCase();
+  return fam === '' || fam === 'claude';
+}
+
+// Model a subagent without an explicit model runs on. The haiku row (mechanical
+// XS/S brief) exists only with a Claude chair; any other chair inherits.
+function resolveSubagentModel(toolInput, env = process.env) {
+  const explicit = toolInput && typeof toolInput.model === 'string' ? toolInput.model.trim() : '';
+  if (explicit) return explicit;
+  if (!chairIsClaude(env)) return 'inherit';
+  const head = String((toolInput && toolInput.prompt) || '').split(/\r?\n/).slice(0, 10).join('\n');
+  const role = (head.match(/^Role:\s*([A-Za-z-]+)/m) || [])[1];
+  const size = (head.match(/^Size:\s*(\S+)/m) || [])[1];
+  if (/^(inventory|summary|chores)$/i.test(role || '') && /^(XS|S)$/i.test(size || '')) return 'haiku';
+  return 'inherit';
+}
+
+// Non-Claude chair + no explicit model: pin `inherit` so the subagent never lands on a Claude default.
+function inheritForNonClaudeChair(toolInput) {
+  if (chairIsClaude()) return null;
+  if (resolveSubagentModel(toolInput) !== 'inherit' || (typeof toolInput.model === 'string' && toolInput.model.trim())) return null;
+  return {
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'allow',
+      updatedInput: { ...toolInput, model: 'inherit' },
+    },
+  };
+}
+
+function isTranscriptWork(prompt) {
+  return /^Work-Class:\s*transcript\b/im.test(String(prompt).split(/\r?\n/).slice(0, 10).join('\n'));
+}
+
 function preToolDeny(reason) {
   return {
     hookSpecificOutput: {
@@ -48,13 +85,21 @@ function decide(input) {
   const prompt = toolInput.prompt;
   if (typeof prompt !== 'string' || !prompt) return null;
 
+  if (isTranscriptWork(prompt) && !chairIsClaude()) {
+    return preToolDeny(
+      'agent-dispatch-shed：transcript 類工作只能從 Claude 主席派發；目前主席來源 AUTOPILOT_CHAIR_FAMILY='
+      + `${process.env.AUTOPILOT_CHAIR_FAMILY} 不是 Claude。請改由 Claude 席派發。`
+      + gateHint('改由 Claude 主席派發 transcript 類工作', 'hooks/README.md')
+    );
+  }
+
   // Throwaway copy: applyShedRouting rewrites the Engine: header and stamps the
   // Shed: line; we read the outcome back out instead of using the rewrite.
   const routed = applyShedRouting({ task: prompt, size: toolInput.size });
-  if (routed === prompt) return null;
+  if (routed === prompt) return inheritForNonClaudeChair(toolInput);
 
   const hit = routed.match(SHED_HIT_LINE_RE);
-  if (!hit) return null; // skipped outcome (stale, pinned, no target, off) -> pass untouched
+  if (!hit) return inheritForNonClaudeChair(toolInput); // skipped outcome (stale, pinned, no target, off) -> pass untouched
 
   const target = hit[1];
   return preToolDeny(
@@ -90,4 +135,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { decide };
+module.exports = { decide, resolveSubagentModel, chairIsClaude };

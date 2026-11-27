@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
 
 const DEFAULT_BWRAP = '/usr/bin/bwrap';
 const SENSITIVE_ENV_RE = /^(FLEET|GIT|SSH|CLAUDE_CONFIG_DIR|ANTHROPIC_|OPENAI_|AWS_|GCP_|AZURE_|.*TOKEN.*|.*SECRET.*|.*KEY.*|.*PASSWORD.*|.*AUTH.*)/i;
@@ -49,6 +49,7 @@ function resolveAllowedEnv(envAllow) {
  * @param {string[]|Record<string,string>} [opts.envAllow] - Allowed env vars
  * @param {boolean} [opts.allowNet=false] - Explicitly allow network (default false -> --unshare-net)
  * @param {string[]} [opts.command] - Command + args to run inside sandbox
+ * @param {string} [opts.proxySocket] - Host Unix socket bind-mounted at /proxy.sock
  * @returns {string[]}
  */
 function buildSandboxArgs(opts = {}) {
@@ -58,6 +59,7 @@ function buildSandboxArgs(opts = {}) {
     envAllow,
     allowNet = false,
     command = [],
+    proxySocket,
   } = opts;
 
   const args = [
@@ -100,6 +102,9 @@ function buildSandboxArgs(opts = {}) {
     args.push('--bind', path.resolve(workDir), '/work');
   } else {
     args.push('--tmpfs', '/work');
+  }
+  if (proxySocket) {
+    args.push('--bind', path.resolve(proxySocket), '/proxy.sock');
   }
   args.push('--chdir', '/work');
 
@@ -169,8 +174,21 @@ function checkBwrapAvailable(bwrapBin = DEFAULT_BWRAP) {
  * @param {string} [opts.bwrapBin]
  * @param {boolean} [opts.allowNet=false] - For negative-control testing only
  * @param {string} [opts.extraRoHome] - For negative-control testing only
+ * @param {string} [opts.proxyModulePath] - replay-api-proxy.js (tests may pass a mutated copy)
  * @returns {{ passed: boolean, skipped?: boolean, reason?: string, probes: Array<{name: string, blocked: boolean, evidence: string}> }}
  */
+function waitForText(file, timeoutMs) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (fs.existsSync(file)) {
+      const text = fs.readFileSync(file, 'utf8').trim();
+      if (text) return text;
+    }
+    spawnSync(process.execPath, ['-e', 'setTimeout(()=>{},40)']);
+  }
+  return '';
+}
+
 function runNegativeControls(opts = {}) {
   const bwrapBin = opts.bwrapBin || DEFAULT_BWRAP;
   const avail = checkBwrapAvailable(bwrapBin);
@@ -206,9 +224,10 @@ function runNegativeControls(opts = {}) {
     allowNet: Boolean(opts.allowNet),
   };
 
-  const runProbe = (name, script, checkFn) => {
+  const runProbe = (name, script, checkFn, extraOpts = {}) => {
     const args = buildSandboxArgs({
       ...baseOpts,
+      ...extraOpts,
       command: [process.execPath, '-e', script],
     });
     if (opts.extraRoHome) {
@@ -301,11 +320,117 @@ function runNegativeControls(opts = {}) {
         evidence: `status=${res.status} stderr=${res.stderr.trim().slice(0, 120)}`,
       })
     );
+
+    const children = [];
+    const stopChildren = () => {
+      for (const child of children) {
+        try { child.kill('SIGKILL'); } catch { /* already gone */ }
+      }
+    };
+    try {
+      const canaryFile = path.join(tmpRoot, 'canary-port');
+      children.push(spawn(process.execPath, ['-e', `
+        const net = require('node:net');
+        const fs = require('node:fs');
+        const s = net.createServer((c) => c.end('ok'));
+        s.listen(0, '127.0.0.1', () => fs.writeFileSync(process.argv[1], String(s.address().port)));
+        setInterval(() => {}, 1e6);
+      `, canaryFile], { stdio: 'ignore' }));
+      const canaryPort = Number(waitForText(canaryFile, 3000)) || 1;
+
+      const proxySock = path.join(tmpRoot, 'proxy.sock');
+      const proxyReady = path.join(tmpRoot, 'proxy-ready');
+      const upstreamReady = path.join(tmpRoot, 'upstream-port');
+      const authFile = path.join(tmpRoot, 'auth');
+      fs.writeFileSync(authFile, 'dummy-replay-auth-do-not-use', { mode: 0o600 });
+      children.push(spawn(process.execPath, ['-e', `
+        const http = require('node:http');
+        const fs = require('node:fs');
+        const s = http.createServer((req, res) => {
+          res.writeHead(200, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 1, output_tokens: 1 } }));
+        });
+        s.listen(0, '127.0.0.1', () => fs.writeFileSync(process.argv[1], String(s.address().port)));
+        setInterval(() => {}, 1e6);
+      `, upstreamReady], { stdio: 'ignore' }));
+      const upstreamPort = waitForText(upstreamReady, 3000);
+      const proxyModule = opts.proxyModulePath || path.join(__dirname, 'replay-api-proxy.js');
+      children.push(spawn(process.execPath, ['-e', `
+        const { startReplayProxy } = require(process.argv[1]);
+        startReplayProxy({
+          socketPath: process.argv[2],
+          upstream: 'http://127.0.0.1:' + process.argv[3],
+          authFile: process.argv[4],
+          totalCap: 80000000,
+          eventMax: 1000,
+          auditPath: process.argv[5],
+        }).then(() => require('node:fs').writeFileSync(process.argv[6], 'ready')).catch(() => process.exit(1));
+      `, proxyModule, proxySock, upstreamPort, authFile, path.join(tmpRoot, 'audit.jsonl'), proxyReady], { stdio: 'ignore' }));
+      waitForText(proxyReady, 3000);
+
+      const mounted = { proxySocket: proxySock };
+      runProbe(
+        'f_no_egress_except_proxy',
+        `
+        const net = require('net');
+        function tcp(port) {
+          return new Promise((resolve) => {
+            const s = net.connect({ host: '127.0.0.1', port, timeout: 800 }, () => { s.destroy(); resolve('OPEN'); });
+            s.on('error', () => resolve('ERR'));
+            s.on('timeout', () => { s.destroy(); resolve('ERR'); });
+          });
+        }
+        function unix(p) {
+          return new Promise((resolve) => {
+            const s = net.connect(p, () => { s.end(); resolve('OPEN'); });
+            s.on('error', () => resolve('ERR'));
+          });
+        }
+        Promise.all([tcp(${canaryPort}), unix('/proxy.sock')]).then((r) => {
+          console.log(JSON.stringify(r));
+          process.exit(r[0] === 'OPEN' || r[1] !== 'OPEN' ? 0 : 1);
+        });
+        `,
+        (res) => ({
+          blocked: res.status !== 0 && !res.stdout.includes('["OPEN"'),
+          evidence: `status=${res.status} stdout=${res.stdout.trim()}`,
+        }),
+        mounted
+      );
+
+      runProbe(
+        'g_proxy_refuses_non_model_paths',
+        `
+        const http = require('http');
+        function hit(path, method) {
+          return new Promise((resolve) => {
+            const req = http.request({ socketPath: '/proxy.sock', path, method }, (res) => {
+              res.resume();
+              res.on('end', () => resolve(res.statusCode));
+            });
+            req.on('error', () => resolve(0));
+            req.end(method === 'POST' ? '{}' : undefined);
+          });
+        }
+        Promise.all([hit('/v1/models', 'GET'), hit('/v1/messages', 'POST')]).then((r) => {
+          console.log(JSON.stringify(r));
+          process.exit(r[0] === 403 && r[1] !== 403 ? 1 : 0);
+        });
+        `,
+        (res) => ({
+          blocked: res.status !== 0 && res.stdout.includes('[403,'),
+          evidence: `status=${res.status} stdout=${res.stdout.trim()}`,
+        }),
+        mounted
+      );
+    } finally {
+      stopChildren();
+    }
   } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
 
-  const passed = probes.length === 5 && probes.every((p) => p.blocked);
+  const passed = probes.length === 7 && probes.every((p) => p.blocked);
   return { passed, probes };
 }
 

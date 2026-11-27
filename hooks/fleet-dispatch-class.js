@@ -55,6 +55,19 @@ const HEADER_LINE_RE = /^\s*(?:[-*]\s+)?(?:\*\*)?[a-z0-9_-]+(?:\*\*)?\s*:/i;
 const SHED_LINE_RE = /^\s*shed\s*:/im;
 const SHED_ROLES = new Set(['inventory', 'summary', 'chores']);
 const SHED_SIZES = new Set(['XS', 'S']);
+// RT: when the pool is tight (AUTOPILOT_POOL_TIGHT=1) the reassignment order is
+// agy, codex first and grok is never a target.
+const TIGHT_FIRST = ['agy', 'codex'];
+const TIGHT_REMOVED = new Set(['grok']);
+
+function orderTargets(targets, env) {
+  if (!env || env.AUTOPILOT_POOL_TIGHT !== '1') return targets;
+  const kept = targets.filter((t) => !TIGHT_REMOVED.has(t));
+  return [
+    ...TIGHT_FIRST.filter((t) => kept.includes(t)),
+    ...kept.filter((t) => !TIGHT_FIRST.includes(t)),
+  ];
+}
 const PLAN_WORD_RE = /(?:^|[^a-z])plan(?:[^a-z]|$)/i;
 const EXPECT_REVISION_FLAG_RE = /--expect-revision(?:=|\s)/;
 const DISPATCH_PLAN_REVIEW_RE = /\bdispatch-plan-review\.js\b/;
@@ -196,7 +209,7 @@ function applyShedRouting(toolInput) {
 
   const rules = sig.data.shed.rules;
   const undispatchable = new Set(Array.isArray(rules.undispatchable) ? rules.undispatchable : []);
-  const chosen = rules.targets_in_order.find(
+  const chosen = orderTargets(rules.targets_in_order, process.env).find(
     (t) => typeof t === 'string' && t && !undispatchable.has(t),
   );
   if (!chosen) {

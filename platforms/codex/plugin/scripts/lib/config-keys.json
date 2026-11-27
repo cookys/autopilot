@@ -8856,6 +8856,30 @@
       "summary": "Set to 0 to disable seat-scoped mechanical-work shed routing from the fresh capacity.burn_more/1 shed field."
     },
     {
+      "name": "AUTOPILOT_CHAIR_FAMILY",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "claude",
+      "readers": [
+        "hooks/agent-dispatch-shed.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "summary": "Model family of the chair seat. Unset or `claude` is a Claude chair; any other value (local, a non-Claude model) makes a subagent without a model inherit, drops the haiku row, and blocks transcript-type work (`Work-Class: transcript`) from being dispatched."
+    },
+    {
+      "name": "AUTOPILOT_POOL_TIGHT",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "off",
+      "readers": [
+        "hooks/fleet-dispatch-class.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "summary": "Set to `1` when the pool is tight: shed reassignment order becomes agy, codex first and grok is never a target."
+    },
+    {
       "name": "AUTOPILOT_ENGINE_PREFLIGHT_WINDOW_MIN",
       "kind": "env",
       "audience": "user",

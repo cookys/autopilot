@@ -2620,19 +2620,8 @@ export function registerLive(on: Parameters<Register>[0]): void {
         const wide = wideBand({ page: pageNo, tabs: WIDE_TABS, stepTitle, list, reply, status, hints, ...(widePage?.replyKeep !== undefined ? { replyKeep: widePage.replyKeep } : {}) })
         wideOverflow = wide.overflow
         const wideTree = WideBandTree(el, wide, (k) => { void paneKey($, k) }, panePlacementEpoch)
-        const askRows = askBandRows(asksFeed.rows() ?? [], columns, bandNow)
-        if (askRows.length === 0) return wideTree
-        const askTree = el.Box({
-          key: 'wide-ask-band',
-          flexDirection: 'column',
-          flexShrink: 0,
-          children: askRows.map((row, y) => el.Box({
-            key: 'wide-ask-row-' + y,
-            flexShrink: 0,
-            children: row.map((s, i) => el.Text({ key: 's' + i, ...(s.color === undefined ? {} : { color: s.color }), wrap: 'truncate', children: s.text })),
-          })),
-        })
-        return stackRows(el, [wideTree, askTree])
+        const askTree = buildAskTree(el, asksFeed.rows() ?? [], columns, bandNow, 'wide-ask')
+        return askTree === null ? wideTree : stackRows(el, [wideTree, askTree])
       }
       const onOneRowSegment = (id: BandSegmentId) => {
         const target = bandSlotPage(id, false)
@@ -2645,7 +2634,10 @@ export function registerLive(on: Parameters<Register>[0]): void {
         void pageOpen(id as BandPageId)
       }
       const oneRow = OneRowBand(el, layoutOneRowBand(oneRowInput, columns, t), onOneRowSegment, () => { void togglePane() }, showBox ? undefined : { onPage: onOneRowPage })
-      if (!showBox) return stackRows(el, [oneRow])
+      if (!showBox) {
+        const askTree = buildAskTree(el, asksFeed.rows() ?? [], columns, bandNow, 'onerow-ask')
+        return stackRows(el, askTree === null ? [oneRow] : [oneRow, askTree])
+      }
       const page = await paneTree($, e as never, false, height, rows)
       await logBandGeometry($, rows, columns, height + 1)
       return stackRows(el, [page, oneRow])
@@ -3092,6 +3084,21 @@ async function decideAnswered($: EngineInterface, id: string): Promise<void> {
   if (d === undefined || answerOf(d, st) === null || snapshot === null) return
   const plan = answerPlan({ lines: decideCardLines(snapshot, st), batch: decideBatch, pending, st, answered: id, offset: decideScroll.offset, room: Math.max(1, decideScroll.room) })
   await decideFocusTo($, plan)
+}
+
+function buildAskTree(el: Parameters<typeof stackRows>[0], rows: Parameters<typeof askBandRows>[0], cols: number, nowMs: number, keyPrefix: string) {
+  const askRows = askBandRows(rows, cols, nowMs)
+  if (askRows.length === 0) return null
+  return el.Box({
+    key: keyPrefix + '-band',
+    flexDirection: 'column',
+    flexShrink: 0,
+    children: askRows.map((row, y) => el.Box({
+      key: keyPrefix + '-row-' + y,
+      flexShrink: 0,
+      children: row.map((s, i) => el.Text({ key: 's' + i, ...(s.color === undefined ? {} : { color: s.color }), wrap: 'truncate', children: s.text })),
+    })),
+  })
 }
 
 // The mod cuts every tab's window itself. Keep the engine's outer window at 0

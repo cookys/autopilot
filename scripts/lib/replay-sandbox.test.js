@@ -84,16 +84,18 @@ test('f is red when the unshare-net guard is removed, then the real probe is gre
   }
   const probe = red.probes.find((p) => p.name === 'f_no_egress_except_proxy');
   assert.equal(probe.blocked, false, `expected red f, evidence=${probe.evidence}`);
+  console.log(`RED f: blocked=${probe.blocked} ${probe.evidence}`);
   const green = runNegativeControls();
   const again = green.probes.find((p) => p.name === 'f_no_egress_except_proxy');
   assert.equal(again.blocked, true, again.evidence);
+  console.log(`GREEN f: blocked=${again.blocked} ${again.evidence}`);
 });
 
 test('g is red when the proxy path guard is removed, then the real probe is green', () => {
   const proxyPath = require('node:path').join(__dirname, 'replay-api-proxy.js');
   const src = require('node:fs').readFileSync(proxyPath, 'utf8');
   const needle = 'if (!isModelMessagesPath(req.url))';
-  const mutated = src.replace(needle, 'if (false)');
+  const mutated = src.replace(needle, 'if (false)').replace("require('./replay-budget.js')", `require(${JSON.stringify(require.resolve('./replay-budget.js'))})`);
   assert.notEqual(mutated, src, 'negative control must remove the path guard');
   const tmp = require('node:fs').mkdtempSync(require('node:path').join(require('node:os').tmpdir(), 'replay-red-g-'));
   const file = require('node:path').join(tmp, 'replay-api-proxy-red.js');
@@ -105,9 +107,12 @@ test('g is red when the proxy path guard is removed, then the real probe is gree
   }
   const probe = red.probes.find((p) => p.name === 'g_proxy_refuses_non_model_paths');
   assert.equal(probe.blocked, false, `expected red g, evidence=${probe.evidence}`);
+  assert.match(probe.evidence, /stdout=\[(?!403,)\d+,\d+\]/, 'mutated proxy must actually answer both requests');
+  console.log(`RED g: blocked=${probe.blocked} ${probe.evidence}`);
   const green = runNegativeControls();
   const again = green.probes.find((p) => p.name === 'g_proxy_refuses_non_model_paths');
   assert.equal(again.blocked, true, again.evidence);
+  console.log(`GREEN g: blocked=${again.blocked} ${again.evidence}`);
 });
 
 console.log(`\n${passedCount} tests passed.`);

@@ -86,3 +86,11 @@ test('real captures pass the CLI gate', () => {
     assert.match(result.stdout, /class="row"/);
   }
 });
+
+test('gate accepts a split-layout row ending at the inner divider, not a shifted border', () => {
+  const { gate } = require('./ansi-to-html-grid.js');
+  const run = text => gate('\x1b[31m' + text, render('\x1b[31m' + text)).failures.map(f => f.check);
+  assert.deepEqual(run('abc │ side │\nabc │      │\nabc │'), []);
+  assert.deepEqual(run('│ ab │\n│ ab│'), ['width']);
+  assert.deepEqual(run('│ ab │\n│ abc │'), ['width']);
+});

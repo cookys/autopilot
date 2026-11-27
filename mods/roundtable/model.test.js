@@ -114,3 +114,10 @@ test('thumb: 10 visible of 100 is one tenth; min 1; full track when it fits; top
   assert.deepEqual(m.thumbSpan(4, 10, 0), { top: 0, len: 10 })
   assert.throws(() => assertThumb({ top: 0, len: 10 }, 100, 10))
 })
+
+test('wrap: closing punctuation never starts a line', () => {
+  assert.deepEqual(m.wrapToWidth('一二三四。', 8), ['一二三', '四。'])
+  assert.deepEqual(m.wrapToWidth('。', 8), ['。'])
+  // no room to take the previous character along: keep the plain break
+  assert.deepEqual(m.wrapToWidth('一。', 2), ['一', '。'])
+})

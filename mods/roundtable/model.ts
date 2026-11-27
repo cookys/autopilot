@@ -61,6 +61,8 @@ export function rowRole(row: RoomRow): LineRole {
   return 'text'
 }
 
+const CLOSING = '，。；：、？！）」』'
+
 // Wrap on display cells. A character wider than the remaining room starts the next line. A character wider than the whole width stays whole on its own line.
 export function wrapToWidth(text: string, width: number): string[] {
   if (text === '') return ['']
@@ -75,7 +77,16 @@ export function wrapToWidth(text: string, width: number): string[] {
       out.push(ch)
       continue
     }
-    if (used + cw > width) { out.push(line); line = ch; used = cw; continue }
+    if (used + cw > width) {
+      // Closing punctuation never starts a line: take the previous character along when both fit.
+      const chars = Array.from(line)
+      const prev = chars[chars.length - 1]
+      const pw = prev === undefined ? 0 : cellWidth(prev.codePointAt(0) as number)
+      if (CLOSING.includes(ch) && chars.length > 1 && pw + cw <= width) {
+        out.push(chars.slice(0, -1).join('')); line = prev + ch; used = pw + cw
+      } else { out.push(line); line = ch; used = cw }
+      continue
+    }
     line += ch
     used += cw
   }

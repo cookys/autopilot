@@ -22,7 +22,6 @@ export type RoundtableView = {
 }
 
 const colorOf = (role: LineRole) => {
-  if (role === 'here') return PALETTE.here
   if (role === 'attention') return PALETTE.attention
   if (role === 'broken') return PALETTE.broken
   if (role === 'structure') return PALETTE.structure

@@ -177,8 +177,7 @@ export function stripRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
   const labelOf = (x: { id: string; label: string }, f: Form): string =>
     (f === 'full' ? x.label : x.id === 'pet' || x.id === 'fleet' ? ctx.t('tab.' + x.id + '_short') : first(x.label))
   const entrySeg = (x: { id: string; key: string; label: string }, f: Form): Seg => {
-    const on = x.id === active
-    return { text: x.key + ' ' + labelOf(x, f), press: 'tab:' + x.key + ':' + x.id, ...(on ? { color: PALETTE.here } : {}) }
+    return { text: x.key + ' ' + labelOf(x, f), press: 'tab:' + x.key + ':' + x.id }
   }
   const entryW = (x: { key: string; label: string; id: string }, f: Form): number =>
     displayWidth(x.key) + 1 + displayWidth(labelOf(x, f)) + HOST_PREFIX

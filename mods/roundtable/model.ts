@@ -57,7 +57,7 @@ export function parseRoomLog(text: string): RoomRow[] {
 export function rowRole(row: RoomRow): LineRole {
   if (row.kind === 'system' && row.text.includes('send failed')) return 'broken'
   if (row.kind === 'system') return 'attention'
-  if (row.from === 'owner') return 'here'
+  if (row.from === 'owner') return 'text'
   return 'text'
 }
 

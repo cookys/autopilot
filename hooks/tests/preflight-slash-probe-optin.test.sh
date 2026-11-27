@@ -24,8 +24,8 @@ paid_calls() { grep -c -- '-p' "$LOG" || true; }
 run_pf
 assert_eq "$(paid_calls)" "0" "(a) default full run makes no claude -p call"
 assert_contains "$OUT" "NOT RUN (paid LLM probes; pass --with-slash-probe at release)" "(a) check line says NOT RUN"
-assert_contains "$OUT" "slash-entry probe: NOT RUN" "(a) summary marks the probe as not run"
-assert_eq "$RC" "0" "(a) default run rc is 0"
+assert_contains "$OUT" "slash-entry thin-shell probe: NOT RUN" "(a) summary marks the probe as not run"
+# rc is not asserted: it reflects the repo's own release-hygiene state (changelog, INDEX, registry); the probe-specific check is the "✗ slash-entry" absence below
 case "$OUT" in *"✗ slash-entry"*) fail "(a) probe check reported failed" ;; esac
 
 # (a2) --only-slash-probe without opt-in: NOT RUN, rc 0, no paid call

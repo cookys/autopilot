@@ -594,6 +594,14 @@ function useRoleActor() {
   if (!process.env.HIPPO_ACTOR) process.env.HIPPO_ACTOR = 'seat/open-decision';
 }
 
+// The gate (capacity ar_gate.py) tracks a decision record by the card that produced it. hippo front matter is a fixed schema
+// (`set card|source` is refused: unknown-field), so both mirror paths put the same marker lines in the body: `Card: d-xxxxxxxx`
+// and, per waiting task, `task:<26-char id>` (the form the gate already reads). Waiting tasks live in the card background.
+function cardRefLines(entry) {
+  const tasks = [...String(entry.background || '').matchAll(/^waiting task: ([0-9A-HJKMNP-TV-Z]{26})$/gm)].map((m) => m[1]);
+  return [`Card: ${entry.id}`, ...tasks.map((t) => `task:${t}`)].join('\n');
+}
+
 function mirrorCard(cwd, entry) {
   let branch = 'setup';
   let repo = cwd;
@@ -609,7 +617,7 @@ function mirrorCard(cwd, entry) {
     const plan = { key, steps: [{ op: 'create', ref: 'root', kind: 'decision', key,
       argv: ['--title', entry.question.split(/\r?\n/)[0], '--status', 'open', '--tag', 'source:open-decision'], body: entry.question }] };
     const answer = entry.answer || entry.last_answer;
-    if (answer) plan.steps.push({ op: 'edit', id: 'root', body: `${entry.question}\n\nAnswer: ${answer}` });
+    if (answer) plan.steps.push({ op: 'edit', id: 'root', body: `${entry.question}\n\nAnswer: ${answer}\n\n${cardRefLines(entry)}` });
     if (isClosedEntry(entry)) plan.steps.push({ op: 'close', id: 'root', status: entry.closed_via === 'withdrawn' || entry.closed_via === 'panel_dismiss' ? 'cancelled' : 'done' });
     branch = 'execute';
     useRoleActor();
@@ -634,7 +642,7 @@ function mirrorRuling(cwd, entry, answer) {
     const token = /^[a-z0-9:._/-]{1,52}$/.test(id) ? id : crypto.createHash('sha256').update(id).digest('hex').slice(0, 32);
     const key = `receipt:${token}`;
     const ruling = answer.answer_free_text || answer.answer || answer.answer_option;
-    const body = `${ruling}\n\nOption: ${answer.answer_option || '(none)'}\nCard: ${entry.id}`;
+    const body = `${ruling}\n\nOption: ${answer.answer_option || '(none)'}\n${cardRefLines(entry)}`;
     const plan = { key, steps: [{ op: 'create', ref: 'root', kind: 'decision', key,
       argv: ['--title', ruling.split(/\r?\n/)[0], '--status', 'open', '--tag', 'source:pm-ruling'], body }] };
     branch = 'execute';

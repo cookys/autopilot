@@ -6,7 +6,9 @@ LOOP="$REPO_ROOT/scripts/hetero-review-loop.js"
 CLASS_JS="$REPO_ROOT/scripts/lib/finding-class.js"
 LEDGER="$TEST_TMP/ledger"
 mkdir -p "$LEDGER"
-CHILD_ENV=(env -i "PATH=$PATH" "HOME=$TEST_TMP" "TMPDIR=$TEST_TMP")
+# the Fleet-Task open check asks the fleet; point it at a stub so the suite never reaches the real fleet
+FLEET_STUB="$TEST_TMP/fleet-open"; printf '#!/bin/sh\necho "{\\"status\\":\\"open\\"}"\n' > "$FLEET_STUB"; chmod +x "$FLEET_STUB"
+CHILD_ENV=(env -i "PATH=$PATH" "HOME=$TEST_TMP" "TMPDIR=$TEST_TMP" "AUTOPILOT_FLEET_TASK=01M8F07G74HH0N19TG1BPQPE59" "FLEET_BIN=$FLEET_STUB")
 
 run_loop() {
   "${CHILD_ENV[@]}" node "$LOOP" "$@" < /dev/null
@@ -126,7 +128,7 @@ printf '%s\n' "$STUB_SEAT_RESPONSE"
 EOF
 chmod +x "$STUB"
 export STUB_SEAT_RESPONSE='{"status":"reviewed","verdict":"SHIP-AS-IS","findings":"none","no_finding_proof":"checked=all; evidence=clean; conclusion=safe"}'
-COLLECT_ENV=(env -i "PATH=$PATH" "HOME=$TEST_TMP" "TMPDIR=$TEST_TMP" "AUTOPILOT_TEST_CN_GATE_OFF=1" "AUTOPILOT_DISPATCH_REVIEW_SCRIPT=$STUB" "STUB_SEAT_RESPONSE=$STUB_SEAT_RESPONSE")
+COLLECT_ENV=(env -i "AUTOPILOT_FLEET_TASK=01M8F07G74HH0N19TG1BPQPE59" "FLEET_BIN=$FLEET_STUB" "PATH=$PATH" "HOME=$TEST_TMP" "TMPDIR=$TEST_TMP" "AUTOPILOT_TEST_CN_GATE_OFF=1" "AUTOPILOT_DISPATCH_REVIEW_SCRIPT=$STUB" "STUB_SEAT_RESPONSE=$STUB_SEAT_RESPONSE")
 set +e
 col="$("${COLLECT_ENV[@]}" node "$LOOP" collect --implementer-engine claude-sonnet-5 --repo-root "$REPO" --ledger "$TEST_TMP/collect-ledger" --phase prod --generation 2 --branch work --seats "gpt-m1/low@codex" 2>&1)"
 col_rc=$?
@@ -155,7 +157,7 @@ assert_file_exists "$TEST_TMP/collect-ledger/review-prod/g2/findings.json" "coll
 PLAIN_LEDGER="$TEST_TMP/plain-ledger"
 mkdir -p "$PLAIN_LEDGER"
 export STUB_SEAT_RESPONSE='{"status":"reviewed","verdict":"FIX-THEN-SHIP","findings":"🟠 [id] MUST-FIX skipped site"}'
-PLAIN_ENV=(env -i "PATH=$PATH" "HOME=$TEST_TMP" "TMPDIR=$TEST_TMP" "AUTOPILOT_TEST_CN_GATE_OFF=1" "AUTOPILOT_DISPATCH_REVIEW_SCRIPT=$STUB" "STUB_SEAT_RESPONSE=$STUB_SEAT_RESPONSE")
+PLAIN_ENV=(env -i "AUTOPILOT_FLEET_TASK=01M8F07G74HH0N19TG1BPQPE59" "FLEET_BIN=$FLEET_STUB" "PATH=$PATH" "HOME=$TEST_TMP" "TMPDIR=$TEST_TMP" "AUTOPILOT_TEST_CN_GATE_OFF=1" "AUTOPILOT_DISPATCH_REVIEW_SCRIPT=$STUB" "STUB_SEAT_RESPONSE=$STUB_SEAT_RESPONSE")
 set +e
 plain="$("${PLAIN_ENV[@]}" node "$LOOP" collect --implementer-engine claude-sonnet-5 --repo-root "$REPO" --ledger "$PLAIN_LEDGER" --phase plain --generation 1 --branch work --phase-base "$BASE" --seats "gpt-m1/low@codex" 2>&1)"
 plain_rc=$?

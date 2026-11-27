@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # review-loop-resolver-b.test.sh — row-39+ contract tests for review-loop resolver-b
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: seam suite with Chinese-family fixture seats (kimi/glm)
 . "$(dirname "$0")/lib.sh"
+# the Fleet-Task open check asks the fleet; point it at a stub so the suite never reaches the real fleet
+FLEET_STUB="$TEST_TMP/fleet-open"; printf '#!/bin/sh\necho "{\\"status\\":\\"open\\"}"\n' > "$FLEET_STUB"; chmod +x "$FLEET_STUB"
+export FLEET_BIN="$FLEET_STUB"
 
 assert_r39_hetero_review_loop_c() {
   local mod="$REPO_ROOT/scripts/lib/exclude-allowlist.js"
@@ -445,6 +449,7 @@ assert_r47_hetero_review_loop_j() {
   cp "$SRC" "$DRIVER_DIR/hetero-review-loop.js"
   cp "$REPO_ROOT/scripts/lib/review-chain-derive.js" "$DRIVER_DIR/lib/"
   cp "$REPO_ROOT/scripts/lib/seat-id-guard.js" "$DRIVER_DIR/lib/"
+cp "$REPO_ROOT"/scripts/lib/*.js "$DRIVER_DIR/lib/"  # the loop grew requires (fleet-task-ref, finding-class, ...); a hand list kept going stale
   cp "$REPO_ROOT/scripts/lib/exclude-allowlist.js" "$DRIVER_DIR/lib/"
   cp "$REPO_ROOT/scripts/lib/repo-layout.js" "$DRIVER_DIR/lib/"
   cp "$REPO_ROOT/scripts/lib/review-packets.js" "$DRIVER_DIR/lib/"

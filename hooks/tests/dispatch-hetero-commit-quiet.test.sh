@@ -15,6 +15,7 @@ export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_NOSYST
 
 SCRIPT="$REPO_ROOT/scripts/dispatch-hetero.sh"
 export AUTOPILOT_GROK_EFFORT_PROBE=0
+export AUTOPILOT_HETERO_CQ_DIAG=1
 
 DEFAULT_CAP_ISOLATION_DIR="$TEST_TMP/engine-capability-default"
 mkdir -p "$DEFAULT_CAP_ISOLATION_DIR"
@@ -74,6 +75,8 @@ run_case() { # mode extra-args... ; sets OUT ELAPSED PIDF
     "$SCRIPT" --no-verify-tip --runner grok --pin-reason "test fixture" --model grok-4.5 --effort high --grok-bin "$stub" \
     --branch "feat/cq-$mode-$RANDOM" --prompt-file "$PROMPT" --timeout 60s "$@" 2>&1)" || true
   ELAPSED=$(( $(date +%s) - start ))
+  local _lg3; _lg3="$(printf '%s\n' "$OUT" | sed -n 's/.* log=\([^ ]*\).*/\1/p' | head -n 1)"
+  if [ -n "$_lg3" ] && [ -f "$_lg3.cqdiag" ]; then tail -n 6 "$_lg3.cqdiag" | cut -c1-400 | sed "s/^/DIAG cq[$mode]: /" >&2; fi
   if [ ! -s "$PIDF" ]; then # stub never ran: print what the rail saw so a host difference is visible
     {
       echo "DIAG[$mode] stub never wrote pidfile"
@@ -85,6 +88,7 @@ run_case() { # mode extra-args... ; sets OUT ELAPSED PIDF
       printf '%s\n' "$OUT" | tail -12 | cut -c1-300 | sed 's/^/DIAG out: /'
       printf '%s\n' "$OUT" | grep '^{' | tail -n 1 | cut -c1-1500 | sed 's/^/DIAG json: /'
       local _lg; _lg="$(printf '%s\n' "$OUT" | sed -n 's/.* log=\([^ ]*\).*/\1/p' | head -n 1)"
+      [ -n "$_lg" ] && [ -f "$_lg.cqdiag" ] && tail -n 12 "$_lg.cqdiag" | cut -c1-400 | sed 's/^/DIAG cq: /'
       if [ -n "$_lg" ] && [ -f "$_lg" ]; then tail -n 25 "$_lg" | cut -c1-300 | sed 's/^/DIAG runlog: /'; else echo "DIAG runlog: none ($_lg)"; fi
     } >&2
   fi

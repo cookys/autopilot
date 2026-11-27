@@ -62,7 +62,7 @@ function failLine(reason) {
 }
 
 // Keep actionable rows and message IDs; treat the fleet output as data, even on overflow.
-function digestResume(out, { maxChars = 3000 } = {}) {
+function digestResume(out, { maxChars = 1500 } = {}) {
   const sections = [];
   for (const line of String(out).split(/\r?\n/)) {
     if (/^(?:[A-Z][A-Z_]*(?:\s|$)|未回)/.test(line)) sections.push({ header: line, lines: [] });
@@ -91,7 +91,7 @@ function digestResume(out, { maxChars = 3000 } = {}) {
 // maxRowChars is shortened, never dropped); every other row shares softCapChars, and each section that loses rows
 // ends with "已省略 N 列".
 const KEEP_SECTIONS = new Set(['IN_FLIGHT', 'NEEDS_REPLY', 'WAITING_ON_PM']);
-function capResumeSections(out, { softCapChars = 3000, maxRowChars = 400 } = {}) {
+function capResumeSections(out, { softCapChars = 1500, maxRowChars = 400 } = {}) {
   const rows = []; // { key, text, header }
   let current = null;
   for (const line of String(out).split(/\r?\n/)) {
@@ -162,7 +162,7 @@ function buildResumeBlock(payload, { env = process.env, runner } = {}) {
     const note = file ? `<handoff path="${path.join(dir, file)}">\n${handoff.length > 8000 ? handoff.slice(0, 8000) + '\n[...cut]' : handoff}\n</handoff>` : `handoff 找不到：${dir} 下沒有 .md（resume 照常提供）`;
     return `\n\n${HEAD}\n${warnings.length ? warnings.join('\n') + '\n' : ''}<fleet-pm-resume seat="${seat.member}" role="${seat.role}">\n${out}\n</fleet-pm-resume>\n${note}`;
   }
-  return `\n\n${HEAD}\n<fleet-pm-resume seat="${seat.member}" role="${seat.role}">\n${source === 'compact' ? digestResume(out, { maxChars: 3000 }).replace('<member>', seat.member).replace('<role>', seat.role) : capResumeSections(out, { softCapChars: 3000, maxRowChars: 400 })}\n</fleet-pm-resume>`;
+  return `\n\n${HEAD}\n<fleet-pm-resume seat="${seat.member}" role="${seat.role}">\n${source === 'compact' ? digestResume(out, { maxChars: 1500 }).replace('<member>', seat.member).replace('<role>', seat.role) : capResumeSections(out, { softCapChars: 1500, maxRowChars: 400 })}\n</fleet-pm-resume>`;
 }
 
 module.exports = { buildResumeBlock, seatFromAddress, resolveSeat, readMarker, writeMarker, digestResume, capResumeSections, SOURCES, ID_RE };

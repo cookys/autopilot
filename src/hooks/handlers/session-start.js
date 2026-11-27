@@ -10,7 +10,7 @@ function shellQuotePath(p) {
   return `'${String(p).replace(/'/g, `'\\''`)}'`;
 }
 const OPEN_DECISION_CMD = shellQuotePath(OPEN_DECISION_JS);
-const OPEN_CARD_LINE = `Anything that needs the owner's decision or answer: open a card with node ${OPEN_DECISION_CMD} open --category <money|identity|presence|goal|public-release|unbackable-loss|authority> --executor <address> --question <q> --option <label>::<desc> --option <label>::<desc> --recommendation <label> --why <reason> --not-authorized <boundary>[:<why>] (at least two options, or --free-text when the owner answers in typed text; --category (only those six kinds of question reach the operator), --executor (who carries out the answer) and --not-authorized are required and refused when the DOA lets you decide it) and write the card id (d- + 8 hex) in the reply.`;
+const OPEN_CARD_LINE = `For an owner decision, open a card: node ${OPEN_DECISION_CMD} open --category <money|identity|presence|goal|public-release|unbackable-loss|authority> --executor <address> --question <q> --option <label>::<desc> --option <label>::<desc> --recommendation <label> --why <reason> --not-authorized <boundary>[:<why>] (or --free-text instead of options). Write the card id (d- + 8 hex) in the reply.`;
 
 function teamRole() {
   try { return require('../../../scripts/lib/team.js').resolve().role; } catch { return 'lane'; }

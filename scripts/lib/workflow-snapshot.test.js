@@ -73,7 +73,7 @@ test('every source present: the lines name each fact', () => {
     const s = run(f);
     const t = text(s);
     assert.match(t, /session: level l5 · size M · stage plan · unit phase:1\/3:alpha · task #2 · root job-root-1/);
-    assert.match(t, /next legal node after plan: implement/);
+    assert.match(t, /next legal node after plan: plan-review/);
     assert.match(t, /git: branch feat\/x @ 12345678, 2 changed paths/);
     assert.match(t, /task card — goal: ship the snapshot/);
     assert.match(t, /success criteria: tests green \| no stdout noise/);

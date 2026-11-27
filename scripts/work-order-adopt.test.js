@@ -299,6 +299,12 @@ test('local-task marker (size=M, stage=implement, no fleet_task_id) then [S] fle
       { cwd: sbx.repo, env: sbx.buildEnv(), encoding: 'utf8' },
     );
     assert.equal(advPlan.status, 0, `stage-advance plan stderr: ${advPlan.stderr}`);
+    const advReview = spawnSync(
+      process.execPath,
+      [STAGE_ADVANCE_SCRIPT, '--session-id', 'sid-local', '--to', 'plan-review'],
+      { cwd: sbx.repo, env: sbx.buildEnv(), encoding: 'utf8' },
+    );
+    assert.equal(advReview.status, 0, `stage-advance plan-review stderr: ${advReview.stderr}`);
     const advImpl = spawnSync(
       process.execPath,
       [STAGE_ADVANCE_SCRIPT, '--session-id', 'sid-local', '--to', 'implement', '--unit', 'phase:1/1:local'],
@@ -327,6 +333,14 @@ test('local-task marker (size=M, stage=implement, no fleet_task_id) then [S] fle
     assert.equal(sbx.runSessionMode(['set', '--size', 'M', '--session-id', 'sid-local-unres']).status, 0);
     assert.equal(
       spawnSync(process.execPath, [STAGE_ADVANCE_SCRIPT, '--session-id', 'sid-local-unres', '--to', 'plan'], {
+        cwd: sbx.repo,
+        env: sbx.buildEnv(),
+        encoding: 'utf8',
+      }).status,
+      0,
+    );
+    assert.equal(
+      spawnSync(process.execPath, [STAGE_ADVANCE_SCRIPT, '--session-id', 'sid-local-unres', '--to', 'plan-review'], {
         cwd: sbx.repo,
         env: sbx.buildEnv(),
         encoding: 'utf8',

@@ -57,16 +57,17 @@ function formatSecondRowItem(r: AskRow): string {
   const ask = summarize(r.ask)
   const ans = firstLine(r.answer)
   const ansText = ans !== '' ? ans : '（尚無答案）'
-  return `${time} ${ask} ＞ ${ansText}`
+  return `${time} ${r.status} ${ask} ＞ ${ansText}`
 }
 
 function formatWideItem(r: AskRow, budget: number): string {
   const time = formatTaipeiTime(r.at).slice(6)
+  const status = r.status
   const ans = firstLine(r.answer)
   const ansText = ans !== '' ? ans : '無答案'
-  const room = Math.max(0, budget - displayWidth(time) - 1 - 2)
+  const room = Math.max(0, budget - displayWidth(time) - 1 - displayWidth(status) - 1 - 2)
   const askRoom = Math.ceil(room / 2)
-  return `${time} ${truncateToWidth(summarize(r.ask), askRoom)}＞${truncateToWidth(ansText, room - askRoom)}`
+  return `${time} ${status} ${truncateToWidth(summarize(r.ask), askRoom)}＞${truncateToWidth(ansText, room - askRoom)}`
 }
 
 export function askBandRows(rows: AskRow[], cols: number, _nowMs: number): Row[] {
@@ -80,7 +81,7 @@ export function askBandRows(rows: AskRow[], cols: number, _nowMs: number): Row[]
   const row1: Row = [
     { text: '我問：' },
     { text: `${unanswered} 未答`, color: PALETTE.attention },
-    { text: ` ｜ ${latestTime} ${latestAsk}` },
+    { text: ` ｜ ${latestTime} ${latest.status} ${latestAsk}` },
   ]
 
   const result: Row[] = [clipRow(row1, cols)]

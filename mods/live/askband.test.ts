@@ -74,4 +74,25 @@ test('(g) only rows with status 未答 are counted; answered rows are not', () =
   ]
   const text = askBandRows(rows, 120, 0)[0].map(s => s.text).join('')
   expect(text).toContain('1 未答')
+  expect(text).toContain('18:59 未答 a')
+})
+
+test('(h) every item in row 1 and row 2 (wide and narrow) carries its status', () => {
+  const rows = [
+    makeAsk(1, { status: '未答', ask: 'q1' }),
+    makeAsk(2, { status: '已答', ask: 'q2', answer: 'a2' }),
+    makeAsk(3, { status: '已處置', ask: 'q3' }),
+  ]
+  const wide = askBandRows(rows, 120, 0)
+  expect(rowText(wide[0])).toContain('未答 q1')
+  expect(rowText(wide[1])).toContain('已答')
+  expect(rowText(wide[1])).toContain('已處置')
+  expect(rowWidth(wide[0])).toBeLessThanOrEqual(120)
+  expect(rowWidth(wide[1])).toBeLessThanOrEqual(120)
+
+  const narrow = askBandRows(rows, 80, 0)
+  expect(rowText(narrow[0])).toContain('未答 q1')
+  expect(rowText(narrow[1])).toContain('已答')
+  expect(rowWidth(narrow[0])).toBeLessThanOrEqual(80)
+  expect(rowWidth(narrow[1])).toBeLessThanOrEqual(80)
 })

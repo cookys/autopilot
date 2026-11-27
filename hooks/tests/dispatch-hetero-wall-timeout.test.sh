@@ -22,6 +22,8 @@ unset _git_cfg_i
 
 SCRIPT="$REPO_ROOT/scripts/dispatch-hetero.sh"
 export AUTOPILOT_GROK_EFFORT_PROBE=0
+# Not a containment test: pin the worker mount mode so a sudo env_reset wrapper (sudo_private_ns hosts) cannot drop the HETERO_TEST_* env the stubs read.
+export WORKER_MOUNT_FORCE_MODE=no_root
 # Idle/hard sampling replaced the single wall sleep. One-second samples keep
 # these short limits inside the suite's outer timeouts. A silent sleeper is an
 # idle kill; a busy loop needs --hard-timeout or progress extends past --timeout.

@@ -54,7 +54,9 @@ OUT="$(node "$SCRIPT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "default print exit 0"
 DEFAULT_ON_N="$(node "$SCRIPT" 2>&1 | sed -nE 's/.*default-on \(([0-9]+)\).*/\1/p' | head -n 1)"
 assert_contains "$OUT" "default-on ($DEFAULT_ON_N)" "default print shows the derived default-on count"
-assert_contains "$OUT" "disabled   (1)" "default print shows 1 disabled"
+DISABLED_N="$(printf '%s\n' "$OUT" | sed -nE 's/.*disabled   \(([0-9]+)\).*/\1/p' | head -n 1)"
+assert_contains "$OUT" "disabled   ($DISABLED_N)" "default print shows a derived disabled count (the live tree has no fixed number of unwired hooks)"
+assert_eq "$([ -n "$DISABLED_N" ] && echo numeric)" "numeric" "default print disabled count is a number"
 assert_contains "$OUT" "audit-log" "default print lists a real wired hook"
 
 # 4. MEMBERSHIP drift (headline class): swap a default-on hook OUT of the Tier-A

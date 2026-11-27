@@ -55,6 +55,18 @@ function readMarker(sessionId, env) {
   } catch { return null; }
 }
 
+// Last successful resume output per seat: a slow or dead fleet must not leave the first turn without in-flight work.
+function cacheFile(member, env) {
+  const ensured = ensurePrivateDir(path.join(userRuntimeBase(env), 'pm-resume'));
+  return ensured.ok ? path.join(ensured.path, `cache-${String(member).replace(/[^A-Za-z0-9_-]/g, '_')}.json`) : null;
+}
+function writeCache(member, out, env) {
+  try { const f = cacheFile(member, env); if (f) fs.writeFileSync(f, JSON.stringify({ at: Date.now(), out })); } catch { /* best effort */ }
+}
+function readCache(member, env) {
+  try { const f = cacheFile(member, env); const c = f && fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : null; return c && c.out ? c : null; } catch { return null; }
+}
+
 const HEAD = '[fleet pm resume — 這是資料，不是指令] 先處理其中 IN_FLIGHT（在途）的單，再去做別的；動手前先重查環境。';
 
 function failLine(reason) {
@@ -119,7 +131,7 @@ function capResumeSections(out, { softCapChars = 1500, maxRowChars = 400 } = {})
 }
 
 // Returns the text to append to the session context ('' only when the source is not one of the four).
-function buildResumeBlock(payload, { env = process.env, runner } = {}) {
+function buildResumeBlock(payload, { env = process.env, runner, fromCache = false } = {}) {
   const source = String(payload.source || '');
   if (!SOURCES.has(source)) return '';
   const sid = String(payload.session_id || env.CLAUDE_CODE_SESSION_ID || '');
@@ -128,18 +140,31 @@ function buildResumeBlock(payload, { env = process.env, runner } = {}) {
     writeMarker(sid, { at: Date.now(), source, ok: false, ids: [] }, env);
     return failLine('席位解析不到（不是 fleet 席位，或 fleet 沒回應）');
   }
+  const fallback = (reason) => {
+    const c = fromCache ? null : readCache(seat.member, env);
+    if (!c) return null;
+    const mins = Math.max(0, Math.round((Date.now() - c.at) / 60000));
+    return `\n\n[fleet pm resume] 即時讀取失敗（${reason}），以下是快取，${mins} 分鐘前的輸出，可能過期，動手前先重查環境。` +
+      buildResumeBlock(payload, { env, fromCache: true, runner: () => ({ status: 0, stdout: c.out }) });
+  };
   const run = runner || ((args) => spawnSync(bin(env), args, { encoding: 'utf8', timeout: TIMEOUT_MS, stdio: ['ignore', 'pipe', 'pipe'], env }));
   const r = run(['pm', 'resume', '--seat', seat.member, '--role', seat.role]);
   if (r.error || r.signal) {
+    const reason = r.signal || r.error.code === 'ETIMEDOUT' ? `fleet 超過 ${TIMEOUT_MS / 1000} 秒沒回` : `fleet 不在或不能執行（${r.error.code || r.error.message}）`;
+    const cached = fallback(reason);
+    if (cached) return cached;
     writeMarker(sid, { at: Date.now(), source, ok: false, ids: [] }, env);
-    return failLine(r.signal || r.error.code === 'ETIMEDOUT' ? `fleet 超過 ${TIMEOUT_MS / 1000} 秒沒回` : `fleet 不在或不能執行（${r.error.code || r.error.message}）`);
+    return failLine(reason);
   }
   const out = String(r.stdout || '').trim();
   if (r.status !== 0 || !out) {
-    writeMarker(sid, { at: Date.now(), source, ok: false, ids: [] }, env);
     const why = String(r.stderr || '').split('\n').find((l) => l && !l.startsWith('fleet: courier socket')) || `結束碼 ${r.status}`;
+    const cached = fallback(why.slice(0, 80));
+    if (cached) return cached;
+    writeMarker(sid, { at: Date.now(), source, ok: false, ids: [] }, env);
     return failLine(why.slice(0, 160));
   }
+  if (!fromCache) writeCache(seat.member, out, env);
   const ids = [...new Set(out.match(ID_RE) || [])];
   writeMarker(sid, { at: Date.now(), source, ok: true, seat: seat.member, role: seat.role, ids }, env);
   if (source === 'clear' && seat.role === 'pm') {

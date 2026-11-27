@@ -485,6 +485,11 @@
       "file": "scripts/lib/agent-event-emit.sh",
       "status": "out_of_scope",
       "reason": "runner label default \"claude\" for emitted events; it only writes event records"
+    },
+    {
+      "file": "hooks/agent-dispatch-shed.js",
+      "status": "out_of_scope",
+      "reason": "false positive: the only hits are the chair-family default string \"claude\" compared to AUTOPILOT_CHAIR_FAMILY; the hook decides a deny or reroute and starts no claude process"
     }
   ],
   "reviewed_non_spawns": [

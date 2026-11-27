@@ -137,11 +137,13 @@ function compareTree(rel) {
   // Mirror sync-codex-plugin-skills.sh SCRIPT_EXCLUDES: the Codex payload
   // deliberately omits the OpenCode installer scripts.
   // BL-0383: the directory entry docs (CLAUDE.md, AGENTS.md) are left out of scripts/ and references/.
-  const scriptExcludes = new Set(['install-opencode.sh', 'sync-opencode-plugin.sh', 'CLAUDE.md', 'AGENTS.md']);
+  const scriptExcludes = new Set(['install-opencode.sh', 'sync-opencode-plugin.sh', 'CLAUDE.md', 'AGENTS.md',
+    // Claude-only tools the sync leaves out (SCRIPT_EXCLUDES in sync-codex-plugin-skills.sh, 1c86d4f10); matched by basename.
+    'ansi-to-html-grid.js', 'pm-auto-handoff.js', 'ticket-claude-usage.js', 'wasted-turns-report.js', 'wasted-turns-classify.js']);
   // tests are not shipped in the package; PM 01M7XRRV
   const shippedTest = (file) => /\.test\.(js|sh|mjs)$/.test(file);
   const excluded = (file) => (
-    (rel === 'scripts' && (scriptExcludes.has(file) || shippedTest(file)))
+    (rel === 'scripts' && (scriptExcludes.has(path.basename(file)) || shippedTest(file)))
     || (rel === 'references' && (file === 'CLAUDE.md' || file === 'AGENTS.md'))
     || (rel === 'profiles' && file.startsWith('baselines/'))
   );

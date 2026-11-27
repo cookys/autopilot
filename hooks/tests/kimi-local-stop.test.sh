@@ -15,7 +15,7 @@ const home = path.join(tmp, 'home');
 const repo = path.join(tmp, 'repo');
 for (const d of [bin, home, repo]) fs.mkdirSync(d, { recursive: true });
 const recorder = path.join(tmp, 'kimi-argv');
-fs.writeFileSync(path.join(bin, 'kimi'), '#!/bin/sh\nprintf "%s\\n" "$@" >> "$KIMI_STOP_RECORDER"\nprintf "fake edit\\n" > kimi-edited.txt\nprintf "done\\n"\n', { mode: 0o755 });
+fs.writeFileSync(path.join(bin, 'kimi'), '#!/bin/sh\nprintf "%s\\n" "$@" >> ' + JSON.stringify(recorder) + '\nprintf "fake edit\\n" > kimi-edited.txt\nprintf "done\\n"\n', { mode: 0o755 });
 const prompt = path.join(tmp, 'prompt');
 fs.writeFileSync(prompt, 'update one file\n');
 const env = { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}`, KIMI_STOP_RECORDER: recorder,

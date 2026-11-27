@@ -390,7 +390,7 @@ function cmdScanStaged(args) {
 
   let stagedOut;
   try {
-    stagedOut = execFileSync('git', ['diff', '--cached', '--name-only', '--diff-filter=AM', '-z'], {
+    stagedOut = execFileSync('git', ['diff', '--cached', '--name-only', '--diff-filter=ACMR', '-z'], {
       encoding: 'utf8',
     });
   } catch (_) {

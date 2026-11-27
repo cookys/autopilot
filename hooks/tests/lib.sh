@@ -50,6 +50,10 @@ export AUTOPILOT_CARD_NOTIFY=off
 # The post-compaction handoff runs `fleet tasks` and reads capacity's AR file unless this is off; no suite may reach the real fleet by accident.
 # A suite that tests the Fleet State block re-exports it as on with a stub AUTOPILOT_FLEET_BIN.
 export AUTOPILOT_CHECKPOINT_FLEET=off
+# fleet-task-ref.js checks a Fleet-Task id with `$FLEET_BIN task show`. On a host with a real fleet that says not_found for a fixture id
+# (or for any id once a suite swaps HOME/XDG_RUNTIME_DIR); with no binary it is "unavailable" and fails open. Suites run hermetic: point it at
+# nothing. A suite that tests the check or the progress lines exports its own stub FLEET_BIN.
+export FLEET_BIN="${FLEET_BIN:-/nonexistent/fleet-not-for-tests}"
 
 # Fake-runner prompt + nonce-frame helpers (generic over AUTOPILOT-REVIEW /
 # AUTOPILOT-AUTHOR). Lifted from hooks/tests/dispatch-review-{a,b,c}.test.sh so consumer

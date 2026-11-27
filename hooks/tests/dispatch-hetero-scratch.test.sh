@@ -72,8 +72,6 @@ trap cleanup_scratch_fixture EXIT
 # The restricted-operator gate takes only the clean-sandbox brief template and one --source-repo (d-38676fad).
 # The shingle index lives on a tmpfs runtime dir; a bare shell has no XDG_RUNTIME_DIR, so the suite brings its own.
 XDG_RUNTIME_DIR="$(mktemp -d /dev/shm/autopilot-test-scratch-XXXXXX)"; export XDG_RUNTIME_DIR
-# The sandbox HOME hides the real fleet store, so the Fleet-Task open check would say not_found; probe- callers are exempt.
-export AUTOPILOT_DISPATCH_ROLE=probe-dispatch-hetero-scratch
 write_brief() { printf 'Brief-Class: clean-sandbox\nTask: %s\nInputs: None.\nOutput: One file.\nLimits: None.\n' "$2" > "$1"; }
 
 run_dispatch() {

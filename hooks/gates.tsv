@@ -1,0 +1,3 @@
+id	blocks	failure_scenario	source	created	owner	class	post_hoc	delete_modify_candidate
+fleet-send-work-order-guard	派工寫成 send/reply、要對方讀真實 ~/.claude、dispatch 缺 Size/Plan(hooks/fleet-send-work-order-guard.js)	放行 -> 工單沒綁任務而丟失、或真實 ~/.claude 被讀;誤擋 -> 純資訊 send 被卡	operator(CLAUDE.md)	2026-11-28	autopilot--claude	integrity	未知:M7d 起才有決定紀錄(AUTOPILOT_HOOK_LOG)	保留
+depth0-delegate-gate	本席連續讀取過多未派子代理;bash-launch-guard 規則(秘密輸出、detach、busy-loop、rm -r)(hooks/depth0-delegate-gate.js)	放行 -> 本席燒 context 或誤刪/洩漏秘密;誤擋 -> 合法指令被卡	operator(CLAUDE.md)	2026-11-28	autopilot--claude	integrity	未知:M7d 起才有決定紀錄(AUTOPILOT_HOOK_LOG)	保留

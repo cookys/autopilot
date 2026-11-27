@@ -195,6 +195,9 @@ export PATH="$FLEET_SENTINEL_DIR:$PATH"
 # dispatch-hetero refuses (disk-guard) below 20% free on the worktree filesystem; a suite result must not depend on how full this host disk is.
 # A suite that tests the guard exports its own AUTOPILOT_DISK_GUARD_FAKE_STATFS.
 if [ -z "${AUTOPILOT_DISK_GUARD_FAKE_STATFS:-}" ]; then printf '{"free_pct":50}\n' > "$TEST_TMP/disk-guard-fake-statfs.json"; export AUTOPILOT_DISK_GUARD_FAKE_STATFS="$TEST_TMP/disk-guard-fake-statfs.json"; fi
+# dispatch-hetero's Fleet-Task precondition rejects a run with no task id; a suite result must not depend on whether the host session exported one.
+# The sentinel fleet above answers the open-check as unavailable (fail-open). A suite that tests the gate unsets/overrides this itself.
+export AUTOPILOT_FLEET_TASK=01ARZ3NDEKTSV4RRFFQ69G5FAV
 # The foreman exam keeps a durable anti-rerun log; a test must never write the real one.
 export AUTOPILOT_FOREMAN_EVIDENCE_DIR="$TEST_TMP/foreman-evidence"
 # G37: a wired claude caller (dispatch-*, probe-*, qc-panel, eval runners ...) goes through the account layer when a

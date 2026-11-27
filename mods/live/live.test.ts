@@ -4072,7 +4072,7 @@ test('P7 model: slot texts and theme keys', () => {
   expect(text(slotPosition(mk({ stage_set_at: undefined }), NOW))).toBe('M·l5·implement')
   expect(slotPosition(mk({ stage: null }), NOW)).toBeNull()
   expect(slotPosition(null, NOW)).toBeNull()
-  expect(slotPosition(mk({}), NOW)?.segs.find(g => g.tag === 'stage')?.color).toBe('claude')
+  expect(slotPosition(mk({}), NOW)?.segs.find(g => g.tag === 'stage')?.color).toBeUndefined()
   // unit: bar + k/N + 族; N > 10 scales to 10 cells; no unit = no slot
   const u = (index: number, total: number, fam: string[] = []) => slotUnit(mk({ unit: { kind: 'deliverable', index, total, label: '' }, review_families: fam }))
   expect(text(u(1, 3))).toBe('▰▱▱ 1/3')

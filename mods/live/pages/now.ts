@@ -861,7 +861,8 @@ function v74SeatSection(ctx: PageCtx, wide: boolean): Row[] {
   const elapsed = band?.elapsed ?? GLYPHS.structure.empty
   const ctxPct = live.metrics?.ctx ?? GLYPHS.structure.empty
   rows.push(labelled(t('v74.c.l_status'), wide,
-    { text: mark + ' ' + status, ...(band === null ? {} : { color: PALETTE.running }) },
+    { text: mark, ...(band === null ? {} : { color: PALETTE.running }) },
+    plain(' ' + status),
     plain('  ' + t('v74.c.elapsed', { e: elapsed })),
     plain('  ' + t('header.ctx') + ' ' + ctxPct)))
   const spend = live.detail.spend

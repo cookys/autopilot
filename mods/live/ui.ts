@@ -893,7 +893,7 @@ export function walkChart(u: Ctx, key: string, labels: readonly string[], curren
   const rule = GLYPHS.structure.rule
   if (KEY_W + total > u.cols - 1) {
     const next = current < n - 1 ? u.t('now.walk_next', { stage: labels[current + 1] }) : ''
-    const line = lineOf('chart', [sg(' '.repeat(KEY_W)), dim(u.t('now.walk_step', { n: current + 1, total: n }) + ' · ', { role: 'prose' }), sg(labels[current], { role: 'prose', color: PALETTE.here, here: true }), ...(next === '' ? [] : [dim(next, { role: 'prose' })])], { hang: KEY_W, fact })
+    const line = lineOf('chart', [sg(' '.repeat(KEY_W)), dim(u.t('now.walk_step', { n: current + 1, total: n }) + ' · ', { role: 'prose' }), sg(labels[current], { role: 'prose', here: true }), ...(next === '' ? [] : [dim(next, { role: 'prose' })])], { hang: KEY_W, fact })
     return [lineOf('chart', [dim(padCells(key, KEY_W), { role: 'key' }), ...walkValue(current, n).segs], { hang: KEY_W, fact }), line]
   }
   const dots: Seg[] = [dim(padCells(key, KEY_W), { role: 'key' })]
@@ -901,7 +901,7 @@ export function walkChart(u: Ctx, key: string, labels: readonly string[], curren
   labels.forEach((x, i) => {
     dots.push(walkDot(i, current))
     if (i < n - 1) dots.push(dim(rule.repeat(w[i] - 1), { role: 'rule' }))
-    names.push(i === current ? sg(x, { role: 'prose', color: PALETTE.here, here: true }) : i < current ? dim(x, { role: 'prose' }) : sg(x, { role: 'prose', color: PALETTE.idle }))
+    names.push(i === current ? sg(x, { role: 'prose', here: true }) : i < current ? dim(x, { role: 'prose' }) : sg(x, { role: 'prose', color: PALETTE.idle }))
     if (i < n - 1) names.push(sg(' '.repeat(w[i] - displayWidth(x))))
   })
   return [lineOf('chart', dots, { hang: KEY_W, fact }), lineOf('chart', names, { fact })]

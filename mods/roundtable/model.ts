@@ -5,7 +5,7 @@
 import { cellWidth } from '../tux/width.ts'
 
 export type RoomKind = 'say' | 'relay' | 'system'
-export type LineRole = 'here' | 'attention' | 'broken' | 'text' | 'structure'
+export type LineRole = 'attention' | 'broken' | 'text' | 'structure'
 
 export type RoomRow = {
   ts: string
@@ -52,12 +52,12 @@ export function parseRoomLog(text: string): RoomRow[] {
   return rows
 }
 
-// Owner rows are "you are here" (PALETTE.here, theme key claude) — the same meaning as window A's owner foreground.
+// Owner rows use the default text colour: theme key claude is ~3.15 on a light theme.
 // A system row is attention, except a send failure, which is broken. Seat and relay rows stay default text.
 export function rowRole(row: RoomRow): LineRole {
   if (row.kind === 'system' && row.text.includes('send failed')) return 'broken'
   if (row.kind === 'system') return 'attention'
-  if (row.from === 'owner') return 'here'
+  if (row.from === 'owner') return 'text'
   return 'text'
 }
 

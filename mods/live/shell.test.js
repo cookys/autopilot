@@ -159,7 +159,7 @@ test('lines: a panel line is cut to inner - 1 with an ellipsis, by display cells
   assert.ok(width(S.panelSegs([{ text: '大腦已連線'.repeat(10) }], 21)) <= 20)
 })
 
-test('room: complete lines only; fresh counts others\' rows after the baseline; owner rows are `here`, system rows `attention`', () => {
+test('room: complete lines only; fresh counts others\' rows after the baseline; owner rows use the default colour, system rows `attention`', () => {
   const text = [{ seq: 1, from: 'owner', kind: 'say', text: 'hi', ts: 'x' }, { seq: 2, from: 'a', kind: 'say', text: 'yo' }, { seq: 3, from: 'sys', kind: 'system', text: 'note' }].map(r => JSON.stringify(r)).join('\n')
   assert.deepEqual(S.parseRoom(text).map(r => r.seq), [1, 2]) // the last line has no newline: partial, ignored
   const rows = S.parseRoom(text + '\nnot json\n{"seq":"x"}\n')
@@ -170,7 +170,8 @@ test('room: complete lines only; fresh counts others\' rows after the baseline; 
   assert.equal(S.newestSeq(rows), 3)
   assert.equal(S.newestSeq([]), null)
   const lines = S.roomLines(rows, 30, 5)
-  assert.equal(lines[0][0].color, ui.PALETTE.here)
+  assert.equal(lines[0][0].color, undefined) // `claude` text is ~3.15 on a light theme
+  assert.equal(lines[0][0].here, true)
   assert.equal(lines[2][0].color, ui.PALETTE.attention)
   assert.equal(lines[1][0].color, undefined)
   assert.equal(S.roomLines(rows, 30, 2).length, 2)

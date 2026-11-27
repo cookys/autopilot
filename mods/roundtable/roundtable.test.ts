@@ -122,7 +122,7 @@ test('the pane paints owner, system, failure and seat rows with PALETTE roles an
   expect(body).toContain('立場')
   const texts = find(tree, 'Text')
   const colored = (needle: string) => texts.find(t => textOf(t).includes(needle))
-  expect(colored('你好')?.props?.color).toBe(PALETTE.here)
+  expect(colored('你好')?.props?.color).toBeUndefined()
   expect(colored('seat added')?.props?.color).toBe(PALETTE.attention)
   expect(colored('send failed')?.props?.color).toBe(PALETTE.broken)
   const seat = colored('立場')

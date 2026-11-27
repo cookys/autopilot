@@ -37,13 +37,13 @@ test('walk columns: every dot starts on the same cell as its label, in both loca
   }
 })
 
-test('walk columns: the current label has the here colour, the finished ones are dim, the rest idle', () => {
+test('walk columns: the current label uses the default colour, the finished ones are dim, the rest idle', () => {
   const labels = labelsOf(ZH_TW)
   const [, nameRow] = walkChart({ t: tr(ZH_TW), cols: 200 }, 'L', labels, 4, 'now.position')
   const named = segsOf(nameRow).filter(s => s.text.trim() !== '')
   expect(named.map(s => s.text)).toEqual(labels)
   named.forEach((s, i) => {
-    if (i === 4) expect(s.color).toBe(PALETTE.here)
+    if (i === 4) expect(s.color).toBeUndefined()
     else if (i < 4) expect(s.dim).toBe(true)
     else expect(s.color).toBe(PALETTE.idle)
   })

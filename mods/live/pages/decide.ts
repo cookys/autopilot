@@ -638,7 +638,7 @@ function v74Card(c: DecideCard, i: number, selected: boolean, nav: DecideNav, ct
   const out: Row[] = []
   const keys = pickKeys(c.options)
   const mark = selected ? CURSOR_MARK : ' '
-  const title = seg(c.title, selected ? { color: PALETTE.here, here: true } : {})
+  const title = seg(c.title, selected ? { here: true } : {})
   const box = ctx.box === true
   const cardAge = v74CardAgeText(c, ctx)
   const ageTail: Seg[] = cardAge === '' ? [] : [dimSeg(' ' + DOT + ' ' + cardAge)]
@@ -647,9 +647,9 @@ function v74Card(c: DecideCard, i: number, selected: boolean, nav: DecideNav, ct
   // lands on the next card and ui.focus reports that key. Only the selected ▸ takes autoFocus.
   // The selected head is not a Button. A focused Button consumes Down/Up and re-fires onPress
   // with its own card:N, so the cursor event writes the index the ▸ already has.
-  const head = box
-    ? [seg(mark + '  ' + String(i + 1) + '. ', selected ? {} : { press: 'card:' + i }), title, ...tailSegs(c), ...ageTail]
-    : [seg(mark + '  ' + String(i + 1) + '. '), title, ...tailSegs(c), ...ageTail]
+  const head = selected
+    ? [seg(mark, { color: PALETTE.here }), seg('  ' + String(i + 1) + '. '), title, ...tailSegs(c), ...ageTail]
+    : [seg(mark + '  ' + String(i + 1) + '. ', box ? { press: 'card:' + i } : {}), title, ...tailSegs(c), ...ageTail]
   out.push(box ? head : truncateSegs(head, cols))
   const bg = c.background
   // J1: the real Pane draws cards through this path (not boxOpen): the open card's background is shown in full (one row per line, wrapped on the label's hanging indent, never cut), the frame scrolls it; the other cards keep one cut row
@@ -730,7 +730,7 @@ function boxOpen(c: DecideCard, i: number, nav: DecideNav, ctx: PageCtx, fit: Fi
   const picked = nav.picks[c.id]
   const held = nav.hold?.[c.id] !== undefined
   const sent = nav.sent[c.id] !== undefined && nav.fixing?.[c.id] === undefined
-  const heading = wrapRow([seg(CURSOR_MARK + '  ' + String(i + 1) + '. '), seg(c.title, { color: PALETTE.here, here: true }), ...tailSegs(c)], ctx.pendingScroll === undefined ? ctx.size.cols : width, 5)
+  const heading = wrapRow([seg(CURSOR_MARK, { color: PALETTE.here }), seg('  ' + String(i + 1) + '. '), seg(c.title, { here: true }), ...tailSegs(c)], ctx.pendingScroll === undefined ? ctx.size.cols : width, 5)
   const out: Row[] = [...(ctx.pendingScroll === undefined ? heading.slice(0, 1) : heading), ...gap]
   if (c.background) out.push(...labelledBox(t('v74.d.bg'), c.background, width), ...gap)
   c.options.forEach((o, k) => {
@@ -766,7 +766,9 @@ function pendingBody(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: 
     ...cards.slice(list.offset, list.offset + list.rows).map((c, k) => {
       const at = list.offset + k
       const row = truncateSegs(boxSummary(c, at, nav, { ...ctx, size: { ...ctx.size, cols: width } }).map(s => ({ ...s, text: s.text.replace(/\s/g, ' ') })), width)
-      return at === cursor ? row.map(s => ({ ...s, color: PALETTE.here, text: s === row[0] ? CURSOR_MARK + s.text.slice(1) : s.text })) : row
+      if (at !== cursor) return row
+      const head = row[0]!
+      return [{ ...head, text: CURSOR_MARK, color: PALETTE.here }, { ...head, text: head.text.slice(1) }, ...row.slice(1)]
     }),
   ]
   if (list.hint) queue.push([dimSeg([
@@ -850,7 +852,7 @@ function renderBoxC(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
     const keys = pickKeys(c.options)
     const countText = t('v74.d.c_count', { k: cursor + 1, n: cards.length }) + ageSuffix + (omitted ? ' ' + DOT + ' ' + t('v74.d.c_desc_omitted') : '')
     const out: Row[] = [[dimSeg(countText)]]
-    out.push(...wrapRow([seg(CURSOR_MARK + '  '), seg(c.title, { color: PALETTE.here, here: true }), ...tailSegs(c)], cols, 3))
+    out.push(...wrapRow([seg(CURSOR_MARK + '  '), seg(c.title, { here: true }), ...tailSegs(c)], cols, 3))
     if (showBg && c.background) {
       const bgRaw = c.background
       const bgLines = bgRaw.split('\n')
@@ -898,7 +900,7 @@ function renderBoxC(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
     const qRow = truncateSegs([
       seg(CURSOR_MARK + ' '),
       dimSeg(`(${cursor + 1}/${cards.length}) `),
-      seg(c.title, { color: PALETTE.here, here: true }),
+      seg(c.title, { here: true }),
       ...tailSegs(c),
     ], cols)
     const optKeys = pickKeys(c.options)
@@ -949,7 +951,7 @@ function renderBoxCompactList(ctx: PageCtx, cards: DecideCard[], nav: DecideNav,
     const title = truncateToWidth(item.title, titleRoom)
     const pad = ' '.repeat(Math.max(0, cols - displayWidth(mark + num + title + suffix)))
     const row: Row = isCur
-      ? [seg(mark + num + title, { color: PALETTE.here, here: true, press: 'card:' + idx }), seg(pad + suffix, { color: PALETTE.here })]
+      ? [seg(CURSOR_MARK, { color: PALETTE.here }), seg(' ' + num + title, { here: true, press: 'card:' + idx }), dimSeg(pad + suffix)]
       : [seg(mark + num + title, { press: 'card:' + idx }), dimSeg(pad + suffix)]
     body.push(padRowTo(row, cols))
   })
@@ -982,7 +984,7 @@ function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
     const innerW = Math.max(10, detailW - 2)
     const keys = pickKeys(c.options)
     const out: Row[] = []
-    out.push(...wrapRow([seg(c.title, { color: PALETTE.here, here: true }), ...tailSegs(c)], innerW, 2))
+    out.push(...wrapRow([seg(c.title, { here: true }), ...tailSegs(c)], innerW, 2))
     if (c.background) { out.push(...labelledBox(t('v74.d.bg'), c.background, innerW)); out.push([seg('')]) }
     c.options.forEach((o, k) => {
       if (k > 0) out.push([seg('')])
@@ -1070,7 +1072,7 @@ function renderBoxD(ctx: PageCtx, cards: DecideCard[], nav: DecideNav, cursor: n
     const title = truncateToWidth(item.title, titleRoom)
     const pad = ' '.repeat(Math.max(0, leftW - displayWidth(mark + num + title + suffix)))
     const row: Row = isCur
-      ? [seg(mark + num + title, { color: PALETTE.here, here: true }), seg(pad + suffix, { color: PALETTE.here })]
+      ? [seg(CURSOR_MARK, { color: PALETTE.here }), seg((mark + num + title).slice(CURSOR_MARK.length), { here: true }), dimSeg(pad + suffix)]
       : [seg(mark + num + title, { press: 'card:' + idx }), dimSeg(pad + suffix)]
     return padRowTo(row, leftW)
   }

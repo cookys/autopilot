@@ -5,6 +5,10 @@ REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SCRIPT="$REPO_ROOT/scripts/plan-sync-run.sh"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 export HOME="$T/home"; mkdir -p "$HOME"
+export GIT_CONFIG_GLOBAL=/dev/null
+export GIT_CONFIG_NOSYSTEM=1
+unset FORCE_COLOR
+export NO_COLOR=1
 export PLAN_SYNC_AUDIT="$T/audit.jsonl"
 PASS=0; FAIL=0
 ok() { PASS=$((PASS+1)); echo "ok - $1"; }
@@ -76,6 +80,13 @@ check "--bind-file: gaps 0, exit 0" '[ "$rc" = 0 ]'
 check "bad bind id: no gaps claimed (exit non-zero)" '[ "$?" != 0 ]'
 "$SCRIPT" --plan plans/p.md --repo "$R" --verdict READY --bind P9=01M8BRKSWB8GGBFWMGJ4M9PZ6B >/dev/null 2>&1
 check "bind to unknown phase: exit non-zero" '[ "$?" != 0 ]'
+
+# 5b. absolute --plan inside the repo becomes repo-relative; outside is exit 2
+node -e 'require("fs").writeFileSync(process.argv[1],JSON.stringify([{task_id:"T1",title:"Plan: plans/p.md Phase: P1"},{task_id:"T2",title:"Plan: plans/p.md Phase: P2"}]))' "$STATE"
+out="$("$SCRIPT" --plan "$R/plans/p.md" --repo "$R" --verdict READY 2>&1)"; rc=$?
+check "absolute --plan inside repo: exit 0" '[ "$rc" = 0 ] && echo "$out" | grep -q "plan=plans/p.md"'
+"$SCRIPT" --plan /tmp/outside-plan.md --repo "$R" --verdict READY >/dev/null 2>&1
+check "absolute --plan outside repo: exit 2" '[ "$?" = 2 ]'
 
 # 6. default audit path is under XDG_STATE_HOME, never /tmp
 unset PLAN_SYNC_AUDIT; export XDG_STATE_HOME="$T/state"

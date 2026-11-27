@@ -400,6 +400,17 @@
             "onFailure": "continue"
           }
         ]
+      },
+      {
+        "matcher": "mcp__fleet__task_accept",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/plan-receipt.js",
+            "timeout": 25,
+            "onFailure": "continue"
+          }
+        ]
       }
     ],
     "PostToolUseFailure": [

@@ -22,6 +22,18 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$plan" ] && [ -n "$repo" ] || { echo "plan-sync-run: --plan and --repo are required" >&2; exit 2; }
 case "$verdict" in READY|adjudicated) ;; *) echo "plan-sync-run: --verdict must be READY or adjudicated" >&2; exit 2 ;; esac
+# git show "$commit:$plan" needs a repo-relative path. An absolute path inside
+# --repo is rewritten; an absolute path outside the repo is an argument error.
+repo_real="$(realpath -m "$repo")"
+case "$plan" in
+  /*)
+    plan_real="$(realpath -m "$plan")"
+    case "$plan_real" in
+      "$repo_real"/*) plan="${plan_real#"$repo_real"/}" ;;
+      *) echo "plan-sync-run: --plan $plan is outside --repo $repo" >&2; exit 2 ;;
+    esac
+    ;;
+esac
 if [ "$sync" = 1 ] && [ -z "$parent" ]; then echo "plan-sync-run: --sync needs --parent" >&2; exit 2; fi
 git -C "$repo" rev-parse --git-dir >/dev/null 2>&1 || { echo "plan-sync-run: $repo is not a git repo" >&2; exit 2; }
 if ! git -C "$repo" ls-files --error-unmatch -- "$plan" >/dev/null 2>&1 || [ -n "$(git -C "$repo" status --porcelain -- "$plan")" ]; then

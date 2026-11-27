@@ -2,7 +2,7 @@
 
 Every hook knob (config.json keys and environment variables) is indexed in [docs/guide/settings-reference.md](../docs/guide/settings-reference.md).
 
-67 Claude Code hooks for runtime enforcement of development discipline: **47 default-on** (Tier A) + **20 opt-in** (Tier B). Active hooks are wired in `hooks.json` (the only place `${CLAUDE_PLUGIN_ROOT}` expands and where the path auto-tracks plugin updates); the 20 opt-in ones **self-gate default-OFF** via `_shared/opt-in.js` and do nothing until enabled in `~/.autopilot/config.json`. (Two Tier-A hooks are also inert by default: `session-handoff` needs handoff enabled; `version-drift-check` is silent outside a behind-upstream dev clone.) The canonical tally is derived from `hooks.json` (all wired hooks) + `opt-in-manifest.json` (which are opt-in) by [`../scripts/check-hook-inventory.js`](../scripts/check-hook-inventory.js) — run it to regenerate these tables, `--check` gates drift.
+70 Claude Code hooks for runtime enforcement of development discipline: **50 default-on** (Tier A) + **20 opt-in** (Tier B). Active hooks are wired in `hooks.json` (the only place `${CLAUDE_PLUGIN_ROOT}` expands and where the path auto-tracks plugin updates); the 20 opt-in ones **self-gate default-OFF** via `_shared/opt-in.js` and do nothing until enabled in `~/.autopilot/config.json`. (Two Tier-A hooks are also inert by default: `session-handoff` needs handoff enabled; `version-drift-check` is silent outside a behind-upstream dev clone.) The canonical tally is derived from `hooks.json` (all wired hooks) + `opt-in-manifest.json` (which are opt-in) by [`../scripts/check-hook-inventory.js`](../scripts/check-hook-inventory.js) — run it to regenerate these tables, `--check` gates drift.
 
 ## Tool-event stdin: the `/dev/stdin` path is broken, but **fd 0 works** (fd-0 fix)
 
@@ -114,6 +114,9 @@ hooks/
   pm-output-cap.js         # Tier B (opt-in, PM console gate) — PostToolUse (Bash|mcp__.*), PreToolUse Bash fallback: caps bulky PM outputs (40 lines; 30 when pm_output_cap.ledger_search_pattern matches)
   work-order-adopt.js      # Tier B (opt-in) — PostToolUse (Bash|mcp__fleet__task_progress): adopts a fleet task work order into the session marker (`scripts/work-order-adopt.js`)
   plan-receipt.js          # Tier A (default-on) — PostToolUse mcp__fleet__task_accept: posts the finish-triage receipt comment for an accepted Plan/Phase task (never blocks, one audit line on failure)
+  pm-intake-a.js            # Tier A (default-on) — UserPromptSubmit, PM seat: pm-intake hits as additionalContext
+  pm-intake-b.js            # Tier A (default-on) — Stop, PM seat: verdict + evidence required on advice or dispatch
+  pm-intake-c.js            # Tier A (default-on) — PreToolUse, PM seat: constraint forbid / 符合 check before a go
   merge-task-status-lib.js # hosted in audit-log.js (lib, not a hook): a successful merge into the integration branch re-writes the task-status input
   prune-merged-branch-lib.js # hosted in audit-log.js (lib, not a hook): a successful push to the integration branch prunes merged remote head branches detached (scripts/prune-merged-branch.js; knob AUTOPILOT_PRUNE_MERGED_BRANCH)
   stuck-hand-lib.js        # hosted in audit-log.js (lib, not a hook): tells the dispatching session once when a running dispatched hand went quiet (scripts/stuck-hand-check.js; knob AUTOPILOT_STUCK_HAND_MINUTES)
@@ -179,7 +182,7 @@ The queue/relay path uses `additionalContext` on UserPromptSubmit: it is the sam
 
 **Wording rule:** a model-facing advisory must name what it counted (a cumulative sum is not a level) and carry the contradicting-axis number when it is cheaply available (e.g. cost-tracker's cache-read sum prints the real context % from the live file) — a bare proxy gets relayed to the operator as fact.
 
-## Tier A — Default-On (47 hooks)
+## Tier A — Default-On (50 hooks)
 
 Registered in `hooks.json`. Active for all autopilot users. All are non-destructive and safe for any project. (Three are wired here but **inert by default** — `session-handoff` no-ops unless handoff is enabled, `version-drift-check` is silent outside a behind-upstream dev clone, `run-approval-gate` does nothing until `run_approval.mode` is set — yet they MUST be wired in `hooks.json` because `${CLAUDE_PLUGIN_ROOT}` does not expand in a user's `settings.json`.)
 
@@ -288,6 +291,10 @@ rm -f ~/.autopilot/.state-checkpoint.log
 ```
 
 Maintainer-side rollback (within this repo): `git revert <merge-sha>` on `develop` produces a new commit reversing the change. The v2.7.1 bash version is retrievable from git history (`git log -- hooks/state-checkpoint.sh`), no in-tree copy.
+
+| pm-intake-a | UserPromptSubmit | — | **Default-on, PM seat only.** Runs `$PM_INTAKE_BIN --query -` (prompt on stdin) and injects markdown as `additionalContext`. Constraints stay whole; `## hits` is capped at 10. Skips an empty prompt and a prompt that starts with `<channel` or `[SYSTEM NOTIFICATION`. Other seats exit 0 with no stdout. Timeout 8, `onFailure: continue`, fail-open. |
+| pm-intake-b | Stop | — | **Default-on, PM seat only.** Advice (建議/推薦/我會派/派給) or a fenced `dispatch` needs `判定：已經有|部分有|沒有|衝突` plus path@sha or a 26-char task id on that line or the next. `已經有`/`部分有` also need a confirm id or `待確認 <id>`; `沒有` names the owning lane or `requested.md`. Missing pieces block once (`stop_hook_active` passes). Verdicts append one JSON line to `$PM_INTAKE_LOG` after `$PM_HOST_DENY_FILE` (default `/etc/lab/deny.txt`; missing file = no scan). Timeout 8, `onFailure: continue`, fail-open except a rule block. |
+| pm-intake-c | PreToolUse | `Bash\|mcp__fleet__dispatch\|mcp__fleet__reply\|mcp__fleet__task_comment` | **Default-on, PM seat only.** On a go/ruling/凍結/核准 dispatch, reply or task_comment, and on `open-decision.js close`: plan text is the message plus `git -C $PM_PLAN_REPO show` of each path@sha (unreadable ref denies). Matching constraint scopes come from `$PM_CONSTRAINTS_FILE`. A forbid hit denies unless `override:<sha>:<answer id>` and `$PM_ANSWER_LOOKUP_BIN <id>` reports exists, from_operator, and a question that mentions the sha. Otherwise the go must list `<id>: 符合` or `<id>: 不適用：<reason>`. Timeout 15, `onFailure: continue` (crash stays fail-open). |
 
 ## Tier B — Opt-In (20 hooks)
 

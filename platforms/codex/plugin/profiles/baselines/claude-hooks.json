@@ -108,6 +108,12 @@
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/bg-quiet-sweep.js",
             "timeout": 5,
             "onFailure": "continue"
+          },
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pm-intake-a.js",
+            "timeout": 8,
+            "onFailure": "continue"
           }
         ]
       },
@@ -151,6 +157,17 @@
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/foreman-guard.js",
             "timeout": 5,
+            "onFailure": "continue"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|mcp__fleet__dispatch|mcp__fleet__reply|mcp__fleet__task_comment",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pm-intake-c.js",
+            "timeout": 15,
             "onFailure": "continue"
           }
         ]
@@ -510,6 +527,17 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/owner-question-guard.js"
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pm-intake-b.js",
+            "timeout": 8,
+            "onFailure": "continue"
           }
         ]
       },

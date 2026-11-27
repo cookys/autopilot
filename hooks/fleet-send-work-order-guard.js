@@ -41,6 +41,7 @@ const { isEnabled } = require('./_shared/opt-in');
 const { isPmConsole } = require('./_shared/pm-console');
 const { parse: parseWorkOrder, isMPlus } = require('../scripts/lib/work-order-plan');
 const { gateHint } = require('./lib/gate-hint.js');
+const { record } = require('./_shared/hook-log');
 
 // Deliberately small: only imperative work requests, so a plain fact question still passes.
 // [no-task: ...] is not an exemption.
@@ -279,19 +280,46 @@ function decide(input, env = envBag()) {
   return preToolDeny(DENY_REASON);
 }
 
+// Rule id of a decision, read back from what decide() emitted.
+function ruleOf(input, out) {
+  const o = out && out.hookSpecificOutput;
+  if (!o) return input && input.tool_name ? `${String(input.tool_name).replace('mcp__fleet__', '')}-pass` : 'pass';
+  if (o.permissionDecision === 'allow') return 'reply-header-autofill';
+  const r = o.permissionDecisionReason || '';
+  if (r.startsWith('reply 不能回 courier')) return 'courier-reply';
+  if (r.includes('~/.claude')) return 'claude-home-path';
+  if (input && input.tool_name === 'mcp__fleet__dispatch') return 'dispatch-plan';
+  return input && input.tool_name === 'mcp__fleet__reply' ? 'reply-work-order' : 'send-work-order';
+}
+
+function logEntry(input, out) {
+  const o = out && out.hookSpecificOutput;
+  return {
+    hook: 'fleet-send-work-order-guard',
+    rule: ruleOf(input, out),
+    decision: !o ? 'allow' : o.permissionDecision === 'deny' ? 'block' : 'allow',
+    intercepted: Boolean(o),
+  };
+}
+
 function main() {
+  let decisionEntry = null;
   try {
     const input = JSON.parse(fs.readFileSync(0, 'utf8'));
     const out = decide(input && typeof input === 'object' ? input : {});
     if (out) process.stdout.write(`${JSON.stringify(out)}\n`);
+    decisionEntry = logEntry(input, out);
   } catch (err) {
     process.stderr.write(`fleet-send-work-order-guard: fail-open: ${err && err.message}\n`);
   }
+  // Outside the fail-open catch: an unwritable AUTOPILOT_HOOK_LOG exits 1.
+  if (decisionEntry) record(decisionEntry);
 }
 
 if (require.main === module) main();
 module.exports = {
   decide,
+  logEntry,
   WORK_ORDER_PHRASES,
   DISPATCH_SIZE_DENY_REASON,
   DISPATCH_SIZE_MISMATCH_DENY_REASON,

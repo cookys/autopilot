@@ -107,6 +107,7 @@ const { resolveLiveDir, sanitizeSessionId, readLive, modelFamily } = require('..
 // Executable-text lexer + foreground-wait rules are shared with foreman-guard.js.
 const { executableText, detectForegroundWait } = require('../scripts/lib/bash-wait-rules.js');
 const { gateHint } = require('./lib/gate-hint.js');
+const { record } = require('./_shared/hook-log');
 // Bash-launch hazards (BL-0019): detach-without-wake, pkill -f self-match, bare ls, recursive rm guards, zsh syntax.
 const {
   detectDetachNoWake, detectPkillSelfMatch, detectZshExpansion, detectZshSyntax,
@@ -286,7 +287,19 @@ function withLock(file, fn) {
   }
 }
 
+// Rule id from a reason/advisory line: "bash-launch-guard (<rule>...)" or the gate's own.
+function ruleOfText(text) {
+  const m = /^bash-launch-guard \(([\w-]+)/.exec(text);
+  if (m) return `bash-launch-guard:${m[1]}`;
+  if (/^depth0-delegate-gate: foreground wait/.test(text)) return 'foreground-wait';
+  if (/^depth0-delegate-gate:/.test(text)) return 'read-counter';
+  if (text === rewriteNote()) return 'bash-rewrite';
+  const s = /\(([a-z][\w-]*)\)/.exec(text);
+  return s ? s[1] : 'secret-print';
+}
+
 function emitDeny(reason) {
+  record({ hook: 'depth0-delegate-gate', rule: ruleOfText(reason), decision: 'block', intercepted: true });
   process.stdout.write(`${JSON.stringify({
     hookSpecificOutput: {
       hookEventName: 'PreToolUse',
@@ -433,6 +446,8 @@ function classify(tool, input) {
       }
     }
     const emitAdvisory = (lines) => {
+      for (const l of lines) record({ hook: 'depth0-delegate-gate', rule: ruleOfText(l), decision: 'warn', intercepted: Boolean(rewrittenInput) });
+      if (!lines.length && rewrittenInput) record({ hook: 'depth0-delegate-gate', rule: 'bash-rewrite', decision: 'allow', intercepted: true });
       const advisory = lines.join('\n');
       if (advisory) process.stderr.write(`${advisory}\n`);
       process.stdout.write(`${JSON.stringify({

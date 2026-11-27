@@ -6,6 +6,8 @@
  */
 'use strict';
 
+// Tests never write the real state dir: the decision log is off unless a test sets its own path.
+process.env.AUTOPILOT_HOOK_LOG = process.env.AUTOPILOT_HOOK_LOG || 'off';
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');

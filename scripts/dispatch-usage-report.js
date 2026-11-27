@@ -13,7 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { manifestDir } = require('./dispatch-status');
-const { resolveLiveDir } = require('./lib/live-state-dir');
+const { stateDir } = require('./lib/state-dir');
 
 function report(dir, now, days) {
   const cutoff = now - days * 86400000;
@@ -143,7 +143,7 @@ function main(argv) {
     else if (a === '--runs-dir') dir = value;
     else dest = value;
   }
-  const targetDir = dir || (byRole ? resolveLiveDir({ env: process.env, warn: () => {} }).base : manifestDir());
+  const targetDir = dir || (byRole ? stateDir(process.env) : manifestDir());
   const data = byRole ? reportByRole(targetDir, Date.now(), days) : report(targetDir, Date.now(), days);
   fs.writeFileSync(dest, JSON.stringify(data, null, 2) + '\n');
   process.stdout.write(json ? JSON.stringify(data) + '\n' : `dispatch usage: ${data.totals.runs} runs, ${data.skipped} skipped; snapshot ${dest}\n`);

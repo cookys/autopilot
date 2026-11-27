@@ -146,7 +146,7 @@ EOF
   chmod +x "$STUB"
 
   OUT="$(env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID \
-    AUTOPILOT_LIVE_DIR="$LIVE" \
+    AUTOPILOT_LIVE_DIR="$LIVE" AUTOPILOT_STATE_DIR="$LIVE" \
     AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
     MINIMAX_API_KEY=test-dummy AUTOPILOT_ENDPOINTS_ENV=/nonexistent \
     "$SCRIPT" --runner cc-shim --model MiniMax-M3 --endpoint minimax \
@@ -160,7 +160,7 @@ EOF
   fi
 
   OUT="$(env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID \
-    AUTOPILOT_LIVE_DIR="$LIVE" \
+    AUTOPILOT_LIVE_DIR="$LIVE" AUTOPILOT_STATE_DIR="$LIVE" \
     AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
     MINIMAX_API_KEY=test-dummy AUTOPILOT_ENDPOINTS_ENV=/nonexistent \
     R79_TRUNCATE=1 "$SCRIPT" --runner cc-shim --model MiniMax-M3 --endpoint minimax \
@@ -193,8 +193,8 @@ EOF
   rm -f "$LIVE"/dispatch-usage-*.jsonl
   NEG_XDG="$(mktemp -d "/dev/shm/r79-neg-xdg-XXXXXX")"
   chmod 700 "$NEG_XDG"
-  env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_LIVE_DIR \
-    XDG_RUNTIME_DIR="$NEG_XDG" \
+  env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_LIVE_DIR -u AUTOPILOT_STATE_DIR \
+    XDG_RUNTIME_DIR="$NEG_XDG" XDG_STATE_HOME="$NEG_XDG" \
     AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
     MINIMAX_API_KEY=test-dummy AUTOPILOT_ENDPOINTS_ENV=/nonexistent \
     "$SCRIPT" --runner cc-shim --model MiniMax-M3 --endpoint minimax \

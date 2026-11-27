@@ -55,7 +55,7 @@ function rule(title: string, right: string | null, cols: number): Row {
   const left = GLYPHS.structure.rule.repeat(2) + ' ' + title + ' '
   const r = right !== null && displayWidth(left) + 2 + displayWidth(' ' + right) <= cols ? ' ' + right : ''
   const fill = Math.max(2, cols - displayWidth(left) - displayWidth(r))
-  return clipRowPlain([{ text: left, color: PALETTE.structure }, { text: GLYPHS.structure.rule.repeat(fill), color: PALETTE.structure }, ...(r === '' ? [] : [{ text: r, dim: true }])], cols)
+  return clipRowPlain([{ text: left, dim: true }, { text: GLYPHS.structure.rule.repeat(fill), color: PALETTE.structure }, ...(r === '' ? [] : [{ text: r, dim: true }])], cols)
 }
 
 type Cols = { pool: number; d7: number; h5: number; reset: number; burn: number; proj: number; exh: number; seats: number }

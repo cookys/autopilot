@@ -99,7 +99,7 @@ export function statusText(r: LivePaneRow, sid: StateId, nowMs: number, t: T): s
 
 function colHeaderRow(wWork: number, t: T): Row {
   const text = '    ' + pad(t('v74.e.col_line'), W_LINE) + pad(t('v74.e.col_engine'), W_ENGINE) + pad(t('v74.e.col_work'), wWork + 2) + t('v74.e.col_status')
-  return [{ text, color: PALETTE.structure }]
+  return [{ text, dim: true }] // words: `subtle` is ~2 contrast, rules only
 }
 
 function drawRunRow(item: ClassifiedRun, wWork: number, stale: boolean, cols: number, nowMs: number, t: T): Row {

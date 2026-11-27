@@ -81,6 +81,7 @@ async function main() {
     manifest,
     proxySocket: socketPath,
     setArm: (arm) => proxy.setArm(arm),
+    captureSandboxVisible: true,
   });
   const out = await runReplay({
     manifest,

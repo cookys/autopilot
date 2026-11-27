@@ -162,6 +162,10 @@ async function main() {
     console.error('refusing --real without --pool <id>');
     process.exit(2);
   }
+  if (args.real && !args.proxySocket) {
+    console.error('refusing --real without --proxy-socket <path>');
+    process.exit(2);
+  }
   if (!args.manifest) {
     console.error('Usage: pm-replay-run.js --manifest <file> [--arm <name>] [--dry-run-model <id> | --real --pool <id> --proxy-socket <path>] | --selftest');
     process.exit(2);

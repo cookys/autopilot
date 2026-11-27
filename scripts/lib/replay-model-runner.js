@@ -1,9 +1,10 @@
 'use strict';
 
+const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { buildSandboxArgs, runInSandbox, resolveAllowedEnv } = require('./replay-sandbox.js');
+const { DEFAULT_BWRAP, buildSandboxArgs, resolveAllowedEnv } = require('./replay-sandbox.js');
 const { checkPool } = require('./replay-pool.js');
 
 /**
@@ -16,21 +17,41 @@ const { checkPool } = require('./replay-pool.js');
  * - A bind-mounted Unix socket still accepts connections under --unshare-net,
  *   and the sandbox's own 127.0.0.1 can host the TCP relay.
  * Therefore createRealModelRunner writes an inner script that relays
- * /proxy.sock to 127.0.0.1 and POSTs /v1/messages there. The credential stays
+ * /proxy.sock to 127.0.0.1 and POSTs /v1/messages there. A byte-pipe relay
+ * drops the request (the HTTP client writes before the unix socket connects);
+ * the relay is an HTTP server that reissues the request on the socket, which
+ * the sandbox probes already show accepts /v1/messages. The credential stays
  * on the out-of-sandbox proxy. Hooks and plugins keep the same sandbox.
+ * The sandbox is spawn()'d, not spawnSync: the proxy shares this event loop
+ * and cannot accept the socket while the loop is blocked.
  */
 const INNER_JS = [
   "'use strict';",
   "const fs = require('node:fs');",
   "const http = require('node:http');",
-  "const net = require('node:net');",
   "const payload = JSON.parse(fs.readFileSync('/work/event.json', 'utf8'));",
-  "const relay = net.createServer((client) => {",
-  "  const upstream = net.connect(payload.proxySock);",
-  "  client.pipe(upstream);",
-  "  upstream.pipe(client);",
-  "  upstream.on('error', () => client.destroy());",
-  "  client.on('error', () => upstream.destroy());",
+  "const relay = http.createServer((req, res) => {",
+  "  const chunks = [];",
+  "  req.on('data', (c) => chunks.push(c));",
+  "  req.on('end', () => {",
+  "    const body = Buffer.concat(chunks);",
+  "    const preq = http.request({",
+  "      socketPath: payload.proxySock,",
+  "      method: req.method || 'POST',",
+  "      path: req.url,",
+  "      headers: { 'content-type': req.headers['content-type'] || 'application/json', 'content-length': body.length, connection: 'close' },",
+  "    }, (pres) => {",
+  "      const parts = [];",
+  "      pres.on('data', (c) => parts.push(c));",
+  "      pres.on('end', () => {",
+  "        const raw = Buffer.concat(parts);",
+  "        res.writeHead(pres.statusCode || 502, { 'content-type': pres.headers['content-type'] || 'application/json', 'content-length': raw.length, connection: 'close' });",
+  "        res.end(raw);",
+  "      });",
+  "    });",
+  "    preq.on('error', () => { res.writeHead(502); res.end('{}'); });",
+  "    preq.end(body);",
+  "  });",
   "});",
   "relay.listen(0, '127.0.0.1', () => {",
   "  const port = relay.address().port;",
@@ -69,6 +90,25 @@ function probeBaseUrlDecision() {
   };
 }
 
+function runSandboxAsync(argv, timeout) {
+  return new Promise((resolve) => {
+    const child = spawn(DEFAULT_BWRAP, argv, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (c) => { stdout += c; });
+    child.stderr.on('data', (c) => { stderr += c; });
+    const timer = setTimeout(() => child.kill('SIGKILL'), timeout);
+    child.on('error', (error) => {
+      clearTimeout(timer);
+      resolve({ status: null, stdout, stderr, error });
+    });
+    child.on('close', (status) => {
+      clearTimeout(timer);
+      resolve({ status, stdout, stderr });
+    });
+  });
+}
+
 function textFromMessage(raw) {
   try {
     const parsed = JSON.parse(raw);
@@ -97,7 +137,7 @@ function usageFromRaw(raw) {
  * Real modelRunner. pool check is fail-closed. proxySocket is the host path of
  * an already-listening replay-api-proxy socket.
  */
-function createRealModelRunner({ manifest, proxySocket, setArm } = {}) {
+function createRealModelRunner({ manifest, proxySocket, setArm, captureSandboxVisible = false } = {}) {
   if (!manifest || typeof manifest !== 'object') throw new Error('manifest is required');
   if (!proxySocket) throw new Error('proxySocket is required');
   return {
@@ -120,7 +160,7 @@ function createRealModelRunner({ manifest, proxySocket, setArm } = {}) {
         proxySocket,
         command: [process.execPath, '/work/inner.js'],
       });
-      const res = runInSandbox(args, { timeout: 20000 });
+      const res = await runSandboxAsync(args, 20000);
       const resultPath = path.join(hostWork, 'result.json');
       const visible = `${res.stdout}\n${res.stderr}\n${fs.existsSync(resultPath) ? fs.readFileSync(resultPath, 'utf8') : ''}`;
       let parsed = {};
@@ -138,7 +178,7 @@ function createRealModelRunner({ manifest, proxySocket, setArm } = {}) {
         usage: usageFromRaw(parsed.raw || ''),
         httpStatus: parsed.status,
         refused: parsed.status === 429,
-        sandboxVisible: visible,
+        ...(captureSandboxVisible ? { sandboxVisible: visible } : {}),
       };
     },
   };

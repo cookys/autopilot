@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const http = require('node:http');
 const https = require('node:https');
 const path = require('node:path');
+const { createBudget } = require('./replay-budget.js');
 
 const DEFAULT_UPSTREAM = 'https://api.anthropic.com';
 const DEFAULT_TOTAL_CAP = 80_000_000;
@@ -71,19 +72,23 @@ function startReplayProxy(opts = {}) {
   }
   const auditPath = opts.auditPath || null;
   let arm = opts.arm || 'default';
-  const spent = { total: 0 };
   const armSpent = new Map();
-  let reserved = 0;
   let calls = 0;
-  let halted = false;
   let openReservation = null;
+  // Shared accumulator: total_limit is the manifest cap. estimate defaults to the
+  // same cap so settle halts once spent exceeds the cap (also the 1.5× estimate rule).
+  const budget = opts.budget || createBudget({
+    total_limit: totalCap,
+    estimate: Number(opts.estimate ?? totalCap),
+  });
 
   function report() {
+    const snap = budget.report();
     return {
       calls,
-      halted,
-      spent: spent.total,
-      reserved,
+      halted: snap.halted,
+      spent: snap.spent,
+      reserved: snap.reserved,
       totalCap,
       perArmCap,
       eventMax,
@@ -92,15 +97,15 @@ function startReplayProxy(opts = {}) {
     };
   }
 
-  function audit(status, usage, forwarded) {
+  function audit(status, usage, forwarded, requestPath) {
     if (!auditPath) return;
-    const line = JSON.stringify({
-      path: '/v1/messages',
+    let line = JSON.stringify({
+      path: requestPath || '/v1/messages',
       status,
       forwarded: Boolean(forwarded),
       usage,
     });
-    if (line.includes(authToken)) return;
+    if (authToken && line.includes(authToken)) line = line.split(authToken).join('[redacted]');
     fs.appendFileSync(auditPath, `${line}\n`, { mode: 0o600 });
   }
 
@@ -111,38 +116,35 @@ function startReplayProxy(opts = {}) {
   }
 
   function reserve(forArm) {
-    if (halted || openReservation) return { ok: false, reason: 'halted' };
+    if (report().halted || openReservation) return { ok: false, reason: 'halted' };
     const armUsed = armSpent.get(forArm) || 0;
-    if (spent.total + reserved + eventMax > totalCap) return { ok: false, reason: 'total_cap' };
     if (armUsed + eventMax > perArmCap) return { ok: false, reason: 'arm_cap' };
-    reserved += eventMax;
-    openReservation = { arm: forArm, max: eventMax };
+    const token = budget.reserve(eventMax);
+    if (!token) return { ok: false, reason: 'total_cap' };
+    openReservation = { arm: forArm, token };
     return { ok: true };
   }
 
   function settle(usage) {
     if (!openReservation) return;
-    reserved -= openReservation.max;
     const tokens = usageTokens(usage);
-    spent.total += tokens;
+    budget.settle(openReservation.token, tokens);
     armSpent.set(openReservation.arm, (armSpent.get(openReservation.arm) || 0) + tokens);
     openReservation = null;
     calls += 1;
-    if (spent.total > totalCap) halted = true;
   }
 
   const server = http.createServer((req, res) => {
     const requestPath = String(req.url || '').split('?')[0];
     if (!isModelMessagesPath(req.url)) {
-      const line = JSON.stringify({ path: requestPath, status: 403, forwarded: false, usage: emptyUsage() });
-      if (auditPath && !line.includes(authToken)) fs.appendFileSync(auditPath, `${line}\n`, { mode: 0o600 });
+      audit(403, emptyUsage(), false, requestPath);
       sendJson(res, 403, { error: { type: 'forbidden', message: 'path_not_allowed' } });
       return;
     }
     const heldArm = arm;
     const gate = reserve(heldArm);
     if (!gate.ok) {
-      audit(429, emptyUsage(), false);
+      audit(429, emptyUsage(), false, '/v1/messages');
       sendJson(res, 429, { error: { type: 'replay_budget', message: gate.reason } });
       return;
     }
@@ -174,7 +176,7 @@ function startReplayProxy(opts = {}) {
             const usage = usageFromBody(raw.toString('utf8'));
             const status = ures.statusCode || 502;
             settle(usage);
-            audit(status, usage, true);
+            audit(status, usage, true, '/v1/messages');
             res.writeHead(status, {
               'content-type': ures.headers['content-type'] || 'application/json',
               'content-length': raw.length,
@@ -186,7 +188,7 @@ function startReplayProxy(opts = {}) {
       );
       ureq.on('error', () => {
         settle(emptyUsage());
-        audit(502, emptyUsage(), true);
+        audit(502, emptyUsage(), true, '/v1/messages');
         sendJson(res, 502, { error: { type: 'upstream', message: 'upstream_error' } });
       });
       ureq.end(body);

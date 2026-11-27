@@ -153,7 +153,7 @@ server.listen(0,'127.0.0.1',()=>fs.writeFileSync(portFile,String(server.address(
 NODE
 FALLBACK_SERVER_PID=$!
 for _i in 1 2 3 4 5 6 7 8 9 10; do [ -s "$FALLBACK_PORT" ] && break; sleep 0.1; done
-FALLBACK_URL="http://127.0.0.1:$(cat "$FALLBACK_PORT")/v1"
+FALLBACK_URL="http://127.0.0.1:$(cat "$FALLBACK_PORT")"
 FALLBACK_RUNS="$TEST_TMP/runs-endpoint-fallback"; mkdir -p "$FALLBACK_RUNS"
 FALLBACK_TABLE="$TEST_TMP/endpoint-fallback-engines.json"
 fresh_table "$FALLBACK_TABLE" '[{"harness":"agy","model":"gemini-4-hydrogen-low","availability":"已用完","suggest":"不派"},{"harness":"cc-shim","model":"glm-5.3","availability":"暫停","suggest":"不派"},{"harness":"grok","model":"grok-4.7","availability":"可用","suggest":"派"}]'

@@ -9,6 +9,10 @@ unset AUTOPILOT_TOKEN_SEAT AUTOPILOT_ENDPOINT_GLM_TRANSPORT \
 export AUTOPILOT_ENDPOINTS_ENV=/nonexistent
 export AUTOPILOT_QUALIFIED_FILE="$TEST_TMP/missing-qualified.json"
 export AUTOPILOT_PACE_FILE="$REPO_ROOT/scripts/fixtures/pace-select/quota-default.json"
+export AUTOPILOT_GROK_PROBE=off
+# Preflight skips codex when ~/.codex/auth.json is missing. The test HOME is empty, so plant a fixture auth or the quota winner never runs.
+mkdir -p "$HOME/.codex"
+printf '{}\n' > "$HOME/.codex/auth.json"
 export AUTOPILOT_DISPATCH_RUNS_DIR="$TEST_TMP/runs"
 export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session"
 export DISPATCH_DETACH=0 AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1
@@ -43,7 +47,7 @@ const fs=require('node:fs'); const s=fs.readFileSync(process.argv[2],'utf8');
 fs.writeFileSync(process.argv[3], s.slice(s.indexOf('# Pace is the default only'), s.indexOf('# Saved before skill-pack')));
 NODE_STRICT
 (
-  STRICT_CONTRACT=1 RUNNER_SUPPLIED=0 MODEL_SUPPLIED=0
+  STRICT_CONTRACT=1 RUNNER_SUPPLIED=0 MODEL_SUPPLIED=0 ENDPOINT_SUPPLIED=0
   RUNNER=grok MODEL=grok-4.7 ENDPOINT='' PACE_ROLE=implementer
   PROMPT_FILE="$TEST_TMP/brief" SELF_DIR="$REPO_ROOT/scripts"
   die_precondition() { echo "$*" >&2; exit 2; }
@@ -123,7 +127,7 @@ AUTOPILOT_ENDPOINT_GLM_URL=https://fixture.invalid/v1 AUTOPILOT_ENDPOINT_GLM_TOK
     > "$TEST_TMP/author-role.out" 2> "$TEST_TMP/author-role.err"
 AUTHOR_RC=$?
 assert_eq "$AUTHOR_RC" 2 'restricted GLM author dispatch is refused in the private repo'
-assert_contains "$(cat "$TEST_TMP/author-role.out")" 'restricted_operator_private_workdir' 'author result names the operator workdir refusal'
+assert_contains "$(cat "$TEST_TMP/author-role.out")$(cat "$TEST_TMP/author-role.err")" 'restricted_operator_not_public_source' 'author result names the undeclared-tier refusal'
 # Retry the actual agy retreat function with a sentinel child and fixture policy.
 # Original argv intentionally has no runner/model: the automatic choice must be pinned on retry.
 mkdir -p "$TEST_TMP/retry-tools/lib"

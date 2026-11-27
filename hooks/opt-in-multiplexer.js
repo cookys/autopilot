@@ -46,6 +46,7 @@ const EVENT_TABLE = {
     { stem: 'accumulator', matcher: 'Write|Edit', args: [] },
     { stem: 'test-runner', matcher: 'Write|Edit', args: [] },
     { stem: 'design-quality', matcher: 'Write|Edit', args: [] },
+    { stem: 'plan-gap-hint', matcher: 'Bash', args: [] },
   ],
   PostToolUseFailure: [
     { stem: 'mcp-health', matcher: 'mcp__.*', args: ['failure'] },

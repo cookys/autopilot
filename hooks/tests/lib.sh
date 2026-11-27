@@ -192,6 +192,9 @@ esac
 SH
 chmod +x "$FLEET_SENTINEL_DIR/fleet"
 export PATH="$FLEET_SENTINEL_DIR:$PATH"
+# dispatch-hetero refuses (disk-guard) below 20% free on the worktree filesystem; a suite result must not depend on how full this host disk is.
+# A suite that tests the guard exports its own AUTOPILOT_DISK_GUARD_FAKE_STATFS.
+if [ -z "${AUTOPILOT_DISK_GUARD_FAKE_STATFS:-}" ]; then printf '{"free_pct":50}\n' > "$TEST_TMP/disk-guard-fake-statfs.json"; export AUTOPILOT_DISK_GUARD_FAKE_STATFS="$TEST_TMP/disk-guard-fake-statfs.json"; fi
 # The foreman exam keeps a durable anti-rerun log; a test must never write the real one.
 export AUTOPILOT_FOREMAN_EVIDENCE_DIR="$TEST_TMP/foreman-evidence"
 # G37: a wired claude caller (dispatch-*, probe-*, qc-panel, eval runners ...) goes through the account layer when a

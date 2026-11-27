@@ -355,6 +355,7 @@ function liveRail(mode) {
       AUTOPILOT_GROK_EFFORT_PROBE: '0',
       AUTOPILOT_STRIKE_WRITER: 'off',
       AUTOPILOT_DISPATCH_MANIFEST: '0',
+      AUTOPILOT_DISPATCH_ROLE: 'engine-qualify', // exam rail: the Fleet-Task precondition exempts the qualifier caller (fleet-task-ref.js)
       ENGINE_CAPABILITY_DIR: cap,
       AUTOPILOT_LIVE_DIR: liveDir(), // the rail appends a dispatch_usage row: into the temp ledger, never the real one
       GIT_CONFIG_GLOBAL: '/dev/null',

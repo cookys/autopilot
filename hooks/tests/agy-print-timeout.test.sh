@@ -93,9 +93,9 @@ M=gemini-3.7-flash-high
 for n in h900 h9m hbad; do mk_sbx "$TEST_TMP/sbx-$n"; done
 mk_sbx "$TEST_TMP/sbx-x"
 
-run_case a900 env "$AUTHOR" --runner agy --model $M --prompt-file "$SMALL" --timeout 900 --bin "$(mk_stub a900 AGY_STUB_CAPTURE=1)"
-run_case a9m  env "$AUTHOR" --runner agy --model $M --prompt-file "$SMALL" --timeout 9m --bin "$(mk_stub a9m AGY_STUB_CAPTURE=1)"
-run_case abad env "$AUTHOR" --runner agy --model $M --prompt-file "$SMALL" --timeout 9x --bin "$(mk_stub abad AGY_STUB_CAPTURE=1)"
+run_case a900 env "$AUTHOR" --runner agy --model $M --prompt-file "$SMALL" --hard-timeout 900 --bin "$(mk_stub a900 AGY_STUB_CAPTURE=1)"
+run_case a9m  env "$AUTHOR" --runner agy --model $M --prompt-file "$SMALL" --hard-timeout 9m --bin "$(mk_stub a9m AGY_STUB_CAPTURE=1)"
+run_case abad env "$AUTHOR" --runner agy --model $M --prompt-file "$SMALL" --hard-timeout 9x --bin "$(mk_stub abad AGY_STUB_CAPTURE=1)"
 run_case r900 env "$REVIEW" --runner agy --model $M --diff-file "$DIFFSMALL" --timeout 900 --bin "$(mk_stub r900 AGY_STUB_CAPTURE=1 AGY_STUB_RESULT=error)"
 run_case r9m  env "$REVIEW" --runner agy --model $M --diff-file "$DIFFSMALL" --timeout 9m --bin "$(mk_stub r9m AGY_STUB_CAPTURE=1 AGY_STUB_RESULT=error)"
 run_case rbad env "$REVIEW" --runner agy --model $M --diff-file "$DIFFSMALL" --timeout 9x --bin "$(mk_stub rbad AGY_STUB_CAPTURE=1 AGY_STUB_RESULT=error)"
@@ -124,13 +124,15 @@ wait
 argv_of() { grep -a -o 'AGY-STUB bytes=[^]]*\]' <<<"$(rail_text "$1")" | head -1; }
 for rail in a r h; do
   case $rail in a) label=author;; r) label=review;; h) label=hetero;; esac
-  assert_contains "$(argv_of ${rail}900)" "|--print-timeout|900s|" "$label: --timeout 900 reaches agy as 900s"
-  assert_contains "$(argv_of ${rail}9m)" "|--print-timeout|9m|" "$label: --timeout 9m reaches agy unchanged"
-  assert_contains "$(cat "$R/${rail}bad.out")" "invalid --timeout value for agy" "$label: --timeout 9x refused with a clear reason"
+  assert_contains "$(argv_of ${rail}900)" "|--print-timeout|900s|" "$label: timeout 900 reaches agy as 900s"
+  assert_contains "$(argv_of ${rail}9m)" "|--print-timeout|9m|" "$label: timeout 9m reaches agy unchanged"
+  # author/hetero parse idle/hard limits (idle-watch) before agy's own check, so they refuse with their own reason
+  case $rail in a) want="invalid idle/hard timeout";; h) want="invalid --timeout/--idle-timeout/--hard-timeout";; *) want="invalid --timeout value for agy";; esac
+  assert_contains "$(cat "$R/${rail}bad.out")" "$want" "$label: invalid timeout 9x refused with a clear reason"
   [ ! -e "$TEST_TMP/called-${rail}bad" ] && pass_ok=1 || pass_ok=0
   assert_eq "1" "$pass_ok" "$label: agy never spawned for an invalid --timeout"
 done
-assert_contains "$(cat "$R/dbad.out")" "invalid --timeout value for agy" "detached hetero: invalid --timeout fails closed with the clear reason"
+assert_contains "$(cat "$R/dbad.out")" "invalid --timeout/--idle-timeout/--hard-timeout" "detached hetero: invalid --timeout fails closed with the clear reason"
 assert_not_contains "$(cat "$R/dbad.out")" "command not found" "detached hetero: no 'command not found' in the child"
 assert_contains "$(cat "$R/dbad.out")" '"status": "precondition_failed"' "detached hetero: typed precondition_failed"
 assert_contains "$(argv_of d900)$(cat "$R/d900.out")" "--print-timeout|900s|" "detached hetero: --timeout 900 reaches agy as 900s"

@@ -195,3 +195,59 @@ test('runner receives isolated temp HOME and CLAUDE_CONFIG_DIR', () => {
     fs.rmSync(fx.dir, { recursive: true, force: true });
   }
 });
+
+// ---- N9 account-rail cases (claude-spawn-sites S7): the eval spawns claude through `claude-account.js exec --pick`.
+// Tempdir fixture, FAKE- tokens, Node claude shim; os.userInfo() pinned to the fixture home by a --require preload.
+const crypto = require('node:crypto');
+const { spawnSync } = require('node:child_process');
+const { makeFixture } = require('../lib/account-fixtures/shim-install.js');
+const SCRIPTS_DIR = path.resolve(__dirname, '..');
+const fpOf = (tok) => crypto.createHash('sha256').update(tok).digest('hex').slice(0, 8);
+
+function n9Run(mode, scriptsDir) {
+  const fx = makeFixture({ aliases: [{ alias: 'a', priority: 10 }, { alias: 'b', priority: 20 }] });
+  try {
+    fx.shim.setControl({ default: { exit: 0, stdout: `${JSON.stringify({ type: 'result', total_cost_usd: 0 })}\n` } });
+    if (mode === 'broken') fs.chmodSync(fx.regFile, 0o644);
+    const preload = path.join(fx.root, 'preload.js');
+    fs.writeFileSync(preload, [
+      "const os = require('os'); const orig = os.userInfo;",
+      "os.userInfo = function (o) { return Object.assign({}, orig.call(os, o), { homedir: process.env.G37_TEST_REAL_HOME }); };",
+    ].join('\n'));
+    const pos = path.join(fx.root, 'pos.txt');
+    fs.writeFileSync(pos, 'autopilot:next | what next?\n');
+    const neg = path.join(fx.root, 'neg.txt');
+    fs.writeFileSync(neg, '');
+    const env = Object.assign({}, fx.env, { NODE_OPTIONS: `--require ${preload}`, G37_TEST_REAL_HOME: fx.realHome });
+    delete env.AUTOPILOT_SESSION_ID;
+    const r = spawnSync(process.execPath, [path.join(scriptsDir, 'eval-skill-triggers.js'), '--should-trigger', pos, '--should-not-trigger', neg,
+      '--plugin-dir', path.resolve(SCRIPTS_DIR, '..'), '--timeout-ms', '60000'], { env, encoding: 'utf8', timeout: 120000 });
+    const calls = fx.shim.calls().filter((c) => !c.argv.includes('--version'));
+    return { code: r.status, stderr: r.stderr, calls, tok: fpOf(fx.tokens.a) };
+  } finally { fx.cleanup(); }
+}
+const n9Good = (r) => r.code === 0 && r.calls.length > 0 && r.calls.every((c) => c.fp === r.tok && c.account === 'a' && c.decoy_read === false);
+
+test('N9 good: eval-skill-triggers.js: registry present -> alias token fingerprint at the shim, decoy never read', () => {
+  const r = n9Run('good', SCRIPTS_DIR);
+  assert.ok(n9Good(r), `code ${r.code} calls=${JSON.stringify(r.calls)} stderr=${String(r.stderr).slice(0, 300)}`);
+});
+
+test('N9 broken: eval-skill-triggers.js: registry unusable -> zero spawn, decoy not read', () => {
+  const r = n9Run('broken', SCRIPTS_DIR);
+  assert.ok(r.calls.length === 0 && !r.calls.some((c) => c.decoy_read), `calls=${JSON.stringify(r.calls)}`);
+});
+
+test('N9 mutation: eval-skill-triggers.js: account call removed -> the good-run assertion turns red', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eval-triggers-mut-'));
+  try {
+    const dir = path.join(root, 'scripts');
+    fs.cpSync(SCRIPTS_DIR, dir, { recursive: true, filter: (s) => !/\.test\.(js|sh)$/.test(s) });
+    const p = path.join(dir, 'eval-skill-triggers.js');
+    const src = fs.readFileSync(p, 'utf8');
+    const out = src.replace(/process\.execPath,\s*\[\s*path\.join\(__dirname, 'claude-account\.js'\), 'exec', '--pick', '--purpose', 'skill-trigger-eval', '--', 'claude',/, "'claude',\n    [");
+    assert.notStrictEqual(out, src, 'mutation applied');
+    fs.writeFileSync(p, out);
+    assert.ok(!n9Good(n9Run('good', dir)), 'without the account call the good-run predicate must fail');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});

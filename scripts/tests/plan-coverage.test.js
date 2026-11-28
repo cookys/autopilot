@@ -149,4 +149,43 @@ describe('plan-to-tasks --coverage', () => {
     assert.equal(run(`${fx.planRel}@7598d09d0000`).gaps, 0);
     assert.equal(run('docs/plans/other.md@7598d09d0000').gaps, 3);
   });
+  describe('marker in a comment, cross-parent', () => {
+    const ROOT = '01M88TW9EPZ806DFR3846AM28R';
+    const run = (fx, tasks) => {
+      fs.writeFileSync(fx.tasksFile, JSON.stringify(tasks), 'utf8');
+      const res = spawnSync(
+        process.execPath,
+        [PLAN_TO_TASKS, '--receipt', fx.receiptPath, '--repo', fx.repoDir, '--coverage', '--parent', ROOT],
+        { encoding: 'utf8', env: { ...process.env, PLAN_TO_TASKS_FLEET_BIN: fx.fakeFleet } }
+      );
+      return JSON.parse(res.stdout);
+    };
+
+    it('counts a marker that lives in a task comment, title without marker', () => {
+      const out = run(fx, [
+        { task_id: '01M89APAPAXBD2F1KSNDABA5PJ', status: 'done', parent_task_id: ROOT, title: 'Engine: build the thing',
+          comments: [{ author: 'x', text: `note\nPlan: ${fx.planRel}@0948ed9a Phase: P1` }] },
+        { task_id: '01M8BRKSWB8GGBFWMGJ4M9PZ6B', status: 'done', parent_task_id: ROOT, title: 'Plan step',
+          comments: [{ author: 'x', text: `Plan: ${fx.planRel} Phase: P2, P3` }] },
+      ]);
+      assert.equal(out.gaps, 0);
+      assert.deepEqual(out.phases.find((p) => p.id === 'P1').task_ids, ['01M89APAPAXBD2F1KSNDABA5PJ']);
+    });
+
+    it('counts a task whose parent is not the plan root (cross-parent)', () => {
+      const out = run(fx, [
+        { task_id: '01M89V2A8WV3MSA93A1EX0ZBNJ', status: 'done', parent_task_id: '01M89B1F51AZVAEG7AE2HKR71J',
+          title: `Plan: ${fx.planRel}@a783846e Phase: P1, P2, P3` },
+      ]);
+      assert.equal(out.gaps, 0);
+    });
+
+    it('a comment naming a different plan path still does not match', () => {
+      const out = run(fx, [
+        { task_id: '01M89SSD12XC2YPXS51X64KBQB', status: 'done', parent_task_id: '01M89B1F51AZVAEG7AE2HKR71J', title: 'x',
+          comments: [{ author: 'x', text: 'Plan: docs/plans/other.md@a783846e Phase: P1, P2, P3' }] },
+      ]);
+      assert.equal(out.gaps, 3);
+    });
+  });
 });

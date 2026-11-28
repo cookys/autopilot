@@ -14,7 +14,7 @@ function scratch() {
   assert.equal(spawnSync('git', ['init', '-q'], { cwd: repo }).status, 0);
   const bin = path.join(home, 'fleet');
   const log = path.join(home, 'calls');
-  fs.writeFileSync(bin, '#!/usr/bin/env node\nrequire("fs").appendFileSync(process.env.CALL_LOG, JSON.stringify(process.argv.slice(2))+"\\n"); if (process.argv[4] === process.env.FAIL_ID) { console.error("simulated failure"); process.exit(1); }\n', { mode: 0o755 });
+  fs.writeFileSync(bin, '#!/usr/bin/env node\nrequire("fs").appendFileSync(process.env.CALL_LOG, JSON.stringify(process.argv.slice(2))+"\\n"); if (process.argv[3] === "progress" && process.argv[4] === process.env.NOT_ASSIGNEE_ID) { console.error("fleet: task_progress refused: not_assignee"); process.exit(1); } if (process.argv[4] === process.env.FAIL_ID) { console.error("simulated failure"); process.exit(1); }\n', { mode: 0o755 });
   const env = { ...process.env, HOME: home, FLEET_BIN: bin, CALL_LOG: log, AUTOPILOT_ALLOW_SCRATCH_CARD: '1', AUTOPILOT_RUNS_WATCH_AUTOSTART: '0', AUTOPILOT_CARD_NOTIFY: 'off' };
   for (const k of ['AUTOPILOT_SESSION_ID', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_SESSION_ID', 'CODEX_THREAD_ID', 'XDG_CONFIG_HOME']) delete env[k];
   return {
@@ -62,5 +62,27 @@ test('without waiting tasks background and fleet calls are unchanged', () => {
     assert.equal(r.status, 0, r.stderr);
     assert.equal(s.cards()[0].background, 'Context');
     assert.deepEqual(s.calls(), []);
+  } finally { s.cleanup(); }
+});
+test('not_assignee on the waiting call leaves a task comment so the assignee lane can set waiting_on itself', () => {
+  const s = scratch(); try {
+    s.env.NOT_ASSIGNEE_ID = ids[0];
+    const r = s.run(ids.flatMap(id => ['--waiting-task', id]));
+    assert.equal(r.status, 0, r.stderr);
+    const card = s.cards()[0];
+    const calls = s.calls();
+    assert.deepEqual(calls[0], ['task', 'progress', ids[0], 'waiting', '--waiting-on', `card:${card.id}`]);
+    assert.deepEqual(calls[1], ['task', 'comment', ids[0], `卡 ${card.id} 已開，請設 waiting_on card:${card.id}`]);
+    assert.deepEqual(calls[2], ['task', 'progress', ids[1], 'waiting', '--waiting-on', `card:${card.id}`]);
+    assert.equal(calls.length, 3);
+    assert.match(r.stderr, new RegExp(`${ids[0]}.*comment`));
+  } finally { s.cleanup(); }
+});
+test('a plain failure (not not_assignee) leaves no comment', () => {
+  const s = scratch(); try {
+    s.env.FAIL_ID = ids[0];
+    const r = s.run(['--waiting-task', ids[0]]);
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(s.calls().filter(c => c[1] === 'comment').length, 0);
   } finally { s.cleanup(); }
 });

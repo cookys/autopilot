@@ -1388,7 +1388,13 @@ function main(argv) {
     for (const id of args['waiting-task']) {
       const progress = spawnSync(fleetBin(), ['task', 'progress', id, 'waiting', '--waiting-on', `card:${r.id}`], { encoding: 'utf8' });
       const reason = progress.error ? progress.error.message : (progress.stderr || '').trim() || `exit code ${progress.status}`;
-      process.stderr.write(`open-decision: waiting task ${id}: ${progress.status === 0 ? 'ok' : reason}\n`);
+      // Only the assignee can set waiting_on. When the courier says we are not it, leave a comment so the assignee's lane sets it itself.
+      let tail = progress.status === 0 ? 'ok' : reason;
+      if (progress.status !== 0 && /not_assignee/.test(`${progress.stderr || ''}${progress.stdout || ''}`)) {
+        const comment = spawnSync(fleetBin(), ['task', 'comment', id, `卡 ${r.id} 已開，請設 waiting_on card:${r.id}`], { encoding: 'utf8' });
+        tail = `${reason}; comment ${comment.status === 0 ? 'left for the assignee' : `failed: ${(comment.stderr || '').trim() || `exit code ${comment.status}`}`}`;
+      }
+      process.stderr.write(`open-decision: waiting task ${id}: ${tail}\n`);
     }
     notifyPm('open', { card_id: r.id, question: args.question, state: 'open', ...(ex.title !== undefined ? { title: ex.title } : {}) });
     process.stdout.write(args.json ? `${JSON.stringify({ ok: true, id: r.id, file: r.file, scope_key: r.scope_key })}\n` : `${r.id}\n`);

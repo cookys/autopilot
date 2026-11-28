@@ -74,7 +74,7 @@ Bump with `scripts/sync-version.js` only. 3.0.0 final is the operator's "3.0.0.0
 ## Process rules
 
 - Mission graphs: node `verification_commands` stay fast and fixed, never `bash hooks/tests/run.sh`; the whole suite runs once, alone, before a campaign merges into `develop`; red means no merge. Editing a sealed graph breaks its pinned digest.
-- Pre-merge runs `affected-suites.js --fast --run`; the full affected run is `scripts/post-merge-suite.sh` after the merge, and the lane reverts its own merge on a NEW red.
+- Pre-merge runs `affected-suites.js --base develop --run`; the full affected run is `scripts/post-merge-suite.sh` after the merge, and the lane reverts its own merge on a NEW red.
 - The merge gate runs `check-phase-review-receipt.js` against the branch tip being merged, never the last reviewed head; any product-code delta after the reviewed head needs its own review, and at the generation cap only a PM ruling plus a post-head ledger passes ([`skills/dev-flow/references/hetero-loops.md`](skills/dev-flow/references/hetero-loops.md)).
 - No hosted CI (operator): suites and the merge gate run locally; never add a hosted workflow.
 - Never read, print or copy credentials, and give dispatch children a throwaway config dir seeded with only `.credentials.json`, never the real `~/.claude` ([`references/hetero-dispatch.md`](references/hetero-dispatch.md)); destructive ops follow the global Red lines tiers.

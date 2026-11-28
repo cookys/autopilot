@@ -8225,6 +8225,45 @@
       "note": "Set by the account layer in every child env: the alias the child runs as (codeforge G36 reads it for usage attribution)."
     },
     {
+      "name": "AUTOPILOT_POOL_MECH_ROUTE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/lib/pool-mech-route.js"
+      ],
+      "doc": "docs/scripts-inventory.md",
+      "relates": [],
+      "note": "0 switches off pool-aware mechanical routing in resolve-dispatch.sh (fleet 01M883AEHTJWZH95JSY1MSKEFX)."
+    },
+    {
+      "name": "AUTOPILOT_POOL_MECH_ROUTE_CONFIG",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/lib/pool-mech-route.js"
+      ],
+      "doc": "docs/scripts-inventory.md",
+      "relates": [],
+      "note": "Test seam: path of the pool-mech-route.json to read instead of the shipped one."
+    },
+    {
+      "name": "AUTOPILOT_MECH_ROUTE_EXCLUDE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/lib/pool-mech-route.js"
+      ],
+      "doc": "docs/scripts-inventory.md",
+      "relates": [],
+      "note": "Comma list of engine or pool names (agy, codex A, codex B) that pool-aware mechanical routing skips, e.g. a pool at its cap."
+    },
+    {
       "name": "AUTOPILOT_CONFIG",
       "kind": "env",
       "audience": "internal",

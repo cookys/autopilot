@@ -3,6 +3,7 @@
 // colours and glyphs strictly via PALETTE / GLYPHS, stale or missing sources in red wrapped without truncation (A10),
 // Enter (view.expanded) folds the decided rows; there is no action-area Button (S5 has none).
 import type { CodeReviewView, DecisionRow, DecisionsView, LiveSnapshot, PlanReviewView, QcView, ReviewSeat, Seg } from '../model'
+import type { KReviewCandidate } from '../v74/contract'
 import { DEFAULT_VALID_FOR_S, TRACE_STALE_MIN, TRACE_STALE_MS, displayWidth, liveAgeMs, truncateToWidth } from '../model'
 import { GLYPHS } from '../../tux/glyphs.ts'
 import { PALETTE } from '../../tux/palette.ts'
@@ -130,6 +131,28 @@ function qcRows(ctx: PageCtx, q: QcView, qcAt?: string | null): Row[] {
   ]
 }
 
+// 候選教訓 (fleet 01M8ARXSD4): one row per pending knowledge-review candidate; the focused row takes the ‣ cursor and a/x decide it.
+// Glyph rule: ‣ (U+2023, EAW=N, width=1) is the active cursor, ▸ stays reserved for folded sections (decide.ts glyph usage).
+const KR_CURSOR = '‣'
+function kreviewRows(ctx: PageCtx, cands: readonly KReviewCandidate[], focusRaw: number): Row[] {
+  const cols = ctx.size.cols
+  // the list can shrink between keystrokes (a/x decided one); the cursor must stay on a real row
+  const focus = Math.max(0, Math.min(focusRaw, cands.length - 1))
+  const out: Row[] = [sectionRule(ctx.t('v74.e.kr_title', { n: cands.length }), cols)]
+  cands.forEach((r, i) => {
+    const meta = [r.pitfall, r.solution].filter(s => s !== '').join(GLYPHS.structure.answer)
+    const src = [r.tool, r.repo].filter(s => s !== '').join('@')
+    const tail: Seg[] = [
+      ...(meta !== '' ? [seg(' · '), dimSeg(meta)] : []),
+      ...(src !== '' ? [seg(' · '), dimSeg(src)] : []),
+      ...(r.count > 1 ? [seg(' ·×'), seg(String(r.count), { color: PALETTE.idle })] : []),
+    ]
+    const mark = i === focus ? seg(KR_CURSOR + ' ', { color: PALETTE.idle }) : seg('  ')
+    out.push(truncateSegs([mark, seg(r.topic), ...tail], cols))
+  })
+  return out
+}
+
 function sortDecisions(rows: readonly DecisionRow[]): DecisionRow[] {
   return rows
     .map((r, i) => {
@@ -237,9 +260,22 @@ export function renderReview(ctx: PageCtx, view: ReviewView = DEFAULT_REVIEW_VIE
   if (decisions !== null) body.push(...decidedRows(ctx, decisions, !view.expanded))
   else if (decisionsMissing) body.push(...brokenRows(GLYPHS.state.failed + ' ' + ctx.t('page.review.decisions_not_wired'), cols))
 
+  const kr = ctx.v74?.kreview
+  const krErr = ctx.v74?.kreviewError ?? null
+  const krMissing = kr === null && krErr !== null
+  const krDrawn = kr !== null && kr !== undefined && kr.length > 0
+  if (krDrawn) body.push(...kreviewRows(ctx, kr, view.focus))
+  else if (krMissing) body.push(...brokenRows(GLYPHS.state.failed + ' ' + ctx.t('v74.e.kr_missing', { why: krErr }), cols))
+
   if (body.length === 0) body.push([seg(GLYPHS.state.pending + ' ', { color: PALETTE.idle }), dimSeg(ctx.t('page.review.empty'))])
 
-  return { body, actions: liveBroken || liveAgeOver || decisionsMissing || showMissingQc ? unknownActions() : [] }
+  // the a/x decision keys ride a visible action Button (`[a] …` hint → hotkey, pane.tsx drawRow); no block, no keys
+  const krActions: Row[] = krDrawn ? [[
+    { text: '[a] ' + ctx.t('v74.e.kr_ok') + '  ', press: 'key:a' },
+    { text: '[x] ' + ctx.t('v74.e.kr_no'), press: 'key:x' },
+  ]] : []
+
+  return { body, actions: krActions.length > 0 ? krActions : liveBroken || liveAgeOver || decisionsMissing || showMissingQc || krMissing ? unknownActions() : [] }
 }
 
 export const reviewPage: Page = {

@@ -169,7 +169,7 @@ const DECIDE_KEYS: Record<string, KeyAction> = { ...CARD_KEYS, d: { kind: 'pick'
 // o acts on the focused (▸) row: quota shows / hides that pool's seats. decide has no o (a-e pick there); now has no focused row yet, so o is not bound there
 const OPEN_KEY: Record<string, KeyAction> = { o: { kind: 'open' } }
 const pageKeys = (id: string): Record<string, KeyAction> =>
-  (id === 'decide' ? { ...COMMON_KEYS, ...DECIDE_KEYS } : id === 'todo' ? { ...COMMON_KEYS, ...CARD_KEYS } : id === 'fleet' ? {} : id === 'quota' ? { ...COMMON_KEYS, ...OPEN_KEY } : COMMON_KEYS) // v7.4 S8: the 艦隊 page is a plain list with no action rows, so it binds nothing (no fold, no see, no fill)
+  (id === 'decide' ? { ...COMMON_KEYS, ...DECIDE_KEYS } : id === 'todo' ? { ...COMMON_KEYS, ...CARD_KEYS } : id === 'fleet' ? {} : id === 'quota' ? { ...COMMON_KEYS, ...OPEN_KEY } : id === 'review' ? { ...COMMON_KEYS, a: { kind: 'kreview', verdict: 'approved' }, x: { kind: 'kreview', verdict: 'rejected' } } : COMMON_KEYS) // v7.4 S8: the 艦隊 page is a plain list with no action rows, so it binds nothing (no fold, no see, no fill)
 // every hotkey a framed page binds (f on fleet / quota is the page's own fill action): a visible `[x]` key hint must be one of these (frame.test.ts)
 export const pageHotkeys = (id: string): string[] => [...Object.keys(pageKeys(id)), ...(id === 'quota' ? ['f'] : [])]
 // quota renders under spend tab; spend page id maps to spend tab

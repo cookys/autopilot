@@ -1099,5 +1099,9 @@
   "trace.dispatch_lines_missing": "Fleet lines: no source (>{limit}m stale)",
   "addr.owner": "owner",
   "addr.no_owner": "no owner set",
-  "addr.registry_down": "project registry unavailable"
+  "addr.registry_down": "project registry unavailable",
+  "v74.e.kr_title": "Candidates ({n})",
+  "v74.e.kr_missing": "Candidates source missing: {why}",
+  "v74.e.kr_ok": "Approve",
+  "v74.e.kr_no": "Reject"
 }

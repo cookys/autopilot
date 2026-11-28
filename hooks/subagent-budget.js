@@ -373,12 +373,12 @@ function entryUsd(e) {
 
 function readTicketLedgerRows() {
   const rows = [];
+  // A ticket's spend can sit in both ledgers: read the legacy one first, then the new one, so a
+  // session+subagent present in both is counted once with the new ledger's figure.
   let raw = '';
-  try {
-    raw = fs.readFileSync(ticketLedgerFile(), 'utf8');
-  } catch {
+  for (const file of [legacyTicketLedgerFile(), ticketLedgerFile()]) {
     try {
-      raw = fs.readFileSync(legacyTicketLedgerFile(), 'utf8');
+      raw += fs.readFileSync(file, 'utf8') + '\n';
     } catch { /* absent or unreadable ledger */ }
   }
   for (const line of raw.split('\n')) {
@@ -846,7 +846,7 @@ function run(payload) {
   });
 }
 
-module.exports = { run, collect, withLanes, tally, resolveDir, contentText, firstUserMessage, laneOf, laneFromBrief, laneFromDescription, ackFromBrief, claudeBudgetFromBrief, isReviewer, isEngineBrief };
+module.exports = { ticketLedgerSpend, run, collect, withLanes, tally, resolveDir, contentText, firstUserMessage, laneOf, laneFromBrief, laneFromDescription, ackFromBrief, claudeBudgetFromBrief, isReviewer, isEngineBrief };
 
 if (require.main === module) {
   try {

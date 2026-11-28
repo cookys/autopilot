@@ -2667,10 +2667,8 @@ export function registerLive(on: Parameters<Register>[0]): void {
         void pageOpen(id as BandPageId)
       }
       const oneRow = OneRowBand(el, layoutOneRowBand(oneRowInput, columns, t), onOneRowSegment, () => { void togglePane() }, showBox ? undefined : { onPage: onOneRowPage })
-      if (!showBox) {
-        const askTree = buildAskTree(el, asksFeed.rows() ?? [], columns, bandNow, 'onerow-ask')
-        return stackRows(el, askTree === null ? [oneRow] : [oneRow, askTree])
-      }
+      // Folded (no box) is exactly one row: the ask and history rows draw only in the expanded page (paneTree askRows).
+      if (!showBox) return stackRows(el, [oneRow])
       const page = await paneTree($, e as never, false, height, rows)
       await logBandGeometry($, rows, columns, height + 1)
       return stackRows(el, [page, oneRow])

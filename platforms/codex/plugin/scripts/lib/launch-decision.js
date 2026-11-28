@@ -34,7 +34,7 @@ function decide(resolved, opts, env) {
     return { code: 3, err: `private lane ${lane} refuses runner ${runner}` };
   }
   const argv = ['scripts/dispatch-hetero.sh', '--runner', runner, '--model', resolved.model,
-    '--pin-reason', `pool-route ${resolved.pool || engine}`];
+    '--no-campaign', '--pin-reason', `pool-route ${resolved.pool || engine}`]; // outside a sealed campaign dispatch-hetero refuses without it; campaign callers drop it
   if (opts.branch) argv.push('--branch', opts.branch);
   if (opts['prompt-file']) argv.push('--prompt-file', opts['prompt-file']);
   return { code: 0, out: { launch: 'hetero', runner, model: resolved.model, pool: resolved.pool || '', argv } };

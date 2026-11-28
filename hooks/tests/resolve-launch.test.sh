@@ -17,6 +17,7 @@ OUT="$(run_l bash "$H" --json '{"model":"gemini-4-carbon-high","mode":"default",
 assert_contains "$OUT" '"launch":"hetero"'  "(a) engine agy -> hetero launch"
 assert_contains "$OUT" '"runner":"agy"'     "(a) runner agy"
 assert_contains "$OUT" 'scripts/dispatch-hetero.sh","--runner","agy","--model","gemini-4-carbon-high"' "(a) argv carries runner+model"
+assert_contains "$OUT" '"--no-campaign","--pin-reason"' "(a2) argv carries --no-campaign (outside-campaign callers)"
 assert_contains "$OUT" '"--branch","feat/x","--prompt-file","/p/brief.md"' "(a) branch/prompt passed through"
 OUT="$(run_l bash "$H" --json '{"model":"gpt-6.1-sol","mode":"default","agent":"","engine":"codex","runner":"codex","pool":"codex A","source":"pool-route"}')"
 assert_contains "$OUT" '"runner":"codex"'   "(a) codex runner"

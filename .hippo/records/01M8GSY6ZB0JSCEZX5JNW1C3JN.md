@@ -1,0 +1,11 @@
+---
+id: 01M8GSY6ZB0JSCEZX5JNW1C3JN
+kind: issue
+created: 2026-11-28T10:06:45.227Z
+---
+- **Since**: 2026-11-28
+- **Problem**: D11（規模 M，PM 01M7DKWK 子工單 01M7DNTZEG） 未開工，PM 取消單並要求停放；原計畫出處 operator-console D11 拆解席。
+- **Impact**: 不做則 operator-console 該段缺口持續，無人在等；狀態 parked。
+- **Trigger**: fleet D15 收尾後重評是否要做
+- **Source**: PM 裁定 01M8GSWJJ6A2（2026-11-28）
+- **Pointer**: none

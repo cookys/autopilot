@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0528 -->
+<!-- next-id: BL-0530 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -2717,3 +2717,29 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: Fleet-Task 01M88GP63J9GTMXM23MNW5HSRK PM 席提醒
 - **Pointer**: none
 - **Context**: fix cd64de2f1 3fcfdf5cf dbc40854b a18358c2b
+
+### parked: operator-console D11 拆解席
+- **Id**: BL-0528
+- **Status**: open
+- **Since**: 2026-11-28
+- **Origin**: self
+- **Problem**: D11（規模 M，PM 01M7DKWK 子工單 01M7DNTZEG） 未開工，PM 取消單並要求停放；原計畫出處 operator-console D11 拆解席。
+- **Impact**: 不做則 operator-console 該段缺口持續，無人在等；狀態 parked。
+- **Trigger**: fleet D15 收尾後重評是否要做
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: PM 裁定 01M8GSWJJ6A2（2026-11-28）
+- **Pointer**: none
+
+### parked: operator-console D5 配置程式與租約表
+- **Id**: BL-0529
+- **Status**: open
+- **Since**: 2026-11-28
+- **Origin**: self
+- **Problem**: D5（規模 L，PM 01M7DKWK 子工單 01M7DNTZEV） 未開工，PM 取消單並要求停放；原計畫出處 operator-console D5 配置程式與租約表。
+- **Impact**: 不做則 operator-console 該段缺口持續，無人在等；狀態 parked。
+- **Trigger**: fleet D15 收尾後重評是否要做
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: PM 裁定 01M8GSWJJ6A2（2026-11-28）
+- **Pointer**: none

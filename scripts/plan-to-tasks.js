@@ -200,7 +200,7 @@ function extractPhaseMarkers(task, planPath) {
   // The marker may sit in the title/body or in any task comment (a phase task filed without one gets it as a comment).
   const text = [String(task.title || task.body || ''), ...(Array.isArray(task.comments) ? task.comments.map((c) => String((c && c.text) || '')) : [])].join('\n');
   // Identity is the plan path; any @<sha> (or none) matches, so tasks filed before a plan commit still count.
-  const prefix = new RegExp(`^Plan: ${planPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:@[0-9a-f]{7,40})? Phase: `);
+  const prefix = new RegExp(`^(?:--tag\\s+\\S+\\s+)?Plan: ${planPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:@[0-9a-f]{7,40})? Phase: `);
   const ids = [];
   for (const rawLine of text.split(/\r?\n/)) {
     const line = rawLine.trim();

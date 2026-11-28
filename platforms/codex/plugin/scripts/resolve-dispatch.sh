@@ -163,6 +163,16 @@ DEFAULTS[think-tank-role]='{"model":"sonnet","mode":"plan","agent":""}'
 # Transcript digest. First seat is haiku; order lives in data-class-policy.json seat_preference.
 DEFAULTS[ar-analyst]='{"model":"haiku","mode":"default","agent":""}'
 
+# Pool-aware mechanical routing (fleet 01M883AEHTJWZH95JSY1MSKEFX): on a seat of a listed account
+# pool (scripts/lib/pool-mech-route.json) the mechanical roles resolve to agy / codex A / codex B.
+# Off: AUTOPILOT_POOL_MECH_ROUTE=0 or "enabled": false in that file. Not applied to --tree.
+POOL_ROUTE_JS="$(dirname "$0")/lib/pool-mech-route.js"
+if routed="$(node "$POOL_ROUTE_JS" route --role "$ROLE" 2>/dev/null)"; then
+  # Same data-class gate as every other success path (finish_ok exits).
+  _routed_engine="$(printf '%s' "$routed" | sed -n 's/.*"model":"\([^"]*\)".*/\1/p')"
+  finish_ok "$_routed_engine" "$routed"
+fi
+
 # Try project override (bare role rows only — tree: prefixed rows are ignored)
 CONFIG="${MODEL_ROUTING_CONFIG_OVERRIDE:-.claude/model-routing-config.md}"
 ROLE_RE="${ROLE//./\\.}"
@@ -176,9 +186,14 @@ if [[ -f "$CONFIG" ]]; then
     model="$(echo "$row" | awk -F'|' '{print $3}' | tr -d ' *')"
     mode="$(echo "$row"  | awk -F'|' '{print $4}' | tr -d ' *')"
     if valid_token "$model" && valid_token "$mode"; then
-      finish_ok "$model" "$(printf '{"model":"%s","mode":"%s","agent":"","source":"project"}' "$model" "$mode")"
+      # Private lanes (308, mple2/MSN, thinksmart, alfred) never resolve to kimi or other Chinese-model engines.
+      if node "$POOL_ROUTE_JS" private-model-ok --model "$model" 2>/dev/null; then
+        finish_ok "$model" "$(printf '{"model":"%s","mode":"%s","agent":"","source":"project"}' "$model" "$mode")"
+      fi
+      echo "warning: private lane refuses a Chinese-model override for ${ROLE}; using defaults" >&2
+    else
+      echo "warning: ignoring override row for ${ROLE} (model/mode must match [A-Za-z0-9._-]+); using defaults" >&2
     fi
-    echo "warning: ignoring override row for ${ROLE} (model/mode must match [A-Za-z0-9._-]+); using defaults" >&2
   fi
 fi
 

@@ -1,0 +1,14 @@
+{
+  "_why": "Fleet 01M883AEHTJWZH95JSY1MSKEFX (PM ruling): seats of the singularaion account pool hit the Claude cap before reset, so their mechanical roles resolve to a non-Claude engine. Engines in order: agy first (pace-roles.json priority, carbon pool), then the scarce codex pools codex A and codex B (model/runner as in pace-roles.json pools). Judgment, merge and review roles stay on Claude. Private lanes may only resolve to codex, agy or Claude. Switch off: set enabled false here, or AUTOPILOT_POOL_MECH_ROUTE=0 in the environment. Pool is read from AUTOPILOT_ACCOUNT, else from CLAUDE_CONFIG_DIR=.../.claude-profiles/<name>.",
+  "enabled": true,
+  "pools": ["singularaion"],
+  "roles": ["hands", "fast-worker", "test-runner"],
+  "engines": [
+    { "engine": "agy", "pool": "agy", "runner": "agy", "model": "gemini-4-carbon-high" },
+    { "engine": "codex", "pool": "codex A", "runner": "codex", "model": "gpt-6.1-sol" },
+    { "engine": "codex", "pool": "codex B", "runner": "codex", "model": "gpt-6.1-sol" }
+  ],
+  "private_lanes": ["308", "mple2", "msn", "thinksmart", "alfred"],
+  "private_allowed_engines": ["codex", "agy", "claude"],
+  "private_barred_model_pattern": "kimi|moonshot|glm|zhipu|qwen|deepseek|minimax|qoder|yi-|baichuan|ernie|doubao"
+}

@@ -38,7 +38,7 @@ still event-driven (Work orders, Detection), this is what you do there.
 
 ## Pick the executor
 
-The lead keeps three things: judgment, checking the key facts, and irreversible actions. Mechanical or read-only work goes to a light- or standard-tier executor (`hands`, or `fast-worker` / `implementer`) or a cheaper engine seat; do it yourself only when it is one or two tool calls. Spread the load by what quota each account and engine has left. The tier names the role; the model comes from `scripts/resolve-dispatch.sh` and `references/model-routing.md`, never from this file.
+The lead keeps three things: judgment, checking the key facts, and irreversible actions. Mechanical or read-only work goes to a light- or standard-tier executor (`hands`, or `fast-worker` / `implementer`) or a cheaper engine seat; do it yourself only when it is one or two tool calls. Spread the load by what quota each account and engine has left. The tier names the role; the model comes from `scripts/resolve-dispatch.sh` and `references/model-routing.md`, never from this file. If the resolve output has an `engine` field (pool route), dispatch through `scripts/dispatch-hetero.sh --runner <runner>` (decision: `scripts/resolve-launch.sh --role <role>`) instead of a Claude subagent.
 
 - grep or file-by-file comparison: light tier (`hands` role).
 - Edit files to a template, run a fixed check: standard tier (`fast-worker` / `implementer` role).

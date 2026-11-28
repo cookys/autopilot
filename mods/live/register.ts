@@ -2653,7 +2653,8 @@ export function registerLive(on: Parameters<Register>[0]): void {
         const wide = wideBand({ page: pageNo, tabs: WIDE_TABS, stepTitle, list, reply, status, hints, ...(widePage?.replyKeep !== undefined ? { replyKeep: widePage.replyKeep } : {}) })
         wideOverflow = wide.overflow
         const wideTree = WideBandTree(el, wide, (k) => { void paneKey($, k) }, panePlacementEpoch)
-        const askTree = buildAskTree(el, asksFeed.rows() ?? [], columns, bandNow, 'wide-ask')
+        // Folded (v74Open false): only the band itself; the ask strip draws once the operator opens the pane (like the one-row band below).
+        const askTree = v74Open ? buildAskTree(el, asksFeed.rows() ?? [], columns, bandNow, 'wide-ask') : null
         return askTree === null ? wideTree : stackRows(el, [wideTree, askTree])
       }
       const onOneRowSegment = (id: BandSegmentId) => {

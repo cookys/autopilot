@@ -108,6 +108,9 @@ export const pickKeys = (options: { label: string }[]): string[] => {
 export const pickIndex = (options: { label: string }[], key: number): number =>
   key < 0 || key >= PICK_KEYS.length ? key : pickKeys(options).indexOf(String(PICK_KEYS[key]))
 
+// ---- knowledge-review candidates (審查 page 候選教訓區塊, fleet 01M8ARXSD4): one lane's pending candidates, decided through the same CLI decision files ----
+export type KReviewCandidate = { key: string; topic: string; pitfall: string; solution: string; tool: string; repo: string; count: number }
+
 // ---- what every v7.4 page receives (PageCtx.v74); a null field means the source is missing (draw the broken marker, never invent rows) ----
 export type V74Ctx = {
   pm: PmStatus | null
@@ -120,6 +123,9 @@ export type V74Ctx = {
   fleetError?: string | null
   fleetSummary?: { fetchedMs: number | null; error: string | null; totals: { stuck: number; running: number; waiting: number; failed: number } } | null
   todo: TodoCard[] | null
+  kreview?: KReviewCandidate[] | null
+  kreviewFetchedMs?: number | null
+  kreviewError?: string | null
   nav: CardNav
   ages?: Record<string, number | null> // keyed by page id (now = PM feed fetchedMs, decide, fleet, ...)
   errors?: Record<string, string | null> // keyed by page id (now = PM feed error, decide, fleet, ...)

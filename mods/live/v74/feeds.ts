@@ -226,3 +226,61 @@ export function makeDecideFeed(ttlMs = V74_FEED_TTL_MS): DecideFeed {
     },
   }
 }
+
+// ---- knowledge-review candidates (審查 候選教訓, fleet 01M8ARXSD4): the same store the knowledge-review.js CLI reads, through the injected runner ----
+export const KR_LIST_TAIL = ['list', '--json', '--status', 'pending'] as const
+export type KReviewFeed = { rows: () => KReviewCandidate[] | null; fetchedMs: () => number | null; error: () => string | null; refresh: (run: CliRunner, argv: readonly string[], nowMs: number, force?: boolean) => Promise<boolean>; fail: (message: string) => void }
+
+// Trust boundary: the list comes from another program. Wrong shape (not an array of {key, topic, ...}) answers null (source broken), never [] — an empty list is a
+// parsed success, a broken one is not.
+export function parseKReviewList(json: string): KReviewCandidate[] | null {
+  let o: unknown
+  try { o = JSON.parse(json) } catch { return null }
+  if (!Array.isArray(o)) return null
+  const out: KReviewCandidate[] = []
+  for (const item of o) {
+    if (typeof item !== 'object' || item === null) return null
+    const r = item as Record<string, unknown>
+    if (typeof r.key !== 'string' || r.key === '' || typeof r.topic !== 'string' || typeof r.status !== 'string') return null
+    if (!/^(?!-)[\w.:-]+$/.test(r.key)) return null // a leading '-' would read as a CLI flag (krDecideArgv passes the key verbatim)
+    const str = (v: unknown): string => (typeof v === 'string' ? v : '')
+    const count = typeof r.count === 'number' && Number.isFinite(r.count) ? r.count : 0
+    out.push({ key: r.key, topic: r.topic, pitfall: str(r.pitfall_type), solution: str(r.solution_type), tool: str(r.tool), repo: str(r.repo), count })
+  }
+  return out
+}
+
+export function makeKReviewFeed(ttlMs = V74_FEED_TTL_MS): KReviewFeed {
+  let rows: KReviewCandidate[] | null = null
+  let fetchedMs: number | null = null
+  let triedMs: number | null = null
+  let error: string | null = null
+  let busy = false
+  return {
+    rows: () => rows,
+    fetchedMs: () => fetchedMs,
+    error: () => error,
+    fail: (message: string) => { error = firstLine(message) || 'failed' },
+    refresh: async (run, argv, nowMs, force = false) => {
+      if (busy) return false
+      if (!force && triedMs !== null && nowMs - triedMs < ttlMs) return false
+      busy = true
+      triedMs = nowMs
+      try {
+        const r = await run(argv)
+        if (r.exitCode !== 0) throw new Error(exitError(r.stderr, r.exitCode))
+        const parsed = parseKReviewList(r.stdout)
+        if (parsed === null) throw new Error('invalid knowledge-review list json')
+        rows = parsed
+        fetchedMs = nowMs
+        error = null
+      } catch (e) {
+        // retain last successful rows & fetchedMs so title/status row stay truthful
+        error = firstLine(e instanceof Error ? e.message : String(e)) || 'failed'
+      } finally {
+        busy = false
+      }
+      return true
+    },
+  }
+}

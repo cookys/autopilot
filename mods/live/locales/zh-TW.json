@@ -1099,5 +1099,9 @@
   "trace.dispatch_lines_missing": "全艦隊產線 · 無來源（>{limit} 分過舊）",
   "addr.owner": "負責人",
   "addr.no_owner": "未設負責人",
-  "addr.registry_down": "專案名冊讀不到"
+  "addr.registry_down": "專案名冊讀不到",
+  "v74.e.kr_title": "候選教訓 {n} 則",
+  "v74.e.kr_missing": "候選教訓讀不到：{why}",
+  "v74.e.kr_ok": "核可",
+  "v74.e.kr_no": "退回"
 }

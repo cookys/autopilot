@@ -10,6 +10,7 @@ export type KeyAction =
   | { kind: 'note' } | { kind: 'undo' } | { kind: 'prev' } | { kind: 'next' } | { kind: 'fill' }
   | { kind: 'move'; by: 1 | -1 } | { kind: 'cursor'; at: number } | { kind: 'fold' } | { kind: 'open' } | { kind: 'none' }
   | { kind: 'scroll'; by: 1 | -1; page: boolean } | { kind: 'style' } | { kind: 'expand' } | { kind: 'toggle_expand' } | { kind: 'toggle_ctx' } | { kind: 'copy_url' }
+  | { kind: 'kreview'; verdict: 'approved' | 'rejected' } // 審查 候選教訓: a approves, x rejects the focused candidate (fleet 01M8ARXSD4)
 
 const pageForDigit = (key: string): string | undefined => {
   if (key === PET_KEY) return 'pet'
@@ -45,6 +46,10 @@ export function routeKey(key: string, st: KeyState): KeyAction {
   if (key === 'k' || key === 'ArrowUp') return { kind: 'move', by: -1 }
   if (key === 'z') return { kind: 'fold' }
   if (key === 'o' && !CARD_PAGES.has(st.page)) return { kind: 'open' }
+  if (st.page === 'review') {
+    if (key === 'a') return { kind: 'kreview', verdict: 'approved' }
+    if (key === 'x') return { kind: 'kreview', verdict: 'rejected' }
+  }
   if (st.page === 'decide' || st.page === 'todo') {
     const pick = PICK_KEYS.indexOf(key as (typeof PICK_KEYS)[number])
     if (pick >= 0) return { kind: 'pick', index: pick }

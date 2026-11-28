@@ -74,6 +74,18 @@
       "relates": []
     },
     {
+      "name": "AUTOPILOT_KREVIEW_BIN",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "mods/live/register.ts"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
       "name": "AUTOPILOT_PM_ASK_BIN",
       "kind": "env",
       "audience": "internal",

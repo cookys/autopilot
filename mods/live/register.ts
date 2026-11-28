@@ -103,7 +103,7 @@ import { DECIDE_COMPACT_MAX_ROWS, decideLayoutMode } from './pages/layout'
 import type { DecideLayoutMode } from './pages/layout'
 import { SEATS_TIMEOUT_MS, seatQuota, v74PmCounts } from './pages/now'
 import { PAGES, EXTRA_PAGES } from './pages/index'
-import { ASKS_LIST_TAIL, cutTitle, makeAsksFeed, makeDecideFeed, makePmFeed, mergeDecideCards } from './v74/feeds'
+import { ASKS_LIST_TAIL, cutTitle, makeAsksFeed, makeDecideFeed, makeKReviewFeed, makePmFeed, KR_LIST_TAIL, mergeDecideCards } from './v74/feeds'
 import { askBandRows } from './askband'
 import { offerTodo, pickIndex, pickKeys, PICK_KEYS, V74_PAGES } from './v74/contract'
 import type { CardNav, DecideCard, PmStatus, TodoCard, V74Ctx } from './v74/contract'
@@ -155,6 +155,7 @@ const fleetFeed = makeFleetFeed()
 const addrFeed = makeAddrFeed() // B73: the prompt box's @@ / p# completion rows, answered from this cache
 const pmFeed = makePmFeed()
 const decideFeed = makeDecideFeed()
+const kreviewFeed = makeKReviewFeed()
 const asksFeed = makeAsksFeed()
 let durableOpenCards: DecideCard[] = [] // open-decision.js store, refreshed with the snapshot; merged with the fleet list by card id
 let durableAwaiting: DurableAwaiting[] = [] // the store's answered cards still waiting on the operator's own step (awaiting_operator_action); the decide page's 等你動手 block
@@ -260,6 +261,21 @@ function kickV74($: EngineInterface, nowMs: number): void {
     const script = typeof bin === 'string' && bin.trim() !== '' ? bin.trim() : $.plugin.root + '/scripts/pm-ask.js'
     return asksFeed.refresh(run, ['node', script, ...ASKS_LIST_TAIL], nowMs)
   }).then(r => { if (r) void $.ui.invalidate('ui.render') }).catch(() => {})
+  // knowledge-review candidates (審查 候選教訓, fleet 01M8ARXSD4): the plugin tree's knowledge-review.js; AUTOPILOT_KREVIEW_BIN overrides it (tests, a pinned copy)
+  void krListArgv($).then(argv => kreviewFeed.refresh(run, argv, nowMs)).then(r => { if (r) void $.ui.invalidate('ui.render') }).catch(() => {})
+}
+// knowledge-review candidates: the script sits in the plugin tree; the bin is resolved once per session (tests pin it through AUTOPILOT_KREVIEW_BIN)
+let krBin: string | null = null
+async function krListArgv($: EngineInterface): Promise<readonly string[]> {
+  if (krBin === null) {
+    const bin = await $.env.get('AUTOPILOT_KREVIEW_BIN')
+    krBin = typeof bin === 'string' && bin.trim() !== '' ? bin.trim() : $.plugin.root + '/scripts/knowledge-review.js'
+  }
+  return ['node', krBin, ...KR_LIST_TAIL]
+}
+async function krDecideArgv($: EngineInterface, cmd: 'approve' | 'reject', key: string): Promise<readonly string[]> {
+  await krListArgv($)
+  return ['node', krBin!, cmd, key]
 }
 const V74_TODO: TodoCard[] | null = null // the todo source (fleet todo --json) is not wired: decision cards do not offer `待辦` (offerTodo) until it is
 async function v74CtxOf($: EngineInterface, withStore = false): Promise<V74Ctx> {
@@ -281,6 +297,9 @@ async function v74CtxOf($: EngineInterface, withStore = false): Promise<V74Ctx> 
     fleetError: fltErr,
     fleetSummary: fleetSum,
     todo: V74_TODO,
+    kreview: kreviewFeed.rows(),
+    kreviewFetchedMs: kreviewFeed.fetchedMs(),
+    kreviewError: kreviewFeed.error(),
     nav,
     keysHeld: v74KeysHeld,
     sendResult: v74SendResult,
@@ -1758,6 +1777,7 @@ const focusRows = (id: string, expanded: boolean): number => {
   if (id === 'fleet') { const n = consoleSnap?.lines === null || consoleSnap === null ? 0 : fleetRowsOf(consoleSnap.lines).length; return expanded ? n : Math.min(FOLD_AT, n) }
   if (id === 'quota') return consoleSnap?.quota.pools?.length ?? 0
   if (id === 'spend') return spendFocusRows(snapshot)
+  if (id === 'review') return Math.max(1, kreviewFeed.rows()?.length ?? 0) // 候選教訓 rows hold the focus (a/x act on the focused one)
   return 1
 }
 let decideLocal: Pick<DecideNav, 'cursor' | 'folded' | 'textMode' | 'textBuf' | 'opt' | 'detailOffset' | 'armed' | 'snap' | 'stale' | 'style' | 'bgOpen' | 'compactExpanded'> = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt, style: 'D', bgOpen: false, compactExpanded: false }
@@ -2019,6 +2039,18 @@ async function frameKeyBody($: EngineInterface, k: KeyAction): Promise<void> {
           const at = pickIndex(c.options, k.index) // R6: the pressed letter picks the option it labels, not the position (contract.pickKeys)
           if (at >= 0 && at < c.options.length) await update($, V74_NAV, () => ({ ...nav, picks: { ...nav.picks, [c.id]: at } }))
         }
+      }
+    } else if (id === 'review' && k.kind === 'kreview') {
+      // a/x on the focused 候選教訓 row: the CLI writes the same decision file it always does (one protocol), then the list refreshes
+      const rows = kreviewFeed.rows() ?? []
+      const cand = rows[Math.max(0, Math.min(pageView.review?.focus ?? 0, rows.length - 1))]
+      if (cand !== undefined) {
+        const nowMs = await $.clock.now()
+        const run = cliRunner($)
+        const argv = await krDecideArgv($, k.verdict === 'approved' ? 'approve' : 'reject', cand.key)
+        const done = await run(argv)
+        if (done.exitCode !== 0) kreviewFeed.fail(done.stderr !== '' ? done.stderr : 'decision failed（rc=' + done.exitCode + '）') // the 缺源 row carries the reason
+        await krListArgv($).then(listArgv => kreviewFeed.refresh(run, listArgv, nowMs, true))
       }
     } else if ((k.kind === 'move' || k.kind === 'scroll') && scrollBody($, k.by * (k.kind === 'scroll' && k.page ? Math.max(1, bodyWin.room - 1) : 1))) {
       return // a cut body scrolls (j / k / arrows / PgUp / PgDn); scrollBody asked for the redraw

@@ -197,7 +197,8 @@ function runFleet(fleetBin, args) {
 }
 
 function extractPhaseMarkers(task, planPath) {
-  const text = String(task.title || task.body || '');
+  // The marker may sit in the title/body or in any task comment (a phase task filed without one gets it as a comment).
+  const text = [String(task.title || task.body || ''), ...(Array.isArray(task.comments) ? task.comments.map((c) => String((c && c.text) || '')) : [])].join('\n');
   // Identity is the plan path; any @<sha> (or none) matches, so tasks filed before a plan commit still count.
   const prefix = new RegExp(`^Plan: ${planPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:@[0-9a-f]{7,40})? Phase: `);
   const ids = [];
@@ -316,7 +317,7 @@ function main() {
           if (!frozenIds.has(phaseId)) throw new Error(`--bind names unknown phase "${phaseId}"`);
           phaseToTasks.get(phaseId).push(task);
         }
-        if (parentId && String(task.parent_task_id || task.parent_id || '') !== parentId) continue;
+        // no parent filter here: the marker names the plan path, so a phase task filed under a sub-parent still counts
         const matchedIds = extractPhaseMarkers(task, receipt.path);
         for (const phaseId of matchedIds) {
           if (phaseToTasks.has(phaseId) && !bound.includes(phaseId)) {

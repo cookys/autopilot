@@ -18,6 +18,13 @@ Before dispatching an Agent, determine the role and look up model + mode:
 3. Apply model + mode to Agent() call
 ```
 
+**Mechanical roles (`hands`, `fast-worker`, `test-runner`): resolve through `scripts/resolve-launch.sh --role <role>`.**
+If the resolve output has an `engine` field (pool route, e.g. a singularaion seat; off with
+`AUTOPILOT_POOL_MECH_ROUTE=0`), dispatch through `scripts/dispatch-hetero.sh --runner <runner>` instead of a
+Claude subagent: `resolve-launch.sh` prints `{"launch":"hetero","runner":...,"argv":[...]}`; run that `argv`
+(add `--branch`/`--prompt-file`, or pass them to the helper). With no `engine` field it prints
+`{"launch":"claude",...}` and the Agent() call above is unchanged. A private lane is refused a Chinese-model runner (exit 3).
+
 ## Default Routing Table
 
 | Role | Model | Mode | Rationale |

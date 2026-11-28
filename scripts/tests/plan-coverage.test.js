@@ -187,5 +187,12 @@ describe('plan-to-tasks --coverage', () => {
       ]);
       assert.equal(out.gaps, 3);
     });
+    it('counts a comment line that carries a leaked CLI flag prefix ("--tag progress Plan: ...")', () => {
+      const out = run(fx, [
+        { task_id: '01M88WFHTR0PG20F3N59FCTKN1', status: 'done', parent_task_id: ROOT, title: 'Engine: build',
+          comments: [{ author: 'x', text: `--tag progress Plan: ${fx.planRel}@a783846e Phase: P1, P2, P3` }] },
+      ]);
+      assert.equal(out.gaps, 0);
+    });
   });
 });
